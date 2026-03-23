@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 aivi-base.workspace = true
 aivi-hir.workspace = true
+aivi-runtime = { path = "../aivi-runtime" }
 
 [dev-dependencies]
 aivi-syntax.workspace = true

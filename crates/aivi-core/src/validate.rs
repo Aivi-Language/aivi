@@ -315,7 +315,7 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             });
         }
         let mut previous_index = None;
-        let mut previous_result = None;
+        let mut previous_result: Option<crate::ty::Type> = None;
         for stage_id in &pipe.stages {
             let Some(stage) = module.stages().get(*stage_id) else {
                 errors.push(ValidationError::PipeStageBackrefMissing {
@@ -452,7 +452,7 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
                 }
             }
             ExprKind::Tuple(elements) | ExprKind::List(elements) | ExprKind::Set(elements) => {
-                push_exprs(module, elements, &mut work, &mut errors)
+                push_exprs(module, elements.as_slice(), &mut work, &mut errors)
             }
             ExprKind::Map(entries) => {
                 for entry in entries {
@@ -472,7 +472,7 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             }
             ExprKind::Apply { callee, arguments } => {
                 push_expr(module, *callee, &mut work, &mut errors);
-                push_exprs(module, arguments, &mut work, &mut errors);
+                push_exprs(module, arguments.as_slice(), &mut work, &mut errors);
             }
             ExprKind::Unary { expr, .. } => push_expr(module, *expr, &mut work, &mut errors),
             ExprKind::Binary { left, right, .. } => {

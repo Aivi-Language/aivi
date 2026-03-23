@@ -4,15 +4,15 @@ use crate::{
     cst::{
         BinaryOperator, ClassBody, ClassMember, ClassMemberName, Decorator, DecoratorArguments,
         DecoratorPayload, DomainBody, DomainItem, DomainMember, DomainMemberName, ErrorItem,
-        ExportItem, Expr, ExprKind, FunctionParam, Identifier, IntegerLiteral, Item, ItemBase,
-        MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module,
-        NamedItem, NamedItemBody, OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr,
-        PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-        RecordPatternField, RegexLiteral, SourceDecorator, SourceProviderContractBody,
-        SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
-        SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
-        TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody, TypeExpr,
-        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
+        ExportItem, Expr, ExprKind, FunctionParam, Identifier, InstanceBody, InstanceItem,
+        InstanceMember, IntegerLiteral, Item, ItemBase, MapExpr, MapExprEntry, MarkupAttribute,
+        MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName, Pattern,
+        PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath,
+        QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral, SourceDecorator,
+        SourceProviderContractBody, SourceProviderContractFieldValue, SourceProviderContractItem,
+        SourceProviderContractMember, SourceProviderContractSchemaMember, SuffixedIntegerLiteral,
+        TextFragment, TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody,
+        TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
@@ -33,6 +33,12 @@ const TRAILING_DECLARATION_BODY_TOKEN: DiagnosticCode =
     DiagnosticCode::new("syntax", "trailing-declaration-body-token");
 const MISSING_CLASS_MEMBER_TYPE: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-class-member-type");
+const MISSING_INSTANCE_CLASS: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-instance-class");
+const MISSING_INSTANCE_TARGET: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-instance-target");
+const MISSING_INSTANCE_MEMBER_BODY: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-instance-member-body");
 const MISSING_DOMAIN_OVER: DiagnosticCode = DiagnosticCode::new("syntax", "missing-domain-over");
 const MISSING_DOMAIN_CARRIER: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-domain-carrier");
@@ -153,7 +159,7 @@ impl<'a> Parser<'a> {
                     .with_code(DANGLING_DECORATOR_BLOCK)
                     .with_primary_label(
                         self.source_span_of_token(start),
-                        "expected `type`, `val`, `fun`, `sig`, `class`, `use`, or `export` after this decorator block",
+                        "expected a following top-level declaration after this decorator block",
                     ),
             );
             return Item::Error(ErrorItem {
@@ -196,6 +202,9 @@ impl<'a> Parser<'a> {
                 Item::Signal(self.parse_signal_item(base, keyword_index, end, "signal declaration"))
             }
             TokenKind::ClassKw => Item::Class(self.parse_class_item(base, keyword_index, end)),
+            TokenKind::InstanceKw => {
+                Item::Instance(self.parse_instance_item(base, keyword_index, end))
+            }
             TokenKind::DomainKw => Item::Domain(self.parse_domain_item(base, keyword_index, end)),
             TokenKind::ProviderKw => Item::SourceProviderContract(
                 self.parse_source_provider_contract_item(base, keyword_index, end),
@@ -297,6 +306,57 @@ impl<'a> Parser<'a> {
             type_parameters,
             annotation: None,
             parameters: Vec::new(),
+            body,
+        }
+    }
+
+    fn parse_instance_item(
+        &mut self,
+        base: ItemBase,
+        keyword_index: usize,
+        end: usize,
+    ) -> InstanceItem {
+        let mut cursor = keyword_index + 1;
+        let class = self.parse_qualified_name(&mut cursor, end).or_else(|| {
+            self.diagnostics.push(
+                Diagnostic::error("instance declaration is missing its class name")
+                    .with_code(MISSING_INSTANCE_CLASS)
+                    .with_primary_label(
+                        self.source_span_of_token(keyword_index),
+                        "expected a class name such as `Eq` or `Default`",
+                    ),
+            );
+            None
+        });
+        let target = self
+            .parse_type_expr(&mut cursor, end, TypeStop::default())
+            .or_else(|| {
+                self.diagnostics.push(
+                    Diagnostic::error("instance declaration is missing its target type")
+                        .with_code(MISSING_INSTANCE_TARGET)
+                        .with_primary_label(
+                            class
+                                .as_ref()
+                                .map(|class| class.span)
+                                .unwrap_or_else(|| self.source_span_of_token(keyword_index)),
+                            "expected one instance target type such as `Blob` or `Result HttpError`",
+                        ),
+                );
+                None
+            });
+        let body = self.parse_instance_body(&mut cursor, end).or_else(|| {
+            self.missing_body_diagnostic(
+                keyword_index,
+                "instance declaration is missing its member bindings",
+                "expected one or more instance member bindings on following lines",
+            );
+            None
+        });
+        InstanceItem {
+            base,
+            keyword_span: self.source_span_of_token(keyword_index),
+            class,
+            target,
             body,
         }
     }
@@ -548,6 +608,38 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_instance_body(&mut self, cursor: &mut usize, end: usize) -> Option<InstanceBody> {
+        let body_start = *cursor;
+        let first_index = self.peek_nontrivia(*cursor, end)?;
+        if !self.tokens[first_index].line_start() || !self.starts_instance_member(first_index) {
+            return None;
+        }
+        let member_indent = self.line_indent_of_token(first_index);
+        let mut members = Vec::new();
+
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if !self.tokens[index].line_start()
+                || self.line_indent_of_token(index) != member_indent
+                || !self.starts_instance_member(index)
+            {
+                break;
+            }
+            let before = *cursor;
+            let Some(member) = self.parse_instance_member(cursor, end, member_indent) else {
+                break;
+            };
+            members.push(member);
+            if *cursor <= before {
+                break;
+            }
+        }
+
+        (!members.is_empty()).then_some(InstanceBody {
+            members,
+            span: self.source_span_for_range(body_start, *cursor),
+        })
+    }
+
     fn parse_domain_body(&mut self, cursor: &mut usize, end: usize) -> Option<DomainBody> {
         let body_start = *cursor;
         let mut members = Vec::new();
@@ -621,6 +713,80 @@ impl<'a> Parser<'a> {
             name,
             annotation,
             span: self.source_span_for_range(start, *cursor),
+        })
+    }
+
+    fn parse_instance_member(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        member_indent: usize,
+    ) -> Option<InstanceMember> {
+        let start = *cursor;
+        let name = self.parse_signature_member_name(cursor, end)?;
+        let mut parameters = Vec::new();
+
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if self.tokens[index].line_start() {
+                break;
+            }
+            match self.tokens[index].kind() {
+                TokenKind::Identifier => {
+                    parameters.push(self.identifier_from_token(index));
+                    *cursor = index + 1;
+                }
+                TokenKind::Equals => break,
+                _ => break,
+            }
+        }
+
+        let equals_span = if let Some(index) = self.consume_kind(cursor, end, TokenKind::Equals) {
+            Some(self.source_span_of_token(index))
+        } else {
+            self.diagnostics.push(
+                Diagnostic::error("instance member is missing `=` before its body")
+                    .with_code(MISSING_INSTANCE_MEMBER_BODY)
+                    .with_primary_label(name.span(), "expected `=` followed by an expression body"),
+            );
+            None
+        };
+        let member_end = self
+            .find_next_instance_member_start(*cursor, end, member_indent)
+            .unwrap_or(end);
+        let body = if let Some(equals_span) = equals_span {
+            self.parse_expr(cursor, member_end, ExprStop::default())
+                .or_else(|| {
+                    self.diagnostics.push(
+                        Diagnostic::error("instance member is missing its body after `=`")
+                            .with_code(MISSING_INSTANCE_MEMBER_BODY)
+                            .with_primary_label(
+                                equals_span,
+                                "expected an expression body for this instance member",
+                            ),
+                    );
+                    None
+                })
+        } else {
+            None
+        };
+        if body.is_some() {
+            if let Some(trailing_index) = self.next_significant_in_range(*cursor, member_end) {
+                self.diagnostics.push(
+                    Diagnostic::error("instance member body must contain exactly one expression")
+                        .with_code(TRAILING_DECLARATION_BODY_TOKEN)
+                        .with_primary_label(
+                            self.source_span_of_token(trailing_index),
+                            "this token is outside the instance member body",
+                        ),
+                );
+            }
+        }
+        *cursor = member_end;
+        Some(InstanceMember {
+            name,
+            parameters,
+            body,
+            span: self.source_span_for_range(start, member_end),
         })
     }
 
@@ -2610,6 +2776,42 @@ impl<'a> Parser<'a> {
         Some(QualifiedName { segments, span })
     }
 
+    fn line_indent_of_token(&self, index: usize) -> usize {
+        let start = self.tokens[index].span().start().as_usize();
+        let line_start = self.source.text()[..start]
+            .rfind('\n')
+            .map(|position| position + 1)
+            .unwrap_or(0);
+        self.source.text()[line_start..start].chars().count()
+    }
+
+    fn starts_instance_member(&self, index: usize) -> bool {
+        matches!(
+            self.tokens[index].kind(),
+            TokenKind::Identifier | TokenKind::LParen
+        )
+    }
+
+    fn find_next_instance_member_start(
+        &self,
+        from: usize,
+        end: usize,
+        member_indent: usize,
+    ) -> Option<usize> {
+        for index in from..end {
+            let token = self.tokens[index];
+            if token.kind().is_trivia()
+                || !token.line_start()
+                || self.line_indent_of_token(index) != member_indent
+                || !self.starts_instance_member(index)
+            {
+                continue;
+            }
+            return Some(index);
+        }
+        None
+    }
+
     fn identifier_from_token(&self, index: usize) -> Identifier {
         let token = self.tokens[index];
         Identifier {
@@ -2932,6 +3134,8 @@ mod tests {
             "operators.aivi",
             r#"class Eq A
     (==) : A -> A -> Bool
+instance Eq Blob
+    (==) left right = same left right
 domain Duration over Int
     literal ms : Int -> Duration
     (*) : Duration -> Int -> Duration
@@ -2953,6 +3157,7 @@ val datePattern = rx"\d{4}-\d{2}-\d{2}"
             .collect();
 
         assert!(kinds.contains(&TokenKind::ClassKw));
+        assert!(kinds.contains(&TokenKind::InstanceKw));
         assert!(kinds.contains(&TokenKind::DomainKw));
         assert!(kinds.contains(&TokenKind::ThinArrow));
         assert!(kinds.contains(&TokenKind::EqualEqual));
@@ -3188,6 +3393,59 @@ export main
             },
             other => panic!("expected function item, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parser_builds_instance_members_with_parameters_and_multiline_bodies() {
+        let (_, parsed) = load(
+            r#"class Eq A
+    (==) : A -> A -> Bool
+
+fun same:Bool #left:Blob #right:Blob =>
+    True
+
+instance Eq Blob
+    (==) left right =
+        same left right
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "{:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        assert_eq!(parsed.module.items[2].kind(), ItemKind::Instance);
+
+        let Item::Instance(item) = &parsed.module.items[2] else {
+            panic!("expected instance item");
+        };
+        assert_eq!(
+            item.class.as_ref().map(QualifiedName::as_dotted).as_deref(),
+            Some("Eq")
+        );
+        assert!(matches!(
+            item.target.as_ref().map(|ty| &ty.kind),
+            Some(TypeExprKind::Name(name)) if name.text == "Blob"
+        ));
+        let body = item.body.as_ref().expect("instance should have a body");
+        assert_eq!(body.members.len(), 1);
+        assert!(matches!(
+            body.members[0].name,
+            ClassMemberName::Operator(ref operator) if operator.text == "=="
+        ));
+        assert_eq!(
+            body.members[0]
+                .parameters
+                .iter()
+                .map(|parameter| parameter.text.as_str())
+                .collect::<Vec<_>>(),
+            vec!["left", "right"]
+        );
+        assert!(matches!(
+            body.members[0].body.as_ref().map(|expr| &expr.kind),
+            Some(ExprKind::Apply { .. })
+        ));
     }
 
     #[test]

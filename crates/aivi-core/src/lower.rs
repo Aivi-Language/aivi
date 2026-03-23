@@ -3,14 +3,13 @@ use std::collections::{BTreeMap, HashMap};
 use aivi_base::SourceSpan;
 use aivi_hir::{
     BlockedFanoutSegment, BlockedGateStage, BlockedRecurrenceNode, BlockedSourceDecodeProgram,
-    BlockedSourceLifecycleNode, BlockedTruthyFalsyStage, Expr as HirExpr, ExprId as HirExprId,
-    ExprKind as HirExprKind, GateRuntimeExpr, GateRuntimeExprKind, GateRuntimeMapEntry,
-    GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeReference,
-    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateStageOutcome, Item as HirItem,
-    ItemId as HirItemId, RecurrenceNodeOutcome, SourceDecodeProgram, SourceDecodeProgramOutcome,
-    SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome, elaborate_fanouts, elaborate_gates,
-    elaborate_recurrences, elaborate_source_lifecycles, elaborate_truthy_falsy,
-    generate_source_decode_programs,
+    BlockedSourceLifecycleNode, BlockedTruthyFalsyStage, ExprId as HirExprId, GateRuntimeExpr,
+    GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
+    GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment, GateStageOutcome,
+    Item as HirItem, ItemId as HirItemId, RecurrenceNodeOutcome, SourceDecodeProgram,
+    SourceDecodeProgramOutcome, SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome,
+    elaborate_fanouts, elaborate_gates, elaborate_recurrences, elaborate_source_lifecycles,
+    elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{
@@ -18,8 +17,8 @@ use crate::{
     DomainDecodeSurface, DomainDecodeSurfaceKind, Expr, ExprId, FanoutJoin, FanoutStage, GateStage,
     Item, ItemId, ItemKind, MapEntry, Module, NonSourceWakeup, Pipe, PipeOrigin, PipeRecurrence,
     PipeStage, ProjectionBase, RecordExprField, RecurrenceStage, Reference, SignalInfo, SourceId,
-    SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageId, StageKind, TextLiteral,
-    TextSegment, TruthyFalsyBranch, TruthyFalsyStage, Type,
+    SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageKind, TextLiteral, TextSegment,
+    TruthyFalsyBranch, TruthyFalsyStage, Type,
     expr::{ExprKind, PipeExpr},
     validate::{ValidationError, validate_module},
 };
@@ -322,11 +321,15 @@ impl<'a> ModuleLowerer<'a> {
                     item.name.text().into(),
                     ItemKind::Signal(SignalInfo::default()),
                 ),
+                HirItem::Instance(item) => (
+                    item.header.span,
+                    format!("instance#{}", hir_id.as_raw()).into_boxed_str(),
+                    ItemKind::Instance,
+                ),
                 HirItem::Type(_)
                 | HirItem::Class(_)
                 | HirItem::Domain(_)
                 | HirItem::SourceProviderContract(_)
-                | HirItem::Instance(_)
                 | HirItem::Use(_)
                 | HirItem::Export(_) => continue,
             };
@@ -378,13 +381,14 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_gate_stages(&mut self) {
         for stage in elaborate_gates(self.hir).into_stages() {
+            if !self.item_map.contains_key(&stage.owner) {
+                self.errors
+                    .push(LoweringError::UnknownOwner { owner: stage.owner });
+                continue;
+            }
             let key = PipeKey {
                 owner: stage.owner,
                 pipe_expr: stage.pipe_expr,
-            };
-            let builder = match self.pipe_builder(key) {
-                Some(builder) => builder,
-                None => continue,
             };
             let lowered = match stage.outcome {
                 GateStageOutcome::Ordinary(plan) => {
@@ -476,6 +480,10 @@ impl<'a> ModuleLowerer<'a> {
                     continue;
                 }
             };
+            let builder = match self.pipe_builder(key) {
+                Some(builder) => builder,
+                None => continue,
+            };
             if builder.stages.insert(stage.stage_index, lowered).is_some() {
                 self.errors.push(LoweringError::DuplicatePipeStage {
                     owner: stage.owner,
@@ -488,6 +496,11 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_truthy_falsy_stages(&mut self) {
         for stage in elaborate_truthy_falsy(self.hir).into_stages() {
+            if !self.item_map.contains_key(&stage.owner) {
+                self.errors
+                    .push(LoweringError::UnknownOwner { owner: stage.owner });
+                continue;
+            }
             let key = PipeKey {
                 owner: stage.owner,
                 pipe_expr: stage.pipe_expr,
@@ -559,6 +572,12 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_fanout_stages(&mut self) {
         for segment in elaborate_fanouts(self.hir).into_segments() {
+            if !self.item_map.contains_key(&segment.owner) {
+                self.errors.push(LoweringError::UnknownOwner {
+                    owner: segment.owner,
+                });
+                continue;
+            }
             let key = PipeKey {
                 owner: segment.owner,
                 pipe_expr: segment.pipe_expr,
@@ -621,13 +640,14 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_recurrences(&mut self) {
         for node in elaborate_recurrences(self.hir).into_nodes() {
+            if !self.item_map.contains_key(&node.owner) {
+                self.errors
+                    .push(LoweringError::UnknownOwner { owner: node.owner });
+                continue;
+            }
             let key = PipeKey {
                 owner: node.owner,
                 pipe_expr: node.pipe_expr,
-            };
-            let builder = match self.pipe_builder(key) {
-                Some(builder) => builder,
-                None => continue,
             };
             let recurrence = match node.outcome {
                 RecurrenceNodeOutcome::Planned(plan) => {
@@ -687,6 +707,10 @@ impl<'a> ModuleLowerer<'a> {
                     });
                     continue;
                 }
+            };
+            let builder = match self.pipe_builder(key) {
+                Some(builder) => builder,
+                None => continue,
             };
             if builder.recurrence.replace(recurrence).is_some() {
                 self.errors.push(LoweringError::DuplicatePipeRecurrence {
@@ -950,7 +974,7 @@ impl<'a> ModuleLowerer<'a> {
         self.module
             .exprs_mut()
             .alloc(expr)
-            .map_err(|overflow| LoweringError::ArenaOverflow {
+            .map_err(|overflow: ArenaOverflow| LoweringError::ArenaOverflow {
                 arena: "exprs",
                 attempted_len: overflow.attempted_len(),
             })
@@ -1547,13 +1571,13 @@ impl<'a> ModuleLowerer<'a> {
         }
 
         let root_index = step_positions[&(program.root_step() as *const _)] as u32;
-        Ok(DecodeProgram {
+        Ok(DecodeProgram::new(
             owner,
-            mode: program.mode,
-            payload_annotation: program.payload_annotation,
-            root: DecodeStepId::from_raw(root_index),
+            program.mode,
+            program.payload_annotation,
+            DecodeStepId::from_raw(root_index),
             steps,
-        })
+        ))
     }
 }
 
@@ -1685,13 +1709,13 @@ mod tests {
         let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
         validate_module(&core).expect("lowered core module should validate");
 
-        let maybe_user = core
+        let maybe_active = core
             .items()
             .iter()
-            .find(|(_, item)| item.name.as_ref() == "maybeUser")
+            .find(|(_, item)| item.name.as_ref() == "maybeActive")
             .map(|(id, _)| id)
-            .expect("expected maybeUser item");
-        let pipes = &core.items()[maybe_user].pipes;
+            .expect("expected maybeActive item");
+        let pipes = &core.items()[maybe_active].pipes;
         assert_eq!(pipes.len(), 1);
         let pipe = &core.pipes()[pipes[0]];
         let first_stage = &core.stages()[pipe.stages[0]];

@@ -251,6 +251,22 @@ pub struct ClassBody {
     pub span: SourceSpan,
 }
 
+/// One instance member binding preserved by the syntax layer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstanceMember {
+    pub name: ClassMemberName,
+    pub parameters: Vec<Identifier>,
+    pub body: Option<Expr>,
+    pub span: SourceSpan,
+}
+
+/// Body of an `instance` declaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstanceBody {
+    pub members: Vec<InstanceMember>,
+    pub span: SourceSpan,
+}
+
 /// Domain member name, either an ordinary/operator signature or a literal suffix.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DomainMemberName {
@@ -502,6 +518,7 @@ pub enum NamedItemBody {
     Expr(Expr),
     Type(TypeDeclBody),
     Class(ClassBody),
+    Instance(InstanceBody),
 }
 
 /// Shared representation for named top-level items.
@@ -537,6 +554,23 @@ impl NamedItem {
             _ => None,
         }
     }
+
+    pub fn instance_body(&self) -> Option<&InstanceBody> {
+        match &self.body {
+            Some(NamedItemBody::Instance(body)) => Some(body),
+            _ => None,
+        }
+    }
+}
+
+/// `instance` declaration.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstanceItem {
+    pub base: ItemBase,
+    pub keyword_span: SourceSpan,
+    pub class: Option<QualifiedName>,
+    pub target: Option<TypeExpr>,
+    pub body: Option<InstanceBody>,
 }
 
 /// `use` declaration with an optional module path and import list.
@@ -629,6 +663,7 @@ pub enum Item {
     Function(NamedItem),
     Signal(NamedItem),
     Class(NamedItem),
+    Instance(InstanceItem),
     Domain(DomainItem),
     SourceProviderContract(SourceProviderContractItem),
     Use(UseItem),
@@ -644,6 +679,7 @@ pub enum ItemKind {
     Function,
     Signal,
     Class,
+    Instance,
     Domain,
     SourceProviderContract,
     Use,
@@ -659,6 +695,7 @@ impl Item {
             Item::Function(_) => ItemKind::Function,
             Item::Signal(_) => ItemKind::Signal,
             Item::Class(_) => ItemKind::Class,
+            Item::Instance(_) => ItemKind::Instance,
             Item::Domain(_) => ItemKind::Domain,
             Item::SourceProviderContract(_) => ItemKind::SourceProviderContract,
             Item::Use(_) => ItemKind::Use,
@@ -674,6 +711,7 @@ impl Item {
             | Item::Function(item)
             | Item::Signal(item)
             | Item::Class(item) => &item.base,
+            Item::Instance(item) => &item.base,
             Item::Domain(item) => &item.base,
             Item::SourceProviderContract(item) => &item.base,
             Item::Use(item) => &item.base,

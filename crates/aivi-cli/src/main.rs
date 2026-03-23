@@ -241,6 +241,7 @@ fn print_usage() {
             ItemKind::Function,
             ItemKind::Signal,
             ItemKind::Class,
+            ItemKind::Instance,
             ItemKind::Domain,
             ItemKind::SourceProviderContract,
             ItemKind::Use,

@@ -1,1 +1,29 @@
+# Rust
 /target
+**/*.rs.bk
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+
+# VitePress
+manual/.vitepress/dist/
+manual/.vitepress/cache/
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# WASM build artefacts (future playground)
+manual/public/wasm/

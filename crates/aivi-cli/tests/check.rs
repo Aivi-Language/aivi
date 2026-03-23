@@ -24,9 +24,11 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/source-option-contract-parameter-context-free-builtins/main.aivi",
         "milestone-2/valid/source-option-imported-binding-match/main.aivi",
         "milestone-2/valid/applicative-clusters/main.aivi",
+        "milestone-2/valid/builtin-constructor-inference/main.aivi",
         "milestone-2/valid/case-exhaustiveness/main.aivi",
         "milestone-2/valid/markup-control-nodes/main.aivi",
         "milestone-2/valid/class-declarations/main.aivi",
+        "milestone-2/valid/instance-declarations/main.aivi",
         "milestone-2/valid/domain-declarations/main.aivi",
         "milestone-2/valid/domain-member-resolution/main.aivi",
         "milestone-2/valid/domain-literal-suffixes/main.aivi",
@@ -119,6 +121,9 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/ambiguous-domain-member/main.aivi",
         "milestone-2/invalid/mixed-applicative-cluster/main.aivi",
         "milestone-2/invalid/case-branch-type-mismatch/main.aivi",
+        "milestone-2/invalid/duplicate-instance/main.aivi",
+        "milestone-2/invalid/instance-member-operator-mismatch/main.aivi",
+        "milestone-2/invalid/operator-expression-typing/main.aivi",
         "milestone-2/invalid/trailing-declaration-body-token/main.aivi",
         "milestone-2/invalid/custom-source-provider-unknown-option/main.aivi",
         "milestone-2/invalid/custom-source-provider-option-type-mismatch/main.aivi",
@@ -243,6 +248,54 @@ fn check_reports_missing_eq_from_hir_typechecker() {
     assert!(
         stderr.contains("this expression requires `Eq` for `Map Text Int`"),
         "expected explicit missing Eq message, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_instance_member_operator_mismatch_from_hir_typechecker() {
+    let path = fixture_path("milestone-2/invalid/instance-member-operator-mismatch/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected instance member operator mismatch fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::type-mismatch"),
+        "expected type mismatch diagnostic code, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("expected `Bool` but found `Blob`"),
+        "expected explicit instance member mismatch message, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_invalid_operator_typing_from_hir_typechecker() {
+    let path = fixture_path("milestone-2/invalid/operator-expression-typing/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected invalid operator fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::invalid-unary-operator"),
+        "expected invalid unary operator diagnostic code, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("hir::invalid-binary-operator"),
+        "expected invalid binary operator diagnostic code, got stderr: {stderr}"
     );
 }
 

@@ -4,9 +4,10 @@ use aivi_base::{Diagnostic, DiagnosticCode, SourceSpan};
 
 use crate::{
     hir::{
-        BuiltinTerm, BuiltinType, ExprKind, FunctionItem, ImportBindingMetadata, ImportBundleKind,
-        Item, Module, RecordExpr, SignalItem, TermReference, TermResolution, TypeItemBody,
-        ValueItem,
+        BinaryOperator, BuiltinTerm, BuiltinType, DomainMemberKind, ExprKind, FunctionItem,
+        ImportBindingMetadata, ImportBundleKind, InstanceItem, InstanceMember, Item, MapExpr,
+        Module, NamePath, ProjectionBase, RecordExpr, ResolutionState, SignalItem, TermReference,
+        TermResolution, TypeItemBody, TypeResolution, UnaryOperator, ValueItem,
     },
     ids::{ExprId, ItemId, TypeParameterId},
     validate::{
@@ -17,6 +18,13 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConstraintClass {
     Eq,
+    Default,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ConstraintOrigin {
+    Expression,
+    RecordOmittedField { field_name: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -24,6 +32,7 @@ pub struct TypeConstraint {
     span: SourceSpan,
     class: ConstraintClass,
     subject: GateType,
+    origin: ConstraintOrigin,
 }
 
 impl TypeConstraint {
@@ -32,6 +41,22 @@ impl TypeConstraint {
             span,
             class: ConstraintClass::Eq,
             subject,
+            origin: ConstraintOrigin::Expression,
+        }
+    }
+
+    pub(crate) fn default_record_field(
+        span: SourceSpan,
+        field_name: impl Into<String>,
+        subject: GateType,
+    ) -> Self {
+        Self {
+            span,
+            class: ConstraintClass::Default,
+            subject,
+            origin: ConstraintOrigin::RecordOmittedField {
+                field_name: field_name.into(),
+            },
         }
     }
 
@@ -45,6 +70,13 @@ impl TypeConstraint {
 
     pub fn subject(&self) -> &GateType {
         &self.subject
+    }
+
+    fn omitted_field_name(&self) -> Option<&str> {
+        match &self.origin {
+            ConstraintOrigin::Expression => None,
+            ConstraintOrigin::RecordOmittedField { field_name } => Some(field_name),
+        }
     }
 }
 
@@ -95,6 +127,13 @@ struct TypeChecker<'a> {
     option_default_in_scope: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BinaryOperatorExpectation {
+    BoolOperands,
+    MatchingNumericOperands,
+    CommonTypeOperands,
+}
+
 impl<'a> TypeChecker<'a> {
     fn new(module: &'a Module) -> Self {
         let option_default_in_scope = module.imports().iter().any(|(_, import)| {
@@ -123,11 +162,11 @@ impl<'a> TypeChecker<'a> {
                 Item::Value(item) => self.check_value_item(&item),
                 Item::Function(item) => self.check_function_item(&item),
                 Item::Signal(item) => self.check_signal_item(&item),
+                Item::Instance(item) => self.check_instance_item(&item),
                 Item::Type(_)
                 | Item::Class(_)
                 | Item::Domain(_)
                 | Item::SourceProviderContract(_)
-                | Item::Instance(_)
                 | Item::Use(_)
                 | Item::Export(_) => {}
             }
@@ -202,9 +241,69 @@ impl<'a> TypeChecker<'a> {
                 );
             }
             None => {
-                self.check_expr(body, &GateExprEnv::default(), None, &mut Vec::new());
+                self.check_inferred_expr(body, &GateExprEnv::default(), None);
             }
         }
+    }
+
+    fn check_instance_item(&mut self, item: &InstanceItem) {
+        let Some(class_item_id) = self.instance_class_item_id(item) else {
+            return;
+        };
+        let Some(argument_substitutions) =
+            self.instance_argument_substitutions(class_item_id, item)
+        else {
+            return;
+        };
+        let Item::Class(class_item) = &self.module.items()[class_item_id] else {
+            return;
+        };
+        let expected_members = class_item
+            .members
+            .iter()
+            .map(|member| (member.name.text().to_owned(), member.annotation))
+            .collect::<HashMap<_, _>>();
+        for member in &item.members {
+            let Some(annotation) = expected_members.get(member.name.text()).copied() else {
+                continue;
+            };
+            let Some(expected) = self
+                .typing
+                .lower_hir_type(annotation, &argument_substitutions)
+            else {
+                continue;
+            };
+            self.check_instance_member(member, &expected);
+        }
+    }
+
+    fn check_instance_member(&mut self, member: &InstanceMember, expected: &GateType) {
+        let mut env = GateExprEnv::default();
+        let mut current = expected.clone();
+        for parameter in &member.parameters {
+            let GateType::Arrow {
+                parameter: parameter_ty,
+                result,
+            } = current
+            else {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "instance member `{}` takes more parameters than its class signature allows",
+                        member.name.text()
+                    ))
+                    .with_code(code("instance-member-arity-mismatch"))
+                    .with_primary_label(
+                        member.span,
+                        "remove parameters or widen the class member signature",
+                    ),
+                );
+                return;
+            };
+            env.locals
+                .insert(parameter.binding, parameter_ty.as_ref().clone());
+            current = *result;
+        }
+        self.check_expr(member.body, &env, Some(&current), &mut Vec::new());
     }
 
     fn check_expr(
@@ -214,6 +313,10 @@ impl<'a> TypeChecker<'a> {
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
+        if let Some(result) = self.check_operator_expr(expr_id, env, expected, value_stack) {
+            return result;
+        }
+
         if let Some(expected) = expected {
             if let Some(result) =
                 self.check_expected_special_case(expr_id, env, expected, value_stack)
@@ -222,6 +325,15 @@ impl<'a> TypeChecker<'a> {
             }
         }
 
+        self.check_inferred_expr(expr_id, env, expected)
+    }
+
+    fn check_inferred_expr(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+    ) -> bool {
         let info = self.typing.infer_expr(expr_id, env, None);
         self.emit_expr_issues(&info.issues);
         self.solve_constraints(&info.constraints);
@@ -234,6 +346,389 @@ impl<'a> TypeChecker<'a> {
             }
             (Some(_), None) => false,
             (None, Some(_)) | (None, None) => true,
+        }
+    }
+
+    fn check_operator_expr(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> Option<bool> {
+        let kind = self.module.exprs()[expr_id].kind.clone();
+        match kind {
+            ExprKind::Unary { operator, expr } => {
+                Some(self.check_unary_expr(expr_id, operator, expr, env, expected, value_stack))
+            }
+            ExprKind::Binary {
+                left,
+                operator,
+                right,
+            } => Some(self.check_binary_expr(
+                expr_id,
+                left,
+                operator,
+                right,
+                env,
+                expected,
+                value_stack,
+            )),
+            _ => None,
+        }
+    }
+
+    fn check_unary_expr(
+        &mut self,
+        expr_id: ExprId,
+        operator: UnaryOperator,
+        expr: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let bool_ty = GateType::Primitive(BuiltinType::Bool);
+        let actual = self.inferred_expr_type(expr, env);
+        let checkpoint = self.diagnostics.len();
+        let operand_ok = self.check_expr(expr, env, Some(&bool_ty), value_stack);
+        if !operand_ok {
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_unary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    actual.as_ref(),
+                );
+            }
+            return false;
+        }
+        self.check_result_type(expr_id, expected, &bool_ty)
+    }
+
+    fn check_binary_expr(
+        &mut self,
+        expr_id: ExprId,
+        left: ExprId,
+        operator: BinaryOperator,
+        right: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        match operator {
+            BinaryOperator::And | BinaryOperator::Or => self.check_bool_binary_expr(
+                expr_id,
+                left,
+                operator,
+                right,
+                env,
+                expected,
+                value_stack,
+            ),
+            BinaryOperator::Add
+            | BinaryOperator::Subtract
+            | BinaryOperator::GreaterThan
+            | BinaryOperator::LessThan => self.check_numeric_binary_expr(
+                expr_id,
+                left,
+                operator,
+                right,
+                env,
+                expected,
+                value_stack,
+            ),
+            BinaryOperator::Equals | BinaryOperator::NotEquals => self.check_equality_binary_expr(
+                expr_id,
+                left,
+                operator,
+                right,
+                env,
+                expected,
+                value_stack,
+            ),
+        }
+    }
+
+    fn check_bool_binary_expr(
+        &mut self,
+        expr_id: ExprId,
+        left: ExprId,
+        operator: BinaryOperator,
+        right: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let bool_ty = GateType::Primitive(BuiltinType::Bool);
+        let left_actual = self.inferred_expr_type(left, env);
+        let right_actual = self.inferred_expr_type(right, env);
+        let checkpoint = self.diagnostics.len();
+        let left_ok = self.check_expr(left, env, Some(&bool_ty), value_stack);
+        let right_ok = self.check_expr(right, env, Some(&bool_ty), value_stack);
+        if !left_ok || !right_ok {
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::BoolOperands,
+                );
+            }
+            return false;
+        }
+        self.check_result_type(expr_id, expected, &bool_ty)
+    }
+
+    fn check_numeric_binary_expr(
+        &mut self,
+        expr_id: ExprId,
+        left: ExprId,
+        operator: BinaryOperator,
+        right: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let left_actual = self.inferred_expr_type(left, env);
+        let right_actual = self.inferred_expr_type(right, env);
+        if let (Some(left_actual), Some(right_actual)) =
+            (left_actual.as_ref(), right_actual.as_ref())
+        {
+            if let Some(result_ty) =
+                self.select_domain_binary_operator(operator, left_actual, right_actual)
+            {
+                let checkpoint = self.diagnostics.len();
+                let left_ok = self.check_expr(left, env, Some(left_actual), value_stack);
+                let right_ok = self.check_expr(right, env, Some(right_actual), value_stack);
+                if !left_ok || !right_ok {
+                    if self.diagnostics.len() == checkpoint {
+                        self.emit_invalid_binary_operator(
+                            self.module.exprs()[expr_id].span,
+                            operator,
+                            Some(left_actual),
+                            Some(right_actual),
+                            BinaryOperatorExpectation::MatchingNumericOperands,
+                        );
+                    }
+                    return false;
+                }
+                return self.check_result_type(expr_id, expected, &result_ty);
+            }
+        }
+        let Some(operand_ty) = self.select_numeric_operand_type(
+            operator,
+            left_actual.as_ref(),
+            right_actual.as_ref(),
+            expected,
+        ) else {
+            let checkpoint = self.diagnostics.len();
+            self.check_expr(left, env, None, value_stack);
+            self.check_expr(right, env, None, value_stack);
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::MatchingNumericOperands,
+                );
+            }
+            return false;
+        };
+
+        let checkpoint = self.diagnostics.len();
+        let left_ok = self.check_expr(left, env, Some(&operand_ty), value_stack);
+        let right_ok = self.check_expr(right, env, Some(&operand_ty), value_stack);
+        if !left_ok || !right_ok {
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::MatchingNumericOperands,
+                );
+            }
+            return false;
+        }
+
+        let result_ty = match operator {
+            BinaryOperator::GreaterThan | BinaryOperator::LessThan => {
+                GateType::Primitive(BuiltinType::Bool)
+            }
+            BinaryOperator::Add | BinaryOperator::Subtract => operand_ty,
+            _ => unreachable!("numeric binary operator helper only handles numeric operators"),
+        };
+        self.check_result_type(expr_id, expected, &result_ty)
+    }
+
+    fn check_equality_binary_expr(
+        &mut self,
+        expr_id: ExprId,
+        left: ExprId,
+        operator: BinaryOperator,
+        right: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let left_actual = self.inferred_expr_type(left, env);
+        let right_actual = self.inferred_expr_type(right, env);
+        let Some(operand_ty) = left_actual.clone().or_else(|| right_actual.clone()) else {
+            let checkpoint = self.diagnostics.len();
+            self.check_expr(left, env, None, value_stack);
+            self.check_expr(right, env, None, value_stack);
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::CommonTypeOperands,
+                );
+            }
+            return false;
+        };
+
+        let checkpoint = self.diagnostics.len();
+        let left_ok = self.check_expr(left, env, Some(&operand_ty), value_stack);
+        let right_ok = self.check_expr(right, env, Some(&operand_ty), value_stack);
+        if !left_ok || !right_ok {
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::CommonTypeOperands,
+                );
+            }
+            return false;
+        }
+
+        self.solve_constraints(&[TypeConstraint::eq(
+            self.module.exprs()[expr_id].span,
+            operand_ty,
+        )]);
+        let bool_ty = GateType::Primitive(BuiltinType::Bool);
+        self.check_result_type(expr_id, expected, &bool_ty)
+    }
+
+    fn inferred_expr_type(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
+        self.typing.infer_expr(expr_id, env, None).ty
+    }
+
+    fn inferred_expr_shape(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
+        let info = self.typing.infer_expr(expr_id, env, None);
+        info.ty.clone().or_else(|| info.actual_gate_type())
+    }
+
+    fn select_domain_binary_operator(
+        &mut self,
+        operator: BinaryOperator,
+        left: &GateType,
+        right: &GateType,
+    ) -> Option<GateType> {
+        let mut matches = Vec::new();
+        if let Some(result) = self.match_domain_binary_operator(left, left, right, operator) {
+            matches.push(result);
+        }
+        if !left.same_shape(right) {
+            if let Some(result) = self.match_domain_binary_operator(right, left, right, operator) {
+                matches.push(result);
+            }
+        }
+        (matches.len() == 1).then(|| {
+            matches
+                .pop()
+                .expect("exactly one domain operator match should be present")
+        })
+    }
+
+    fn match_domain_binary_operator(
+        &mut self,
+        domain_ty: &GateType,
+        left: &GateType,
+        right: &GateType,
+        operator: BinaryOperator,
+    ) -> Option<GateType> {
+        let GateType::Domain {
+            item, arguments, ..
+        } = domain_ty
+        else {
+            return None;
+        };
+        let Item::Domain(domain_item) = &self.module.items()[*item] else {
+            return None;
+        };
+        let substitutions = domain_item
+            .parameters
+            .iter()
+            .copied()
+            .zip(arguments.iter().cloned())
+            .collect::<HashMap<TypeParameterId, GateType>>();
+        for member in &domain_item.members {
+            if member.kind != DomainMemberKind::Operator
+                || member.name.text() != binary_operator_text(operator)
+            {
+                continue;
+            }
+            let Some(lowered) = self
+                .typing
+                .lower_hir_type(member.annotation, &substitutions)
+            else {
+                continue;
+            };
+            let GateType::Arrow {
+                parameter: first,
+                result: tail,
+            } = lowered
+            else {
+                continue;
+            };
+            let GateType::Arrow {
+                parameter: second,
+                result,
+            } = *tail
+            else {
+                continue;
+            };
+            if first.as_ref().same_shape(left) && second.as_ref().same_shape(right) {
+                return Some(*result);
+            }
+        }
+        None
+    }
+
+    fn select_numeric_operand_type(
+        &self,
+        operator: BinaryOperator,
+        left: Option<&GateType>,
+        right: Option<&GateType>,
+        expected: Option<&GateType>,
+    ) -> Option<GateType> {
+        left.filter(|ty| is_numeric_gate_type(ty))
+            .cloned()
+            .or_else(|| right.filter(|ty| is_numeric_gate_type(ty)).cloned())
+            .or_else(|| {
+                matches!(operator, BinaryOperator::Add | BinaryOperator::Subtract)
+                    .then(|| expected.filter(|ty| is_numeric_gate_type(ty)).cloned())
+                    .flatten()
+            })
+    }
+
+    fn check_result_type(
+        &mut self,
+        expr_id: ExprId,
+        expected: Option<&GateType>,
+        actual: &GateType,
+    ) -> bool {
+        match expected {
+            Some(expected) if !actual.same_shape(expected) => {
+                self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
+                false
+            }
+            _ => true,
         }
     }
 
@@ -251,6 +746,9 @@ impl<'a> TypeChecker<'a> {
                 .or_else(|| self.check_domain_member_name(&reference, expected))
                 .or_else(|| {
                     self.check_unannotated_value_name(&reference, env, expected, value_stack)
+                })
+                .or_else(|| {
+                    self.check_unannotated_function_name(&reference, expected, value_stack)
                 }),
             ExprKind::Apply { callee, arguments } => {
                 let callee_kind = self.module.exprs()[callee].kind.clone();
@@ -277,24 +775,63 @@ impl<'a> TypeChecker<'a> {
                 self.check_expected_apply(expr_id, callee, &arguments, env, expected, value_stack)
             }
             ExprKind::Record(record) => match expected {
-                GateType::Record(fields) => Some(self.check_record_expr(
+                GateType::Record(fields) => {
+                    let checkpoint = self.diagnostics.len();
+                    let mut constraints = Vec::new();
+                    let ok = self.check_record_expr(
+                        self.module.exprs()[expr_id].span,
+                        &record,
+                        fields,
+                        env,
+                        value_stack,
+                        &mut constraints,
+                    );
+                    self.solve_constraints(&constraints);
+                    Some(ok && self.diagnostics.len() == checkpoint)
+                }
+                _ => None,
+            },
+            ExprKind::Tuple(elements) => match expected {
+                GateType::Tuple(expected_elements) => Some(self.check_tuple_expr(
                     self.module.exprs()[expr_id].span,
-                    &record,
-                    fields,
+                    &elements,
+                    expected_elements,
                     env,
                     value_stack,
                 )),
                 _ => None,
             },
+            ExprKind::List(elements) => match expected {
+                GateType::List(element) => Some(self.check_homogeneous_collection_expr(
+                    &elements,
+                    element.as_ref(),
+                    env,
+                    value_stack,
+                )),
+                _ => None,
+            },
+            ExprKind::Map(map) => match expected {
+                GateType::Map { key, value } => {
+                    Some(self.check_map_expr(&map, key.as_ref(), value.as_ref(), env, value_stack))
+                }
+                _ => None,
+            },
+            ExprKind::Set(elements) => match expected {
+                GateType::Set(element) => Some(self.check_homogeneous_collection_expr(
+                    &elements,
+                    element.as_ref(),
+                    env,
+                    value_stack,
+                )),
+                _ => None,
+            },
+            ExprKind::Projection { base, path } => {
+                self.check_projection_expr(expr_id, &base, &path, env, expected, value_stack)
+            }
             ExprKind::Integer(_)
             | ExprKind::SuffixedInteger(_)
             | ExprKind::Text(_)
             | ExprKind::Regex(_)
-            | ExprKind::Tuple(_)
-            | ExprKind::List(_)
-            | ExprKind::Map(_)
-            | ExprKind::Set(_)
-            | ExprKind::Projection { .. }
             | ExprKind::Unary { .. }
             | ExprKind::Binary { .. }
             | ExprKind::Pipe(_)
@@ -327,6 +864,70 @@ impl<'a> TypeChecker<'a> {
         let popped = value_stack.pop();
         debug_assert_eq!(popped, Some(*item_id));
         Some(result)
+    }
+
+    fn check_unannotated_function_name(
+        &mut self,
+        reference: &TermReference,
+        expected: &GateType,
+        value_stack: &mut Vec<ItemId>,
+    ) -> Option<bool> {
+        let crate::ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let (parameters, annotated, body) = match &self.module.items()[*item_id] {
+            Item::Function(item) => (
+                item.parameters.clone(),
+                item.annotation.is_some(),
+                item.body,
+            ),
+            _ => return None,
+        };
+        if annotated || value_stack.contains(item_id) {
+            return None;
+        }
+        let (parameter_types, result_expected) =
+            self.expected_function_signature(expected, parameters.len())?;
+        let mut env = GateExprEnv::default();
+        for (parameter, expected_parameter_ty) in parameters.iter().zip(parameter_types.iter()) {
+            if let Some(annotation) = parameter.annotation {
+                let Some(parameter_ty) = self.typing.lower_annotation(annotation) else {
+                    return None;
+                };
+                if !parameter_ty.same_shape(expected_parameter_ty) {
+                    self.emit_type_mismatch(reference.span(), expected_parameter_ty, &parameter_ty);
+                    return Some(false);
+                }
+                env.locals.insert(parameter.binding, parameter_ty);
+            } else {
+                env.locals
+                    .insert(parameter.binding, expected_parameter_ty.clone());
+            }
+        }
+        value_stack.push(*item_id);
+        let result = self.check_expr(body, &env, Some(&result_expected), value_stack);
+        let popped = value_stack.pop();
+        debug_assert_eq!(popped, Some(*item_id));
+        Some(result)
+    }
+
+    fn expected_function_signature(
+        &self,
+        expected: &GateType,
+        arity: usize,
+    ) -> Option<(Vec<GateType>, GateType)> {
+        let mut current = expected;
+        let mut parameter_types = Vec::with_capacity(arity);
+        for _ in 0..arity {
+            let GateType::Arrow { parameter, result } = current else {
+                return None;
+            };
+            parameter_types.push(parameter.as_ref().clone());
+            current = result.as_ref();
+        }
+        Some((parameter_types, current.clone()))
     }
 
     fn check_builtin_constructor_name(
@@ -460,20 +1061,31 @@ impl<'a> TypeChecker<'a> {
             return Some(false);
         }
 
-        let mut current = callee_info.ty?;
-        let mut parameter_types = Vec::with_capacity(arguments.len());
-        for _ in arguments.iter() {
-            let GateType::Arrow { parameter, result } = current else {
-                return None;
-            };
-            parameter_types.push(*parameter);
-            current = *result;
-        }
-
-        if !current.same_shape(expected) {
-            self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, &current);
-            return Some(false);
-        }
+        let parameter_types = match callee_info.ty {
+            Some(callee_ty) => {
+                let (parameter_types, result_ty) =
+                    self.expected_function_signature(&callee_ty, arguments.len())?;
+                if !result_ty.same_shape(expected) {
+                    self.emit_type_mismatch(
+                        self.module.exprs()[expr_id].span,
+                        expected,
+                        &result_ty,
+                    );
+                    return Some(false);
+                }
+                parameter_types
+            }
+            None => {
+                let parameter_types =
+                    self.fallback_apply_parameter_types(callee, &arguments, env)?;
+                let callee_expected = self.arrow_type(&parameter_types, expected);
+                let checkpoint = self.diagnostics.len();
+                if !self.check_expr(callee, env, Some(&callee_expected), value_stack) {
+                    return (self.diagnostics.len() != checkpoint).then_some(false);
+                }
+                parameter_types
+            }
+        };
 
         for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
             if !self.check_expr(*argument, env, Some(parameter), value_stack) {
@@ -491,6 +1103,7 @@ impl<'a> TypeChecker<'a> {
         expected_fields: &[GateRecordField],
         env: &GateExprEnv,
         value_stack: &mut Vec<ItemId>,
+        constraints: &mut Vec<TypeConstraint>,
     ) -> bool {
         let expected = expected_fields
             .iter()
@@ -523,28 +1136,209 @@ impl<'a> TypeChecker<'a> {
             if seen.contains(&field.name) {
                 continue;
             }
-            if self.has_default_instance(&field.ty) {
-                continue;
-            }
-            self.diagnostics.push(
-                Diagnostic::error(format!(
-                    "record literal omits field `{}` but no `Default` instance is in scope for `{}`",
-                    field.name, field.ty
-                ))
-                .with_code(code("missing-default-instance"))
-                .with_primary_label(
-                    expr_span,
-                    format!("field `{}` must be provided or defaultable here", field.name),
-                ),
-            );
-            ok = false;
+            constraints.push(TypeConstraint::default_record_field(
+                expr_span,
+                field.name.clone(),
+                field.ty.clone(),
+            ));
         }
 
         ok
     }
 
-    fn has_default_instance(&self, ty: &GateType) -> bool {
-        matches!(ty, GateType::Option(_)) && self.option_default_in_scope
+    fn check_tuple_expr(
+        &mut self,
+        expr_span: SourceSpan,
+        elements: &crate::AtLeastTwo<ExprId>,
+        expected_elements: &[GateType],
+        env: &GateExprEnv,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let mut ok = true;
+        for (index, element) in elements.iter().enumerate() {
+            match expected_elements.get(index) {
+                Some(expected) => {
+                    ok &= self.check_expected_expr(*element, env, expected, value_stack);
+                }
+                None => {
+                    ok &= self.check_expr(*element, env, None, value_stack);
+                }
+            }
+        }
+
+        if elements.len() != expected_elements.len() {
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "expected `{}` but found a {}-element tuple",
+                    GateType::Tuple(expected_elements.to_vec()),
+                    elements.len()
+                ))
+                .with_code(code("type-mismatch"))
+                .with_primary_label(expr_span, "this tuple has the wrong arity"),
+            );
+            return false;
+        }
+
+        ok
+    }
+
+    fn check_homogeneous_collection_expr(
+        &mut self,
+        elements: &[ExprId],
+        expected_element: &GateType,
+        env: &GateExprEnv,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let mut ok = true;
+        for element in elements {
+            ok &= self.check_expected_expr(*element, env, expected_element, value_stack);
+        }
+        ok
+    }
+
+    fn check_map_expr(
+        &mut self,
+        map: &MapExpr,
+        expected_key: &GateType,
+        expected_value: &GateType,
+        env: &GateExprEnv,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let mut ok = true;
+        for entry in &map.entries {
+            ok &= self.check_expected_expr(entry.key, env, expected_key, value_stack);
+            ok &= self.check_expected_expr(entry.value, env, expected_value, value_stack);
+        }
+        ok
+    }
+
+    fn check_projection_expr(
+        &mut self,
+        expr_id: ExprId,
+        base: &ProjectionBase,
+        path: &NamePath,
+        env: &GateExprEnv,
+        expected: &GateType,
+        value_stack: &mut Vec<ItemId>,
+    ) -> Option<bool> {
+        let ProjectionBase::Expr(base_expr) = base else {
+            return None;
+        };
+
+        let checkpoint = self.diagnostics.len();
+        let base_info = self.typing.infer_expr(*base_expr, env, None);
+        self.emit_expr_issues(&base_info.issues);
+        self.solve_constraints(&base_info.constraints);
+        if self.diagnostics.len() != checkpoint {
+            return Some(false);
+        }
+
+        let subject = base_info
+            .ty
+            .clone()
+            .or_else(|| base_info.actual_gate_type())
+            .or_else(|| self.infer_apply_result_type(*base_expr, env));
+        if self.diagnostics.len() != checkpoint {
+            return Some(false);
+        }
+        let Some(subject) = subject else {
+            return None;
+        };
+
+        if !self.check_expected_expr(*base_expr, env, &subject, value_stack) {
+            return Some(false);
+        }
+
+        match self.project_type(&subject, path) {
+            Ok(actual) => Some(self.check_result_type(expr_id, Some(expected), &actual)),
+            Err(issue) => {
+                self.emit_expr_issues(&[issue]);
+                Some(false)
+            }
+        }
+    }
+
+    fn check_expected_expr(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: &GateType,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let checkpoint = self.diagnostics.len();
+        let ok = self.check_expr(expr_id, env, Some(expected), value_stack);
+        if !ok && self.diagnostics.len() == checkpoint {
+            let actual = self.inferred_expr_shape(expr_id, env);
+            self.emit_type_mismatch_or_unresolved(
+                self.module.exprs()[expr_id].span,
+                expected,
+                actual.as_ref(),
+            );
+        }
+        ok
+    }
+
+    fn infer_apply_result_type(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
+        let ExprKind::Apply { callee, arguments } = self.module.exprs()[expr_id].kind.clone()
+        else {
+            return None;
+        };
+
+        let callee_info = self.typing.infer_expr(callee, env, None);
+        self.emit_expr_issues(&callee_info.issues);
+        self.solve_constraints(&callee_info.constraints);
+
+        let mut current = callee_info.ty?;
+        for _ in arguments.iter() {
+            let GateType::Arrow { result, .. } = current else {
+                return None;
+            };
+            current = *result;
+        }
+        Some(current)
+    }
+
+    fn project_type(&self, subject: &GateType, path: &NamePath) -> Result<GateType, GateIssue> {
+        let mut current = subject.clone();
+        for segment in path.segments().iter() {
+            let GateType::Record(fields) = &current else {
+                return Err(GateIssue::InvalidProjection {
+                    span: path.span(),
+                    path: projection_path_text(path),
+                    subject: current.to_string(),
+                });
+            };
+            let Some(field) = fields.iter().find(|field| field.name == segment.text()) else {
+                return Err(GateIssue::UnknownField {
+                    span: path.span(),
+                    path: projection_path_text(path),
+                    subject: current.to_string(),
+                });
+            };
+            current = field.ty.clone();
+        }
+        Ok(current)
+    }
+
+    fn has_default_instance(&mut self, ty: &GateType) -> bool {
+        (matches!(ty, GateType::Option(_)) && self.option_default_in_scope)
+            || self.has_same_module_instance("Default", ty)
+    }
+
+    fn require_default(&mut self, ty: &GateType) -> Result<(), String> {
+        if self.has_default_instance(ty) {
+            return Ok(());
+        }
+        match ty {
+            GateType::Option(_) => Err(
+                "`Option A` only satisfies `Default` here via `use aivi.defaults (Option)` or a same-module `Default` instance"
+                    .to_owned(),
+            ),
+            _ => Err(
+                "resolved-HIR default checking currently accepts same-module `Default` instances only"
+                    .to_owned(),
+            ),
+        }
     }
 
     fn emit_expr_issues(&mut self, issues: &[GateIssue]) {
@@ -663,6 +1457,57 @@ impl<'a> TypeChecker<'a> {
         );
     }
 
+    fn emit_invalid_unary_operator(
+        &mut self,
+        span: SourceSpan,
+        operator: UnaryOperator,
+        actual: Option<&GateType>,
+    ) {
+        self.diagnostics.push(
+            Diagnostic::error(format!(
+                "operator `{}` expects a `Bool` operand, found {}",
+                unary_operator_text(operator),
+                describe_inferred_type(actual)
+            ))
+            .with_code(code("invalid-unary-operator"))
+            .with_primary_label(span, "use a `Bool` expression here"),
+        );
+    }
+
+    fn emit_invalid_binary_operator(
+        &mut self,
+        span: SourceSpan,
+        operator: BinaryOperator,
+        left: Option<&GateType>,
+        right: Option<&GateType>,
+        expectation: BinaryOperatorExpectation,
+    ) {
+        let (expected_operands, label) = match expectation {
+            BinaryOperatorExpectation::BoolOperands => (
+                "`Bool` operands",
+                "both operands must have type `Bool` here",
+            ),
+            BinaryOperatorExpectation::MatchingNumericOperands => (
+                "matching numeric operands",
+                "both operands must resolve to the same numeric type here",
+            ),
+            BinaryOperatorExpectation::CommonTypeOperands => (
+                "operands that resolve to one common type",
+                "both operands must resolve to one shared type here",
+            ),
+        };
+        self.diagnostics.push(
+            Diagnostic::error(format!(
+                "operator `{}` expects {expected_operands}, found {} and {}",
+                binary_operator_text(operator),
+                describe_inferred_type(left),
+                describe_inferred_type(right),
+            ))
+            .with_code(code("invalid-binary-operator"))
+            .with_primary_label(span, label),
+        );
+    }
+
     fn solve_constraints(&mut self, constraints: &[TypeConstraint]) {
         for constraint in constraints {
             match constraint.class() {
@@ -685,11 +1530,106 @@ impl<'a> TypeChecker<'a> {
                         );
                     }
                 }
+                ConstraintClass::Default => {
+                    if let Err(reason) = self.require_default(constraint.subject()) {
+                        let field_name = constraint.omitted_field_name().unwrap_or("this field");
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record literal omits field `{field_name}` but no `Default` instance is in scope for `{}`",
+                                constraint.subject()
+                            ))
+                            .with_code(code("missing-default-instance"))
+                            .with_primary_label(
+                                constraint.span(),
+                                format!("field `{field_name}` must be provided or defaultable here"),
+                            )
+                            .with_note(reason),
+                        );
+                    }
+                }
             }
         }
     }
 
+    fn fallback_apply_parameter_types(
+        &mut self,
+        callee: ExprId,
+        arguments: &crate::NonEmpty<ExprId>,
+        env: &GateExprEnv,
+    ) -> Option<Vec<GateType>> {
+        let mut parameter_types = arguments
+            .iter()
+            .map(|argument| self.inferred_expr_type(*argument, env))
+            .collect::<Vec<_>>();
+        if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
+            if let Some(named_parameter_types) =
+                self.named_function_parameter_types(reference, arguments.len())
+            {
+                for (slot, named_parameter_ty) in parameter_types
+                    .iter_mut()
+                    .zip(named_parameter_types.into_iter())
+                {
+                    if named_parameter_ty.is_some() {
+                        *slot = named_parameter_ty;
+                    }
+                }
+            }
+        }
+        parameter_types.into_iter().collect()
+    }
+
+    fn named_function_parameter_types(
+        &mut self,
+        reference: &TermReference,
+        arity: usize,
+    ) -> Option<Vec<Option<GateType>>> {
+        let crate::ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let parameters = match &self.module.items()[*item_id] {
+            Item::Function(item) if item.parameters.len() == arity => item.parameters.clone(),
+            _ => return None,
+        };
+        Some(
+            parameters
+                .into_iter()
+                .map(|parameter| {
+                    parameter
+                        .annotation
+                        .and_then(|annotation| self.typing.lower_annotation(annotation))
+                })
+                .collect(),
+        )
+    }
+
+    fn arrow_type(&self, parameter_types: &[GateType], result: &GateType) -> GateType {
+        let mut current = result.clone();
+        for parameter in parameter_types.iter().rev() {
+            current = GateType::Arrow {
+                parameter: Box::new(parameter.clone()),
+                result: Box::new(current),
+            };
+        }
+        current
+    }
+
     fn require_eq(&mut self, ty: &GateType, item_stack: &mut Vec<ItemId>) -> Result<(), String> {
+        if self.require_compiler_derived_eq(ty, item_stack).is_ok() {
+            return Ok(());
+        }
+        if self.has_same_module_instance("Eq", ty) {
+            return Ok(());
+        }
+        self.require_compiler_derived_eq(ty, item_stack)
+    }
+
+    fn require_compiler_derived_eq(
+        &mut self,
+        ty: &GateType,
+        item_stack: &mut Vec<ItemId>,
+    ) -> Result<(), String> {
         match ty {
             GateType::Primitive(BuiltinType::Bytes) => {
                 Err("`Bytes` does not have a compiler-derived `Eq` instance in v1".to_owned())
@@ -796,6 +1736,73 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    fn has_same_module_instance(&mut self, class_name: &str, ty: &GateType) -> bool {
+        let instances = self
+            .module
+            .items()
+            .iter()
+            .filter_map(|(_, item)| match item {
+                Item::Instance(instance) => Some(instance.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for instance in instances {
+            let ResolutionState::Resolved(TypeResolution::Item(class_item_id)) =
+                instance.class.resolution.as_ref()
+            else {
+                continue;
+            };
+            let Item::Class(class_item) = &self.module.items()[*class_item_id] else {
+                continue;
+            };
+            if class_item.name.text() != class_name || instance.arguments.len() != 1 {
+                continue;
+            }
+            if self
+                .typing
+                .lower_annotation(*instance.arguments.first())
+                .is_some_and(|candidate| candidate.same_shape(ty))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn instance_class_item_id(&self, item: &InstanceItem) -> Option<ItemId> {
+        let ResolutionState::Resolved(TypeResolution::Item(item_id)) =
+            item.class.resolution.as_ref()
+        else {
+            return None;
+        };
+        matches!(self.module.items()[*item_id], Item::Class(_)).then_some(*item_id)
+    }
+
+    fn instance_argument_substitutions(
+        &mut self,
+        class_item_id: ItemId,
+        item: &InstanceItem,
+    ) -> Option<HashMap<TypeParameterId, GateType>> {
+        let Item::Class(class_item) = &self.module.items()[class_item_id] else {
+            return None;
+        };
+        if class_item.parameters.len() != item.arguments.len() {
+            return None;
+        }
+        let mut arguments = Vec::with_capacity(item.arguments.len());
+        for argument in item.arguments.iter() {
+            arguments.push(self.typing.lower_annotation(*argument)?);
+        }
+        Some(
+            class_item
+                .parameters
+                .iter()
+                .copied()
+                .zip(arguments)
+                .collect(),
+        )
+    }
+
     fn emit_type_mismatch(&mut self, span: SourceSpan, expected: &GateType, actual: &GateType) {
         self.diagnostics.push(
             Diagnostic::error(format!("expected `{expected}` but found `{actual}`"))
@@ -803,10 +1810,73 @@ impl<'a> TypeChecker<'a> {
                 .with_primary_label(span, "this expression has the wrong type"),
         );
     }
+
+    fn emit_type_mismatch_or_unresolved(
+        &mut self,
+        span: SourceSpan,
+        expected: &GateType,
+        actual: Option<&GateType>,
+    ) {
+        match actual {
+            Some(actual) => self.emit_type_mismatch(span, expected, actual),
+            None => self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "expected `{expected}` but found {}",
+                    describe_inferred_type(None)
+                ))
+                .with_code(code("type-mismatch"))
+                .with_primary_label(span, "this expression has the wrong type"),
+            ),
+        }
+    }
 }
 
 fn code(name: &'static str) -> DiagnosticCode {
     DiagnosticCode::new("hir", name)
+}
+
+fn is_numeric_gate_type(ty: &GateType) -> bool {
+    matches!(
+        ty,
+        GateType::Primitive(
+            BuiltinType::Int | BuiltinType::Float | BuiltinType::Decimal | BuiltinType::BigInt
+        )
+    )
+}
+
+fn unary_operator_text(operator: UnaryOperator) -> &'static str {
+    match operator {
+        UnaryOperator::Not => "not",
+    }
+}
+
+fn binary_operator_text(operator: BinaryOperator) -> &'static str {
+    match operator {
+        BinaryOperator::Add => "+",
+        BinaryOperator::Subtract => "-",
+        BinaryOperator::GreaterThan => ">",
+        BinaryOperator::LessThan => "<",
+        BinaryOperator::Equals => "==",
+        BinaryOperator::NotEquals => "!=",
+        BinaryOperator::And => "and",
+        BinaryOperator::Or => "or",
+    }
+}
+
+fn describe_inferred_type(ty: Option<&GateType>) -> String {
+    ty.map(|ty| format!("`{ty}`"))
+        .unwrap_or_else(|| "an unresolved expression".to_owned())
+}
+
+fn projection_path_text(path: &NamePath) -> String {
+    format!(
+        ".{}",
+        path.segments()
+            .iter()
+            .map(|segment| segment.text())
+            .collect::<Vec<_>>()
+            .join(".")
+    )
 }
 
 #[cfg(test)]
@@ -875,6 +1945,110 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_reports_missing_eq_for_map_inequality() {
+        let report = typecheck_text(
+            "map-inequality.aivi",
+            "val left = Map { \"id\": 1 }\n\
+             val right = Map { \"id\": 2 }\n\
+             val different:Bool = left != right\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "missing-eq-instance"))
+            }),
+            "expected missing Eq diagnostic for !=, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_same_module_eq_instances_for_nonstructural_types() {
+        let report = typecheck_text(
+            "same-module-eq-instance.aivi",
+            "class Eq A\n\
+             \x20\x20\x20\x20(==) : A -> A -> Bool\n\
+             type Blob = Blob Bytes\n\
+             fun blobEquals:Bool #left:Blob #right:Blob =>\n\
+             \x20\x20\x20\x20True\n\
+             instance Eq Blob\n\
+             \x20\x20\x20\x20(==) left right = blobEquals left right\n\
+             fun compare:Bool #left:Blob #right:Blob =>\n\
+             \x20\x20\x20\x20left == right\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected same-module Eq instance to satisfy equality, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_equality_in_instance_member_bodies() {
+        let report = typecheck_text(
+            "instance-member-equality.aivi",
+            "class Compare A\n\
+             \x20\x20\x20\x20same : A -> A -> Bool\n\
+             type Label = Label Text\n\
+             instance Compare Label\n\
+             \x20\x20\x20\x20same left right = left == right\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected equality inside instance members to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_instance_member_operator_operand_mismatch() {
+        let report = typecheck_text(
+            "instance-member-operator-mismatch.aivi",
+            "class Ready A\n\
+             \x20\x20\x20\x20ready : A -> Bool\n\
+             type Blob = Blob Bytes\n\
+             instance Ready Blob\n\
+             \x20\x20\x20\x20ready blob = blob and True\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
+            }),
+            "expected instance member operator mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_invalid_unary_operator_without_resolved_operand_type() {
+        let report = typecheck_text(
+            "invalid-unary-operator.aivi",
+            "val broken:Bool = not None\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "invalid-unary-operator"))
+            }),
+            "expected invalid unary operator diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_invalid_binary_operator_for_nonnumeric_comparison() {
+        let report = typecheck_text(
+            "invalid-binary-operator.aivi",
+            "val broken:Bool = \"a\" < \"b\"\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "invalid-binary-operator"))
+            }),
+            "expected invalid binary operator diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
     fn typecheck_reports_value_annotation_mismatch() {
         let report = typecheck_text("value-mismatch.aivi", "val answer:Text = 42\n");
         assert!(
@@ -882,6 +2056,34 @@ mod tests {
                 diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
             }),
             "expected type mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_unannotated_function_name_from_expected_arrow() {
+        let report = typecheck_text(
+            "function-name-expected-arrow.aivi",
+            "fun keep #value => value\n\
+             val chosen:(Option Int -> Option Int) = keep\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected unannotated function name to typecheck from expected arrow, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_unannotated_function_application_from_expected_result() {
+        let report = typecheck_text(
+            "function-application-expected-result.aivi",
+            "fun keepNone #value:Option Int => None\n\
+             val result:Option Int = keepNone None\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected unannotated function application to typecheck from expected result, got diagnostics: {:?}",
             report.diagnostics()
         );
     }
@@ -912,6 +2114,51 @@ mod tests {
                 diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
             }),
             "expected type mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_missing_default_instance_via_constraint_solver() {
+        let report = typecheck_text(
+            "missing-default-instance.aivi",
+            "type Nickname = Nickname Text\n\
+             type User = {\n\
+                 name: Text,\n\
+                 nickname: Nickname\n\
+             }\n\
+             val name = \"Ada\"\n\
+             val user:User = { name }\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "missing-default-instance"))
+                    && diagnostic.message.contains("nickname")
+            }),
+            "expected missing Default diagnostic from constraint solver, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_same_module_default_instances_for_record_elision() {
+        let report = typecheck_text(
+            "same-module-default-instance.aivi",
+            "class Default A\n\
+             \x20\x20\x20\x20default : A\n\
+             type Nickname = Nickname Text\n\
+             instance Default Nickname\n\
+             \x20\x20\x20\x20default = Nickname \"\"\n\
+             type User = {\n\
+                 name: Text,\n\
+                 nickname: Nickname\n\
+             }\n\
+             val name = \"Ada\"\n\
+             val user:User = { name }\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected same-module Default instance to satisfy record elision, got diagnostics: {:?}",
             report.diagnostics()
         );
     }
@@ -954,6 +2201,31 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_partial_builtin_applicative_clusters() {
+        let report = typecheck_text(
+            "partial-builtin-clusters.aivi",
+            "type NamePair = NamePair Text Text\n\
+             val first = Some \"Ada\"\n\
+             val last = None\n\
+             val maybePair:Option NamePair =\n\
+              &|> first\n\
+              &|> last\n\
+               |> NamePair\n\
+             val okFirst = Ok \"Ada\"\n\
+             val errLast = Err \"missing\"\n\
+             val resultPair:Result Text NamePair =\n\
+              &|> okFirst\n\
+              &|> errLast\n\
+               |> NamePair\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected partial builtin clusters to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
     fn typecheck_reports_case_branch_type_mismatch() {
         let report = typecheck_text(
             "case-branch-type-mismatch.aivi",
@@ -972,6 +2244,103 @@ val broken =
                 diagnostic.code == Some(DiagnosticCode::new("hir", "case-branch-type-mismatch"))
             }),
             "expected case branch type mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_partial_builtin_case_runs() {
+        let report = typecheck_text(
+            "partial-builtin-case-runs.aivi",
+            r#"type Screen =
+  | Loading
+  | Ready Text
+  | Failed Text
+val current:Screen = Loading
+val maybeLabel:Option Text =
+    current
+     ||> Loading => None
+     ||> Ready title => Some title
+     ||> Failed reason => Some reason
+val resultLabel:Result Text Text =
+    current
+     ||> Loading => Ok "loading"
+     ||> Ready title => Ok title
+     ||> Failed reason => Err reason
+"#,
+        );
+        assert!(
+            report.is_ok(),
+            "expected partial builtin case runs to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_projection_from_unannotated_record_values() {
+        let report = typecheck_text(
+            "projection-from-record-value.aivi",
+            "val profile = { name: \"Ada\", age: 36 }\n\
+             val name:Text = profile.name\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected projection from an unannotated record value to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_unknown_field_from_unannotated_record_projection() {
+        let report = typecheck_text(
+            "projection-unknown-field.aivi",
+            "val profile = { name: \"Ada\", age: 36 }\n\
+             val missing:Text = profile.missing\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "unknown-projection-field"))
+            }),
+            "expected unknown projection field diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_collection_literals_with_expected_shapes() {
+        let report = typecheck_text(
+            "expected-collection-literals.aivi",
+            "val pair:(Option Int, Result Text Int) = (None, Ok 1)\n\
+             val items:List (Option Int) = [None, Some 2]\n\
+             val headers:Map Text (Option Int) = Map { \"primary\": None, \"backup\": Some 3 }\n\
+             val tags:Set (Option Int) = Set [None, Some 4]\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected collection literals to use their expected shapes bidirectionally, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_collection_literal_element_mismatches() {
+        let report = typecheck_text(
+            "expected-collection-literal-mismatches.aivi",
+            "val pair:(Option Int, Result Text Int) = (Some \"Ada\", Ok \"Ada\")\n\
+             val items:List (Option Int) = [Some \"Ada\"]\n\
+             val headers:Map Text (Option Int) = Map { \"primary\": Some \"Ada\" }\n\
+             val tags:Set (Option Int) = Set [Some \"Ada\"]\n",
+        );
+        let mismatch_count = report
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
+            })
+            .count();
+        assert!(
+            mismatch_count >= 4,
+            "expected collection literal mismatches to surface type mismatches, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

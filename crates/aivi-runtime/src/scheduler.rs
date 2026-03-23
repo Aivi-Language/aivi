@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeSet, VecDeque},
     iter::repeat_with,
+    sync::mpsc,
 };
 
 use crate::graph::{
@@ -49,6 +50,7 @@ impl PublicationStamp {
     }
 }
 
+#[derive(Debug)]
 pub struct Publication<V> {
     stamp: PublicationStamp,
     value: V,
@@ -65,6 +67,30 @@ impl<V> Publication<V> {
 
     pub fn into_parts(self) -> (PublicationStamp, V) {
         (self.stamp, self.value)
+    }
+}
+
+#[derive(Clone)]
+pub struct WorkerPublicationSender<V> {
+    sender: mpsc::Sender<Publication<V>>,
+}
+
+impl<V> WorkerPublicationSender<V> {
+    pub fn publish(&self, publication: Publication<V>) -> Result<(), WorkerSendError<V>> {
+        self.sender
+            .send(publication)
+            .map_err(|err| WorkerSendError { publication: err.0 })
+    }
+}
+
+#[derive(Debug)]
+pub struct WorkerSendError<V> {
+    publication: Publication<V>,
+}
+
+impl<V> WorkerSendError<V> {
+    pub fn into_publication(self) -> Publication<V> {
+        self.publication
     }
 }
 
@@ -134,12 +160,15 @@ pub struct Scheduler<V> {
     inputs: Vec<Option<InputRuntimeState>>,
     signals: Vec<SignalRuntimeState<V>>,
     queue: VecDeque<SchedulerMessage<V>>,
+    worker_publication_tx: mpsc::Sender<Publication<V>>,
+    worker_publication_rx: mpsc::Receiver<Publication<V>>,
     initialized: bool,
     next_tick: u64,
 }
 
 impl<V> Scheduler<V> {
     pub fn new(graph: SignalGraph) -> Self {
+        let (worker_publication_tx, worker_publication_rx) = mpsc::channel();
         let owners = (0..graph.owner_count())
             .map(|_| OwnerRuntimeState { active: true })
             .collect();
@@ -163,6 +192,8 @@ impl<V> Scheduler<V> {
             inputs,
             signals,
             queue: VecDeque::new(),
+            worker_publication_tx,
+            worker_publication_rx,
             initialized: false,
             next_tick: 0,
         }
@@ -178,6 +209,12 @@ impl<V> Scheduler<V> {
 
     pub fn queued_message_count(&self) -> usize {
         self.queue.len()
+    }
+
+    pub fn worker_sender(&self) -> WorkerPublicationSender<V> {
+        WorkerPublicationSender {
+            sender: self.worker_publication_tx.clone(),
+        }
     }
 
     pub fn current_value(&self, signal: SignalHandle) -> Result<Option<&V>, SchedulerAccessError> {
@@ -252,6 +289,7 @@ impl<V> Scheduler<V> {
     where
         E: DerivedNodeEvaluator<V>,
     {
+        self.drain_worker_publications();
         let tick = self.next_tick;
         self.next_tick = self
             .next_tick
@@ -393,6 +431,12 @@ impl<V> Scheduler<V> {
         }
 
         disposed
+    }
+
+    fn drain_worker_publications(&mut self) {
+        while let Ok(publication) = self.worker_publication_rx.try_recv() {
+            self.queue.push_back(SchedulerMessage::Publish(publication));
+        }
     }
 
     fn apply_owner_disposals(
@@ -627,6 +671,8 @@ impl<V> PendingValue<V> {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     use crate::{
         graph::SignalGraphBuilder,
         scheduler::{Publication, PublicationDropReason, Scheduler, SchedulerAccessError},
@@ -689,6 +735,44 @@ mod tests {
                 .unwrap()
                 .copied(),
             Some(10)
+        );
+    }
+
+    #[test]
+    fn scheduler_drains_worker_publications_into_scheduler_owned_queue() {
+        let mut builder = SignalGraphBuilder::new();
+        let input = builder.add_input("input", None).unwrap();
+        let mirror = builder.add_derived("mirror", None).unwrap();
+        builder.define_derived(mirror, [input.as_signal()]).unwrap();
+
+        let graph = builder.build().unwrap();
+        let mut scheduler = Scheduler::new(graph);
+        let sender = scheduler.worker_sender();
+        let stamp = scheduler.current_stamp(input).unwrap();
+
+        thread::spawn(move || {
+            sender.publish(Publication::new(stamp, 9_i32)).unwrap();
+        })
+        .join()
+        .unwrap();
+
+        let outcome =
+            scheduler.tick(&mut |_, inputs: DependencyValues<'_, i32>| inputs.value(0).copied());
+
+        assert_eq!(
+            outcome.committed(),
+            &[input.as_signal(), mirror.as_signal()]
+        );
+        assert_eq!(
+            scheduler.current_value(input.as_signal()).unwrap().copied(),
+            Some(9)
+        );
+        assert_eq!(
+            scheduler
+                .current_value(mirror.as_signal())
+                .unwrap()
+                .copied(),
+            Some(9)
         );
     }
 

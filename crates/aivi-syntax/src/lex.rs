@@ -45,6 +45,7 @@ pub enum TokenKind {
     FunKw,
     SigKw,
     ClassKw,
+    InstanceKw,
     DomainKw,
     ProviderKw,
     UseKw,
@@ -83,6 +84,7 @@ impl TokenKind {
                 | TokenKind::FunKw
                 | TokenKind::SigKw
                 | TokenKind::ClassKw
+                | TokenKind::InstanceKw
                 | TokenKind::DomainKw
                 | TokenKind::ProviderKw
                 | TokenKind::UseKw
@@ -432,6 +434,7 @@ fn keyword_kind(text: &str) -> Option<TokenKind> {
         "fun" => Some(TokenKind::FunKw),
         "sig" => Some(TokenKind::SigKw),
         "class" => Some(TokenKind::ClassKw),
+        "instance" => Some(TokenKind::InstanceKw),
         "domain" => Some(TokenKind::DomainKw),
         "provider" => Some(TokenKind::ProviderKw),
         "use" => Some(TokenKind::UseKw),

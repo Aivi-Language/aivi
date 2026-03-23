@@ -1,0 +1,71 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'manual/**'
+      - 'tooling/packages/vscode-aivi/syntaxes/**'
+      - 'tooling/packages/vscode-aivi/themes/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: manual/pnpm-lock.yaml
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build aivi compiler
+        run: cargo build --release --bin aivi
+
+      - name: Install aivi binary
+        run: |
+          mkdir -p ~/.local/bin
+          cp target/release/aivi ~/.local/bin/aivi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install docs dependencies
+        run: pnpm install
+        working-directory: manual
+
+      - name: Build docs
+        run: pnpm docs:build
+        working-directory: manual
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: manual/.vitepress/dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

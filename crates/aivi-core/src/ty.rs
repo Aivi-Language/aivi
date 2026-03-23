@@ -170,7 +170,10 @@ impl Type {
                         }
                     }
                 },
-                Task::BuildTuple(len) => values.push(Self::Tuple(drain_tail(&mut values, len))),
+                Task::BuildTuple(len) => {
+                    let tuple = Self::Tuple(drain_tail(&mut values, len));
+                    values.push(tuple);
+                }
                 Task::BuildRecord(names) => {
                     let len = names.len();
                     let fields = names
@@ -189,9 +192,10 @@ impl Type {
                         result: Box::new(result),
                     });
                 }
-                Task::BuildList => values.push(Self::List(Box::new(
-                    values.pop().expect("list child should exist"),
-                ))),
+                Task::BuildList => {
+                    let child = values.pop().expect("list child should exist");
+                    values.push(Self::List(Box::new(child)));
+                }
                 Task::BuildMap => {
                     let mut drained = drain_tail(&mut values, 2);
                     let key = drained.remove(0);
@@ -201,12 +205,14 @@ impl Type {
                         value: Box::new(value),
                     });
                 }
-                Task::BuildSet => values.push(Self::Set(Box::new(
-                    values.pop().expect("set child should exist"),
-                ))),
-                Task::BuildOption => values.push(Self::Option(Box::new(
-                    values.pop().expect("option child should exist"),
-                ))),
+                Task::BuildSet => {
+                    let child = values.pop().expect("set child should exist");
+                    values.push(Self::Set(Box::new(child)));
+                }
+                Task::BuildOption => {
+                    let child = values.pop().expect("option child should exist");
+                    values.push(Self::Option(Box::new(child)));
+                }
                 Task::BuildResult => {
                     let mut drained = drain_tail(&mut values, 2);
                     let error = drained.remove(0);
@@ -225,9 +231,10 @@ impl Type {
                         value: Box::new(value),
                     });
                 }
-                Task::BuildSignal => values.push(Self::Signal(Box::new(
-                    values.pop().expect("signal child should exist"),
-                ))),
+                Task::BuildSignal => {
+                    let child = values.pop().expect("signal child should exist");
+                    values.push(Self::Signal(Box::new(child)));
+                }
                 Task::BuildTask => {
                     let mut drained = drain_tail(&mut values, 2);
                     let error = drained.remove(0);
@@ -241,20 +248,26 @@ impl Type {
                     item,
                     name,
                     arguments,
-                } => values.push(Self::Domain {
-                    item,
-                    name,
-                    arguments: drain_tail(&mut values, arguments),
-                }),
+                } => {
+                    let arguments = drain_tail(&mut values, arguments);
+                    values.push(Self::Domain {
+                        item,
+                        name,
+                        arguments,
+                    });
+                }
                 Task::BuildOpaqueItem {
                     item,
                     name,
                     arguments,
-                } => values.push(Self::OpaqueItem {
-                    item,
-                    name,
-                    arguments: drain_tail(&mut values, arguments),
-                }),
+                } => {
+                    let arguments = drain_tail(&mut values, arguments);
+                    values.push(Self::OpaqueItem {
+                        item,
+                        name,
+                        arguments,
+                    });
+                }
             }
         }
 

@@ -1,0 +1,2164 @@
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt,
+};
+
+use aivi_base::SourceSpan;
+use aivi_core::{self as core, Arena, ArenaOverflow};
+use aivi_hir::{
+    BinaryOperator as HirBinaryOperator, BuiltinTerm as HirBuiltinTerm,
+    UnaryOperator as HirUnaryOperator,
+};
+use aivi_typing::{
+    DecodeExtraFieldPolicy as TypingDecodeExtraFieldPolicy,
+    DecodeFieldRequirement as TypingDecodeFieldRequirement, DecodeMode as TypingDecodeMode,
+    DecodeSumStrategy as TypingDecodeSumStrategy, FanoutCarrier as TypingFanoutCarrier,
+    NonSourceWakeupCause as TypingNonSourceWakeupCause, PrimitiveType as TypingPrimitiveType,
+    RecurrenceTarget as TypingRecurrenceTarget, RecurrenceWakeupKind as TypingRecurrenceWakeupKind,
+    SourceCancellationPolicy as TypingSourceCancellationPolicy,
+};
+
+use crate::{
+    AbiParameter, AbiResult, BinaryOperator, BuiltinTerm, CallingConvention, CallingConventionKind,
+    DecodeExtraFieldPolicy, DecodeField, DecodeFieldRequirement, DecodeMode, DecodePlan,
+    DecodePlanId, DecodeStep, DecodeStepId, DecodeStepKind, DecodeSumStrategy, DecodeVariant,
+    DomainDecodeSurface, DomainDecodeSurfaceKind, EnvSlotId, FanoutCarrier, FanoutJoin,
+    FanoutStage, GateStage, InlinePipeExpr, InlinePipeStage, InlinePipeStageKind, InlineSubjectId,
+    IntegerLiteral, Item, ItemId, ItemKind, Kernel, KernelExpr, KernelExprId, KernelExprKind,
+    KernelId, KernelOrigin, KernelOriginKind, Layout, LayoutId, LayoutKind, LoweringError::*,
+    MapEntry, NonSourceWakeup, NonSourceWakeupCause, ParameterRole, Pipeline, PipelineId,
+    PipelineOrigin, PrimitiveType, Program, ProjectionBase, RecordExprField, RecordFieldLayout,
+    Recurrence, RecurrenceStage, RecurrenceTarget, RecurrenceWakeupKind, SignalInfo,
+    SourceCancellationPolicy, SourceInstanceId, SourceOptionBinding, SourcePlan, SourceProvider,
+    SourceReplacementPolicy, SourceStaleWorkPolicy, SourceTeardownPolicy, Stage, StageKind,
+    SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment, TruthyFalsyBranch,
+    TruthyFalsyStage, UnaryOperator, ValidationError, VariantLayout, validate_program,
+};
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LoweringErrors {
+    errors: Vec<LoweringError>,
+}
+
+impl LoweringErrors {
+    pub fn new(errors: Vec<LoweringError>) -> Self {
+        Self { errors }
+    }
+
+    pub fn errors(&self) -> &[LoweringError] {
+        &self.errors
+    }
+
+    pub fn into_errors(self) -> Vec<LoweringError> {
+        self.errors
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
+impl fmt::Display for LoweringErrors {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (index, error) in self.errors.iter().enumerate() {
+            if index > 0 {
+                f.write_str("; ")?;
+            }
+            write!(f, "{error}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for LoweringErrors {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LoweringError {
+    InvalidCoreModule(core::ValidationError),
+    InvalidBackendProgram(ValidationError),
+    UnknownCoreItem {
+        item: core::ItemId,
+        span: SourceSpan,
+    },
+    UnresolvedItemReference {
+        span: SourceSpan,
+    },
+    MissingInputSubjectContract {
+        span: SourceSpan,
+    },
+    SubjectLayoutMismatch {
+        span: SourceSpan,
+        expected: LayoutId,
+        found: LayoutId,
+    },
+    LocalLayoutMismatch {
+        span: SourceSpan,
+        binding: u32,
+        previous: LayoutId,
+        current: LayoutId,
+    },
+    ArenaOverflow {
+        family: &'static str,
+        attempted_len: usize,
+    },
+}
+
+impl fmt::Display for LoweringError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidCoreModule(error) => {
+                write!(
+                    f,
+                    "backend lowering requires valid typed-core input: {error}"
+                )
+            }
+            Self::InvalidBackendProgram(error) => {
+                write!(f, "backend lowering produced invalid backend IR: {error}")
+            }
+            Self::UnknownCoreItem { item, .. } => {
+                write!(f, "backend lowering cannot map typed-core item {item}")
+            }
+            Self::UnresolvedItemReference { .. } => {
+                f.write_str("backend lowering rejects unresolved HIR item references")
+            }
+            Self::MissingInputSubjectContract { .. } => f.write_str(
+                "backend kernel uses an input subject without an explicit backend contract",
+            ),
+            Self::SubjectLayoutMismatch {
+                expected, found, ..
+            } => write!(
+                f,
+                "backend subject reference changed layout unexpectedly: expected layout{expected}, found layout{found}"
+            ),
+            Self::LocalLayoutMismatch {
+                binding,
+                previous,
+                current,
+                ..
+            } => write!(
+                f,
+                "backend lowering saw conflicting layouts for local binding {binding}: layout{previous} then layout{current}"
+            ),
+            Self::ArenaOverflow {
+                family,
+                attempted_len,
+            } => write!(
+                f,
+                "backend {family} arena overflow after {attempted_len} entries; ids are limited to u32::MAX"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LoweringError {}
+
+pub fn lower_module(core_module: &core::Module) -> Result<Program, LoweringErrors> {
+    if let Err(errors) = core::validate_module(core_module) {
+        return Err(LoweringErrors::new(
+            errors
+                .into_errors()
+                .into_iter()
+                .map(LoweringError::InvalidCoreModule)
+                .collect(),
+        ));
+    }
+
+    ProgramLowerer::new(core_module).build()
+}
+
+struct ProgramLowerer<'a> {
+    core: &'a core::Module,
+    program: Program,
+    item_map: HashMap<core::ItemId, ItemId>,
+    layout_interner: HashMap<Layout, LayoutId>,
+    core_layouts: HashMap<core::Type, LayoutId>,
+}
+
+impl<'a> ProgramLowerer<'a> {
+    fn new(core: &'a core::Module) -> Self {
+        Self {
+            core,
+            program: Program::new(),
+            item_map: HashMap::new(),
+            layout_interner: HashMap::new(),
+            core_layouts: HashMap::new(),
+        }
+    }
+
+    fn build(mut self) -> Result<Program, LoweringErrors> {
+        self.seed_items().map_err(wrap_one)?;
+        self.seed_signal_dependencies().map_err(wrap_one)?;
+        self.lower_pipelines().map_err(wrap_one)?;
+        self.lower_sources().map_err(wrap_one)?;
+        if let Err(errors) = validate_program(&self.program) {
+            return Err(LoweringErrors::new(
+                errors
+                    .into_errors()
+                    .into_iter()
+                    .map(LoweringError::InvalidBackendProgram)
+                    .collect::<Vec<_>>(),
+            ));
+        }
+        Ok(self.program)
+    }
+
+    fn seed_items(&mut self) -> Result<(), LoweringError> {
+        for (core_id, item) in self.core.items().iter() {
+            let kind = match &item.kind {
+                core::ItemKind::Value => ItemKind::Value,
+                core::ItemKind::Function => ItemKind::Function,
+                core::ItemKind::Signal(_) => ItemKind::Signal(SignalInfo::default()),
+                core::ItemKind::Instance => ItemKind::Instance,
+            };
+            let item_id = self
+                .program
+                .items_mut()
+                .alloc(Item {
+                    origin: core_id,
+                    span: item.span,
+                    name: item.name.clone(),
+                    kind,
+                    pipelines: Vec::new(),
+                })
+                .map_err(|overflow| arena_overflow("items", overflow))?;
+            self.item_map.insert(core_id, item_id);
+        }
+        Ok(())
+    }
+
+    fn seed_signal_dependencies(&mut self) -> Result<(), LoweringError> {
+        for (core_id, item) in self.core.items().iter() {
+            let core::ItemKind::Signal(signal) = &item.kind else {
+                continue;
+            };
+            let item_id = self.require_item(core_id, item.span)?;
+            let dependencies = signal
+                .dependencies
+                .iter()
+                .map(|dependency| self.require_item(*dependency, item.span))
+                .collect::<Result<Vec<_>, _>>()?;
+            let backend_item = self
+                .program
+                .items_mut()
+                .get_mut(item_id)
+                .expect("seeded signal item should exist");
+            let ItemKind::Signal(info) = &mut backend_item.kind else {
+                unreachable!("signal dependency seeding only touches signal items");
+            };
+            info.dependencies = dependencies;
+        }
+        Ok(())
+    }
+
+    fn lower_pipelines(&mut self) -> Result<(), LoweringError> {
+        for (core_pipe_id, pipe) in self.core.pipes().iter() {
+            let owner = self.require_item(pipe.owner, pipe.origin.span)?;
+            let pipeline_id = self
+                .program
+                .pipelines_mut()
+                .alloc(Pipeline {
+                    owner,
+                    origin: PipelineOrigin {
+                        span: pipe.origin.span,
+                        core_pipe: core_pipe_id,
+                    },
+                    stages: Vec::new(),
+                    recurrence: None,
+                })
+                .map_err(|overflow| arena_overflow("pipelines", overflow))?;
+
+            let mut stages = Vec::with_capacity(pipe.stages.len());
+            for stage_id in &pipe.stages {
+                let stage = &self.core.stages()[*stage_id];
+                stages.push(self.lower_stage(pipe.owner, pipeline_id, stage)?);
+            }
+            let recurrence = pipe
+                .recurrence
+                .as_ref()
+                .map(|recurrence| self.lower_recurrence(pipe.owner, pipeline_id, recurrence))
+                .transpose()?;
+
+            let backend_pipeline = self
+                .program
+                .pipelines_mut()
+                .get_mut(pipeline_id)
+                .expect("allocated pipeline should exist");
+            backend_pipeline.stages = stages;
+            backend_pipeline.recurrence = recurrence;
+            self.program
+                .items_mut()
+                .get_mut(owner)
+                .expect("pipeline owner should exist")
+                .pipelines
+                .push(pipeline_id);
+        }
+        Ok(())
+    }
+
+    fn lower_stage(
+        &mut self,
+        owner_core_item: core::ItemId,
+        pipeline_id: PipelineId,
+        stage: &core::Stage,
+    ) -> Result<Stage, LoweringError> {
+        let input_layout = self.intern_core_type(&stage.input_subject)?;
+        let result_layout = self.intern_core_type(&stage.result_subject)?;
+        let kind = match &stage.kind {
+            core::StageKind::Gate(core::GateStage::Ordinary {
+                when_true,
+                when_false,
+            }) => StageKind::Gate(GateStage::Ordinary {
+                when_true: self.lower_kernel(
+                    owner_core_item,
+                    stage.span,
+                    KernelOriginKind::GateTrue {
+                        pipeline: pipeline_id,
+                        stage_index: stage.index,
+                    },
+                    Some(input_layout),
+                    *when_true,
+                )?,
+                when_false: self.lower_kernel(
+                    owner_core_item,
+                    stage.span,
+                    KernelOriginKind::GateFalse {
+                        pipeline: pipeline_id,
+                        stage_index: stage.index,
+                    },
+                    Some(input_layout),
+                    *when_false,
+                )?,
+            }),
+            core::StageKind::Gate(core::GateStage::SignalFilter {
+                payload_type,
+                predicate,
+                emits_negative_update,
+            }) => {
+                let payload_layout = self.intern_core_type(payload_type)?;
+                StageKind::Gate(GateStage::SignalFilter {
+                    payload_layout,
+                    predicate: self.lower_kernel(
+                        owner_core_item,
+                        stage.span,
+                        KernelOriginKind::SignalFilterPredicate {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        },
+                        Some(payload_layout),
+                        *predicate,
+                    )?,
+                    emits_negative_update: *emits_negative_update,
+                })
+            }
+            core::StageKind::TruthyFalsy(pair) => StageKind::TruthyFalsy(TruthyFalsyStage {
+                truthy_stage_index: pair.truthy_stage_index,
+                truthy_stage_span: pair.truthy_stage_span,
+                falsy_stage_index: pair.falsy_stage_index,
+                falsy_stage_span: pair.falsy_stage_span,
+                truthy: TruthyFalsyBranch {
+                    constructor: map_builtin_term(pair.truthy.constructor),
+                    payload_layout: pair
+                        .truthy
+                        .payload_subject
+                        .as_ref()
+                        .map(|payload| self.intern_core_type(payload))
+                        .transpose()?,
+                    result_layout: self.intern_core_type(&pair.truthy.result_type)?,
+                },
+                falsy: TruthyFalsyBranch {
+                    constructor: map_builtin_term(pair.falsy.constructor),
+                    payload_layout: pair
+                        .falsy
+                        .payload_subject
+                        .as_ref()
+                        .map(|payload| self.intern_core_type(payload))
+                        .transpose()?,
+                    result_layout: self.intern_core_type(&pair.falsy.result_type)?,
+                },
+            }),
+            core::StageKind::Fanout(fanout) => StageKind::Fanout(FanoutStage {
+                carrier: map_fanout_carrier(fanout.carrier),
+                element_layout: self.intern_core_type(&fanout.element_subject)?,
+                mapped_element_layout: self.intern_core_type(&fanout.mapped_element_type)?,
+                mapped_collection_layout: self.intern_core_type(&fanout.mapped_collection_type)?,
+                join: fanout
+                    .join
+                    .as_ref()
+                    .map(|join| {
+                        Ok(FanoutJoin {
+                            stage_index: join.stage_index,
+                            stage_span: join.stage_span,
+                            input_layout: self.intern_core_type(&join.input_subject)?,
+                            collection_layout: self.intern_core_type(&join.collection_subject)?,
+                            result_layout: self.intern_core_type(&join.result_type)?,
+                        })
+                    })
+                    .transpose()?,
+            }),
+        };
+
+        Ok(Stage {
+            index: stage.index,
+            span: stage.span,
+            input_layout,
+            result_layout,
+            kind,
+        })
+    }
+
+    fn lower_recurrence(
+        &mut self,
+        owner_core_item: core::ItemId,
+        pipeline_id: PipelineId,
+        recurrence: &core::PipeRecurrence,
+    ) -> Result<Recurrence, LoweringError> {
+        let start = self.lower_recurrence_stage(
+            owner_core_item,
+            pipeline_id,
+            KernelOriginKind::RecurrenceStart {
+                pipeline: pipeline_id,
+                stage_index: recurrence.start.stage_index,
+            },
+            &recurrence.start,
+        )?;
+        let mut steps = Vec::with_capacity(recurrence.steps.len());
+        for step in &recurrence.steps {
+            steps.push(self.lower_recurrence_stage(
+                owner_core_item,
+                pipeline_id,
+                KernelOriginKind::RecurrenceStep {
+                    pipeline: pipeline_id,
+                    stage_index: step.stage_index,
+                },
+                step,
+            )?);
+        }
+        let non_source_wakeup = recurrence
+            .non_source_wakeup
+            .as_ref()
+            .map(|wakeup| {
+                Ok(NonSourceWakeup {
+                    cause: map_non_source_wakeup_cause(wakeup.cause),
+                    kernel: self.lower_kernel(
+                        owner_core_item,
+                        self.program.pipelines()[pipeline_id].origin.span,
+                        KernelOriginKind::RecurrenceWakeupWitness {
+                            pipeline: pipeline_id,
+                        },
+                        None,
+                        wakeup.runtime_witness,
+                    )?,
+                })
+            })
+            .transpose()?;
+
+        Ok(Recurrence {
+            target: map_recurrence_target(recurrence.target.target()),
+            wakeup_kind: map_recurrence_wakeup_kind(recurrence.wakeup.kind()),
+            start,
+            steps,
+            non_source_wakeup,
+        })
+    }
+
+    fn lower_recurrence_stage(
+        &mut self,
+        owner_core_item: core::ItemId,
+        _pipeline_id: PipelineId,
+        kind: KernelOriginKind,
+        stage: &core::RecurrenceStage,
+    ) -> Result<RecurrenceStage, LoweringError> {
+        let input_layout = self.intern_core_type(&stage.input_subject)?;
+        let result_layout = self.intern_core_type(&stage.result_subject)?;
+        Ok(RecurrenceStage {
+            stage_index: stage.stage_index,
+            stage_span: stage.stage_span,
+            input_layout,
+            result_layout,
+            kernel: self.lower_kernel(
+                owner_core_item,
+                stage.stage_span,
+                kind,
+                Some(input_layout),
+                stage.runtime_expr,
+            )?,
+        })
+    }
+    fn lower_sources(&mut self) -> Result<(), LoweringError> {
+        for (_, source) in self.core.sources().iter() {
+            let owner = self.require_item(source.owner, source.span)?;
+            let reconfiguration_dependencies = source
+                .reconfiguration_dependencies
+                .iter()
+                .map(|dependency| self.require_item(*dependency, source.span))
+                .collect::<Result<Vec<_>, _>>()?;
+            let explicit_triggers = source
+                .explicit_triggers
+                .iter()
+                .map(|binding| SourceOptionBinding {
+                    option_span: binding.option_span,
+                    option_name: binding.option_name.clone(),
+                })
+                .collect();
+            let active_when = source
+                .active_when
+                .as_ref()
+                .map(|binding| SourceOptionBinding {
+                    option_span: binding.option_span,
+                    option_name: binding.option_name.clone(),
+                });
+            let source_id = self
+                .program
+                .sources_mut()
+                .alloc(SourcePlan {
+                    owner,
+                    span: source.span,
+                    instance: SourceInstanceId::from_raw(source_instance_raw(source)),
+                    provider: map_source_provider(&source.provider),
+                    teardown: map_teardown_policy(source.teardown),
+                    replacement: map_replacement_policy(source.replacement),
+                    reconfiguration_dependencies,
+                    explicit_triggers,
+                    active_when,
+                    cancellation: map_cancellation_policy(source.cancellation),
+                    stale_work: map_stale_work_policy(source.stale_work),
+                    decode: None,
+                })
+                .map_err(|overflow| arena_overflow("sources", overflow))?;
+            let backend_item = self
+                .program
+                .items_mut()
+                .get_mut(owner)
+                .expect("source owner should exist");
+            let ItemKind::Signal(info) = &mut backend_item.kind else {
+                unreachable!("typed-core validation should prevent non-signal sources");
+            };
+            info.source = Some(source_id);
+            if let Some(decode) = source.decode {
+                let decode_id =
+                    self.lower_decode_plan(owner, &self.core.decode_programs()[decode])?;
+                self.program
+                    .sources_mut()
+                    .get_mut(source_id)
+                    .expect("allocated source should exist")
+                    .decode = Some(decode_id);
+            }
+        }
+        Ok(())
+    }
+
+    fn lower_decode_plan(
+        &mut self,
+        owner: ItemId,
+        decode: &core::DecodeProgram,
+    ) -> Result<DecodePlanId, LoweringError> {
+        enum Task {
+            Visit(core::DecodeStepId),
+            Build(DecodeBuildTask),
+        }
+
+        enum DecodeBuildTask {
+            Scalar {
+                scalar: PrimitiveType,
+            },
+            Tuple {
+                len: usize,
+            },
+            Record {
+                fields: Vec<(Box<str>, DecodeFieldRequirement)>,
+                extra_fields: DecodeExtraFieldPolicy,
+            },
+            Sum {
+                variants: Vec<(Box<str>, bool)>,
+                strategy: DecodeSumStrategy,
+            },
+            Domain {
+                surface: DomainDecodeSurface,
+            },
+            List,
+            Option,
+            Result,
+            Validation,
+        }
+
+        let mut steps = Arena::new();
+        let mut tasks = vec![Task::Visit(decode.root)];
+        let mut values: Vec<(DecodeStepId, LayoutId)> = Vec::new();
+
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Visit(step_id) => {
+                    let step = &decode.steps()[step_id];
+                    match step {
+                        core::DecodeStep::Scalar { scalar } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Scalar {
+                                scalar: map_decode_primitive(*scalar),
+                            }));
+                        }
+                        core::DecodeStep::Tuple { elements } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Tuple {
+                                len: elements.len(),
+                            }));
+                            for child in elements.iter().rev() {
+                                tasks.push(Task::Visit(*child));
+                            }
+                        }
+                        core::DecodeStep::Record {
+                            fields,
+                            extra_fields,
+                        } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Record {
+                                fields: fields
+                                    .iter()
+                                    .map(|field| {
+                                        (
+                                            field.name.clone(),
+                                            map_decode_requirement(field.requirement),
+                                        )
+                                    })
+                                    .collect(),
+                                extra_fields: map_extra_fields(*extra_fields),
+                            }));
+                            for field in fields.iter().rev() {
+                                tasks.push(Task::Visit(field.step));
+                            }
+                        }
+                        core::DecodeStep::Sum { variants, strategy } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Sum {
+                                variants: variants
+                                    .iter()
+                                    .map(|variant| {
+                                        (variant.name.clone(), variant.payload.is_some())
+                                    })
+                                    .collect(),
+                                strategy: map_decode_strategy(*strategy),
+                            }));
+                            for variant in variants.iter().rev() {
+                                if let Some(payload) = variant.payload {
+                                    tasks.push(Task::Visit(payload));
+                                }
+                            }
+                        }
+                        core::DecodeStep::Domain { carrier, surface } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Domain {
+                                surface: DomainDecodeSurface {
+                                    member_index: surface.member_index,
+                                    member_name: surface.member_name.clone(),
+                                    kind: map_domain_surface_kind(surface.kind),
+                                    span: surface.span,
+                                },
+                            }));
+                            tasks.push(Task::Visit(*carrier));
+                        }
+                        core::DecodeStep::List { element } => {
+                            tasks.push(Task::Build(DecodeBuildTask::List));
+                            tasks.push(Task::Visit(*element));
+                        }
+                        core::DecodeStep::Option { element } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Option));
+                            tasks.push(Task::Visit(*element));
+                        }
+                        core::DecodeStep::Result { error, value } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Result));
+                            tasks.push(Task::Visit(*value));
+                            tasks.push(Task::Visit(*error));
+                        }
+                        core::DecodeStep::Validation { error, value } => {
+                            tasks.push(Task::Build(DecodeBuildTask::Validation));
+                            tasks.push(Task::Visit(*value));
+                            tasks.push(Task::Visit(*error));
+                        }
+                    }
+                }
+                Task::Build(build) => {
+                    let (step, layout) = match build {
+                        DecodeBuildTask::Scalar { scalar } => {
+                            let layout =
+                                self.intern_layout(Layout::new(LayoutKind::Primitive(scalar)))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Scalar { scalar },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Tuple { len } => {
+                            let lowered = drain_tail(&mut values, len);
+                            let layout = self.intern_layout(Layout::new(LayoutKind::Tuple(
+                                lowered.iter().map(|(_, layout)| *layout).collect(),
+                            )))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Tuple {
+                                        elements: lowered
+                                            .into_iter()
+                                            .map(|(step, _)| step)
+                                            .collect(),
+                                    },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Record {
+                            fields,
+                            extra_fields,
+                        } => {
+                            let lowered = drain_tail(&mut values, fields.len());
+                            let layout = self.intern_layout(Layout::new(LayoutKind::Record(
+                                fields
+                                    .iter()
+                                    .zip(lowered.iter())
+                                    .map(|((name, _), (_, layout))| RecordFieldLayout {
+                                        name: name.clone(),
+                                        layout: *layout,
+                                    })
+                                    .collect(),
+                            )))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Record {
+                                        fields: fields
+                                            .into_iter()
+                                            .zip(lowered.into_iter())
+                                            .map(|((name, requirement), (step, _))| DecodeField {
+                                                name,
+                                                requirement,
+                                                step,
+                                            })
+                                            .collect(),
+                                        extra_fields,
+                                    },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Sum { variants, strategy } => {
+                            let payload_count = variants
+                                .iter()
+                                .filter(|(_, has_payload)| *has_payload)
+                                .count();
+                            let payloads = drain_tail(&mut values, payload_count);
+                            let mut payload_iter = payloads.into_iter();
+                            let mut layout_variants = Vec::with_capacity(variants.len());
+                            let mut decode_variants = Vec::with_capacity(variants.len());
+                            for (name, has_payload) in variants {
+                                let payload = if has_payload {
+                                    payload_iter.next()
+                                } else {
+                                    None
+                                };
+                                layout_variants.push(VariantLayout {
+                                    name: name.clone(),
+                                    payload: payload.map(|(_, layout)| layout),
+                                });
+                                decode_variants.push(DecodeVariant {
+                                    name,
+                                    payload: payload.map(|(step, _)| step),
+                                });
+                            }
+                            let layout =
+                                self.intern_layout(Layout::new(LayoutKind::Sum(layout_variants)))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Sum {
+                                        variants: decode_variants,
+                                        strategy,
+                                    },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Domain { surface } => {
+                            let (carrier, carrier_layout) =
+                                values.pop().expect("domain carrier should exist");
+                            let layout =
+                                self.intern_layout(Layout::new(LayoutKind::AnonymousDomain {
+                                    carrier: carrier_layout,
+                                    surface_member: surface.member_name.clone(),
+                                }))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Domain { carrier, surface },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::List => {
+                            let (element, element_layout) =
+                                values.pop().expect("list element should exist");
+                            let layout = self.intern_layout(Layout::new(LayoutKind::List {
+                                element: element_layout,
+                            }))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::List { element },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Option => {
+                            let (element, element_layout) =
+                                values.pop().expect("option element should exist");
+                            let layout = self.intern_layout(Layout::new(LayoutKind::Option {
+                                element: element_layout,
+                            }))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Option { element },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Result => {
+                            let lowered = drain_tail(&mut values, 2);
+                            let layout = self.intern_layout(Layout::new(LayoutKind::Result {
+                                error: lowered[0].1,
+                                value: lowered[1].1,
+                            }))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Result {
+                                        error: lowered[0].0,
+                                        value: lowered[1].0,
+                                    },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::Validation => {
+                            let lowered = drain_tail(&mut values, 2);
+                            let layout =
+                                self.intern_layout(Layout::new(LayoutKind::Validation {
+                                    error: lowered[0].1,
+                                    value: lowered[1].1,
+                                }))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::Validation {
+                                        error: lowered[0].0,
+                                        value: lowered[1].0,
+                                    },
+                                },
+                                layout,
+                            )
+                        }
+                    };
+                    let step_id = steps
+                        .alloc(step)
+                        .map_err(|overflow| arena_overflow("decode steps", overflow))?;
+                    values.push((step_id, layout));
+                }
+            }
+        }
+
+        let (root, _) = values
+            .pop()
+            .expect("decode lowering should produce one root step");
+        self.program
+            .decode_plans_mut()
+            .alloc(DecodePlan::new(
+                owner,
+                map_decode_mode(decode.mode),
+                root,
+                steps,
+            ))
+            .map_err(|overflow| arena_overflow("decode plans", overflow))
+    }
+
+    fn lower_kernel(
+        &mut self,
+        owner_core_item: core::ItemId,
+        span: SourceSpan,
+        kind: KernelOriginKind,
+        input_hint: Option<LayoutId>,
+        root: core::ExprId,
+    ) -> Result<KernelId, LoweringError> {
+        let owner = self.require_item(owner_core_item, span)?;
+        let contract = self.collect_kernel_contract(root, input_hint)?;
+        let lowered = self.lower_kernel_exprs(root, input_hint, &contract.env_map)?;
+        let result_layout = self.intern_core_type(&self.core.exprs()[root].ty)?;
+        let input_subject = input_hint.filter(|_| contract.uses_input_subject);
+        let convention =
+            self.build_calling_convention(input_subject, &contract.environment, result_layout);
+        self.program
+            .kernels_mut()
+            .alloc(Kernel::new(
+                KernelOrigin {
+                    item: owner,
+                    span,
+                    kind,
+                },
+                input_subject,
+                lowered.inline_subjects,
+                contract.environment,
+                result_layout,
+                convention,
+                contract.global_items,
+                lowered.root,
+                lowered.exprs,
+            ))
+            .map_err(|overflow| arena_overflow("kernels", overflow))
+    }
+
+    fn collect_kernel_contract(
+        &mut self,
+        root: core::ExprId,
+        input_hint: Option<LayoutId>,
+    ) -> Result<KernelContract, LoweringError> {
+        #[derive(Clone, Copy)]
+        enum SubjectKind {
+            Input,
+            Inline,
+        }
+
+        let mut work = vec![(root, SubjectKind::Input)];
+        let mut bindings = BTreeMap::<u32, LayoutId>::new();
+        let mut globals = BTreeSet::new();
+        let mut uses_input_subject = false;
+
+        while let Some((expr_id, subject)) = work.pop() {
+            let expr = &self.core.exprs()[expr_id];
+            let expr_layout = self.intern_core_type(&expr.ty)?;
+            match &expr.kind {
+                core::ExprKind::AmbientSubject => {
+                    if matches!(subject, SubjectKind::Input) {
+                        if input_hint.is_none() {
+                            return Err(MissingInputSubjectContract { span: expr.span });
+                        }
+                        uses_input_subject = true;
+                    }
+                }
+                core::ExprKind::OptionSome { payload } => work.push((*payload, subject)),
+                core::ExprKind::OptionNone
+                | core::ExprKind::Integer(_)
+                | core::ExprKind::SuffixedInteger(_) => {}
+                core::ExprKind::Reference(reference) => match reference {
+                    core::Reference::Local(binding) => {
+                        match bindings.get(&binding.as_raw()).copied() {
+                            Some(previous) if previous != expr_layout => {
+                                return Err(LocalLayoutMismatch {
+                                    span: expr.span,
+                                    binding: binding.as_raw(),
+                                    previous,
+                                    current: expr_layout,
+                                });
+                            }
+                            Some(_) => {}
+                            None => {
+                                bindings.insert(binding.as_raw(), expr_layout);
+                            }
+                        }
+                    }
+                    core::Reference::Item(item) => {
+                        globals.insert(self.require_item(*item, expr.span)?);
+                    }
+                    core::Reference::HirItem(_) => {
+                        return Err(UnresolvedItemReference { span: expr.span });
+                    }
+                    core::Reference::Builtin(_) => {}
+                },
+                core::ExprKind::Text(text) => {
+                    for segment in text.segments.iter().rev() {
+                        if let core::TextSegment::Interpolation { expr, .. } = segment {
+                            work.push((*expr, subject));
+                        }
+                    }
+                }
+                core::ExprKind::Tuple(elements)
+                | core::ExprKind::List(elements)
+                | core::ExprKind::Set(elements) => {
+                    for child in elements.iter().rev() {
+                        work.push((*child, subject));
+                    }
+                }
+                core::ExprKind::Map(entries) => {
+                    for entry in entries.iter().rev() {
+                        work.push((entry.value, subject));
+                        work.push((entry.key, subject));
+                    }
+                }
+                core::ExprKind::Record(fields) => {
+                    for field in fields.iter().rev() {
+                        work.push((field.value, subject));
+                    }
+                }
+                core::ExprKind::Projection { base, .. } => match base {
+                    core::ProjectionBase::AmbientSubject => {
+                        if matches!(subject, SubjectKind::Input) {
+                            if input_hint.is_none() {
+                                return Err(MissingInputSubjectContract { span: expr.span });
+                            }
+                            uses_input_subject = true;
+                        }
+                    }
+                    core::ProjectionBase::Expr(base) => work.push((*base, subject)),
+                },
+                core::ExprKind::Apply { callee, arguments } => {
+                    for argument in arguments.iter().rev() {
+                        work.push((*argument, subject));
+                    }
+                    work.push((*callee, subject));
+                }
+                core::ExprKind::Unary { expr, .. } => work.push((*expr, subject)),
+                core::ExprKind::Binary { left, right, .. } => {
+                    work.push((*right, subject));
+                    work.push((*left, subject));
+                }
+                core::ExprKind::Pipe(pipe) => {
+                    for stage in pipe.stages.iter().rev() {
+                        match &stage.kind {
+                            core::PipeStageKind::Transform { expr }
+                            | core::PipeStageKind::Tap { expr } => {
+                                work.push((*expr, SubjectKind::Inline));
+                            }
+                            core::PipeStageKind::Gate { predicate, .. } => {
+                                work.push((*predicate, SubjectKind::Inline));
+                            }
+                        }
+                    }
+                    work.push((pipe.head, subject));
+                }
+            }
+        }
+
+        Ok(KernelContract {
+            uses_input_subject,
+            environment: bindings.values().copied().collect(),
+            env_map: bindings
+                .keys()
+                .enumerate()
+                .map(|(index, binding)| (*binding, EnvSlotId::from_raw(index as u32)))
+                .collect(),
+            global_items: globals.into_iter().collect(),
+        })
+    }
+    fn lower_kernel_exprs(
+        &mut self,
+        root: core::ExprId,
+        input_hint: Option<LayoutId>,
+        env_map: &HashMap<u32, EnvSlotId>,
+    ) -> Result<LoweredKernelExprs, LoweringError> {
+        #[derive(Clone, Copy)]
+        struct SubjectContext {
+            reference: SubjectRef,
+            layout: LayoutId,
+        }
+
+        enum Task {
+            Visit(core::ExprId, Option<SubjectContext>),
+            BuildOptionSome {
+                span: SourceSpan,
+                layout: LayoutId,
+            },
+            BuildText {
+                span: SourceSpan,
+                layout: LayoutId,
+                segments: Vec<SegmentSpec>,
+            },
+            BuildTuple {
+                span: SourceSpan,
+                layout: LayoutId,
+                len: usize,
+            },
+            BuildList {
+                span: SourceSpan,
+                layout: LayoutId,
+                len: usize,
+            },
+            BuildMap {
+                span: SourceSpan,
+                layout: LayoutId,
+                entries: usize,
+            },
+            BuildSet {
+                span: SourceSpan,
+                layout: LayoutId,
+                len: usize,
+            },
+            BuildRecord {
+                span: SourceSpan,
+                layout: LayoutId,
+                labels: Vec<Box<str>>,
+            },
+            BuildProjection {
+                span: SourceSpan,
+                layout: LayoutId,
+                base: ProjectionBaseBuild,
+                path: Vec<Box<str>>,
+            },
+            BuildApply {
+                span: SourceSpan,
+                layout: LayoutId,
+                arguments: usize,
+            },
+            BuildUnary {
+                span: SourceSpan,
+                layout: LayoutId,
+                operator: UnaryOperator,
+            },
+            BuildBinary {
+                span: SourceSpan,
+                layout: LayoutId,
+                operator: BinaryOperator,
+            },
+            BuildPipe {
+                span: SourceSpan,
+                layout: LayoutId,
+                stages: Vec<InlinePipeStageSpec>,
+            },
+        }
+
+        enum SegmentSpec {
+            Fragment { raw: Box<str>, span: SourceSpan },
+            Interpolation { span: SourceSpan },
+        }
+
+        enum ProjectionBaseBuild {
+            Subject(SubjectRef),
+            Expr,
+        }
+
+        #[derive(Clone, Copy)]
+        struct InlinePipeStageSpec {
+            subject: InlineSubjectId,
+            span: SourceSpan,
+            input_layout: LayoutId,
+            result_layout: LayoutId,
+            kind: InlinePipeStageBuild,
+        }
+
+        #[derive(Clone, Copy)]
+        enum InlinePipeStageBuild {
+            Transform,
+            Tap,
+            Gate { emits_negative_update: bool },
+        }
+
+        let mut tasks = vec![Task::Visit(
+            root,
+            input_hint.map(|layout| SubjectContext {
+                reference: SubjectRef::Input,
+                layout,
+            }),
+        )];
+        let mut values = Vec::new();
+        let mut exprs = Arena::new();
+        let mut inline_subjects = Vec::new();
+
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Visit(expr_id, subject) => {
+                    let expr = &self.core.exprs()[expr_id];
+                    let layout = self.intern_core_type(&expr.ty)?;
+                    match &expr.kind {
+                        core::ExprKind::AmbientSubject => {
+                            let subject =
+                                subject.ok_or(MissingInputSubjectContract { span: expr.span })?;
+                            if subject.layout != layout {
+                                return Err(SubjectLayoutMismatch {
+                                    span: expr.span,
+                                    expected: subject.layout,
+                                    found: layout,
+                                });
+                            }
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::Subject(subject.reference),
+                                },
+                            )?);
+                        }
+                        core::ExprKind::OptionSome { payload } => {
+                            tasks.push(Task::BuildOptionSome {
+                                span: expr.span,
+                                layout,
+                            });
+                            tasks.push(Task::Visit(*payload, subject));
+                        }
+                        core::ExprKind::OptionNone => {
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::OptionNone,
+                                },
+                            )?);
+                        }
+                        core::ExprKind::Reference(reference) => {
+                            let kind = match reference {
+                                core::Reference::Local(binding) => KernelExprKind::Environment(
+                                    *env_map.get(&binding.as_raw()).expect(
+                                        "binding should have been collected before lowering",
+                                    ),
+                                ),
+                                core::Reference::Item(item) => {
+                                    KernelExprKind::Item(self.require_item(*item, expr.span)?)
+                                }
+                                core::Reference::HirItem(_) => {
+                                    return Err(UnresolvedItemReference { span: expr.span });
+                                }
+                                core::Reference::Builtin(term) => {
+                                    KernelExprKind::Builtin(map_builtin_term(*term))
+                                }
+                            };
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind,
+                                },
+                            )?);
+                        }
+                        core::ExprKind::Integer(integer) => {
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::Integer(IntegerLiteral {
+                                        raw: integer.raw.clone(),
+                                    }),
+                                },
+                            )?);
+                        }
+                        core::ExprKind::SuffixedInteger(integer) => {
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::SuffixedInteger(SuffixedIntegerLiteral {
+                                        raw: integer.raw.clone(),
+                                        suffix: integer.suffix.text().into(),
+                                    }),
+                                },
+                            )?);
+                        }
+                        core::ExprKind::Text(text) => {
+                            tasks.push(Task::BuildText {
+                                span: expr.span,
+                                layout,
+                                segments: text
+                                    .segments
+                                    .iter()
+                                    .map(|segment| match segment {
+                                        core::TextSegment::Fragment { raw, span } => {
+                                            SegmentSpec::Fragment {
+                                                raw: raw.clone(),
+                                                span: *span,
+                                            }
+                                        }
+                                        core::TextSegment::Interpolation { span, .. } => {
+                                            SegmentSpec::Interpolation { span: *span }
+                                        }
+                                    })
+                                    .collect(),
+                            });
+                            for segment in text.segments.iter().rev() {
+                                if let core::TextSegment::Interpolation { expr, .. } = segment {
+                                    tasks.push(Task::Visit(*expr, subject));
+                                }
+                            }
+                        }
+                        core::ExprKind::Tuple(elements) => {
+                            tasks.push(Task::BuildTuple {
+                                span: expr.span,
+                                layout,
+                                len: elements.len(),
+                            });
+                            for child in elements.iter().rev() {
+                                tasks.push(Task::Visit(*child, subject));
+                            }
+                        }
+                        core::ExprKind::List(elements) => {
+                            tasks.push(Task::BuildList {
+                                span: expr.span,
+                                layout,
+                                len: elements.len(),
+                            });
+                            for child in elements.iter().rev() {
+                                tasks.push(Task::Visit(*child, subject));
+                            }
+                        }
+                        core::ExprKind::Map(entries) => {
+                            tasks.push(Task::BuildMap {
+                                span: expr.span,
+                                layout,
+                                entries: entries.len(),
+                            });
+                            for entry in entries.iter().rev() {
+                                tasks.push(Task::Visit(entry.value, subject));
+                                tasks.push(Task::Visit(entry.key, subject));
+                            }
+                        }
+                        core::ExprKind::Set(elements) => {
+                            tasks.push(Task::BuildSet {
+                                span: expr.span,
+                                layout,
+                                len: elements.len(),
+                            });
+                            for child in elements.iter().rev() {
+                                tasks.push(Task::Visit(*child, subject));
+                            }
+                        }
+                        core::ExprKind::Record(fields) => {
+                            tasks.push(Task::BuildRecord {
+                                span: expr.span,
+                                layout,
+                                labels: fields.iter().map(|field| field.label.clone()).collect(),
+                            });
+                            for field in fields.iter().rev() {
+                                tasks.push(Task::Visit(field.value, subject));
+                            }
+                        }
+                        core::ExprKind::Projection { base, path } => {
+                            let base = match base {
+                                core::ProjectionBase::AmbientSubject => {
+                                    ProjectionBaseBuild::Subject(
+                                        subject
+                                            .ok_or(MissingInputSubjectContract { span: expr.span })?
+                                            .reference,
+                                    )
+                                }
+                                core::ProjectionBase::Expr(base_expr) => {
+                                    tasks.push(Task::Visit(*base_expr, subject));
+                                    ProjectionBaseBuild::Expr
+                                }
+                            };
+                            tasks.push(Task::BuildProjection {
+                                span: expr.span,
+                                layout,
+                                base,
+                                path: path.clone(),
+                            });
+                        }
+                        core::ExprKind::Apply { callee, arguments } => {
+                            tasks.push(Task::BuildApply {
+                                span: expr.span,
+                                layout,
+                                arguments: arguments.len(),
+                            });
+                            for argument in arguments.iter().rev() {
+                                tasks.push(Task::Visit(*argument, subject));
+                            }
+                            tasks.push(Task::Visit(*callee, subject));
+                        }
+                        core::ExprKind::Unary {
+                            operator,
+                            expr: inner,
+                        } => {
+                            tasks.push(Task::BuildUnary {
+                                span: expr.span,
+                                layout,
+                                operator: map_unary_operator(*operator),
+                            });
+                            tasks.push(Task::Visit(*inner, subject));
+                        }
+                        core::ExprKind::Binary {
+                            left,
+                            operator,
+                            right,
+                        } => {
+                            tasks.push(Task::BuildBinary {
+                                span: expr.span,
+                                layout,
+                                operator: map_binary_operator(*operator),
+                            });
+                            tasks.push(Task::Visit(*right, subject));
+                            tasks.push(Task::Visit(*left, subject));
+                        }
+                        core::ExprKind::Pipe(pipe) => {
+                            let mut stage_specs = Vec::with_capacity(pipe.stages.len());
+                            let mut children = Vec::with_capacity(pipe.stages.len());
+                            for stage in &pipe.stages {
+                                let input_layout = self.intern_core_type(&stage.input_subject)?;
+                                let result_layout = self.intern_core_type(&stage.result_subject)?;
+                                let subject_slot =
+                                    alloc_inline_subject(&mut inline_subjects, input_layout)?;
+                                let child_subject = Some(SubjectContext {
+                                    reference: SubjectRef::Inline(subject_slot),
+                                    layout: input_layout,
+                                });
+                                let kind = match &stage.kind {
+                                    core::PipeStageKind::Transform { expr } => {
+                                        children.push((*expr, child_subject));
+                                        InlinePipeStageBuild::Transform
+                                    }
+                                    core::PipeStageKind::Tap { expr } => {
+                                        children.push((*expr, child_subject));
+                                        InlinePipeStageBuild::Tap
+                                    }
+                                    core::PipeStageKind::Gate {
+                                        predicate,
+                                        emits_negative_update,
+                                    } => {
+                                        children.push((*predicate, child_subject));
+                                        InlinePipeStageBuild::Gate {
+                                            emits_negative_update: *emits_negative_update,
+                                        }
+                                    }
+                                };
+                                stage_specs.push(InlinePipeStageSpec {
+                                    subject: subject_slot,
+                                    span: stage.span,
+                                    input_layout,
+                                    result_layout,
+                                    kind,
+                                });
+                            }
+                            tasks.push(Task::BuildPipe {
+                                span: expr.span,
+                                layout,
+                                stages: stage_specs,
+                            });
+                            for (child, child_subject) in children.into_iter().rev() {
+                                tasks.push(Task::Visit(child, child_subject));
+                            }
+                            tasks.push(Task::Visit(pipe.head, subject));
+                        }
+                    }
+                }
+                Task::BuildOptionSome { span, layout } => {
+                    let payload = values.pop().expect("option payload should exist");
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::OptionSome { payload },
+                        },
+                    )?);
+                }
+                Task::BuildText {
+                    span,
+                    layout,
+                    segments,
+                } => {
+                    let interpolation_count = segments
+                        .iter()
+                        .filter(|segment| matches!(segment, SegmentSpec::Interpolation { .. }))
+                        .count();
+                    let mut lowered = drain_tail(&mut values, interpolation_count).into_iter();
+                    let segments = segments
+                        .into_iter()
+                        .map(|segment| match segment {
+                            SegmentSpec::Fragment { raw, span } => {
+                                TextSegment::Fragment { raw, span }
+                            }
+                            SegmentSpec::Interpolation { span } => TextSegment::Interpolation {
+                                expr: lowered
+                                    .next()
+                                    .expect("text interpolation count should match"),
+                                span,
+                            },
+                        })
+                        .collect();
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Text(TextLiteral { segments }),
+                        },
+                    )?);
+                }
+                Task::BuildTuple { span, layout, len } => {
+                    let elements = drain_tail(&mut values, len);
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Tuple(elements),
+                        },
+                    )?);
+                }
+                Task::BuildList { span, layout, len } => {
+                    let elements = drain_tail(&mut values, len);
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::List(elements),
+                        },
+                    )?);
+                }
+                Task::BuildMap {
+                    span,
+                    layout,
+                    entries,
+                } => {
+                    let lowered = drain_tail(&mut values, entries * 2);
+                    let mut iter = lowered.into_iter();
+                    let entries = (0..entries)
+                        .map(|_| MapEntry {
+                            key: iter.next().expect("map key should exist"),
+                            value: iter.next().expect("map value should exist"),
+                        })
+                        .collect();
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Map(entries),
+                        },
+                    )?);
+                }
+                Task::BuildSet { span, layout, len } => {
+                    let elements = drain_tail(&mut values, len);
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Set(elements),
+                        },
+                    )?);
+                }
+                Task::BuildRecord {
+                    span,
+                    layout,
+                    labels,
+                } => {
+                    let len = labels.len();
+                    let fields = labels
+                        .into_iter()
+                        .zip(drain_tail(&mut values, len))
+                        .map(|(label, value)| RecordExprField { label, value })
+                        .collect();
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Record(fields),
+                        },
+                    )?);
+                }
+                Task::BuildProjection {
+                    span,
+                    layout,
+                    base,
+                    path,
+                } => {
+                    let base = match base {
+                        ProjectionBaseBuild::Subject(subject) => ProjectionBase::Subject(subject),
+                        ProjectionBaseBuild::Expr => ProjectionBase::Expr(
+                            values.pop().expect("projection base should exist"),
+                        ),
+                    };
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Projection { base, path },
+                        },
+                    )?);
+                }
+                Task::BuildApply {
+                    span,
+                    layout,
+                    arguments,
+                } => {
+                    let lowered = drain_tail(&mut values, arguments + 1);
+                    let mut iter = lowered.into_iter();
+                    let callee = iter.next().expect("apply callee should exist");
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Apply {
+                                callee,
+                                arguments: iter.collect(),
+                            },
+                        },
+                    )?);
+                }
+                Task::BuildUnary {
+                    span,
+                    layout,
+                    operator,
+                } => {
+                    let inner = values.pop().expect("unary child should exist");
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Unary {
+                                operator,
+                                expr: inner,
+                            },
+                        },
+                    )?);
+                }
+                Task::BuildBinary {
+                    span,
+                    layout,
+                    operator,
+                } => {
+                    let lowered = drain_tail(&mut values, 2);
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Binary {
+                                left: lowered[0],
+                                operator,
+                                right: lowered[1],
+                            },
+                        },
+                    )?);
+                }
+                Task::BuildPipe {
+                    span,
+                    layout,
+                    stages,
+                } => {
+                    let lowered = drain_tail(&mut values, stages.len() + 1);
+                    let mut iter = lowered.into_iter();
+                    let head = iter.next().expect("pipe head should exist");
+                    let stages = stages
+                        .into_iter()
+                        .map(|stage| {
+                            let expr = iter.next().expect("pipe stage child should exist");
+                            InlinePipeStage {
+                                subject: stage.subject,
+                                span: stage.span,
+                                input_layout: stage.input_layout,
+                                result_layout: stage.result_layout,
+                                kind: match stage.kind {
+                                    InlinePipeStageBuild::Transform => {
+                                        InlinePipeStageKind::Transform { expr }
+                                    }
+                                    InlinePipeStageBuild::Tap => InlinePipeStageKind::Tap { expr },
+                                    InlinePipeStageBuild::Gate {
+                                        emits_negative_update,
+                                    } => InlinePipeStageKind::Gate {
+                                        predicate: expr,
+                                        emits_negative_update,
+                                    },
+                                },
+                            }
+                        })
+                        .collect();
+                    values.push(alloc_kernel_expr(
+                        &mut exprs,
+                        KernelExpr {
+                            span,
+                            layout,
+                            kind: KernelExprKind::Pipe(InlinePipeExpr { head, stages }),
+                        },
+                    )?);
+                }
+            }
+        }
+
+        Ok(LoweredKernelExprs {
+            root: values
+                .pop()
+                .expect("kernel lowering should yield one root expression"),
+            inline_subjects,
+            exprs,
+        })
+    }
+
+    fn build_calling_convention(
+        &self,
+        input_subject: Option<LayoutId>,
+        environment: &[LayoutId],
+        result_layout: LayoutId,
+    ) -> CallingConvention {
+        let mut parameters =
+            Vec::with_capacity(environment.len() + usize::from(input_subject.is_some()));
+        if let Some(layout) = input_subject {
+            parameters.push(AbiParameter {
+                role: ParameterRole::InputSubject,
+                layout,
+                pass_mode: self.program.layouts()[layout].abi,
+            });
+        }
+        for (index, layout) in environment.iter().enumerate() {
+            parameters.push(AbiParameter {
+                role: ParameterRole::Environment(EnvSlotId::from_raw(index as u32)),
+                layout: *layout,
+                pass_mode: self.program.layouts()[*layout].abi,
+            });
+        }
+        CallingConvention {
+            kind: CallingConventionKind::RuntimeKernelV1,
+            parameters,
+            result: AbiResult {
+                layout: result_layout,
+                pass_mode: self.program.layouts()[result_layout].abi,
+            },
+        }
+    }
+
+    fn require_item(&self, item: core::ItemId, span: SourceSpan) -> Result<ItemId, LoweringError> {
+        self.item_map
+            .get(&item)
+            .copied()
+            .ok_or(UnknownCoreItem { item, span })
+    }
+
+    fn intern_layout(&mut self, layout: Layout) -> Result<LayoutId, LoweringError> {
+        if let Some(id) = self.layout_interner.get(&layout).copied() {
+            return Ok(id);
+        }
+        let id = self
+            .program
+            .layouts_mut()
+            .alloc(layout.clone())
+            .map_err(|overflow| arena_overflow("layouts", overflow))?;
+        self.layout_interner.insert(layout, id);
+        Ok(id)
+    }
+
+    fn intern_core_type(&mut self, root: &core::Type) -> Result<LayoutId, LoweringError> {
+        if let Some(id) = self.core_layouts.get(root).copied() {
+            return Ok(id);
+        }
+
+        enum Task<'a> {
+            Visit(&'a core::Type),
+            Build(core::Type, TypeBuildTask),
+        }
+
+        enum TypeBuildTask {
+            Primitive(PrimitiveType),
+            Tuple(usize),
+            Record(Vec<Box<str>>),
+            Arrow,
+            List,
+            Map,
+            Set,
+            Option,
+            Result,
+            Validation,
+            Signal,
+            Task,
+            Domain { name: Box<str>, arguments: usize },
+            Opaque { name: Box<str>, arguments: usize },
+        }
+
+        let mut tasks = vec![Task::Visit(root)];
+        let mut values = Vec::new();
+
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Visit(ty) => {
+                    if let Some(id) = self.core_layouts.get(ty).copied() {
+                        values.push(id);
+                        continue;
+                    }
+                    match ty {
+                        core::Type::Primitive(builtin) => tasks.push(Task::Build(
+                            ty.clone(),
+                            TypeBuildTask::Primitive(PrimitiveType::from_builtin(*builtin)),
+                        )),
+                        core::Type::Tuple(elements) => {
+                            tasks.push(Task::Build(
+                                ty.clone(),
+                                TypeBuildTask::Tuple(elements.len()),
+                            ));
+                            for element in elements.iter().rev() {
+                                tasks.push(Task::Visit(element));
+                            }
+                        }
+                        core::Type::Record(fields) => {
+                            tasks.push(Task::Build(
+                                ty.clone(),
+                                TypeBuildTask::Record(
+                                    fields.iter().map(|field| field.name.clone()).collect(),
+                                ),
+                            ));
+                            for field in fields.iter().rev() {
+                                tasks.push(Task::Visit(&field.ty));
+                            }
+                        }
+                        core::Type::Arrow { parameter, result } => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Arrow));
+                            tasks.push(Task::Visit(result));
+                            tasks.push(Task::Visit(parameter));
+                        }
+                        core::Type::List(element) => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::List));
+                            tasks.push(Task::Visit(element));
+                        }
+                        core::Type::Map { key, value } => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Map));
+                            tasks.push(Task::Visit(value));
+                            tasks.push(Task::Visit(key));
+                        }
+                        core::Type::Set(element) => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Set));
+                            tasks.push(Task::Visit(element));
+                        }
+                        core::Type::Option(element) => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Option));
+                            tasks.push(Task::Visit(element));
+                        }
+                        core::Type::Result { error, value } => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Result));
+                            tasks.push(Task::Visit(value));
+                            tasks.push(Task::Visit(error));
+                        }
+                        core::Type::Validation { error, value } => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Validation));
+                            tasks.push(Task::Visit(value));
+                            tasks.push(Task::Visit(error));
+                        }
+                        core::Type::Signal(element) => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Signal));
+                            tasks.push(Task::Visit(element));
+                        }
+                        core::Type::Task { error, value } => {
+                            tasks.push(Task::Build(ty.clone(), TypeBuildTask::Task));
+                            tasks.push(Task::Visit(value));
+                            tasks.push(Task::Visit(error));
+                        }
+                        core::Type::Domain {
+                            name, arguments, ..
+                        } => {
+                            tasks.push(Task::Build(
+                                ty.clone(),
+                                TypeBuildTask::Domain {
+                                    name: name.clone(),
+                                    arguments: arguments.len(),
+                                },
+                            ));
+                            for argument in arguments.iter().rev() {
+                                tasks.push(Task::Visit(argument));
+                            }
+                        }
+                        core::Type::OpaqueItem {
+                            name, arguments, ..
+                        } => {
+                            tasks.push(Task::Build(
+                                ty.clone(),
+                                TypeBuildTask::Opaque {
+                                    name: name.clone(),
+                                    arguments: arguments.len(),
+                                },
+                            ));
+                            for argument in arguments.iter().rev() {
+                                tasks.push(Task::Visit(argument));
+                            }
+                        }
+                    }
+                }
+                Task::Build(cache_key, build) => {
+                    let layout = match build {
+                        TypeBuildTask::Primitive(primitive) => {
+                            Layout::new(LayoutKind::Primitive(primitive))
+                        }
+                        TypeBuildTask::Tuple(len) => {
+                            Layout::new(LayoutKind::Tuple(drain_tail(&mut values, len)))
+                        }
+                        TypeBuildTask::Record(names) => {
+                            let len = names.len();
+                            Layout::new(LayoutKind::Record(
+                                names
+                                    .into_iter()
+                                    .zip(drain_tail(&mut values, len))
+                                    .map(|(name, layout)| RecordFieldLayout { name, layout })
+                                    .collect(),
+                            ))
+                        }
+                        TypeBuildTask::Arrow => {
+                            let lowered = drain_tail(&mut values, 2);
+                            Layout::new(LayoutKind::Arrow {
+                                parameter: lowered[0],
+                                result: lowered[1],
+                            })
+                        }
+                        TypeBuildTask::List => Layout::new(LayoutKind::List {
+                            element: values.pop().expect("list child should exist"),
+                        }),
+                        TypeBuildTask::Map => {
+                            let lowered = drain_tail(&mut values, 2);
+                            Layout::new(LayoutKind::Map {
+                                key: lowered[0],
+                                value: lowered[1],
+                            })
+                        }
+                        TypeBuildTask::Set => Layout::new(LayoutKind::Set {
+                            element: values.pop().expect("set child should exist"),
+                        }),
+                        TypeBuildTask::Option => Layout::new(LayoutKind::Option {
+                            element: values.pop().expect("option child should exist"),
+                        }),
+                        TypeBuildTask::Result => {
+                            let lowered = drain_tail(&mut values, 2);
+                            Layout::new(LayoutKind::Result {
+                                error: lowered[0],
+                                value: lowered[1],
+                            })
+                        }
+                        TypeBuildTask::Validation => {
+                            let lowered = drain_tail(&mut values, 2);
+                            Layout::new(LayoutKind::Validation {
+                                error: lowered[0],
+                                value: lowered[1],
+                            })
+                        }
+                        TypeBuildTask::Signal => Layout::new(LayoutKind::Signal {
+                            element: values.pop().expect("signal child should exist"),
+                        }),
+                        TypeBuildTask::Task => {
+                            let lowered = drain_tail(&mut values, 2);
+                            Layout::new(LayoutKind::Task {
+                                error: lowered[0],
+                                value: lowered[1],
+                            })
+                        }
+                        TypeBuildTask::Domain { name, arguments } => {
+                            Layout::new(LayoutKind::Domain {
+                                name,
+                                arguments: drain_tail(&mut values, arguments),
+                            })
+                        }
+                        TypeBuildTask::Opaque { name, arguments } => {
+                            Layout::new(LayoutKind::Opaque {
+                                name,
+                                arguments: drain_tail(&mut values, arguments),
+                            })
+                        }
+                    };
+                    let id = self.intern_layout(layout)?;
+                    self.core_layouts.insert(cache_key, id);
+                    values.push(id);
+                }
+            }
+        }
+
+        Ok(values
+            .pop()
+            .expect("core type lowering should produce one backend layout"))
+    }
+}
+
+struct KernelContract {
+    uses_input_subject: bool,
+    environment: Vec<LayoutId>,
+    env_map: HashMap<u32, EnvSlotId>,
+    global_items: Vec<ItemId>,
+}
+
+struct LoweredKernelExprs {
+    root: KernelExprId,
+    inline_subjects: Vec<LayoutId>,
+    exprs: Arena<KernelExprId, KernelExpr>,
+}
+fn alloc_kernel_expr(
+    exprs: &mut Arena<KernelExprId, KernelExpr>,
+    expr: KernelExpr,
+) -> Result<KernelExprId, LoweringError> {
+    exprs
+        .alloc(expr)
+        .map_err(|overflow| arena_overflow("kernel expressions", overflow))
+}
+
+fn alloc_inline_subject(
+    inline_subjects: &mut Vec<LayoutId>,
+    layout: LayoutId,
+) -> Result<InlineSubjectId, LoweringError> {
+    let attempted_len = inline_subjects.len();
+    let raw = u32::try_from(attempted_len).map_err(|_| LoweringError::ArenaOverflow {
+        family: "inline subjects",
+        attempted_len,
+    })?;
+    inline_subjects.push(layout);
+    Ok(InlineSubjectId::from_raw(raw))
+}
+
+fn drain_tail<T>(values: &mut Vec<T>, len: usize) -> Vec<T> {
+    let split = values
+        .len()
+        .checked_sub(len)
+        .expect("requested more lowered values than available");
+    values.drain(split..).collect()
+}
+
+fn wrap_one(error: LoweringError) -> LoweringErrors {
+    LoweringErrors::new(vec![error])
+}
+
+fn arena_overflow(family: &'static str, overflow: ArenaOverflow) -> LoweringError {
+    LoweringError::ArenaOverflow {
+        family,
+        attempted_len: overflow.attempted_len(),
+    }
+}
+
+fn map_builtin_term(term: HirBuiltinTerm) -> BuiltinTerm {
+    match term {
+        HirBuiltinTerm::True => BuiltinTerm::True,
+        HirBuiltinTerm::False => BuiltinTerm::False,
+        HirBuiltinTerm::None => BuiltinTerm::None,
+        HirBuiltinTerm::Some => BuiltinTerm::Some,
+        HirBuiltinTerm::Ok => BuiltinTerm::Ok,
+        HirBuiltinTerm::Err => BuiltinTerm::Err,
+        HirBuiltinTerm::Valid => BuiltinTerm::Valid,
+        HirBuiltinTerm::Invalid => BuiltinTerm::Invalid,
+    }
+}
+
+fn map_unary_operator(operator: HirUnaryOperator) -> UnaryOperator {
+    match operator {
+        HirUnaryOperator::Not => UnaryOperator::Not,
+    }
+}
+
+fn map_binary_operator(operator: HirBinaryOperator) -> BinaryOperator {
+    match operator {
+        HirBinaryOperator::Add => BinaryOperator::Add,
+        HirBinaryOperator::Subtract => BinaryOperator::Subtract,
+        HirBinaryOperator::GreaterThan => BinaryOperator::GreaterThan,
+        HirBinaryOperator::LessThan => BinaryOperator::LessThan,
+        HirBinaryOperator::Equals => BinaryOperator::Equals,
+        HirBinaryOperator::NotEquals => BinaryOperator::NotEquals,
+        HirBinaryOperator::And => BinaryOperator::And,
+        HirBinaryOperator::Or => BinaryOperator::Or,
+    }
+}
+
+fn map_fanout_carrier(carrier: TypingFanoutCarrier) -> FanoutCarrier {
+    match carrier {
+        TypingFanoutCarrier::Ordinary => FanoutCarrier::Ordinary,
+        TypingFanoutCarrier::Signal => FanoutCarrier::Signal,
+    }
+}
+
+fn map_recurrence_target(target: TypingRecurrenceTarget) -> RecurrenceTarget {
+    match target {
+        TypingRecurrenceTarget::Signal => RecurrenceTarget::Signal,
+        TypingRecurrenceTarget::Task => RecurrenceTarget::Task,
+        TypingRecurrenceTarget::SourceHelper => RecurrenceTarget::SourceHelper,
+    }
+}
+
+fn map_recurrence_wakeup_kind(kind: TypingRecurrenceWakeupKind) -> RecurrenceWakeupKind {
+    match kind {
+        TypingRecurrenceWakeupKind::Timer => RecurrenceWakeupKind::Timer,
+        TypingRecurrenceWakeupKind::Backoff => RecurrenceWakeupKind::Backoff,
+        TypingRecurrenceWakeupKind::SourceEvent => RecurrenceWakeupKind::SourceEvent,
+        TypingRecurrenceWakeupKind::ProviderDefinedTrigger => {
+            RecurrenceWakeupKind::ProviderDefinedTrigger
+        }
+    }
+}
+
+fn map_non_source_wakeup_cause(cause: TypingNonSourceWakeupCause) -> NonSourceWakeupCause {
+    match cause {
+        TypingNonSourceWakeupCause::ExplicitTimer => NonSourceWakeupCause::ExplicitTimer,
+        TypingNonSourceWakeupCause::ExplicitBackoff => NonSourceWakeupCause::ExplicitBackoff,
+    }
+}
+
+fn map_decode_mode(mode: TypingDecodeMode) -> DecodeMode {
+    match mode {
+        TypingDecodeMode::Strict => DecodeMode::Strict,
+        TypingDecodeMode::Permissive => DecodeMode::Permissive,
+    }
+}
+
+fn map_extra_fields(policy: TypingDecodeExtraFieldPolicy) -> DecodeExtraFieldPolicy {
+    match policy {
+        TypingDecodeExtraFieldPolicy::Reject => DecodeExtraFieldPolicy::Reject,
+        TypingDecodeExtraFieldPolicy::Ignore => DecodeExtraFieldPolicy::Ignore,
+    }
+}
+
+fn map_decode_requirement(requirement: TypingDecodeFieldRequirement) -> DecodeFieldRequirement {
+    match requirement {
+        TypingDecodeFieldRequirement::Required => DecodeFieldRequirement::Required,
+    }
+}
+
+fn map_decode_strategy(strategy: TypingDecodeSumStrategy) -> DecodeSumStrategy {
+    match strategy {
+        TypingDecodeSumStrategy::Explicit => DecodeSumStrategy::Explicit,
+    }
+}
+
+fn map_domain_surface_kind(kind: core::DomainDecodeSurfaceKind) -> DomainDecodeSurfaceKind {
+    match kind {
+        core::DomainDecodeSurfaceKind::Direct => DomainDecodeSurfaceKind::Direct,
+        core::DomainDecodeSurfaceKind::FallibleResult => DomainDecodeSurfaceKind::FallibleResult,
+    }
+}
+
+fn map_decode_primitive(primitive: TypingPrimitiveType) -> PrimitiveType {
+    match primitive {
+        TypingPrimitiveType::Int => PrimitiveType::Int,
+        TypingPrimitiveType::Float => PrimitiveType::Float,
+        TypingPrimitiveType::Decimal => PrimitiveType::Decimal,
+        TypingPrimitiveType::BigInt => PrimitiveType::BigInt,
+        TypingPrimitiveType::Bool => PrimitiveType::Bool,
+        TypingPrimitiveType::Text => PrimitiveType::Text,
+        TypingPrimitiveType::Unit => PrimitiveType::Unit,
+        TypingPrimitiveType::Bytes => PrimitiveType::Bytes,
+    }
+}
+
+fn map_source_provider(provider: &aivi_hir::SourceProviderRef) -> SourceProvider {
+    if let Some(builtin) = provider.builtin() {
+        return SourceProvider::Builtin(builtin.key().into());
+    }
+    if let Some(custom) = provider.custom_key() {
+        return SourceProvider::Custom(custom.into());
+    }
+    match provider.key() {
+        Some(key) => SourceProvider::InvalidShape(key.into()),
+        None => SourceProvider::Missing,
+    }
+}
+
+fn map_teardown_policy(_: aivi_hir::SourceTeardownPolicy) -> SourceTeardownPolicy {
+    SourceTeardownPolicy::DisposeOnOwnerTeardown
+}
+
+fn map_replacement_policy(_: aivi_hir::SourceReplacementPolicy) -> SourceReplacementPolicy {
+    SourceReplacementPolicy::DisposeSupersededBeforePublish
+}
+
+fn map_stale_work_policy(_: aivi_hir::SourceStaleWorkPolicy) -> SourceStaleWorkPolicy {
+    SourceStaleWorkPolicy::DropStalePublications
+}
+
+fn map_cancellation_policy(policy: TypingSourceCancellationPolicy) -> SourceCancellationPolicy {
+    match policy {
+        TypingSourceCancellationPolicy::ProviderManaged => {
+            SourceCancellationPolicy::ProviderManaged
+        }
+        TypingSourceCancellationPolicy::CancelInFlight => SourceCancellationPolicy::CancelInFlight,
+    }
+}
+
+fn source_instance_raw(source: &core::SourceNode) -> u32 {
+    source
+        .instance
+        .to_string()
+        .parse::<u32>()
+        .expect("typed-core source instances should print raw u32 values")
+}

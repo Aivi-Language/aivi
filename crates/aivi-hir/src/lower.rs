@@ -11,17 +11,17 @@ use crate::{
     DecoratorId, DecoratorPayload, DomainItem, DomainMember, DomainMemberKind,
     DomainMemberResolution, EachControl, EmptyControl, ExportItem, Expr, ExprId, ExprKind,
     FragmentControl, FunctionItem, FunctionParameter, ImportBinding, ImportBindingMetadata,
-    ImportBundleKind, ImportId, ImportValueType, IntegerLiteral, Item, ItemHeader, ItemId,
-    ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
-    MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl,
-    Module, Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind,
-    ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
-    RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState,
-    ShowControl, SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
-    SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
-    TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId,
-    TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference,
-    TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
+    ImportBundleKind, ImportId, ImportValueType, InstanceItem, InstanceMember, IntegerLiteral,
+    Item, ItemHeader, ItemId, ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry,
+    MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind,
+    MatchControl, Module, Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage,
+    PipeStageKind, ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface,
+    RecordPatternField, RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral,
+    ResolutionState, ShowControl, SignalItem, SourceDecorator, SourceLifecycleDependencies,
+    SourceMetadata, SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral,
+    TermReference, TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment,
+    TypeField, TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId,
+    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {
@@ -164,6 +164,7 @@ impl Lowerer {
             syn::Item::Function(item) => Some(Item::Function(self.lower_function_item(item))),
             syn::Item::Signal(item) => Some(Item::Signal(self.lower_signal_item(item))),
             syn::Item::Class(item) => Some(Item::Class(self.lower_class_item(item))),
+            syn::Item::Instance(item) => Some(Item::Instance(self.lower_instance_item(item))),
             syn::Item::Domain(item) => Some(Item::Domain(self.lower_domain_item(item))),
             syn::Item::SourceProviderContract(item) => Some(Item::SourceProviderContract(
                 self.lower_source_provider_contract_item(item),
@@ -414,6 +415,83 @@ impl Lowerer {
             name,
             parameters,
             superclasses,
+            members,
+        }
+    }
+
+    fn lower_instance_item(&mut self, item: &syn::InstanceItem) -> InstanceItem {
+        let header =
+            self.lower_item_header(&item.base.decorators, ItemKind::Instance, item.base.span);
+        let class = item
+            .class
+            .as_ref()
+            .map(|class| TypeReference::unresolved(self.lower_qualified_name(class)))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "instance declaration is missing its class name",
+                    code("missing-instance-class"),
+                );
+                TypeReference::unresolved(
+                    self.make_path(&[self.make_name("invalid", item.base.span)]),
+                )
+            });
+        let argument = item
+            .target
+            .as_ref()
+            .map(|target| self.lower_type_expr(target))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "instance declaration is missing its target type",
+                    code("missing-instance-target"),
+                );
+                self.placeholder_type(item.base.span)
+            });
+        let members = item
+            .body
+            .as_ref()
+            .map(|body| {
+                body.members
+                    .iter()
+                    .map(|member| InstanceMember {
+                        span: member.span,
+                        name: self.make_name(member.name.text(), member.name.span()),
+                        parameters: member
+                            .parameters
+                            .iter()
+                            .map(|parameter| self.lower_instance_parameter(parameter))
+                            .collect(),
+                        annotation: None,
+                        body: member
+                            .body
+                            .as_ref()
+                            .map(|body| self.lower_expr(body))
+                            .unwrap_or_else(|| {
+                                self.emit_error(
+                                    member.span,
+                                    "instance member is missing a body",
+                                    code("missing-instance-member-body"),
+                                );
+                                self.placeholder_expr(member.span)
+                            }),
+                    })
+                    .collect()
+            })
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    item.base.span,
+                    "instance declaration is missing a body",
+                    code("missing-instance-body"),
+                );
+                Vec::new()
+            });
+
+        InstanceItem {
+            header,
+            class,
+            arguments: crate::NonEmpty::new(argument, Vec::new()),
+            context: Vec::new(),
             members,
         }
     }
@@ -1068,6 +1146,20 @@ impl Lowerer {
                 .annotation
                 .as_ref()
                 .map(|annotation| self.lower_type_expr(annotation)),
+        }
+    }
+
+    fn lower_instance_parameter(&mut self, parameter: &syn::Identifier) -> FunctionParameter {
+        let name = self.make_name(&parameter.text, parameter.span);
+        let binding = self.alloc_binding(Binding {
+            span: parameter.span,
+            name,
+            kind: BindingKind::FunctionParameter,
+        });
+        FunctionParameter {
+            span: parameter.span,
+            binding,
+            annotation: None,
         }
     }
 
@@ -3240,7 +3332,27 @@ impl Lowerer {
                 item.resolution = self.resolve_export_target(&item.target, namespaces);
                 Item::Export(item)
             }
-            Item::Instance(item) => Item::Instance(item),
+            Item::Instance(mut item) => {
+                let env = ResolveEnv::default();
+                self.resolve_type_reference(&mut item.class, namespaces, &env);
+                for argument in item.arguments.iter() {
+                    self.resolve_type(*argument, namespaces, &env);
+                }
+                for context in &item.context {
+                    self.resolve_type(*context, namespaces, &env);
+                }
+                for member in &item.members {
+                    if let Some(annotation) = member.annotation {
+                        self.resolve_type(annotation, namespaces, &env);
+                    }
+                    let mut member_env = env.clone();
+                    member_env.push_term_scope(self.binding_scope(
+                        member.parameters.iter().map(|parameter| parameter.binding),
+                    ));
+                    self.resolve_expr(member.body, namespaces, &member_env);
+                }
+                Item::Instance(item)
+            }
         };
         *self
             .module
@@ -5000,6 +5112,7 @@ mod tests {
             "milestone-2/valid/applicative-clusters/main.aivi",
             "milestone-2/valid/markup-control-nodes/main.aivi",
             "milestone-2/valid/class-declarations/main.aivi",
+            "milestone-2/valid/instance-declarations/main.aivi",
             "milestone-2/valid/domain-declarations/main.aivi",
             "milestone-2/valid/domain-member-resolution/main.aivi",
             "milestone-2/valid/domain-literal-suffixes/main.aivi",
@@ -6847,6 +6960,80 @@ sig updates : Signal Int
             other => panic!("expected `NonEmpty` to lower as a domain item, found {other:?}"),
         };
         assert_eq!(non_empty.parameters.len(), 1);
+    }
+
+    #[test]
+    fn lowers_instances_with_same_module_class_resolution_and_local_parameters() {
+        let lowered = lower_fixture("milestone-2/valid/instance-declarations/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "instance fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "instance fixture should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let instance = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Instance(item) => Some(item),
+                _ => None,
+            })
+            .expect("fixture should lower one instance item");
+        assert_eq!(instance.arguments.len(), 1);
+        assert!(matches!(
+            instance.class.resolution,
+            ResolutionState::Resolved(TypeResolution::Item(class_item))
+                if matches!(&lowered.module().items()[class_item], Item::Class(class) if class.name.text() == "Eq")
+        ));
+        assert_eq!(instance.members.len(), 1);
+        assert_eq!(instance.members[0].parameters.len(), 2);
+
+        let ExprKind::Apply { arguments, .. } =
+            &lowered.module().exprs()[instance.members[0].body].kind
+        else {
+            panic!("expected instance body to lower as an application");
+        };
+        let argument_kinds = arguments
+            .iter()
+            .map(|argument| match &lowered.module().exprs()[*argument].kind {
+                ExprKind::Name(reference) => reference.resolution.clone(),
+                other => panic!("expected local instance member arguments, found {other:?}"),
+            })
+            .collect::<Vec<_>>();
+        assert!(argument_kinds.iter().all(|resolution| matches!(
+            resolution,
+            ResolutionState::Resolved(TermResolution::Local(_))
+        )));
+    }
+
+    #[test]
+    fn rejects_duplicate_instances_during_validation() {
+        let lowered = lower_fixture("milestone-2/invalid/duplicate-instance/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "duplicate-instance fixture should lower cleanly before validation: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(super::code("duplicate-instance"))),
+            "expected duplicate-instance validation diagnostic, got {:?}",
+            report.diagnostics()
+        );
     }
 
     #[test]

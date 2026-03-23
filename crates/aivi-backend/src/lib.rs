@@ -1,3 +1,50 @@
 #![forbid(unsafe_code)]
 
-//! Backend and code generation foundations for the AIVI compiler.
+//! First backend-facing foundations for the AIVI compiler.
+//!
+//! This crate consumes the validated `aivi-core` slice and re-expresses it as backend-owned,
+//! layout-aware contracts:
+//! - backend-owned items, pipelines, kernels, sources, and decode plans,
+//! - explicit ABI/layout tables,
+//! - explicit kernel calling conventions and captured environments,
+//! - source/decode/runtime-facing plans with no remaining HIR-only references,
+//! - and structural validation plus stable debug output.
+//!
+//! The current slice intentionally stops before real Cranelift emission. It makes the RFC's
+//! lambda/backend boundary honest today by turning the existing typed-core runtime expressions into
+//! closed backend kernels with explicit input subjects, environment slots, and global dependencies.
+
+mod ids;
+mod kernel;
+mod layout;
+mod lower;
+mod program;
+mod validate;
+
+pub use aivi_core::{Arena, ArenaId, ArenaOverflow};
+pub use ids::{
+    DecodePlanId, DecodeStepId, EnvSlotId, InlineSubjectId, ItemId, KernelExprId, KernelId,
+    LayoutId, PipelineId, SourceId,
+};
+pub use kernel::{
+    AbiParameter, AbiResult, BinaryOperator, BuiltinTerm, CallingConvention, CallingConventionKind,
+    InlinePipeExpr, InlinePipeStage, InlinePipeStageKind, IntegerLiteral, Kernel, KernelExpr,
+    KernelExprKind, KernelOrigin, KernelOriginKind, MapEntry, ParameterRole, ProjectionBase,
+    RecordExprField, SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment, UnaryOperator,
+    describe_expr_kind,
+};
+pub use layout::{
+    AbiPassMode, Layout, LayoutKind, PrimitiveType, RecordFieldLayout, VariantLayout,
+};
+pub use lower::{LoweringError, LoweringErrors, lower_module};
+pub use program::{
+    DecodeExtraFieldPolicy, DecodeField, DecodeFieldRequirement, DecodeMode, DecodePlan,
+    DecodeStep, DecodeStepKind, DecodeSumStrategy, DecodeVariant, DomainDecodeSurface,
+    DomainDecodeSurfaceKind, FanoutCarrier, FanoutJoin, FanoutStage, GateStage, Item, ItemKind,
+    NonSourceWakeup, NonSourceWakeupCause, Pipeline, PipelineOrigin, Program, Recurrence,
+    RecurrenceStage, RecurrenceTarget, RecurrenceWakeupKind, SignalInfo, SourceCancellationPolicy,
+    SourceInstanceId, SourceOptionBinding, SourcePlan, SourceProvider, SourceReplacementPolicy,
+    SourceStaleWorkPolicy, SourceTeardownPolicy, Stage, StageKind, TruthyFalsyBranch,
+    TruthyFalsyStage,
+};
+pub use validate::{ValidationError, ValidationErrors, validate_program};

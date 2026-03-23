@@ -708,6 +708,7 @@ pub struct InstanceItem {
 pub struct InstanceMember {
     pub span: SourceSpan,
     pub name: Name,
+    pub parameters: Vec<FunctionParameter>,
     pub annotation: Option<TypeId>,
     pub body: ExprId,
 }

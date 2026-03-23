@@ -1,0 +1,71 @@
+# Language Tour
+
+This tour covers the AIVI language from first principles.
+It assumes you can read code in any mainstream language but does not assume functional programming experience.
+
+## Reading guide
+
+Each chapter builds on the previous one. Read them in order on your first pass.
+
+| Chapter | What you learn | Key concept |
+|---|---|---|
+| [01 · Values & Types](/tour/01-values-types) | `val`, `type`, sum and product types | Everything has a type; no null |
+| [02 · Functions](/tour/02-functions) | `fun`, labeled parameters, calling conventions | Labeled params eliminate positional ambiguity |
+| [03 · Pipes](/tour/03-pipes) | `\|>`, projection shorthand, chaining | Data flows left-to-right |
+| [04 · Pattern Matching](/tour/04-pattern-matching) | `\|\|>`, exhaustiveness, nested patterns | Match shapes, not just values |
+| [05 · Signals](/tour/05-signals) | `sig`, recurrence with `@\|>...<\|@` | Time-varying values |
+| [06 · Sources](/tour/06-sources) | `@source`, `@recur.timer`, lifecycle | Where values come from |
+| [07 · Markup](/tour/07-markup) | `<label>`, `<each>`, `<match>` | GTK widgets as AIVI expressions |
+| [08 · Type Classes](/tour/08-typeclasses) | `class`, `instance`, `Eq`, `Show` | Interfaces with laws |
+
+## A complete program
+
+Before diving into the details, here is a small but complete AIVI program.
+The tour will dissect each piece.
+
+```aivi
+-- A simple todo-item counter
+
+type Filter = All | Active | Done
+
+type TodoItem = {
+    id:   Int,
+    text: Text,
+    done: Bool
+}
+
+fun countActive:Int #items:List TodoItem =>
+    items
+     *|> .done
+     *|> \done => done == False
+     |> List.length
+
+@source window.keyDown with { repeat: False }
+sig lastKey : Signal Text
+
+sig todos : Signal (List TodoItem) =
+    []
+    @|> List.append (TodoItem 1 "Buy coffee" False)
+    <|@ List.append (TodoItem 1 "Buy coffee" False)
+
+sig activeCount : Signal Int =
+    todos
+     |> countActive
+
+sig statusText : Signal Text =
+    activeCount
+     |> \n => "{n} items remaining"
+
+val main =
+    <Window title="Todos">
+        <Box orientation={Vertical} spacing={8}>
+            <Label text={statusText} />
+        </Box>
+    </Window>
+
+export main
+```
+
+Do not worry if parts are unfamiliar — the tour explains everything step by step.
+
+[Start with Values & Types →](/tour/01-values-types)

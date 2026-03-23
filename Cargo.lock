@@ -14,6 +14,13 @@ dependencies = [
 [[package]]
 name = "aivi-backend"
 version = "0.1.0"
+dependencies = [
+ "aivi-base",
+ "aivi-core",
+ "aivi-hir",
+ "aivi-syntax",
+ "aivi-typing",
+]
 
 [[package]]
 name = "aivi-base"
@@ -46,6 +53,7 @@ version = "0.1.0"
 dependencies = [
  "aivi-base",
  "aivi-hir",
+ "aivi-runtime",
  "aivi-syntax",
 ]
 
@@ -93,6 +101,12 @@ dependencies = [
 [[package]]
 name = "aivi-runtime"
 version = "0.1.0"
+dependencies = [
+ "aivi-base",
+ "aivi-hir",
+ "aivi-syntax",
+ "aivi-typing",
+]
 
 [[package]]
 name = "aivi-syntax"

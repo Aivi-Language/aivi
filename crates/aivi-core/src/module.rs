@@ -13,7 +13,8 @@ use aivi_typing::{
 
 use crate::{
     Arena,
-    expr::{Expr, ExprId, Reference},
+    expr::{Expr, Reference},
+    ids::ExprId,
     ids::{DecodeProgramId, DecodeStepId, ItemId, PipeId, SourceId, StageId},
     ty::Type,
 };
@@ -263,6 +264,7 @@ pub enum ItemKind {
     Value,
     Function,
     Signal(SignalInfo),
+    Instance,
 }
 
 impl ItemKind {
@@ -271,6 +273,7 @@ impl ItemKind {
             Self::Value => "val",
             Self::Function => "fun",
             Self::Signal(_) => "sig",
+            Self::Instance => "instance",
         }
     }
 }
@@ -477,6 +480,22 @@ pub struct DecodeProgram {
 }
 
 impl DecodeProgram {
+    pub(crate) fn new(
+        owner: ItemId,
+        mode: DecodeMode,
+        payload_annotation: HirTypeId,
+        root: DecodeStepId,
+        steps: Arena<DecodeStepId, DecodeStep>,
+    ) -> Self {
+        Self {
+            owner,
+            mode,
+            payload_annotation,
+            root,
+            steps,
+        }
+    }
+
     pub fn steps(&self) -> &Arena<DecodeStepId, DecodeStep> {
         &self.steps
     }
@@ -567,9 +586,9 @@ fn format_expr(module: &Module, expr_id: ExprId, f: &mut fmt::Formatter<'_>) -> 
             Reference::HirItem(item) => write!(f, "hir-item-{}", item.as_raw()),
             Reference::Builtin(term) => write!(f, "{term:?}"),
         },
-        crate::expr::ExprKind::Integer(value) => write!(f, "{}", value.value),
+        crate::expr::ExprKind::Integer(value) => write!(f, "{}", value.raw),
         crate::expr::ExprKind::SuffixedInteger(value) => {
-            write!(f, "{}{}", value.value.value, value.suffix.text())
+            write!(f, "{}{}", value.raw, value.suffix.text())
         }
         crate::expr::ExprKind::Text(text) => {
             f.write_str("\"")?;

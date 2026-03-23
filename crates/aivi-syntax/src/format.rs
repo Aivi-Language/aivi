@@ -1,12 +1,12 @@
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
-    DomainItem, DomainMember, DomainMemberName, Expr, ExprKind, FunctionParam, Identifier, Item,
-    MapExpr, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, Pattern,
-    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr,
-    RecordField, RecordPatternField, SourceDecorator, SourceProviderContractItem,
-    SourceProviderContractMember, SourceProviderContractSchemaMember, SuffixedIntegerLiteral,
-    TextLiteral, TextSegment, TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant,
-    UnaryOperator, UseItem,
+    DomainItem, DomainMember, DomainMemberName, Expr, ExprKind, FunctionParam, Identifier,
+    InstanceItem, InstanceMember, Item, MapExpr, MarkupAttribute, MarkupAttributeValue, MarkupNode,
+    Module, NamedItem, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath,
+    QualifiedName, RecordExpr, RecordField, RecordPatternField, SourceDecorator,
+    SourceProviderContractItem, SourceProviderContractMember, SourceProviderContractSchemaMember,
+    SuffixedIntegerLiteral, TextLiteral, TextSegment, TypeDeclBody, TypeExpr, TypeExprKind,
+    TypeField, TypeVariant, UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -70,6 +70,7 @@ impl Formatter {
             Item::Function(item) => lines.extend(self.format_function_item(item)),
             Item::Signal(item) => lines.extend(self.format_value_item("sig", item, true)),
             Item::Class(item) => lines.extend(self.format_class_item(item)),
+            Item::Instance(item) => lines.extend(self.format_instance_item(item)),
             Item::Domain(item) => lines.extend(self.format_domain_item(item)),
             Item::SourceProviderContract(item) => {
                 lines.extend(self.format_source_provider_contract_item(item))
@@ -217,6 +218,29 @@ impl Formatter {
         let mut lines = vec![header];
         for member in &body.members {
             lines.extend(self.format_class_member(member));
+        }
+        lines
+    }
+
+    fn format_instance_item(&self, item: &InstanceItem) -> Vec<String> {
+        let class = item
+            .class
+            .as_ref()
+            .map(|class| self.format_qualified_name(class))
+            .unwrap_or_else(|| "_".to_owned());
+        let mut header = format!("instance {class}");
+        if let Some(target) = &item.target {
+            header.push(' ');
+            header.push_str(&self.format_type_inline(target, 0));
+        }
+
+        let Some(body) = &item.body else {
+            return vec![header];
+        };
+
+        let mut lines = vec![header];
+        for member in &body.members {
+            lines.extend(self.format_instance_member(member));
         }
         lines
     }
@@ -389,6 +413,38 @@ impl Formatter {
             )]
         } else {
             block.prefixed(&prefix).into_lines()
+        }
+    }
+
+    fn format_instance_member(&self, member: &InstanceMember) -> Vec<String> {
+        let mut header = format!(
+            "{}{}",
+            spaces(INDENT_WIDTH),
+            self.format_class_member_name(&member.name)
+        );
+        for parameter in &member.parameters {
+            header.push(' ');
+            header.push_str(&parameter.text);
+        }
+
+        let Some(body) = &member.body else {
+            return vec![format!("{header} =")];
+        };
+
+        let force_break =
+            self.should_force_expr_break(display_width(&format!("{header} = ")), body);
+        let block = self.format_expr_block(body, force_break);
+        if block.is_inline() {
+            vec![format!(
+                "{header} = {}",
+                block.inline_text().expect("inline block")
+            )]
+        } else if block.starts_with_delimiter() {
+            block.prefixed(&format!("{header} = ")).into_lines()
+        } else {
+            let mut lines = vec![format!("{header} =")];
+            lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
+            lines
         }
     }
 
@@ -1619,6 +1675,23 @@ mod tests {
                 "    literal root : Text -> Path\n",
                 "    (/) : Path -> Text -> Path\n",
                 "    value : Path -> Text\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_instance_layout() {
+        let formatted = format_text(
+            "class Eq A\n    (==):A -> A -> Bool\n\ninstance Eq Blob\n    (==) left right=\n        same left right\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "class Eq A\n",
+                "    (==) : A -> A -> Bool\n",
+                "\n",
+                "instance Eq Blob\n",
+                "    (==) left right = same left right\n",
             )
         );
     }
