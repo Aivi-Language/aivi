@@ -5,6 +5,7 @@
 //! This crate owns a genuine post-HIR intermediate representation for the already-proven reactive
 //! and source-facing frontend slice:
 //! - core-owned type and expression nodes,
+//! - typed `val` / `fun` bodies with explicit local parameters,
 //! - deterministic typed arenas and ids,
 //! - normalized pipe-stage plans for gates, truthy/falsy pairs, fanout, and recurrence,
 //! - source lifecycle and decode-program nodes,
@@ -24,15 +25,16 @@ mod validate;
 
 pub use arena::{Arena, ArenaId, ArenaOverflow};
 pub use expr::{
-    Expr, ExprKind, MapEntry, PipeExpr, PipeStage, PipeStageKind, ProjectionBase, RecordExprField,
-    Reference, TextLiteral, TextSegment,
+    Expr, ExprKind, MapEntry, Pattern, PatternBinding, PatternConstructor, PatternKind, PipeCaseArm,
+    PipeExpr, PipeStage, PipeStageKind, PipeTruthyFalsyBranch, PipeTruthyFalsyStage,
+    ProjectionBase, RecordExprField, RecordPatternField, Reference, TextLiteral, TextSegment,
 };
 pub use ids::{DecodeProgramId, DecodeStepId, ExprId, ItemId, PipeId, SourceId, StageId};
 pub use lower::{LoweringError, LoweringErrors, lower_module};
 pub use module::{
     DecodeField, DecodeProgram, DecodeStep, DecodeVariant, DomainDecodeSurface,
-    DomainDecodeSurfaceKind, FanoutJoin, FanoutStage, GateStage, Item, ItemKind, Module,
-    NonSourceWakeup, Pipe, PipeOrigin, PipeRecurrence, RecurrenceStage, SignalInfo,
+    DomainDecodeSurfaceKind, FanoutJoin, FanoutStage, GateStage, Item, ItemKind, ItemParameter,
+    Module, NonSourceWakeup, Pipe, PipeOrigin, PipeRecurrence, RecurrenceStage, SignalInfo,
     SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageKind, TruthyFalsyBranch,
     TruthyFalsyStage,
 };

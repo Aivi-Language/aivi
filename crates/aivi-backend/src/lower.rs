@@ -83,6 +83,9 @@ pub enum LoweringError {
     UnresolvedItemReference {
         span: SourceSpan,
     },
+    UnsupportedInlinePipeStage {
+        span: SourceSpan,
+    },
     MissingInputSubjectContract {
         span: SourceSpan,
     },
@@ -121,6 +124,9 @@ impl fmt::Display for LoweringError {
             Self::UnresolvedItemReference { .. } => {
                 f.write_str("backend lowering rejects unresolved HIR item references")
             }
+            Self::UnsupportedInlinePipeStage { .. } => f.write_str(
+                "backend lowering does not yet encode inline case/truthy-falsy pipe stages",
+            ),
             Self::MissingInputSubjectContract { .. } => f.write_str(
                 "backend kernel uses an input subject without an explicit backend contract",
             ),
@@ -1024,6 +1030,10 @@ impl<'a> ProgramLowerer<'a> {
                             core::PipeStageKind::Gate { predicate, .. } => {
                                 work.push((*predicate, SubjectKind::Inline));
                             }
+                            core::PipeStageKind::Case { .. }
+                            | core::PipeStageKind::TruthyFalsy(_) => {
+                                return Err(UnsupportedInlinePipeStage { span: stage.span });
+                            }
                         }
                     }
                     work.push((pipe.head, subject));
@@ -1413,6 +1423,10 @@ impl<'a> ProgramLowerer<'a> {
                                         InlinePipeStageBuild::Gate {
                                             emits_negative_update: *emits_negative_update,
                                         }
+                                    }
+                                    core::PipeStageKind::Case { .. }
+                                    | core::PipeStageKind::TruthyFalsy(_) => {
+                                        return Err(UnsupportedInlinePipeStage { span: stage.span });
                                     }
                                 };
                                 stage_specs.push(InlinePipeStageSpec {

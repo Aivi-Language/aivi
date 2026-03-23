@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, fmt};
 use crate::{
     DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, ExprId, Module, PipeId, SourceId,
     StageId, StageKind,
-    expr::{ExprKind, PipeStageKind, ProjectionBase, Reference, TextSegment},
+    expr::{ExprKind, Pattern, PatternKind, PipeStageKind, ProjectionBase, Reference, TextSegment},
     module::{GateStage, ItemKind},
 };
 
@@ -46,6 +46,16 @@ impl std::error::Error for ValidationErrors {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationError {
+    MissingItemBody {
+        item: crate::ItemId,
+    },
+    UnexpectedItemParameters {
+        item: crate::ItemId,
+    },
+    UnknownItemBody {
+        item: crate::ItemId,
+        expr: ExprId,
+    },
     ItemPipeBackrefMissing {
         item: crate::ItemId,
         pipe: PipeId,
@@ -141,11 +151,60 @@ pub enum ValidationError {
     OptionNoneTypeMismatch {
         expr: ExprId,
     },
+    InlinePipeStageTypeDiscontinuity {
+        expr: ExprId,
+        stage_index: usize,
+        previous: crate::ty::Type,
+        current: crate::ty::Type,
+    },
+    InlinePipeTransformResultMismatch {
+        expr: ExprId,
+        stage_index: usize,
+        expected: crate::ty::Type,
+        found: crate::ty::Type,
+    },
+    InlinePipeGatePredicateNotBool {
+        expr: ExprId,
+        stage_index: usize,
+    },
+    InlinePipeGateResultMismatch {
+        expr: ExprId,
+        stage_index: usize,
+        expected: crate::ty::Type,
+        found: crate::ty::Type,
+    },
+    InlinePipeCaseEmpty {
+        expr: ExprId,
+        stage_index: usize,
+    },
+    InlinePipeCaseArmResultMismatch {
+        expr: ExprId,
+        stage_index: usize,
+        arm_index: usize,
+        expected: crate::ty::Type,
+        found: crate::ty::Type,
+    },
+    InlinePipeTruthyFalsyResultMismatch {
+        expr: ExprId,
+        stage_index: usize,
+        expected: crate::ty::Type,
+        truthy: crate::ty::Type,
+        falsy: crate::ty::Type,
+    },
 }
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::MissingItemBody { item } => {
+                write!(f, "item {item} is missing its typed-core body expression")
+            }
+            Self::UnexpectedItemParameters { item } => {
+                write!(f, "item {item} carries parameters in a non-function core item")
+            }
+            Self::UnknownItemBody { item, expr } => {
+                write!(f, "item {item} references unknown body expression {expr}")
+            }
             Self::ItemPipeBackrefMissing { item, pipe } => {
                 write!(f, "item {item} does not list pipe {pipe} in its backrefs")
             }
@@ -270,6 +329,61 @@ impl fmt::Display for ValidationError {
                     "option-none expression {expr} does not have an Option result type"
                 )
             }
+            Self::InlinePipeStageTypeDiscontinuity {
+                expr,
+                stage_index,
+                previous,
+                current,
+            } => write!(
+                f,
+                "inline pipe expression {expr} changes subject shape before stage {stage_index}: {previous} then {current}"
+            ),
+            Self::InlinePipeTransformResultMismatch {
+                expr,
+                stage_index,
+                expected,
+                found,
+            } => write!(
+                f,
+                "inline pipe expression {expr} stage {stage_index} lowers to `{found}` but should produce `{expected}`"
+            ),
+            Self::InlinePipeGatePredicateNotBool { expr, stage_index } => write!(
+                f,
+                "inline pipe expression {expr} stage {stage_index} does not carry a Bool predicate"
+            ),
+            Self::InlinePipeGateResultMismatch {
+                expr,
+                stage_index,
+                expected,
+                found,
+            } => write!(
+                f,
+                "inline pipe expression {expr} stage {stage_index} produces `{found}` but gate semantics require `{expected}`"
+            ),
+            Self::InlinePipeCaseEmpty { expr, stage_index } => write!(
+                f,
+                "inline pipe expression {expr} stage {stage_index} has no case arms"
+            ),
+            Self::InlinePipeCaseArmResultMismatch {
+                expr,
+                stage_index,
+                arm_index,
+                expected,
+                found,
+            } => write!(
+                f,
+                "inline pipe expression {expr} case stage {stage_index} arm {arm_index} produces `{found}` but expected `{expected}`"
+            ),
+            Self::InlinePipeTruthyFalsyResultMismatch {
+                expr,
+                stage_index,
+                expected,
+                truthy,
+                falsy,
+            } => write!(
+                f,
+                "inline pipe expression {expr} truthy/falsy stage {stage_index} should produce `{expected}` but branches yield `{truthy}` and `{falsy}`"
+            ),
         }
     }
 }
@@ -278,6 +392,36 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
     let mut errors = Vec::new();
 
     for (item_id, item) in module.items().iter() {
+        match item.kind {
+            ItemKind::Value => {
+                if !item.parameters.is_empty() {
+                    errors.push(ValidationError::UnexpectedItemParameters { item: item_id });
+                }
+                if let Some(body) = item.body {
+                    if !module.exprs().contains(body) {
+                        errors.push(ValidationError::UnknownItemBody {
+                            item: item_id,
+                            expr: body,
+                        });
+                    }
+                }
+            }
+            ItemKind::Function => {
+                if let Some(body) = item.body {
+                    if !module.exprs().contains(body) {
+                        errors.push(ValidationError::UnknownItemBody {
+                            item: item_id,
+                            expr: body,
+                        });
+                    }
+                }
+            }
+            ItemKind::Signal(_) | ItemKind::Instance => {
+                if !item.parameters.is_empty() {
+                    errors.push(ValidationError::UnexpectedItemParameters { item: item_id });
+                }
+            }
+        }
         for pipe in &item.pipes {
             if !module.pipes().contains(*pipe) {
                 errors.push(ValidationError::ItemPipeBackrefMissing {
@@ -482,15 +626,102 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             }
             ExprKind::Pipe(pipe) => {
                 push_expr(module, pipe.head, &mut work, &mut errors);
-                for stage in &pipe.stages {
+                let mut previous = module.exprs()[pipe.head].ty.clone();
+                for (stage_index, stage) in pipe.stages.iter().enumerate() {
+                    if stage.input_subject != previous {
+                        errors.push(ValidationError::InlinePipeStageTypeDiscontinuity {
+                            expr: expr_id,
+                            stage_index,
+                            previous: previous.clone(),
+                            current: stage.input_subject.clone(),
+                        });
+                    }
                     match &stage.kind {
                         PipeStageKind::Transform { expr } | PipeStageKind::Tap { expr } => {
-                            push_expr(module, *expr, &mut work, &mut errors)
+                            push_expr(module, *expr, &mut work, &mut errors);
+                            if let PipeStageKind::Transform { .. } = &stage.kind {
+                                let expected = inline_pipe_body_result_type(
+                                    &stage.input_subject,
+                                    &stage.result_subject,
+                                );
+                                if module.exprs()[*expr].ty != expected {
+                                    errors.push(
+                                        ValidationError::InlinePipeTransformResultMismatch {
+                                            expr: expr_id,
+                                            stage_index,
+                                            expected,
+                                            found: module.exprs()[*expr].ty.clone(),
+                                        },
+                                    );
+                                }
+                            }
                         }
                         PipeStageKind::Gate { predicate, .. } => {
-                            push_expr(module, *predicate, &mut work, &mut errors)
+                            push_expr(module, *predicate, &mut work, &mut errors);
+                            if !module.exprs()[*predicate].ty.is_bool() {
+                                errors.push(ValidationError::InlinePipeGatePredicateNotBool {
+                                    expr: expr_id,
+                                    stage_index,
+                                });
+                            }
+                            let expected = gate_result_type(&stage.input_subject);
+                            if stage.result_subject != expected {
+                                errors.push(ValidationError::InlinePipeGateResultMismatch {
+                                    expr: expr_id,
+                                    stage_index,
+                                    expected,
+                                    found: stage.result_subject.clone(),
+                                });
+                            }
+                        }
+                        PipeStageKind::Case { arms } => {
+                            if arms.is_empty() {
+                                errors.push(ValidationError::InlinePipeCaseEmpty {
+                                    expr: expr_id,
+                                    stage_index,
+                                });
+                            }
+                            for (arm_index, arm) in arms.iter().enumerate() {
+                                push_expr(module, arm.body, &mut work, &mut errors);
+                                validate_pattern(&arm.pattern, module, &mut work, &mut errors);
+                                if module.exprs()[arm.body].ty != stage.result_subject {
+                                    errors.push(ValidationError::InlinePipeCaseArmResultMismatch {
+                                        expr: expr_id,
+                                        stage_index,
+                                        arm_index,
+                                        expected: stage.result_subject.clone(),
+                                        found: module.exprs()[arm.body].ty.clone(),
+                                    });
+                                }
+                            }
+                        }
+                        PipeStageKind::TruthyFalsy(stage_pair) => {
+                            push_expr(module, stage_pair.truthy.body, &mut work, &mut errors);
+                            push_expr(module, stage_pair.falsy.body, &mut work, &mut errors);
+                            let expected = truthy_falsy_result_type(
+                                &stage.input_subject,
+                                &stage.result_subject,
+                            );
+                            if stage_pair.truthy.result_type != expected
+                                || stage_pair.falsy.result_type != expected
+                                || module.exprs()[stage_pair.truthy.body].ty
+                                    != stage_pair.truthy.result_type
+                                || module.exprs()[stage_pair.falsy.body].ty
+                                    != stage_pair.falsy.result_type
+                            {
+                                errors.push(
+                                    ValidationError::InlinePipeTruthyFalsyResultMismatch {
+                                        expr: expr_id,
+                                        stage_index,
+                                        expected,
+                                        truthy: stage_pair.truthy.result_type.clone(),
+                                        falsy: stage_pair.falsy.result_type.clone(),
+                                    },
+                                );
+                            }
                         }
                     }
+                    previous = stage.result_subject.clone();
                 }
             }
         }
@@ -655,5 +886,58 @@ fn push_exprs(
 ) {
     for expr in exprs {
         push_expr(module, *expr, work, errors);
+    }
+}
+
+fn validate_pattern(
+    pattern: &Pattern,
+    _module: &Module,
+    _work: &mut Vec<ExprId>,
+    _errors: &mut Vec<ValidationError>,
+) {
+    match &pattern.kind {
+        PatternKind::Wildcard
+        | PatternKind::Binding(_)
+        | PatternKind::Integer(_)
+        | PatternKind::Text(_) => {}
+        PatternKind::Tuple(elements) => {
+            for element in elements {
+                validate_pattern(element, _module, _work, _errors);
+            }
+        }
+        PatternKind::Record(fields) => {
+            for field in fields {
+                validate_pattern(&field.pattern, _module, _work, _errors);
+            }
+        }
+        PatternKind::Constructor { arguments, .. } => {
+            for argument in arguments {
+                validate_pattern(argument, _module, _work, _errors);
+            }
+        }
+    }
+}
+
+fn inline_pipe_body_result_type(input: &crate::ty::Type, result: &crate::ty::Type) -> crate::ty::Type {
+    match (input, result) {
+        (crate::ty::Type::Signal(_), crate::ty::Type::Signal(payload)) => payload.as_ref().clone(),
+        _ => result.clone(),
+    }
+}
+
+fn gate_result_type(subject: &crate::ty::Type) -> crate::ty::Type {
+    match subject {
+        crate::ty::Type::Signal(payload) => crate::ty::Type::Signal(payload.clone()),
+        other => crate::ty::Type::Option(Box::new(other.clone())),
+    }
+}
+
+fn truthy_falsy_result_type(
+    input: &crate::ty::Type,
+    result: &crate::ty::Type,
+) -> crate::ty::Type {
+    match (input, result) {
+        (crate::ty::Type::Signal(_), crate::ty::Type::Signal(payload)) => payload.as_ref().clone(),
+        _ => result.clone(),
     }
 }

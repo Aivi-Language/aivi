@@ -94,11 +94,71 @@ pub struct PipeExpr {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pattern {
+    pub span: SourceSpan,
+    pub kind: PatternKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatternKind {
+    Wildcard,
+    Binding(PatternBinding),
+    Integer(IntegerLiteral),
+    Text(Box<str>),
+    Tuple(Vec<Pattern>),
+    Record(Vec<RecordPatternField>),
+    Constructor {
+        callee: PatternConstructor,
+        arguments: Vec<Pattern>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatternBinding {
+    pub binding: HirBindingId,
+    pub name: Box<str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordPatternField {
+    pub label: Box<str>,
+    pub pattern: Pattern,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatternConstructor {
+    pub display: Box<str>,
+    pub reference: Reference,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PipeStage {
     pub span: SourceSpan,
     pub input_subject: Type,
     pub result_subject: Type,
     pub kind: PipeStageKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PipeCaseArm {
+    pub span: SourceSpan,
+    pub pattern: Pattern,
+    pub body: ExprId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PipeTruthyFalsyStage {
+    pub truthy: PipeTruthyFalsyBranch,
+    pub falsy: PipeTruthyFalsyBranch,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PipeTruthyFalsyBranch {
+    pub span: SourceSpan,
+    pub constructor: BuiltinTerm,
+    pub payload_subject: Option<Type>,
+    pub result_type: Type,
+    pub body: ExprId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -113,4 +173,8 @@ pub enum PipeStageKind {
         predicate: ExprId,
         emits_negative_update: bool,
     },
+    Case {
+        arms: Vec<PipeCaseArm>,
+    },
+    TruthyFalsy(PipeTruthyFalsyStage),
 }

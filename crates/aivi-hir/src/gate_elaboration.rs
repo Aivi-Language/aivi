@@ -3,7 +3,7 @@ use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
     BinaryOperator, BindingId, BuiltinTerm, DomainMemberHandle, ExprId, ExprKind, IntegerLiteral,
-    Item, ItemId, Module, Name, NamePath, PipeExpr, PipeStageKind, ProjectionBase,
+    Item, ItemId, Module, Name, NamePath, PatternId, PipeExpr, PipeStageKind, ProjectionBase,
     SuffixedIntegerLiteral, TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     validate::{
@@ -230,6 +230,22 @@ pub struct GateRuntimePipeStage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateRuntimeCaseArm {
+    pub span: SourceSpan,
+    pub pattern: PatternId,
+    pub body: GateRuntimeExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateRuntimeTruthyFalsyBranch {
+    pub span: SourceSpan,
+    pub constructor: BuiltinTerm,
+    pub payload_subject: Option<GateType>,
+    pub result_type: GateType,
+    pub body: GateRuntimeExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GateRuntimePipeStageKind {
     Transform {
         expr: GateRuntimeExpr,
@@ -240,6 +256,13 @@ pub enum GateRuntimePipeStageKind {
     Gate {
         predicate: GateRuntimeExpr,
         emits_negative_update: bool,
+    },
+    Case {
+        arms: Vec<GateRuntimeCaseArm>,
+    },
+    TruthyFalsy {
+        truthy: GateRuntimeTruthyFalsyBranch,
+        falsy: GateRuntimeTruthyFalsyBranch,
     },
 }
 

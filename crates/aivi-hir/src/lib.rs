@@ -9,6 +9,7 @@ mod domain_operator_elaboration;
 pub mod exports;
 mod fanout_elaboration;
 mod gate_elaboration;
+mod general_expr_elaboration;
 mod hir;
 mod ids;
 mod lower;
@@ -34,6 +35,11 @@ pub use decode_generation::{
     SourceDecodeProgram, SourceDecodeProgramBlocker, SourceDecodeProgramNode,
     SourceDecodeProgramOutcome, SourceDecodeProgramReport, generate_source_decode_programs,
 };
+pub use general_expr_elaboration::{
+    BlockedGeneralExpr, GeneralExprBlocker, GeneralExprElaborationReport,
+    GeneralExprItemElaboration, GeneralExprOutcome, GeneralExprParameter,
+    elaborate_general_expressions,
+};
 pub use exports::{ExportedName, ExportedNameKind, ExportedNames, exports};
 pub use fanout_elaboration::{
     BlockedFanoutSegment, FanoutElaborationBlocker, FanoutElaborationReport, FanoutJoinPlan,
@@ -41,9 +47,10 @@ pub use fanout_elaboration::{
 };
 pub use gate_elaboration::{
     BlockedGateStage, GateCoreExpr, GateCoreExprKind, GateElaborationBlocker,
-    GateElaborationReport, GateRuntimeExpr, GateRuntimeExprKind, GateRuntimePipeExpr,
-    GateRuntimePipeStage, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
-    GateRuntimeRecordField, GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
+    GateElaborationReport, GateRuntimeCaseArm, GateRuntimeExpr, GateRuntimeExprKind,
+    GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind,
+    GateRuntimeProjectionBase, GateRuntimeRecordField, GateRuntimeReference,
+    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
     GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, GateStageElaboration,
     GateStageOutcome, OrdinaryGateStage, SignalGateFilter, elaborate_gates,
 };

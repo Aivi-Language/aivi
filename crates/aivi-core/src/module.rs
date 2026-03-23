@@ -13,7 +13,10 @@ use aivi_typing::{
 
 use crate::{
     Arena,
-    expr::{Expr, Reference},
+    expr::{
+        Expr, Pattern, PatternBinding, PatternConstructor, PatternKind, PipeCaseArm,
+        PipeTruthyFalsyStage, Reference,
+    },
     ids::ExprId,
     ids::{DecodeProgramId, DecodeStepId, ItemId, PipeId, SourceId, StageId},
     ty::Type,
@@ -108,6 +111,19 @@ impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (_, item) in self.items.iter() {
             writeln!(f, "{} {}:", item.kind.label(), item.name)?;
+            if !item.parameters.is_empty() {
+                write!(f, "  params = [")?;
+                for (index, parameter) in item.parameters.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", parameter.name, parameter.ty)?;
+                }
+                writeln!(f, "]")?;
+            }
+            if let Some(body) = item.body {
+                writeln!(f, "  body = {}", ExprPrinter::new(self, body))?;
+            }
             if let ItemKind::Signal(info) = &item.kind {
                 if !info.dependencies.is_empty() {
                     write!(f, "  dependencies = [")?;
@@ -256,7 +272,17 @@ pub struct Item {
     pub span: SourceSpan,
     pub name: Box<str>,
     pub kind: ItemKind,
+    pub parameters: Vec<ItemParameter>,
+    pub body: Option<ExprId>,
     pub pipes: Vec<PipeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ItemParameter {
+    pub binding: aivi_hir::BindingId,
+    pub span: SourceSpan,
+    pub name: Box<str>,
+    pub ty: Type,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -711,9 +737,80 @@ fn format_expr(module: &Module, expr_id: ExprId, f: &mut fmt::Formatter<'_>) -> 
                         format_expr(module, *predicate, f)?;
                         f.write_str("]")?;
                     }
+                    crate::expr::PipeStageKind::Case { arms } => {
+                        for PipeCaseArm { pattern, body, .. } in arms {
+                            f.write_str(" ||> ")?;
+                            format_pattern(pattern, f)?;
+                            f.write_str(" => ")?;
+                            format_expr(module, *body, f)?;
+                        }
+                    }
+                    crate::expr::PipeStageKind::TruthyFalsy(PipeTruthyFalsyStage {
+                        truthy,
+                        falsy,
+                    }) => {
+                        write!(f, " T|>[{}] ", constructor_name(truthy.constructor))?;
+                        format_expr(module, truthy.body, f)?;
+                        write!(f, " F|>[{}] ", constructor_name(falsy.constructor))?;
+                        format_expr(module, falsy.body, f)?;
+                    }
                 }
             }
             Ok(())
         }
+    }
+}
+
+fn format_pattern(pattern: &Pattern, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match &pattern.kind {
+        PatternKind::Wildcard => f.write_str("_"),
+        PatternKind::Binding(PatternBinding { name, .. }) => f.write_str(name),
+        PatternKind::Integer(value) => write!(f, "{}", value.raw),
+        PatternKind::Text(raw) => write!(f, "\"{raw}\""),
+        PatternKind::Tuple(elements) => {
+            f.write_str("(")?;
+            for (index, element) in elements.iter().enumerate() {
+                if index > 0 {
+                    f.write_str(", ")?;
+                }
+                format_pattern(element, f)?;
+            }
+            f.write_str(")")
+        }
+        PatternKind::Record(fields) => {
+            f.write_str("{")?;
+            for (index, field) in fields.iter().enumerate() {
+                if index > 0 {
+                    f.write_str(", ")?;
+                }
+                write!(f, "{}: ", field.label)?;
+                format_pattern(&field.pattern, f)?;
+            }
+            f.write_str("}")
+        }
+        PatternKind::Constructor {
+            callee: PatternConstructor { display, .. },
+            arguments,
+        } => {
+            f.write_str(display)?;
+            for argument in arguments {
+                f.write_str(" ")?;
+                format_pattern(argument, f)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn constructor_name(term: BuiltinTerm) -> &'static str {
+    match term {
+        BuiltinTerm::True => "True",
+        BuiltinTerm::False => "False",
+        BuiltinTerm::None => "None",
+        BuiltinTerm::Some => "Some",
+        BuiltinTerm::Ok => "Ok",
+        BuiltinTerm::Err => "Err",
+        BuiltinTerm::Valid => "Valid",
+        BuiltinTerm::Invalid => "Invalid",
     }
 }

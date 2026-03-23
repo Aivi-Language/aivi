@@ -80,6 +80,8 @@ fn manual_core_gate(when_true: CoreExprKind) -> CoreModule {
             span,
             name: "captured".into(),
             kind: CoreItemKind::Value,
+            parameters: Vec::new(),
+            body: None,
             pipes: Vec::new(),
         })
         .expect("item allocation should fit");

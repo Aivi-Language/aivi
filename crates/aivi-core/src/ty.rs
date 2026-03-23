@@ -280,6 +280,10 @@ impl Type {
         matches!(self, Self::Primitive(BuiltinType::Bool))
     }
 
+    pub fn is_signal(&self) -> bool {
+        matches!(self, Self::Signal(_))
+    }
+
     pub fn same_shape(&self, other: &Self) -> bool {
         self == other
     }

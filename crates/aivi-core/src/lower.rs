@@ -3,23 +3,28 @@ use std::collections::{BTreeMap, HashMap};
 use aivi_base::SourceSpan;
 use aivi_hir::{
     BlockedFanoutSegment, BlockedGateStage, BlockedRecurrenceNode, BlockedSourceDecodeProgram,
-    BlockedSourceLifecycleNode, BlockedTruthyFalsyStage, ExprId as HirExprId, GateRuntimeExpr,
-    GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
-    GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment, GateStageOutcome,
-    Item as HirItem, ItemId as HirItemId, RecurrenceNodeOutcome, SourceDecodeProgram,
+    BlockedSourceLifecycleNode, BlockedTruthyFalsyStage,
+    BlockedGeneralExpr as BlockedGeneralExprBody, ExprId as HirExprId, GateRuntimeExpr,
+    GateRuntimeExprKind,
+    GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
+    GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
+    GateRuntimeTruthyFalsyBranch, GateStageOutcome, GeneralExprOutcome, Item as HirItem,
+    ItemId as HirItemId, PatternId as HirPatternId, RecurrenceNodeOutcome, SourceDecodeProgram,
     SourceDecodeProgramOutcome, SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome,
-    elaborate_fanouts, elaborate_gates, elaborate_recurrences, elaborate_source_lifecycles,
-    elaborate_truthy_falsy, generate_source_decode_programs,
+    elaborate_fanouts, elaborate_gates, elaborate_general_expressions, elaborate_recurrences,
+    elaborate_source_lifecycles, elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{
     Arena, ArenaOverflow, DecodeField, DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId,
     DomainDecodeSurface, DomainDecodeSurfaceKind, Expr, ExprId, FanoutJoin, FanoutStage, GateStage,
-    Item, ItemId, ItemKind, MapEntry, Module, NonSourceWakeup, Pipe, PipeOrigin, PipeRecurrence,
-    PipeStage, ProjectionBase, RecordExprField, RecurrenceStage, Reference, SignalInfo, SourceId,
-    SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageKind, TextLiteral, TextSegment,
-    TruthyFalsyBranch, TruthyFalsyStage, Type,
-    expr::{ExprKind, PipeExpr},
+    Item, ItemId, ItemKind, ItemParameter, MapEntry, Module, NonSourceWakeup, Pattern,
+    PatternBinding, PatternConstructor, PatternKind, Pipe, PipeCaseArm, PipeExpr, PipeOrigin,
+    PipeRecurrence, PipeStage, PipeTruthyFalsyBranch, PipeTruthyFalsyStage,
+    ProjectionBase, RecordExprField, RecordPatternField, RecurrenceStage, Reference, SignalInfo,
+    SourceId, SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageKind, TextLiteral,
+    TextSegment, TruthyFalsyBranch, TruthyFalsyStage, Type,
+    expr::ExprKind,
     validate::{ValidationError, validate_module},
 };
 
@@ -104,6 +109,12 @@ pub enum LoweringError {
         span: SourceSpan,
         blocked: BlockedSourceDecodeProgram,
     },
+    BlockedGeneralExpr {
+        owner: HirItemId,
+        body_expr: HirExprId,
+        span: SourceSpan,
+        blocked: BlockedGeneralExprBody,
+    },
     DuplicatePipeStage {
         owner: HirItemId,
         pipe_expr: HirExprId,
@@ -183,6 +194,10 @@ impl std::fmt::Display for LoweringError {
             Self::BlockedDecodeProgram { owner, blocked, .. } => write!(
                 f,
                 "typed-core lowering blocked on decode program for item {owner}: {blocked:?}"
+            ),
+            Self::BlockedGeneralExpr { owner, blocked, .. } => write!(
+                f,
+                "typed-core lowering blocked on general expression body for item {owner}: {blocked:?}"
             ),
             Self::DuplicatePipeStage {
                 owner,
@@ -279,6 +294,7 @@ impl<'a> ModuleLowerer<'a> {
 
     fn build(mut self) -> Result<Module, LoweringErrors> {
         self.seed_items()?;
+        self.lower_general_exprs();
         self.seed_signal_dependencies();
         self.lower_gate_stages();
         self.lower_truthy_falsy_stages();
@@ -341,12 +357,55 @@ impl<'a> ModuleLowerer<'a> {
                     span,
                     name,
                     kind,
+                    parameters: Vec::new(),
+                    body: None,
                     pipes: Vec::new(),
                 })
                 .map_err(|overflow| LoweringErrors::new(vec![arena_overflow("items", overflow)]))?;
             self.item_map.insert(hir_id, item_id);
         }
         Ok(())
+    }
+
+    fn lower_general_exprs(&mut self) {
+        for item in elaborate_general_expressions(self.hir).into_items() {
+            let Some(owner) = self.item_map.get(&item.owner).copied() else {
+                self.errors
+                    .push(LoweringError::UnknownOwner { owner: item.owner });
+                continue;
+            };
+            match item.outcome {
+                GeneralExprOutcome::Lowered(body) => {
+                    let body = match self.lower_runtime_expr(item.owner, &body) {
+                        Ok(body) => body,
+                        Err(error) => {
+                            self.errors.push(error);
+                            continue;
+                        }
+                    };
+                    let parameters = item
+                        .parameters
+                        .into_iter()
+                        .map(|parameter| ItemParameter {
+                            binding: parameter.binding,
+                            span: parameter.span,
+                            name: parameter.name,
+                            ty: Type::lower(&parameter.ty),
+                        })
+                        .collect::<Vec<_>>();
+                    let Some(core_item) = self.module.items_mut().get_mut(owner) else {
+                        self.errors
+                            .push(LoweringError::UnknownOwner { owner: item.owner });
+                        continue;
+                    };
+                    core_item.parameters = parameters;
+                    core_item.body = Some(body);
+                }
+                GeneralExprOutcome::Blocked(blocked) => {
+                    let _ = blocked;
+                }
+            }
+        }
     }
 
     fn seed_signal_dependencies(&mut self) {
@@ -965,6 +1024,84 @@ impl<'a> ModuleLowerer<'a> {
         }
     }
 
+    fn lower_pattern(&self, pattern_id: HirPatternId) -> Pattern {
+        let pattern = self.hir.patterns()[pattern_id].clone();
+        let kind = match pattern.kind {
+            aivi_hir::PatternKind::Wildcard => PatternKind::Wildcard,
+            aivi_hir::PatternKind::Binding(binding) => PatternKind::Binding(PatternBinding {
+                binding: binding.binding,
+                name: binding.name.text().into(),
+            }),
+            aivi_hir::PatternKind::Integer(literal) => PatternKind::Integer(literal),
+            aivi_hir::PatternKind::Text(text) => PatternKind::Text(lower_text_pattern(&text)),
+            aivi_hir::PatternKind::Tuple(elements) => PatternKind::Tuple(
+                elements
+                    .iter()
+                    .map(|element| self.lower_pattern(*element))
+                    .collect(),
+            ),
+            aivi_hir::PatternKind::Record(fields) => PatternKind::Record(
+                fields
+                    .into_iter()
+                    .map(|field| RecordPatternField {
+                        label: field.label.text().into(),
+                        pattern: self.lower_pattern(field.pattern),
+                    })
+                    .collect(),
+            ),
+            aivi_hir::PatternKind::Constructor { callee, arguments } => PatternKind::Constructor {
+                callee: PatternConstructor {
+                    display: callee.path.to_string().into_boxed_str(),
+                    reference: self.lower_term_reference(&callee),
+                },
+                arguments: arguments
+                    .into_iter()
+                    .map(|argument| self.lower_pattern(argument))
+                    .collect(),
+            },
+            aivi_hir::PatternKind::UnresolvedName(callee) => PatternKind::Constructor {
+                callee: PatternConstructor {
+                    display: callee.path.to_string().into_boxed_str(),
+                    reference: self.lower_term_reference(&callee),
+                },
+                arguments: Vec::new(),
+            },
+        };
+        Pattern {
+            span: pattern.span,
+            kind,
+        }
+    }
+
+    fn lower_term_reference(&self, reference: &aivi_hir::TermReference) -> Reference {
+        match reference.resolution.as_ref() {
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Local(binding)) => {
+                Reference::Local(*binding)
+            }
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Item(item)) => self
+                .item_map
+                .get(item)
+                .copied()
+                .map(Reference::Item)
+                .unwrap_or(Reference::HirItem(*item)),
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::DomainMember(resolution)) => self
+                .hir
+                .domain_member_handle(*resolution)
+                .map(Reference::DomainMember)
+                .unwrap_or(Reference::HirItem(resolution.domain)),
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Builtin(term)) => {
+                Reference::Builtin(*term)
+            }
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Import(_))
+            | aivi_hir::ResolutionState::Resolved(
+                aivi_hir::TermResolution::AmbiguousDomainMembers(_),
+            )
+            | aivi_hir::ResolutionState::Unresolved => unreachable!(
+                "typed-core general-expression lowering should only see resolved constructor references"
+            ),
+        }
+    }
+
     fn alloc_expr(
         &mut self,
         _owner: HirItemId,
@@ -1248,6 +1385,15 @@ impl<'a> ModuleLowerer<'a> {
                                     GateRuntimePipeStageKind::Gate { predicate, .. } => {
                                         tasks.push(Task::Visit(predicate));
                                     }
+                                    GateRuntimePipeStageKind::Case { arms } => {
+                                        for arm in arms.iter().rev() {
+                                            tasks.push(Task::Visit(&arm.body));
+                                        }
+                                    }
+                                    GateRuntimePipeStageKind::TruthyFalsy { truthy, falsy } => {
+                                        tasks.push(Task::Visit(&falsy.body));
+                                        tasks.push(Task::Visit(&truthy.body));
+                                    }
                                 }
                             }
                             tasks.push(Task::Visit(&pipe.head));
@@ -1426,30 +1572,87 @@ impl<'a> ModuleLowerer<'a> {
                     )?);
                 }
                 Task::BuildPipe { span, ty, stages } => {
-                    let lowered = drain_tail(&mut values, stages.len() + 1);
+                    let lowered = drain_tail(
+                        &mut values,
+                        1 + stages
+                            .iter()
+                            .map(PipeStageSpec::child_expr_count)
+                            .sum::<usize>(),
+                    );
                     let mut iter = lowered.into_iter();
                     let head = iter.next().expect("pipe head should exist");
                     let stages = stages
                         .into_iter()
                         .map(|stage| {
-                            let expr = iter.next().expect("pipe stage expr should exist");
+                            let children = (0..stage.child_expr_count())
+                                .map(|_| iter.next().expect("pipe stage child should exist"))
+                                .collect::<Vec<_>>();
                             PipeStage {
                                 span: stage.span,
                                 input_subject: stage.input_subject,
                                 result_subject: stage.result_subject,
                                 kind: match stage.kind {
                                     PipeStageKindSpec::Transform => {
+                                        let expr = children[0];
                                         crate::expr::PipeStageKind::Transform { expr }
                                     }
                                     PipeStageKindSpec::Tap => {
+                                        let expr = children[0];
                                         crate::expr::PipeStageKind::Tap { expr }
                                     }
                                     PipeStageKindSpec::Gate {
                                         emits_negative_update,
-                                    } => crate::expr::PipeStageKind::Gate {
-                                        predicate: expr,
-                                        emits_negative_update,
-                                    },
+                                    } => {
+                                        let predicate = children[0];
+                                        crate::expr::PipeStageKind::Gate {
+                                            predicate,
+                                            emits_negative_update,
+                                        }
+                                    }
+                                    PipeStageKindSpec::Case { arms } => {
+                                        let mut bodies = children.into_iter();
+                                        crate::expr::PipeStageKind::Case {
+                                            arms: arms
+                                                .into_iter()
+                                                .map(|arm| PipeCaseArm {
+                                                    span: arm.span,
+                                                    pattern: self.lower_pattern(arm.pattern),
+                                                    body: bodies
+                                                        .next()
+                                                        .expect("case arm body should exist"),
+                                                })
+                                                .collect(),
+                                        }
+                                    }
+                                    PipeStageKindSpec::TruthyFalsy { truthy, falsy } => {
+                                        let mut bodies = children.into_iter();
+                                        crate::expr::PipeStageKind::TruthyFalsy(
+                                            PipeTruthyFalsyStage {
+                                                truthy: PipeTruthyFalsyBranch {
+                                                    span: truthy.span,
+                                                    constructor: truthy.constructor,
+                                                    payload_subject: truthy
+                                                        .payload_subject
+                                                        .map(|payload| Type::lower(&payload)),
+                                                    result_type: Type::lower(&truthy.result_type),
+                                                    body: bodies
+                                                        .next()
+                                                        .expect("truthy body should exist"),
+                                                },
+                                                falsy: PipeTruthyFalsyBranch {
+                                                    span: falsy.span,
+                                                    constructor: falsy.constructor,
+                                                    payload_subject: falsy
+                                                        .payload_subject
+                                                        .map(|payload| Type::lower(&payload)),
+                                                    result_type: Type::lower(&falsy.result_type),
+                                                    body: bodies
+                                                        .next()
+                                                        .expect("falsy body should exist"),
+                                                },
+                                            },
+                                        )
+                                    }
                                 },
                             }
                         })
@@ -1619,6 +1822,17 @@ fn text_segment_specs(text: &GateRuntimeTextLiteral) -> Vec<SegmentSpec> {
         .collect()
 }
 
+fn lower_text_pattern(text: &aivi_hir::TextLiteral) -> Box<str> {
+    let mut raw = String::new();
+    for segment in &text.segments {
+        match segment {
+            aivi_hir::TextSegment::Text(fragment) => raw.push_str(&fragment.raw),
+            aivi_hir::TextSegment::Interpolation(_) => raw.push_str("{...}"),
+        }
+    }
+    raw.into_boxed_str()
+}
+
 fn pipe_stage_specs(pipe: &GateRuntimePipeExpr) -> Vec<PipeStageSpec> {
     pipe.stages
         .iter()
@@ -1635,6 +1849,21 @@ fn pipe_stage_specs(pipe: &GateRuntimePipeExpr) -> Vec<PipeStageSpec> {
                 } => PipeStageKindSpec::Gate {
                     emits_negative_update: *emits_negative_update,
                 },
+                GateRuntimePipeStageKind::Case { arms } => PipeStageKindSpec::Case {
+                    arms: arms
+                        .iter()
+                        .map(|arm| CaseArmSpec {
+                            span: arm.span,
+                            pattern: arm.pattern,
+                        })
+                        .collect(),
+                },
+                GateRuntimePipeStageKind::TruthyFalsy { truthy, falsy } => {
+                    PipeStageKindSpec::TruthyFalsy {
+                        truthy: TruthyFalsyArmSpec::from_hir(truthy),
+                        falsy: TruthyFalsyArmSpec::from_hir(falsy),
+                    }
+                }
             },
         })
         .collect()
@@ -1654,11 +1883,57 @@ struct PipeStageSpec {
     kind: PipeStageKindSpec,
 }
 
+impl PipeStageSpec {
+    fn child_expr_count(&self) -> usize {
+        self.kind.child_expr_count()
+    }
+}
+
 #[derive(Clone)]
 enum PipeStageKindSpec {
     Transform,
     Tap,
     Gate { emits_negative_update: bool },
+    Case { arms: Vec<CaseArmSpec> },
+    TruthyFalsy {
+        truthy: TruthyFalsyArmSpec,
+        falsy: TruthyFalsyArmSpec,
+    },
+}
+
+impl PipeStageKindSpec {
+    fn child_expr_count(&self) -> usize {
+        match self {
+            Self::Transform | Self::Tap | Self::Gate { .. } => 1,
+            Self::Case { arms } => arms.len(),
+            Self::TruthyFalsy { .. } => 2,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct CaseArmSpec {
+    span: SourceSpan,
+    pattern: HirPatternId,
+}
+
+#[derive(Clone)]
+struct TruthyFalsyArmSpec {
+    span: SourceSpan,
+    constructor: aivi_hir::BuiltinTerm,
+    payload_subject: Option<aivi_hir::GateType>,
+    result_type: aivi_hir::GateType,
+}
+
+impl TruthyFalsyArmSpec {
+    fn from_hir(branch: &GateRuntimeTruthyFalsyBranch) -> Self {
+        Self {
+            span: branch.span,
+            constructor: branch.constructor,
+            payload_subject: branch.payload_subject.clone(),
+            result_type: branch.result_type.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1778,6 +2053,94 @@ sig timeout : Signal Duration
     }
 
     #[test]
+    fn lowers_value_and_function_bodies_into_typed_core_exprs() {
+        let lowered = lower_fixture("milestone-1/valid/top-level/declarations.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "declarations fixture should lower cleanly before typed-core lowering: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        let answer = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "answer")
+            .map(|(id, _)| id)
+            .expect("expected answer value item");
+        let answer_body = core.items()[answer]
+            .body
+            .expect("answer should carry a lowered value body");
+        assert!(matches!(
+            core.exprs()[answer_body].kind,
+            crate::ExprKind::Integer(_)
+        ));
+
+        let add = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "add")
+            .map(|(id, _)| id)
+            .expect("expected add function item");
+        assert_eq!(core.items()[add].parameters.len(), 2);
+        let add_body = core.items()[add]
+            .body
+            .expect("add should carry a lowered function body");
+        assert!(matches!(
+            core.exprs()[add_body].kind,
+            crate::ExprKind::Binary {
+                operator: aivi_hir::BinaryOperator::Add,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn lowers_case_and_truthy_falsy_pipe_bodies() {
+        let lowered = lower_fixture("milestone-1/valid/pipes/pipe_algebra.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "pipe algebra fixture should lower cleanly before typed-core lowering: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        let status_label = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "statusLabel")
+            .map(|(id, _)| id)
+            .expect("expected statusLabel function item");
+        let status_body = core.items()[status_label]
+            .body
+            .expect("statusLabel should carry a lowered body");
+        let crate::ExprKind::Pipe(status_pipe) = &core.exprs()[status_body].kind else {
+            panic!("statusLabel should lower to a pipe expression");
+        };
+        assert!(matches!(
+            status_pipe.stages[0].kind,
+            crate::PipeStageKind::Case { .. }
+        ));
+
+        let start_or_wait = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "startOrWait")
+            .map(|(id, _)| id)
+            .expect("expected startOrWait function item");
+        let start_or_wait_body = core.items()[start_or_wait]
+            .body
+            .expect("startOrWait should carry a lowered body");
+        let crate::ExprKind::Pipe(branch_pipe) = &core.exprs()[start_or_wait_body].kind else {
+            panic!("startOrWait should lower to a pipe expression");
+        };
+        assert!(matches!(
+            branch_pipe.stages[0].kind,
+            crate::PipeStageKind::TruthyFalsy(_)
+        ));
+    }
+
+    #[test]
     fn lowers_recurrence_reports_into_pipe_nodes() {
         let lowered = lower_fixture("milestone-2/valid/pipe-recurrence-nonsource-wakeup/main.aivi");
         assert!(
@@ -1867,6 +2230,39 @@ sig timeout : Signal Duration
                 .errors()
                 .iter()
                 .any(|error| matches!(error, ValidationError::RecurrenceDoesNotClose { .. }))
+        );
+    }
+
+    #[test]
+    fn validator_catches_broken_inline_case_stage_result_types() {
+        let lowered = lower_fixture("milestone-1/valid/patterns/pattern_matching.aivi");
+        let mut core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        let loaded_name = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "loadedName")
+            .map(|(id, _)| id)
+            .expect("expected loadedName function item");
+        let body = core.items()[loaded_name]
+            .body
+            .expect("loadedName should carry a lowered body");
+        let crate::ExprKind::Pipe(pipe) = &core.exprs()[body].kind else {
+            panic!("loadedName should lower to a pipe expression");
+        };
+        let crate::PipeStageKind::Case { arms } = &pipe.stages[0].kind else {
+            panic!("loadedName should start with a case stage");
+        };
+        let bad_arm = arms[0].body;
+        core.exprs_mut()
+            .get_mut(bad_arm)
+            .expect("case arm body should exist")
+            .ty = Type::Primitive(aivi_hir::BuiltinType::Int);
+        let errors = validate_module(&core).expect_err("broken inline case stage should fail");
+        assert!(
+            errors.errors().iter().any(|error| matches!(
+                error,
+                ValidationError::InlinePipeCaseArmResultMismatch { .. }
+            ))
         );
     }
 }
