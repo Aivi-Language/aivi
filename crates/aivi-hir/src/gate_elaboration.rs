@@ -438,90 +438,94 @@ fn collect_gate_pipe(
         .flatten()
         .map(|suffix| suffix.prefix_stage_count());
     let all_stages = pipe.stages.iter().collect::<Vec<_>>();
-    PipeSubjectWalker::new(pipe, env, typing).walk(typing, |stage_index, stage, current, typing| {
-        // Stop at the recurrence boundary — gate elaboration only covers the
-        // non-recurrence prefix of the pipe.
-        if recurrence_start_index.is_some_and(|start| stage_index >= start) {
-            return PipeSubjectStepOutcome::Stop;
-        }
-        match &stage.kind {
-            PipeStageKind::Gate { expr } => {
-                let outcome =
-                    elaborate_gate_stage(module, *expr, env, current, typing);
-                gate_stages.push(GateStageElaboration {
-                    owner,
-                    pipe_expr,
-                    stage_index,
-                    stage_span: stage.span,
-                    predicate: *expr,
-                    outcome: outcome.clone(),
-                });
-                PipeSubjectStepOutcome::Continue {
-                    new_subject: match outcome {
-                        GateStageOutcome::Ordinary(s) => Some(s.result_type),
-                        GateStageOutcome::SignalFilter(s) => Some(s.result_type),
-                        GateStageOutcome::Blocked(_) => None,
-                    },
-                    advance_by: 1,
-                }
+    PipeSubjectWalker::new(pipe, env, typing).walk(
+        typing,
+        |stage_index, stage, current, typing| {
+            // Stop at the recurrence boundary — gate elaboration only covers the
+            // non-recurrence prefix of the pipe.
+            if recurrence_start_index.is_some_and(|start| stage_index >= start) {
+                return PipeSubjectStepOutcome::Stop;
             }
-            PipeStageKind::Map { expr } => {
-                let segment = pipe
-                    .fanout_segment(stage_index)
-                    .expect("map stages should expose a fan-out segment");
-                if segment.join_stage().is_some() {
-                    let outcome = crate::fanout_elaboration::elaborate_fanout_segment(
-                        module, &segment, current, env, typing,
-                    );
-                    let advance =
-                        segment.next_stage_index().saturating_sub(stage_index).max(1);
+            match &stage.kind {
+                PipeStageKind::Gate { expr } => {
+                    let outcome = elaborate_gate_stage(module, *expr, env, current, typing);
+                    gate_stages.push(GateStageElaboration {
+                        owner,
+                        pipe_expr,
+                        stage_index,
+                        stage_span: stage.span,
+                        predicate: *expr,
+                        outcome: outcome.clone(),
+                    });
                     PipeSubjectStepOutcome::Continue {
                         new_subject: match outcome {
-                            crate::fanout_elaboration::FanoutSegmentOutcome::Planned(plan) => {
-                                Some(plan.result_type)
-                            }
-                            crate::fanout_elaboration::FanoutSegmentOutcome::Blocked(_) => None,
+                            GateStageOutcome::Ordinary(s) => Some(s.result_type),
+                            GateStageOutcome::SignalFilter(s) => Some(s.result_type),
+                            GateStageOutcome::Blocked(_) => None,
                         },
-                        advance_by: advance,
+                        advance_by: 1,
                     }
-                } else {
+                }
+                PipeStageKind::Map { expr } => {
+                    let segment = pipe
+                        .fanout_segment(stage_index)
+                        .expect("map stages should expose a fan-out segment");
+                    if segment.join_stage().is_some() {
+                        let outcome = crate::fanout_elaboration::elaborate_fanout_segment(
+                            module, &segment, current, env, typing,
+                        );
+                        let advance = segment
+                            .next_stage_index()
+                            .saturating_sub(stage_index)
+                            .max(1);
+                        PipeSubjectStepOutcome::Continue {
+                            new_subject: match outcome {
+                                crate::fanout_elaboration::FanoutSegmentOutcome::Planned(plan) => {
+                                    Some(plan.result_type)
+                                }
+                                crate::fanout_elaboration::FanoutSegmentOutcome::Blocked(_) => None,
+                            },
+                            advance_by: advance,
+                        }
+                    } else {
+                        PipeSubjectStepOutcome::Continue {
+                            new_subject: current
+                                .and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                            advance_by: 1,
+                        }
+                    }
+                }
+                PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
+                    new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                    advance_by: 1,
+                },
+                PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
+                    let Some(pair) = truthy_falsy_pair_stages(&all_stages, stage_index) else {
+                        return PipeSubjectStepOutcome::Continue {
+                            new_subject: None,
+                            advance_by: 1,
+                        };
+                    };
+                    let advance = pair.next_index.saturating_sub(stage_index).max(1);
                     PipeSubjectStepOutcome::Continue {
                         new_subject: current
-                            .and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
-                        advance_by: 1,
+                            .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s)),
+                        advance_by: advance,
                     }
                 }
-            }
-            PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
-                advance_by: 1,
-            },
-            PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
-                let Some(pair) = truthy_falsy_pair_stages(&all_stages, stage_index) else {
-                    return PipeSubjectStepOutcome::Continue {
-                        new_subject: None,
-                        advance_by: 1,
-                    };
-                };
-                let advance = pair.next_index.saturating_sub(stage_index).max(1);
-                PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s)),
-                    advance_by: advance,
+                PipeStageKind::Case { .. }
+                | PipeStageKind::Apply { .. }
+                | PipeStageKind::RecurStart { .. }
+                | PipeStageKind::RecurStep { .. } => PipeSubjectStepOutcome::Continue {
+                    new_subject: None,
+                    advance_by: 1,
+                },
+                PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
+                    unreachable!("PipeSubjectWalker handles Transform and Tap internally")
                 }
             }
-            PipeStageKind::Case { .. }
-            | PipeStageKind::Apply { .. }
-            | PipeStageKind::RecurStart { .. }
-            | PipeStageKind::RecurStep { .. } => PipeSubjectStepOutcome::Continue {
-                new_subject: None,
-                advance_by: 1,
-            },
-            PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
-                unreachable!("PipeSubjectWalker handles Transform and Tap internally")
-            }
-        }
-    });
+        },
+    );
 }
 
 fn elaborate_gate_stage(
@@ -734,13 +738,29 @@ enum LowerTask {
         callee: DomainMemberHandle,
     },
     /// Pop N results → build `Tuple`.
-    BuildTuple { span: SourceSpan, ty: GateType, n: usize },
+    BuildTuple {
+        span: SourceSpan,
+        ty: GateType,
+        n: usize,
+    },
     /// Pop N results → build `List`.
-    BuildList { span: SourceSpan, ty: GateType, n: usize },
+    BuildList {
+        span: SourceSpan,
+        ty: GateType,
+        n: usize,
+    },
     /// Pop 2*N results (key₀, value₀, key₁, value₁, …) → build `Map`.
-    BuildMap { span: SourceSpan, ty: GateType, n: usize },
+    BuildMap {
+        span: SourceSpan,
+        ty: GateType,
+        n: usize,
+    },
     /// Pop N results → build `Set`.
-    BuildSet { span: SourceSpan, ty: GateType, n: usize },
+    BuildSet {
+        span: SourceSpan,
+        ty: GateType,
+        n: usize,
+    },
     /// Pop N results → build `Record` with the given labels.
     BuildRecord {
         span: SourceSpan,
@@ -797,10 +817,14 @@ pub(crate) fn lower_gate_runtime_expr(
                 match expr.kind {
                     // --- Leaf nodes: push result directly ---
                     ExprKind::Name(reference) => {
-                        let kind = GateRuntimeExprKind::Reference(
-                            runtime_reference_for_name(module, expr.span, &reference)?,
-                        );
-                        results.push(GateRuntimeExpr { span: expr.span, ty, kind });
+                        let kind = GateRuntimeExprKind::Reference(runtime_reference_for_name(
+                            module, expr.span, &reference,
+                        )?);
+                        results.push(GateRuntimeExpr {
+                            span: expr.span,
+                            ty,
+                            kind,
+                        });
                     }
                     ExprKind::Integer(literal) => {
                         results.push(GateRuntimeExpr {
@@ -818,7 +842,8 @@ pub(crate) fn lower_gate_runtime_expr(
                     }
                     // --- Text: bounded interpolation segments (not a source of deep nesting) ---
                     ExprKind::Text(text) => {
-                        let lowered = lower_runtime_text_literal(module, &text, env, ambient, typing)?;
+                        let lowered =
+                            lower_runtime_text_literal(module, &text, env, ambient, typing)?;
                         results.push(GateRuntimeExpr {
                             span: expr.span,
                             ty,
@@ -867,34 +892,61 @@ pub(crate) fn lower_gate_runtime_expr(
                         });
                     }
                     // --- Compound nodes: push continuation then children ---
-                    ExprKind::Unary { operator, expr: child } => {
-                        work.push(LowerTask::BuildUnary { span: expr.span, ty, operator });
+                    ExprKind::Unary {
+                        operator,
+                        expr: child,
+                    } => {
+                        work.push(LowerTask::BuildUnary {
+                            span: expr.span,
+                            ty,
+                            operator,
+                        });
                         work.push(LowerTask::Eval(child));
                     }
-                    ExprKind::Binary { left, operator, right } => {
+                    ExprKind::Binary {
+                        left,
+                        operator,
+                        right,
+                    } => {
                         // Push Build first (runs last), then children in reverse order
                         // so `left` is evaluated before `right`.
-                        work.push(LowerTask::BuildBinary { span: expr.span, ty, operator });
+                        work.push(LowerTask::BuildBinary {
+                            span: expr.span,
+                            ty,
+                            operator,
+                        });
                         work.push(LowerTask::Eval(right));
                         work.push(LowerTask::Eval(left));
                     }
                     ExprKind::Tuple(elements) => {
                         let n = elements.len();
-                        work.push(LowerTask::BuildTuple { span: expr.span, ty, n });
+                        work.push(LowerTask::BuildTuple {
+                            span: expr.span,
+                            ty,
+                            n,
+                        });
                         for &element in elements.iter().rev() {
                             work.push(LowerTask::Eval(element));
                         }
                     }
                     ExprKind::List(elements) => {
                         let n = elements.len();
-                        work.push(LowerTask::BuildList { span: expr.span, ty, n });
+                        work.push(LowerTask::BuildList {
+                            span: expr.span,
+                            ty,
+                            n,
+                        });
                         for element in elements.into_iter().rev() {
                             work.push(LowerTask::Eval(element));
                         }
                     }
                     ExprKind::Map(map) => {
                         let n = map.entries.len();
-                        work.push(LowerTask::BuildMap { span: expr.span, ty, n });
+                        work.push(LowerTask::BuildMap {
+                            span: expr.span,
+                            ty,
+                            n,
+                        });
                         for entry in map.entries.into_iter().rev() {
                             work.push(LowerTask::Eval(entry.value));
                             work.push(LowerTask::Eval(entry.key));
@@ -902,7 +954,11 @@ pub(crate) fn lower_gate_runtime_expr(
                     }
                     ExprKind::Set(elements) => {
                         let n = elements.len();
-                        work.push(LowerTask::BuildSet { span: expr.span, ty, n });
+                        work.push(LowerTask::BuildSet {
+                            span: expr.span,
+                            ty,
+                            n,
+                        });
                         for element in elements.into_iter().rev() {
                             work.push(LowerTask::Eval(element));
                         }
@@ -910,7 +966,11 @@ pub(crate) fn lower_gate_runtime_expr(
                     ExprKind::Record(record) => {
                         let labels: Vec<Name> =
                             record.fields.iter().map(|f| f.label.clone()).collect();
-                        work.push(LowerTask::BuildRecord { span: expr.span, ty, labels });
+                        work.push(LowerTask::BuildRecord {
+                            span: expr.span,
+                            ty,
+                            labels,
+                        });
                         for field in record.fields.into_iter().rev() {
                             work.push(LowerTask::Eval(field.value));
                         }
@@ -919,12 +979,20 @@ pub(crate) fn lower_gate_runtime_expr(
                         base: ProjectionBase::Expr(base),
                         path,
                     } => {
-                        work.push(LowerTask::BuildProjectionExpr { span: expr.span, ty, path });
+                        work.push(LowerTask::BuildProjectionExpr {
+                            span: expr.span,
+                            ty,
+                            path,
+                        });
                         work.push(LowerTask::Eval(base));
                     }
                     ExprKind::Apply { callee, arguments } => {
                         let n_args = arguments.len();
-                        work.push(LowerTask::BuildApply { span: expr.span, ty, n_args });
+                        work.push(LowerTask::BuildApply {
+                            span: expr.span,
+                            ty,
+                            n_args,
+                        });
                         for &arg in arguments.iter().rev() {
                             work.push(LowerTask::Eval(arg));
                         }
@@ -935,7 +1003,9 @@ pub(crate) fn lower_gate_runtime_expr(
 
             // --- Build continuations: pop children from result stack ---
             LowerTask::BuildUnary { span, ty, operator } => {
-                let child = results.pop().expect("result stack has child for BuildUnary");
+                let child = results
+                    .pop()
+                    .expect("result stack has child for BuildUnary");
                 results.push(GateRuntimeExpr {
                     span,
                     ty,
@@ -946,8 +1016,12 @@ pub(crate) fn lower_gate_runtime_expr(
                 });
             }
             LowerTask::BuildBinary { span, ty, operator } => {
-                let right = results.pop().expect("result stack has right for BuildBinary");
-                let left = results.pop().expect("result stack has left for BuildBinary");
+                let right = results
+                    .pop()
+                    .expect("result stack has right for BuildBinary");
+                let left = results
+                    .pop()
+                    .expect("result stack has left for BuildBinary");
                 results.push(GateRuntimeExpr {
                     span,
                     ty,
@@ -958,15 +1032,31 @@ pub(crate) fn lower_gate_runtime_expr(
                     },
                 });
             }
-            LowerTask::BuildDomainBinary { span, ty, callee_ty, callee } => {
-                let right = results.pop().expect("result stack has right for BuildDomainBinary");
-                let left = results.pop().expect("result stack has left for BuildDomainBinary");
+            LowerTask::BuildDomainBinary {
+                span,
+                ty,
+                callee_ty,
+                callee,
+            } => {
+                let right = results
+                    .pop()
+                    .expect("result stack has right for BuildDomainBinary");
+                let left = results
+                    .pop()
+                    .expect("result stack has left for BuildDomainBinary");
                 let callee_expr = GateRuntimeExpr {
                     span,
                     ty: callee_ty,
-                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(callee)),
+                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(
+                        callee,
+                    )),
                 };
-                results.push(GateRuntimeExpr::apply(span, ty, callee_expr, vec![left, right]));
+                results.push(GateRuntimeExpr::apply(
+                    span,
+                    ty,
+                    callee_expr,
+                    vec![left, right],
+                ));
             }
             LowerTask::BuildTuple { span, ty, n } => {
                 let start = results.len() - n;
@@ -1029,7 +1119,9 @@ pub(crate) fn lower_gate_runtime_expr(
                 });
             }
             LowerTask::BuildProjectionExpr { span, ty, path } => {
-                let base = results.pop().expect("result stack has base for BuildProjectionExpr");
+                let base = results
+                    .pop()
+                    .expect("result stack has base for BuildProjectionExpr");
                 results.push(GateRuntimeExpr {
                     span,
                     ty,
@@ -1042,7 +1134,9 @@ pub(crate) fn lower_gate_runtime_expr(
             LowerTask::BuildApply { span, ty, n_args } => {
                 let arg_start = results.len() - n_args;
                 let arguments: Vec<GateRuntimeExpr> = results.drain(arg_start..).collect();
-                let callee = results.pop().expect("result stack has callee for BuildApply");
+                let callee = results
+                    .pop()
+                    .expect("result stack has callee for BuildApply");
                 results.push(GateRuntimeExpr {
                     span,
                     ty,
@@ -1055,7 +1149,9 @@ pub(crate) fn lower_gate_runtime_expr(
         }
     }
 
-    Ok(results.pop().expect("iterative lowering produces exactly one result"))
+    Ok(results
+        .pop()
+        .expect("iterative lowering produces exactly one result"))
 }
 
 /// Checks whether `expr_id` is a binary expression whose operator resolves to

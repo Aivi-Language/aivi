@@ -318,9 +318,6 @@ impl RootDatabase {
     /// dependencies for `importer`.
     pub fn register_file_deps(&self, importer: SourceFile, deps: &[SourceFile]) {
         let dep_ids: FxHashSet<u32> = deps.iter().map(|f| f.id).collect();
-        self.state
-            .write()
-            .file_deps
-            .set_deps(importer.id, dep_ids);
+        self.state.write().file_deps.set_deps(importer.id, dep_ids);
     }
 }

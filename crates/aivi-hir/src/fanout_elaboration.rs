@@ -237,66 +237,68 @@ fn collect_fanout_pipe(
 ) {
     // Collect the stages snapshot once for truthy_falsy_pair_stages lookups.
     let all_stages = pipe.stages.iter().collect::<Vec<_>>();
-    PipeSubjectWalker::new(pipe, env, typing).walk(typing, |stage_index, stage, current, typing| {
-        match &stage.kind {
-            PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
-                advance_by: 1,
-            },
-            PipeStageKind::Map { expr } => {
-                let segment = pipe
-                    .fanout_segment(stage_index)
-                    .expect("map stages should expose a fan-out segment");
-                let outcome =
-                    elaborate_fanout_segment(module, &segment, current, env, typing);
-                segments.push(FanoutSegmentElaboration {
-                    owner,
-                    pipe_expr,
-                    map_stage_index: stage_index,
-                    map_stage_span: stage.span,
-                    map_expr: *expr,
-                    outcome: outcome.clone(),
-                });
-                let advance = segment.next_stage_index().saturating_sub(stage_index);
-                PipeSubjectStepOutcome::Continue {
-                    new_subject: match outcome {
-                        FanoutSegmentOutcome::Planned(plan) => Some(plan.result_type),
-                        FanoutSegmentOutcome::Blocked(_) => None,
-                    },
-                    advance_by: advance.max(1),
+    PipeSubjectWalker::new(pipe, env, typing).walk(
+        typing,
+        |stage_index, stage, current, typing| {
+            match &stage.kind {
+                PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
+                    new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
+                    advance_by: 1,
+                },
+                PipeStageKind::Map { expr } => {
+                    let segment = pipe
+                        .fanout_segment(stage_index)
+                        .expect("map stages should expose a fan-out segment");
+                    let outcome = elaborate_fanout_segment(module, &segment, current, env, typing);
+                    segments.push(FanoutSegmentElaboration {
+                        owner,
+                        pipe_expr,
+                        map_stage_index: stage_index,
+                        map_stage_span: stage.span,
+                        map_expr: *expr,
+                        outcome: outcome.clone(),
+                    });
+                    let advance = segment.next_stage_index().saturating_sub(stage_index);
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject: match outcome {
+                            FanoutSegmentOutcome::Planned(plan) => Some(plan.result_type),
+                            FanoutSegmentOutcome::Blocked(_) => None,
+                        },
+                        advance_by: advance.max(1),
+                    }
                 }
-            }
-            PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
-                advance_by: 1,
-            },
-            PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
-                let Some(pair) = truthy_falsy_pair_stages(&all_stages, stage_index) else {
-                    return PipeSubjectStepOutcome::Continue {
-                        new_subject: None,
-                        advance_by: 1,
+                PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
+                    new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                    advance_by: 1,
+                },
+                PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
+                    let Some(pair) = truthy_falsy_pair_stages(&all_stages, stage_index) else {
+                        return PipeSubjectStepOutcome::Continue {
+                            new_subject: None,
+                            advance_by: 1,
+                        };
                     };
-                };
-                let advance = pair.next_index.saturating_sub(stage_index);
-                PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s)),
-                    advance_by: advance.max(1),
+                    let advance = pair.next_index.saturating_sub(stage_index);
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject: current
+                            .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s)),
+                        advance_by: advance.max(1),
+                    }
+                }
+                PipeStageKind::Case { .. }
+                | PipeStageKind::Apply { .. }
+                | PipeStageKind::RecurStart { .. }
+                | PipeStageKind::RecurStep { .. } => PipeSubjectStepOutcome::Continue {
+                    new_subject: None,
+                    advance_by: 1,
+                },
+                // Transform and Tap are handled by the walker itself.
+                PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
+                    unreachable!("PipeSubjectWalker handles Transform and Tap internally")
                 }
             }
-            PipeStageKind::Case { .. }
-            | PipeStageKind::Apply { .. }
-            | PipeStageKind::RecurStart { .. }
-            | PipeStageKind::RecurStep { .. } => PipeSubjectStepOutcome::Continue {
-                new_subject: None,
-                advance_by: 1,
-            },
-            // Transform and Tap are handled by the walker itself.
-            PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
-                unreachable!("PipeSubjectWalker handles Transform and Tap internally")
-            }
-        }
-    });
+        },
+    );
 }
 
 pub(crate) fn elaborate_fanout_segment(

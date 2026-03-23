@@ -207,15 +207,15 @@ fn collect_truthy_falsy_pipe(
     truthy_falsy_stages: &mut Vec<TruthyFalsyStageElaboration>,
 ) {
     let all_stages = pipe.stages.iter().collect::<Vec<_>>();
-    PipeSubjectWalker::new(pipe, env, typing).walk(typing, |stage_index, stage, current, typing| {
-        match &stage.kind {
+    PipeSubjectWalker::new(pipe, env, typing).walk(
+        typing,
+        |stage_index, stage, current, typing| match &stage.kind {
             PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
                 new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Map { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current
-                    .and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                new_subject: current.and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
                 advance_by: 1,
             },
             PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
@@ -229,8 +229,7 @@ fn collect_truthy_falsy_pipe(
                         advance_by: 1,
                     };
                 };
-                let outcome =
-                    elaborate_truthy_falsy_pair(&pair, current, env, typing);
+                let outcome = elaborate_truthy_falsy_pair(&pair, current, env, typing);
                 truthy_falsy_stages.push(TruthyFalsyStageElaboration {
                     owner,
                     pipe_expr,
@@ -261,8 +260,8 @@ fn collect_truthy_falsy_pipe(
             PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
                 unreachable!("PipeSubjectWalker handles Transform and Tap internally")
             }
-        }
-    });
+        },
+    );
 }
 
 fn elaborate_truthy_falsy_pair(

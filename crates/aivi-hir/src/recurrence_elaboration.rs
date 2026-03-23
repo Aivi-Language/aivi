@@ -590,7 +590,11 @@ fn infer_recurrence_input_subject(
     // Collect the limited stage slice once so the truthy/falsy pair helper can
     // index into it by position.  The walker is constructed with the same limit
     // so it only iterates over these prefix stages (PA-M1).
-    let all_stages = pipe.stages.iter().take(prefix_stage_count).collect::<Vec<_>>();
+    let all_stages = pipe
+        .stages
+        .iter()
+        .take(prefix_stage_count)
+        .collect::<Vec<_>>();
     PipeSubjectWalker::new_with_limit(pipe, env, typing, prefix_stage_count).walk(
         typing,
         |stage_index, stage, current, typing| match &stage.kind {
@@ -599,8 +603,7 @@ fn infer_recurrence_input_subject(
                 advance_by: 1,
             },
             PipeStageKind::Map { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current
-                    .and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                new_subject: current.and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
                 advance_by: 1,
             },
             PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
@@ -614,10 +617,13 @@ fn infer_recurrence_input_subject(
                         advance_by: 1,
                     };
                 };
-                let new_subject = current
-                    .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
+                let new_subject =
+                    current.and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
                 let advance = pair.next_index.saturating_sub(stage_index).max(1);
-                PipeSubjectStepOutcome::Continue { new_subject, advance_by: advance }
+                PipeSubjectStepOutcome::Continue {
+                    new_subject,
+                    advance_by: advance,
+                }
             }
             // Recurrence boundary stages and unhandled case/apply stages should
             // never appear within the prefix (the caller computes prefix_stage_count

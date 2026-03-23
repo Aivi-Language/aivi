@@ -341,6 +341,8 @@ impl GlibLinkedRuntimeDriver {
                 .lock()
                 .expect("GLib linked runtime state mutex should not be poisoned");
             state
+                .as_mut()
+                .expect("GLib linked runtime state should exist before worker notifier install")
                 .linked
                 .runtime_mut()
                 .set_worker_publication_notifier(Some(worker_notifier));
@@ -425,7 +427,9 @@ impl GlibLinkedRuntimeDriver {
             .state
             .lock()
             .expect("GLib linked runtime state mutex should not be poisoned");
-        f(&guard)
+        f(guard
+            .as_ref()
+            .expect("GLib linked runtime state should be present when not inside a tick"))
     }
 
     fn with_state_mut<R>(&self, f: impl FnOnce(&mut GlibLinkedRuntimeState) -> R) -> R {
@@ -435,7 +439,9 @@ impl GlibLinkedRuntimeDriver {
             .state
             .lock()
             .expect("GLib linked runtime state mutex should not be poisoned");
-        f(&mut guard)
+        f(guard
+            .as_mut()
+            .expect("GLib linked runtime state should be present when not inside a tick"))
     }
 }
 
@@ -479,7 +485,10 @@ impl Error for GlibLinkedRuntimeFailure {}
 
 struct GlibLinkedRuntimeShared {
     context: MainContext,
-    state: Mutex<GlibLinkedRuntimeState>,
+    /// Linked runtime state is kept inside `Option` so ticks can take ownership
+    /// of the whole state, release the mutex while backend kernels and source
+    /// lifecycle evaluation run, then store the updated state back afterward.
+    state: Mutex<Option<GlibLinkedRuntimeState>>,
     tick_enqueued: AtomicBool,
     notifier: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
 }
@@ -493,12 +502,12 @@ impl GlibLinkedRuntimeShared {
     ) -> Self {
         Self {
             context,
-            state: Mutex::new(GlibLinkedRuntimeState {
+            state: Mutex::new(Some(GlibLinkedRuntimeState {
                 linked,
                 providers,
                 outcomes: VecDeque::new(),
                 failures: VecDeque::new(),
-            }),
+            })),
             tick_enqueued: AtomicBool::new(false),
             notifier,
         }
@@ -531,38 +540,41 @@ impl GlibLinkedRuntimeShared {
         let mut notify = false;
         loop {
             self.tick_enqueued.store(false, Ordering::Release);
-            let should_continue = {
-                let mut state = self
-                    .state
-                    .lock()
-                    .expect("GLib linked runtime state mutex should not be poisoned");
-                match state.linked.tick_with_source_lifecycle() {
-                    Ok(outcome) => {
-                        if let Err(error) = state.providers.apply_actions(outcome.source_actions())
-                        {
-                            state
-                                .failures
-                                .push_back(GlibLinkedRuntimeFailure::ProviderExecution(error));
-                            notify = true;
-                            false
-                        } else {
-                            if !outcome.scheduler().is_empty() {
-                                state.outcomes.push_back(outcome);
-                                notify = true;
-                            }
-                            self.tick_enqueued.load(Ordering::Acquire)
-                                || state.linked.queued_message_count() > 0
-                        }
-                    }
-                    Err(error) => {
+            let mut state = self
+                .state
+                .lock()
+                .expect("GLib linked runtime state mutex should not be poisoned")
+                .take()
+                .expect("GLib linked runtime state should be present before a tick");
+            let should_continue = match state.linked.tick_with_source_lifecycle() {
+                Ok(outcome) => {
+                    if let Err(error) = state.providers.apply_actions(outcome.source_actions()) {
                         state
                             .failures
-                            .push_back(GlibLinkedRuntimeFailure::Tick(error));
+                            .push_back(GlibLinkedRuntimeFailure::ProviderExecution(error));
                         notify = true;
                         false
+                    } else {
+                        if !outcome.scheduler().is_empty() {
+                            state.outcomes.push_back(outcome);
+                            notify = true;
+                        }
+                        self.tick_enqueued.load(Ordering::Acquire)
+                            || state.linked.queued_message_count() > 0
                     }
                 }
+                Err(error) => {
+                    state
+                        .failures
+                        .push_back(GlibLinkedRuntimeFailure::Tick(error));
+                    notify = true;
+                    false
+                }
             };
+            *self
+                .state
+                .lock()
+                .expect("GLib linked runtime state mutex should not be poisoned") = Some(state);
 
             if !should_continue {
                 break;

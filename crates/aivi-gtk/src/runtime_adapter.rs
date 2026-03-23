@@ -392,16 +392,27 @@ impl<'a> WidgetRuntimeAssemblyBuilder<'a> {
         graph_builder: &mut SignalGraphBuilder,
     ) -> RuntimeEachNode {
         let owner = plan_to_owner[plan_id.index()];
-        RuntimeEachNode {
-            collection: RuntimeExprInput {
-                expr: each.collection,
+        let collection = RuntimeExprInput {
+            expr: each.collection,
+            input: graph_builder
+                .add_input(
+                    runtime_control_name(node.stable_id, "collection"),
+                    Some(owner),
+                )
+                .expect("runtime owner handles were validated before collection allocation"),
+        };
+        let key_input = match &each.child_policy {
+            RepeatedChildPolicy::Positional { .. } => None,
+            RepeatedChildPolicy::Keyed { key, .. } => Some(RuntimeExprInput {
+                expr: *key,
                 input: graph_builder
-                    .add_input(
-                        runtime_control_name(node.stable_id, "collection"),
-                        Some(owner),
-                    )
-                    .expect("runtime owner handles were validated before collection allocation"),
-            },
+                    .add_input(runtime_control_name(node.stable_id, "key"), Some(owner))
+                    .expect("runtime owner handles were validated before key allocation"),
+            }),
+        };
+        RuntimeEachNode {
+            collection,
+            key_input,
             binding: each.binding,
             child_policy: each.child_policy.clone(),
             item_children: adapt_child_ops(&each.item_children, plan_to_owner),
@@ -607,6 +618,7 @@ pub enum RuntimeShowMountPolicy {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeEachNode {
     pub collection: RuntimeExprInput,
+    pub key_input: Option<RuntimeExprInput>,
     pub binding: BindingId,
     pub child_policy: RepeatedChildPolicy,
     pub item_children: Box<[RuntimeChildOp]>,
@@ -1093,7 +1105,7 @@ val view =
             assemble_widget_runtime(&plan).expect("control fixture should adapt cleanly");
 
         assert_eq!(assembly.graph().owner_count(), plan.len());
-        assert_eq!(assembly.graph().signal_count(), 8);
+        assert_eq!(assembly.graph().signal_count(), 9);
 
         let root = assembly.node(plan.root()).expect("root node should exist");
         let RuntimePlanNodeKind::Fragment(fragment) = &root.kind else {
@@ -1161,6 +1173,11 @@ val view =
             panic!("expected each runtime node, found {:?}", each.kind);
         };
         assert_eq!(each_node.collection.input.as_raw(), 5);
+        let key_input = each_node
+            .key_input
+            .as_ref()
+            .expect("keyed each nodes should allocate a runtime key input");
+        assert_eq!(key_input.input.as_raw(), 6);
         assert!(matches!(
             each_node.child_policy,
             RepeatedChildPolicy::Keyed {
@@ -1178,7 +1195,7 @@ val view =
         let RuntimePropertyBinding::Setter(row_title) = &row_widget.properties[0] else {
             panic!("expected runtime setter for row title");
         };
-        assert_eq!(row_title.input.as_raw(), 6);
+        assert_eq!(row_title.input.as_raw(), 7);
 
         let failed_case = &match_node.cases[2];
         let failed = assembly
@@ -1200,7 +1217,7 @@ val view =
         let RuntimePropertyBinding::Setter(failed_text) = &failed_label_widget.properties[0] else {
             panic!("expected runtime setter for failed label");
         };
-        assert_eq!(failed_text.input.as_raw(), 7);
+        assert_eq!(failed_text.input.as_raw(), 8);
         assert!(matches!(
             failed_text.source,
             SetterSource::InterpolatedText(_)

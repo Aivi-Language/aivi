@@ -2,7 +2,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     env,
     ffi::OsString,
     fs,
@@ -10,7 +10,8 @@ use std::{
     path::{Path, PathBuf},
     process::ExitCode,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, mpsc as sync_mpsc},
+    thread::{self, JoinHandle},
 };
 
 use aivi_backend::{
@@ -215,7 +216,7 @@ struct RunArtifact {
     view_name: Box<str>,
     module: HirModule,
     bridge: GtkBridgeGraph,
-    fragments: BTreeMap<HirExprId, CompiledRunFragment>,
+    hydration_inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
     runtime_assembly: HirRuntimeAssembly,
     core: aivi_core::Module,
     backend: Arc<BackendProgram>,
@@ -230,10 +231,135 @@ struct RunValidationBlocker {
 
 #[derive(Clone, Debug)]
 struct CompiledRunFragment {
+    expr: HirExprId,
     parameters: Vec<GeneralExprParameter>,
     program: BackendProgram,
     item: BackendItemId,
     required_globals: Vec<BackendItemId>,
+}
+
+#[derive(Clone, Debug)]
+enum CompiledRunInput {
+    Expr(CompiledRunFragment),
+    Text(CompiledRunText),
+}
+
+#[derive(Clone, Debug)]
+struct CompiledRunText {
+    segments: Box<[CompiledRunTextSegment]>,
+}
+
+#[derive(Clone, Debug)]
+enum CompiledRunTextSegment {
+    Text(Box<str>),
+    Interpolation(CompiledRunFragment),
+}
+
+#[derive(Clone, Debug)]
+enum RunInputSpec {
+    Expr(HirExprId),
+    Text(aivi_hir::TextLiteral),
+}
+
+#[derive(Clone, Debug)]
+struct RunHydrationStaticState {
+    view_name: Box<str>,
+    module: HirModule,
+    bridge: GtkBridgeGraph,
+    inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
+}
+
+#[derive(Debug)]
+struct RunHydrationRequest {
+    revision: u64,
+    globals: BTreeMap<BackendItemId, RuntimeValue>,
+}
+
+#[derive(Debug)]
+struct RunHydrationResponse {
+    revision: u64,
+    result: Result<RunHydrationPlan, String>,
+}
+
+struct RunHydrationWorker {
+    request_tx: Option<sync_mpsc::Sender<RunHydrationRequest>>,
+    response_rx: sync_mpsc::Receiver<RunHydrationResponse>,
+    thread: Option<JoinHandle<()>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RunHydrationPlan {
+    root: HydratedRunNode,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum HydratedRunNode {
+    Widget {
+        instance: GtkNodeInstance,
+        properties: Box<[HydratedRunProperty]>,
+        children: Box<[HydratedRunNode]>,
+    },
+    Show {
+        instance: GtkNodeInstance,
+        when_input: RuntimeInputHandle,
+        when: bool,
+        keep_mounted_input: Option<RuntimeInputHandle>,
+        keep_mounted: bool,
+        children: Box<[HydratedRunNode]>,
+    },
+    Each {
+        instance: GtkNodeInstance,
+        collection_input: RuntimeInputHandle,
+        kind: HydratedRunEachKind,
+        empty_branch: Option<Box<HydratedRunNode>>,
+    },
+    Match {
+        instance: GtkNodeInstance,
+        scrutinee_input: RuntimeInputHandle,
+        active_case: usize,
+        branch: Box<HydratedRunNode>,
+    },
+    Case {
+        instance: GtkNodeInstance,
+        children: Box<[HydratedRunNode]>,
+    },
+    Fragment {
+        instance: GtkNodeInstance,
+        children: Box<[HydratedRunNode]>,
+    },
+    With {
+        instance: GtkNodeInstance,
+        value_input: RuntimeInputHandle,
+        children: Box<[HydratedRunNode]>,
+    },
+    Empty {
+        instance: GtkNodeInstance,
+        children: Box<[HydratedRunNode]>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HydratedRunProperty {
+    input: RuntimeInputHandle,
+    value: RuntimeValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum HydratedRunEachKind {
+    Positional {
+        item_count: usize,
+        items: Box<[HydratedRunEachItem]>,
+    },
+    Keyed {
+        key_input: RuntimeInputHandle,
+        keys: Box<[GtkCollectionKey]>,
+        items: Box<[HydratedRunEachItem]>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HydratedRunEachItem {
+    children: Box<[HydratedRunNode]>,
 }
 
 #[derive(Clone, Debug)]
@@ -245,15 +371,85 @@ struct ResolvedRunEventHandler {
 
 struct RunSession {
     view_name: Box<str>,
-    module: HirModule,
-    bridge: GtkBridgeGraph,
-    fragments: BTreeMap<HirExprId, CompiledRunFragment>,
     event_handlers: BTreeMap<HirExprId, ResolvedRunEventHandler>,
     executor: GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     driver: GlibLinkedRuntimeDriver,
+    hydration_worker: RunHydrationWorker,
     main_loop: glib::MainLoop,
     work_scheduled: bool,
     runtime_error: Option<String>,
+    next_hydration_revision: u64,
+    latest_requested_hydration: Option<u64>,
+    latest_applied_hydration: Option<u64>,
+}
+
+impl RunHydrationWorker {
+    fn new(
+        shared: Arc<RunHydrationStaticState>,
+        notifier: Arc<dyn Fn() + Send + Sync + 'static>,
+    ) -> Self {
+        let (request_tx, request_rx) = sync_mpsc::channel();
+        let (response_tx, response_rx) = sync_mpsc::channel();
+        let thread = thread::spawn(move || {
+            run_hydration_worker_loop(shared, request_rx, response_tx, notifier);
+        });
+        Self {
+            request_tx: Some(request_tx),
+            response_rx,
+            thread: Some(thread),
+        }
+    }
+
+    fn request(
+        &self,
+        revision: u64,
+        globals: BTreeMap<BackendItemId, RuntimeValue>,
+    ) -> Result<(), String> {
+        self.request_tx
+            .as_ref()
+            .ok_or_else(|| "run hydration worker has already shut down".to_owned())?
+            .send(RunHydrationRequest { revision, globals })
+            .map_err(|_| {
+                "run hydration worker stopped before the request could be queued".to_owned()
+            })
+    }
+
+    fn drain_ready(&self) -> Vec<RunHydrationResponse> {
+        self.response_rx.try_iter().collect()
+    }
+}
+
+impl Drop for RunHydrationWorker {
+    fn drop(&mut self) {
+        self.request_tx.take();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+fn run_hydration_worker_loop(
+    shared: Arc<RunHydrationStaticState>,
+    request_rx: sync_mpsc::Receiver<RunHydrationRequest>,
+    response_tx: sync_mpsc::Sender<RunHydrationResponse>,
+    notifier: Arc<dyn Fn() + Send + Sync + 'static>,
+) {
+    while let Ok(mut request) = request_rx.recv() {
+        while let Ok(next) = request_rx.try_recv() {
+            request = next;
+        }
+        let result = plan_run_hydration(shared.as_ref(), &request.globals);
+        if response_tx
+            .send(RunHydrationResponse {
+                revision: request.revision,
+                result,
+            })
+            .is_err()
+        {
+            break;
+        }
+        notifier();
+    }
 }
 
 fn check_file(path: &Path) -> Result<ExitCode, String> {
@@ -364,13 +560,13 @@ fn prepare_run_artifact(
         }
         rendered
     })?;
-    let fragments = compile_run_fragments(sources, module, view_owner, view.body, &bridge)?;
+    let hydration_inputs = compile_run_inputs(sources, module, view_owner, view.body, &bridge)?;
     let event_handlers = resolve_run_event_handlers(module, &bridge, &runtime_assembly, sources)?;
     Ok(RunArtifact {
         view_name: view.name.text().into(),
         module: module.clone(),
         bridge,
-        fragments,
+        hydration_inputs,
         runtime_assembly,
         core: lowered.core,
         backend: lowered.backend,
@@ -845,149 +1041,188 @@ fn hir_item_kind_label(item: &Item) -> &'static str {
     }
 }
 
-fn collect_run_exprs_from_bridge(bridge: &GtkBridgeGraph) -> BTreeSet<HirExprId> {
-    let mut exprs = BTreeSet::new();
+fn collect_run_input_specs_from_bridge(
+    bridge: &GtkBridgeGraph,
+) -> BTreeMap<RuntimeInputHandle, RunInputSpec> {
+    let mut inputs = BTreeMap::new();
     for node in bridge.nodes() {
         match &node.kind {
             GtkBridgeNodeKind::Widget(widget) => {
                 for property in &widget.properties {
                     if let RuntimePropertyBinding::Setter(setter) = property {
-                        match &setter.source {
-                            SetterSource::Expr(expr) => {
-                                exprs.insert(*expr);
-                            }
+                        let spec = match &setter.source {
+                            SetterSource::Expr(expr) => RunInputSpec::Expr(*expr),
                             SetterSource::InterpolatedText(text) => {
-                                for segment in &text.segments {
-                                    if let aivi_hir::TextSegment::Interpolation(interpolation) =
-                                        segment
-                                    {
-                                        exprs.insert(interpolation.expr);
-                                    }
-                                }
+                                RunInputSpec::Text(text.clone())
                             }
-                        }
+                        };
+                        inputs.insert(setter.input, spec);
                     }
                 }
             }
             GtkBridgeNodeKind::Show(show) => {
-                exprs.insert(show.when.expr);
+                inputs.insert(show.when.input, RunInputSpec::Expr(show.when.expr));
                 if let RuntimeShowMountPolicy::KeepMounted { decision } = &show.mount {
-                    exprs.insert(decision.expr);
+                    inputs.insert(decision.input, RunInputSpec::Expr(decision.expr));
                 }
             }
             GtkBridgeNodeKind::Each(each) => {
-                exprs.insert(each.collection.expr);
-                if let RepeatedChildPolicy::Keyed { key, .. } = &each.child_policy {
-                    exprs.insert(*key);
+                inputs.insert(
+                    each.collection.input,
+                    RunInputSpec::Expr(each.collection.expr),
+                );
+                if let Some(key_input) = &each.key_input {
+                    inputs.insert(key_input.input, RunInputSpec::Expr(key_input.expr));
                 }
             }
             GtkBridgeNodeKind::Match(match_node) => {
-                exprs.insert(match_node.scrutinee.expr);
+                inputs.insert(
+                    match_node.scrutinee.input,
+                    RunInputSpec::Expr(match_node.scrutinee.expr),
+                );
             }
             GtkBridgeNodeKind::With(with_node) => {
-                exprs.insert(with_node.value.expr);
+                inputs.insert(
+                    with_node.value.input,
+                    RunInputSpec::Expr(with_node.value.expr),
+                );
             }
             GtkBridgeNodeKind::Empty(_)
             | GtkBridgeNodeKind::Case(_)
             | GtkBridgeNodeKind::Fragment(_) => {}
         }
     }
-    exprs
+    inputs
 }
 
-fn compile_run_fragments(
+fn compile_run_inputs(
     sources: &SourceDatabase,
     module: &HirModule,
     view_owner: aivi_hir::ItemId,
     view_body: HirExprId,
     bridge: &GtkBridgeGraph,
-) -> Result<BTreeMap<HirExprId, CompiledRunFragment>, String> {
+) -> Result<BTreeMap<RuntimeInputHandle, CompiledRunInput>, String> {
     let sites = collect_markup_runtime_expr_sites(module, view_body).map_err(|error| {
         format!(
             "failed to collect runtime expression environments for run view at {}: {error}",
             source_location(sources, module.exprs()[view_body].span)
         )
     })?;
-    let mut fragments = BTreeMap::new();
-    for expr in collect_run_exprs_from_bridge(bridge) {
-        let site = sites.get(expr).ok_or_else(|| {
-            format!(
-                "run view references expression {} at {} without a collected runtime environment",
-                expr.as_raw(),
-                source_location(sources, module.exprs()[expr].span)
-            )
-        })?;
-        let body = elaborate_runtime_expr_with_env(module, expr, &site.parameters, Some(&site.ty))
-            .map_err(|blocked| {
-                format!(
-                    "failed to elaborate runtime expression at {}: {}",
-                    source_location(sources, site.span),
-                    blocked
-                )
-            })?;
-        let fragment = RuntimeFragmentSpec {
-            name: format!("__run_fragment_{}", expr.as_raw()).into_boxed_str(),
-            owner: view_owner,
-            body_expr: expr,
-            parameters: site.parameters.clone(),
-            body,
+    let mut inputs = BTreeMap::new();
+    for (input, spec) in collect_run_input_specs_from_bridge(bridge) {
+        let compiled = match spec {
+            RunInputSpec::Expr(expr) => CompiledRunInput::Expr(compile_run_expr_fragment(
+                sources, module, view_owner, &sites, expr,
+            )?),
+            RunInputSpec::Text(text) => {
+                let mut segments = Vec::with_capacity(text.segments.len());
+                for segment in text.segments {
+                    match segment {
+                        aivi_hir::TextSegment::Text(text) => {
+                            segments.push(CompiledRunTextSegment::Text(text.raw));
+                        }
+                        aivi_hir::TextSegment::Interpolation(interpolation) => segments.push(
+                            CompiledRunTextSegment::Interpolation(compile_run_expr_fragment(
+                                sources,
+                                module,
+                                view_owner,
+                                &sites,
+                                interpolation.expr,
+                            )?),
+                        ),
+                    }
+                }
+                CompiledRunInput::Text(CompiledRunText {
+                    segments: segments.into_boxed_slice(),
+                })
+            }
         };
-        let core = lower_runtime_fragment(module, &fragment).map_err(|error| {
-            format!(
-                "failed to lower runtime expression at {} into typed core: {error}",
-                source_location(sources, site.span)
-            )
-        })?;
-        let lambda = lower_lambda_module(&core.module).map_err(|error| {
-            format!(
-                "failed to lower runtime expression at {} into typed lambda: {error}",
-                source_location(sources, site.span)
-            )
-        })?;
-        validate_lambda_module(&lambda).map_err(|error| {
-            format!(
-                "typed lambda validation failed for runtime expression at {}: {error}",
-                source_location(sources, site.span)
-            )
-        })?;
-        let backend = lower_backend_module(&lambda).map_err(|error| {
-            format!(
-                "failed to lower runtime expression at {} into backend IR: {error}",
-                source_location(sources, site.span)
-            )
-        })?;
-        validate_program(&backend).map_err(|error| {
-            format!(
-                "backend validation failed for runtime expression at {}: {error}",
-                source_location(sources, site.span)
-            )
-        })?;
-        let item = backend
-            .items()
-            .iter()
-            .find_map(|(item_id, item)| (item.name == core.entry_name).then_some(item_id))
-            .ok_or_else(|| {
-                format!(
-                    "backend lowering did not preserve runtime fragment `{}` for expression at {}",
-                    core.entry_name,
-                    source_location(sources, site.span)
-                )
-            })?;
-        let required_globals = backend.items()[item]
-            .body
-            .map(|kernel| backend.kernels()[kernel].global_items.clone())
-            .unwrap_or_default();
-        fragments.insert(
-            expr,
-            CompiledRunFragment {
-                parameters: site.parameters.clone(),
-                program: backend,
-                item,
-                required_globals,
-            },
-        );
+        inputs.insert(input, compiled);
     }
-    Ok(fragments)
+    Ok(inputs)
+}
+
+fn compile_run_expr_fragment(
+    sources: &SourceDatabase,
+    module: &HirModule,
+    view_owner: aivi_hir::ItemId,
+    sites: &aivi_hir::MarkupRuntimeExprSites,
+    expr: HirExprId,
+) -> Result<CompiledRunFragment, String> {
+    let site = sites.get(expr).ok_or_else(|| {
+        format!(
+            "run view references expression {} at {} without a collected runtime environment",
+            expr.as_raw(),
+            source_location(sources, module.exprs()[expr].span)
+        )
+    })?;
+    let body = elaborate_runtime_expr_with_env(module, expr, &site.parameters, Some(&site.ty))
+        .map_err(|blocked| {
+            format!(
+                "failed to elaborate runtime expression at {}: {}",
+                source_location(sources, site.span),
+                blocked
+            )
+        })?;
+    let fragment = RuntimeFragmentSpec {
+        name: format!("__run_fragment_{}", expr.as_raw()).into_boxed_str(),
+        owner: view_owner,
+        body_expr: expr,
+        parameters: site.parameters.clone(),
+        body,
+    };
+    let core = lower_runtime_fragment(module, &fragment).map_err(|error| {
+        format!(
+            "failed to lower runtime expression at {} into typed core: {error}",
+            source_location(sources, site.span)
+        )
+    })?;
+    let lambda = lower_lambda_module(&core.module).map_err(|error| {
+        format!(
+            "failed to lower runtime expression at {} into typed lambda: {error}",
+            source_location(sources, site.span)
+        )
+    })?;
+    validate_lambda_module(&lambda).map_err(|error| {
+        format!(
+            "typed lambda validation failed for runtime expression at {}: {error}",
+            source_location(sources, site.span)
+        )
+    })?;
+    let backend = lower_backend_module(&lambda).map_err(|error| {
+        format!(
+            "failed to lower runtime expression at {} into backend IR: {error}",
+            source_location(sources, site.span)
+        )
+    })?;
+    validate_program(&backend).map_err(|error| {
+        format!(
+            "backend validation failed for runtime expression at {}: {error}",
+            source_location(sources, site.span)
+        )
+    })?;
+    let item = backend
+        .items()
+        .iter()
+        .find_map(|(item_id, item)| (item.name == core.entry_name).then_some(item_id))
+        .ok_or_else(|| {
+            format!(
+                "backend lowering did not preserve runtime fragment `{}` for expression at {}",
+                core.entry_name,
+                source_location(sources, site.span)
+            )
+        })?;
+    let required_globals = backend.items()[item]
+        .body
+        .map(|kernel| backend.kernels()[kernel].global_items.clone())
+        .unwrap_or_default();
+    Ok(CompiledRunFragment {
+        expr,
+        parameters: site.parameters.clone(),
+        program: backend,
+        item,
+        required_globals,
+    })
 }
 
 fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
@@ -997,7 +1232,7 @@ fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
         view_name,
         module,
         bridge,
-        fragments,
+        hydration_inputs,
         runtime_assembly,
         core,
         backend,
@@ -1015,13 +1250,17 @@ fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
 
     let context = glib::MainContext::default();
     let (update_tx, mut update_rx) = mpsc::unbounded_channel::<()>();
+    let update_notifier: Arc<dyn Fn() + Send + Sync + 'static> = {
+        let update_tx = update_tx.clone();
+        Arc::new(move || {
+            let _ = update_tx.send(());
+        })
+    };
     let driver = GlibLinkedRuntimeDriver::new(
         context.clone(),
         linked,
         SourceProviderManager::new(),
-        Some(Arc::new(move || {
-            let _ = update_tx.send(());
-        })),
+        Some(update_notifier.clone()),
     );
     let main_loop = glib::MainLoop::new(Some(&context), false);
     let executor =
@@ -1033,17 +1272,27 @@ fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
                     path.display()
                 )
             })?;
+    let hydration_worker = RunHydrationWorker::new(
+        Arc::new(RunHydrationStaticState {
+            view_name: view_name.clone(),
+            module,
+            bridge,
+            inputs: hydration_inputs,
+        }),
+        update_notifier,
+    );
     let session = Rc::new(RefCell::new(RunSession {
         view_name,
-        module,
-        bridge,
-        fragments,
         event_handlers,
         executor,
         driver,
+        hydration_worker,
         main_loop: main_loop.clone(),
         work_scheduled: false,
         runtime_error: None,
+        next_hydration_revision: 0,
+        latest_requested_hydration: None,
+        latest_applied_hydration: None,
     }));
     {
         let weak_session = Rc::downgrade(&session);
@@ -1072,15 +1321,29 @@ fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
     session.borrow().driver.tick_now();
     {
         let mut session = session.borrow_mut();
-        session.hydrate_current_state().map_err(|error| {
-            format!(
-                "failed to hydrate run view `{}`: {error}",
-                session.view_name
-            )
-        })?;
         session.process_pending_work().map_err(|error| {
             format!("failed to start run view `{}`: {error}", session.view_name)
         })?;
+        if session.latest_requested_hydration.is_none() {
+            session.request_current_hydration().map_err(|error| {
+                format!("failed to start run view `{}`: {error}", session.view_name)
+            })?;
+        }
+    }
+    while {
+        let session = session.borrow();
+        session.latest_applied_hydration.is_none() && session.runtime_error.is_none()
+    } {
+        context.iteration(true);
+    }
+    {
+        let mut session = session.borrow_mut();
+        if let Some(error) = session.runtime_error.take() {
+            return Err(format!(
+                "failed to start run view `{}`: {error}",
+                session.view_name
+            ));
+        }
     }
     let root_windows = session.borrow_mut().collect_root_windows()?;
 
@@ -1115,19 +1378,33 @@ fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
 type RuntimeBindingEnv = BTreeMap<aivi_hir::BindingId, RuntimeValue>;
 
 impl RunSession {
-    fn hydrate_current_state(&mut self) -> Result<(), String> {
+    fn request_current_hydration(&mut self) -> Result<(), String> {
         let globals = self
             .driver
             .current_signal_globals()
             .map_err(|error| format!("{error}"))?;
-        hydrate_run_view(
-            &self.module,
-            &self.bridge,
-            self.view_name.as_ref(),
-            &self.fragments,
-            &globals,
-            &mut self.executor,
-        )
+        self.next_hydration_revision = self.next_hydration_revision.wrapping_add(1);
+        let revision = self.next_hydration_revision;
+        self.hydration_worker.request(revision, globals)?;
+        self.latest_requested_hydration = Some(revision);
+        Ok(())
+    }
+
+    fn apply_ready_hydrations(&mut self) -> Result<(), String> {
+        let requested = self.latest_requested_hydration;
+        let latest = self
+            .hydration_worker
+            .drain_ready()
+            .into_iter()
+            .filter(|response| requested.map_or(true, |revision| response.revision >= revision))
+            .last();
+        let Some(response) = latest else {
+            return Ok(());
+        };
+        let plan = response.result?;
+        apply_run_hydration_plan(&plan, &mut self.executor)?;
+        self.latest_applied_hydration = Some(response.revision);
+        Ok(())
     }
 
     fn process_pending_work(&mut self) -> Result<(), String> {
@@ -1156,9 +1433,9 @@ impl RunSession {
             return Err(rendered);
         }
         if !self.driver.drain_outcomes().is_empty() {
-            self.hydrate_current_state()?;
+            self.request_current_hydration()?;
         }
-        Ok(())
+        self.apply_ready_hydrations()
     }
 
     fn collect_root_windows(&mut self) -> Result<Vec<gtk::Window>, String> {
@@ -1254,37 +1531,28 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
     }
 }
 
-fn hydrate_run_view(
-    module: &HirModule,
-    bridge: &GtkBridgeGraph,
-    view_name: &str,
-    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+fn plan_run_hydration(
+    shared: &RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
-    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
-) -> Result<(), String> {
-    hydrate_node(
-        module,
-        bridge,
-        fragments,
-        globals,
-        view_name,
-        executor,
-        &GtkNodeInstance::root(bridge.root()),
-        &RuntimeBindingEnv::new(),
-    )
+) -> Result<RunHydrationPlan, String> {
+    Ok(RunHydrationPlan {
+        root: plan_run_node(
+            shared,
+            globals,
+            &GtkNodeInstance::root(shared.bridge.root()),
+            &RuntimeBindingEnv::new(),
+        )?,
+    })
 }
 
-fn hydrate_node(
-    module: &HirModule,
-    bridge: &GtkBridgeGraph,
-    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+fn plan_run_node(
+    shared: &RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
-    view_name: &str,
-    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     instance: &GtkNodeInstance,
     env: &RuntimeBindingEnv,
-) -> Result<(), String> {
-    let node = bridge.node(instance.node.plan).ok_or_else(|| {
+) -> Result<HydratedRunNode, String> {
+    let view_name = shared.view_name.as_ref();
+    let node = shared.bridge.node(instance.node.plan).ok_or_else(|| {
         format!(
             "run view `{view_name}` is missing GTK node {}",
             instance.node
@@ -1292,80 +1560,81 @@ fn hydrate_node(
     })?;
     match &node.kind {
         GtkBridgeNodeKind::Widget(widget) => {
+            let mut properties = Vec::new();
             for property in &widget.properties {
                 if let RuntimePropertyBinding::Setter(setter) = property {
-                    let value = match &setter.source {
-                        SetterSource::Expr(expr) => {
-                            evaluate_run_fragment(fragments, globals, *expr, env)?
-                        }
-                        SetterSource::InterpolatedText(text) => RuntimeValue::Text(
-                            evaluate_runtime_text(fragments, globals, text, env)?,
-                        ),
-                    };
-                    executor
-                        .set_property_for_instance(instance, setter.input, RunHostValue(value))
-                        .map_err(|error| {
-                            format!(
-                                "failed to apply dynamic property `{}` on {}: {error}",
-                                setter.name.text(),
-                                instance
-                            )
-                        })?;
+                    properties.push(HydratedRunProperty {
+                        input: setter.input,
+                        value: evaluate_run_input(&shared.inputs, globals, setter.input, env)?,
+                    });
                 }
             }
-            hydrate_child_group(
-                module,
-                bridge,
-                fragments,
-                globals,
-                view_name,
-                executor,
-                &widget.default_children.roots,
-                instance.path.clone(),
-                env,
-            )
+            Ok(HydratedRunNode::Widget {
+                instance: instance.clone(),
+                properties: properties.into_boxed_slice(),
+                children: plan_run_child_group(
+                    shared,
+                    globals,
+                    &widget.default_children.roots,
+                    instance.path.clone(),
+                    env,
+                )?,
+            })
         }
         GtkBridgeNodeKind::Show(show) => {
-            let when = runtime_bool(evaluate_run_fragment(fragments, globals, show.when.expr, env)?)
-                .ok_or_else(|| {
-                    format!(
-                        "run view `{view_name}` expected `<show when>` on {instance} to evaluate to Bool"
-                    )
-                })?;
-            let keep_mounted = match &show.mount {
-                RuntimeShowMountPolicy::UnmountWhenHidden => false,
-                RuntimeShowMountPolicy::KeepMounted { decision } => runtime_bool(
-                    evaluate_run_fragment(fragments, globals, decision.expr, env)?,
+            let when = runtime_bool(evaluate_run_input(
+                &shared.inputs,
+                globals,
+                show.when.input,
+                env,
+            )?)
+            .ok_or_else(|| {
+                format!(
+                    "run view `{view_name}` expected `<show when>` on {instance} to evaluate to Bool"
                 )
-                .ok_or_else(|| {
-                    format!(
-                        "run view `{view_name}` expected `<show keepMounted>` on {instance} to evaluate to Bool"
-                    )
-                })?,
+            })?;
+            let (keep_mounted_input, keep_mounted) = match &show.mount {
+                RuntimeShowMountPolicy::UnmountWhenHidden => (None, false),
+                RuntimeShowMountPolicy::KeepMounted { decision } => (
+                    Some(decision.input),
+                    runtime_bool(evaluate_run_input(
+                        &shared.inputs,
+                        globals,
+                        decision.input,
+                        env,
+                    )?)
+                    .ok_or_else(|| {
+                        format!(
+                            "run view `{view_name}` expected `<show keepMounted>` on {instance} to evaluate to Bool"
+                        )
+                    })?,
+                ),
             };
-            executor
-                .update_show(instance, when, keep_mounted)
-                .map_err(|error| format!("failed to update `<show>` node {instance}: {error}"))?;
-            if when || keep_mounted {
-                hydrate_child_group(
-                    module,
-                    bridge,
-                    fragments,
+            let children = if when || keep_mounted {
+                plan_run_child_group(
+                    shared,
                     globals,
-                    view_name,
-                    executor,
                     &show.body.roots,
                     instance.path.clone(),
                     env,
-                )?;
-            }
-            Ok(())
+                )?
+            } else {
+                Vec::new().into_boxed_slice()
+            };
+            Ok(HydratedRunNode::Show {
+                instance: instance.clone(),
+                when_input: show.when.input,
+                when,
+                keep_mounted_input,
+                keep_mounted,
+                children,
+            })
         }
         GtkBridgeNodeKind::Each(each) => {
-            let values = runtime_list_values(evaluate_run_fragment(
-                fragments,
+            let values = runtime_list_values(evaluate_run_input(
+                &shared.inputs,
                 globals,
-                each.collection.expr,
+                each.collection.input,
                 env,
             )?)
             .ok_or_else(|| {
@@ -1374,13 +1643,9 @@ fn hydrate_node(
                 )
             })?;
             let collection_is_empty = values.is_empty();
-            match &each.child_policy {
+            let kind = match &each.child_policy {
                 RepeatedChildPolicy::Positional { .. } => {
-                    executor
-                        .update_each_positional(instance, values.len())
-                        .map_err(|error| {
-                            format!("failed to update positional `<each>` node {instance}: {error}")
-                        })?;
+                    let mut items = Vec::with_capacity(values.len());
                     for (index, value) in values.into_iter().enumerate() {
                         let mut child_env = env.clone();
                         child_env.insert(each.binding, value);
@@ -1388,196 +1653,316 @@ fn hydrate_node(
                             instance.node,
                             aivi_gtk::GtkRepeatedChildIdentity::Positional(index),
                         );
-                        hydrate_child_group(
-                            module,
-                            bridge,
-                            fragments,
-                            globals,
-                            view_name,
-                            executor,
-                            &each.item_template.roots,
-                            path,
-                            &child_env,
-                        )?;
+                        items.push(HydratedRunEachItem {
+                            children: plan_run_child_group(
+                                shared,
+                                globals,
+                                &each.item_template.roots,
+                                path,
+                                &child_env,
+                            )?,
+                        });
+                    }
+                    HydratedRunEachKind::Positional {
+                        item_count: items.len(),
+                        items: items.into_boxed_slice(),
                     }
                 }
-                RepeatedChildPolicy::Keyed { key, .. } => {
-                    let mut keyed_items = Vec::with_capacity(values.len());
+                RepeatedChildPolicy::Keyed { .. } => {
+                    let key_input = each.key_input.as_ref().ok_or_else(|| {
+                        format!(
+                            "run view `{view_name}` is missing a keyed `<each>` runtime input on {instance}"
+                        )
+                    })?;
+                    let mut items = Vec::with_capacity(values.len());
                     let mut keys = Vec::with_capacity(values.len());
                     for value in values {
                         let mut child_env = env.clone();
-                        child_env.insert(each.binding, value.clone());
-                        let key_value =
-                            evaluate_run_fragment(fragments, globals, *key, &child_env)?;
-                        let collection_key = runtime_collection_key(key_value).ok_or_else(|| {
+                        child_env.insert(each.binding, value);
+                        let collection_key = runtime_collection_key(evaluate_run_input(
+                            &shared.inputs,
+                            globals,
+                            key_input.input,
+                            &child_env,
+                        )?)
+                        .ok_or_else(|| {
                             format!(
                                 "run view `{view_name}` expected `<each>` key on {instance} to be displayable"
                             )
                         })?;
-                        keys.push(collection_key.clone());
-                        keyed_items.push((collection_key, child_env));
-                    }
-                    executor
-                        .update_each_keyed(instance, &keys)
-                        .map_err(|error| {
-                            format!("failed to update keyed `<each>` node {instance}: {error}")
-                        })?;
-                    for (collection_key, child_env) in keyed_items {
                         let path = instance.path.pushed(
                             instance.node,
-                            aivi_gtk::GtkRepeatedChildIdentity::Keyed(collection_key),
+                            aivi_gtk::GtkRepeatedChildIdentity::Keyed(collection_key.clone()),
                         );
-                        hydrate_child_group(
-                            module,
-                            bridge,
-                            fragments,
-                            globals,
-                            view_name,
-                            executor,
-                            &each.item_template.roots,
-                            path,
-                            &child_env,
-                        )?;
+                        keys.push(collection_key);
+                        items.push(HydratedRunEachItem {
+                            children: plan_run_child_group(
+                                shared,
+                                globals,
+                                &each.item_template.roots,
+                                path,
+                                &child_env,
+                            )?,
+                        });
+                    }
+                    HydratedRunEachKind::Keyed {
+                        key_input: key_input.input,
+                        keys: keys.into_boxed_slice(),
+                        items: items.into_boxed_slice(),
                     }
                 }
-            }
-            if collection_is_empty {
-                if let Some(empty) = &each.empty_branch {
-                    hydrate_node(
-                        module,
-                        bridge,
-                        fragments,
-                        globals,
-                        view_name,
-                        executor,
-                        &GtkNodeInstance::with_path(empty.empty, instance.path.clone()),
-                        env,
-                    )?;
-                }
-            }
-            Ok(())
+            };
+            let empty_branch = if collection_is_empty {
+                each.empty_branch
+                    .as_ref()
+                    .map(|empty| {
+                        plan_run_node(
+                            shared,
+                            globals,
+                            &GtkNodeInstance::with_path(empty.empty, instance.path.clone()),
+                            env,
+                        )
+                    })
+                    .transpose()?
+                    .map(Box::new)
+            } else {
+                None
+            };
+            Ok(HydratedRunNode::Each {
+                instance: instance.clone(),
+                collection_input: each.collection.input,
+                kind,
+                empty_branch,
+            })
         }
         GtkBridgeNodeKind::Match(match_node) => {
-            let value = evaluate_run_fragment(fragments, globals, match_node.scrutinee.expr, env)?;
+            let value =
+                evaluate_run_input(&shared.inputs, globals, match_node.scrutinee.input, env)?;
             let mut matched = None;
             for (index, branch) in match_node.cases.iter().enumerate() {
                 let mut bindings = RuntimeBindingEnv::new();
-                if match_pattern(module, branch.pattern, &value, &mut bindings)? {
-                    matched = Some((index, branch.clone(), bindings));
+                if match_pattern(&shared.module, branch.pattern, &value, &mut bindings)? {
+                    matched = Some((index, branch, bindings));
                     break;
                 }
             }
-            let Some((index, branch, bindings)) = matched else {
+            let Some((active_case, branch, bindings)) = matched else {
                 return Err(format!(
                     "run view `{view_name}` found no matching `<match>` case for node {instance}"
                 ));
             };
-            executor
-                .update_match(instance, index)
-                .map_err(|error| format!("failed to update `<match>` node {instance}: {error}"))?;
             let mut case_env = env.clone();
             case_env.extend(bindings);
-            hydrate_node(
-                module,
-                bridge,
-                fragments,
-                globals,
-                view_name,
-                executor,
-                &GtkNodeInstance::with_path(branch.case, instance.path.clone()),
-                &case_env,
-            )
+            Ok(HydratedRunNode::Match {
+                instance: instance.clone(),
+                scrutinee_input: match_node.scrutinee.input,
+                active_case,
+                branch: Box::new(plan_run_node(
+                    shared,
+                    globals,
+                    &GtkNodeInstance::with_path(branch.case, instance.path.clone()),
+                    &case_env,
+                )?),
+            })
         }
-        GtkBridgeNodeKind::Case(case) => hydrate_child_group(
-            module,
-            bridge,
-            fragments,
-            globals,
-            view_name,
-            executor,
-            &case.body.roots,
-            instance.path.clone(),
-            env,
-        ),
-        GtkBridgeNodeKind::Fragment(fragment) => hydrate_child_group(
-            module,
-            bridge,
-            fragments,
-            globals,
-            view_name,
-            executor,
-            &fragment.body.roots,
-            instance.path.clone(),
-            env,
-        ),
+        GtkBridgeNodeKind::Case(case) => Ok(HydratedRunNode::Case {
+            instance: instance.clone(),
+            children: plan_run_child_group(
+                shared,
+                globals,
+                &case.body.roots,
+                instance.path.clone(),
+                env,
+            )?,
+        }),
+        GtkBridgeNodeKind::Fragment(fragment) => Ok(HydratedRunNode::Fragment {
+            instance: instance.clone(),
+            children: plan_run_child_group(
+                shared,
+                globals,
+                &fragment.body.roots,
+                instance.path.clone(),
+                env,
+            )?,
+        }),
         GtkBridgeNodeKind::With(with_node) => {
-            let value = evaluate_run_fragment(fragments, globals, with_node.value.expr, env)?;
+            let value = evaluate_run_input(&shared.inputs, globals, with_node.value.input, env)?;
             let mut child_env = env.clone();
             child_env.insert(with_node.binding, value);
-            hydrate_child_group(
-                module,
-                bridge,
-                fragments,
-                globals,
-                view_name,
-                executor,
-                &with_node.body.roots,
-                instance.path.clone(),
-                &child_env,
-            )
+            Ok(HydratedRunNode::With {
+                instance: instance.clone(),
+                value_input: with_node.value.input,
+                children: plan_run_child_group(
+                    shared,
+                    globals,
+                    &with_node.body.roots,
+                    instance.path.clone(),
+                    &child_env,
+                )?,
+            })
         }
-        GtkBridgeNodeKind::Empty(empty) => hydrate_child_group(
-            module,
-            bridge,
-            fragments,
-            globals,
-            view_name,
-            executor,
-            &empty.body.roots,
-            instance.path.clone(),
-            env,
-        ),
+        GtkBridgeNodeKind::Empty(empty) => Ok(HydratedRunNode::Empty {
+            instance: instance.clone(),
+            children: plan_run_child_group(
+                shared,
+                globals,
+                &empty.body.roots,
+                instance.path.clone(),
+                env,
+            )?,
+        }),
     }
 }
 
-fn hydrate_child_group(
-    module: &HirModule,
-    bridge: &GtkBridgeGraph,
-    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+fn plan_run_child_group(
+    shared: &RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
-    view_name: &str,
-    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     roots: &[aivi_gtk::GtkBridgeNodeRef],
     path: GtkExecutionPath,
     env: &RuntimeBindingEnv,
-) -> Result<(), String> {
+) -> Result<Box<[HydratedRunNode]>, String> {
+    let mut children = Vec::with_capacity(roots.len());
     for &root in roots {
-        hydrate_node(
-            module,
-            bridge,
-            fragments,
+        children.push(plan_run_node(
+            shared,
             globals,
-            view_name,
-            executor,
             &GtkNodeInstance::with_path(root, path.clone()),
             env,
-        )?;
+        )?);
+    }
+    Ok(children.into_boxed_slice())
+}
+
+fn apply_run_hydration_plan(
+    plan: &RunHydrationPlan,
+    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
+) -> Result<(), String> {
+    apply_run_node(&plan.root, executor)
+}
+
+fn apply_run_children(
+    children: &[HydratedRunNode],
+    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
+) -> Result<(), String> {
+    for child in children {
+        apply_run_node(child, executor)?;
     }
     Ok(())
 }
 
-fn evaluate_run_fragment(
-    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+fn apply_run_node(
+    node: &HydratedRunNode,
+    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
+) -> Result<(), String> {
+    match node {
+        HydratedRunNode::Widget {
+            instance,
+            properties,
+            children,
+        } => {
+            for property in properties {
+                executor
+                    .set_property_for_instance(
+                        instance,
+                        property.input,
+                        RunHostValue(property.value.clone()),
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "failed to apply dynamic input {} on {}: {error}",
+                            property.input.as_raw(),
+                            instance
+                        )
+                    })?;
+            }
+            apply_run_children(children, executor)
+        }
+        HydratedRunNode::Show {
+            instance,
+            when,
+            keep_mounted,
+            children,
+            ..
+        } => {
+            executor
+                .update_show(instance, *when, *keep_mounted)
+                .map_err(|error| format!("failed to update `<show>` node {instance}: {error}"))?;
+            apply_run_children(children, executor)
+        }
+        HydratedRunNode::Each {
+            instance,
+            kind,
+            empty_branch,
+            ..
+        } => {
+            match kind {
+                HydratedRunEachKind::Positional { item_count, items } => {
+                    executor
+                        .update_each_positional(instance, *item_count)
+                        .map_err(|error| {
+                            format!("failed to update positional `<each>` node {instance}: {error}")
+                        })?;
+                    for item in items {
+                        apply_run_children(&item.children, executor)?;
+                    }
+                }
+                HydratedRunEachKind::Keyed { keys, items, .. } => {
+                    executor
+                        .update_each_keyed(instance, keys)
+                        .map_err(|error| {
+                            format!("failed to update keyed `<each>` node {instance}: {error}")
+                        })?;
+                    for item in items {
+                        apply_run_children(&item.children, executor)?;
+                    }
+                }
+            }
+            if let Some(empty_branch) = empty_branch {
+                apply_run_node(empty_branch, executor)?;
+            }
+            Ok(())
+        }
+        HydratedRunNode::Match {
+            instance,
+            active_case,
+            branch,
+            ..
+        } => {
+            executor
+                .update_match(instance, *active_case)
+                .map_err(|error| format!("failed to update `<match>` node {instance}: {error}"))?;
+            apply_run_node(branch, executor)
+        }
+        HydratedRunNode::Case { children, .. }
+        | HydratedRunNode::Fragment { children, .. }
+        | HydratedRunNode::With { children, .. }
+        | HydratedRunNode::Empty { children, .. } => apply_run_children(children, executor),
+    }
+}
+
+fn evaluate_run_input(
+    inputs: &BTreeMap<RuntimeInputHandle, CompiledRunInput>,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
-    expr: HirExprId,
+    input: RuntimeInputHandle,
     env: &RuntimeBindingEnv,
 ) -> Result<RuntimeValue, String> {
-    let fragment = fragments.get(&expr).ok_or_else(|| {
+    let compiled = inputs.get(&input).ok_or_else(|| {
         format!(
-            "missing compiled runtime fragment for expression {}",
-            expr.as_raw()
+            "missing compiled runtime input {} for live run hydration",
+            input.as_raw()
         )
     })?;
+    match compiled {
+        CompiledRunInput::Expr(fragment) => evaluate_compiled_run_fragment(fragment, globals, env),
+        CompiledRunInput::Text(text) => evaluate_compiled_run_text(text, globals, env),
+    }
+}
+
+fn evaluate_compiled_run_fragment(
+    fragment: &CompiledRunFragment,
+    globals: &BTreeMap<BackendItemId, RuntimeValue>,
+    env: &RuntimeBindingEnv,
+) -> Result<RuntimeValue, String> {
     let args = fragment
         .parameters
         .iter()
@@ -1586,7 +1971,7 @@ fn evaluate_run_fragment(
                 format!(
                     "missing runtime value for binding `{}` while evaluating expression {}",
                     parameter.name,
-                    expr.as_raw()
+                    fragment.expr.as_raw()
                 )
             })
         })
@@ -1604,7 +1989,7 @@ fn evaluate_run_fragment(
                 .ok_or_else(|| {
                     format!(
                         "runtime expression {} requires current signal item {} but no committed snapshot exists",
-                        expr.as_raw(),
+                        fragment.expr.as_raw(),
                         item
                     )
                 })
@@ -1618,7 +2003,7 @@ fn evaluate_run_fragment(
         let kernel = item.body.ok_or_else(|| {
             format!(
                 "compiled runtime fragment {} has no executable body",
-                expr.as_raw()
+                fragment.expr.as_raw()
             )
         })?;
         evaluator
@@ -1627,34 +2012,30 @@ fn evaluate_run_fragment(
     }
 }
 
-fn evaluate_runtime_text(
-    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+fn evaluate_compiled_run_text(
+    text: &CompiledRunText,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
-    text: &aivi_hir::TextLiteral,
     env: &RuntimeBindingEnv,
-) -> Result<Box<str>, String> {
+) -> Result<RuntimeValue, String> {
     let mut rendered = String::new();
     for segment in &text.segments {
         match segment {
-            aivi_hir::TextSegment::Text(fragment) => rendered.push_str(fragment.raw.as_ref()),
-            aivi_hir::TextSegment::Interpolation(interpolation) => {
-                let value = strip_signal_runtime_value(evaluate_run_fragment(
-                    fragments,
-                    globals,
-                    interpolation.expr,
-                    env,
+            CompiledRunTextSegment::Text(text) => rendered.push_str(text),
+            CompiledRunTextSegment::Interpolation(fragment) => {
+                let value = strip_signal_runtime_value(evaluate_compiled_run_fragment(
+                    fragment, globals, env,
                 )?);
                 if matches!(value, RuntimeValue::Callable(_)) {
                     return Err(format!(
                         "text interpolation for expression {} produced a callable runtime value",
-                        interpolation.expr.as_raw()
+                        fragment.expr.as_raw()
                     ));
                 }
                 rendered.push_str(&value.to_string());
             }
         }
     }
-    Ok(rendered.into_boxed_str())
+    Ok(RuntimeValue::Text(rendered.into_boxed_str()))
 }
 
 fn runtime_bool(value: RuntimeValue) -> Option<bool> {
@@ -2178,12 +2559,16 @@ fn print_usage() {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_file, prepare_run_artifact};
+    use super::{
+        HydratedRunNode, RunHydrationStaticState, check_file, plan_run_hydration,
+        prepare_run_artifact,
+    };
+    use aivi_backend::RuntimeValue;
     use aivi_base::SourceDatabase;
-    use aivi_gtk::{GtkBridgeNodeKind, RuntimePropertyBinding};
+    use aivi_gtk::{GtkBridgeNodeKind, RuntimePropertyBinding, RuntimeShowMountPolicy};
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
     use aivi_syntax::parse_module;
-    use std::{path::PathBuf, process::ExitCode};
+    use std::{collections::BTreeMap, path::PathBuf, process::ExitCode};
 
     fn fixture(path: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -2217,6 +2602,64 @@ mod tests {
             validation.diagnostics()
         );
         prepare_run_artifact(&sources, lowered.module(), requested_view)
+    }
+
+    fn control_window_source() -> &'static str {
+        r#"
+type Item = {
+    id: Int,
+    title: Text
+}
+
+type Screen =
+  | Loading
+  | Ready (List Item)
+  | Failed Text
+
+val view =
+    <Window title="Users">
+        <show when={True} keepMounted={True}>
+            <with value={Ready [
+                { id: 1, title: "Alpha" },
+                { id: 2, title: "Beta" }
+            ]} as={currentScreen}>
+                <match on={currentScreen}>
+                    <case pattern={Loading}>
+                        <Label text="Loading..." />
+                    </case>
+                    <case pattern={Ready items}>
+                        <each of={items} as={item} key={item.id}>
+                            <Label text={item.title} />
+                            <empty>
+                                <Label text="No items" />
+                            </empty>
+                        </each>
+                    </case>
+                    <case pattern={Failed reason}>
+                        <Label text="Error {reason}" />
+                    </case>
+                </match>
+            </with>
+        </show>
+    </Window>
+"#
+    }
+
+    fn planner_window_source() -> &'static str {
+        r#"
+val view =
+    <Window title="Users">
+        <show when={True} keepMounted={True}>
+            <with value={"Alpha"} as={label}>
+                <Label text={label} />
+                <Label text="Ready" />
+                <fragment>
+                    <Label text="{label}" />
+                </fragment>
+            </with>
+        </show>
+    </Window>
+"#
     }
 
     #[test]
@@ -2296,7 +2739,7 @@ val view =
                 RuntimePropertyBinding::Setter(setter) if setter.name.text() == "title"
             )
         }));
-        assert!(!artifact.fragments.is_empty());
+        assert!(!artifact.hydration_inputs.is_empty());
     }
 
     #[test]
@@ -2321,6 +2764,152 @@ val view =
                 .iter()
                 .any(|node| matches!(node.kind, GtkBridgeNodeKind::Show(_)))
         );
+    }
+
+    #[test]
+    fn prepare_run_collects_fine_grained_runtime_inputs() {
+        let artifact = prepare_run_from_text("control-window.aivi", control_window_source(), None)
+            .expect("control window should compile for live run hydration");
+        let root = artifact.bridge.root_node();
+        let GtkBridgeNodeKind::Widget(window) = &root.kind else {
+            panic!("expected a window root, found {:?}", root.kind.tag());
+        };
+        let show_ref = window.default_children.roots[0];
+        let show = artifact
+            .bridge
+            .node(show_ref.plan)
+            .expect("show child should exist in the bridge");
+        let GtkBridgeNodeKind::Show(show) = &show.kind else {
+            panic!("expected a show node, found {:?}", show.kind.tag());
+        };
+        assert!(artifact.hydration_inputs.contains_key(&show.when.input));
+        let RuntimeShowMountPolicy::KeepMounted { decision } = &show.mount else {
+            panic!("expected keepMounted input");
+        };
+        assert!(artifact.hydration_inputs.contains_key(&decision.input));
+
+        let with_ref = show.body.roots[0];
+        let with_node = artifact
+            .bridge
+            .node(with_ref.plan)
+            .expect("with child should exist in the bridge");
+        let GtkBridgeNodeKind::With(with_node) = &with_node.kind else {
+            panic!("expected a with node, found {:?}", with_node.kind.tag());
+        };
+        assert!(
+            artifact
+                .hydration_inputs
+                .contains_key(&with_node.value.input)
+        );
+
+        let match_ref = with_node.body.roots[0];
+        let match_node = artifact
+            .bridge
+            .node(match_ref.plan)
+            .expect("match child should exist in the bridge");
+        let GtkBridgeNodeKind::Match(match_node) = &match_node.kind else {
+            panic!("expected a match node, found {:?}", match_node.kind.tag());
+        };
+        assert!(
+            artifact
+                .hydration_inputs
+                .contains_key(&match_node.scrutinee.input)
+        );
+
+        let ready_case = &match_node.cases[1];
+        let ready_case = artifact
+            .bridge
+            .node(ready_case.case.plan)
+            .expect("ready case should exist in the bridge");
+        let GtkBridgeNodeKind::Case(ready_case) = &ready_case.kind else {
+            panic!("expected a case node, found {:?}", ready_case.kind.tag());
+        };
+        let each_ref = ready_case.body.roots[0];
+        let each_node = artifact
+            .bridge
+            .node(each_ref.plan)
+            .expect("each child should exist in the bridge");
+        let GtkBridgeNodeKind::Each(each_node) = &each_node.kind else {
+            panic!("expected an each node, found {:?}", each_node.kind.tag());
+        };
+        assert!(
+            artifact
+                .hydration_inputs
+                .contains_key(&each_node.collection.input)
+        );
+        let key_input = each_node
+            .key_input
+            .as_ref()
+            .expect("keyed each nodes should expose a runtime key input");
+        assert!(artifact.hydration_inputs.contains_key(&key_input.input));
+        assert_eq!(artifact.hydration_inputs.len(), 8);
+    }
+
+    #[test]
+    fn run_hydration_planner_precomputes_control_and_setter_updates_off_thread() {
+        let artifact = prepare_run_from_text("planner-window.aivi", planner_window_source(), None)
+            .expect("planner window should compile for live run hydration");
+        let shared = RunHydrationStaticState {
+            view_name: artifact.view_name.clone(),
+            module: artifact.module.clone(),
+            bridge: artifact.bridge.clone(),
+            inputs: artifact.hydration_inputs.clone(),
+        };
+        let plan = plan_run_hydration(&shared, &BTreeMap::new())
+            .expect("inline planner window should plan without runtime globals");
+
+        let HydratedRunNode::Widget { children, .. } = &plan.root else {
+            panic!("expected a window hydration root");
+        };
+        let [
+            HydratedRunNode::Show {
+                when,
+                keep_mounted,
+                children,
+                ..
+            },
+        ] = children.as_ref()
+        else {
+            panic!("expected a single show child under the window root");
+        };
+        assert!(*when);
+        assert!(*keep_mounted);
+
+        let [HydratedRunNode::With { children, .. }] = children.as_ref() else {
+            panic!("expected a single with child inside the show body");
+        };
+        let [
+            HydratedRunNode::Widget {
+                properties: alpha_props,
+                ..
+            },
+            HydratedRunNode::Widget {
+                properties: ready_props,
+                ..
+            },
+            HydratedRunNode::Fragment {
+                children: fragment_children,
+                ..
+            },
+        ] = children.as_ref()
+        else {
+            panic!("expected the with body to contain two labels and one fragment");
+        };
+        assert_eq!(alpha_props.len(), 1);
+        assert_eq!(alpha_props[0].value, RuntimeValue::Text("Alpha".into()));
+        assert!(ready_props.is_empty());
+
+        let [
+            HydratedRunNode::Widget {
+                properties: fragment_props,
+                ..
+            },
+        ] = fragment_children.as_ref()
+        else {
+            panic!("expected the fragment child to contain one label widget");
+        };
+        assert_eq!(fragment_props.len(), 1);
+        assert_eq!(fragment_props[0].value, RuntimeValue::Text("Alpha".into()));
     }
 
     #[test]

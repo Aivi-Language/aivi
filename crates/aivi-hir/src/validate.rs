@@ -25,8 +25,7 @@ use crate::{
         CustomSourceRecurrenceWakeup, DecoratorPayload, DomainMemberKind, DomainMemberResolution,
         ExprKind, ImportBindingMetadata, ImportValueType, Item, LiteralSuffixResolution,
         MarkupAttributeValue, MarkupNodeKind, Module, Name, NamePath, PatternKind, PipeStage,
-        PipeStageKind,
-        RecurrenceWakeupDecoratorKind, ResolutionState, SignalItem, SourceDecorator,
+        PipeStageKind, RecurrenceWakeupDecoratorKind, ResolutionState, SignalItem, SourceDecorator,
         SourceMetadata, SourceProviderRef, TermReference, TermResolution, TextLiteral, TextSegment,
         TypeItemBody, TypeKind, TypeReference, TypeResolution,
     },
@@ -3751,7 +3750,13 @@ impl Validator<'_> {
                     self.validate_gate_expr_tree(item.body, &env, &mut typing);
                     self.validate_truthy_falsy_expr_tree(item.body, &env, &mut typing);
                     self.validate_case_exhaustiveness_expr_tree(item.body, &env, &mut typing);
-                    self.validate_recurrence_expr_tree(item.body, target, wakeup, &env, &mut typing);
+                    self.validate_recurrence_expr_tree(
+                        item.body,
+                        target,
+                        wakeup,
+                        &env,
+                        &mut typing,
+                    );
                 }
                 Item::Function(item) => {
                     let env = self.gate_env_for_function(&item, &mut typing);
@@ -3764,7 +3769,13 @@ impl Validator<'_> {
                     self.validate_gate_expr_tree(item.body, &env, &mut typing);
                     self.validate_truthy_falsy_expr_tree(item.body, &env, &mut typing);
                     self.validate_case_exhaustiveness_expr_tree(item.body, &env, &mut typing);
-                    self.validate_recurrence_expr_tree(item.body, target, wakeup, &env, &mut typing);
+                    self.validate_recurrence_expr_tree(
+                        item.body,
+                        target,
+                        wakeup,
+                        &env,
+                        &mut typing,
+                    );
                 }
                 Item::Signal(item) => {
                     if let Some(body) = item.body {
@@ -3831,13 +3842,7 @@ impl Validator<'_> {
                     }
                     if let Some(options) = call.options {
                         self.validate_case_exhaustiveness_expr_tree(options, &env, &mut typing);
-                        self.validate_recurrence_expr_tree(
-                            options,
-                            None,
-                            None,
-                            &env,
-                            &mut typing,
-                        );
+                        self.validate_recurrence_expr_tree(options, None, None, &env, &mut typing);
                     }
                 }
                 DecoratorPayload::RecurrenceWakeup(wakeup) => {
@@ -3865,13 +3870,7 @@ impl Validator<'_> {
                     }
                     if let Some(options) = source.options {
                         self.validate_case_exhaustiveness_expr_tree(options, &env, &mut typing);
-                        self.validate_recurrence_expr_tree(
-                            options,
-                            None,
-                            None,
-                            &env,
-                            &mut typing,
-                        );
+                        self.validate_recurrence_expr_tree(options, None, None, &env, &mut typing);
                     }
                 }
             }
@@ -5013,8 +5012,7 @@ impl Validator<'_> {
             typing,
             |stage_index, stage, current, typing| match &stage.kind {
                 PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_gate_stage(*expr, env, s)),
+                    new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
                     advance_by: 1,
                 },
                 PipeStageKind::Map { .. } => {
@@ -5040,13 +5038,15 @@ impl Validator<'_> {
                                 typing,
                             )
                         });
-                        PipeSubjectStepOutcome::Continue { new_subject, advance_by: 1 }
+                        PipeSubjectStepOutcome::Continue {
+                            new_subject,
+                            advance_by: 1,
+                        }
                     }
                 }
                 PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current.and_then(|s| {
-                        self.validate_fanin_stage(stage.span, *expr, env, s, typing)
-                    }),
+                    new_subject: current
+                        .and_then(|s| self.validate_fanin_stage(stage.span, *expr, env, s, typing)),
                     advance_by: 1,
                 },
                 PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
@@ -5056,10 +5056,13 @@ impl Validator<'_> {
                             advance_by: 1,
                         };
                     };
-                    let new_subject = current
-                        .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
+                    let new_subject =
+                        current.and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
-                    PipeSubjectStepOutcome::Continue { new_subject, advance_by: advance }
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject,
+                        advance_by: advance,
+                    }
                 }
                 PipeStageKind::Case { .. }
                 | PipeStageKind::Apply { .. }
@@ -5112,9 +5115,8 @@ impl Validator<'_> {
             typing,
             |stage_index, stage, current, typing| match &stage.kind {
                 PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current.and_then(|s| {
-                        self.validate_gate_stage(stage.span, *expr, env, s, typing)
-                    }),
+                    new_subject: current
+                        .and_then(|s| self.validate_gate_stage(stage.span, *expr, env, s, typing)),
                     advance_by: 1,
                 },
                 PipeStageKind::Map { expr } => {
@@ -5143,8 +5145,7 @@ impl Validator<'_> {
                     }
                 }
                 PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                    new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
                     advance_by: 1,
                 },
                 PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
@@ -5154,10 +5155,13 @@ impl Validator<'_> {
                             advance_by: 1,
                         };
                     };
-                    let new_subject = current
-                        .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
+                    let new_subject =
+                        current.and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
-                    PipeSubjectStepOutcome::Continue { new_subject, advance_by: advance }
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject,
+                        advance_by: advance,
+                    }
                 }
                 PipeStageKind::Case { .. }
                 | PipeStageKind::Apply { .. }
@@ -5202,18 +5206,15 @@ impl Validator<'_> {
             typing,
             |stage_index, stage, current, typing| match &stage.kind {
                 PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_gate_stage(*expr, env, s)),
+                    new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
                     advance_by: 1,
                 },
                 PipeStageKind::Map { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                    new_subject: current.and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
                     advance_by: 1,
                 },
                 PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                    new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
                     advance_by: 1,
                 },
                 PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
@@ -5223,11 +5224,13 @@ impl Validator<'_> {
                             advance_by: 1,
                         };
                     };
-                    let new_subject = current.and_then(|s| {
-                        self.validate_truthy_falsy_pair(&pair, env, s, typing)
-                    });
+                    let new_subject = current
+                        .and_then(|s| self.validate_truthy_falsy_pair(&pair, env, s, typing));
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
-                    PipeSubjectStepOutcome::Continue { new_subject, advance_by: advance }
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject,
+                        advance_by: advance,
+                    }
                 }
                 PipeStageKind::Case { .. }
                 | PipeStageKind::Apply { .. }
@@ -7189,7 +7192,11 @@ impl<'pipe, 'env> PipeSubjectWalker<'pipe, 'env> {
     ) -> Self {
         let stages = pipe.stages.iter().collect::<Vec<_>>();
         let current = typing.infer_expr(pipe.head, env, None).ty;
-        Self { stages, current, env }
+        Self {
+            stages,
+            current,
+            env,
+        }
     }
 
     /// Like `new`, but only considers the first `limit` stages of the pipe.
@@ -7205,7 +7212,11 @@ impl<'pipe, 'env> PipeSubjectWalker<'pipe, 'env> {
     ) -> Self {
         let stages = pipe.stages.iter().take(limit).collect::<Vec<_>>();
         let current = typing.infer_expr(pipe.head, env, None).ty;
-        Self { stages, current, env }
+        Self {
+            stages,
+            current,
+            env,
+        }
     }
 
     /// Walk all stages, calling `on_stage` for each stage that is not a plain
@@ -7213,12 +7224,16 @@ impl<'pipe, 'env> PipeSubjectWalker<'pipe, 'env> {
     /// `PipeSubjectStepOutcome::Stop` or when all stages are exhausted.
     ///
     /// Returns the subject type at the point where walking stopped.
-    pub(crate) fn walk<F>(mut self, typing: &mut GateTypeContext<'_>, mut on_stage: F) -> Option<GateType>
+    pub(crate) fn walk<F>(
+        mut self,
+        typing: &mut GateTypeContext<'_>,
+        mut on_stage: F,
+    ) -> Option<GateType>
     where
         F: FnMut(
-            usize,                    // stage_index
-            &'pipe PipeStage,         // stage
-            Option<&GateType>,        // current subject (before this stage)
+            usize,             // stage_index
+            &'pipe PipeStage,  // stage
+            Option<&GateType>, // current subject (before this stage)
             &mut GateTypeContext<'_>,
         ) -> PipeSubjectStepOutcome,
     {
@@ -7240,15 +7255,16 @@ impl<'pipe, 'env> PipeSubjectWalker<'pipe, 'env> {
                     }
                     stage_index += 1;
                 }
-                _ => {
-                    match on_stage(stage_index, stage, self.current.as_ref(), typing) {
-                        PipeSubjectStepOutcome::Continue { new_subject, advance_by } => {
-                            self.current = new_subject;
-                            stage_index += advance_by;
-                        }
-                        PipeSubjectStepOutcome::Stop => break,
+                _ => match on_stage(stage_index, stage, self.current.as_ref(), typing) {
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject,
+                        advance_by,
+                    } => {
+                        self.current = new_subject;
+                        stage_index += advance_by;
                     }
-                }
+                    PipeSubjectStepOutcome::Stop => break,
+                },
             }
         }
         self.current
@@ -9648,14 +9664,17 @@ impl<'a> GateTypeContext<'a> {
     ) -> Option<GateType> {
         let carrier = self.fanout_carrier(subject)?;
         let element_subject = subject.fanout_element().cloned()?;
-        let mapped_element_type = self.infer_pipe_body(segment.map_expr(), env, &element_subject).ty?;
+        let mapped_element_type = self
+            .infer_pipe_body(segment.map_expr(), env, &element_subject)
+            .ty?;
         let mapped_collection_type = self.apply_fanout_plan(
             FanoutPlanner::plan(FanoutStageKind::Map, carrier),
             mapped_element_type,
         );
         if let Some(join_expr) = segment.join_expr() {
-            let join_value_type =
-                self.infer_pipe_body(join_expr, env, &mapped_collection_type).ty?;
+            let join_value_type = self
+                .infer_pipe_body(join_expr, env, &mapped_collection_type)
+                .ty?;
             Some(self.apply_fanout_plan(
                 FanoutPlanner::plan(FanoutStageKind::Join, carrier),
                 join_value_type,

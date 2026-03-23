@@ -178,7 +178,9 @@ pub enum KernelOriginKind {
     /// through their own fields; this variant makes that identity explicit so
     /// diagnostic messages can name the item without having to look up the
     /// parent `KernelOrigin`.
-    ItemBody { item: ItemId },
+    ItemBody {
+        item: ItemId,
+    },
     GateTrue {
         pipeline: PipelineId,
         stage_index: usize,

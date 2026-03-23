@@ -140,6 +140,7 @@ impl GtkBridgeGraphBuilder {
             }),
             RuntimePlanNodeKind::Each(each) => GtkBridgeNodeKind::Each(GtkEachNode {
                 collection: each.collection.clone(),
+                key_input: each.key_input.clone(),
                 binding: each.binding,
                 child_policy: each.child_policy.clone(),
                 item_template: self.child_group(
@@ -724,6 +725,7 @@ pub enum GtkShowState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GtkEachNode {
     pub collection: RuntimeExprInput,
+    pub key_input: Option<RuntimeExprInput>,
     pub binding: BindingId,
     pub child_policy: RepeatedChildPolicy,
     pub item_template: GtkChildGroup,

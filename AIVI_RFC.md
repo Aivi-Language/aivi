@@ -1,8 +1,8 @@
 # AIVI Language Specification
 
-## Draft v0.4 — implementation-facing
+## Draft v0.5 — implementation-facing
 
-> Status: normative working draft for the first implementation.
+> Status: normative working draft. Milestones 1–8 (surface through backend) are substantially complete. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
 
 ---
 
@@ -203,6 +203,30 @@ The core top-level forms are:
 
 A module may export exactly one process entry point named `main`.
 
+### 5.1 Import rules
+
+Name lookup is intentionally simple in v1:
+
+- local names and a small explicit import set work
+- no wildcard imports in v1
+- no module-qualified call syntax such as `List.map` in v1
+- built-in names keep priority where needed
+
+#### Import aliases
+
+`use module (member as localName)` is the disambiguation escape hatch when two imports would otherwise provide the same local name:
+
+```aivi
+use aivi.network (http)
+use my.client (fetch as clientFetch)
+```
+
+The original member name still drives compiler-known metadata. The alias changes only the local binding name.
+
+#### Name resolution for terms
+
+The compiler generally prefers unqualified term use and resolves the right binding from local name plus already-known context. When several candidates remain after contextual filtering, the compiler reports an `ambiguous-domain-member` or similar diagnostic and requires explicit disambiguation through an import alias.
+
 ---
 
 ## 6. Type system
@@ -385,7 +409,7 @@ class Applicative F => Monad F
 
 - instance resolution is coherent
 - overlapping instances are not allowed in v1
-- orphan instances are disallowed or tightly restricted in v1
+- orphan instances are **fully disallowed** in v1 to keep behavior consistent and easy to reason about
 - instance search is compile-time only
 
 ### 7.2 Core instances
@@ -1079,6 +1103,19 @@ A signal referenced inside a `sig` is read as its current value during evaluatio
 - signal dependency extraction happens after elaboration
 - dependency graphs are static after elaboration for ordinary derived signals
 
+### 13.5 Input signals
+
+An annotated body-less `sig` declaration is a first-class input signal — an externally publishable entry point for reactive inputs such as GTK events.
+
+```aivi
+sig clicked : Signal Unit
+sig query   : Signal Text
+```
+
+These are not errors. They define runtime-owned slots that external code (event handlers, tests, FFI) may publish into. Their type annotation is mandatory. They participate in the signal dependency graph exactly like derived signals.
+
+Input signals are the canonical mechanism for routing GTK event payloads into the language-level reactive graph. See §17.2 for event hookup rules.
+
 ### 13.2 Applicative meaning of `Signal`
 
 `pure x` creates a constant signal.
@@ -1145,7 +1182,24 @@ Sources may represent:
 - process events
 - mailboxes/channels
 
-### 14.1.1 Source declaration shape
+### 14.1.1 Recurrence decorators on non-source declarations
+
+Plain repeating `sig` and `val` bodies prove their wakeup only through explicit `@recur.timer` or `@recur.backoff` decorators. Each takes exactly one positional witness expression.
+
+```aivi
+@recur.timer 1000ms
+sig polled : Signal Status
+
+@recur.backoff initialDelay
+sig retried : Signal (Result FetchError Data)
+```
+
+Rules:
+- `@recur.timer expr` and `@recur.backoff expr` are the only recurrence decorators for non-`@source` declarations
+- neither accepts `with { ... }` options or duplicates
+- they are not allowed on `@source` signals (source wakeups use the source contract)
+
+### 14.1.2 Source declaration shape
 
 The general surface form is:
 
@@ -1190,7 +1244,7 @@ Rules:
 
 Reactive source configuration does not make sources dynamic in the type-theoretic sense. The provider kind and dependency graph remain statically known; only runtime configuration values change.
 
-### 14.1.2 Recommended v1 source variants
+### 14.1.3 Recommended v1 source variants
 
 The following provider variants are recommended for v1.
 
@@ -1328,7 +1382,7 @@ Recommended window-event options:
 - `repeat : Bool`
 - `focusOnly : Bool`
 
-### 14.1.3 Decode and delivery modes
+### 14.1.4 Decode and delivery modes
 
 Recommended supporting enums:
 
@@ -1375,6 +1429,31 @@ Additional lifecycle rules:
 - reconfiguration caused by reactive source arguments disposes the superseded runtime resource before publishing new values from the replacement resource
 - long-lived sources may use `activeWhen` to suspend or resume delivery without changing the static graph shape
 - request-like sources such as HTTP and `fs.read` must either cancel in-flight work when reconfigured or mark stale completions so they cannot publish into the live graph
+
+### 14.4 Custom provider declarations
+
+Custom source providers are declared at the top level with a `provider` keyword:
+
+```aivi
+provider my.data.source
+    wakeup: timer
+    argument url: Url
+    option timeout: Duration
+    option retries: Int
+```
+
+Declaration rules:
+
+- the provider name must be fully qualified with a `.`-separated path
+- `wakeup` is mandatory and must be one of: `timer`, `backoff`, `sourceEvent`, `providerTrigger`
+- `argument` members declare positional source arguments in order
+- `option` members declare named source options
+- argument and option types must be from the current closed proof surface: primitive types, same-module named types and domains, and those shapes under `List` or `Signal`
+- richer types such as records, arrows, imported constructors, or `Option`/`Result` in provider schemas are rejected on the declaration
+- duplicate declarations for the same qualified name are an error
+- unqualified provider names are not allowed
+
+Provider declarations match against `@source` use sites in the same module through same-module order-independent lookup. Custom providers reuse the standard reactive-reconfiguration and stale-publication model; additional `activeWhen` or trigger semantics require explicit `wakeup` metadata.
 
 ---
 
@@ -1508,7 +1587,23 @@ If an expression is reactive, the compiler extracts a derived signal and the run
 - subscribes once
 - calls the concrete GTK setter on change
 
-Event props lower to direct signal connections, not callback spaghetti exposed to user code.
+### 17.2.1 Event hookups
+
+Expression-valued markup attributes whose names start with `on` are treated as event hookups when the concrete GTK host recognizes that exact widget/event pair.
+
+```aivi
+<Button label="Click me" onClick={clicked} />
+```
+
+Event hookup rules:
+
+- the handler expression must name a directly publishable input signal (see §13.5)
+- the input signal's payload type must match the GTK event's concrete payload type
+- unsupported `on*` names on a given widget type remain ordinary attributes and are rejected by run-surface validation rather than silently treated as live events
+- the `on*` naming convention is explicit and will be replaced by widget-schema metadata when that surface exists
+- GTK discrete events (such as button clicks) force their own runtime ticks; rapid repeated events are processed as separate transactions and not collapsed within one tick
+
+Event props lower to direct GTK signal connections, not user-visible callbacks.
 
 ## 17.3 Control nodes
 
@@ -2132,66 +2227,103 @@ Every bug fix should add a regression test that names the failed invariant.
 
 These milestones do **not** reduce scope. They partition implementation work.
 
-### Milestone 1 — Surface and CST freeze
+Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implemented with known gaps; **PENDING** = not yet started.
 
-- lexer
-- parser
-- CST
-- formatter skeleton
-- syntax for `type`, `class`, `instance`, `val`, `fun`, `sig`, `use`, `export`, markup, and pipe operators
+### Milestone 1 — Surface and CST freeze — **COMPLETE**
 
-### Milestone 2 — HIR and names
+- lexer ✓
+- parser ✓
+- CST (lossless for formatting and diagnostics) ✓
+- formatter (canonical pipe, arrow, cluster alignment) ✓
+- syntax for `type`, `class`, `instance`, `val`, `fun`, `sig`, `use`, `export`, markup, and pipe operators ✓
+- regex literal lexing and HIR validation ✓
+- suffix literal lexing (`250ms`) ✓
 
-- name resolution
-- import resolution
-- decorator attachment
-- explicit HIR nodes for applicative clusters and markup control nodes
+### Milestone 2 — HIR and names — **COMPLETE**
 
-### Milestone 3 — Kinds and core typing
+- name resolution ✓
+- import resolution ✓
+- import alias (`use module (x as y)`) ✓
+- decorator attachment (`@source`, `@recur.timer`, `@recur.backoff`) ✓
+- explicit HIR nodes for applicative clusters and markup control nodes ✓
+- domain declarations and suffix namespaces ✓
+- `instance` blocks with same-module class resolution ✓
+- provider declarations (`provider qualified.name`) ✓
+- input signal declarations (body-less annotated `sig`) ✓
 
-- kind checking
-- class/instance resolution
-- constructor partial application
-- `Validation`
-- `Default`
-- `Eq`
+### Milestone 3 — Kinds and core typing — **COMPLETE**
 
-### Milestone 4 — Pipe normalization
+- kind checking ✓
+- class/instance resolution and evidence ✓
+- constructor partial application ✓
+- `Validation` ✓
+- `Default` and record default elaboration ✓
+- `Eq` compiler derivation ✓
+- module-aware expression typechecker in `aivi-hir` ✓
+- operator typechecking (`==`, `!=`, domain operators) ✓
+- truthy/falsy branch handoff (`T|>`, `F|>`) ✓
+- case exhaustiveness checks for known closed sums ✓
+- bidirectional record/collection/projection shape checking ✓
 
-- exact `&|>` normalization
-- recurrence node representation
-- diagnostics for illegal unfinished clusters
+### Milestone 4 — Pipe normalization — **COMPLETE**
 
-### Milestone 5 — Reactive core and scheduler
+- exact `&|>` normalization into applicative spines ✓
+- recurrence node representation ✓
+- recurrence scheduler-node handoff ✓
+- gate (`?|>`) lowering plan ✓
+- fan-out (`*|>` / `<|*`) typed handoff ✓
+- source lifecycle handoff ✓
+- diagnostics for illegal unfinished clusters ✓
 
-- signal graph extraction
-- topological scheduling
-- transactional ticks
-- deterministic propagation
-- cancellation/disposal
+### Milestone 5 — Reactive core and scheduler — **COMPLETE**
 
-### Milestone 6 — Tasks and sources
+- signal graph extraction ✓
+- topological scheduling with GLib main-context integration ✓
+- transactional ticks with generation stamps ✓
+- deterministic propagation with stale-publication rejection ✓
+- cancellation/disposal and owner-liveness tracking ✓
+- GLib cross-thread wakeup with reentry guard ✓
 
-- `Task` runtime
-- `@source` runtime contract
-- decode integration
-- worker/UI publication boundary
+### Milestone 6 — Tasks and sources — **PARTIAL**
 
-### Milestone 7 — GTK bridge
+- `Task` typed IR and scheduler ports ✓
+- `@source` runtime contract and instance lifecycle ✓
+- decode integration (structural decoder, domain parse method resolution) ✓
+- worker/UI publication boundary ✓
+- timer sources (`timer.every`, `timer.after`) — fully working ✓
+- HTTP sources — runtime contract wired, provider execution pending
+- `fs.read`, `fs.watch` — contract wired, full runtime execution pending
+- socket / mailbox / process / window-event sources — pending
+- `Task` full worker execution — pending
 
-- direct widget graph lowering
-- dynamic setter bindings
-- event hookups
-- `<show>`, `<each>`, `<empty>`, `<match>`, `<fragment>`, `<with>`
-- keyed child management without VDOM
+### Milestone 7 — GTK bridge — **PARTIAL**
 
-### Milestone 8 — Backend and hardening
+- widget plan IR ✓
+- runtime assembly ✓
+- GTK bridge graph and child-group lowering ✓
+- executor with direct setter/event/child management ✓
+- `<show>` (mount/unmount) ✓
+- `<each>` with keys and localized child edits ✓
+- `<empty>` branch ✓
+- `<match>` ✓
+- `<fragment>` ✓
+- `<with>` — pending
+- `keepMounted` on `<show>` — pending
+- widget schema metadata (replaces `on*` naming convention) — pending
+- full widget property catalog — pending
 
-- lambda IR
-- backend IR
-- Cranelift AOT/JIT
-- performance passes
-- fuzzing and stress infrastructure
+### Milestone 8 — Backend and hardening — **PARTIAL**
+
+- lambda IR with explicit closures and environments ✓
+- backend IR with layouts, kernels, pipelines ✓
+- Cranelift AOT codegen for scalars and item-body kernels ✓
+- runtime startup linking (HIR → backend → scheduler) ✓
+- inline helper pipe execution in item/source kernels ✓
+- general lambda/closure conversion for arbitrary bodies — pending
+- full signal-carried inline pipe execution — pending
+- GC integration — pending
+- performance passes — pending
+- fuzzing and stress infrastructure — pending
 
 ---
 
@@ -2213,3 +2345,201 @@ The implementation should prefer one correct algebraic model over many local pat
 - record omission must remain explicit-default completion, not open records
 - `Task` must remain the only user-visible one-shot effect carrier
 - GTK markup must lower directly and predictably to widgets, setters, handlers, and child management
+---
+
+## 26. CLI reference
+
+The `aivi` CLI provides the following subcommands.
+
+### 26.1 `aivi check <path>`
+
+Validates an AIVI source file through the full frontend pipeline:
+
+```
+aivi check src/main.aivi
+```
+
+Pipeline: source → CST → HIR → typed core → lambda → backend (no code emission).
+
+Reports diagnostics with source locations. Exits 0 if there are no errors, 1 if there are errors, 2 on internal failure.
+
+Invoking `aivi <path>` with no subcommand is equivalent to `aivi check <path>`.
+
+### 26.2 `aivi compile <path> [-o <output>]`
+
+Compiles an AIVI source file to a native object file:
+
+```
+aivi compile src/main.aivi -o build/main.o
+aivi compile src/main.aivi --output build/main.o
+```
+
+Pipeline: source → CST → HIR → typed core → lambda → backend → Cranelift → object file.
+
+If `-o` / `--output` is omitted, no output file is written but the pipeline is validated. Exits 0 on success, 1 on compilation errors.
+
+**Current limitation**: object output is emitted but runtime startup, linking, and executable launch are not yet fully automated. The explicit per-stage failure boundary is reported rather than pretending a full executable is produced.
+
+### 26.3 `aivi run <path> [--view <name>]`
+
+Compiles and runs an AIVI module as a GTK application:
+
+```
+aivi run src/app.aivi
+aivi run src/app.aivi --view mainWindow
+```
+
+View selection rules:
+
+1. If `--view <name>` is given, the named top-level markup-valued `val` is used.
+2. Otherwise, if there is exactly one top-level markup-valued `val` named `view`, that is used.
+3. Otherwise, if there is a unique top-level markup-valued `val`, that is used.
+4. If several candidates remain, `--view` is required.
+
+The selected root must be a `Window`. The CLI does not auto-wrap arbitrary widgets into windows.
+
+The run session integrates a GLib main loop, evaluates markup fragments against committed runtime signal snapshots, and re-evaluates the selected view after each meaningful scheduler tick. Live GTK updates are applied through the bridge executor.
+
+Exits 0 on clean application close, 1 on startup/compilation error.
+
+### 26.4 `aivi fmt [--stdin | --check] [<path>...]`
+
+Formats AIVI source files:
+
+```
+aivi fmt src/app.aivi             # format to stdout
+aivi fmt --stdin                  # read from stdin, write to stdout
+aivi fmt --check src/a.aivi src/b.aivi   # verify formatting; exit 1 if any differ
+```
+
+The formatter is canonical: it produces a single deterministic output for any valid source. Formatting is part of the language contract (§22).
+
+### 26.5 `aivi lex <path>`
+
+Tokenizes an AIVI source file and prints the token stream:
+
+```
+aivi lex src/app.aivi
+```
+
+Useful for debugging lexer behavior or suffix literal resolution.
+
+### 26.6 `aivi lsp`
+
+Starts the AIVI Language Server on stdin/stdout using the Language Server Protocol:
+
+```
+aivi lsp
+```
+
+Editor integrations should launch this subprocess and communicate over stdio. See §27 for supported LSP capabilities.
+
+---
+
+## 27. Language server (LSP)
+
+The AIVI language server (`aivi lsp`) provides editor integration through the Language Server Protocol. It is backed by the `aivi-query` incremental query database, which caches source, parse, HIR, diagnostic, symbol, and format results per revision.
+
+### 27.1 Supported capabilities
+
+| Capability | Status |
+|---|---|
+| Text document sync (full) | ✓ |
+| Diagnostics (publish on open/change) | ✓ |
+| Document formatting | ✓ |
+| Document symbols | ✓ |
+| Workspace symbols | ✓ |
+| Hover documentation | ✓ |
+| Go-to-definition | ✓ |
+| Completion (triggered on `.`) | ✓ |
+| Semantic tokens (full) | ✓ |
+
+### 27.2 Architecture
+
+The LSP server is read-only from the user model's point of view. All editor features go through the query database rather than invoking ad-hoc frontend passes. Incremental memoization is per file revision so rapid keystroke changes do not invalidate unrelated cached queries.
+
+### 27.3 Current limitations
+
+- multi-file workspace analysis is not yet implemented; each file is checked independently
+- completion suggestions are basic; type-directed completion over expected record fields and constructor arguments is pending
+- semantic token legend is defined but token-type coverage is partial
+
+---
+
+## 28. Pre-stdlib gaps and implementation status
+
+This section lists known gaps that must be addressed or explicitly scoped before a standard library can be built on the language.
+
+### 28.1 General expression typechecking
+
+The module-aware expression typechecker in `aivi-hir` covers:
+
+- top-level annotation checks
+- record default and shorthand elaboration
+- operator typechecking (`==`, `!=`, domain operators)
+- class instance checking
+- truthy/falsy branch handoff
+- case exhaustiveness for known closed sums
+- bidirectional record/collection/projection shape checking
+- `Apply` and `Name` expressions with local expected-type propagation
+
+**Gap**: General expression inference across arbitrary expression trees (function application chains, let-bindings, lambda expressions as values, higher-order combinators) is not yet complete. Many ordinary bodies remain "unlowered" in typed-core rather than being proven through the typechecker. This is the primary blocker for a general-purpose stdlib.
+
+### 28.2 Task runtime execution
+
+The `Task` typed IR and scheduler ports exist. Workers publish through typed scheduler-owned ports.
+
+**Gap**: Full task worker execution — scheduling a `Task` value, running its body on a worker thread, and routing success/error results back into the scheduler — is not yet fully wired. User-authored `Task`-returning `fun` bodies cannot be executed at runtime until the general expression lowering gap (§28.1) is also closed.
+
+### 28.3 Source provider coverage
+
+Timer sources (`timer.every`, `timer.after`) are fully working. HTTP, `fs.read`, `fs.watch`, socket, mailbox, process, and window-event sources have their runtime contracts wired but provider execution is pending.
+
+**Gap**: Any stdlib module that uses non-timer sources cannot be exercised end-to-end until those providers are implemented.
+
+### 28.4 Lambda/closure conversion
+
+Typed-lambda IR with explicit closures and environments exists. Backend item-body kernels cover same-module value/function bodies with explicit parameter contracts.
+
+**Gap**: General lambda/closure conversion for arbitrary higher-order function values (closures captured by source or task workers, callbacks passed as arguments) is not yet complete. Inline helper pipes execute correctly within item/source kernels, but signal-carried inline pipes remain blocked.
+
+### 28.5 GTK widget coverage
+
+The GTK executor, bridge graph, and host are implemented. `<show>`, `<each>` (with keys), `<empty>`, `<match>`, and `<fragment>` work.
+
+**Gap**:
+- `<with>` control node is not yet implemented
+- `keepMounted` on `<show>` is not yet implemented
+- widget property catalogs and event schemas rely on a hand-maintained `on*` convention rather than widget-metadata-driven lookup; GTK widget coverage is limited to the set explicitly supported by the concrete host
+- libadwaita widget bindings beyond basic GTK4 widgets are not yet enumerated
+
+### 28.6 Multi-file compilation and modules
+
+The compiler currently treats each file as a standalone module. Import catalog metadata is carried as a closed Milestone-2 catalog.
+
+**Gap**: Multi-file compilation, cross-module name resolution at the type/term level, and a real module system (including the `aivi.*` standard library namespace) do not yet exist. The stdlib itself requires this to be addressable.
+
+### 28.7 Garbage collection
+
+The runtime currently does not include the generational moving GC described in §16.1. Values are managed via Rust's ownership system in the current implementation.
+
+**Gap**: The moving GC, stable-handle boundary, and GC-safe pointer tagging are required before the runtime matches the language-visible guarantees in §16.1.
+
+### 28.8 Stack-depth guarantees
+
+The implementation uses explicit worklists in the compiler and scheduler. Cranelift-emitted code does not yet implement tail-call optimization or stack-safe recursion for user-authored recursive functions.
+
+**Gap**: User-authored recursive `fun` bodies that could overflow the native stack are not yet protected. Tail recursion must be compiled in a stack-safe form per §3.4.
+
+### 28.9 Summary: what must close before stdlib work begins
+
+| Gap | Blocking for stdlib? |
+|---|---|
+| General expression typechecking (§28.1) | **Critical** — needed for all typed stdlib functions |
+| Task runtime execution (§28.2) | **Critical** — needed for any effectful stdlib |
+| Multi-file modules (§28.6) | **Critical** — stdlib must live in `aivi.*` modules |
+| Lambda/closure conversion (§28.4) | **High** — needed for higher-order combinators |
+| Source provider coverage (§28.3) | **Medium** — needed for network/file stdlib |
+| GTK widget coverage (§28.5) | **Medium** — needed for UI component stdlib |
+| GC (§28.7) | **Medium** — needed for runtime correctness guarantees |
+| Stack-safety for recursion (§28.8) | **Medium** — needed before recursive stdlib functions are safe |
