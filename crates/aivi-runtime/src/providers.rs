@@ -342,7 +342,7 @@ fn duration_from_suffix(amount: u64, suffix: &str) -> Option<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
+    use std::{sync::Arc, thread, time::Duration};
 
     use aivi_base::SourceDatabase;
     use aivi_hir::{Item, lower_module as lower_hir_module};
@@ -409,7 +409,7 @@ sig tick : Signal Unit
         );
         let assembly =
             assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
-        let mut linked = link_backend_runtime(assembly, &lowered.core, &lowered.backend)
+        let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone()))
             .expect("startup link should succeed");
 
         let actions = linked
@@ -457,7 +457,7 @@ sig users : Signal Text
         );
         let assembly =
             assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
-        let mut linked = link_backend_runtime(assembly, &lowered.core, &lowered.backend)
+        let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone()))
             .expect("startup link should succeed");
         let actions = linked
             .tick_with_source_lifecycle()
@@ -488,7 +488,7 @@ sig tick : Signal Unit
         );
         let assembly =
             assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
-        let mut linked = link_backend_runtime(assembly, &lowered.core, &lowered.backend)
+        let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone()))
             .expect("startup link should succeed");
         let actions = linked
             .tick_with_source_lifecycle()
@@ -518,7 +518,7 @@ sig tick : Signal Unit
         );
         let assembly =
             assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
-        let mut linked = link_backend_runtime(assembly, &lowered.core, &lowered.backend)
+        let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone()))
             .expect("startup link should succeed");
         let actions = linked
             .tick_with_source_lifecycle()
@@ -550,7 +550,7 @@ sig tick : Signal Unit
         );
         let assembly =
             assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
-        let mut linked = link_backend_runtime(assembly, &lowered.core, &lowered.backend)
+        let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone()))
             .expect("startup link should succeed");
 
         let actions = linked

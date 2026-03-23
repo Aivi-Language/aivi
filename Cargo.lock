@@ -118,6 +118,7 @@ dependencies = [
  "aivi-syntax",
  "aivi-typing",
  "parking_lot",
+ "rustc-hash",
 ]
 
 [[package]]
