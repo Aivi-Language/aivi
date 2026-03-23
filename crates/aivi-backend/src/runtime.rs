@@ -3,7 +3,7 @@ use std::{
     fmt,
 };
 
-use aivi_hir::DomainMemberHandle;
+use aivi_hir::{DomainMemberHandle, ItemId as HirItemId, SumConstructorHandle};
 
 use crate::{
     BinaryOperator, BuiltinTerm, EnvSlotId, InlinePipePattern, InlinePipePatternKind,
@@ -21,6 +21,14 @@ pub struct RuntimeRecordField {
 pub struct RuntimeMapEntry {
     pub key: RuntimeValue,
     pub value: RuntimeValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeSumValue {
+    pub item: HirItemId,
+    pub type_name: Box<str>,
+    pub variant_name: Box<str>,
+    pub fields: Vec<RuntimeValue>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +52,10 @@ pub enum RuntimeCallable {
         constructor: RuntimeConstructor,
         bound_arguments: Vec<RuntimeValue>,
     },
+    SumConstructor {
+        handle: SumConstructorHandle,
+        bound_arguments: Vec<RuntimeValue>,
+    },
     DomainMember {
         handle: DomainMemberHandle,
         bound_arguments: Vec<RuntimeValue>,
@@ -61,6 +73,7 @@ pub enum RuntimeValue {
     Map(Vec<RuntimeMapEntry>),
     Set(Vec<RuntimeValue>),
     Record(Vec<RuntimeRecordField>),
+    Sum(RuntimeSumValue),
     OptionNone,
     OptionSome(Box<RuntimeValue>),
     ResultOk(Box<RuntimeValue>),
@@ -119,6 +132,9 @@ impl RuntimeValue {
                     Self::Record(fields) => {
                         push_record_fields(&mut stack, fields);
                     }
+                    Self::Sum(value) => {
+                        push_sum_value(&mut stack, value);
+                    }
                     Self::OptionNone => target.write_str("None")?,
                     Self::OptionSome(value) => {
                         stack.push(DisplayFrame::Value(value));
@@ -153,6 +169,11 @@ impl RuntimeValue {
                         RuntimeCallable::BuiltinConstructor { constructor, .. } => {
                             write!(target, "<constructor {constructor}>")?
                         }
+                        RuntimeCallable::SumConstructor { handle, .. } => write!(
+                            target,
+                            "<constructor {}.{}>",
+                            handle.type_name, handle.variant_name
+                        )?,
                         RuntimeCallable::DomainMember { handle, .. } => write!(
                             target,
                             "<domain-member {}.{}>",
@@ -228,6 +249,28 @@ fn push_record_fields<'a>(stack: &mut Vec<DisplayFrame<'a>>, fields: &'a [Runtim
         }
     }
     stack.push(DisplayFrame::StaticText("{"));
+}
+
+fn push_sum_value<'a>(stack: &mut Vec<DisplayFrame<'a>>, value: &'a RuntimeSumValue) {
+    match value.fields.as_slice() {
+        [] => stack.push(DisplayFrame::BorrowedText(value.variant_name.as_ref())),
+        [field] => {
+            stack.push(DisplayFrame::Value(field));
+            stack.push(DisplayFrame::StaticText(" "));
+            stack.push(DisplayFrame::BorrowedText(value.variant_name.as_ref()));
+        }
+        fields => {
+            stack.push(DisplayFrame::StaticText(")"));
+            for (index, field) in fields.iter().enumerate().rev() {
+                stack.push(DisplayFrame::Value(field));
+                if index > 0 {
+                    stack.push(DisplayFrame::StaticText(", "));
+                }
+            }
+            stack.push(DisplayFrame::StaticText("("));
+            stack.push(DisplayFrame::BorrowedText(value.variant_name.as_ref()));
+        }
+    }
 }
 
 impl fmt::Display for RuntimeConstructor {
@@ -729,6 +772,12 @@ impl<'a> KernelEvaluator<'a> {
                         KernelExprKind::Item(item) => {
                             let value = self.evaluate_item(*item, globals)?;
                             values.push(value);
+                        }
+                        KernelExprKind::SumConstructor(handle) => {
+                            values.push(RuntimeValue::Callable(RuntimeCallable::SumConstructor {
+                                handle: handle.clone(),
+                                bound_arguments: Vec::new(),
+                            }))
                         }
                         KernelExprKind::DomainMember(handle) => {
                             values.push(RuntimeValue::Callable(RuntimeCallable::DomainMember {
@@ -1329,6 +1378,30 @@ impl<'a> KernelEvaluator<'a> {
                     self.apply_callable(kernel_id, expr, value, remaining, globals)
                 }
             }
+            RuntimeCallable::SumConstructor {
+                handle,
+                mut bound_arguments,
+            } => {
+                bound_arguments.extend(arguments);
+                if bound_arguments.len() < handle.field_count as usize {
+                    return Ok(RuntimeValue::Callable(RuntimeCallable::SumConstructor {
+                        handle,
+                        bound_arguments,
+                    }));
+                }
+                let remaining = bound_arguments.split_off(handle.field_count as usize);
+                let value = RuntimeValue::Sum(RuntimeSumValue {
+                    item: handle.item,
+                    type_name: handle.type_name.clone(),
+                    variant_name: handle.variant_name.clone(),
+                    fields: bound_arguments,
+                });
+                if remaining.is_empty() {
+                    Ok(value)
+                } else {
+                    self.apply_callable(kernel_id, expr, value, remaining, globals)
+                }
+            }
             RuntimeCallable::DomainMember {
                 handle,
                 bound_arguments,
@@ -1520,6 +1593,10 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
                         && value_matches_layout(program, &field.value, layout.layout)
                 })
         }
+        (LayoutKind::Sum(variants), RuntimeValue::Sum(value)) => variants
+            .iter()
+            .find(|variant| variant.name.as_ref() == value.variant_name.as_ref())
+            .is_some_and(|variant| sum_fields_match_layout(program, &value.fields, variant.payload)),
         (LayoutKind::Option { element }, RuntimeValue::OptionNone) => {
             let _ = element;
             true
@@ -1545,6 +1622,28 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
         (LayoutKind::Arrow { .. }, RuntimeValue::Callable(_)) => true,
         (LayoutKind::AnonymousDomain { .. }, RuntimeValue::SuffixedInteger { .. })
         | (LayoutKind::Domain { .. }, RuntimeValue::SuffixedInteger { .. }) => true,
+        (LayoutKind::Opaque { name, .. }, RuntimeValue::Sum(value)) => name.as_ref() == value.type_name.as_ref(),
+        _ => false,
+    }
+}
+
+fn sum_fields_match_layout(program: &Program, fields: &[RuntimeValue], payload: Option<LayoutId>) -> bool {
+    match (payload, fields) {
+        (None, []) => true,
+        (Some(layout), [field]) => value_matches_layout(program, field, layout),
+        (Some(layout), fields) if fields.len() > 1 => {
+            let Some(layout) = program.layouts().get(layout) else {
+                return false;
+            };
+            let LayoutKind::Tuple(expected) = &layout.kind else {
+                return false;
+            };
+            expected.len() == fields.len()
+                && expected
+                    .iter()
+                    .zip(fields.iter())
+                    .all(|(layout, field)| value_matches_layout(program, field, *layout))
+        }
         _ => false,
     }
 }
@@ -1597,6 +1696,20 @@ fn structural_eq(
                 for (left, right) in left.iter().zip(right.iter()) {
                     equal &= left.label == right.label;
                     equal &= structural_eq(kernel, expr, &left.value, &right.value)?;
+                }
+                equal
+            }
+        }
+        (RuntimeValue::Sum(left), RuntimeValue::Sum(right)) => {
+            if left.item != right.item
+                || left.variant_name != right.variant_name
+                || left.fields.len() != right.fields.len()
+            {
+                false
+            } else {
+                let mut equal = true;
+                for (left, right) in left.fields.iter().zip(right.fields.iter()) {
+                    equal &= structural_eq(kernel, expr, left, right)?;
                 }
                 equal
             }
@@ -1689,7 +1802,9 @@ fn strip_signal(value: RuntimeValue) -> RuntimeValue {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeMapEntry, RuntimeRecordField, RuntimeValue};
+    use aivi_hir::{ItemId as HirItemId, SumConstructorHandle};
+
+    use super::{RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeValue};
 
     #[test]
     fn display_formats_nested_runtime_values_without_intermediate_joining() {
@@ -1733,5 +1848,32 @@ mod tests {
         assert!(rendered.starts_with("Signal("));
         let suffix = "1".to_owned() + &")".repeat(10_000);
         assert!(rendered.ends_with(&suffix));
+    }
+
+    #[test]
+    fn display_formats_user_sum_values() {
+        let value = RuntimeValue::Sum(RuntimeSumValue {
+            item: HirItemId::from_raw(3),
+            type_name: "ResultLike".into(),
+            variant_name: "Pair".into(),
+            fields: vec![RuntimeValue::Int(1), RuntimeValue::Text("ok".into())],
+        });
+
+        assert_eq!(value.display_text(), "Pair(1, ok)");
+    }
+
+    #[test]
+    fn display_formats_user_sum_constructors() {
+        let value = RuntimeValue::Callable(super::RuntimeCallable::SumConstructor {
+            handle: SumConstructorHandle {
+                item: HirItemId::from_raw(3),
+                type_name: "Status".into(),
+                variant_name: "Ready".into(),
+                field_count: 0,
+            },
+            bound_arguments: Vec::new(),
+        });
+
+        assert_eq!(format!("{value}"), "<constructor Status.Ready>");
     }
 }

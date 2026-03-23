@@ -2,7 +2,7 @@ use std::fmt;
 
 use aivi_base::SourceSpan;
 use aivi_core::Arena;
-use aivi_hir::DomainMemberHandle;
+use aivi_hir::{DomainMemberHandle, SumConstructorHandle};
 
 use crate::{
     EnvSlotId, InlineSubjectId, ItemId, KernelExprId, LayoutId, PipelineId, SourceId,
@@ -314,6 +314,7 @@ pub enum KernelExprKind {
     OptionNone,
     Environment(EnvSlotId),
     Item(ItemId),
+    SumConstructor(SumConstructorHandle),
     DomainMember(DomainMemberHandle),
     Builtin(BuiltinTerm),
     Integer(IntegerLiteral),
@@ -465,6 +466,9 @@ pub fn describe_expr_kind(kind: &KernelExprKind) -> String {
         KernelExprKind::OptionNone => "None".to_owned(),
         KernelExprKind::Environment(slot) => format!("env{slot}"),
         KernelExprKind::Item(item) => format!("item item{item}"),
+        KernelExprKind::SumConstructor(handle) => {
+            format!("sum-constructor {}.{}", handle.type_name, handle.variant_name)
+        }
         KernelExprKind::DomainMember(handle) => {
             format!(
                 "domain-member {}.{}",

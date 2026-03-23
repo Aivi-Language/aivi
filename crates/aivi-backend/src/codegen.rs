@@ -522,6 +522,7 @@ impl<'a> CraneliftCompiler<'a> {
                         }
                     }
                     KernelExprKind::Item(_)
+                    | KernelExprKind::SumConstructor(_)
                     | KernelExprKind::DomainMember(_)
                     | KernelExprKind::Builtin(_)
                     | KernelExprKind::SuffixedInteger(_)

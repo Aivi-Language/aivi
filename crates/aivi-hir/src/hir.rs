@@ -207,6 +207,15 @@ pub struct DomainMemberHandle {
     pub member_index: usize,
 }
 
+/// Stable semantic handle for one same-module closed-sum constructor.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SumConstructorHandle {
+    pub item: ItemId,
+    pub type_name: Box<str>,
+    pub variant_name: Box<str>,
+    pub field_count: usize,
+}
+
 /// Compiler-known builtin term references that live outside the current module graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinTerm {
@@ -1620,6 +1629,28 @@ impl Module {
             domain_name: domain.name.text().into(),
             member_name: member.name.text().into(),
             member_index: resolution.member_index,
+        })
+    }
+
+    pub fn sum_constructor_handle(
+        &self,
+        item: ItemId,
+        variant_name: &str,
+    ) -> Option<SumConstructorHandle> {
+        let Item::Type(type_item) = self.arenas.items.get(item)? else {
+            return None;
+        };
+        let TypeItemBody::Sum(variants) = &type_item.body else {
+            return None;
+        };
+        let variant = variants
+            .iter()
+            .find(|variant| variant.name.text() == variant_name)?;
+        Some(SumConstructorHandle {
+            item,
+            type_name: type_item.name.text().into(),
+            variant_name: variant.name.text().into(),
+            field_count: variant.fields.len(),
         })
     }
 

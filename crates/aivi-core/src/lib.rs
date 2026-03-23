@@ -30,7 +30,10 @@ pub use expr::{
     ProjectionBase, RecordExprField, RecordPatternField, Reference, TextLiteral, TextSegment,
 };
 pub use ids::{DecodeProgramId, DecodeStepId, ExprId, ItemId, PipeId, SourceId, StageId};
-pub use lower::{LoweringError, LoweringErrors, lower_module};
+pub use lower::{
+    LoweredRuntimeFragment, LoweringError, LoweringErrors, RuntimeFragmentSpec, lower_module,
+    lower_runtime_fragment,
+};
 pub use module::{
     DecodeField, DecodeProgram, DecodeStep, DecodeVariant, DomainDecodeSurface,
     DomainDecodeSurfaceKind, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item, ItemKind,

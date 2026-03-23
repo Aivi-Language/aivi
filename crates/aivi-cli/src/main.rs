@@ -2,6 +2,7 @@
 
 use std::{
     cell::Cell,
+    collections::{BTreeMap, BTreeSet},
     env,
     ffi::OsString,
     fs,
@@ -11,15 +12,26 @@ use std::{
     rc::Rc,
 };
 
-use aivi_backend::{compile_program, lower_module as lower_backend_module, validate_program};
+use aivi_backend::{
+    ItemId as BackendItemId, KernelEvaluator, Program as BackendProgram, RuntimeValue,
+    compile_program, lower_module as lower_backend_module, validate_program,
+};
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
-use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
+use aivi_core::{
+    RuntimeFragmentSpec, lower_module as lower_core_module, lower_runtime_fragment,
+    validate_module as validate_core_module,
+};
 use aivi_gtk::{
-    GtkConcreteHost, GtkHostValue, GtkRuntimeExecutor, PlanNodeKind, PropertyPlan,
-    lower_markup_expr, lower_widget_bridge,
+    GtkBridgeGraph, GtkBridgeNodeKind, GtkCollectionKey, GtkConcreteHost, GtkExecutionPath,
+    GtkHostValue, GtkNodeInstance, GtkRuntimeExecutor, PlanNodeKind, RepeatedChildPolicy,
+    RuntimePropertyBinding, RuntimeShowMountPolicy, SetterSource, lower_markup_expr,
+    lower_widget_bridge,
 };
 use aivi_hir::{
-    ExprKind, Item, Module as HirModule, ValidationMode, ValueItem,
+    BuiltinTerm, ExprId as HirExprId, ExprKind, GeneralExprParameter, Item,
+    Module as HirModule, PatternId as HirPatternId, PatternKind, TermResolution,
+    ValidationMode, ValueItem,
+    collect_markup_runtime_expr_sites, elaborate_runtime_expr_with_env,
     lower_module as lower_hir_module,
 };
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
@@ -164,25 +176,53 @@ fn load_source(path: &Path) -> Result<(SourceDatabase, FileId), String> {
     Ok((sources, file_id))
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct RunHostValue;
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RunHostValue(RuntimeValue);
 
 impl GtkHostValue for RunHostValue {
     fn unit() -> Self {
-        Self
+        Self(RuntimeValue::Unit)
+    }
+
+    fn as_bool(&self) -> Option<bool> {
+        strip_signal_runtime_value(self.0.clone()).as_bool()
+    }
+
+    fn as_i64(&self) -> Option<i64> {
+        strip_signal_runtime_value(self.0.clone()).as_i64()
+    }
+
+    fn as_text(&self) -> Option<&str> {
+        match &self.0 {
+            RuntimeValue::Text(value) => Some(value.as_ref()),
+            RuntimeValue::Signal(value) => match value.as_ref() {
+                RuntimeValue::Text(value) => Some(value.as_ref()),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
 
 #[derive(Clone, Debug)]
-struct StaticRunArtifact {
+struct RunArtifact {
     view_name: Box<str>,
-    bridge: aivi_gtk::GtkBridgeGraph,
+    module: HirModule,
+    bridge: GtkBridgeGraph,
+    fragments: BTreeMap<HirExprId, CompiledRunFragment>,
 }
 
 #[derive(Clone, Debug)]
-struct StaticRunBlocker {
+struct RunValidationBlocker {
     span: SourceSpan,
     message: String,
+}
+
+#[derive(Clone, Debug)]
+struct CompiledRunFragment {
+    parameters: Vec<GeneralExprParameter>,
+    program: BackendProgram,
+    item: BackendItemId,
 }
 
 fn check_file(path: &Path) -> Result<ExitCode, String> {
@@ -241,7 +281,7 @@ fn run_markup_file(path: &Path, requested_view: Option<&str>) -> Result<ExitCode
         return Ok(ExitCode::FAILURE);
     }
 
-    let artifact = match prepare_static_run_artifact(&sources, lowered.module(), requested_view) {
+    let artifact = match prepare_run_artifact(&sources, lowered.module(), requested_view) {
         Ok(artifact) => artifact,
         Err(message) => {
             eprintln!("{message}");
@@ -249,15 +289,17 @@ fn run_markup_file(path: &Path, requested_view: Option<&str>) -> Result<ExitCode
         }
     };
 
-    launch_static_run(path, artifact)
+    launch_run(path, artifact)
 }
 
-fn prepare_static_run_artifact(
+fn prepare_run_artifact(
     sources: &SourceDatabase,
     module: &HirModule,
     requested_view: Option<&str>,
-) -> Result<StaticRunArtifact, String> {
+) -> Result<RunArtifact, String> {
     let view = select_run_view(module, requested_view)?;
+    let view_owner = find_run_view_owner(module, view)
+        .ok_or_else(|| format!("failed to recover owning item for run view `{}`", view.name.text()))?;
     let ExprKind::Markup(_) = &module.exprs()[view.body].kind else {
         return Err(format!(
             "run view `{}` is not markup; `aivi run` currently requires a top-level markup-valued `val`",
@@ -270,16 +312,19 @@ fn prepare_static_run_artifact(
             view.name.text()
         )
     })?;
-    validate_static_run_plan(sources, &plan)?;
+    validate_run_plan(sources, &plan)?;
     let bridge = lower_widget_bridge(&plan).map_err(|error| {
         format!(
-            "failed to lower static run view `{}` into a GTK bridge graph: {error}",
+            "failed to lower run view `{}` into a GTK bridge graph: {error}",
             view.name.text()
         )
     })?;
-    Ok(StaticRunArtifact {
+    let fragments = compile_run_fragments(sources, module, view_owner, view.body, &bridge)?;
+    Ok(RunArtifact {
         view_name: view.name.text().into(),
+        module: module.clone(),
         bridge,
+        fragments,
     })
 }
 
@@ -350,7 +395,18 @@ fn markup_view_names(values: &[&ValueItem]) -> Vec<String> {
         .collect()
 }
 
-fn validate_static_run_plan(
+fn find_run_view_owner(module: &HirModule, view: &ValueItem) -> Option<aivi_hir::ItemId> {
+    module.items().iter().find_map(|(item_id, item)| match item {
+        Item::Value(candidate)
+            if candidate.body == view.body && candidate.name.text() == view.name.text() =>
+        {
+            Some(item_id)
+        }
+        _ => None,
+    })
+}
+
+fn validate_run_plan(
     sources: &SourceDatabase,
     plan: &aivi_gtk::WidgetPlan,
 ) -> Result<(), String> {
@@ -358,40 +414,17 @@ fn validate_static_run_plan(
     for node in plan.nodes() {
         match &node.kind {
             PlanNodeKind::Widget(widget) => {
-                for property in &widget.properties {
-                    if let PropertyPlan::Setter(setter) = property {
-                        blockers.push(StaticRunBlocker {
-                            span: setter.site.span,
-                            message: format!(
-                                "dynamic property `{}` is not supported yet",
-                                setter.name.text()
-                            ),
-                        });
-                    }
-                }
                 for event in &widget.event_hooks {
-                    blockers.push(StaticRunBlocker {
+                    blockers.push(RunValidationBlocker {
                         span: event.site.span,
                         message: format!("event hook `{}` is not supported yet", event.name.text()),
                     });
                 }
             }
-            PlanNodeKind::Show(_) => blockers.push(StaticRunBlocker {
-                span: node.span,
-                message: "`<show>` control nodes are not supported yet".to_owned(),
-            }),
-            PlanNodeKind::Each(_) => blockers.push(StaticRunBlocker {
-                span: node.span,
-                message: "`<each>` control nodes are not supported yet".to_owned(),
-            }),
-            PlanNodeKind::Match(_) => blockers.push(StaticRunBlocker {
-                span: node.span,
-                message: "`<match>` control nodes are not supported yet".to_owned(),
-            }),
-            PlanNodeKind::With(_) => blockers.push(StaticRunBlocker {
-                span: node.span,
-                message: "`<with>` control nodes are not supported yet".to_owned(),
-            }),
+            PlanNodeKind::Show(_)
+            | PlanNodeKind::Each(_)
+            | PlanNodeKind::Match(_)
+            | PlanNodeKind::With(_) => {}
             PlanNodeKind::Empty(_) | PlanNodeKind::Case(_) | PlanNodeKind::Fragment(_) => {}
         }
     }
@@ -400,9 +433,8 @@ fn validate_static_run_plan(
         return Ok(());
     }
 
-    let mut rendered = String::from(
-        "`aivi run` currently supports static GTK markup only. Unsupported features in the selected view:\n",
-    );
+    let mut rendered =
+        String::from("`aivi run` does not support every GTK/runtime feature yet. Unsupported features in the selected view:\n");
     for blocker in blockers {
         rendered.push_str("- ");
         rendered.push_str(&source_location(sources, blocker.span));
@@ -424,29 +456,176 @@ fn source_location(sources: &SourceDatabase, span: SourceSpan) -> String {
     )
 }
 
-fn launch_static_run(path: &Path, artifact: StaticRunArtifact) -> Result<ExitCode, String> {
+fn collect_run_exprs_from_bridge(bridge: &GtkBridgeGraph) -> BTreeSet<HirExprId> {
+    let mut exprs = BTreeSet::new();
+    for node in bridge.nodes() {
+        match &node.kind {
+            GtkBridgeNodeKind::Widget(widget) => {
+                for property in &widget.properties {
+                    if let RuntimePropertyBinding::Setter(setter) = property {
+                        match &setter.source {
+                            SetterSource::Expr(expr) => {
+                                exprs.insert(*expr);
+                            }
+                            SetterSource::InterpolatedText(text) => {
+                                for segment in &text.segments {
+                                    if let aivi_hir::TextSegment::Interpolation(interpolation) = segment
+                                    {
+                                        exprs.insert(interpolation.expr);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            GtkBridgeNodeKind::Show(show) => {
+                exprs.insert(show.when.expr);
+                if let RuntimeShowMountPolicy::KeepMounted { decision } = &show.mount {
+                    exprs.insert(decision.expr);
+                }
+            }
+            GtkBridgeNodeKind::Each(each) => {
+                exprs.insert(each.collection.expr);
+                if let RepeatedChildPolicy::Keyed { key, .. } = &each.child_policy {
+                    exprs.insert(*key);
+                }
+            }
+            GtkBridgeNodeKind::Match(match_node) => {
+                exprs.insert(match_node.scrutinee.expr);
+            }
+            GtkBridgeNodeKind::With(with_node) => {
+                exprs.insert(with_node.value.expr);
+            }
+            GtkBridgeNodeKind::Empty(_)
+            | GtkBridgeNodeKind::Case(_)
+            | GtkBridgeNodeKind::Fragment(_) => {}
+        }
+    }
+    exprs
+}
+
+fn compile_run_fragments(
+    sources: &SourceDatabase,
+    module: &HirModule,
+    view_owner: aivi_hir::ItemId,
+    view_body: HirExprId,
+    bridge: &GtkBridgeGraph,
+) -> Result<BTreeMap<HirExprId, CompiledRunFragment>, String> {
+    let sites = collect_markup_runtime_expr_sites(module, view_body).map_err(|error| {
+        format!(
+            "failed to collect runtime expression environments for run view at {}: {error}",
+            source_location(sources, module.exprs()[view_body].span)
+        )
+    })?;
+    let mut fragments = BTreeMap::new();
+    for expr in collect_run_exprs_from_bridge(bridge) {
+        let site = sites.get(expr).ok_or_else(|| {
+            format!(
+                "run view references expression {} at {} without a collected runtime environment",
+                expr.as_raw(),
+                source_location(sources, module.exprs()[expr].span)
+            )
+        })?;
+        let body = elaborate_runtime_expr_with_env(module, expr, &site.parameters, Some(&site.ty))
+            .map_err(|blocked| {
+                format!(
+                    "failed to elaborate runtime expression at {}: {}",
+                    source_location(sources, site.span),
+                    blocked
+                )
+            })?;
+        let fragment = RuntimeFragmentSpec {
+            name: format!("__run_fragment_{}", expr.as_raw()).into_boxed_str(),
+            owner: view_owner,
+            body_expr: expr,
+            parameters: site.parameters.clone(),
+            body,
+        };
+        let core = lower_runtime_fragment(module, &fragment).map_err(|error| {
+            format!(
+                "failed to lower runtime expression at {} into typed core: {error}",
+                source_location(sources, site.span)
+            )
+        })?;
+        let lambda = lower_lambda_module(&core.module).map_err(|error| {
+            format!(
+                "failed to lower runtime expression at {} into typed lambda: {error}",
+                source_location(sources, site.span)
+            )
+        })?;
+        validate_lambda_module(&lambda).map_err(|error| {
+            format!(
+                "typed lambda validation failed for runtime expression at {}: {error}",
+                source_location(sources, site.span)
+            )
+        })?;
+        let backend = lower_backend_module(&lambda).map_err(|error| {
+            format!(
+                "failed to lower runtime expression at {} into backend IR: {error}",
+                source_location(sources, site.span)
+            )
+        })?;
+        validate_program(&backend).map_err(|error| {
+            format!(
+                "backend validation failed for runtime expression at {}: {error}",
+                source_location(sources, site.span)
+            )
+        })?;
+        let item = backend
+            .items()
+            .iter()
+            .find_map(|(item_id, item)| (item.name == core.entry_name).then_some(item_id))
+            .ok_or_else(|| {
+                format!(
+                    "backend lowering did not preserve runtime fragment `{}` for expression at {}",
+                    core.entry_name,
+                    source_location(sources, site.span)
+                )
+            })?;
+        fragments.insert(
+            expr,
+            CompiledRunFragment {
+                parameters: site.parameters.clone(),
+                program: backend,
+                item,
+            },
+        );
+    }
+    Ok(fragments)
+}
+
+fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
     gtk::init()
         .map_err(|error| format!("failed to initialize GTK for {}: {error}", path.display()))?;
+    let RunArtifact {
+        view_name,
+        module,
+        bridge,
+        fragments,
+    } = artifact;
 
-    let executor =
-        GtkRuntimeExecutor::new(artifact.bridge, GtkConcreteHost::<RunHostValue>::default())
+    let mut executor =
+        GtkRuntimeExecutor::new(bridge.clone(), GtkConcreteHost::<RunHostValue>::default())
             .map_err(|error| {
                 format!(
-                    "failed to mount static GTK view `{}` from {}: {error}",
-                    artifact.view_name,
+                    "failed to mount GTK view `{}` from {}: {error}",
+                    view_name,
                     path.display()
                 )
             })?;
+    hydrate_run_view(&module, &bridge, view_name.as_ref(), &fragments, &mut executor)
+        .map_err(|error| format!("failed to hydrate run view `{}`: {error}", view_name))?;
     let root_handles = executor.root_widgets().map_err(|error| {
         format!(
-            "failed to collect root widgets for static view `{}`: {error}",
-            artifact.view_name
+            "failed to collect root widgets for run view `{}`: {error}",
+            view_name
         )
     })?;
     if root_handles.is_empty() {
         return Err(format!(
             "run view `{}` did not produce any root GTK widgets",
-            artifact.view_name
+            view_name
         ));
     }
 
@@ -456,24 +635,20 @@ fn launch_static_run(path: &Path, artifact: StaticRunArtifact) -> Result<ExitCod
             let widget = executor.host().widget(&handle).ok_or_else(|| {
                 format!(
                     "run view `{}` lost GTK root widget {:?} before presentation",
-                    artifact.view_name, handle
+                    view_name, handle
                 )
             })?;
             widget.clone().downcast::<gtk::Window>().map_err(|widget| {
                 format!(
                     "`aivi run` currently requires top-level `Window` roots; view `{}` produced a root `{}`",
-                    artifact.view_name,
+                    view_name,
                     widget.type_().name()
                 )
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    println!(
-        "running static GTK view `{}` from {}",
-        artifact.view_name,
-        path.display()
-    );
+    println!("running GTK view `{}` from {}", view_name, path.display());
 
     let main_loop = glib::MainLoop::new(None, false);
     let remaining = Rc::new(Cell::new(root_windows.len()));
@@ -492,6 +667,510 @@ fn launch_static_run(path: &Path, artifact: StaticRunArtifact) -> Result<ExitCod
     executor.host().present_root_windows();
     main_loop.run();
     Ok(ExitCode::SUCCESS)
+}
+
+type RuntimeBindingEnv = BTreeMap<aivi_hir::BindingId, RuntimeValue>;
+
+fn hydrate_run_view(
+    module: &HirModule,
+    bridge: &GtkBridgeGraph,
+    view_name: &str,
+    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
+) -> Result<(), String> {
+    hydrate_node(
+        module,
+        bridge,
+        fragments,
+        view_name,
+        executor,
+        &GtkNodeInstance::root(bridge.root()),
+        &RuntimeBindingEnv::new(),
+    )
+}
+
+fn hydrate_node(
+    module: &HirModule,
+    bridge: &GtkBridgeGraph,
+    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+    view_name: &str,
+    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
+    instance: &GtkNodeInstance,
+    env: &RuntimeBindingEnv,
+) -> Result<(), String> {
+    let node = bridge
+        .node(instance.node.plan)
+        .ok_or_else(|| format!("run view `{view_name}` is missing GTK node {}", instance.node))?;
+    match &node.kind {
+        GtkBridgeNodeKind::Widget(widget) => {
+            for property in &widget.properties {
+                if let RuntimePropertyBinding::Setter(setter) = property {
+                    let value = match &setter.source {
+                        SetterSource::Expr(expr) => {
+                            evaluate_run_fragment(fragments, *expr, env)?
+                        }
+                        SetterSource::InterpolatedText(text) => {
+                            RuntimeValue::Text(evaluate_runtime_text(fragments, text, env)?)
+                        }
+                    };
+                    executor
+                        .set_property_for_instance(instance, setter.input, RunHostValue(value))
+                        .map_err(|error| {
+                            format!(
+                                "failed to apply dynamic property `{}` on {}: {error}",
+                                setter.name.text(),
+                                instance
+                            )
+                        })?;
+                }
+            }
+            hydrate_child_group(
+                module,
+                bridge,
+                fragments,
+                view_name,
+                executor,
+                &widget.default_children.roots,
+                instance.path.clone(),
+                env,
+            )
+        }
+        GtkBridgeNodeKind::Show(show) => {
+            let when = runtime_bool(evaluate_run_fragment(fragments, show.when.expr, env)?)
+                .ok_or_else(|| {
+                    format!(
+                        "run view `{view_name}` expected `<show when>` on {instance} to evaluate to Bool"
+                    )
+                })?;
+            let keep_mounted = match &show.mount {
+                RuntimeShowMountPolicy::UnmountWhenHidden => false,
+                RuntimeShowMountPolicy::KeepMounted { decision } => runtime_bool(
+                    evaluate_run_fragment(fragments, decision.expr, env)?,
+                )
+                .ok_or_else(|| {
+                    format!(
+                        "run view `{view_name}` expected `<show keepMounted>` on {instance} to evaluate to Bool"
+                    )
+                })?,
+            };
+            executor
+                .update_show(instance, when, keep_mounted)
+                .map_err(|error| format!("failed to update `<show>` node {instance}: {error}"))?;
+            if when || keep_mounted {
+                hydrate_child_group(
+                    module,
+                    bridge,
+                    fragments,
+                    view_name,
+                    executor,
+                    &show.body.roots,
+                    instance.path.clone(),
+                    env,
+                )?;
+            }
+            Ok(())
+        }
+        GtkBridgeNodeKind::Each(each) => {
+            let values = runtime_list_values(evaluate_run_fragment(
+                fragments,
+                each.collection.expr,
+                env,
+            )?)
+            .ok_or_else(|| {
+                format!(
+                    "run view `{view_name}` expected `<each>` collection on {instance} to evaluate to a List"
+                )
+            })?;
+            let collection_is_empty = values.is_empty();
+            match &each.child_policy {
+                RepeatedChildPolicy::Positional { .. } => {
+                    executor
+                        .update_each_positional(instance, values.len())
+                        .map_err(|error| {
+                            format!("failed to update positional `<each>` node {instance}: {error}")
+                        })?;
+                    for (index, value) in values.into_iter().enumerate() {
+                        let mut child_env = env.clone();
+                        child_env.insert(each.binding, value);
+                        let path = instance
+                            .path
+                            .pushed(instance.node, aivi_gtk::GtkRepeatedChildIdentity::Positional(index));
+                        hydrate_child_group(
+                            module,
+                            bridge,
+                            fragments,
+                            view_name,
+                            executor,
+                            &each.item_template.roots,
+                            path,
+                            &child_env,
+                        )?;
+                    }
+                }
+                RepeatedChildPolicy::Keyed { key, .. } => {
+                    let mut keyed_items = Vec::with_capacity(values.len());
+                    let mut keys = Vec::with_capacity(values.len());
+                    for value in values {
+                        let mut child_env = env.clone();
+                        child_env.insert(each.binding, value.clone());
+                        let key_value = evaluate_run_fragment(fragments, *key, &child_env)?;
+                        let collection_key = runtime_collection_key(key_value).ok_or_else(|| {
+                            format!(
+                                "run view `{view_name}` expected `<each>` key on {instance} to be displayable"
+                            )
+                        })?;
+                        keys.push(collection_key.clone());
+                        keyed_items.push((collection_key, child_env));
+                    }
+                    executor
+                        .update_each_keyed(instance, &keys)
+                        .map_err(|error| {
+                            format!("failed to update keyed `<each>` node {instance}: {error}")
+                        })?;
+                    for (collection_key, child_env) in keyed_items {
+                        let path = instance.path.pushed(
+                            instance.node,
+                            aivi_gtk::GtkRepeatedChildIdentity::Keyed(collection_key),
+                        );
+                        hydrate_child_group(
+                            module,
+                            bridge,
+                            fragments,
+                            view_name,
+                            executor,
+                            &each.item_template.roots,
+                            path,
+                            &child_env,
+                        )?;
+                    }
+                }
+            }
+            if collection_is_empty {
+                if let Some(empty) = &each.empty_branch {
+                    hydrate_node(
+                        module,
+                        bridge,
+                        fragments,
+                        view_name,
+                        executor,
+                        &GtkNodeInstance::with_path(empty.empty, instance.path.clone()),
+                        env,
+                    )?;
+                }
+            }
+            Ok(())
+        }
+        GtkBridgeNodeKind::Match(match_node) => {
+            let value = evaluate_run_fragment(fragments, match_node.scrutinee.expr, env)?;
+            let mut matched = None;
+            for (index, branch) in match_node.cases.iter().enumerate() {
+                let mut bindings = RuntimeBindingEnv::new();
+                if match_pattern(module, branch.pattern, &value, &mut bindings)? {
+                    matched = Some((index, branch.clone(), bindings));
+                    break;
+                }
+            }
+            let Some((index, branch, bindings)) = matched else {
+                return Err(format!(
+                    "run view `{view_name}` found no matching `<match>` case for node {instance}"
+                ));
+            };
+            executor
+                .update_match(instance, index)
+                .map_err(|error| format!("failed to update `<match>` node {instance}: {error}"))?;
+            let mut case_env = env.clone();
+            case_env.extend(bindings);
+            hydrate_node(
+                module,
+                bridge,
+                fragments,
+                view_name,
+                executor,
+                &GtkNodeInstance::with_path(branch.case, instance.path.clone()),
+                &case_env,
+            )
+        }
+        GtkBridgeNodeKind::Case(case) => hydrate_child_group(
+            module,
+            bridge,
+            fragments,
+            view_name,
+            executor,
+            &case.body.roots,
+            instance.path.clone(),
+            env,
+        ),
+        GtkBridgeNodeKind::Fragment(fragment) => hydrate_child_group(
+            module,
+            bridge,
+            fragments,
+            view_name,
+            executor,
+            &fragment.body.roots,
+            instance.path.clone(),
+            env,
+        ),
+        GtkBridgeNodeKind::With(with_node) => {
+            let value = evaluate_run_fragment(fragments, with_node.value.expr, env)?;
+            let mut child_env = env.clone();
+            child_env.insert(with_node.binding, value);
+            hydrate_child_group(
+                module,
+                bridge,
+                fragments,
+                view_name,
+                executor,
+                &with_node.body.roots,
+                instance.path.clone(),
+                &child_env,
+            )
+        }
+        GtkBridgeNodeKind::Empty(empty) => hydrate_child_group(
+            module,
+            bridge,
+            fragments,
+            view_name,
+            executor,
+            &empty.body.roots,
+            instance.path.clone(),
+            env,
+        ),
+    }
+}
+
+fn hydrate_child_group(
+    module: &HirModule,
+    bridge: &GtkBridgeGraph,
+    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+    view_name: &str,
+    executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
+    roots: &[aivi_gtk::GtkBridgeNodeRef],
+    path: GtkExecutionPath,
+    env: &RuntimeBindingEnv,
+) -> Result<(), String> {
+    for &root in roots {
+        hydrate_node(
+            module,
+            bridge,
+            fragments,
+            view_name,
+            executor,
+            &GtkNodeInstance::with_path(root, path.clone()),
+            env,
+        )?;
+    }
+    Ok(())
+}
+
+fn evaluate_run_fragment(
+    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+    expr: HirExprId,
+    env: &RuntimeBindingEnv,
+) -> Result<RuntimeValue, String> {
+    let fragment = fragments
+        .get(&expr)
+        .ok_or_else(|| format!("missing compiled runtime fragment for expression {}", expr.as_raw()))?;
+    let args = fragment
+        .parameters
+        .iter()
+        .map(|parameter| {
+            env.get(&parameter.binding).cloned().ok_or_else(|| {
+                format!(
+                    "missing runtime value for binding `{}` while evaluating expression {}",
+                    parameter.name,
+                    expr.as_raw()
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let item = &fragment.program.items()[fragment.item];
+    let mut evaluator = KernelEvaluator::new(&fragment.program);
+    if args.is_empty() {
+        evaluator
+            .evaluate_item(fragment.item, &BTreeMap::new())
+            .map_err(|error| format!("{error}"))
+    } else {
+        let kernel = item
+            .body
+            .ok_or_else(|| format!("compiled runtime fragment {} has no executable body", expr.as_raw()))?;
+        evaluator
+            .evaluate_kernel(kernel, None, &args, &BTreeMap::new())
+            .map_err(|error| format!("{error}"))
+    }
+}
+
+fn evaluate_runtime_text(
+    fragments: &BTreeMap<HirExprId, CompiledRunFragment>,
+    text: &aivi_hir::TextLiteral,
+    env: &RuntimeBindingEnv,
+) -> Result<Box<str>, String> {
+    let mut rendered = String::new();
+    for segment in &text.segments {
+        match segment {
+            aivi_hir::TextSegment::Text(fragment) => rendered.push_str(fragment.raw.as_ref()),
+            aivi_hir::TextSegment::Interpolation(interpolation) => {
+                let value = strip_signal_runtime_value(evaluate_run_fragment(
+                    fragments,
+                    interpolation.expr,
+                    env,
+                )?);
+                if matches!(value, RuntimeValue::Callable(_)) {
+                    return Err(format!(
+                        "text interpolation for expression {} produced a callable runtime value",
+                        interpolation.expr.as_raw()
+                    ));
+                }
+                rendered.push_str(&value.to_string());
+            }
+        }
+    }
+    Ok(rendered.into_boxed_str())
+}
+
+fn runtime_bool(value: RuntimeValue) -> Option<bool> {
+    strip_signal_runtime_value(value).as_bool()
+}
+
+fn runtime_list_values(value: RuntimeValue) -> Option<Vec<RuntimeValue>> {
+    match strip_signal_runtime_value(value) {
+        RuntimeValue::List(values) => Some(values),
+        _ => None,
+    }
+}
+
+fn runtime_collection_key(value: RuntimeValue) -> Option<GtkCollectionKey> {
+    let value = strip_signal_runtime_value(value);
+    (!matches!(value, RuntimeValue::Callable(_))).then(|| GtkCollectionKey::new(value.to_string()))
+}
+
+fn strip_signal_runtime_value(mut value: RuntimeValue) -> RuntimeValue {
+    while let RuntimeValue::Signal(inner) = value {
+        value = *inner;
+    }
+    value
+}
+
+fn match_pattern(
+    module: &HirModule,
+    pattern_id: HirPatternId,
+    value: &RuntimeValue,
+    bindings: &mut RuntimeBindingEnv,
+) -> Result<bool, String> {
+    let pattern = &module.patterns()[pattern_id];
+    match &pattern.kind {
+        PatternKind::Wildcard => Ok(true),
+        PatternKind::Binding(binding) => {
+            bindings.insert(binding.binding, strip_signal_runtime_value(value.clone()));
+            Ok(true)
+        }
+        PatternKind::Integer(integer) => Ok(matches!(
+            strip_signal_runtime_value(value.clone()),
+            RuntimeValue::Int(found) if integer.raw.parse::<i64>().ok() == Some(found)
+        )),
+        PatternKind::Text(text) => Ok(matches!(
+            strip_signal_runtime_value(value.clone()),
+            RuntimeValue::Text(found)
+                if text_literal_static_text(text).as_deref() == Some(found.as_ref())
+        )),
+        PatternKind::Tuple(elements) => {
+            let RuntimeValue::Tuple(found) = strip_signal_runtime_value(value.clone()) else {
+                return Ok(false);
+            };
+            let expected = elements.iter().copied().collect::<Vec<_>>();
+            if expected.len() != found.len() {
+                return Ok(false);
+            }
+            let mut matches = true;
+            for (pattern, value) in expected.into_iter().zip(found.iter()) {
+                matches &= match_pattern(module, pattern, value, bindings)?;
+            }
+            Ok(matches)
+        }
+        PatternKind::Record(fields) => {
+            let RuntimeValue::Record(found) = strip_signal_runtime_value(value.clone()) else {
+                return Ok(false);
+            };
+            let mut matches = true;
+            for field in fields {
+                let Some(found_field) = found
+                    .iter()
+                    .find(|candidate| candidate.label.as_ref() == field.label.text())
+                else {
+                    return Ok(false);
+                };
+                matches &= match_pattern(module, field.pattern, &found_field.value, bindings)?;
+            }
+            Ok(matches)
+        }
+        PatternKind::Constructor { callee, arguments } => match callee.resolution.as_ref() {
+            aivi_hir::ResolutionState::Resolved(TermResolution::Builtin(term)) => {
+                match_builtin_pattern(*term, arguments, value, module, bindings)
+            }
+            aivi_hir::ResolutionState::Resolved(TermResolution::Item(item)) => {
+                let RuntimeValue::Sum(found) = strip_signal_runtime_value(value.clone()) else {
+                    return Ok(false);
+                };
+                let variant_name = callee.path.segments().last().text();
+                if found.item != *item || found.variant_name.as_ref() != variant_name {
+                    return Ok(false);
+                }
+                if arguments.len() != found.fields.len() {
+                    return Ok(false);
+                }
+                let mut matches = true;
+                for (pattern, field) in arguments.iter().copied().zip(found.fields.iter()) {
+                    matches &= match_pattern(module, pattern, field, bindings)?;
+                }
+                Ok(matches)
+            }
+            _ => Ok(false),
+        },
+        PatternKind::UnresolvedName(_) => Ok(false),
+    }
+}
+
+fn match_builtin_pattern(
+    term: BuiltinTerm,
+    arguments: &[HirPatternId],
+    value: &RuntimeValue,
+    module: &HirModule,
+    bindings: &mut RuntimeBindingEnv,
+) -> Result<bool, String> {
+    let Some(payload) = truthy_falsy_payload(value, term) else {
+        return Ok(false);
+    };
+    match (payload, arguments) {
+        (None, []) => Ok(true),
+        (Some(payload), [argument]) => match_pattern(module, *argument, &payload, bindings),
+        _ => Ok(false),
+    }
+}
+
+fn truthy_falsy_payload(value: &RuntimeValue, constructor: BuiltinTerm) -> Option<Option<RuntimeValue>> {
+    match (constructor, strip_signal_runtime_value(value.clone())) {
+        (BuiltinTerm::True, RuntimeValue::Bool(true))
+        | (BuiltinTerm::False, RuntimeValue::Bool(false))
+        | (BuiltinTerm::None, RuntimeValue::OptionNone) => Some(None),
+        (BuiltinTerm::Some, RuntimeValue::OptionSome(payload))
+        | (BuiltinTerm::Ok, RuntimeValue::ResultOk(payload))
+        | (BuiltinTerm::Err, RuntimeValue::ResultErr(payload))
+        | (BuiltinTerm::Valid, RuntimeValue::ValidationValid(payload))
+        | (BuiltinTerm::Invalid, RuntimeValue::ValidationInvalid(payload)) => {
+            Some(Some(*payload))
+        }
+        _ => None,
+    }
+}
+
+fn text_literal_static_text(text: &aivi_hir::TextLiteral) -> Option<String> {
+    let mut rendered = String::new();
+    for segment in &text.segments {
+        match segment {
+            aivi_hir::TextSegment::Text(fragment) => rendered.push_str(fragment.raw.as_ref()),
+            aivi_hir::TextSegment::Interpolation(_) => return None,
+        }
+    }
+    Some(rendered)
 }
 
 fn compile_file(path: &Path, output: Option<&Path>) -> Result<ExitCode, String> {
@@ -868,9 +1547,9 @@ fn print_usage() {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_file, prepare_static_run_artifact};
+    use super::{check_file, prepare_run_artifact};
     use aivi_base::SourceDatabase;
-    use aivi_gtk::GtkBridgeNodeKind;
+    use aivi_gtk::{GtkBridgeNodeKind, RuntimePropertyBinding};
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
     use aivi_syntax::parse_module;
     use std::{path::PathBuf, process::ExitCode};
@@ -882,11 +1561,11 @@ mod tests {
             .join(path)
     }
 
-    fn prepare_static_run_from_text(
+    fn prepare_run_from_text(
         path: &str,
         source: &str,
         requested_view: Option<&str>,
-    ) -> Result<super::StaticRunArtifact, String> {
+    ) -> Result<super::RunArtifact, String> {
         let mut sources = SourceDatabase::new();
         let file_id = sources.add_file(path, source);
         let file = &sources[file_id];
@@ -906,7 +1585,7 @@ mod tests {
             "test input should validate cleanly: {:?}",
             validation.diagnostics()
         );
-        prepare_static_run_artifact(&sources, lowered.module(), requested_view)
+        prepare_run_artifact(&sources, lowered.module(), requested_view)
     }
 
     #[test]
@@ -928,8 +1607,8 @@ mod tests {
     }
 
     #[test]
-    fn prepare_static_run_accepts_a_single_static_window_view() {
-        let artifact = prepare_static_run_from_text(
+    fn prepare_run_accepts_a_single_static_window_view() {
+        let artifact = prepare_run_from_text(
             "static-window.aivi",
             r#"
 val screenView =
@@ -947,8 +1626,8 @@ val screenView =
     }
 
     #[test]
-    fn prepare_static_run_prefers_named_view_when_present() {
-        let artifact = prepare_static_run_from_text(
+    fn prepare_run_prefers_named_view_when_present() {
+        let artifact = prepare_run_from_text(
             "named-view.aivi",
             r#"
 val view =
@@ -964,8 +1643,8 @@ val alternate =
     }
 
     #[test]
-    fn prepare_static_run_rejects_dynamic_properties() {
-        let error = prepare_static_run_from_text(
+    fn prepare_run_accepts_dynamic_properties() {
+        let artifact = prepare_run_from_text(
             "dynamic-property.aivi",
             r#"
 val title = "AIVI"
@@ -975,13 +1654,23 @@ val view =
 "#,
             None,
         )
-        .expect_err("dynamic setters should stay rejected in the static MVP");
-        assert!(error.contains("dynamic property `title`"));
+        .expect("dynamic setters should compile for one-shot run hydration");
+        let root = artifact.bridge.root_node();
+        let GtkBridgeNodeKind::Widget(widget) = &root.kind else {
+            panic!("expected a root widget, found {:?}", root.kind.tag());
+        };
+        assert!(widget.properties.iter().any(|property| {
+            matches!(
+                property,
+                RuntimePropertyBinding::Setter(setter) if setter.name.text() == "title"
+            )
+        }));
+        assert!(!artifact.fragments.is_empty());
     }
 
     #[test]
-    fn prepare_static_run_rejects_control_nodes() {
-        let error = prepare_static_run_from_text(
+    fn prepare_run_accepts_control_nodes() {
+        let artifact = prepare_run_from_text(
             "control-node.aivi",
             r#"
 val view =
@@ -993,13 +1682,33 @@ val view =
 "#,
             None,
         )
-        .expect_err("control nodes should stay rejected in the static MVP");
-        assert!(error.contains("`<show>` control nodes are not supported yet"));
+        .expect("control nodes should compile for one-shot run hydration");
+        assert!(artifact
+            .bridge
+            .nodes()
+            .iter()
+            .any(|node| matches!(node.kind, GtkBridgeNodeKind::Show(_))));
     }
 
     #[test]
-    fn prepare_static_run_requires_view_name_when_multiple_markup_values_exist() {
-        let error = prepare_static_run_from_text(
+    fn prepare_run_rejects_event_hooks() {
+        let error = prepare_run_from_text(
+            "event-hook.aivi",
+            r#"
+val click = True
+
+val view =
+    <Button label="Save" onClick={click} />
+"#,
+            None,
+        )
+        .expect_err("event hooks should stay rejected until real runtime routing lands");
+        assert!(error.contains("event hook `onClick` is not supported yet"));
+    }
+
+    #[test]
+    fn prepare_run_requires_view_name_when_multiple_markup_values_exist() {
+        let error = prepare_run_from_text(
             "multiple-views.aivi",
             r#"
 val first =

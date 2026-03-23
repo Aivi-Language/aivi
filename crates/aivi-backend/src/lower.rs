@@ -1077,6 +1077,7 @@ impl<'a> ProgramLowerer<'a> {
                     core::Reference::Item(item) => {
                         globals.insert(self.require_item(*item, expr.span)?);
                     }
+                    core::Reference::SumConstructor(_) => {}
                     core::Reference::DomainMember(_) => {}
                     core::Reference::HirItem(_) => {
                         return Err(UnresolvedItemReference { span: expr.span });
@@ -1365,6 +1366,9 @@ impl<'a> ProgramLowerer<'a> {
                                 }
                                 core::Reference::Item(item) => {
                                     KernelExprKind::Item(self.require_item(*item, expr.span)?)
+                                }
+                                core::Reference::SumConstructor(handle) => {
+                                    KernelExprKind::SumConstructor(handle.clone())
                                 }
                                 core::Reference::DomainMember(handle) => {
                                     KernelExprKind::DomainMember(handle.clone())

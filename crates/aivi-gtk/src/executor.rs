@@ -224,6 +224,11 @@ pub enum GtkExecutorError<E> {
     UnknownSetterInput {
         input: InputHandle,
     },
+    SetterInputInstanceMismatch {
+        input: InputHandle,
+        expected: GtkBridgeNodeRef,
+        instance: GtkNodeInstance,
+    },
     RepeatedItemIndexOutOfRange {
         each: GtkNodeInstance,
         index: usize,
@@ -280,6 +285,15 @@ impl<E: fmt::Display> fmt::Display for GtkExecutorError<E> {
                 "GTK executor input {} does not belong to a dynamic setter binding",
                 input.as_raw()
             ),
+            Self::SetterInputInstanceMismatch {
+                input,
+                expected,
+                instance,
+            } => write!(
+                f,
+                "GTK executor input {} belongs to node {expected}, not instance {instance}",
+                input.as_raw()
+            ),
             Self::RepeatedItemIndexOutOfRange {
                 each,
                 index,
@@ -334,7 +348,8 @@ where
     host: H,
     root: GtkNodeInstance,
     setter_sites: BTreeMap<InputHandle, GtkSetterSite>,
-    values: BTreeMap<InputHandle, V>,
+    default_values: BTreeMap<InputHandle, V>,
+    scoped_values: BTreeMap<GtkNodeInstance, BTreeMap<InputHandle, V>>,
     instances: BTreeMap<GtkNodeInstance, MountedNode<H::Widget>>,
     routes: BTreeMap<GtkEventRouteId, MountedRoute<H::Widget, H::EventHandle>>,
     next_route: u32,
@@ -364,7 +379,8 @@ where
             host,
             root: root.clone(),
             setter_sites,
-            values: initial_values.into_iter().collect(),
+            default_values: initial_values.into_iter().collect(),
+            scoped_values: BTreeMap::new(),
             instances: BTreeMap::new(),
             routes: BTreeMap::new(),
             next_route: 0,
@@ -440,15 +456,47 @@ where
             .get(&input)
             .cloned()
             .ok_or(GtkExecutorError::UnknownSetterInput { input })?;
-        self.values.insert(input, value.clone());
+        self.default_values.insert(input, value.clone());
         let targets = self
             .instances
             .keys()
             .filter(|instance| instance.node == site.node)
+            .filter(|instance| !self.has_scoped_value(instance, input))
             .cloned()
             .collect::<Vec<_>>();
         for instance in targets {
             let handle = self.widget_handle(&instance)?.clone();
+            self.host
+                .apply_dynamic_property(&handle, &site.binding, &value)
+                .map_err(GtkExecutorError::Host)?;
+        }
+        Ok(())
+    }
+
+    pub fn set_property_for_instance(
+        &mut self,
+        instance: &GtkNodeInstance,
+        input: InputHandle,
+        value: V,
+    ) -> Result<(), GtkExecutorError<H::Error>> {
+        let site = self
+            .setter_sites
+            .get(&input)
+            .cloned()
+            .ok_or(GtkExecutorError::UnknownSetterInput { input })?;
+        if instance.node != site.node {
+            return Err(GtkExecutorError::SetterInputInstanceMismatch {
+                input,
+                expected: site.node,
+                instance: instance.clone(),
+            });
+        }
+        self.scoped_values
+            .entry(instance.clone())
+            .or_default()
+            .insert(input, value.clone());
+        if self.is_mounted(instance) {
+            let handle = self.widget_handle(instance)?.clone();
             self.host
                 .apply_dynamic_property(&handle, &site.binding, &value)
                 .map_err(GtkExecutorError::Host)?;
@@ -976,7 +1024,10 @@ where
                                 .map_err(GtkExecutorError::Host)?;
                         }
                         RuntimePropertyBinding::Setter(binding) => {
-                            if let Some(value) = self.values.get(&binding.input).cloned() {
+                            if let Some(value) = self
+                                .scoped_value(instance, binding.input)
+                                .or_else(|| self.default_values.get(&binding.input).cloned())
+                            {
                                 self.host
                                     .apply_dynamic_property(&handle, binding, &value)
                                     .map_err(GtkExecutorError::Host)?;
@@ -1228,6 +1279,7 @@ where
                         instance: frame.instance.clone(),
                     },
                 )?;
+                self.scoped_values.remove(&frame.instance);
                 if let MountedNodeKind::Widget(widget) = state.kind {
                     for route_id in widget.event_routes {
                         let route = self
@@ -1257,6 +1309,19 @@ where
             }
         }
         Ok(())
+    }
+
+    fn has_scoped_value(&self, instance: &GtkNodeInstance, input: InputHandle) -> bool {
+        self.scoped_values
+            .get(instance)
+            .is_some_and(|values| values.contains_key(&input))
+    }
+
+    fn scoped_value(&self, instance: &GtkNodeInstance, input: InputHandle) -> Option<V> {
+        self.scoped_values
+            .get(instance)
+            .and_then(|values| values.get(&input))
+            .cloned()
     }
 
     fn refresh_root_widgets_from(
@@ -2264,6 +2329,112 @@ val view =
                 .dynamic_props
                 .get("title"),
             Some(&TestValue::Text("Shared title".to_string()))
+        );
+    }
+
+    #[test]
+    fn executor_applies_scoped_setter_updates_per_template_instance() {
+        let graph = control_fixture_graph();
+        let root = graph.root_node();
+        let GtkBridgeNodeKind::Fragment(fragment) = &root.kind else {
+            panic!("expected fragment root, found {:?}", root.kind.tag());
+        };
+        let show = GtkNodeInstance::root(fragment.body.roots[1]);
+        let show_node = graph.node(show.node.plan).expect("show node should exist");
+        let GtkBridgeNodeKind::Show(show_data) = &show_node.kind else {
+            panic!("expected show node, found {:?}", show_node.kind.tag());
+        };
+        let with_ref = show_data.body.roots[0];
+        let with_node = graph.node(with_ref.plan).expect("with node should exist");
+        let GtkBridgeNodeKind::With(with_node) = &with_node.kind else {
+            panic!("expected with node, found {:?}", with_node.kind.tag());
+        };
+        let match_instance = GtkNodeInstance::root(with_node.body.roots[0]);
+        let match_node = graph
+            .node(match_instance.node.plan)
+            .expect("match node should exist");
+        let GtkBridgeNodeKind::Match(match_data) = &match_node.kind else {
+            panic!("expected match node, found {:?}", match_node.kind.tag());
+        };
+        let each_instance = GtkNodeInstance::root(match_data.cases[1].body.roots[0]);
+        let each_node = graph
+            .node(each_instance.node.plan)
+            .expect("each node should exist");
+        let GtkBridgeNodeKind::Each(each_data) = &each_node.kind else {
+            panic!("expected each node, found {:?}", each_node.kind.tag());
+        };
+        let row_ref = each_data.item_template.roots[0];
+        let row_node = graph.node(row_ref.plan).expect("row node should exist");
+        let GtkBridgeNodeKind::Widget(row_data) = &row_node.kind else {
+            panic!("expected row widget, found {:?}", row_node.kind.tag());
+        };
+        let title_input = row_data
+            .properties
+            .iter()
+            .find_map(|property| match property {
+                RuntimePropertyBinding::Setter(binding) if binding.name.text() == "title" => {
+                    Some(binding.input)
+                }
+                _ => None,
+            })
+            .expect("row template should carry the title setter");
+
+        let mut executor =
+            GtkRuntimeExecutor::<TestHost, TestValue>::new(graph, TestHost::default())
+                .expect("executor should mount the fragment header");
+        executor.update_show(&show, true, true).unwrap();
+        executor.update_match(&match_instance, 1).unwrap();
+        executor
+            .update_each_keyed(
+                &each_instance,
+                &[
+                    GtkCollectionKey::from("alpha"),
+                    GtkCollectionKey::from("beta"),
+                ],
+            )
+            .unwrap();
+
+        let alpha_row = GtkNodeInstance::with_path(
+            row_ref,
+            each_instance.path.pushed(
+                each_instance.node,
+                GtkRepeatedChildIdentity::Keyed(GtkCollectionKey::from("alpha")),
+            ),
+        );
+        let beta_row = GtkNodeInstance::with_path(
+            row_ref,
+            each_instance.path.pushed(
+                each_instance.node,
+                GtkRepeatedChildIdentity::Keyed(GtkCollectionKey::from("beta")),
+            ),
+        );
+        executor
+            .set_property_for_instance(&alpha_row, title_input, TestValue::Text("Alpha".to_string()))
+            .expect("scoped setter should update the alpha row");
+        executor
+            .set_property_for_instance(&beta_row, title_input, TestValue::Text("Beta".to_string()))
+            .expect("scoped setter should update the beta row");
+        executor
+            .set_property(title_input, TestValue::Text("Shared title".to_string()))
+            .expect("shared setter should not clobber scoped row values");
+
+        let alpha_handle = executor.widget_handle(&alpha_row).unwrap().clone();
+        let beta_handle = executor.widget_handle(&beta_row).unwrap().clone();
+        assert_eq!(
+            executor
+                .host()
+                .widget(&alpha_handle)
+                .dynamic_props
+                .get("title"),
+            Some(&TestValue::Text("Alpha".to_string()))
+        );
+        assert_eq!(
+            executor
+                .host()
+                .widget(&beta_handle)
+                .dynamic_props
+                .get("title"),
+            Some(&TestValue::Text("Beta".to_string()))
         );
     }
 }

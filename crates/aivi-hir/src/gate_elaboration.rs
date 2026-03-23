@@ -210,6 +210,7 @@ pub enum GateRuntimeExprKind {
 pub enum GateRuntimeReference {
     Local(BindingId),
     Item(ItemId),
+    SumConstructor(crate::SumConstructorHandle),
     DomainMember(DomainMemberHandle),
     Builtin(BuiltinTerm),
 }
@@ -1033,9 +1034,10 @@ fn runtime_reference_for_name(
         crate::ResolutionState::Resolved(TermResolution::Local(binding)) => {
             Ok(GateRuntimeReference::Local(*binding))
         }
-        crate::ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-            Ok(GateRuntimeReference::Item(*item_id))
-        }
+        crate::ResolutionState::Resolved(TermResolution::Item(item_id)) => Ok(module
+            .sum_constructor_handle(*item_id, reference.path.segments().last().text())
+            .map(GateRuntimeReference::SumConstructor)
+            .unwrap_or(GateRuntimeReference::Item(*item_id))),
         crate::ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => module
             .domain_member_handle(*resolution)
             .map(GateRuntimeReference::DomainMember)

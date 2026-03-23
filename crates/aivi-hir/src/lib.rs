@@ -52,7 +52,9 @@ pub use gate_elaboration::{
 pub use general_expr_elaboration::{
     BlockedGeneralExpr, GeneralExprBlocker, GeneralExprElaborationReport,
     GeneralExprItemElaboration, GeneralExprOutcome, GeneralExprParameter,
-    elaborate_general_expressions,
+    MarkupRuntimeExprSite, MarkupRuntimeExprSiteError, MarkupRuntimeExprSites,
+    collect_markup_runtime_expr_sites, elaborate_general_expressions,
+    elaborate_runtime_expr_with_env,
 };
 pub use hir::{
     ApplicativeCluster, ApplicativeSpine, ApplicativeSpineHead, BinaryOperator, Binding,
@@ -72,7 +74,7 @@ pub use hir::{
     RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, RootItemError, ShowControl,
     SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
     SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
-    TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment,
+    TermResolution, SumConstructorHandle, TextFragment, TextInterpolation, TextLiteral, TextSegment,
     TupleConstructorArity, TypeField, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter,
     TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };

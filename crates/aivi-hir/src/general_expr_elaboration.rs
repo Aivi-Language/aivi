@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt,
+};
 
 use aivi_base::SourceSpan;
 use aivi_typing::GatePlanner;
@@ -54,6 +57,74 @@ pub struct GeneralExprParameter {
     pub name: Box<str>,
     pub ty: GateType,
 }
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MarkupRuntimeExprSites {
+    sites: BTreeMap<ExprId, MarkupRuntimeExprSite>,
+}
+
+impl MarkupRuntimeExprSites {
+    pub fn new(sites: BTreeMap<ExprId, MarkupRuntimeExprSite>) -> Self {
+        Self { sites }
+    }
+
+    pub fn sites(&self) -> &BTreeMap<ExprId, MarkupRuntimeExprSite> {
+        &self.sites
+    }
+
+    pub fn get(&self, expr: ExprId) -> Option<&MarkupRuntimeExprSite> {
+        self.sites.get(&expr)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarkupRuntimeExprSite {
+    pub expr: ExprId,
+    pub span: SourceSpan,
+    pub ty: GateType,
+    pub parameters: Vec<GeneralExprParameter>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MarkupRuntimeExprSiteError {
+    RootNotMarkup {
+        expr: ExprId,
+        span: SourceSpan,
+    },
+    MissingMarkupNode {
+        expr: ExprId,
+        node: crate::MarkupNodeId,
+    },
+    MissingControlNode {
+        expr: ExprId,
+        node: crate::ControlNodeId,
+    },
+    UnknownExprType {
+        expr: ExprId,
+        span: SourceSpan,
+    },
+}
+
+impl fmt::Display for MarkupRuntimeExprSiteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RootNotMarkup { expr, .. } => {
+                write!(f, "expression {expr} is not a markup root")
+            }
+            Self::MissingMarkupNode { expr, node } => {
+                write!(f, "markup root expression {expr} references missing markup node {node}")
+            }
+            Self::MissingControlNode { expr, node } => {
+                write!(f, "markup root expression {expr} references missing control node {node}")
+            }
+            Self::UnknownExprType { expr, .. } => {
+                write!(f, "markup runtime expression {expr} has no resolved type")
+            }
+        }
+    }
+}
+
+impl std::error::Error for MarkupRuntimeExprSiteError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GeneralExprOutcome {
@@ -222,6 +293,27 @@ pub fn elaborate_general_expressions(module: &Module) -> GeneralExprElaborationR
     GeneralExprElaborator::new(&module).build()
 }
 
+pub fn collect_markup_runtime_expr_sites(
+    module: &Module,
+    root: ExprId,
+) -> Result<MarkupRuntimeExprSites, MarkupRuntimeExprSiteError> {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    GeneralExprElaborator::new(&module).collect_markup_runtime_expr_sites(root)
+}
+
+pub fn elaborate_runtime_expr_with_env(
+    module: &Module,
+    expr_id: ExprId,
+    parameters: &[GeneralExprParameter],
+    expected: Option<&GateType>,
+) -> Result<GateRuntimeExpr, BlockedGeneralExpr> {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    let env = gate_env_from_parameters(parameters);
+    GeneralExprElaborator::new(&module)
+        .lower_expr(expr_id, &env, None, expected)
+        .map_err(|blockers| BlockedGeneralExpr { blockers })
+}
+
 pub(crate) fn elaborate_runtime_expr(
     module: &Module,
     expr_id: ExprId,
@@ -266,6 +358,212 @@ impl<'a> GeneralExprElaborator<'a> {
             }
         }
         GeneralExprElaborationReport::new(items)
+    }
+
+    fn collect_markup_runtime_expr_sites(
+        mut self,
+        root: ExprId,
+    ) -> Result<MarkupRuntimeExprSites, MarkupRuntimeExprSiteError> {
+        let expr = &self.module.exprs()[root];
+        let ExprKind::Markup(root_node) = expr.kind else {
+            return Err(MarkupRuntimeExprSiteError::RootNotMarkup {
+                expr: root,
+                span: expr.span,
+            });
+        };
+
+        enum Work {
+            Markup {
+                expr: ExprId,
+                node: crate::MarkupNodeId,
+                env: GateExprEnv,
+            },
+            Control {
+                expr: ExprId,
+                node: crate::ControlNodeId,
+                env: GateExprEnv,
+            },
+        }
+
+        let mut sites = BTreeMap::new();
+        let mut work = vec![Work::Markup {
+            expr: root,
+            node: root_node,
+            env: GateExprEnv::default(),
+        }];
+        while let Some(frame) = work.pop() {
+            match frame {
+                Work::Markup { expr, node, env } => {
+                    let Some(node) = self.module.markup_nodes().get(node).cloned() else {
+                        return Err(MarkupRuntimeExprSiteError::MissingMarkupNode { expr, node });
+                    };
+                    match node.kind {
+                        crate::MarkupNodeKind::Element(element) => {
+                            for child in element.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: env.clone(),
+                                });
+                            }
+                            for attribute in element.attributes.into_iter().rev() {
+                                match attribute.value {
+                                    crate::MarkupAttributeValue::Expr(attribute_expr) => {
+                                        self.record_markup_runtime_expr_site(
+                                            attribute_expr,
+                                            &env,
+                                            &mut sites,
+                                        )?;
+                                    }
+                                    crate::MarkupAttributeValue::Text(text) => {
+                                        for segment in text.segments.into_iter().rev() {
+                                            if let crate::TextSegment::Interpolation(interpolation) =
+                                                segment
+                                            {
+                                                self.record_markup_runtime_expr_site(
+                                                    interpolation.expr,
+                                                    &env,
+                                                    &mut sites,
+                                                )?;
+                                            }
+                                        }
+                                    }
+                                    crate::MarkupAttributeValue::ImplicitTrue => {}
+                                }
+                            }
+                        }
+                        crate::MarkupNodeKind::Control(control) => {
+                            work.push(Work::Control {
+                                expr,
+                                node: control,
+                                env,
+                            });
+                        }
+                    }
+                }
+                Work::Control { expr, node, env } => {
+                    let Some(control) = self.module.control_nodes().get(node).cloned() else {
+                        return Err(MarkupRuntimeExprSiteError::MissingControlNode { expr, node });
+                    };
+                    match control {
+                        crate::ControlNode::Show(node) => {
+                            self.record_markup_runtime_expr_site(node.when, &env, &mut sites)?;
+                            if let Some(keep_mounted) = node.keep_mounted {
+                                self.record_markup_runtime_expr_site(
+                                    keep_mounted,
+                                    &env,
+                                    &mut sites,
+                                )?;
+                            }
+                            for child in node.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: env.clone(),
+                                });
+                            }
+                        }
+                        crate::ControlNode::Each(node) => {
+                            self.record_markup_runtime_expr_site(
+                                node.collection,
+                                &env,
+                                &mut sites,
+                            )?;
+                            let child_env = self.each_child_env(&env, &node);
+                            if let Some(key) = node.key {
+                                self.record_markup_runtime_expr_site(key, &child_env, &mut sites)?;
+                            }
+                            for child in node.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: child_env.clone(),
+                                });
+                            }
+                            if let Some(empty) = node.empty {
+                                work.push(Work::Control {
+                                    expr,
+                                    node: empty,
+                                    env,
+                                });
+                            }
+                        }
+                        crate::ControlNode::Empty(node) => {
+                            for child in node.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: env.clone(),
+                                });
+                            }
+                        }
+                        crate::ControlNode::Match(node) => {
+                            self.record_markup_runtime_expr_site(
+                                node.scrutinee,
+                                &env,
+                                &mut sites,
+                            )?;
+                            let subject = self
+                                .typing
+                                .infer_expr(node.scrutinee, &env, None)
+                                .ty
+                                .ok_or(MarkupRuntimeExprSiteError::UnknownExprType {
+                                    expr: node.scrutinee,
+                                    span: self.module.exprs()[node.scrutinee].span,
+                                })?;
+                            for case in node.cases.iter().rev() {
+                                let case_env = self
+                                    .module
+                                    .control_nodes()
+                                    .get(*case)
+                                    .and_then(|case_node| match case_node {
+                                        crate::ControlNode::Case(case_node) => Some(
+                                            self.case_branch_env(&env, case_node.pattern, &subject),
+                                        ),
+                                        _ => None,
+                                    })
+                                    .unwrap_or_else(|| env.clone());
+                                work.push(Work::Control {
+                                    expr,
+                                    node: *case,
+                                    env: case_env,
+                                });
+                            }
+                        }
+                        crate::ControlNode::Case(node) => {
+                            for child in node.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: env.clone(),
+                                });
+                            }
+                        }
+                        crate::ControlNode::Fragment(node) => {
+                            for child in node.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: env.clone(),
+                                });
+                            }
+                        }
+                        crate::ControlNode::With(node) => {
+                            self.record_markup_runtime_expr_site(node.value, &env, &mut sites)?;
+                            let child_env = self.with_child_env(&env, &node);
+                            for child in node.children.into_iter().rev() {
+                                work.push(Work::Markup {
+                                    expr,
+                                    node: child,
+                                    env: child_env.clone(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(MarkupRuntimeExprSites::new(sites))
     }
 
     fn elaborate_value(&mut self, owner: ItemId, value: &ValueItem) -> GeneralExprItemElaboration {
@@ -1121,9 +1419,11 @@ impl<'a> GeneralExprElaborator<'a> {
             ResolutionState::Resolved(TermResolution::Local(binding)) => {
                 Ok(GateRuntimeReference::Local(*binding))
             }
-            ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-                Ok(GateRuntimeReference::Item(*item_id))
-            }
+            ResolutionState::Resolved(TermResolution::Item(item_id)) => Ok(self
+                .module
+                .sum_constructor_handle(*item_id, reference.path.segments().last().text())
+                .map(GateRuntimeReference::SumConstructor)
+                .unwrap_or(GateRuntimeReference::Item(*item_id))),
             ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => self
                 .module
                 .domain_member_handle(*resolution)
@@ -1166,17 +1466,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 | BuiltinTerm::Invalid,
             )) => self.runtime_reference_for_name(span, reference).ok(),
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-                let Item::Type(item) = &self.module.items()[*item_id] else {
-                    return None;
-                };
-                let TypeItemBody::Sum(variants) = &item.body else {
-                    return None;
-                };
-                let variant_name = reference.path.segments().last().text();
-                variants
-                    .iter()
-                    .any(|variant| variant.name.text() == variant_name)
-                    .then(|| GateRuntimeReference::Item(*item_id))
+                self.module
+                    .sum_constructor_handle(*item_id, reference.path.segments().last().text())
+                    .map(GateRuntimeReference::SumConstructor)
             }
             _ => None,
         }
@@ -1487,6 +1779,77 @@ impl<'a> GeneralExprElaborator<'a> {
             _ => Some(expected.clone()),
         }
     }
+
+    fn each_child_env(&mut self, env: &GateExprEnv, each: &crate::EachControl) -> GateExprEnv {
+        let mut child_env = env.clone();
+        if let Some(element_ty) = self
+            .typing
+            .infer_expr(each.collection, env, None)
+            .ty
+            .and_then(|collection| collection.fanout_element().cloned())
+        {
+            child_env.locals.insert(each.binding, element_ty);
+        }
+        child_env
+    }
+
+    fn with_child_env(&mut self, env: &GateExprEnv, with_node: &crate::WithControl) -> GateExprEnv {
+        let mut child_env = env.clone();
+        if let Some(value_ty) = self.typing.infer_expr(with_node.value, env, None).ty {
+            child_env.locals.insert(with_node.binding, value_ty);
+        }
+        child_env
+    }
+
+    fn record_markup_runtime_expr_site(
+        &mut self,
+        expr: ExprId,
+        env: &GateExprEnv,
+        sites: &mut BTreeMap<ExprId, MarkupRuntimeExprSite>,
+    ) -> Result<(), MarkupRuntimeExprSiteError> {
+        let ty = self
+            .typing
+            .infer_expr(expr, env, None)
+            .ty
+            .ok_or(MarkupRuntimeExprSiteError::UnknownExprType {
+                expr,
+                span: self.module.exprs()[expr].span,
+            })?;
+        let parameters = env_parameters(self.module, env);
+        sites.entry(expr).or_insert(MarkupRuntimeExprSite {
+            expr,
+            span: self.module.exprs()[expr].span,
+            ty,
+            parameters,
+        });
+        Ok(())
+    }
+}
+
+fn gate_env_from_parameters(parameters: &[GeneralExprParameter]) -> GateExprEnv {
+    let mut env = GateExprEnv::default();
+    for parameter in parameters {
+        env.locals.insert(parameter.binding, parameter.ty.clone());
+    }
+    env
+}
+
+fn env_parameters(module: &Module, env: &GateExprEnv) -> Vec<GeneralExprParameter> {
+    let mut parameters = env
+        .locals
+        .iter()
+        .map(|(binding, ty)| {
+            let binding_info = &module.bindings()[*binding];
+            GeneralExprParameter {
+                binding: *binding,
+                span: binding_info.span,
+                name: binding_info.name.text().into(),
+                ty: ty.clone(),
+            }
+        })
+        .collect::<Vec<_>>();
+    parameters.sort_by_key(|parameter| parameter.binding.as_raw());
+    parameters
 }
 
 fn join_stage_spans(stages: &[&crate::PipeStage]) -> SourceSpan {

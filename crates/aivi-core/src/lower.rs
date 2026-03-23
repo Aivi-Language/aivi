@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use aivi_base::SourceSpan;
 use aivi_hir::{
@@ -7,7 +7,8 @@ use aivi_hir::{
     BlockedTruthyFalsyStage, ExprId as HirExprId, GateRuntimeExpr, GateRuntimeExprKind,
     GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeReference,
     GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch, GateStageOutcome,
-    GeneralExprOutcome, Item as HirItem, ItemId as HirItemId, PatternId as HirPatternId,
+    GeneralExprOutcome, GeneralExprParameter, Item as HirItem, ItemId as HirItemId,
+    PatternId as HirPatternId,
     RecurrenceNodeOutcome, SourceDecodeProgram, SourceDecodeProgramOutcome,
     SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome, elaborate_fanouts, elaborate_gates,
     elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
@@ -247,6 +248,28 @@ pub fn lower_module(hir: &aivi_hir::Module) -> Result<Module, LoweringErrors> {
     ModuleLowerer::new(hir).build()
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeFragmentSpec {
+    pub name: Box<str>,
+    pub owner: HirItemId,
+    pub body_expr: HirExprId,
+    pub parameters: Vec<GeneralExprParameter>,
+    pub body: GateRuntimeExpr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoweredRuntimeFragment {
+    pub entry_name: Box<str>,
+    pub module: Module,
+}
+
+pub fn lower_runtime_fragment(
+    hir: &aivi_hir::Module,
+    fragment: &RuntimeFragmentSpec,
+) -> Result<LoweredRuntimeFragment, LoweringErrors> {
+    RuntimeFragmentLowerer::new(hir, fragment).build()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct PipeKey {
     owner: HirItemId,
@@ -277,6 +300,14 @@ struct ModuleLowerer<'a> {
     source_by_owner: HashMap<ItemId, SourceId>,
     decode_by_owner: HashMap<ItemId, DecodeProgramId>,
     errors: Vec<LoweringError>,
+}
+
+struct RuntimeFragmentLowerer<'a> {
+    lowerer: ModuleLowerer<'a>,
+    fragment: &'a RuntimeFragmentSpec,
+    report_by_owner: HashMap<HirItemId, aivi_hir::GeneralExprItemElaboration>,
+    lowering: HashSet<HirItemId>,
+    lowered: HashSet<HirItemId>,
 }
 
 impl<'a> ModuleLowerer<'a> {
@@ -1189,10 +1220,10 @@ impl<'a> ModuleLowerer<'a> {
                 Reference::Local(*binding)
             }
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Item(item)) => self
-                .item_map
-                .get(item)
-                .copied()
-                .map(Reference::Item)
+                .hir
+                .sum_constructor_handle(*item, reference.path.segments().last().text())
+                .map(Reference::SumConstructor)
+                .or_else(|| self.item_map.get(item).copied().map(Reference::Item))
                 .unwrap_or(Reference::HirItem(*item)),
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::DomainMember(
                 resolution,
@@ -1331,6 +1362,9 @@ impl<'a> ModuleLowerer<'a> {
                                                 .copied()
                                                 .map(Reference::Item)
                                                 .unwrap_or(Reference::HirItem(*item)),
+                                            GateRuntimeReference::SumConstructor(handle) => {
+                                                Reference::SumConstructor(handle.clone())
+                                            }
                                             GateRuntimeReference::DomainMember(handle) => {
                                                 Reference::DomainMember(handle.clone())
                                             }
@@ -2050,6 +2084,281 @@ impl TruthyFalsyArmSpec {
             result_type: branch.result_type.clone(),
         }
     }
+}
+
+impl<'a> RuntimeFragmentLowerer<'a> {
+    fn new(hir: &'a aivi_hir::Module, fragment: &'a RuntimeFragmentSpec) -> Self {
+        let report_by_owner = elaborate_general_expressions(hir)
+            .into_items()
+            .into_iter()
+            .map(|item| (item.owner, item))
+            .collect();
+        Self {
+            lowerer: ModuleLowerer::new(hir),
+            fragment,
+            report_by_owner,
+            lowering: HashSet::new(),
+            lowered: HashSet::new(),
+        }
+    }
+
+    fn build(mut self) -> Result<LoweredRuntimeFragment, LoweringErrors> {
+        for dependency in referenced_hir_items(&self.fragment.body) {
+            self.ensure_hir_item_lowered(dependency);
+        }
+
+        let fragment_item = self
+            .lowerer
+            .module
+            .items_mut()
+            .alloc(Item {
+                origin: self.fragment.owner,
+                span: self.lowerer.hir.exprs()[self.fragment.body_expr].span,
+                name: self.fragment.name.clone(),
+                kind: if self.fragment.parameters.is_empty() {
+                    ItemKind::Value
+                } else {
+                    ItemKind::Function
+                },
+                parameters: self
+                    .fragment
+                    .parameters
+                    .iter()
+                    .map(|parameter| ItemParameter {
+                        binding: parameter.binding,
+                        span: parameter.span,
+                        name: parameter.name.clone(),
+                        ty: Type::lower(&parameter.ty),
+                    })
+                    .collect(),
+                body: None,
+                pipes: Vec::new(),
+            })
+            .map_err(|overflow| LoweringErrors::new(vec![arena_overflow("items", overflow)]))?;
+
+        match self
+            .lowerer
+            .lower_runtime_expr(self.fragment.owner, &self.fragment.body)
+        {
+            Ok(body) => {
+                let item = self
+                    .lowerer
+                    .module
+                    .items_mut()
+                    .get_mut(fragment_item)
+                    .expect("freshly allocated runtime fragment item should exist");
+                item.body = Some(body);
+            }
+            Err(error) => self.lowerer.errors.push(error),
+        }
+
+        if !self.lowerer.errors.is_empty() {
+            return Err(LoweringErrors::new(self.lowerer.errors));
+        }
+        if let Err(validation) = validate_module(&self.lowerer.module) {
+            self.lowerer.errors.extend(
+                validation
+                    .into_errors()
+                    .into_iter()
+                    .map(LoweringError::Validation),
+            );
+            return Err(LoweringErrors::new(self.lowerer.errors));
+        }
+
+        Ok(LoweredRuntimeFragment {
+            entry_name: self.fragment.name.clone(),
+            module: self.lowerer.module,
+        })
+    }
+
+    fn ensure_hir_item_lowered(&mut self, owner: HirItemId) {
+        if self.lowered.contains(&owner) || self.lowering.contains(&owner) {
+            return;
+        }
+        let Some(report) = self.report_by_owner.get(&owner).cloned() else {
+            self.lowerer.errors.push(LoweringError::UnknownOwner { owner });
+            return;
+        };
+        let Some(core_item) = self.seed_hir_item(owner) else {
+            return;
+        };
+        let body = match report.outcome {
+            GeneralExprOutcome::Lowered(body) => body,
+            GeneralExprOutcome::Blocked(blocked) => {
+                self.lowerer.errors.push(LoweringError::BlockedGeneralExpr {
+                    owner,
+                    body_expr: report.body_expr,
+                    span: blocked.primary_span().unwrap_or_default(),
+                    blocked,
+                });
+                return;
+            }
+        };
+
+        self.lowering.insert(owner);
+        for dependency in referenced_hir_items(&body) {
+            self.ensure_hir_item_lowered(dependency);
+        }
+        if self.lowerer.errors.is_empty() {
+            match self.lowerer.lower_runtime_expr(owner, &body) {
+                Ok(lowered_body) => {
+                    let item = self
+                        .lowerer
+                        .module
+                        .items_mut()
+                        .get_mut(core_item)
+                        .expect("seeded runtime dependency item should exist");
+                    item.parameters = report
+                        .parameters
+                        .iter()
+                        .map(|parameter| ItemParameter {
+                            binding: parameter.binding,
+                            span: parameter.span,
+                            name: parameter.name.clone(),
+                            ty: Type::lower(&parameter.ty),
+                        })
+                        .collect();
+                    item.body = Some(lowered_body);
+                }
+                Err(error) => self.lowerer.errors.push(error),
+            }
+        }
+        self.lowering.remove(&owner);
+        self.lowered.insert(owner);
+    }
+
+    fn seed_hir_item(&mut self, owner: HirItemId) -> Option<ItemId> {
+        if let Some(item) = self.lowerer.item_map.get(&owner).copied() {
+            return Some(item);
+        }
+        let item = self.lowerer.hir.items().get(owner)?;
+        let (span, name, kind) = match item {
+            HirItem::Value(item) => (item.header.span, item.name.text().into(), ItemKind::Value),
+            HirItem::Function(item) => {
+                (item.header.span, item.name.text().into(), ItemKind::Function)
+            }
+            HirItem::Signal(item) => (
+                item.header.span,
+                item.name.text().into(),
+                ItemKind::Signal(SignalInfo::default()),
+            ),
+            HirItem::Instance(item) => (
+                item.header.span,
+                format!("instance#{}", owner.as_raw()).into_boxed_str(),
+                ItemKind::Instance,
+            ),
+            HirItem::Type(_)
+            | HirItem::Class(_)
+            | HirItem::Domain(_)
+            | HirItem::SourceProviderContract(_)
+            | HirItem::Use(_)
+            | HirItem::Export(_) => {
+                self.lowerer.errors.push(LoweringError::UnknownOwner { owner });
+                return None;
+            }
+        };
+        let item_id = match self.lowerer.module.items_mut().alloc(Item {
+            origin: owner,
+            span,
+            name,
+            kind,
+            parameters: Vec::new(),
+            body: None,
+            pipes: Vec::new(),
+        }) {
+            Ok(item_id) => item_id,
+            Err(overflow) => {
+                self.lowerer.errors.push(arena_overflow("items", overflow));
+                return None;
+            }
+        };
+        self.lowerer.item_map.insert(owner, item_id);
+        Some(item_id)
+    }
+}
+
+fn referenced_hir_items(root: &GateRuntimeExpr) -> Vec<HirItemId> {
+    let mut seen = HashSet::new();
+    let mut work = vec![root];
+    while let Some(expr) = work.pop() {
+        match &expr.kind {
+            GateRuntimeExprKind::AmbientSubject
+            | GateRuntimeExprKind::Integer(_)
+            | GateRuntimeExprKind::SuffixedInteger(_)
+            | GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_))
+            | GateRuntimeExprKind::Reference(GateRuntimeReference::Builtin(_))
+            | GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(_))
+            | GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(_)) => {}
+            GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item)) => {
+                seen.insert(*item);
+            }
+            GateRuntimeExprKind::Text(text) => {
+                for segment in text.segments.iter().rev() {
+                    if let GateRuntimeTextSegment::Interpolation(interpolation) = segment {
+                        work.push(interpolation);
+                    }
+                }
+            }
+            GateRuntimeExprKind::Tuple(elements)
+            | GateRuntimeExprKind::List(elements)
+            | GateRuntimeExprKind::Set(elements) => {
+                for element in elements.iter().rev() {
+                    work.push(element);
+                }
+            }
+            GateRuntimeExprKind::Map(entries) => {
+                for entry in entries.iter().rev() {
+                    work.push(&entry.value);
+                    work.push(&entry.key);
+                }
+            }
+            GateRuntimeExprKind::Record(fields) => {
+                for field in fields.iter().rev() {
+                    work.push(&field.value);
+                }
+            }
+            GateRuntimeExprKind::Projection { base, .. } => {
+                if let GateRuntimeProjectionBase::Expr(base) = base {
+                    work.push(base);
+                }
+            }
+            GateRuntimeExprKind::Apply { callee, arguments } => {
+                for argument in arguments.iter().rev() {
+                    work.push(argument);
+                }
+                work.push(callee);
+            }
+            GateRuntimeExprKind::Unary { expr, .. } => work.push(expr),
+            GateRuntimeExprKind::Binary { left, right, .. } => {
+                work.push(right);
+                work.push(left);
+            }
+            GateRuntimeExprKind::Pipe(pipe) => {
+                work.push(&pipe.head);
+                for stage in pipe.stages.iter().rev() {
+                    match &stage.kind {
+                        GateRuntimePipeStageKind::Transform { expr }
+                        | GateRuntimePipeStageKind::Tap { expr }
+                        | GateRuntimePipeStageKind::Gate {
+                            predicate: expr, ..
+                        } => work.push(expr),
+                        GateRuntimePipeStageKind::Case { arms } => {
+                            for arm in arms.iter().rev() {
+                                work.push(&arm.body);
+                            }
+                        }
+                        GateRuntimePipeStageKind::TruthyFalsy { truthy, falsy } => {
+                            work.push(&falsy.body);
+                            work.push(&truthy.body);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut items = seen.into_iter().collect::<Vec<_>>();
+    items.sort_by_key(|item| item.as_raw());
+    items
 }
 
 #[cfg(test)]
