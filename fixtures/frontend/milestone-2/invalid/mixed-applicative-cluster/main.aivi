@@ -1,0 +1,9 @@
+type NamePair = NamePair Text Text
+
+val first:(Option Text) = Some "Ada"
+sig last = "Lovelace"
+
+val broken =
+ &|> first
+ &|> last
+  |> NamePair

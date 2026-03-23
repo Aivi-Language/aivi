@@ -2,10 +2,10 @@ use aivi_base::SourceSpan;
 use aivi_typing::{FanoutCarrier, FanoutPlanner, FanoutStageKind};
 
 use crate::{
-    ExprId, Item, ItemId, Module, PipeExpr, PipeStageKind,
     validate::{
-        GateExprEnv, GateIssue, GateType, GateTypeContext, truthy_falsy_pair_stages, walk_expr_tree,
+        truthy_falsy_pair_stages, walk_expr_tree, GateExprEnv, GateIssue, GateType, GateTypeContext,
     },
+    ExprId, Item, ItemId, Module, PipeExpr, PipeStageKind,
 };
 
 /// Focused fan-out plans derived from resolved HIR.
@@ -366,7 +366,11 @@ fn blocker_for_map_issue(issue: GateIssue) -> FanoutElaborationBlocker {
         GateIssue::UnknownField { path, subject, .. } => {
             FanoutElaborationBlocker::MapUnknownField { path, subject }
         }
-        GateIssue::AmbiguousDomainMember { .. } => FanoutElaborationBlocker::UnknownMapBodyType,
+        GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::UnsupportedApplicativeClusterMember { .. }
+        | GateIssue::ApplicativeClusterMismatch { .. }
+        | GateIssue::InvalidClusterFinalizer { .. }
+        | GateIssue::CaseBranchTypeMismatch { .. } => FanoutElaborationBlocker::UnknownMapBodyType,
     }
 }
 
@@ -378,7 +382,11 @@ fn blocker_for_join_issue(issue: GateIssue) -> FanoutElaborationBlocker {
         GateIssue::UnknownField { path, subject, .. } => {
             FanoutElaborationBlocker::JoinUnknownField { path, subject }
         }
-        GateIssue::AmbiguousDomainMember { .. } => FanoutElaborationBlocker::UnknownJoinBodyType,
+        GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::UnsupportedApplicativeClusterMember { .. }
+        | GateIssue::ApplicativeClusterMismatch { .. }
+        | GateIssue::InvalidClusterFinalizer { .. }
+        | GateIssue::CaseBranchTypeMismatch { .. } => FanoutElaborationBlocker::UnknownJoinBodyType,
     }
 }
 
@@ -406,8 +414,8 @@ mod tests {
     use aivi_syntax::parse_module;
     use aivi_typing::FanoutCarrier;
 
-    use super::{FanoutElaborationBlocker, FanoutSegmentOutcome, elaborate_fanouts};
-    use crate::{BuiltinType, GateType, Item, ValidationMode, lower_module};
+    use super::{elaborate_fanouts, FanoutElaborationBlocker, FanoutSegmentOutcome};
+    use crate::{lower_module, BuiltinType, GateType, Item, ValidationMode};
 
     fn fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))

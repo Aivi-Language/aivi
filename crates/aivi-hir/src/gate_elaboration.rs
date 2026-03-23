@@ -2,12 +2,12 @@ use aivi_base::SourceSpan;
 use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
+    validate::{
+        truthy_falsy_pair_stages, walk_expr_tree, GateExprEnv, GateIssue, GateType, GateTypeContext,
+    },
     BinaryOperator, BindingId, BuiltinTerm, ExprId, ExprKind, IntegerLiteral, Item, ItemId, Module,
     Name, NamePath, PipeExpr, PipeStageKind, ProjectionBase, SuffixedIntegerLiteral,
     TermResolution, TextFragment, TextSegment, UnaryOperator,
-    validate::{
-        GateExprEnv, GateIssue, GateType, GateTypeContext, truthy_falsy_pair_stages, walk_expr_tree,
-    },
 };
 
 /// Focused gate-core plans derived from resolved HIR.
@@ -937,7 +937,11 @@ fn blocker_for_issue(issue: GateIssue) -> GateElaborationBlocker {
         GateIssue::UnknownField { path, subject, .. } => {
             GateElaborationBlocker::UnknownField { path, subject }
         }
-        GateIssue::AmbiguousDomainMember { span, .. } => {
+        GateIssue::AmbiguousDomainMember { span, .. }
+        | GateIssue::UnsupportedApplicativeClusterMember { span, .. }
+        | GateIssue::ApplicativeClusterMismatch { span, .. }
+        | GateIssue::InvalidClusterFinalizer { span, .. }
+        | GateIssue::CaseBranchTypeMismatch { span, .. } => {
             GateElaborationBlocker::UnknownRuntimeExprType { span }
         }
     }
@@ -967,10 +971,10 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use super::{
-        GateCoreExprKind, GateElaborationBlocker, GateRuntimeExprKind, GateRuntimeProjectionBase,
-        GateRuntimeReference, GateStageOutcome, elaborate_gates,
+        elaborate_gates, GateCoreExprKind, GateElaborationBlocker, GateRuntimeExprKind,
+        GateRuntimeProjectionBase, GateRuntimeReference, GateStageOutcome,
     };
-    use crate::{BuiltinType, GateType, Item, lower_module};
+    use crate::{lower_module, BuiltinType, GateType, Item};
 
     fn fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1356,12 +1360,10 @@ val maybeJoined:Option Text =
 
         match &blocked.outcome {
             GateStageOutcome::Blocked(stage) => {
-                assert!(
-                    stage
-                        .blockers
-                        .iter()
-                        .any(|blocker| blocker == &GateElaborationBlocker::ImpurePredicate)
-                );
+                assert!(stage
+                    .blockers
+                    .iter()
+                    .any(|blocker| blocker == &GateElaborationBlocker::ImpurePredicate));
             }
             other => panic!("expected blocked gate stage, found {other:?}"),
         }

@@ -1,29 +1,28 @@
 use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt,
 };
 
 use aivi_base::{ByteIndex, Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan, Span};
 use aivi_typing::{
-    BuiltinSourceProvider, BuiltinSourceWakeupCause, CustomSourceRecurrenceWakeupContext,
-    FanoutCarrier, FanoutPlan, FanoutPlanner, FanoutResultKind, FanoutStageKind, GateCarrier,
-    GatePlanner, GateResultKind, Kind, KindCheckError, KindCheckErrorKind, KindChecker, KindExprId,
+    builtin_source_option_wakeup_cause, BuiltinSourceProvider, BuiltinSourceWakeupCause,
+    CustomSourceRecurrenceWakeupContext, FanoutCarrier, FanoutPlan, FanoutPlanner,
+    FanoutResultKind, FanoutStageKind, GateCarrier, GatePlanner, GateResultKind, Kind,
+    KindCheckError, KindCheckErrorKind, KindChecker, KindExprId,
     KindParameterId as TypingKindParameterId, KindRecordField, KindStore, NonSourceWakeupCause,
     RecurrencePlanner, RecurrenceTargetEvidence, RecurrenceWakeupKind, RecurrenceWakeupPlanner,
     SourceContractType, SourceRecurrenceWakeupContext, SourceTypeParameter,
-    builtin_source_option_wakeup_cause,
 };
 use regex_syntax::{
-    Error as RegexSyntaxError, ParserBuilder as RegexParserBuilder, ast::Span as RegexSpan,
+    ast::Span as RegexSpan, Error as RegexSyntaxError, ParserBuilder as RegexParserBuilder,
 };
 
 use crate::{
     arena::{Arena, ArenaId},
     hir::{
         ApplicativeSpineHead, BuiltinTerm, BuiltinType, ControlNode, ControlNodeKind,
-        CustomSourceRecurrenceWakeup, DecoratorPayload, DomainMemberKind,
-        DomainMemberResolution, ExprKind,
-        ImportBindingMetadata, ImportValueType, Item, LiteralSuffixResolution,
+        CustomSourceRecurrenceWakeup, DecoratorPayload, DomainMemberKind, DomainMemberResolution,
+        ExprKind, ImportBindingMetadata, ImportValueType, Item, LiteralSuffixResolution,
         MarkupAttributeValue, MarkupNodeKind, Module, Name, NamePath, PatternKind, PipeStageKind,
         RecurrenceWakeupDecoratorKind, ResolutionState, SignalItem, SourceDecorator,
         SourceMetadata, SourceProviderRef, TermReference, TermResolution, TextLiteral, TextSegment,
@@ -37,7 +36,7 @@ use crate::{
         ResolvedSourceContractType, ResolvedSourceTypeConstructor,
         SourceContractResolutionErrorKind, SourceContractTypeResolver,
     },
-    typecheck::{TypeConstraint, expression_matches, typecheck_module},
+    typecheck::{expression_matches, typecheck_module, TypeConstraint},
 };
 
 /// Validation strictness for HIR modules.
@@ -1384,7 +1383,12 @@ impl Validator<'_> {
         value_stack: &mut Vec<ItemId>,
     ) -> SourceOptionTypeCheck {
         if let Some(expected_gate) = expected.to_gate_type(bindings) {
-            if expression_matches(self.module, expr_id, &GateExprEnv::default(), &expected_gate) {
+            if expression_matches(
+                self.module,
+                expr_id,
+                &GateExprEnv::default(),
+                &expected_gate,
+            ) {
                 return SourceOptionTypeCheck::Match;
             }
         }
@@ -4520,6 +4524,71 @@ impl Validator<'_> {
                     .with_note(format!("candidates: {}", candidates.join(", "))),
                 );
             }
+            GateIssue::UnsupportedApplicativeClusterMember { span, actual } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "gate predicate contains an `&|>` cluster member with unsupported type `{actual}`"
+                    ))
+                    .with_code(code("unsupported-applicative-cluster-member"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "use one resolved applicative family for every cluster member inside this predicate",
+                    )),
+                );
+            }
+            GateIssue::ApplicativeClusterMismatch {
+                span,
+                expected,
+                actual,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "gate predicate mixes `{expected}` with `{actual}` inside one `&|>` cluster"
+                    ))
+                    .with_code(code("applicative-cluster-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "all members in one cluster must share the same outer applicative constructor",
+                    )),
+                );
+            }
+            GateIssue::InvalidClusterFinalizer {
+                span,
+                expected_inputs,
+                actual,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "gate predicate uses an `&|>` cluster finalizer that cannot consume {} (found `{actual}`)",
+                        expected_inputs
+                            .iter()
+                            .map(|input| format!("`{input}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .with_code(code("invalid-cluster-finalizer"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "adjust the finalizer so it accepts the member payload types in order",
+                    )),
+                );
+            }
+            GateIssue::CaseBranchTypeMismatch {
+                span,
+                expected,
+                actual,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "gate predicate contains a case split whose branches produce `{expected}` and `{actual}`"
+                    ))
+                    .with_code(code("case-branch-type-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "make every branch in this case split produce the same type",
+                    )),
+                );
+            }
         }
     }
 
@@ -4612,6 +4681,71 @@ impl Validator<'_> {
                         "add more type context or use a distinct local/import alias for the member you want",
                     ))
                     .with_note(format!("candidates: {}", candidates.join(", "))),
+                );
+            }
+            GateIssue::UnsupportedApplicativeClusterMember { span, actual } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{branch_name} branch contains an `&|>` cluster member with unsupported type `{actual}`"
+                    ))
+                    .with_code(code("unsupported-applicative-cluster-member"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "use one resolved applicative family for every cluster member in this branch",
+                    )),
+                );
+            }
+            GateIssue::ApplicativeClusterMismatch {
+                span,
+                expected,
+                actual,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{branch_name} branch mixes `{expected}` with `{actual}` inside one `&|>` cluster"
+                    ))
+                    .with_code(code("applicative-cluster-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "all members in one cluster must share the same outer applicative constructor",
+                    )),
+                );
+            }
+            GateIssue::InvalidClusterFinalizer {
+                span,
+                expected_inputs,
+                actual,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{branch_name} branch uses an `&|>` cluster finalizer that cannot consume {} (found `{actual}`)",
+                        expected_inputs
+                            .iter()
+                            .map(|input| format!("`{input}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .with_code(code("invalid-cluster-finalizer"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "adjust the finalizer so it accepts the member payload types in order",
+                    )),
+                );
+            }
+            GateIssue::CaseBranchTypeMismatch {
+                span,
+                expected,
+                actual,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{branch_name} branch contains a case split whose branches produce `{expected}` and `{actual}`"
+                    ))
+                    .with_code(code("case-branch-type-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "make every branch in this nested case split produce the same type",
+                    )),
                 );
             }
         }
@@ -4758,6 +4892,101 @@ impl Validator<'_> {
                         "add more type context or use a distinct local/import alias for the member you want",
                     ))
                     .with_note(format!("candidates: {}", candidates.join(", "))),
+                );
+            }
+            (context, GateIssue::UnsupportedApplicativeClusterMember { span, actual }) => {
+                let (subject, code_name, label) = match context {
+                    FanoutIssueContext::MapElement => (
+                        "fan-out body",
+                        "unsupported-applicative-cluster-member",
+                        "use one resolved applicative family for every cluster member in this mapped body",
+                    ),
+                    FanoutIssueContext::JoinCollection => (
+                        "fan-in body",
+                        "unsupported-applicative-cluster-member",
+                        "use one resolved applicative family for every cluster member in this reduction body",
+                    ),
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} contains an `&|>` cluster member with unsupported type `{actual}`"
+                    ))
+                    .with_code(code(code_name))
+                    .with_label(DiagnosticLabel::primary(span, label)),
+                );
+            }
+            (
+                context,
+                GateIssue::ApplicativeClusterMismatch {
+                    span,
+                    expected,
+                    actual,
+                },
+            ) => {
+                let subject = match context {
+                    FanoutIssueContext::MapElement => "fan-out body",
+                    FanoutIssueContext::JoinCollection => "fan-in body",
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} mixes `{expected}` with `{actual}` inside one `&|>` cluster"
+                    ))
+                    .with_code(code("applicative-cluster-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "all members in one cluster must share the same outer applicative constructor",
+                    )),
+                );
+            }
+            (
+                context,
+                GateIssue::InvalidClusterFinalizer {
+                    span,
+                    expected_inputs,
+                    actual,
+                },
+            ) => {
+                let subject = match context {
+                    FanoutIssueContext::MapElement => "fan-out body",
+                    FanoutIssueContext::JoinCollection => "fan-in body",
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} uses an `&|>` cluster finalizer that cannot consume {} (found `{actual}`)",
+                        expected_inputs
+                            .iter()
+                            .map(|input| format!("`{input}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .with_code(code("invalid-cluster-finalizer"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "adjust the finalizer so it accepts the member payload types in order",
+                    )),
+                );
+            }
+            (
+                context,
+                GateIssue::CaseBranchTypeMismatch {
+                    span,
+                    expected,
+                    actual,
+                },
+            ) => {
+                let subject = match context {
+                    FanoutIssueContext::MapElement => "fan-out body",
+                    FanoutIssueContext::JoinCollection => "fan-in body",
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} contains a case split whose branches produce `{expected}` and `{actual}`"
+                    ))
+                    .with_code(code("case-branch-type-mismatch"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "make every branch in this nested case split produce the same type",
+                    )),
                 );
             }
         }
@@ -5464,12 +5693,14 @@ impl Validator<'_> {
         };
         if member.kind != DomainMemberKind::Method {
             self.diagnostics.push(
-                Diagnostic::error("domain member resolution does not target a callable domain member")
-                    .with_code(code("invalid-domain-member-resolution"))
-                    .with_label(DiagnosticLabel::primary(
-                        span,
-                        "only callable identifier members participate in unqualified term resolution",
-                    )),
+                Diagnostic::error(
+                    "domain member resolution does not target a callable domain member",
+                )
+                .with_code(code("invalid-domain-member-resolution"))
+                .with_label(DiagnosticLabel::primary(
+                    span,
+                    "only callable identifier members participate in unqualified term resolution",
+                )),
             );
         }
     }
@@ -5870,6 +6101,25 @@ pub(crate) enum GateIssue {
         name: String,
         candidates: Vec<String>,
     },
+    UnsupportedApplicativeClusterMember {
+        span: SourceSpan,
+        actual: String,
+    },
+    ApplicativeClusterMismatch {
+        span: SourceSpan,
+        expected: String,
+        actual: String,
+    },
+    InvalidClusterFinalizer {
+        span: SourceSpan,
+        expected_inputs: Vec<String>,
+        actual: String,
+    },
+    CaseBranchTypeMismatch {
+        span: SourceSpan,
+        expected: String,
+        actual: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -6126,6 +6376,83 @@ impl fmt::Display for GateType {
                 }
                 Ok(())
             }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ApplicativeClusterKind {
+    List,
+    Option,
+    Result { error: GateType },
+    Validation { error: GateType },
+    Signal,
+    Task { error: GateType },
+}
+
+impl ApplicativeClusterKind {
+    fn from_member_type(ty: &GateType) -> Option<(Self, GateType)> {
+        match ty {
+            GateType::List(element) => Some((Self::List, element.as_ref().clone())),
+            GateType::Option(element) => Some((Self::Option, element.as_ref().clone())),
+            GateType::Result { error, value } => Some((
+                Self::Result {
+                    error: error.as_ref().clone(),
+                },
+                value.as_ref().clone(),
+            )),
+            GateType::Validation { error, value } => Some((
+                Self::Validation {
+                    error: error.as_ref().clone(),
+                },
+                value.as_ref().clone(),
+            )),
+            GateType::Signal(element) => Some((Self::Signal, element.as_ref().clone())),
+            GateType::Task { error, value } => Some((
+                Self::Task {
+                    error: error.as_ref().clone(),
+                },
+                value.as_ref().clone(),
+            )),
+            GateType::Primitive(_)
+            | GateType::Tuple(_)
+            | GateType::Record(_)
+            | GateType::Arrow { .. }
+            | GateType::Map { .. }
+            | GateType::Set(_)
+            | GateType::Domain { .. }
+            | GateType::OpaqueItem { .. } => None,
+        }
+    }
+
+    fn wrap(&self, payload: GateType) -> GateType {
+        match self {
+            Self::List => GateType::List(Box::new(payload)),
+            Self::Option => GateType::Option(Box::new(payload)),
+            Self::Result { error } => GateType::Result {
+                error: Box::new(error.clone()),
+                value: Box::new(payload),
+            },
+            Self::Validation { error } => GateType::Validation {
+                error: Box::new(error.clone()),
+                value: Box::new(payload),
+            },
+            Self::Signal => GateType::Signal(Box::new(payload)),
+            Self::Task { error } => GateType::Task {
+                error: Box::new(error.clone()),
+                value: Box::new(payload),
+            },
+        }
+    }
+
+    fn surface(&self) -> String {
+        match self {
+            Self::List => "List _".to_owned(),
+            Self::Option => "Option _".to_owned(),
+            Self::Result { error } => format!("Result {error} _"),
+            Self::Validation { error } => format!("Validation {error} _"),
+            Self::Signal => "Signal _".to_owned(),
+            Self::Task { error } => format!("Task {error} _"),
         }
     }
 }
@@ -6649,9 +6976,11 @@ impl<'a> GateTypeContext<'a> {
         expected: &GateType,
     ) -> Option<DomainMemberSelection<GateType>> {
         let candidates = self.domain_member_candidates(reference)?;
-        Some(self.select_domain_member_candidate(candidates, |this, resolution| {
-            this.match_domain_member_name_candidate(resolution, expected)
-        }))
+        Some(
+            self.select_domain_member_candidate(candidates, |this, resolution| {
+                this.match_domain_member_name_candidate(resolution, expected)
+            }),
+        )
     }
 
     pub(crate) fn select_domain_member_call(
@@ -6661,9 +6990,11 @@ impl<'a> GateTypeContext<'a> {
         expected_result: Option<&GateType>,
     ) -> Option<DomainMemberSelection<DomainMemberCallMatch>> {
         let candidates = self.domain_member_candidates(reference)?;
-        Some(self.select_domain_member_candidate(candidates, |this, resolution| {
-            this.match_domain_member_call_candidate(resolution, argument_types, expected_result)
-        }))
+        Some(
+            self.select_domain_member_candidate(candidates, |this, resolution| {
+                this.match_domain_member_call_candidate(resolution, argument_types, expected_result)
+            }),
+        )
     }
 
     fn select_domain_member_candidate<T>(
@@ -6776,9 +7107,12 @@ impl<'a> GateTypeContext<'a> {
                     return false;
                 };
                 elements.len() == actual_elements.len()
-                    && elements.iter().zip(actual_elements.iter()).all(|(element, actual)| {
-                        self.match_hir_type(*element, actual, substitutions, item_stack)
-                    })
+                    && elements
+                        .iter()
+                        .zip(actual_elements.iter())
+                        .all(|(element, actual)| {
+                            self.match_hir_type(*element, actual, substitutions, item_stack)
+                        })
             }
             TypeKind::Record(fields) => {
                 let GateType::Record(actual_fields) = actual else {
@@ -6786,8 +7120,9 @@ impl<'a> GateTypeContext<'a> {
                 };
                 fields.len() == actual_fields.len()
                     && fields.iter().all(|field| {
-                        let Some(actual_field) =
-                            actual_fields.iter().find(|candidate| candidate.name == field.label.text())
+                        let Some(actual_field) = actual_fields
+                            .iter()
+                            .find(|candidate| candidate.name == field.label.text())
                         else {
                             return false;
                         };
@@ -7327,6 +7662,11 @@ impl<'a> GateTypeContext<'a> {
                     {
                         return info;
                     }
+                    if let Some(info) = self.infer_same_module_constructor_apply_expr(
+                        reference, &arguments, env, ambient,
+                    ) {
+                        return info;
+                    }
                 }
                 let mut info = self.infer_expr(callee, env, ambient);
                 let mut current = info.ty.clone();
@@ -7395,11 +7735,9 @@ impl<'a> GateTypeContext<'a> {
                 };
                 info
             }
-            ExprKind::Pipe(pipe) => GateExprInfo {
-                ty: self.infer_pipe_result(&pipe, env),
-                ..GateExprInfo::default()
-            },
-            ExprKind::Cluster(_) | ExprKind::Markup(_) => GateExprInfo::default(),
+            ExprKind::Pipe(pipe) => self.infer_pipe_expr(&pipe, env),
+            ExprKind::Cluster(cluster) => self.infer_cluster_expr(cluster, env),
+            ExprKind::Markup(_) => GateExprInfo::default(),
         }
     }
 
@@ -7415,7 +7753,9 @@ impl<'a> GateTypeContext<'a> {
                 }
             }
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-                let ty = self.item_value_type(*item_id);
+                let ty = self
+                    .infer_same_module_constructor_name_type(reference)
+                    .or_else(|| self.item_value_type(*item_id));
                 GateExprInfo {
                     contains_signal: ty.as_ref().is_some_and(GateType::is_signal),
                     ty,
@@ -7437,12 +7777,7 @@ impl<'a> GateTypeContext<'a> {
             ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_)) => GateExprInfo {
                 issues: vec![GateIssue::AmbiguousDomainMember {
                     span: reference.span(),
-                    name: reference
-                        .path
-                        .segments()
-                        .last()
-                        .text()
-                        .to_owned(),
+                    name: reference.path.segments().last().text().to_owned(),
                     candidates: self
                         .domain_member_candidate_labels(reference)
                         .unwrap_or_default(),
@@ -7467,6 +7802,109 @@ impl<'a> GateTypeContext<'a> {
                 }
             }
         }
+    }
+
+    fn same_module_constructor(
+        &self,
+        reference: &TermReference,
+    ) -> Option<(ItemId, String, Vec<TypeParameterId>, Vec<TypeId>)> {
+        let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let Item::Type(item) = &self.module.items()[*item_id] else {
+            return None;
+        };
+        let TypeItemBody::Sum(variants) = &item.body else {
+            return None;
+        };
+        let variant_name = reference.path.segments().last().text();
+        let variant = variants
+            .iter()
+            .find(|variant| variant.name.text() == variant_name)?;
+        Some((
+            *item_id,
+            item.name.text().to_owned(),
+            item.parameters.clone(),
+            variant.fields.clone(),
+        ))
+    }
+
+    fn infer_same_module_constructor_name_type(
+        &mut self,
+        reference: &TermReference,
+    ) -> Option<GateType> {
+        let (item_id, item_name, parameters, fields) = self.same_module_constructor(reference)?;
+        if !parameters.is_empty() {
+            return None;
+        }
+        let substitutions = HashMap::new();
+        let field_types = fields
+            .into_iter()
+            .map(|field| self.lower_hir_type(field, &substitutions))
+            .collect::<Option<Vec<_>>>()?;
+        let mut ty = GateType::OpaqueItem {
+            item: item_id,
+            name: item_name,
+            arguments: Vec::new(),
+        };
+        for field_ty in field_types.into_iter().rev() {
+            ty = GateType::Arrow {
+                parameter: Box::new(field_ty),
+                result: Box::new(ty),
+            };
+        }
+        Some(ty)
+    }
+
+    fn infer_same_module_constructor_apply(
+        &mut self,
+        reference: &TermReference,
+        argument_types: &[GateType],
+    ) -> Option<GateType> {
+        let (item_id, item_name, parameters, fields) = self.same_module_constructor(reference)?;
+        if fields.len() != argument_types.len() {
+            return None;
+        }
+        let mut substitutions = HashMap::new();
+        for (field, actual) in fields.iter().zip(argument_types.iter()) {
+            let mut item_stack = Vec::new();
+            if !self.match_hir_type(*field, actual, &mut substitutions, &mut item_stack) {
+                return None;
+            }
+        }
+        let arguments = parameters
+            .iter()
+            .map(|parameter| substitutions.get(parameter).cloned())
+            .collect::<Option<Vec<_>>>()?;
+        Some(GateType::OpaqueItem {
+            item: item_id,
+            name: item_name,
+            arguments,
+        })
+    }
+
+    fn infer_same_module_constructor_apply_expr(
+        &mut self,
+        reference: &TermReference,
+        arguments: &crate::NonEmpty<ExprId>,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+    ) -> Option<GateExprInfo> {
+        self.same_module_constructor(reference)?;
+        let mut info = GateExprInfo::default();
+        let mut argument_types = Vec::with_capacity(arguments.len());
+        for argument in arguments.iter() {
+            let argument_info = self.infer_expr(*argument, env, ambient);
+            argument_types.push(argument_info.ty.clone());
+            info.merge(argument_info);
+        }
+        let Some(argument_types) = argument_types.into_iter().collect::<Option<Vec<_>>>() else {
+            return Some(info);
+        };
+        info.ty = self.infer_same_module_constructor_apply(reference, &argument_types);
+        Some(info)
     }
 
     fn infer_domain_member_apply(
@@ -7494,12 +7932,7 @@ impl<'a> GateTypeContext<'a> {
             DomainMemberSelection::Ambiguous => {
                 info.issues.push(GateIssue::AmbiguousDomainMember {
                     span: reference.span(),
-                    name: reference
-                        .path
-                        .segments()
-                        .last()
-                        .text()
-                        .to_owned(),
+                    name: reference.path.segments().last().text().to_owned(),
                     candidates: self
                         .domain_member_candidate_labels(reference)
                         .unwrap_or_default(),
@@ -7530,6 +7963,17 @@ impl<'a> GateTypeContext<'a> {
                 info.ty = Some(*result);
             }
         }
+        info
+    }
+
+    fn infer_tap_stage_info(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let mut info = self.infer_pipe_body(expr_id, env, subject);
+        info.ty = Some(subject.clone());
         info
     }
 
@@ -7573,6 +8017,40 @@ impl<'a> GateTypeContext<'a> {
         truthy_ty.same_shape(&falsy_ty).then_some(truthy_ty)
     }
 
+    fn infer_truthy_falsy_pair_info(
+        &mut self,
+        pair: &TruthyFalsyPairStages<'_>,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let Some(subject_plan) = self.truthy_falsy_subject_plan(subject) else {
+            return GateExprInfo::default();
+        };
+        let mut info = GateExprInfo::default();
+        let truthy = self.infer_truthy_falsy_branch(
+            pair.truthy_expr,
+            env,
+            subject_plan.truthy_payload.as_ref(),
+        );
+        let truthy_ty = truthy.ty.clone();
+        info.merge(truthy);
+        let falsy = self.infer_truthy_falsy_branch(
+            pair.falsy_expr,
+            env,
+            subject_plan.falsy_payload.as_ref(),
+        );
+        let falsy_ty = falsy.ty.clone();
+        info.merge(falsy);
+        if info.issues.is_empty() {
+            if let (Some(truthy_ty), Some(falsy_ty)) = (truthy_ty, falsy_ty) {
+                if truthy_ty.same_shape(&falsy_ty) {
+                    info.ty = Some(truthy_ty);
+                }
+            }
+        }
+        info
+    }
+
     fn infer_single_parameter_function_pipe_body(
         &mut self,
         expr_id: ExprId,
@@ -7611,19 +8089,7 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         subject: &GateType,
     ) -> Option<GateType> {
-        let predicate = self.infer_pipe_body(expr_id, env, subject);
-        if !predicate.issues.is_empty()
-            || predicate.contains_signal
-            || predicate.ty.as_ref().is_some_and(GateType::is_signal)
-        {
-            return None;
-        }
-        if let Some(predicate_ty) = predicate.ty.as_ref() {
-            if !predicate_ty.is_bool() {
-                return None;
-            }
-        }
-        Some(self.apply_gate_plan(GatePlanner::plan(subject.gate_carrier()), subject))
+        self.infer_gate_stage_info(expr_id, env, subject).ty
     }
 
     pub(crate) fn infer_fanout_map_stage(
@@ -7632,14 +8098,7 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         subject: &GateType,
     ) -> Option<GateType> {
-        let carrier = subject.fanout_carrier()?;
-        let element = subject.fanout_element()?;
-        let body = self.infer_pipe_body(expr_id, env, element);
-        if !body.issues.is_empty() {
-            return None;
-        }
-        let body_ty = body.ty?;
-        Some(self.apply_fanout_plan(FanoutPlanner::plan(FanoutStageKind::Map, carrier), body_ty))
+        self.infer_fanout_map_stage_info(expr_id, env, subject).ty
     }
 
     pub(crate) fn infer_fanin_stage(
@@ -7648,13 +8107,7 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         subject: &GateType,
     ) -> Option<GateType> {
-        let carrier = subject.fanout_carrier()?;
-        let body = self.infer_pipe_body(expr_id, env, subject);
-        if !body.issues.is_empty() {
-            return None;
-        }
-        let body_ty = body.ty?;
-        Some(self.apply_fanout_plan(FanoutPlanner::plan(FanoutStageKind::Join, carrier), body_ty))
+        self.infer_fanin_stage_info(expr_id, env, subject).ty
     }
 
     pub(crate) fn infer_transform_stage(
@@ -7663,56 +8116,273 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         subject: &GateType,
     ) -> Option<GateType> {
-        let body = self.infer_pipe_body(expr_id, env, subject);
-        let body_ty = body.ty?;
-        Some(match subject {
-            GateType::Signal(_) => GateType::Signal(Box::new(body_ty)),
-            _ => body_ty,
-        })
+        self.infer_transform_stage_info(expr_id, env, subject).ty
     }
 
-    fn infer_pipe_result(
+    fn infer_transform_stage_info(
         &mut self,
-        pipe: &crate::hir::PipeExpr,
+        expr_id: ExprId,
         env: &GateExprEnv,
-    ) -> Option<GateType> {
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let mut info = self.infer_pipe_body(expr_id, env, subject);
+        info.ty = info.ty.map(|body_ty| match subject {
+            GateType::Signal(_) => GateType::Signal(Box::new(body_ty)),
+            _ => body_ty,
+        });
+        info
+    }
+
+    fn infer_gate_stage_info(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let mut info = self.infer_pipe_body(expr_id, env, subject);
+        let is_valid = info.issues.is_empty()
+            && !info.contains_signal
+            && !info.ty.as_ref().is_some_and(GateType::is_signal)
+            && info.ty.as_ref().is_some_and(GateType::is_bool);
+        info.ty = is_valid
+            .then(|| self.apply_gate_plan(GatePlanner::plan(subject.gate_carrier()), subject));
+        info
+    }
+
+    fn infer_fanout_map_stage_info(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let Some(carrier) = subject.fanout_carrier() else {
+            return GateExprInfo::default();
+        };
+        let Some(element) = subject.fanout_element() else {
+            return GateExprInfo::default();
+        };
+        let mut info = self.infer_pipe_body(expr_id, env, element);
+        if info.issues.is_empty() {
+            info.ty = info.ty.map(|body_ty| {
+                self.apply_fanout_plan(FanoutPlanner::plan(FanoutStageKind::Map, carrier), body_ty)
+            });
+        } else {
+            info.ty = None;
+        }
+        info
+    }
+
+    fn infer_fanin_stage_info(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let Some(carrier) = subject.fanout_carrier() else {
+            return GateExprInfo::default();
+        };
+        let mut info = self.infer_pipe_body(expr_id, env, subject);
+        if info.issues.is_empty() {
+            info.ty = info.ty.map(|body_ty| {
+                self.apply_fanout_plan(FanoutPlanner::plan(FanoutStageKind::Join, carrier), body_ty)
+            });
+        } else {
+            info.ty = None;
+        }
+        info
+    }
+
+    fn infer_case_stage_run_info(
+        &mut self,
+        case_stages: &[&crate::hir::PipeStage],
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        if subject.is_signal() {
+            return GateExprInfo::default();
+        }
+        let mut info = GateExprInfo::default();
+        let mut branch_result = None::<GateType>;
+        for stage in case_stages {
+            let PipeStageKind::Case { pattern, body } = &stage.kind else {
+                continue;
+            };
+            let mut branch_env = env.clone();
+            branch_env
+                .locals
+                .extend(self.case_pattern_bindings(*pattern, subject).locals);
+            let branch = self.infer_pipe_body(*body, &branch_env, subject);
+            let branch_ty = branch.ty.clone();
+            info.merge(branch);
+            let Some(branch_ty) = branch_ty else {
+                branch_result = None;
+                continue;
+            };
+            match branch_result.as_ref() {
+                None => branch_result = Some(branch_ty),
+                Some(current) if current.same_shape(&branch_ty) => {}
+                Some(current) => {
+                    info.issues.push(GateIssue::CaseBranchTypeMismatch {
+                        span: stage.span,
+                        expected: current.to_string(),
+                        actual: branch_ty.to_string(),
+                    });
+                    branch_result = None;
+                    break;
+                }
+            }
+        }
+        if info.issues.is_empty() {
+            info.ty = branch_result;
+        }
+        info
+    }
+
+    fn infer_cluster_expr(&mut self, cluster_id: ClusterId, env: &GateExprEnv) -> GateExprInfo {
+        let Some(cluster) = self.module.clusters().get(cluster_id).cloned() else {
+            return GateExprInfo::default();
+        };
+        let spine = cluster.normalized_spine();
+        let mut info = GateExprInfo::default();
+        let mut cluster_kind = None::<ApplicativeClusterKind>;
+        let mut payloads = Vec::new();
+
+        for member in spine.apply_arguments() {
+            let member_info = self.infer_expr(member, env, None);
+            let member_ty = member_info.ty.clone();
+            info.merge(member_info);
+            let Some(member_ty) = member_ty else {
+                return info;
+            };
+            let Some((member_kind, payload)) = ApplicativeClusterKind::from_member_type(&member_ty)
+            else {
+                info.issues
+                    .push(GateIssue::UnsupportedApplicativeClusterMember {
+                        span: self.module.exprs()[member].span,
+                        actual: member_ty.to_string(),
+                    });
+                return info;
+            };
+            match cluster_kind.as_ref() {
+                None => {
+                    cluster_kind = Some(member_kind);
+                    payloads.push(payload);
+                }
+                Some(expected) if expected == &member_kind => {
+                    payloads.push(payload);
+                }
+                Some(expected) => {
+                    info.issues.push(GateIssue::ApplicativeClusterMismatch {
+                        span: self.module.exprs()[member].span,
+                        expected: expected.surface(),
+                        actual: member_kind.surface(),
+                    });
+                    return info;
+                }
+            }
+        }
+
+        let Some(cluster_kind) = cluster_kind else {
+            return info;
+        };
+        let payload_result = match spine.pure_head() {
+            ApplicativeSpineHead::TupleConstructor(_) => GateType::Tuple(payloads),
+            ApplicativeSpineHead::Expr(finalizer) => {
+                let finalizer_info = self.infer_expr(finalizer, env, None);
+                let finalizer_ty = finalizer_info.ty.clone();
+                let finalizer_had_issues = !finalizer_info.issues.is_empty();
+                info.merge(finalizer_info);
+
+                let applied_from_type = finalizer_ty
+                    .as_ref()
+                    .and_then(|ty| self.apply_function_chain(ty, &payloads));
+                let applied_from_constructor = match &self.module.exprs()[finalizer].kind {
+                    ExprKind::Name(reference) => {
+                        self.infer_same_module_constructor_apply(reference, &payloads)
+                    }
+                    _ => None,
+                };
+
+                match applied_from_type.or(applied_from_constructor) {
+                    Some(result) => result,
+                    None => {
+                        if !finalizer_had_issues {
+                            info.issues.push(GateIssue::InvalidClusterFinalizer {
+                                span: self.module.exprs()[finalizer].span,
+                                expected_inputs: payloads.iter().map(ToString::to_string).collect(),
+                                actual: finalizer_ty
+                                    .map(|ty| ty.to_string())
+                                    .unwrap_or_else(|| "unknown type".to_owned()),
+                            });
+                        }
+                        return info;
+                    }
+                }
+            }
+        };
+        info.ty = Some(cluster_kind.wrap(payload_result));
+        info
+    }
+
+    fn infer_pipe_expr(&mut self, pipe: &crate::hir::PipeExpr, env: &GateExprEnv) -> GateExprInfo {
         let stages = pipe.stages.iter().collect::<Vec<_>>();
-        let mut current = self.infer_expr(pipe.head, env, None).ty?;
+        let mut info = self.infer_expr(pipe.head, env, None);
+        let mut current = info.ty.clone();
         let mut stage_index = 0usize;
         while stage_index < stages.len() {
             let stage = stages[stage_index];
-            match &stage.kind {
+            let Some(subject) = current.clone() else {
+                break;
+            };
+            let stage_info = match &stage.kind {
                 PipeStageKind::Transform { expr } => {
-                    current = self.infer_transform_stage(*expr, env, &current)?;
                     stage_index += 1;
+                    self.infer_transform_stage_info(*expr, env, &subject)
                 }
-                PipeStageKind::Tap { .. } => {
+                PipeStageKind::Tap { expr } => {
                     stage_index += 1;
+                    self.infer_tap_stage_info(*expr, env, &subject)
                 }
                 PipeStageKind::Gate { expr } => {
-                    current = self.infer_gate_stage(*expr, env, &current)?;
                     stage_index += 1;
+                    self.infer_gate_stage_info(*expr, env, &subject)
                 }
                 PipeStageKind::Map { expr } => {
-                    current = self.infer_fanout_map_stage(*expr, env, &current)?;
                     stage_index += 1;
+                    self.infer_fanout_map_stage_info(*expr, env, &subject)
                 }
                 PipeStageKind::FanIn { expr } => {
-                    current = self.infer_fanin_stage(*expr, env, &current)?;
                     stage_index += 1;
+                    self.infer_fanin_stage_info(*expr, env, &subject)
                 }
                 PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
-                    let pair = truthy_falsy_pair_stages(&stages, stage_index)?;
-                    current = self.infer_truthy_falsy_pair(&pair, env, &current)?;
+                    let Some(pair) = truthy_falsy_pair_stages(&stages, stage_index) else {
+                        break;
+                    };
                     stage_index = pair.next_index;
+                    self.infer_truthy_falsy_pair_info(&pair, env, &subject)
                 }
-                PipeStageKind::Case { .. }
-                | PipeStageKind::Apply { .. }
+                PipeStageKind::Case { .. } => {
+                    let case_start = stage_index;
+                    while stage_index < stages.len()
+                        && matches!(stages[stage_index].kind, PipeStageKind::Case { .. })
+                    {
+                        stage_index += 1;
+                    }
+                    self.infer_case_stage_run_info(&stages[case_start..stage_index], env, &subject)
+                }
+                PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
-                | PipeStageKind::RecurStep { .. } => return None,
-            }
+                | PipeStageKind::RecurStep { .. } => {
+                    stage_index += 1;
+                    GateExprInfo::default()
+                }
+            };
+            current = stage_info.ty.clone();
+            info.merge(stage_info);
         }
-        Some(current)
+        info.ty = current;
+        info
     }
 
     fn project_type(&self, subject: &GateType, path: &NamePath) -> Result<GateType, GateIssue> {
@@ -7744,6 +8414,14 @@ impl<'a> GateTypeContext<'a> {
         parameter
             .same_shape(argument)
             .then(|| result.as_ref().clone())
+    }
+
+    fn apply_function_chain(&self, callee: &GateType, arguments: &[GateType]) -> Option<GateType> {
+        let mut current = callee.clone();
+        for argument in arguments {
+            current = self.apply_function(&current, argument)?;
+        }
+        Some(current)
     }
 }
 
@@ -9229,6 +9907,129 @@ mod tests {
         );
     }
 
+    #[test]
+    fn gate_typing_infers_applicative_clusters() {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(
+            "cluster-types.aivi",
+            "type NamePair = NamePair Text Text\n\
+             val first:(Option Text) = Some \"Ada\"\n\
+             val last:(Option Text) = Some \"Lovelace\"\n\
+             val pair =\n\
+              &|> first\n\
+              &|> last\n\
+               |> NamePair\n\
+             val tupled =\n\
+              &|> first\n\
+              &|> last\n",
+        );
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "cluster typing input should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let lowered = crate::lower_module(&parsed.module);
+        assert!(
+            !lowered.has_errors(),
+            "cluster typing input should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let module = lowered.module();
+        let pair_expr = module
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &module.items()[*item_id] {
+                Item::Value(item) if item.name.text() == "pair" => Some(item.body),
+                _ => None,
+            })
+            .expect("expected pair value");
+        let tupled_expr = module
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &module.items()[*item_id] {
+                Item::Value(item) if item.name.text() == "tupled" => Some(item.body),
+                _ => None,
+            })
+            .expect("expected tupled value");
+
+        let mut typing = GateTypeContext::new(module);
+        assert_eq!(
+            typing
+                .infer_expr(pair_expr, &GateExprEnv::default(), None)
+                .ty,
+            Some(GateType::Option(Box::new(GateType::OpaqueItem {
+                item: module
+                    .root_items()
+                    .iter()
+                    .find_map(|item_id| match &module.items()[*item_id] {
+                        Item::Type(item) if item.name.text() == "NamePair" => Some(*item_id),
+                        _ => None,
+                    })
+                    .expect("expected NamePair type item"),
+                name: "NamePair".to_owned(),
+                arguments: Vec::new(),
+            }))),
+        );
+        assert_eq!(
+            typing
+                .infer_expr(tupled_expr, &GateExprEnv::default(), None)
+                .ty,
+            Some(GateType::Option(Box::new(GateType::Tuple(vec![
+                GateType::Primitive(BuiltinType::Text),
+                GateType::Primitive(BuiltinType::Text),
+            ])))),
+        );
+    }
+
+    #[test]
+    fn gate_typing_infers_pipe_case_split_result() {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(
+            "case-pipe-types.aivi",
+            r#"type Screen =
+  | Loading
+  | Ready Text
+  | Failed Text
+val current:Screen = Loading
+val label =
+    current
+     ||> Loading => "loading"
+     ||> Ready title => title
+     ||> Failed reason => reason
+"#,
+        );
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "case typing input should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let lowered = crate::lower_module(&parsed.module);
+        assert!(
+            !lowered.has_errors(),
+            "case typing input should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let module = lowered.module();
+        let label_expr = module
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &module.items()[*item_id] {
+                Item::Value(item) if item.name.text() == "label" => Some(item.body),
+                _ => None,
+            })
+            .expect("expected label value");
+
+        let mut typing = GateTypeContext::new(module);
+        assert_eq!(
+            typing
+                .infer_expr(label_expr, &GateExprEnv::default(), None)
+                .ty,
+            Some(GateType::Primitive(BuiltinType::Text)),
+        );
+    }
+
     fn name(text: &str) -> Name {
         Name::new(text, unit_span()).expect("test name should stay valid")
     }
@@ -9427,12 +10228,10 @@ mod tests {
 
         let report = validate_module(&module, ValidationMode::Structural);
         assert!(!report.is_ok());
-        assert!(
-            report
-                .diagnostics()
-                .iter()
-                .any(|diagnostic| diagnostic.message.contains("missing expression 99"))
-        );
+        assert!(report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("missing expression 99")));
     }
 
     #[test]
@@ -9747,12 +10546,10 @@ val screenView =
             .expect("item allocation should fit");
 
         let report = validate_module(&module, ValidationMode::Structural);
-        assert!(
-            report
-                .diagnostics()
-                .iter()
-                .any(|diagnostic| diagnostic.message.contains("branch-only control node kind"))
-        );
+        assert!(report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("branch-only control node kind")));
     }
 
     #[test]
@@ -9774,7 +10571,7 @@ val screenView =
                 span: shared_span,
                 kind: MarkupNodeKind::Element(crate::MarkupElement {
                     name: NamePath::from_vec(vec![
-                        Name::new("Label", span(0, 0, 5)).expect("valid name"),
+                        Name::new("Label", span(0, 0, 5)).expect("valid name")
                     ])
                     .expect("single segment path"),
                     attributes: Vec::new(),

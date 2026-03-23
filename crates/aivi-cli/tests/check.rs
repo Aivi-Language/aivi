@@ -117,6 +117,8 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/value-annotation-type-mismatch/main.aivi",
         "milestone-2/invalid/equality-missing-eq-instance/main.aivi",
         "milestone-2/invalid/ambiguous-domain-member/main.aivi",
+        "milestone-2/invalid/mixed-applicative-cluster/main.aivi",
+        "milestone-2/invalid/case-branch-type-mismatch/main.aivi",
         "milestone-2/invalid/trailing-declaration-body-token/main.aivi",
         "milestone-2/invalid/custom-source-provider-unknown-option/main.aivi",
         "milestone-2/invalid/custom-source-provider-option-type-mismatch/main.aivi",
@@ -289,5 +291,54 @@ fn check_reports_ambiguous_domain_members_from_hir_typechecker() {
     assert!(
         stderr.contains("domain member `make` is ambiguous in this context"),
         "expected explicit ambiguous domain member message, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_mixed_applicative_clusters_from_hir_typechecker() {
+    let path = fixture_path("milestone-2/invalid/mixed-applicative-cluster/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected mixed applicative cluster fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::applicative-cluster-mismatch"),
+        "expected applicative cluster mismatch diagnostic code, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("`&|>` cluster mixes `Option _` with `Signal _`"),
+        "expected explicit applicative cluster mismatch message, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_case_branch_type_mismatch_from_hir_typechecker() {
+    let path = fixture_path("milestone-2/invalid/case-branch-type-mismatch/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected case branch type mismatch fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::case-branch-type-mismatch"),
+        "expected case branch type mismatch diagnostic code, got stderr: {stderr}"
+    );
+    assert!(
+        stderr
+            .contains("case split branches must agree on one result type, found `Int` and `Text`"),
+        "expected explicit case branch type mismatch message, got stderr: {stderr}"
     );
 }

@@ -4,9 +4,9 @@ use aivi_base::{Diagnostic, DiagnosticCode, SourceSpan};
 
 use crate::{
     hir::{
-        BuiltinTerm, BuiltinType, ExprKind, FunctionItem, ImportBindingMetadata,
-        ImportBundleKind, Item, Module, RecordExpr, SignalItem, TermReference, TermResolution,
-        TypeItemBody, ValueItem,
+        BuiltinTerm, BuiltinType, ExprKind, FunctionItem, ImportBindingMetadata, ImportBundleKind,
+        Item, Module, RecordExpr, SignalItem, TermReference, TermResolution, TypeItemBody,
+        ValueItem,
     },
     ids::{ExprId, ItemId, TypeParameterId},
     validate::{
@@ -84,7 +84,8 @@ pub(crate) fn expression_matches(
     expected: &GateType,
 ) -> bool {
     let mut checker = TypeChecker::new(module);
-    checker.check_expr(expr_id, env, Some(expected), &mut Vec::new()) && checker.diagnostics.is_empty()
+    checker.check_expr(expr_id, env, Some(expected), &mut Vec::new())
+        && checker.diagnostics.is_empty()
 }
 
 struct TypeChecker<'a> {
@@ -137,7 +138,12 @@ impl<'a> TypeChecker<'a> {
         let expected = item
             .annotation
             .and_then(|annotation| self.typing.lower_annotation(annotation));
-        self.check_expr(item.body, &GateExprEnv::default(), expected.as_ref(), &mut Vec::new());
+        self.check_expr(
+            item.body,
+            &GateExprEnv::default(),
+            expected.as_ref(),
+            &mut Vec::new(),
+        );
     }
 
     fn check_function_item(&mut self, item: &FunctionItem) {
@@ -243,7 +249,9 @@ impl<'a> TypeChecker<'a> {
             ExprKind::Name(reference) => self
                 .check_builtin_constructor_name(&reference, expected)
                 .or_else(|| self.check_domain_member_name(&reference, expected))
-                .or_else(|| self.check_unannotated_value_name(&reference, env, expected, value_stack)),
+                .or_else(|| {
+                    self.check_unannotated_value_name(&reference, env, expected, value_stack)
+                }),
             ExprKind::Apply { callee, arguments } => {
                 let callee_kind = self.module.exprs()[callee].kind.clone();
                 if let ExprKind::Name(reference) = callee_kind {
@@ -266,14 +274,7 @@ impl<'a> TypeChecker<'a> {
                         return Some(result);
                     }
                 }
-                self.check_expected_apply(
-                    expr_id,
-                    callee,
-                    &arguments,
-                    env,
-                    expected,
-                    value_stack,
-                )
+                self.check_expected_apply(expr_id, callee, &arguments, env, expected, value_stack)
             }
             ExprKind::Record(record) => match expected {
                 GateType::Record(fields) => Some(self.check_record_expr(
@@ -309,7 +310,9 @@ impl<'a> TypeChecker<'a> {
         expected: &GateType,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
-        let crate::ResolutionState::Resolved(TermResolution::Item(item_id)) = reference.resolution.as_ref() else {
+        let crate::ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
             return None;
         };
         let (body, annotated) = match &self.module.items()[*item_id] {
@@ -331,7 +334,9 @@ impl<'a> TypeChecker<'a> {
         reference: &TermReference,
         expected: &GateType,
     ) -> Option<bool> {
-        let crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) = reference.resolution.as_ref() else {
+        let crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) =
+            reference.resolution.as_ref()
+        else {
             return None;
         };
         match (builtin, expected) {
@@ -348,7 +353,9 @@ impl<'a> TypeChecker<'a> {
         expected: &GateType,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
-        let crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) = reference.resolution.as_ref() else {
+        let crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) =
+            reference.resolution.as_ref()
+        else {
             return None;
         };
         if arguments.len() != 1 {
@@ -551,7 +558,10 @@ impl<'a> TypeChecker<'a> {
                     "projection `{path}` cannot be applied to `{subject}`"
                 ))
                 .with_code(code("invalid-projection"))
-                .with_primary_label(*span, "this projection target does not support field access"),
+                .with_primary_label(
+                    *span,
+                    "this projection target does not support field access",
+                ),
                 GateIssue::UnknownField {
                     span,
                     path,
@@ -574,6 +584,60 @@ impl<'a> TypeChecker<'a> {
                     "add more type context or rename/import an alias for the desired member",
                 )
                 .with_note(format!("candidates: {}", candidates.join(", "))),
+                GateIssue::UnsupportedApplicativeClusterMember { span, actual } => {
+                    Diagnostic::error(format!(
+                        "`&|>` cluster members must have a supported applicative type, found `{actual}`"
+                    ))
+                    .with_code(code("unsupported-applicative-cluster-member"))
+                    .with_primary_label(
+                        *span,
+                        "this cluster member does not have a resolved applicative outer type",
+                    )
+                    .with_note(
+                        "resolved-HIR cluster typing currently accepts `List`, `Option`, `Result E`, `Validation E`, `Signal`, and `Task E` members with one shared outer constructor",
+                    )
+                }
+                GateIssue::ApplicativeClusterMismatch {
+                    span,
+                    expected,
+                    actual,
+                } => Diagnostic::error(format!(
+                    "`&|>` cluster mixes `{expected}` with `{actual}`"
+                ))
+                .with_code(code("applicative-cluster-mismatch"))
+                .with_primary_label(
+                    *span,
+                    "all members in one cluster must share the same outer applicative constructor",
+                ),
+                GateIssue::InvalidClusterFinalizer {
+                    span,
+                    expected_inputs,
+                    actual,
+                } => Diagnostic::error(format!(
+                    "`&|>` cluster finalizer must accept payloads {} in member order, found `{actual}`",
+                    expected_inputs
+                        .iter()
+                        .map(|input| format!("`{input}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .with_code(code("invalid-cluster-finalizer"))
+                .with_primary_label(
+                    *span,
+                    "this finalizer cannot be applied to the current cluster member payloads",
+                ),
+                GateIssue::CaseBranchTypeMismatch {
+                    span,
+                    expected,
+                    actual,
+                } => Diagnostic::error(format!(
+                    "case split branches must agree on one result type, found `{expected}` and `{actual}`"
+                ))
+                .with_code(code("case-branch-type-mismatch"))
+                .with_primary_label(
+                    *span,
+                    "this branch produces a different type than earlier branches in the same case split",
+                ),
             };
             self.diagnostics.push(diagnostic);
         }
@@ -585,20 +649,17 @@ impl<'a> TypeChecker<'a> {
         reference: &TermReference,
         candidates: &[String],
     ) {
-        let name = reference
-            .path
-            .segments()
-            .last()
-            .text()
-            .to_owned();
+        let name = reference.path.segments().last().text().to_owned();
         self.diagnostics.push(
-            Diagnostic::error(format!("domain member `{name}` is ambiguous in this context"))
-                .with_code(code("ambiguous-domain-member"))
-                .with_primary_label(
-                    span,
-                    "add more type context or rename/import an alias for the desired member",
-                )
-                .with_note(format!("candidates: {}", candidates.join(", "))),
+            Diagnostic::error(format!(
+                "domain member `{name}` is ambiguous in this context"
+            ))
+            .with_code(code("ambiguous-domain-member"))
+            .with_primary_label(
+                span,
+                "add more type context or rename/import an alias for the desired member",
+            )
+            .with_note(format!("candidates: {}", candidates.join(", "))),
         );
     }
 
@@ -630,9 +691,9 @@ impl<'a> TypeChecker<'a> {
 
     fn require_eq(&mut self, ty: &GateType, item_stack: &mut Vec<ItemId>) -> Result<(), String> {
         match ty {
-            GateType::Primitive(BuiltinType::Bytes) => Err(
-                "`Bytes` does not have a compiler-derived `Eq` instance in v1".to_owned(),
-            ),
+            GateType::Primitive(BuiltinType::Bytes) => {
+                Err("`Bytes` does not have a compiler-derived `Eq` instance in v1".to_owned())
+            }
             GateType::Primitive(_) => Ok(()),
             GateType::Tuple(elements) => {
                 for element in elements {
@@ -697,7 +758,8 @@ impl<'a> TypeChecker<'a> {
                 item_stack.push(*item);
                 let result = match body {
                     TypeItemBody::Alias(alias) => {
-                        let Some(lowered) = self.typing.lower_hir_type(alias, &substitutions) else {
+                        let Some(lowered) = self.typing.lower_hir_type(alias, &substitutions)
+                        else {
                             return Err(format!(
                                 "the alias body for `{ty}` could not be lowered for Eq checking"
                             ));
@@ -707,7 +769,9 @@ impl<'a> TypeChecker<'a> {
                     TypeItemBody::Sum(variants) => {
                         for variant in variants.iter() {
                             for field in &variant.fields {
-                                let Some(lowered) = self.typing.lower_hir_type(*field, &substitutions) else {
+                                let Some(lowered) =
+                                    self.typing.lower_hir_type(*field, &substitutions)
+                                else {
                                     return Err(format!(
                                         "constructor payloads for `{ty}` could not be lowered for Eq checking"
                                     ));
@@ -848,6 +912,66 @@ mod tests {
                 diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
             }),
             "expected type mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_same_module_constructor_argument_mismatch() {
+        let report = typecheck_text(
+            "same-module-constructor-mismatch.aivi",
+            "type Box A = Box A\n\
+             val wrapped:(Box Text) = Box 42\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
+            }),
+            "expected same-module constructor mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_mixed_applicative_cluster_members() {
+        let report = typecheck_text(
+            "mixed-applicative-cluster.aivi",
+            "type NamePair = NamePair Text Text\n\
+             val first:(Option Text) = Some \"Ada\"\n\
+             sig last = \"Lovelace\"\n\
+             val broken =\n\
+              &|> first\n\
+              &|> last\n\
+               |> NamePair\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "applicative-cluster-mismatch"))
+            }),
+            "expected applicative cluster mismatch diagnostic, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_case_branch_type_mismatch() {
+        let report = typecheck_text(
+            "case-branch-type-mismatch.aivi",
+            r#"type Screen =
+  | Loading
+  | Ready Text
+val current:Screen = Loading
+val broken =
+    current
+     ||> Loading => 0
+     ||> Ready title => title
+"#,
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "case-branch-type-mismatch"))
+            }),
+            "expected case branch type mismatch diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

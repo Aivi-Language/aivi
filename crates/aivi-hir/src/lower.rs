@@ -10,19 +10,18 @@ use crate::{
     ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeId, Decorator, DecoratorCall,
     DecoratorId, DecoratorPayload, DomainItem, DomainMember, DomainMemberKind,
     DomainMemberResolution, EachControl, EmptyControl, ExportItem, Expr, ExprId, ExprKind,
-    FragmentControl, FunctionItem,
-    FunctionParameter, ImportBinding, ImportBindingMetadata, ImportBundleKind, ImportId,
-    ImportValueType, IntegerLiteral, Item, ItemHeader, ItemId, ItemKind, LiteralSuffixResolution,
-    MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode,
-    MarkupNodeId, MarkupNodeKind, MatchControl, Module, Name, NamePath, Pattern, PatternId,
-    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase, RecordExpr, RecordExprField,
-    RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
-    RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, ShowControl, SignalItem,
-    SourceDecorator, SourceLifecycleDependencies, SourceMetadata, SourceProviderContractItem,
-    SourceProviderRef, SuffixedIntegerLiteral, TermReference, TermResolution, TextFragment,
-    TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId, TypeItem, TypeItemBody,
-    TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference, TypeResolution, TypeVariant,
-    UnaryOperator, UseItem, ValueItem, WithControl,
+    FragmentControl, FunctionItem, FunctionParameter, ImportBinding, ImportBindingMetadata,
+    ImportBundleKind, ImportId, ImportValueType, IntegerLiteral, Item, ItemHeader, ItemId,
+    ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
+    MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl,
+    Module, Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind,
+    ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
+    RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState,
+    ShowControl, SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
+    SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
+    TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId,
+    TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference,
+    TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {
@@ -4125,7 +4124,12 @@ impl Lowerer {
         let domain_candidates = namespaces
             .domain_terms
             .get(name)
-            .map(|candidates| candidates.iter().map(|candidate| candidate.value).collect::<Vec<_>>())
+            .map(|candidates| {
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.value)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
         if matches!(term_lookup, LookupResult::Ambiguous) {
             self.emit_error(

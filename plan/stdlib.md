@@ -4,160 +4,293 @@
 
 ---
 
-## 1. Overview
+## 1. Goal
 
-The legacy AIVI stdlib was broad: 64 modules and 1233 exported entries spanning
-pure helpers, protocol clients, database layers, UI node DSLs, runtime
-reactivity, and generic servers.
+Define a small, typed, GNOME-first standard library that matches the current
+language model in `AGENTS.md` and `AIVI_RFC.md`.
 
-We should **not** port that library wholesale.
+The stdlib should center four ideas:
 
-The new stdlib needs to follow the current AIVI model from `AGENTS.md` and
-`AIVI_RFC.md`:
-
-- pure user code by default
+- pure value-level programming by default
 - one-shot effects through `Task E A`
 - long-lived external input through `sig` plus `@source`
-- strict closed-type decoding by default
-- domain-backed wrappers such as `Duration`, `Url`, and `Path`
-- GTK/libadwaita-first desktop programming on GNOME
-- explicit runtime boundaries instead of ad hoc mutable handles
+- explicit domain-backed wrappers for values such as `Duration`, `Url`, and `Path`
 
-This document selects what to keep, what to redesign, what to defer, and what
-not to port.
+The initial stdlib should be opinionated and narrow. It should provide the
+pieces needed for native desktop applications without turning the language into
+a grab bag of unrelated utility packages.
 
 ---
 
-## 2. Selection rules
+## 2. Architectural rules
 
-The stdlib should be chosen using the following rules.
+These rules are normative for the first stdlib wave.
 
-1. Keep only surfaces that directly support the RFC's v1 language model.
-2. Keep capabilities, not legacy APIs. Many old modules are worth keeping only
-   after redesign.
-3. Any legacy `Effect E A` API must become either:
-   - `Task E A` for one-shot work, or
-   - an `@source` provider for long-lived input.
-4. Do not reimplement language or runtime features as library APIs:
+1. Pure helpers stay pure. They must not hide runtime handles, blocking I/O, or
+   mutable state.
+2. One-shot external work uses `Task E A`.
+3. Long-lived subscriptions, polling, watches, and event feeds use `@source`
+   providers.
+4. Source options are closed and typed. Unknown or duplicate options are errors.
+5. Source decoding is strict by default and uses typed error channels.
+6. Public surfaces should expose domain values rather than raw carrier types
+   when invariants matter.
+7. GTK, D-Bus, network clients, file watching, and similar runtime integrations
+   remain behind controlled effect or source boundaries.
+8. The stdlib must not re-expose runtime internals as public APIs:
    - no public mutable `Signal` API
-   - no virtual DOM
-   - no public scheduler model
-   - no broad `Resource` choreography as the default user model
-5. Prefer narrow, typed, GNOME-native integrations over generic cross-platform
-   protocol stacks.
-6. Prefer one canonical surface over duplicated facades such as `http`,
-   `https`, `rest`, `net`, `number`, or `linalg`.
-7. Keep pure foundation modules small and lawful.
+   - no public scheduler API
+   - no generic UI tree API
+   - no general resource choreography as the default user model
+9. Prefer one canonical surface per capability. Avoid duplicated umbrella
+   namespaces.
 
 ---
 
-## 3. Global migration rules from the legacy stdlib
+## 3. First-wave modules to implement
 
-### 3.1 Pure data and utility modules
+### 3.1 Core export surface
 
-Keep only the modules that fill clear gaps around the RFC's core types:
-`List`, `Option`, `Result`, `Validation`, `Text`, defaults, and domain-backed
-values such as `Duration`, `Url`, `Path`, and `Color`.
+#### `aivi`
 
-### 3.2 One-shot effects
+Keep the root surface small.
 
-Any old API that performed one request, one file write, one credential refresh,
-or one process action should become a `Task`.
+It should export only:
 
-Examples:
+- core types committed to by the RFC
+- core constructors such as `Some`, `None`, `Ok`, `Err`, `Valid`, `Invalid`
+- the small class surface that the language commits to
 
-- `http.fetch` -> `Task HttpError Response`
-- `Goa.ensureCredentials` -> `Task GoaError Unit`
-- `fs.write` -> `Task FsError Unit`
+It should **not** become a namespace full of runtime handles or subsystem
+facades.
 
-### 3.3 Long-lived or evented inputs
+#### `aivi.prelude`
 
-Anything that watches, subscribes, streams, polls, or listens should become a
-source provider.
+Provide a compact import surface for ordinary programs.
 
-Examples from the RFC:
+The prelude should re-export:
 
-- `http.get`
-- `fs.watch`
-- `fs.read`
-- `timer.every`
-- `process.spawn`
-- `mailbox.subscribe`
-- window event sources
+- primitive types
+- `List`, `Option`, `Result`, `Validation`, `Signal`, `Task`
+- the core class surface actually required by the RFC
+- a minimal set of high-value helpers
 
-### 3.4 UI and scheduler concerns
+The prelude should stay intentionally small.
 
-UI description belongs in the language and GTK bridge, not in a library-level
-widget tree API.
+### 3.2 Pure foundation modules
 
-Scheduler, signal propagation, and subscription teardown are runtime
-architecture concerns, not public stdlib data models.
+These modules should be part of the first implementation wave.
+
+| Module | What to implement | Shape notes |
+| --- | --- | --- |
+| `aivi.defaults` | `Default` instance bundles | The first required bundle is `Option`. Record omission support should rely on this module. |
+| `aivi.list` | compact list helper set | Focus on traversal, search, partitioning, zipping, and safe access. |
+| `aivi.option` | compact option helper set | `isSome`, `isNone`, `getOrElse`, and conversion helpers. |
+| `aivi.result` | compact result helper set | `isOk`, `isErr`, `mapErr`, and conversion helpers. |
+| `aivi.validation` | applicative validation surface | Match RFC accumulation semantics with `NonEmptyList`. |
+| `aivi.text` | Unicode-safe text and encoding helpers | Keep it focused on text operations, encoding, and parsing helpers that clearly belong here. |
+| `aivi.duration` | domain-backed duration type | Explicit constructors, explicit `value`, literal suffixes, and domain-local operators. |
+| `aivi.url` | domain-backed URL type | Explicit parse and explicit unwrap. |
+| `aivi.path` | domain-backed path type | Explicit parse, explicit unwrap, and path-join operator. |
+| `aivi.color` | domain-backed color type | Keep it small and GTK-friendly. |
+| `aivi.nonEmpty` | `NonEmpty` / `NonEmptyList` | Needed to make `Validation` match the RFC cleanly. |
+
+### 3.3 Domain shapes
+
+The domain modules should follow the RFC's explicit-construction model.
+
+#### `aivi.duration`
+
+Recommended surface:
+
+```aivi
+domain Duration over Int
+    literal ms  : Int -> Duration
+    literal sec : Int -> Duration
+    literal min : Int -> Duration
+    millis      : Int -> Duration
+    trySeconds  : Int -> Result DurationError Duration
+    value       : Duration -> Int
+    (+)         : Duration -> Duration -> Duration
+    (-)         : Duration -> Duration -> Duration
+```
+
+#### `aivi.url`
+
+Recommended surface:
+
+```aivi
+domain Url over Text
+    parse : Text -> Result UrlError Url
+    value : Url -> Text
+```
+
+Add only focused helpers that preserve the explicit domain model.
+
+#### `aivi.path`
+
+Recommended surface:
+
+```aivi
+domain Path over Text
+    parse : Text -> Result PathError Path
+    (/)   : Path -> Text -> Path
+    value : Path -> Text
+```
+
+Path normalization should be part of the domain's invariant story, not a loose
+string helper.
+
+#### `aivi.color`
+
+Use a domain-backed color representation with a small constructor and unwrap
+surface. The goal is to support GTK-facing style and property work, not to ship
+an extensive graphics toolkit.
 
 ---
 
-## 4. Recommended retained surface
+## 4. Runtime boundary surfaces
 
-### 4.1 Pure foundation modules for v1
+### 4.1 HTTP
 
-| Surface | Decision | Notes |
-| --- | --- | --- |
-| Root `aivi` / `aivi.prelude` | Keep, but shrink drastically | Export RFC core types and the small class surface the spec actually commits to. Do not keep a giant root namespace full of runtime handles. |
-| `aivi.defaults` | Keep, redesign | Replace legacy `ToDefault` with RFC `Default`. The first required bundle is `Option`. |
-| `aivi.list` | Keep | Small, lawful list helpers that complement `Functor`, `Applicative`, and `Monad`. |
-| `aivi.option` | Keep | Small helper surface such as `isSome`, `isNone`, `getOrElse`, and conversion helpers. |
-| `aivi.result` | Keep | Small helper surface such as `mapErr`, `toOption`, and `fromOption`. |
-| `aivi.validation` | Keep, redesign | Align with RFC applicative accumulation and `Invalid (NonEmptyList E)`. |
-| `aivi.text` | Keep, reduce | Keep Unicode-safe text and encoding helpers; avoid turning it into a catch-all parsing module. |
-| `aivi.duration` | Keep, redesign as a domain | Match the RFC domain shape: explicit constructors, explicit `value`, and literal suffixes such as `ms`, `sec`, and `min`. |
-| `aivi.url` | Keep, redesign as a domain | Match the RFC shape: `parse`, `value`, and focused helpers for query/parts. |
-| `aivi.path` | Keep, redesign as a domain | Match the RFC shape: `parse`, `(/)`, `value`, and normalization behavior. |
-| `aivi.color` | Keep, redesign as a domain | Keep a small GTK-friendly color domain instead of a large graphics utility module. |
-| `NonEmpty` / `NonEmptyList` | Add | Needed by RFC `Validation`; not clearly present as a first-class legacy module. |
+Implement HTTP as:
 
-### 4.2 Runtime boundary modules we should keep
+- a typed request/response surface
+- one-shot `Task` entry points for imperative use
+- an `@source` provider family for reactive use
 
-| Surface | Decision | Notes |
-| --- | --- | --- |
-| HTTP (`aivi.net.http` concept) | Keep, redesign | Keep request, response, header, and error concepts, but execution should be available as `Task` plus `@source http.*`. |
-| File IO (`aivi.file` concept) | Keep, split | Replace handle-centric APIs with `fs.read` and `fs.watch` sources plus a small set of write/copy/delete tasks. |
-| Timer (new provider) | Keep | The RFC explicitly recommends `timer.every` and `timer.after`. This should not be hidden inside a generic concurrency module. |
-| Logging (`aivi.log`) | Keep, small | Keep structured logging and tracing tasks only. |
-| Raw JSON (`aivi.json`) | Keep later, but as an escape hatch | Compiler-generated structural decoding is the default model. Raw `JsonValue` support is still useful, but it should not be the center of user-facing decoding. |
+Required user-facing source surface:
 
-### 4.3 GNOME-first integrations we should keep
+```aivi
+@source http.get "/users"
+sig users : Signal (Result HttpError (List User))
 
-#### `aivi.gnome.onlineAccounts`
+@source http.post "/login" with {
+    body: creds,
+    headers: authHeaders,
+    decode: Strict,
+    timeout: 5sec
+}
+sig login : Signal (Result HttpError Session)
+```
 
-This capability is worth keeping because it matches the GNOME-first target
-directly. The old API shape is not right.
+Required option concepts:
 
-What we should keep:
+- `headers`
+- `query`
+- `body`
+- `decode`
+- `timeout`
+- `retry`
+- `refreshOn`
+- `refreshEvery`
+- `activeWhen`
 
-- account discovery
+Required runtime behavior:
+
+- request-like sources must cancel in-flight work or mark stale results so they
+  cannot publish into the live graph
+- reconfiguration must be transactional
+- decoding happens before publication
+- failures stay typed
+
+### 4.2 Filesystem
+
+Implement filesystem support as two distinct source families plus a small task
+surface.
+
+Required source surface:
+
+```aivi
+@source fs.watch configPath with {
+    events: [Created, Changed, Deleted]
+}
+sig fileEvents : Signal FsEvent
+
+@source fs.read configPath with {
+    decode: Strict,
+    reloadOn: fileEvents
+}
+sig fileText : Signal (Result FsError Text)
+```
+
+Required rules:
+
+- `fs.watch` publishes events only
+- `fs.read` publishes snapshots only
+- reads and watches are separate concepts
+- file path inputs should use the `Path` domain where practical
+
+The task surface should stay small and explicit:
+
+- write text or bytes
+- delete
+- create directories if needed
+- optionally rename or copy if clearly justified
+
+### 4.3 Timer
+
+Implement a dedicated `timer` provider family.
+
+Required surface:
+
+```aivi
+@source timer.every 120ms
+sig tick : Signal Unit
+
+@source timer.after 1sec
+sig ready : Signal Unit
+```
+
+Required option concepts:
+
+- `immediate`
+- `jitter`
+- `coalesce`
+- `activeWhen`
+
+### 4.4 Logging
+
+Implement a minimal structured logging surface under `aivi.log`.
+
+It should support:
+
+- a closed log-level enum
+- message text
+- structured key-value context
+- one-shot logging tasks
+
+This surface is for tracing, diagnostics, and application logs. It should stay
+small and not grow into a general observability framework.
+
+---
+
+## 5. GNOME-first integration surfaces
+
+### 5.1 `aivi.gnome.onlineAccounts`
+
+This module should provide a typed GNOME Online Accounts boundary.
+
+Its design should be account-centric, not protocol-centric.
+
+Required concepts:
+
+- account identity
 - provider identity
-- account capability filtering
-- attention-needed / unavailable states
-- explicit credential refresh
-- typed credential materialization where GOA supports it
-- D-Bus-backed change observation
+- capability filtering
+- attention-needed state
+- typed account listing
+- typed credential refresh
+- typed token retrieval where GOA supports it
+- account change observation
 
-What we should **not** keep from the old API:
-
-- mail-only modeling as the primary abstraction
-- `imapConfig`
-- `smtpConfig`
-- `toImapConfig`
-- `toSmtpConfig`
-
-Those are app-domain adapters, not core stdlib responsibilities.
-
-The replacement should be account-centric and source/task-shaped. Candidate
-direction:
+Recommended shape:
 
 ```aivi
 type GoaAccountId
 type GoaCapability
 type GoaProvider
+
 type GoaAccount = {
     id: GoaAccountId,
     provider: GoaProvider,
@@ -174,219 +307,134 @@ type GoaError = ...
 sig accounts : Signal (Result GoaError (List GoaAccount))
 
 ensureCredentials : GoaAccountId -> Task GoaError Unit
-accessToken : GoaAccountId -> Task GoaError AccessToken
+accessToken       : GoaAccountId -> Task GoaError AccessToken
 ```
 
-Exact names can change, but the shape should remain:
+Implementation guidance:
 
-- account model first
-- D-Bus internal, typed boundary external
-- one-shot credential work as `Task`
-- account change observation as `@source`
-
-#### PKCE loopback support
-
-We do want PKCE support, but it should **not** reintroduce a general-purpose
-HTTP server into the core stdlib.
-
-The old `aivi.net.httpServer` is far too broad for the new language philosophy.
-The retained capability should be a **narrow loopback-only auth helper**, not a
-server framework.
-
-Recommended replacement:
-
-- add `aivi.auth.pkce` (or `aivi.oauth.pkce`)
-- model a single auth flow
-- generate verifier, challenge, and state explicitly
-- bind only to localhost
-- prefer ephemeral ports by default
-- accept exactly one callback request
-- surface typed success or typed failure
-- shut the listener down deterministically after completion or cancellation
-
-Candidate direction:
-
-```aivi
-type PkceSession
-type PkceCallback = { code: Text, state: Text }
-type PkceError = ...
-
-begin : PkceConfig -> Task PkceError PkceSession
-authorizeUrl : PkceSession -> Url
-awaitCallback : PkceSession -> Task PkceError PkceCallback
-cancel : PkceSession -> Task PkceError Unit
-```
-
-Important constraints:
-
-- no arbitrary routing
-- no middleware stack
-- no websocket support
-- no binding to public interfaces by default
-- no general HTTP server lifecycle API in the first stdlib
-
-The loopback listener exists only to complete a PKCE flow. Token exchange still
-belongs on the normal HTTP surface.
+- use D-Bus internally
+- keep D-Bus details out of the language-facing types
+- expose only typed account and credential concepts
+- publish account changes through a source, not polling hidden inside helpers
 
 ---
 
-## 5. Legacy module decision matrix
+## 6. What is not in the first stdlib wave
 
-### 5.1 Keep, but redesign heavily
+The first wave should stay focused. The following areas are out of scope unless
+later work proves they are necessary:
 
-| Legacy module or family | Decision | Replacement direction |
-| --- | --- | --- |
-| `aivi` root builtins | Keep, shrink | Keep core types and constructors only; remove root runtime handles such as `httpServer`, `database`, `source`, and similar namespaces. |
-| `aivi.prelude` | Keep, slim | Only re-export what the RFC explicitly wants in easy reach. |
-| `aivi.defaults` | Keep | Match RFC `Default`, not legacy `ToDefault`. |
-| `aivi.list` | Keep | Preserve a compact list helper layer. |
-| `aivi.option` | Keep | Preserve compact option helpers. |
-| `aivi.result` | Keep | Preserve compact result helpers. |
-| `aivi.validation` | Keep | Redesign around `NonEmptyList` accumulation. |
-| `aivi.text` | Keep | Smaller, clearer text surface. |
-| `aivi.duration` | Keep | Domain over `Int`, not a `Span` record wrapper. |
-| `aivi.url` | Keep | Domain over `Text`, explicit parse/value. |
-| `aivi.path` | Keep | Domain over `Text`, explicit parse/value and path-join operator. |
-| `aivi.color` | Keep | Domain-centered and GTK-oriented, not a general color toolkit. |
-| `aivi.net.http` | Keep | Redesign around `Task` and `@source http.*`. |
-| `aivi.file` | Keep conceptually | Split into `fs.read`, `fs.watch`, and focused write tasks. |
-| `aivi.gnome.onlineAccounts` | Keep conceptually | Redesign around GOA accounts and credentials, not mail config bridging. |
-| `aivi.log` | Keep | Minimal structured logging only. |
+- database abstraction layers
+- IMAP/SMTP or other mail protocol clients
+- generic secret-storage APIs
+- raw sockets and generic streaming APIs
+- general HTTP server frameworks
+- PKCE and localhost loopback auth helpers
+- public signal or scheduler manipulation APIs
+- UI tree or form helper DSLs
+- broad math, graph, geometry, matrix, vector, or linear-algebra libraries
+- large generic crypto toolkits
 
-### 5.2 Defer until after the first stdlib wave
-
-| Legacy module or family | Decision | Why it is deferred |
-| --- | --- | --- |
-| `aivi.json` | Defer, but keep small later | Useful as an interop escape hatch, but compiler-driven typed decoding should land first. |
-| `aivi.regex` | Defer | Useful, but not a blocker for the GNOME-first core. |
-| `aivi.i18n` | Defer and redesign | The old properties-style API is not obviously the right GNOME story; a gettext-oriented design is more likely. |
-| `aivi.testing` | Defer | Important, but not required to define the runtime-facing stdlib scope. |
-| `aivi.console` | Defer | More relevant for CLI tooling than for the flagship desktop app story. |
-| `aivi.system` | Defer and limit | Environment/process access needs a tighter capability story. |
-| `aivi.crypto` | Defer and narrow | Most legacy crypto should be internal or tightly scoped. Public crypto should appear only with a coherent bytes-first design. |
-| `aivi.calendar` / `aivi.chronos.calendar` / `aivi.chronos.instant` / `aivi.chronos.timezone` | Defer | Dates and time zones are useful, but `Duration` is the urgent RFC-backed time surface. |
-| `aivi.math` | Defer and curate | Do not port the full 74-entry module. Add only a clearly justified small numeric helper set later. |
-| `aivi.number.bigint` / `aivi.number.decimal` | Defer as separate modules | `BigInt` and `Decimal` remain RFC core types, but separate facade modules are not a priority. |
-| Future `process` and `mailbox` provider surfaces | Defer to phase 2 | RFC recommends them, but they should land after HTTP/fs/timer are stable. |
-| Future GNOME secret-store support | Defer | If needed, it should be a GNOME/libsecret integration, not the old generic encrypted-blob API. |
-
-### 5.3 Do not port to the new stdlib
-
-| Legacy module or family | Decision | Why it should not return |
-| --- | --- | --- |
-| `aivi.reactive` | Do not port | `Signal` is now a language/runtime feature. We should not expose mutable `signal/get/set/watch` as the public model. |
-| `aivi.ui` / `aivi.ui.gtk4` / `aivi.ui.layout` | Do not port | The RFC lowers markup directly to GTK/libadwaita. No virtual tree or raw widget-node DSL should be the public UI surface. |
-| `aivi.ui.forms` | Do not port for v1 | Validation helpers can be built on `Validation`; they are not core enough to shape the stdlib. |
-| `aivi.chronos.scheduler` | Do not port | The scheduler is runtime architecture, not a user-visible stdlib data model. |
-| `aivi.net.httpServer` | Do not port as-is | Replace only the narrow PKCE loopback use case. |
-| `aivi.net.https` | Do not port | TLS should be transport behavior of HTTP, not a separate module. |
-| `aivi.rest` | Do not port | Redundant with a single canonical HTTP surface. |
-| `aivi.net` facade | Do not port | Avoid umbrella namespace duplication. |
-| `aivi.net.sockets` / `aivi.net.streams` | Do not port in the first stdlib | If revisited later, they should be source/task-shaped, not raw connection and stream APIs copied from the legacy design. |
-| `aivi.concurrency` | Do not port | `Task`, runtime scheduling, and later mailbox sources replace raw `spawn`, `race`, and channel APIs. |
-| `aivi.database` / `aivi.database.pool` | Do not port | Too large, too backend-oriented, and far from the GNOME-first v1 focus. |
-| `aivi.email` | Do not port | GOA covers the immediate desktop integration need; IMAP/SMTP belongs in higher-level packages if it ever returns. |
-| `aivi.secrets` | Do not port as-is | Generic encrypted-blob storage is the wrong abstraction. If needed later, use OS-backed credential storage. |
-| `aivi.collections` plus `Queue` / `Deque` / `Heap` | Do not port | The RFC core collection story is `List`, `Map`, and `Set`. Extra collection towers can wait. |
-| `aivi.logic` as a full class zoo | Do not port | Keep only the class surface the RFC explicitly commits to. |
-| `aivi.number` / `aivi.linalg` facades | Do not port | Duplicate umbrella modules add noise without semantic value. |
-| `aivi.number.complex` / `aivi.number.quaternion` / `aivi.number.rational` | Do not port | Not part of the current language focus. |
-| `aivi.bits` / `aivi.generator` / `aivi.geometry` / `aivi.graph` / `aivi.linear_algebra` / `aivi.matrix` / `aivi.tree` / `aivi.units` / `aivi.vector` | Do not port | These are niche utility surfaces, not core to the current GNOME-first reactive language. |
+These capabilities can be reconsidered later, but they should not shape the v1
+stdlib architecture.
 
 ---
 
-## 6. New surfaces required by the current RFC, not by the old stdlib
+## 7. Later phases
 
-The new stdlib should not just prune the old library. It also needs a few new
-or newly explicit surfaces.
+These are reasonable follow-on candidates after the first wave is stable:
 
-| Surface | Why it is needed |
-| --- | --- |
-| `Default` instance bundles | Required explicitly by RFC section 9. |
-| `NonEmpty` / `NonEmptyList` | Required to make `Validation` match the RFC. |
-| `DecodeMode` and related source option types | Needed for strict typed external decoding. |
-| `timer` provider | Explicit RFC-recommended source family. |
-| `fs.watch` and `fs.read` provider split | Explicit RFC recommendation; better than the old monolithic file API. |
-| `goa` account change observation | Needed to make GNOME Online Accounts reactive instead of task-only. |
-| `aivi.auth.pkce` | The legacy stdlib did not have the right narrow auth abstraction for PKCE loopback flows. |
+- raw JSON escape hatch APIs
+- regex
+- testing helpers
+- gettext-oriented i18n
+- limited process and mailbox provider surfaces
+- carefully scoped system access
+- GNOME-native secret-store integration if real needs appear
+- PKCE or other localhost loopback auth support if a concrete integration needs it
+- calendar and time-zone support once the domain and source foundations are solid
 
----
+Later work should reuse the same rules:
 
-## 7. Naming guidance
-
-Avoid umbrella facades unless they provide real semantic value.
-
-Recommended shape:
-
-- pure modules: `aivi.list`, `aivi.option`, `aivi.result`, `aivi.validation`,
-  `aivi.text`, `aivi.defaults`, `aivi.duration`, `aivi.url`, `aivi.path`,
-  `aivi.color`
-- provider namespaces for external input: `http`, `fs`, `timer`, `process`,
-  `mailbox`, `window`, `goa`
-- narrow integration modules: `aivi.gnome.onlineAccounts`,
-  `aivi.auth.pkce`
-
-Avoid reintroducing:
-
-- `aivi.net`
-- `aivi.rest`
-- `aivi.https`
-- `aivi.collections`
-- `aivi.number`
-- `aivi.linalg`
+- pure helpers stay pure
+- one-shot work uses `Task`
+- long-lived input uses `@source`
+- no duplicate facades
 
 ---
 
-## 8. Suggested implementation order
+## 8. Implementation order
 
-### Phase 1: foundation and domains
+### Phase 1: core foundation
 
-- slim `aivi` / `aivi.prelude`
+- `aivi`
+- `aivi.prelude`
 - `aivi.defaults`
 - `aivi.list`
 - `aivi.option`
 - `aivi.result`
 - `aivi.validation`
+- `aivi.nonEmpty`
 - `aivi.text`
 - `aivi.duration`
 - `aivi.url`
 - `aivi.path`
 - `aivi.color`
-- `NonEmpty`
 
-### Phase 2: core source and task surfaces
+### Phase 2: source and task boundaries
 
-- HTTP request types plus `Task` and `@source http.*`
-- `fs.read` and `fs.watch`
-- timer providers
-- minimal logging
-- typed decode support and `DecodeMode`
+- HTTP types plus `http` provider family
+- filesystem types plus `fs.read` and `fs.watch`
+- timer provider family
+- minimal `aivi.log`
+- typed decode support and source option types
 
-### Phase 3: GNOME-first auth and account integration
+### Phase 3: GNOME-native account support
 
-- redesigned `aivi.gnome.onlineAccounts`
-- PKCE loopback helper in `aivi.auth.pkce`
-- any internal D-Bus/runtime plumbing needed for those surfaces
+- `aivi.gnome.onlineAccounts`
+- internal D-Bus plumbing needed for that surface
 
-### Phase 4: later additions if real demand appears
+### Phase 4: later expansions
 
+- JSON
 - regex
-- raw JSON escape hatch
 - testing
-- limited process and mailbox providers
-- gettext-oriented i18n
-- carefully scoped system and secret-store integrations
+- i18n
+- process and mailbox providers
+- limited system and secret-store integrations
+- optional PKCE or localhost loopback auth helper
 
 ---
 
-## 9. Final recommendation
+## 9. Definition of done
 
-The new AIVI stdlib should be **small, typed, and opinionated**.
+This plan is complete only when the implementation follows these constraints:
 
-Keep the pure foundation modules, keep HTTP/file/timer as first-class source and
-task surfaces, keep GNOME Online Accounts as a real GNOME-native integration,
-and add a narrow PKCE loopback helper.
+1. The first stdlib wave is small and coherent.
+2. Public APIs clearly separate pure helpers, `Task` work, and `@source`
+   providers.
+3. Domain-backed values enforce explicit construction and explicit unwrapping.
+4. No umbrella duplicate namespaces are introduced.
+5. No public API re-exposes signal mutation, scheduler control, or UI tree
+   machinery.
+6. GOA support matches the GNOME-first philosophy and remains typed, narrow, and
+   deterministic.
+7. Tests cover:
+   - domain invariants
+   - strict decode behavior
+   - source reconfiguration and stale-result suppression
+   - GOA account change delivery
 
-Do **not** spend v1 effort porting the old generic server, reactive, database,
-email, UI node, or utility-math ecosystems. Those belonged to the old language
-shape, not the current one.
+---
+
+## 10. Final recommendation
+
+Implement the smallest stdlib that makes the current language real:
+
+- a strong pure foundation
+- explicit domains
+- source-first external input
+- task-based one-shot effects
+- GNOME Online Accounts
+
+Everything else should wait until it is justified by the current architecture.

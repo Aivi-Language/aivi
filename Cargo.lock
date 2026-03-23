@@ -12,6 +12,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "aivi-backend"
+version = "0.1.0"
+
+[[package]]
 name = "aivi-base"
 version = "0.1.0"
 
@@ -24,6 +28,25 @@ dependencies = [
  "aivi-lsp",
  "aivi-syntax",
  "tokio",
+]
+
+[[package]]
+name = "aivi-core"
+version = "0.1.0"
+dependencies = [
+ "aivi-base",
+ "aivi-hir",
+ "aivi-syntax",
+ "aivi-typing",
+]
+
+[[package]]
+name = "aivi-gtk"
+version = "0.1.0"
+dependencies = [
+ "aivi-base",
+ "aivi-hir",
+ "aivi-syntax",
 ]
 
 [[package]]
@@ -66,6 +89,10 @@ dependencies = [
  "aivi-typing",
  "parking_lot",
 ]
+
+[[package]]
+name = "aivi-runtime"
+version = "0.1.0"
 
 [[package]]
 name = "aivi-syntax"

@@ -1,7 +1,11 @@
 [workspace]
 members = [
     "crates/aivi-base",
+    "crates/aivi-core",
     "crates/aivi-hir",
+    "crates/aivi-runtime",
+    "crates/aivi-gtk",
+    "crates/aivi-backend",
     "crates/aivi-syntax",
     "crates/aivi-cli",
     "crates/aivi-typing",

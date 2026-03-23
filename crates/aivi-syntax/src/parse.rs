@@ -3408,15 +3408,16 @@ export main
 
     #[test]
     fn parser_reports_trailing_tokens_after_expression_body() {
-        let (_, parsed) = load(
-            "fun prependCells:List Int #head:Int #tail:List Int =>\n    head :: tail\n",
-        );
+        let (_, parsed) =
+            load("fun prependCells:List Int #head:Int #tail:List Int =>\n    head :: tail\n");
 
         assert!(parsed.has_errors());
-        assert!(parsed
-            .diagnostics()
-            .iter()
-            .any(|diagnostic| diagnostic.code == Some(TRAILING_DECLARATION_BODY_TOKEN)));
+        assert!(
+            parsed
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(TRAILING_DECLARATION_BODY_TOKEN))
+        );
     }
 
     #[test]
