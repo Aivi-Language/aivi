@@ -1,10 +1,10 @@
 use std::{collections::BTreeSet, fmt};
 
 use crate::{
-    expr::{ExprKind, Pattern, PatternKind, PipeStageKind, ProjectionBase, Reference, TextSegment},
-    module::{GateStage, ItemKind},
     DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, ExprId, Module, PipeId, SourceId,
     StageId, StageKind,
+    expr::{ExprKind, Pattern, PatternKind, PipeStageKind, ProjectionBase, Reference, TextSegment},
+    module::{GateStage, ItemKind},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

@@ -1,20 +1,20 @@
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     fmt,
 };
 
 use aivi_base::{ByteIndex, Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan, Span};
 use aivi_typing::{
-    builtin_source_option_wakeup_cause, BuiltinSourceProvider, BuiltinSourceWakeupCause,
-    CustomSourceRecurrenceWakeupContext, FanoutCarrier, FanoutPlan, FanoutPlanner,
-    FanoutResultKind, FanoutStageKind, GateCarrier, GatePlanner, GateResultKind, Kind,
-    KindCheckError, KindCheckErrorKind, KindChecker, KindExprId,
+    BuiltinSourceProvider, BuiltinSourceWakeupCause, CustomSourceRecurrenceWakeupContext,
+    FanoutCarrier, FanoutPlan, FanoutPlanner, FanoutResultKind, FanoutStageKind, GateCarrier,
+    GatePlanner, GateResultKind, Kind, KindCheckError, KindCheckErrorKind, KindChecker, KindExprId,
     KindParameterId as TypingKindParameterId, KindRecordField, KindStore, NonSourceWakeupCause,
     RecurrencePlanner, RecurrenceTargetEvidence, RecurrenceWakeupKind, RecurrenceWakeupPlanner,
     SourceContractType, SourceRecurrenceWakeupContext, SourceTypeParameter,
+    builtin_source_option_wakeup_cause,
 };
 use regex_syntax::{
-    ast::Span as RegexSpan, Error as RegexSyntaxError, ParserBuilder as RegexParserBuilder,
+    Error as RegexSyntaxError, ParserBuilder as RegexParserBuilder, ast::Span as RegexSpan,
 };
 
 use crate::{
@@ -37,7 +37,7 @@ use crate::{
         ResolvedSourceContractType, ResolvedSourceTypeConstructor,
         SourceContractResolutionErrorKind, SourceContractTypeResolver,
     },
-    typecheck::{typecheck_module, TypeConstraint},
+    typecheck::{TypeConstraint, typecheck_module},
 };
 
 /// Validation strictness for HIR modules.
@@ -12312,10 +12312,12 @@ val resultLabel =
 
         let report = validate_module(&module, ValidationMode::Structural);
         assert!(!report.is_ok());
-        assert!(report
-            .diagnostics()
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("missing expression 99")));
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("missing expression 99"))
+        );
     }
 
     #[test]
@@ -12630,10 +12632,12 @@ val screenView =
             .expect("item allocation should fit");
 
         let report = validate_module(&module, ValidationMode::Structural);
-        assert!(report
-            .diagnostics()
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("branch-only control node kind")));
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("branch-only control node kind"))
+        );
     }
 
     #[test]
@@ -12655,7 +12659,7 @@ val screenView =
                 span: shared_span,
                 kind: MarkupNodeKind::Element(crate::MarkupElement {
                     name: NamePath::from_vec(vec![
-                        Name::new("Label", span(0, 0, 5)).expect("valid name")
+                        Name::new("Label", span(0, 0, 5)).expect("valid name"),
                     ])
                     .expect("single segment path"),
                     attributes: Vec::new(),
@@ -14018,8 +14022,8 @@ sig login : Signal (Result HttpError Session)
     }
 
     #[test]
-    fn source_option_root_contract_parameters_preserve_generic_constructor_holes_for_unproven_arguments(
-    ) {
+    fn source_option_root_contract_parameters_preserve_generic_constructor_holes_for_unproven_arguments()
+     {
         let mut module = Module::new(FileId::new(0));
         let payload = type_parameter(&mut module, "A");
         let int_ref = builtin_type(&mut module, BuiltinType::Int);

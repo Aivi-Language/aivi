@@ -10,7 +10,7 @@ use crate::{
         PatternId, TypeId, TypeParameterId,
     },
     sequence::{AtLeastTwo, NonEmpty, SequenceError},
-    validate::{validate_module, ValidationMode, ValidationReport},
+    validate::{ValidationMode, ValidationReport, validate_module},
 };
 
 /// One source-stable surface name preserved into HIR for diagnostics.

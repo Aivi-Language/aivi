@@ -30,7 +30,7 @@ pub use expr::{
     ProjectionBase, RecordExprField, RecordPatternField, Reference, TextLiteral, TextSegment,
 };
 pub use ids::{DecodeProgramId, DecodeStepId, ExprId, ItemId, PipeId, SourceId, StageId};
-pub use lower::{lower_module, LoweringError, LoweringErrors};
+pub use lower::{LoweringError, LoweringErrors, lower_module};
 pub use module::{
     DecodeField, DecodeProgram, DecodeStep, DecodeVariant, DomainDecodeSurface,
     DomainDecodeSurfaceKind, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item, ItemKind,
@@ -39,4 +39,4 @@ pub use module::{
     StageKind, TruthyFalsyBranch, TruthyFalsyStage,
 };
 pub use ty::{RecordField, Type};
-pub use validate::{validate_module, ValidationError, ValidationErrors};
+pub use validate::{ValidationError, ValidationErrors, validate_module};

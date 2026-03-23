@@ -2,8 +2,6 @@ use std::collections::{BTreeMap, HashMap};
 
 use aivi_base::SourceSpan;
 use aivi_hir::{
-    elaborate_fanouts, elaborate_gates, elaborate_general_expressions, elaborate_recurrences,
-    elaborate_source_lifecycles, elaborate_truthy_falsy, generate_source_decode_programs,
     BlockedFanoutSegment, BlockedGateStage, BlockedGeneralExpr as BlockedGeneralExprBody,
     BlockedRecurrenceNode, BlockedSourceDecodeProgram, BlockedSourceLifecycleNode,
     BlockedTruthyFalsyStage, ExprId as HirExprId, GateRuntimeExpr, GateRuntimeExprKind,
@@ -11,12 +9,12 @@ use aivi_hir::{
     GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch, GateStageOutcome,
     GeneralExprOutcome, Item as HirItem, ItemId as HirItemId, PatternId as HirPatternId,
     RecurrenceNodeOutcome, SourceDecodeProgram, SourceDecodeProgramOutcome,
-    SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome,
+    SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome, elaborate_fanouts, elaborate_gates,
+    elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
+    elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{
-    expr::ExprKind,
-    validate::{validate_module, ValidationError},
     Arena, ArenaOverflow, DecodeField, DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId,
     DomainDecodeSurface, DomainDecodeSurfaceKind, Expr, ExprId, FanoutFilter, FanoutJoin,
     FanoutStage, GateStage, Item, ItemId, ItemKind, ItemParameter, MapEntry, Module,
@@ -25,6 +23,8 @@ use crate::{
     ProjectionBase, RecordExprField, RecordPatternField, RecurrenceGuard, RecurrenceStage,
     Reference, SignalInfo, SourceId, SourceInstanceId, SourceNode, SourceOptionBinding, Stage,
     StageKind, TextLiteral, TextSegment, TruthyFalsyBranch, TruthyFalsyStage, Type,
+    expr::ExprKind,
+    validate::{ValidationError, validate_module},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2019,10 +2019,10 @@ mod tests {
     use aivi_base::SourceDatabase;
     use aivi_syntax::parse_module;
 
-    use super::{lower_module, LoweringError};
+    use super::{LoweringError, lower_module};
     use crate::{
-        validate::{validate_module, ValidationError},
         DecodeStep, GateStage, ItemKind, StageKind, Type,
+        validate::{ValidationError, validate_module},
     };
 
     fn fixture_root() -> PathBuf {
@@ -2325,10 +2325,12 @@ sig cursor : Signal Cursor =
     fn rejects_blocked_hir_handoffs_instead_of_guessing() {
         let lowered = lower_fixture("milestone-2/invalid/gate-predicate-not-bool/main.aivi");
         let errors = lower_module(lowered.module()).expect_err("blocked gate should stop lowering");
-        assert!(errors
-            .errors()
-            .iter()
-            .any(|error| matches!(error, LoweringError::BlockedGateStage { .. })));
+        assert!(
+            errors
+                .errors()
+                .iter()
+                .any(|error| matches!(error, LoweringError::BlockedGateStage { .. }))
+        );
     }
 
     #[test]
@@ -2383,10 +2385,12 @@ sig timeout : Signal Duration
 
         let errors =
             lower_module(lowered.module()).expect_err("ambiguous decode should block lowering");
-        assert!(errors
-            .errors()
-            .iter()
-            .any(|error| matches!(error, LoweringError::BlockedDecodeProgram { .. })));
+        assert!(
+            errors
+                .errors()
+                .iter()
+                .any(|error| matches!(error, LoweringError::BlockedDecodeProgram { .. }))
+        );
     }
 
     #[test]
@@ -2431,10 +2435,12 @@ val retried : Task Int Int =
         recurrence.steps[0].result_subject = Type::Primitive(aivi_hir::BuiltinType::Text);
         let errors =
             validate_module(&core).expect_err("manually broken recurrence should fail validation");
-        assert!(errors
-            .errors()
-            .iter()
-            .any(|error| matches!(error, ValidationError::RecurrenceDoesNotClose { .. })));
+        assert!(
+            errors
+                .errors()
+                .iter()
+                .any(|error| matches!(error, ValidationError::RecurrenceDoesNotClose { .. }))
+        );
     }
 
     #[test]

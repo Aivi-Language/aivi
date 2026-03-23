@@ -25,34 +25,34 @@ mod validate;
 
 pub use arena::{Arena, ArenaId, ArenaOverflow};
 pub use decode_elaboration::{
-    elaborate_source_decodes, BlockedSourceDecodeNode, SourceDecodeDomainBinding,
-    SourceDecodeElaborationBlocker, SourceDecodeElaborationReport, SourceDecodeNodeElaboration,
-    SourceDecodeNodeOutcome, SourceDecodePlan, SourceDecodeUnsupportedTypeKind,
+    BlockedSourceDecodeNode, SourceDecodeDomainBinding, SourceDecodeElaborationBlocker,
+    SourceDecodeElaborationReport, SourceDecodeNodeElaboration, SourceDecodeNodeOutcome,
+    SourceDecodePlan, SourceDecodeUnsupportedTypeKind, elaborate_source_decodes,
 };
 pub use decode_generation::{
-    generate_source_decode_programs, BlockedSourceDecodeProgram, DecodeProgramField,
-    DecodeProgramStep, DecodeProgramStepId, DomainDecodeSurfaceCandidate, DomainDecodeSurfaceKind,
-    DomainDecodeSurfacePlan, SourceDecodeProgram, SourceDecodeProgramBlocker,
-    SourceDecodeProgramNode, SourceDecodeProgramOutcome, SourceDecodeProgramReport,
+    BlockedSourceDecodeProgram, DecodeProgramField, DecodeProgramStep, DecodeProgramStepId,
+    DomainDecodeSurfaceCandidate, DomainDecodeSurfaceKind, DomainDecodeSurfacePlan,
+    SourceDecodeProgram, SourceDecodeProgramBlocker, SourceDecodeProgramNode,
+    SourceDecodeProgramOutcome, SourceDecodeProgramReport, generate_source_decode_programs,
 };
-pub use exports::{exports, ExportedName, ExportedNameKind, ExportedNames};
+pub use exports::{ExportedName, ExportedNameKind, ExportedNames, exports};
 pub use fanout_elaboration::{
-    elaborate_fanouts, BlockedFanoutSegment, FanoutElaborationBlocker, FanoutElaborationReport,
-    FanoutFilterBlocker, FanoutFilterPlan, FanoutJoinPlan, FanoutSegmentElaboration,
-    FanoutSegmentOutcome, FanoutSegmentPlan,
+    BlockedFanoutSegment, FanoutElaborationBlocker, FanoutElaborationReport, FanoutFilterBlocker,
+    FanoutFilterPlan, FanoutJoinPlan, FanoutSegmentElaboration, FanoutSegmentOutcome,
+    FanoutSegmentPlan, elaborate_fanouts,
 };
 pub use gate_elaboration::{
-    elaborate_gates, BlockedGateStage, GateCoreExpr, GateCoreExprKind, GateElaborationBlocker,
+    BlockedGateStage, GateCoreExpr, GateCoreExprKind, GateElaborationBlocker,
     GateElaborationReport, GateRuntimeCaseArm, GateRuntimeExpr, GateRuntimeExprKind,
     GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
     GateRuntimeRecordField, GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
     GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind,
-    GateStageElaboration, GateStageOutcome, OrdinaryGateStage, SignalGateFilter,
+    GateStageElaboration, GateStageOutcome, OrdinaryGateStage, SignalGateFilter, elaborate_gates,
 };
 pub use general_expr_elaboration::{
-    elaborate_general_expressions, BlockedGeneralExpr, GeneralExprBlocker,
-    GeneralExprElaborationReport, GeneralExprItemElaboration, GeneralExprOutcome,
-    GeneralExprParameter,
+    BlockedGeneralExpr, GeneralExprBlocker, GeneralExprElaborationReport,
+    GeneralExprItemElaboration, GeneralExprOutcome, GeneralExprParameter,
+    elaborate_general_expressions,
 };
 pub use hir::{
     ApplicativeCluster, ApplicativeSpine, ApplicativeSpineHead, BinaryOperator, Binding,
@@ -81,12 +81,12 @@ pub use ids::{
     PatternId, TypeId, TypeParameterId,
 };
 pub use lower::lower_module_with_resolver;
-pub use lower::{lower_module, LoweringResult};
+pub use lower::{LoweringResult, lower_module};
 pub use recurrence_elaboration::{
-    elaborate_recurrences, BlockedRecurrenceNode, RecurrenceElaborationBlocker,
-    RecurrenceElaborationReport, RecurrenceGuardPlan, RecurrenceNodeElaboration,
-    RecurrenceNodeOutcome, RecurrenceNodePlan, RecurrenceNonSourceWakeupBinding,
-    RecurrenceRuntimeExpr, RecurrenceRuntimeStageBlocker, RecurrenceStagePlan,
+    BlockedRecurrenceNode, RecurrenceElaborationBlocker, RecurrenceElaborationReport,
+    RecurrenceGuardPlan, RecurrenceNodeElaboration, RecurrenceNodeOutcome, RecurrenceNodePlan,
+    RecurrenceNonSourceWakeupBinding, RecurrenceRuntimeExpr, RecurrenceRuntimeStageBlocker,
+    RecurrenceStagePlan, elaborate_recurrences,
 };
 pub use resolver::{ImportResolver, NullImportResolver};
 pub use sequence::{AtLeastTwo, NonEmpty, SequenceError};
@@ -95,20 +95,19 @@ pub use source_contract_resolution::{
     SourceContractResolutionErrorKind, SourceContractTypeResolver,
 };
 pub use source_lifecycle_elaboration::{
-    elaborate_source_lifecycles, BlockedSourceLifecycleNode, SourceInstanceId,
-    SourceLifecycleElaborationBlocker, SourceLifecycleElaborationReport,
-    SourceLifecycleNodeElaboration, SourceLifecycleNodeOutcome, SourceLifecyclePlan,
-    SourceOptionSignalBinding, SourceReplacementPolicy, SourceStaleWorkPolicy,
-    SourceTeardownPolicy,
+    BlockedSourceLifecycleNode, SourceInstanceId, SourceLifecycleElaborationBlocker,
+    SourceLifecycleElaborationReport, SourceLifecycleNodeElaboration, SourceLifecycleNodeOutcome,
+    SourceLifecyclePlan, SourceOptionSignalBinding, SourceReplacementPolicy, SourceStaleWorkPolicy,
+    SourceTeardownPolicy, elaborate_source_lifecycles,
 };
-pub use symbols::{extract_symbols, LspSymbol, LspSymbolKind};
+pub use symbols::{LspSymbol, LspSymbolKind, extract_symbols};
 pub use truthy_falsy_elaboration::{
-    elaborate_truthy_falsy, BlockedTruthyFalsyStage, TruthyFalsyBranchKind, TruthyFalsyBranchPlan,
+    BlockedTruthyFalsyStage, TruthyFalsyBranchKind, TruthyFalsyBranchPlan,
     TruthyFalsyElaborationBlocker, TruthyFalsyElaborationReport, TruthyFalsyStageElaboration,
-    TruthyFalsyStageOutcome, TruthyFalsyStagePlan,
+    TruthyFalsyStageOutcome, TruthyFalsyStagePlan, elaborate_truthy_falsy,
 };
 pub use typecheck::{
-    elaborate_default_record_fields, typecheck_module, ConstraintClass, TypeCheckReport,
-    TypeConstraint,
+    ConstraintClass, TypeCheckReport, TypeConstraint, elaborate_default_record_fields,
+    typecheck_module,
 };
-pub use validate::{validate_module, GateRecordField, GateType, ValidationMode, ValidationReport};
+pub use validate::{GateRecordField, GateType, ValidationMode, ValidationReport, validate_module};

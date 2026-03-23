@@ -4,9 +4,6 @@ use aivi_base::SourceSpan;
 use aivi_typing::GatePlanner;
 
 use crate::{
-    gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
-    typecheck::expression_matches,
-    validate::{truthy_falsy_pair_stages, GateExprEnv, GateIssue, GateType, GateTypeContext},
     BindingId, BuiltinTerm, ExprId, ExprKind, FunctionItem, FunctionParameter, GateRuntimeCaseArm,
     GateRuntimeExpr, GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStage,
     GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeRecordField,
@@ -14,6 +11,9 @@ use crate::{
     GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind,
     Item, ItemId, Module, PipeExpr, PipeStageKind, ProjectionBase, ResolutionState, TermReference,
     TermResolution, TypeItemBody, ValueItem,
+    gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
+    typecheck::expression_matches,
+    validate::{GateExprEnv, GateIssue, GateType, GateTypeContext, truthy_falsy_pair_stages},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1497,8 +1497,8 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use super::{
-        elaborate_general_expressions, GateRuntimeExprKind, GateRuntimePipeStageKind,
-        GeneralExprBlocker, GeneralExprOutcome,
+        GateRuntimeExprKind, GateRuntimePipeStageKind, GeneralExprBlocker, GeneralExprOutcome,
+        elaborate_general_expressions,
     };
 
     fn item_name(module: &crate::Module, item: crate::ItemId) -> Option<&str> {

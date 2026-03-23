@@ -42,8 +42,7 @@ impl FileAnalysis {
 }
 
 fn symbol_contains(symbol: &LspSymbol, cursor: ByteIndex) -> bool {
-    let span = symbol.span.span();
-    span.start() <= cursor && cursor <= span.end()
+    symbol.span.span().contains(cursor)
 }
 
 #[cfg(test)]
@@ -52,7 +51,7 @@ mod tests {
     use std::sync::Arc;
 
     use aivi_base::{ByteIndex, FileId, SourceSpan, Span};
-    use aivi_hir::LspSymbol;
+    use aivi_hir::{LspSymbol, LspSymbolKind};
 
     fn symbol(name: &str, span: std::ops::Range<usize>, children: Vec<LspSymbol>) -> LspSymbol {
         let span = SourceSpan::new(FileId::new(0), Span::from(span));

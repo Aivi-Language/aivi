@@ -4,13 +4,13 @@ use aivi_base::SourceSpan;
 use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
-    domain_operator_elaboration::select_domain_binary_operator,
-    validate::{
-        truthy_falsy_pair_stages, walk_expr_tree, GateExprEnv, GateIssue, GateType, GateTypeContext,
-    },
     BinaryOperator, BindingId, BuiltinTerm, DomainMemberHandle, ExprId, ExprKind, IntegerLiteral,
     Item, ItemId, Module, Name, NamePath, PatternId, PipeExpr, PipeStageKind, ProjectionBase,
     SuffixedIntegerLiteral, TermResolution, TextFragment, TextSegment, UnaryOperator,
+    domain_operator_elaboration::select_domain_binary_operator,
+    validate::{
+        GateExprEnv, GateIssue, GateType, GateTypeContext, truthy_falsy_pair_stages, walk_expr_tree,
+    },
 };
 
 /// Focused gate-core plans derived from resolved HIR.
@@ -1103,10 +1103,10 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use super::{
-        elaborate_gates, GateCoreExprKind, GateElaborationBlocker, GateRuntimeExprKind,
-        GateRuntimeProjectionBase, GateRuntimeReference, GateStageOutcome,
+        GateCoreExprKind, GateElaborationBlocker, GateRuntimeExprKind, GateRuntimeProjectionBase,
+        GateRuntimeReference, GateStageOutcome, elaborate_gates,
     };
-    use crate::{lower_module, BuiltinType, GateType, Item};
+    use crate::{BuiltinType, GateType, Item, lower_module};
 
     fn fixture_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1669,10 +1669,12 @@ sig cursor : Signal Cursor =
 
         match &blocked.outcome {
             GateStageOutcome::Blocked(stage) => {
-                assert!(stage
-                    .blockers
-                    .iter()
-                    .any(|blocker| blocker == &GateElaborationBlocker::ImpurePredicate));
+                assert!(
+                    stage
+                        .blockers
+                        .iter()
+                        .any(|blocker| blocker == &GateElaborationBlocker::ImpurePredicate)
+                );
             }
             other => panic!("expected blocked gate stage, found {other:?}"),
         }

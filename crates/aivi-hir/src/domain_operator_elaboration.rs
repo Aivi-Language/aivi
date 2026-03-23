@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    validate::GateTypeContext, BinaryOperator, DomainMemberHandle, DomainMemberKind,
-    DomainMemberResolution, GateType, Item, Module, TypeParameterId,
+    BinaryOperator, DomainMemberHandle, DomainMemberKind, DomainMemberResolution, GateType, Item,
+    Module, TypeParameterId, validate::GateTypeContext,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -127,9 +127,8 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use crate::{
-        lower_module,
+        ExprKind, Item, lower_module,
         validate::{GateExprEnv, GateTypeContext},
-        ExprKind, Item,
     };
 
     use super::*;

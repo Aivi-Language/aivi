@@ -36,8 +36,11 @@ version = "0.1.0"
 name = "aivi-cli"
 version = "0.1.0"
 dependencies = [
+ "aivi-backend",
  "aivi-base",
+ "aivi-core",
  "aivi-hir",
+ "aivi-lambda",
  "aivi-lsp",
  "aivi-syntax",
  "tokio",

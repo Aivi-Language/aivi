@@ -12,6 +12,7 @@ use aivi_typing::{
 };
 
 use crate::{
+    Arena,
     expr::{
         Expr, Pattern, PatternBinding, PatternConstructor, PatternKind, PipeCaseArm,
         PipeTruthyFalsyStage, Reference,
@@ -19,7 +20,6 @@ use crate::{
     ids::ExprId,
     ids::{DecodeProgramId, DecodeStepId, ItemId, PipeId, SourceId, StageId},
     ty::Type,
-    Arena,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
