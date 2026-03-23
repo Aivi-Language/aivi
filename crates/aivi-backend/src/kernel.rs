@@ -2,6 +2,7 @@ use std::fmt;
 
 use aivi_base::SourceSpan;
 use aivi_core::Arena;
+use aivi_hir::DomainMemberHandle;
 
 use crate::{
     EnvSlotId, InlineSubjectId, ItemId, KernelExprId, LayoutId, PipelineId, layout::AbiPassMode,
@@ -296,6 +297,7 @@ pub enum KernelExprKind {
     OptionNone,
     Environment(EnvSlotId),
     Item(ItemId),
+    DomainMember(DomainMemberHandle),
     Builtin(BuiltinTerm),
     Integer(IntegerLiteral),
     SuffixedInteger(SuffixedIntegerLiteral),
@@ -396,6 +398,12 @@ pub fn describe_expr_kind(kind: &KernelExprKind) -> String {
         KernelExprKind::OptionNone => "None".to_owned(),
         KernelExprKind::Environment(slot) => format!("env{slot}"),
         KernelExprKind::Item(item) => format!("item item{item}"),
+        KernelExprKind::DomainMember(handle) => {
+            format!(
+                "domain-member {}.{}",
+                handle.domain_name, handle.member_name
+            )
+        }
         KernelExprKind::Builtin(term) => format!("builtin {term}"),
         KernelExprKind::Integer(integer) => integer.raw.to_string(),
         KernelExprKind::SuffixedInteger(integer) => format!("{}{}", integer.raw, integer.suffix),

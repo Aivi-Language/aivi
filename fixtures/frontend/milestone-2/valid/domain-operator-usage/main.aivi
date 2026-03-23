@@ -1,0 +1,7 @@
+domain Duration over Int
+    literal ms : Int -> Duration
+    (+) : Duration -> Duration -> Duration
+    value : Duration -> Int
+
+val total : Duration = 10ms + 5ms
+val raw : Int = value total

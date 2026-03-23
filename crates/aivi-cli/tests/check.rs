@@ -32,6 +32,8 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/domain-declarations/main.aivi",
         "milestone-2/valid/domain-member-resolution/main.aivi",
         "milestone-2/valid/domain-literal-suffixes/main.aivi",
+        "milestone-2/valid/domain-operator-usage/main.aivi",
+        "milestone-2/valid/domain-operator-usage-parameterized/main.aivi",
         "milestone-2/valid/type-kinds/main.aivi",
         "milestone-2/valid/pipe-branch-and-join/main.aivi",
         "milestone-2/valid/pipe-truthy-falsy-carriers/main.aivi",
@@ -113,6 +115,7 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/source-contract-arity-mismatch/main.aivi",
         "milestone-2/invalid/source-option-type-mismatch/main.aivi",
         "milestone-2/invalid/source-option-contract-parameter-signal-mismatch/main.aivi",
+        "milestone-2/invalid/source-option-unbound-contract-parameter/main.aivi",
         "milestone-2/invalid/source-option-imported-binding-mismatch/main.aivi",
         "milestone-2/invalid/source-option-constructor-mismatch/main.aivi",
         "milestone-2/invalid/source-option-list-element-mismatch/main.aivi",
@@ -200,6 +203,33 @@ fn check_reports_non_exhaustive_case_from_hir() {
     assert!(
         stderr.contains("case split over `Status` is not exhaustive; missing `Pending`, `Failed`"),
         "expected explicit non-exhaustive case message, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_unbound_source_option_contract_parameter_from_hir() {
+    let path =
+        fixture_path("milestone-2/invalid/source-option-unbound-contract-parameter/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected unbound source option fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::source-option-unbound-contract-parameter"),
+        "expected unbound contract parameter diagnostic code, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "source option `body` for `http.post` expects `A`, but local source-option checking leaves contract parameter `A` unbound"
+        ),
+        "expected explicit unbound contract parameter message, got stderr: {stderr}"
     );
 }
 

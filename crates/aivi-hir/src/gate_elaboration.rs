@@ -2,9 +2,10 @@ use aivi_base::SourceSpan;
 use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
-    BinaryOperator, BindingId, BuiltinTerm, ExprId, ExprKind, IntegerLiteral, Item, ItemId, Module,
-    Name, NamePath, PipeExpr, PipeStageKind, ProjectionBase, SuffixedIntegerLiteral,
-    TermResolution, TextFragment, TextSegment, UnaryOperator,
+    BinaryOperator, BindingId, BuiltinTerm, DomainMemberHandle, ExprId, ExprKind, IntegerLiteral,
+    Item, ItemId, Module, Name, NamePath, PipeExpr, PipeStageKind, ProjectionBase,
+    SuffixedIntegerLiteral, TermResolution, TextFragment, TextSegment, UnaryOperator,
+    domain_operator_elaboration::select_domain_binary_operator,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, truthy_falsy_pair_stages, walk_expr_tree,
     },
@@ -181,6 +182,7 @@ pub enum GateRuntimeExprKind {
 pub enum GateRuntimeReference {
     Local(BindingId),
     Item(ItemId),
+    DomainMember(DomainMemberHandle),
     Builtin(BuiltinTerm),
 }
 
@@ -618,11 +620,16 @@ pub(crate) fn lower_gate_runtime_expr(
     ambient: Option<&GateType>,
     typing: &mut GateTypeContext<'_>,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    if let Some(domain_operator) =
+        lower_domain_operator_runtime_expr(module, expr_id, env, ambient, typing)?
+    {
+        return Ok(domain_operator);
+    }
     let (expr, ty) = inferred_runtime_expr(module, expr_id, env, ambient, typing)?;
     let kind = match expr.kind {
-        ExprKind::Name(reference) => {
-            GateRuntimeExprKind::Reference(runtime_reference_for_name(expr.span, &reference)?)
-        }
+        ExprKind::Name(reference) => GateRuntimeExprKind::Reference(runtime_reference_for_name(
+            module, expr.span, &reference,
+        )?),
         ExprKind::Integer(literal) => GateRuntimeExprKind::Integer(literal),
         ExprKind::SuffixedInteger(literal) => GateRuntimeExprKind::SuffixedInteger(literal),
         ExprKind::Text(text) => GateRuntimeExprKind::Text(lower_runtime_text_literal(
@@ -724,6 +731,46 @@ pub(crate) fn lower_gate_runtime_expr(
         ty,
         kind,
     })
+}
+
+fn lower_domain_operator_runtime_expr(
+    module: &Module,
+    expr_id: ExprId,
+    env: &GateExprEnv,
+    ambient: Option<&GateType>,
+    typing: &mut GateTypeContext<'_>,
+) -> Result<Option<GateRuntimeExpr>, GateElaborationBlocker> {
+    let expr = module.exprs()[expr_id].clone();
+    let ExprKind::Binary {
+        left,
+        operator,
+        right,
+    } = expr.kind
+    else {
+        return Ok(None);
+    };
+    let left_ty = typing.infer_expr(left, env, ambient).ty;
+    let right_ty = typing.infer_expr(right, env, ambient).ty;
+    let (Some(left_ty), Some(right_ty)) = (left_ty.as_ref(), right_ty.as_ref()) else {
+        return Ok(None);
+    };
+    let Some(matched) = select_domain_binary_operator(module, typing, operator, left_ty, right_ty)
+    else {
+        return Ok(None);
+    };
+    let left = lower_gate_runtime_expr(module, left, env, ambient, typing)?;
+    let right = lower_gate_runtime_expr(module, right, env, ambient, typing)?;
+    let callee = GateRuntimeExpr {
+        span: expr.span,
+        ty: matched.callee_type.clone(),
+        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(matched.callee)),
+    };
+    Ok(Some(GateRuntimeExpr::apply(
+        expr.span,
+        matched.result_type,
+        callee,
+        vec![left, right],
+    )))
 }
 
 fn lower_runtime_text_literal(
@@ -897,6 +944,7 @@ fn inferred_runtime_expr(
 }
 
 fn runtime_reference_for_name(
+    module: &Module,
     span: SourceSpan,
     reference: &crate::TermReference,
 ) -> Result<GateRuntimeReference, GateElaborationBlocker> {
@@ -907,11 +955,14 @@ fn runtime_reference_for_name(
         crate::ResolutionState::Resolved(TermResolution::Item(item_id)) => {
             Ok(GateRuntimeReference::Item(*item_id))
         }
+        crate::ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => module
+            .domain_member_handle(*resolution)
+            .map(GateRuntimeReference::DomainMember)
+            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span }),
         crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) => {
             Ok(GateRuntimeReference::Builtin(*builtin))
         }
-        crate::ResolutionState::Resolved(TermResolution::DomainMember(_))
-        | crate::ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
+        crate::ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | crate::ResolutionState::Resolved(TermResolution::Import(_))
         | crate::ResolutionState::Unresolved => {
             Err(GateElaborationBlocker::UnknownRuntimeExprType { span })
@@ -1237,6 +1288,98 @@ sig activeUsers:Signal User =
                     other => panic!("expected binary runtime predicate, found {other:?}"),
                 }
             }
+            other => panic!("expected signal filter plan, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lowers_domain_operator_predicates_into_explicit_domain_calls() {
+        let lowered = lower_text(
+            "signal-gate-domain-operators.aivi",
+            r#"
+domain Duration over Int
+    literal ms : Int -> Duration
+    (+) : Duration -> Duration -> Duration
+    (>) : Duration -> Duration -> Bool
+
+type Window = {
+    delay: Duration
+}
+
+sig windows:Signal Window = { delay: 10ms }
+
+sig slowWindows:Signal Window =
+    windows
+     ?|> ((.delay + 5ms) > 12ms)
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "signal gate domain-operator predicate should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_gates(lowered.module());
+        let signal = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "slowWindows")
+            .expect("expected signal gate plan for slowWindows");
+
+        match &signal.outcome {
+            GateStageOutcome::SignalFilter(stage) => match &stage.runtime_predicate.kind {
+                GateRuntimeExprKind::Apply { callee, arguments } => {
+                    assert_eq!(arguments.len(), 2);
+                    match &callee.kind {
+                        GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(
+                            handle,
+                        )) => {
+                            assert_eq!(handle.domain_name.as_ref(), "Duration");
+                            assert_eq!(handle.member_name.as_ref(), ">");
+                        }
+                        other => panic!(
+                            "expected explicit domain-member reference for outer comparison, found {other:?}"
+                        ),
+                    }
+                    match &arguments[0].kind {
+                        GateRuntimeExprKind::Apply { callee, arguments } => {
+                            assert_eq!(arguments.len(), 2);
+                            assert!(matches!(
+                                &arguments[0].kind,
+                                GateRuntimeExprKind::Projection {
+                                    base: GateRuntimeProjectionBase::AmbientSubject,
+                                    ..
+                                }
+                            ));
+                            assert!(matches!(
+                                &arguments[1].kind,
+                                GateRuntimeExprKind::SuffixedInteger(_)
+                            ));
+                            match &callee.kind {
+                                GateRuntimeExprKind::Reference(
+                                    GateRuntimeReference::DomainMember(handle),
+                                ) => {
+                                    assert_eq!(handle.domain_name.as_ref(), "Duration");
+                                    assert_eq!(handle.member_name.as_ref(), "+");
+                                }
+                                other => panic!(
+                                    "expected explicit domain-member reference for nested add, found {other:?}"
+                                ),
+                            }
+                        }
+                        other => panic!(
+                            "expected nested explicit apply for domain addition, found {other:?}"
+                        ),
+                    }
+                    assert!(matches!(
+                        &arguments[1].kind,
+                        GateRuntimeExprKind::SuffixedInteger(_)
+                    ));
+                }
+                other => panic!(
+                    "expected explicit apply tree for domain operator predicate, found {other:?}"
+                ),
+            },
             other => panic!("expected signal filter plan, found {other:?}"),
         }
     }

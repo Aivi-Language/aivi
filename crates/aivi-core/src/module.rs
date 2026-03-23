@@ -584,6 +584,9 @@ fn format_expr(module: &Module, expr_id: ExprId, f: &mut fmt::Formatter<'_>) -> 
             Reference::Local(binding) => write!(f, "#{}", binding.as_raw()),
             Reference::Item(item) => f.write_str(module.item_name(*item)),
             Reference::HirItem(item) => write!(f, "hir-item-{}", item.as_raw()),
+            Reference::DomainMember(handle) => {
+                write!(f, "{}.{}", handle.domain_name, handle.member_name)
+            }
             Reference::Builtin(term) => write!(f, "{term:?}"),
         },
         crate::expr::ExprKind::Integer(value) => write!(f, "{}", value.raw),

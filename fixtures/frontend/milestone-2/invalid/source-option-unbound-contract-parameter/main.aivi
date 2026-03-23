@@ -5,13 +5,13 @@ type Session = {
     token: Text
 }
 
-type Pair A =
-  | Pair A (Option A)
+type Box A =
+  | Box A
 
-val requestBody =
-    Pair 1 None
+val emptyBody =
+    Box None
 
 @source http.post "/login" with {
-    body: requestBody
+    body: emptyBody
 }
 sig login : Signal (Result HttpError Session)

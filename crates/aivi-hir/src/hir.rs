@@ -199,6 +199,14 @@ pub struct DomainMemberResolution {
     pub member_index: usize,
 }
 
+/// Stable semantic handle for one domain-owned callable surfaced past HIR elaboration.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DomainMemberHandle {
+    pub domain_name: Box<str>,
+    pub member_name: Box<str>,
+    pub member_index: usize,
+}
+
 /// Compiler-known builtin term references that live outside the current module graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinTerm {
@@ -1467,6 +1475,21 @@ impl Module {
 
     pub fn imports(&self) -> &Arena<ImportId, ImportBinding> {
         &self.arenas.imports
+    }
+
+    pub fn domain_member_handle(
+        &self,
+        resolution: DomainMemberResolution,
+    ) -> Option<DomainMemberHandle> {
+        let Item::Domain(domain) = self.arenas.items.get(resolution.domain)? else {
+            return None;
+        };
+        let member = domain.members.get(resolution.member_index)?;
+        Some(DomainMemberHandle {
+            domain_name: domain.name.text().into(),
+            member_name: member.name.text().into(),
+            member_index: resolution.member_index,
+        })
     }
 
     pub fn alloc_item(&mut self, item: Item) -> Result<ItemId, ArenaOverflow> {

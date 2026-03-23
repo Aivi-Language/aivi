@@ -1,7 +1,7 @@
 use aivi_base::SourceSpan;
 use aivi_hir::{
-    BinaryOperator, BindingId as HirBindingId, BuiltinTerm, IntegerLiteral, ItemId as HirItemId,
-    SuffixedIntegerLiteral, UnaryOperator,
+    BinaryOperator, BindingId as HirBindingId, BuiltinTerm, DomainMemberHandle, IntegerLiteral,
+    ItemId as HirItemId, SuffixedIntegerLiteral, UnaryOperator,
 };
 
 use crate::{ids::ExprId, ty::Type};
@@ -54,6 +54,7 @@ pub enum Reference {
     Local(HirBindingId),
     Item(crate::ItemId),
     HirItem(HirItemId),
+    DomainMember(DomainMemberHandle),
     Builtin(BuiltinTerm),
 }
 

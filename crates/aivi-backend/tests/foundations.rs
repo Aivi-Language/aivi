@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf};
 
 use aivi_backend::{
     DecodeStepKind, DomainDecodeSurfaceKind, GateStage as BackendGateStage,
-    ItemKind as BackendItemKind, LayoutKind, LoweringError, NonSourceWakeupCause, RecurrenceTarget,
-    SourceProvider, StageKind as BackendStageKind, ValidationError,
+    ItemKind as BackendItemKind, KernelExprKind, LayoutKind, LoweringError, NonSourceWakeupCause,
+    RecurrenceTarget, SourceProvider, StageKind as BackendStageKind, ValidationError,
     lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::{SourceDatabase, SourceSpan};
@@ -233,6 +233,85 @@ fn lowers_recurrence_targets_and_witnesses() {
             .map(|w| w.cause),
         Some(NonSourceWakeupCause::ExplicitBackoff)
     ));
+}
+
+#[test]
+fn lowers_domain_operators_into_backend_gate_kernels() {
+    let backend = lower_text(
+        "backend-domain-operators.aivi",
+        r#"
+domain Duration over Int
+    literal ms : Int -> Duration
+    (+) : Duration -> Duration -> Duration
+    (>) : Duration -> Duration -> Bool
+
+type Window = {
+    delay: Duration
+}
+
+sig windows : Signal Window = { delay: 10ms }
+
+sig slowWindows : Signal Window =
+    windows
+     ?|> ((.delay + 5ms) > 12ms)
+"#,
+    );
+
+    let slow_windows = find_item(&backend, "slowWindows");
+    let pipeline = &backend.pipelines()[first_pipeline(&backend, slow_windows)];
+    let BackendStageKind::Gate(BackendGateStage::SignalFilter { predicate, .. }) =
+        &pipeline.stages[0].kind
+    else {
+        panic!("expected signal-filter gate stage for slowWindows");
+    };
+
+    let predicate_kernel = &backend.kernels()[*predicate];
+    match &predicate_kernel.exprs()[predicate_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 2);
+            match &predicate_kernel.exprs()[*callee].kind {
+                KernelExprKind::DomainMember(handle) => {
+                    assert_eq!(handle.domain_name.as_ref(), "Duration");
+                    assert_eq!(handle.member_name.as_ref(), ">");
+                }
+                other => panic!(
+                    "expected explicit domain-member callee for outer comparison, found {other:?}"
+                ),
+            }
+            match &predicate_kernel.exprs()[arguments[0]].kind {
+                KernelExprKind::Apply { callee, arguments } => {
+                    assert_eq!(arguments.len(), 2);
+                    match &predicate_kernel.exprs()[*callee].kind {
+                        KernelExprKind::DomainMember(handle) => {
+                            assert_eq!(handle.domain_name.as_ref(), "Duration");
+                            assert_eq!(handle.member_name.as_ref(), "+");
+                        }
+                        other => panic!(
+                            "expected explicit domain-member callee for nested add, found {other:?}"
+                        ),
+                    }
+                    assert!(matches!(
+                        &predicate_kernel.exprs()[arguments[0]].kind,
+                        KernelExprKind::Projection { .. }
+                    ));
+                    assert!(matches!(
+                        &predicate_kernel.exprs()[arguments[1]].kind,
+                        KernelExprKind::SuffixedInteger(_)
+                    ));
+                }
+                other => panic!(
+                    "expected outer comparison left operand to be a nested apply tree, found {other:?}"
+                ),
+            }
+            assert!(matches!(
+                &predicate_kernel.exprs()[arguments[1]].kind,
+                KernelExprKind::SuffixedInteger(_)
+            ));
+        }
+        other => panic!(
+            "expected predicate kernel to lower into an explicit apply tree, found {other:?}"
+        ),
+    }
 }
 
 #[test]

@@ -888,7 +888,8 @@ fn validate_kernel(
                     });
                 }
             }
-            KernelExprKind::Builtin(_)
+            KernelExprKind::DomainMember(_)
+            | KernelExprKind::Builtin(_)
             | KernelExprKind::Integer(_)
             | KernelExprKind::SuffixedInteger(_) => {}
             KernelExprKind::Text(text) => {

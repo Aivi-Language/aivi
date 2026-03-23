@@ -12,9 +12,10 @@ use crate::{
 ///
 /// This is intentionally narrower than a future full typed-core case IR. It proves only the RFC
 /// v1 canonical builtin carriers that the current resolved-HIR layer can identify honestly:
-/// `Bool`, `Option A`, `Result E A`, and `Validation E A`. Each successful elaboration records the
-/// chosen builtin constructor pair plus the branch-local payload subject (when one exists) and the
-/// unified branch result type. If the current layer cannot justify the carrier or either branch,
+/// `Bool`, `Option A`, `Result E A`, and `Validation E A`, plus exactly one pointwise outer
+/// `Signal (...)` around those same carriers. Each successful elaboration records the chosen
+/// builtin constructor pair plus the branch-local payload subject (when one exists) and the
+/// unified stage result type. If the current layer cannot justify the carrier or either branch,
 /// the report records explicit blockers instead of guessing a case lowering.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TruthyFalsyElaborationReport {
@@ -351,6 +352,8 @@ fn elaborate_truthy_falsy_pair(
         });
     }
 
+    let stage_result_type =
+        typing.apply_truthy_falsy_result_type(subject, truthy_result_type.clone());
     TruthyFalsyStageOutcome::Planned(TruthyFalsyStagePlan {
         input_subject: subject.clone(),
         truthy: TruthyFalsyBranchPlan {
@@ -369,7 +372,7 @@ fn elaborate_truthy_falsy_pair(
             payload_subject: subject_plan.falsy_payload.clone(),
             result_type: falsy_result_type,
         },
-        result_type: truthy_result_type,
+        result_type: stage_result_type,
     })
 }
 
@@ -577,6 +580,148 @@ mod tests {
     }
 
     #[test]
+    fn elaborates_signal_lifted_truthy_falsy_fixture_into_pointwise_branch_plans() {
+        let lowered =
+            lower_fixture("milestone-2/valid/pipe-truthy-falsy-signal-carriers/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "signal truthy/falsy fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let validation = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            validation.is_ok(),
+            "signal truthy/falsy fixture should validate cleanly: {:?}",
+            validation.diagnostics()
+        );
+
+        let report = elaborate_truthy_falsy(lowered.module());
+        assert_eq!(
+            report.stages().len(),
+            5,
+            "expected every signal-lifted truthy/falsy pair to elaborate"
+        );
+
+        let ready = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "readyText")
+            .expect("expected readyText truthy/falsy pair");
+        match &ready.outcome {
+            TruthyFalsyStageOutcome::Planned(plan) => {
+                assert_eq!(
+                    plan.input_subject,
+                    GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Bool)))
+                );
+                assert_eq!(plan.truthy.constructor, BuiltinTerm::True);
+                assert_eq!(plan.falsy.constructor, BuiltinTerm::False);
+                assert!(plan.truthy.payload_subject.is_none());
+                assert!(plan.falsy.payload_subject.is_none());
+                assert_eq!(
+                    plan.truthy.result_type,
+                    GateType::Primitive(BuiltinType::Text)
+                );
+                assert_eq!(
+                    plan.result_type,
+                    GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => panic!("expected planned signal bool truthy/falsy pair, found {other:?}"),
+        }
+
+        let greeting = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "greeting")
+            .expect("expected greeting truthy/falsy pair");
+        match &greeting.outcome {
+            TruthyFalsyStageOutcome::Planned(plan) => {
+                assert!(matches!(
+                    &plan.input_subject,
+                    GateType::Signal(inner) if matches!(inner.as_ref(), GateType::Option(_))
+                ));
+                let truthy_payload = plan
+                    .truthy
+                    .payload_subject
+                    .as_ref()
+                    .expect("`Some` branch should expose the payload subject");
+                assert!(matches!(truthy_payload, GateType::Record(_)));
+                assert!(plan.falsy.payload_subject.is_none());
+                assert_eq!(plan.truthy.constructor, BuiltinTerm::Some);
+                assert_eq!(plan.falsy.constructor, BuiltinTerm::None);
+                assert_eq!(
+                    plan.result_type,
+                    GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => panic!("expected planned signal option truthy/falsy pair, found {other:?}"),
+        }
+
+        let reversed = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "maybeDisplay")
+            .expect("expected reversed truthy/falsy pair");
+        match &reversed.outcome {
+            TruthyFalsyStageOutcome::Planned(plan) => {
+                assert_eq!(
+                    reversed.truthy_stage_index, 1,
+                    "truthy stage index should preserve reversed pair order"
+                );
+                assert_eq!(
+                    reversed.falsy_stage_index, 0,
+                    "falsy stage index should preserve reversed pair order"
+                );
+                assert_eq!(
+                    plan.result_type,
+                    GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => panic!("expected planned reversed signal truthy/falsy pair, found {other:?}"),
+        }
+
+        let rendered = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "rendered")
+            .expect("expected result truthy/falsy pair");
+        match &rendered.outcome {
+            TruthyFalsyStageOutcome::Planned(plan) => {
+                assert_eq!(plan.truthy.constructor, BuiltinTerm::Ok);
+                assert_eq!(plan.falsy.constructor, BuiltinTerm::Err);
+                assert!(plan.truthy.payload_subject.is_some());
+                assert!(plan.falsy.payload_subject.is_some());
+                assert_eq!(
+                    plan.result_type,
+                    GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => panic!("expected planned signal result truthy/falsy pair, found {other:?}"),
+        }
+
+        let summary = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "summary")
+            .expect("expected validation truthy/falsy pair");
+        match &summary.outcome {
+            TruthyFalsyStageOutcome::Planned(plan) => {
+                assert_eq!(plan.truthy.constructor, BuiltinTerm::Valid);
+                assert_eq!(plan.falsy.constructor, BuiltinTerm::Invalid);
+                assert_eq!(
+                    plan.result_type,
+                    GateType::Signal(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => {
+                panic!("expected planned signal validation truthy/falsy pair, found {other:?}")
+            }
+        }
+    }
+
+    #[test]
     fn blocks_noncanonical_truthy_falsy_subjects() {
         let lowered =
             lower_fixture("milestone-2/invalid/truthy-falsy-noncanonical-subject/main.aivi");
@@ -652,6 +797,52 @@ mod tests {
     }
 
     #[test]
+    fn blocks_signal_truthy_falsy_misuse() {
+        let lowered = lower_fixture("milestone-2/invalid/truthy-falsy-signal-misuse/main.aivi");
+        let report = elaborate_truthy_falsy(lowered.module());
+
+        let bad_projection = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "badProjection")
+            .expect("expected blocked signal truthy/falsy projection pair");
+        match &bad_projection.outcome {
+            TruthyFalsyStageOutcome::Blocked(stage) => {
+                assert!(stage.blockers.iter().any(|blocker| matches!(
+                    blocker,
+                    TruthyFalsyElaborationBlocker::InvalidProjection {
+                        branch: TruthyFalsyBranchKind::Truthy,
+                        subject,
+                        ..
+                    } if subject == "unknown subject"
+                )));
+            }
+            other => {
+                panic!("expected blocked signal truthy/falsy projection pair, found {other:?}")
+            }
+        }
+
+        let bad_subject = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "badSubject")
+            .expect("expected blocked signal truthy/falsy subject pair");
+        match &bad_subject.outcome {
+            TruthyFalsyStageOutcome::Blocked(stage) => {
+                assert!(stage.blockers.iter().any(|blocker| matches!(
+                    blocker,
+                    TruthyFalsyElaborationBlocker::UnsupportedSubject {
+                        found: GateType::Signal(inner)
+                    } if matches!(inner.as_ref(), GateType::Record(_))
+                )));
+            }
+            other => {
+                panic!("expected blocked signal truthy/falsy subject pair, found {other:?}")
+            }
+        }
+    }
+
+    #[test]
     fn resolved_validation_reports_truthy_falsy_diagnostics() {
         let lowered =
             lower_fixture("milestone-2/invalid/truthy-falsy-noncanonical-subject/main.aivi");
@@ -684,6 +875,25 @@ mod tests {
         let report = lowered
             .module()
             .validate(ValidationMode::RequireResolvedNames);
+        assert!(report.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code
+                == Some(DiagnosticCode::new(
+                    "hir",
+                    "invalid-truthy-falsy-projection",
+                ))
+        }));
+
+        let lowered = lower_fixture("milestone-2/invalid/truthy-falsy-signal-misuse/main.aivi");
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(report.diagnostics().iter().any(|diagnostic| {
+            diagnostic.code
+                == Some(DiagnosticCode::new(
+                    "hir",
+                    "truthy-falsy-subject-not-canonical",
+                ))
+        }));
         assert!(report.diagnostics().iter().any(|diagnostic| {
             diagnostic.code
                 == Some(DiagnosticCode::new(

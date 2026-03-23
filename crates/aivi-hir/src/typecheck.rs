@@ -3,11 +3,12 @@ use std::collections::{HashMap, HashSet};
 use aivi_base::{Diagnostic, DiagnosticCode, SourceSpan};
 
 use crate::{
+    domain_operator_elaboration::select_domain_binary_operator,
     hir::{
-        BinaryOperator, BuiltinTerm, BuiltinType, DomainMemberKind, ExprKind, FunctionItem,
-        ImportBindingMetadata, ImportBundleKind, InstanceItem, InstanceMember, Item, MapExpr,
-        Module, NamePath, ProjectionBase, RecordExpr, ResolutionState, SignalItem, TermReference,
-        TermResolution, TypeItemBody, TypeResolution, UnaryOperator, ValueItem,
+        BinaryOperator, BuiltinTerm, BuiltinType, ExprKind, FunctionItem, ImportBindingMetadata,
+        ImportBundleKind, InstanceItem, InstanceMember, Item, MapExpr, Module, NamePath,
+        ProjectionBase, RecordExpr, ResolutionState, SignalItem, TermReference, TermResolution,
+        TypeItemBody, TypeResolution, UnaryOperator, ValueItem,
     },
     ids::{ExprId, ItemId, TypeParameterId},
     validate::{
@@ -494,9 +495,13 @@ impl<'a> TypeChecker<'a> {
         if let (Some(left_actual), Some(right_actual)) =
             (left_actual.as_ref(), right_actual.as_ref())
         {
-            if let Some(result_ty) =
-                self.select_domain_binary_operator(operator, left_actual, right_actual)
-            {
+            if let Some(domain_operator) = select_domain_binary_operator(
+                self.module,
+                &mut self.typing,
+                operator,
+                left_actual,
+                right_actual,
+            ) {
                 let checkpoint = self.diagnostics.len();
                 let left_ok = self.check_expr(left, env, Some(left_actual), value_stack);
                 let right_ok = self.check_expr(right, env, Some(right_actual), value_stack);
@@ -512,7 +517,7 @@ impl<'a> TypeChecker<'a> {
                     }
                     return false;
                 }
-                return self.check_result_type(expr_id, expected, &result_ty);
+                return self.check_result_type(expr_id, expected, &domain_operator.result_type);
             }
         }
         let Some(operand_ty) = self.select_numeric_operand_type(
@@ -621,83 +626,6 @@ impl<'a> TypeChecker<'a> {
     fn inferred_expr_shape(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
         let info = self.typing.infer_expr(expr_id, env, None);
         info.ty.clone().or_else(|| info.actual_gate_type())
-    }
-
-    fn select_domain_binary_operator(
-        &mut self,
-        operator: BinaryOperator,
-        left: &GateType,
-        right: &GateType,
-    ) -> Option<GateType> {
-        let mut matches = Vec::new();
-        if let Some(result) = self.match_domain_binary_operator(left, left, right, operator) {
-            matches.push(result);
-        }
-        if !left.same_shape(right) {
-            if let Some(result) = self.match_domain_binary_operator(right, left, right, operator) {
-                matches.push(result);
-            }
-        }
-        (matches.len() == 1).then(|| {
-            matches
-                .pop()
-                .expect("exactly one domain operator match should be present")
-        })
-    }
-
-    fn match_domain_binary_operator(
-        &mut self,
-        domain_ty: &GateType,
-        left: &GateType,
-        right: &GateType,
-        operator: BinaryOperator,
-    ) -> Option<GateType> {
-        let GateType::Domain {
-            item, arguments, ..
-        } = domain_ty
-        else {
-            return None;
-        };
-        let Item::Domain(domain_item) = &self.module.items()[*item] else {
-            return None;
-        };
-        let substitutions = domain_item
-            .parameters
-            .iter()
-            .copied()
-            .zip(arguments.iter().cloned())
-            .collect::<HashMap<TypeParameterId, GateType>>();
-        for member in &domain_item.members {
-            if member.kind != DomainMemberKind::Operator
-                || member.name.text() != binary_operator_text(operator)
-            {
-                continue;
-            }
-            let Some(lowered) = self
-                .typing
-                .lower_hir_type(member.annotation, &substitutions)
-            else {
-                continue;
-            };
-            let GateType::Arrow {
-                parameter: first,
-                result: tail,
-            } = lowered
-            else {
-                continue;
-            };
-            let GateType::Arrow {
-                parameter: second,
-                result,
-            } = *tail
-            else {
-                continue;
-            };
-            if first.as_ref().same_shape(left) && second.as_ref().same_shape(right) {
-                return Some(*result);
-            }
-        }
-        None
     }
 
     fn select_numeric_operand_type(

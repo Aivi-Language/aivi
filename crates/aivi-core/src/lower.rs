@@ -1082,6 +1082,9 @@ impl<'a> ModuleLowerer<'a> {
                                                 .copied()
                                                 .map(Reference::Item)
                                                 .unwrap_or(Reference::HirItem(*item)),
+                                            GateRuntimeReference::DomainMember(handle) => {
+                                                Reference::DomainMember(handle.clone())
+                                            }
                                             GateRuntimeReference::Builtin(term) => {
                                                 Reference::Builtin(*term)
                                             }

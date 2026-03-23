@@ -5,6 +5,7 @@
 pub mod arena;
 mod decode_elaboration;
 mod decode_generation;
+mod domain_operator_elaboration;
 pub mod exports;
 mod fanout_elaboration;
 mod gate_elaboration;
@@ -52,21 +53,21 @@ pub use hir::{
     ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeKind,
     CustomSourceArgumentSchema, CustomSourceContractMetadata, CustomSourceOptionSchema,
     CustomSourceRecurrenceWakeup, Decorator, DecoratorCall, DecoratorPayload, DomainItem,
-    DomainMember, DomainMemberKind, DomainMemberResolution, EachControl, EmptyControl, ExportItem,
-    Expr, ExprKind, FragmentControl, FunctionItem, FunctionParameter, ImportBinding,
-    ImportBindingMetadata, ImportBundleKind, ImportRecordField, ImportValueType, InstanceItem,
-    InstanceMember, IntegerLiteral, Item, ItemHeader, ItemKind, LiteralSuffixResolution, MapExpr,
-    MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeKind,
-    MatchControl, Module, ModuleArenas, Name, NameError, NamePath, NamePathError, Pattern,
-    PatternKind, PipeExpr, PipeRecurrenceShapeError, PipeRecurrenceSuffix, PipeStage,
-    PipeStageKind, ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface,
-    RecordPatternField, RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral,
-    ResolutionState, RootItemError, ShowControl, SignalItem, SourceDecorator,
-    SourceLifecycleDependencies, SourceMetadata, SourceProviderContractItem, SourceProviderRef,
-    SuffixedIntegerLiteral, TermReference, TermResolution, TextFragment, TextInterpolation,
-    TextLiteral, TextSegment, TupleConstructorArity, TypeField, TypeItem, TypeItemBody, TypeKind,
-    TypeNode, TypeParameter, TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem,
-    ValueItem, WithControl,
+    DomainMember, DomainMemberHandle, DomainMemberKind, DomainMemberResolution, EachControl,
+    EmptyControl, ExportItem, Expr, ExprKind, FragmentControl, FunctionItem, FunctionParameter,
+    ImportBinding, ImportBindingMetadata, ImportBundleKind, ImportRecordField, ImportValueType,
+    InstanceItem, InstanceMember, IntegerLiteral, Item, ItemHeader, ItemKind,
+    LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue,
+    MarkupElement, MarkupNode, MarkupNodeKind, MatchControl, Module, ModuleArenas, Name, NameError,
+    NamePath, NamePathError, Pattern, PatternKind, PipeExpr, PipeRecurrenceShapeError,
+    PipeRecurrenceSuffix, PipeStage, PipeStageKind, ProjectionBase, RecordExpr, RecordExprField,
+    RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
+    RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, RootItemError, ShowControl,
+    SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
+    SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
+    TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment,
+    TupleConstructorArity, TypeField, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter,
+    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 pub use ids::{
     BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,
