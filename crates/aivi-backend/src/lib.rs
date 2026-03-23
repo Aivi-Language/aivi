@@ -2,17 +2,17 @@
 
 //! First backend-facing foundations for the AIVI compiler.
 //!
-//! This crate consumes the validated `aivi-core` slice and re-expresses it as backend-owned,
+//! This crate consumes the validated `aivi-lambda` slice and re-expresses it as backend-owned,
 //! layout-aware contracts:
 //! - backend-owned items, pipelines, kernels, sources, and decode plans,
 //! - explicit ABI/layout tables,
 //! - explicit kernel calling conventions and captured environments,
-//! - source/decode/runtime-facing plans with no remaining HIR-only references,
+//! - source/decode/runtime-facing plans with no remaining typed-lambda-only capture analysis,
 //! - and structural validation plus stable debug output.
 //!
-//! The current slice intentionally stops before real Cranelift emission. It makes the RFC's
-//! lambda/backend boundary honest today by turning the existing typed-core runtime expressions into
-//! closed backend kernels with explicit input subjects, environment slots, and global dependencies.
+//! The current slice intentionally stops before real Cranelift emission. It consumes explicit
+//! lambda closures and turns them into closed backend kernels with explicit input subjects,
+//! environment slots, layout tables, and global dependencies.
 
 mod ids;
 mod kernel;

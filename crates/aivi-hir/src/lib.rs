@@ -35,11 +35,6 @@ pub use decode_generation::{
     SourceDecodeProgram, SourceDecodeProgramBlocker, SourceDecodeProgramNode,
     SourceDecodeProgramOutcome, SourceDecodeProgramReport, generate_source_decode_programs,
 };
-pub use general_expr_elaboration::{
-    BlockedGeneralExpr, GeneralExprBlocker, GeneralExprElaborationReport,
-    GeneralExprItemElaboration, GeneralExprOutcome, GeneralExprParameter,
-    elaborate_general_expressions,
-};
 pub use exports::{ExportedName, ExportedNameKind, ExportedNames, exports};
 pub use fanout_elaboration::{
     BlockedFanoutSegment, FanoutElaborationBlocker, FanoutElaborationReport, FanoutJoinPlan,
@@ -48,11 +43,15 @@ pub use fanout_elaboration::{
 pub use gate_elaboration::{
     BlockedGateStage, GateCoreExpr, GateCoreExprKind, GateElaborationBlocker,
     GateElaborationReport, GateRuntimeCaseArm, GateRuntimeExpr, GateRuntimeExprKind,
-    GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind,
-    GateRuntimeProjectionBase, GateRuntimeRecordField, GateRuntimeReference,
-    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
-    GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, GateStageElaboration,
-    GateStageOutcome, OrdinaryGateStage, SignalGateFilter, elaborate_gates,
+    GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
+    GateRuntimeRecordField, GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
+    GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind,
+    GateStageElaboration, GateStageOutcome, OrdinaryGateStage, SignalGateFilter, elaborate_gates,
+};
+pub use general_expr_elaboration::{
+    BlockedGeneralExpr, GeneralExprBlocker, GeneralExprElaborationReport,
+    GeneralExprItemElaboration, GeneralExprOutcome, GeneralExprParameter,
+    elaborate_general_expressions,
 };
 pub use hir::{
     ApplicativeCluster, ApplicativeSpine, ApplicativeSpineHead, BinaryOperator, Binding,
@@ -106,5 +105,8 @@ pub use truthy_falsy_elaboration::{
     TruthyFalsyElaborationBlocker, TruthyFalsyElaborationReport, TruthyFalsyStageElaboration,
     TruthyFalsyStageOutcome, TruthyFalsyStagePlan, elaborate_truthy_falsy,
 };
-pub use typecheck::{ConstraintClass, TypeCheckReport, TypeConstraint, typecheck_module};
+pub use typecheck::{
+    ConstraintClass, TypeCheckReport, TypeConstraint, elaborate_default_record_fields,
+    typecheck_module,
+};
 pub use validate::{GateRecordField, GateType, ValidationMode, ValidationReport, validate_module};

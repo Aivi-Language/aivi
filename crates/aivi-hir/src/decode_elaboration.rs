@@ -113,6 +113,8 @@ pub enum SourceDecodeUnsupportedTypeKind {
 }
 
 pub fn elaborate_source_decodes(module: &Module) -> SourceDecodeElaborationReport {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    let module = &module;
     let items = module
         .items()
         .iter()

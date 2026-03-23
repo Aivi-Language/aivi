@@ -8,9 +8,9 @@ use crate::{
     GateRuntimeExpr, GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStage,
     GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeRecordField,
     GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
-    GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind,
-    GateRuntimeUnsupportedPipeStageKind, Item, ItemId, Module, PipeExpr, PipeStageKind,
-    ProjectionBase, ResolutionState, TermReference, TermResolution, TypeItemBody, ValueItem,
+    GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind,
+    Item, ItemId, Module, PipeExpr, PipeStageKind, ProjectionBase, ResolutionState, TermReference,
+    TermResolution, TypeItemBody, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::expression_matches,
     validate::{GateExprEnv, GateIssue, GateType, GateTypeContext, truthy_falsy_pair_stages},
@@ -109,7 +109,8 @@ pub enum GeneralExprBlocker {
 }
 
 pub fn elaborate_general_expressions(module: &Module) -> GeneralExprElaborationReport {
-    GeneralExprElaborator::new(module).build()
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    GeneralExprElaborator::new(&module).build()
 }
 
 struct GeneralExprElaborator<'a> {
@@ -148,10 +149,11 @@ impl<'a> GeneralExprElaborator<'a> {
         let expected = value
             .annotation
             .and_then(|annotation| self.typing.lower_annotation(annotation));
-        let outcome = match self.lower_expr(value.body, &GateExprEnv::default(), None, expected.as_ref()) {
-            Ok(body) => GeneralExprOutcome::Lowered(body),
-            Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
-        };
+        let outcome =
+            match self.lower_expr(value.body, &GateExprEnv::default(), None, expected.as_ref()) {
+                Ok(body) => GeneralExprOutcome::Lowered(body),
+                Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
+            };
         GeneralExprItemElaboration {
             owner,
             body_expr: value.body,
@@ -251,12 +253,14 @@ impl<'a> GeneralExprElaborator<'a> {
         }
         let ty = self.expr_type(expr_id, env, ambient, expected)?;
         let kind = match expr.kind {
-            ExprKind::Name(reference) => {
-                GateRuntimeExprKind::Reference(self.runtime_reference_for_name(expr.span, &reference)?)
-            }
+            ExprKind::Name(reference) => GateRuntimeExprKind::Reference(
+                self.runtime_reference_for_name(expr.span, &reference)?,
+            ),
             ExprKind::Integer(literal) => GateRuntimeExprKind::Integer(literal),
             ExprKind::SuffixedInteger(literal) => GateRuntimeExprKind::SuffixedInteger(literal),
-            ExprKind::Text(text) => GateRuntimeExprKind::Text(self.lower_text_literal(&text, env, ambient)?),
+            ExprKind::Text(text) => {
+                GateRuntimeExprKind::Text(self.lower_text_literal(&text, env, ambient)?)
+            }
             ExprKind::Regex(_) => {
                 return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
                     span: expr.span,
@@ -277,7 +281,9 @@ impl<'a> GeneralExprElaborator<'a> {
                         .iter()
                         .enumerate()
                         .map(|(index, element)| {
-                            let expected = expected_elements.as_ref().and_then(|items| items.get(index));
+                            let expected = expected_elements
+                                .as_ref()
+                                .and_then(|items| items.get(index));
                             self.lower_expr(*element, env, ambient, expected)
                         })
                         .collect::<Result<_, _>>()?,
@@ -308,7 +314,12 @@ impl<'a> GeneralExprElaborator<'a> {
                         .map(|entry| {
                             Ok(GateRuntimeMapEntry {
                                 key: self.lower_expr(entry.key, env, ambient, expected_key)?,
-                                value: self.lower_expr(entry.value, env, ambient, expected_value)?,
+                                value: self.lower_expr(
+                                    entry.value,
+                                    env,
+                                    ambient,
+                                    expected_value,
+                                )?,
                             })
                         })
                         .collect::<Result<_, Vec<_>>>()?,
@@ -369,7 +380,10 @@ impl<'a> GeneralExprElaborator<'a> {
             ExprKind::Apply { callee, arguments } => {
                 self.lower_apply_expr(expr_id, callee, &arguments, env, ambient, &ty)?
             }
-            ExprKind::Unary { operator, expr: inner } => GateRuntimeExprKind::Unary {
+            ExprKind::Unary {
+                operator,
+                expr: inner,
+            } => GateRuntimeExprKind::Unary {
                 operator,
                 expr: Box::new(self.lower_expr(inner, env, ambient, None)?),
             },
@@ -382,7 +396,9 @@ impl<'a> GeneralExprElaborator<'a> {
                     crate::BinaryOperator::And | crate::BinaryOperator::Or => {
                         Some(GateType::Primitive(crate::BuiltinType::Bool))
                     }
-                    crate::BinaryOperator::Add | crate::BinaryOperator::Subtract => Some(ty.clone()),
+                    crate::BinaryOperator::Add | crate::BinaryOperator::Subtract => {
+                        Some(ty.clone())
+                    }
                     crate::BinaryOperator::GreaterThan | crate::BinaryOperator::LessThan => None,
                     crate::BinaryOperator::Equals | crate::BinaryOperator::NotEquals => None,
                 };
@@ -402,7 +418,9 @@ impl<'a> GeneralExprElaborator<'a> {
                     )?),
                 }
             }
-            ExprKind::Pipe(pipe) => GateRuntimeExprKind::Pipe(self.lower_pipe_expr(&pipe, env, ambient, Some(&ty))?),
+            ExprKind::Pipe(pipe) => {
+                GateRuntimeExprKind::Pipe(self.lower_pipe_expr(&pipe, env, ambient, Some(&ty))?)
+            }
             ExprKind::Cluster(_) => {
                 return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
                     span: expr.span,
@@ -437,7 +455,10 @@ impl<'a> GeneralExprElaborator<'a> {
         let inferred_parameter_types = inferred_callee
             .actual_gate_type()
             .or_else(|| inferred_callee.ty.clone())
-            .and_then(|ty| self.function_signature(&ty, arguments.len()).map(|(parameters, _)| parameters));
+            .and_then(|ty| {
+                self.function_signature(&ty, arguments.len())
+                    .map(|(parameters, _)| parameters)
+            });
         let argument_expectations = constructor_expectations.or(inferred_parameter_types.clone());
 
         let mut lowered_arguments = Vec::with_capacity(arguments.len());
@@ -502,7 +523,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     stage_index += 1;
                 }
                 PipeStageKind::Tap { expr } => {
-                    let body = self.lower_body_expr(*expr, env, Some(current.gate_payload()), None)?;
+                    let body =
+                        self.lower_body_expr(*expr, env, Some(current.gate_payload()), None)?;
                     lowered.push(GateRuntimePipeStage {
                         span: stage.span,
                         input_subject: current.clone(),
@@ -635,10 +657,7 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<GateRuntimePipeStage, Vec<GeneralExprBlocker>> {
         if subject.is_signal() {
             return Err(vec![GeneralExprBlocker::UnsupportedSignalCase {
-                span: stages
-                    .first()
-                    .map(|stage| stage.span)
-                    .unwrap_or_default(),
+                span: stages.first().map(|stage| stage.span).unwrap_or_default(),
                 subject: subject.clone(),
             }]);
         }
@@ -651,13 +670,14 @@ impl<'a> GeneralExprElaborator<'a> {
                 continue;
             };
             let branch_env = self.case_branch_env(env, *pattern, subject);
-            let lowered_body = match self.lower_body_expr(*body, &branch_env, Some(subject), expected) {
-                Ok(body) => body,
-                Err(errors) => {
-                    blockers.extend(errors);
-                    continue;
-                }
-            };
+            let lowered_body =
+                match self.lower_body_expr(*body, &branch_env, Some(subject), expected) {
+                    Ok(body) => body,
+                    Err(errors) => {
+                        blockers.extend(errors);
+                        continue;
+                    }
+                };
             let branch_ty = lowered_body.ty.clone();
             match result_subject.as_ref() {
                 Some(current) if !current.same_shape(&branch_ty) => {
@@ -681,10 +701,7 @@ impl<'a> GeneralExprElaborator<'a> {
         }
         let result_subject = result_subject.ok_or_else(|| {
             vec![GeneralExprBlocker::UnknownExprType {
-                span: stages
-                    .first()
-                    .map(|stage| stage.span)
-                    .unwrap_or_default(),
+                span: stages.first().map(|stage| stage.span).unwrap_or_default(),
             }]
         })?;
         Ok(GateRuntimePipeStage {
@@ -720,15 +737,21 @@ impl<'a> GeneralExprElaborator<'a> {
                 }]
             })?;
         let truthy_body = match plan.truthy_payload.as_ref() {
-            Some(payload) => {
-                self.lower_body_expr(pair.truthy_expr, env, Some(payload), branch_expected.as_ref())?
-            }
+            Some(payload) => self.lower_body_expr(
+                pair.truthy_expr,
+                env,
+                Some(payload),
+                branch_expected.as_ref(),
+            )?,
             None => self.lower_expr(pair.truthy_expr, env, None, branch_expected.as_ref())?,
         };
         let falsy_body = match plan.falsy_payload.as_ref() {
-            Some(payload) => {
-                self.lower_body_expr(pair.falsy_expr, env, Some(payload), branch_expected.as_ref())?
-            }
+            Some(payload) => self.lower_body_expr(
+                pair.falsy_expr,
+                env,
+                Some(payload),
+                branch_expected.as_ref(),
+            )?,
             None => self.lower_expr(pair.falsy_expr, env, None, branch_expected.as_ref())?,
         };
         Ok(GateRuntimePipeStage {
@@ -764,7 +787,11 @@ impl<'a> GeneralExprElaborator<'a> {
         let mut lowered = match self.lower_expr(expr_id, env, ambient, expected) {
             Ok(lowered) => lowered,
             Err(blockers) if ambient.is_some() && blockers.iter().all(is_unknown_type_blocker) => {
-                self.lower_single_parameter_function_pipe_body(expr_id, ambient.expect("checked above"), expected)?
+                self.lower_single_parameter_function_pipe_body(
+                    expr_id,
+                    ambient.expect("checked above"),
+                    expected,
+                )?
             }
             Err(blockers) => return Err(blockers),
         };
@@ -800,16 +827,26 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
         let expr = self.module.exprs()[expr_id].clone();
         let ExprKind::Name(reference) = expr.kind else {
-            return Err(vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
+            return Err(vec![GeneralExprBlocker::UnknownExprType {
+                span: expr.span,
+            }]);
         };
-        let ResolutionState::Resolved(TermResolution::Item(item_id)) = reference.resolution.as_ref() else {
-            return Err(vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
+        let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return Err(vec![GeneralExprBlocker::UnknownExprType {
+                span: expr.span,
+            }]);
         };
         let Item::Function(function) = &self.module.items()[*item_id] else {
-            return Err(vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
+            return Err(vec![GeneralExprBlocker::UnknownExprType {
+                span: expr.span,
+            }]);
         };
         if function.parameters.len() != 1 {
-            return Err(vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
+            return Err(vec![GeneralExprBlocker::UnknownExprType {
+                span: expr.span,
+            }]);
         }
         let parameter = function
             .parameters
@@ -821,12 +858,16 @@ impl<'a> GeneralExprElaborator<'a> {
                 .lower_annotation(annotation)
                 .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: expr.span }])?;
             if !parameter_ty.same_shape(ambient) {
-                return Err(vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
+                return Err(vec![GeneralExprBlocker::UnknownExprType {
+                    span: expr.span,
+                }]);
             }
         }
 
         let mut function_env = GateExprEnv::default();
-        function_env.locals.insert(parameter.binding, ambient.clone());
+        function_env
+            .locals
+            .insert(parameter.binding, ambient.clone());
         let body = self.lower_expr(function.body, &function_env, Some(ambient), expected)?;
         let callee = GateRuntimeExpr {
             span: expr.span,
@@ -859,7 +900,9 @@ impl<'a> GeneralExprElaborator<'a> {
         let mut segments = Vec::with_capacity(text.segments.len());
         for segment in &text.segments {
             let lowered = match segment {
-                crate::TextSegment::Text(fragment) => GateRuntimeTextSegment::Fragment(fragment.clone()),
+                crate::TextSegment::Text(fragment) => {
+                    GateRuntimeTextSegment::Fragment(fragment.clone())
+                }
                 crate::TextSegment::Interpolation(interpolation) => {
                     GateRuntimeTextSegment::Interpolation(Box::new(self.lower_expr(
                         interpolation.expr,
@@ -890,11 +933,11 @@ impl<'a> GeneralExprElaborator<'a> {
         if !info.issues.is_empty() {
             return Err(self.blockers_from_issues(info.issues));
         }
-        info.actual_gate_type()
-            .or(info.ty)
-            .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType {
+        info.actual_gate_type().or(info.ty).ok_or_else(|| {
+            vec![GeneralExprBlocker::UnknownExprType {
                 span: self.module.exprs()[expr_id].span,
-            }])
+            }]
+        })
     }
 
     fn runtime_reference_for_name(
@@ -918,10 +961,12 @@ impl<'a> GeneralExprElaborator<'a> {
                 Ok(GateRuntimeReference::Builtin(*builtin))
             }
             ResolutionState::Resolved(TermResolution::Import(_)) => {
-                Err(vec![GeneralExprBlocker::UnsupportedImportReference { span }])
+                Err(vec![GeneralExprBlocker::UnsupportedImportReference {
+                    span,
+                }])
             }
-            ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(candidates)) => Err(
-                vec![GeneralExprBlocker::AmbiguousDomainMember {
+            ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(candidates)) => {
+                Err(vec![GeneralExprBlocker::AmbiguousDomainMember {
                     span,
                     name: reference.path.segments().last().text().to_owned(),
                     candidates: candidates
@@ -929,8 +974,8 @@ impl<'a> GeneralExprElaborator<'a> {
                         .filter_map(|candidate| self.module.domain_member_handle(*candidate))
                         .map(|handle| format!("{}.{}", handle.domain_name, handle.member_name))
                         .collect(),
-                }],
-            ),
+                }])
+            }
             ResolutionState::Unresolved => Err(vec![GeneralExprBlocker::UnknownExprType { span }]),
         }
     }
@@ -973,12 +1018,20 @@ impl<'a> GeneralExprElaborator<'a> {
                     span,
                     path,
                     subject,
-                } => GeneralExprBlocker::InvalidProjection { span, path, subject },
+                } => GeneralExprBlocker::InvalidProjection {
+                    span,
+                    path,
+                    subject,
+                },
                 GateIssue::UnknownField {
                     span,
                     path,
                     subject,
-                } => GeneralExprBlocker::UnknownField { span, path, subject },
+                } => GeneralExprBlocker::UnknownField {
+                    span,
+                    path,
+                    subject,
+                },
                 GateIssue::AmbiguousDomainMember {
                     span,
                     name,
@@ -1072,7 +1125,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     }
                 }
                 crate::PatternKind::Constructor { callee, arguments } => {
-                    let Some(field_types) = self.case_pattern_field_types(&callee, &subject_ty) else {
+                    let Some(field_types) = self.case_pattern_field_types(&callee, &subject_ty)
+                    else {
                         continue;
                     };
                     if field_types.len() != arguments.len() {
@@ -1097,10 +1151,12 @@ impl<'a> GeneralExprElaborator<'a> {
             | ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::False)) => {
                 matches!(subject, GateType::Primitive(crate::BuiltinType::Bool)).then(Vec::new)
             }
-            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Some)) => match subject {
-                GateType::Option(payload) => Some(vec![payload.as_ref().clone()]),
-                _ => None,
-            },
+            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Some)) => {
+                match subject {
+                    GateType::Option(payload) => Some(vec![payload.as_ref().clone()]),
+                    _ => None,
+                }
+            }
             ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::None)) => {
                 matches!(subject, GateType::Option(_)).then(Vec::new)
             }
@@ -1112,14 +1168,17 @@ impl<'a> GeneralExprElaborator<'a> {
                 GateType::Result { error, .. } => Some(vec![error.as_ref().clone()]),
                 _ => None,
             },
-            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Valid)) => match subject {
+            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Valid)) => match subject
+            {
                 GateType::Validation { value, .. } => Some(vec![value.as_ref().clone()]),
                 _ => None,
             },
-            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Invalid)) => match subject {
-                GateType::Validation { error, .. } => Some(vec![error.as_ref().clone()]),
-                _ => None,
-            },
+            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Invalid)) => {
+                match subject {
+                    GateType::Validation { error, .. } => Some(vec![error.as_ref().clone()]),
+                    _ => None,
+                }
+            }
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
                 self.same_module_constructor_fields(*item_id, callee, subject)
             }
@@ -1236,10 +1295,13 @@ impl<'a> GeneralExprElaborator<'a> {
     }
 
     fn arrow_type(&self, parameters: Vec<GateType>, result: GateType) -> GateType {
-        parameters.into_iter().rev().fold(result, |result, parameter| GateType::Arrow {
-            parameter: Box::new(parameter),
-            result: Box::new(result),
-        })
+        parameters
+            .into_iter()
+            .rev()
+            .fold(result, |result, parameter| GateType::Arrow {
+                parameter: Box::new(parameter),
+                result: Box::new(result),
+            })
     }
 
     fn inline_pipe_stage_result_body_type(
@@ -1274,7 +1336,8 @@ fn join_spans(left: SourceSpan, right: SourceSpan) -> SourceSpan {
 fn is_unknown_type_blocker(blocker: &GeneralExprBlocker) -> bool {
     matches!(
         blocker,
-        GeneralExprBlocker::UnknownExprType { .. } | GeneralExprBlocker::UnsupportedImportReference { .. }
+        GeneralExprBlocker::UnknownExprType { .. }
+            | GeneralExprBlocker::UnsupportedImportReference { .. }
     )
 }
 
@@ -1290,22 +1353,20 @@ impl From<GateElaborationBlocker> for GeneralExprBlocker {
                     span: SourceSpan::default(),
                 }
             }
-            GateElaborationBlocker::InvalidProjection {
-                path,
-                subject,
-            } => GeneralExprBlocker::InvalidProjection {
-                span: SourceSpan::default(),
-                path,
-                subject,
-            },
-            GateElaborationBlocker::UnknownField {
-                path,
-                subject,
-            } => GeneralExprBlocker::UnknownField {
-                span: SourceSpan::default(),
-                path,
-                subject,
-            },
+            GateElaborationBlocker::InvalidProjection { path, subject } => {
+                GeneralExprBlocker::InvalidProjection {
+                    span: SourceSpan::default(),
+                    path,
+                    subject,
+                }
+            }
+            GateElaborationBlocker::UnknownField { path, subject } => {
+                GeneralExprBlocker::UnknownField {
+                    span: SourceSpan::default(),
+                    path,
+                    subject,
+                }
+            }
             GateElaborationBlocker::UnsupportedRuntimeExpr { span, kind } => {
                 GeneralExprBlocker::UnsupportedRuntimeExpr { span, kind }
             }
@@ -1354,7 +1415,8 @@ mod tests {
     }
 
     fn lower_fixture(path: &str) -> crate::LoweringResult {
-        let text = fs::read_to_string(fixture_root().join(path)).expect("fixture should be readable");
+        let text =
+            fs::read_to_string(fixture_root().join(path)).expect("fixture should be readable");
         lower_text(path, &text)
     }
 
@@ -1410,6 +1472,62 @@ mod tests {
                 other => panic!("expected pipe body, found {other:?}"),
             },
             other => panic!("expected lowered function body, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_option_default_record_elision_into_runtime_record_fields() {
+        let lowered = lower_text(
+            "record-default-elision-general.aivi",
+            "use aivi.defaults (Option)\n\
+             type Profile = {\n\
+                 name: Text,\n\
+                 nickname: Option Text,\n\
+                 bio: Option Text\n\
+             }\n\
+             val name = \"Ada\"\n\
+             val nickname = Some \"Countess\"\n\
+             val profile:Profile = { name, nickname }\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "record-default-elision fixture should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let profile = report
+            .items()
+            .iter()
+            .find(|item| item_name(lowered.module(), item.owner) == Some("profile"))
+            .expect("expected profile elaboration");
+        match &profile.outcome {
+            GeneralExprOutcome::Lowered(expr) => match &expr.kind {
+                GateRuntimeExprKind::Record(fields) => {
+                    assert_eq!(
+                        fields.len(),
+                        3,
+                        "expected omitted record field to be lowered"
+                    );
+                    assert_eq!(
+                        fields
+                            .iter()
+                            .map(|field| field.label.text())
+                            .collect::<Vec<_>>(),
+                        vec!["name", "nickname", "bio"]
+                    );
+                    match &fields[2].value.kind {
+                        GateRuntimeExprKind::Reference(crate::GateRuntimeReference::Builtin(
+                            crate::BuiltinTerm::None,
+                        )) => {}
+                        other => panic!(
+                            "expected synthesized option default to lower as builtin None, found {other:?}"
+                        ),
+                    }
+                }
+                other => panic!("expected lowered runtime record, found {other:?}"),
+            },
+            other => panic!("expected lowered profile body, found {other:?}"),
         }
     }
 }

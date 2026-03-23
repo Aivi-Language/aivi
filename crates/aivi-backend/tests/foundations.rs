@@ -17,6 +17,7 @@ use aivi_hir::{
     BindingId as HirBindingId, BuiltinType, ExprId as HirExprId, IntegerLiteral,
     ItemId as HirItemId,
 };
+use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_syntax::parse_module;
 
 fn fixture_root() -> PathBuf {
@@ -44,7 +45,9 @@ fn lower_text(path: &str, text: &str) -> aivi_backend::Program {
     );
     let core = lower_core_module(hir.module()).expect("HIR should lower into typed core");
     validate_core_module(&core).expect("typed core should validate before backend lowering");
-    let backend = lower_backend_module(&core).expect("backend lowering should succeed");
+    let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
+    validate_lambda_module(&lambda).expect("typed lambda should validate before backend lowering");
+    let backend = lower_backend_module(&lambda).expect("backend lowering should succeed");
     validate_program(&backend).expect("backend program should validate");
     backend
 }
@@ -322,7 +325,9 @@ fn lowering_makes_local_bindings_explicit_environment_slots() {
         HirBindingId::from_raw(7),
     )));
     validate_core_module(&core).expect("manual core module should validate");
-    let backend = lower_backend_module(&core).expect("backend lowering should succeed");
+    let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
+    validate_lambda_module(&lambda).expect("typed lambda should validate");
+    let backend = lower_backend_module(&lambda).expect("backend lowering should succeed");
     let item = find_item(&backend, "captured");
     let pipeline = &backend.pipelines()[first_pipeline(&backend, item)];
     let BackendStageKind::Gate(BackendGateStage::Ordinary {
@@ -370,8 +375,9 @@ fn lowering_rejects_unresolved_hir_item_references() {
         HirItemId::from_raw(99),
     )));
     validate_core_module(&core).expect("manual core module should validate");
+    let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
     let errors =
-        lower_backend_module(&core).expect_err("unresolved HIR item reference should fail");
+        lower_backend_module(&lambda).expect_err("unresolved HIR item reference should fail");
     assert!(
         errors
             .errors()

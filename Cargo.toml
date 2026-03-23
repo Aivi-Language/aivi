@@ -2,6 +2,7 @@
 members = [
     "crates/aivi-base",
     "crates/aivi-core",
+    "crates/aivi-lambda",
     "crates/aivi-hir",
     "crates/aivi-runtime",
     "crates/aivi-gtk",
@@ -22,6 +23,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 aivi-base = { path = "crates/aivi-base" }
 aivi-hir = { path = "crates/aivi-hir" }
+aivi-lambda = { path = "crates/aivi-lambda" }
 aivi-syntax = { path = "crates/aivi-syntax" }
 aivi-typing = { path = "crates/aivi-typing" }
 aivi-query = { path = "crates/aivi-query" }

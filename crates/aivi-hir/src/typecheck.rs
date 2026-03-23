@@ -6,9 +6,10 @@ use crate::{
     domain_operator_elaboration::select_domain_binary_operator,
     hir::{
         BinaryOperator, BuiltinTerm, BuiltinType, ExprKind, FunctionItem, ImportBindingMetadata,
-        ImportBundleKind, InstanceItem, InstanceMember, Item, MapExpr, Module, NamePath,
-        ProjectionBase, RecordExpr, ResolutionState, SignalItem, TermReference, TermResolution,
-        TypeItemBody, TypeResolution, UnaryOperator, ValueItem,
+        ImportBundleKind, InstanceItem, InstanceMember, Item, MapExpr, Module, Name, NamePath,
+        ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface, ResolutionState,
+        SignalItem, TermReference, TermResolution, TypeItemBody, TypeResolution, UnaryOperator,
+        ValueItem,
     },
     ids::{ExprId, ItemId, TypeParameterId},
     validate::{
@@ -26,6 +27,29 @@ pub enum ConstraintClass {
 enum ConstraintOrigin {
     Expression,
     RecordOmittedField { field_name: String },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DefaultEvidence {
+    BuiltinOptionNone,
+    SameModuleMemberBody(ExprId),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct ConstraintSolveReport {
+    default_record_fields: Vec<SolvedDefaultRecordField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SolvedDefaultRecordField {
+    field_name: String,
+    evidence: DefaultEvidence,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct DefaultRecordElision {
+    record_expr: ExprId,
+    fields: Vec<SolvedDefaultRecordField>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,19 +108,31 @@ impl TypeConstraint {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeCheckReport {
     diagnostics: Vec<Diagnostic>,
+    elaborated_module: Module,
 }
 
 impl TypeCheckReport {
-    pub fn new(diagnostics: Vec<Diagnostic>) -> Self {
-        Self { diagnostics }
+    pub fn new(elaborated_module: Module, diagnostics: Vec<Diagnostic>) -> Self {
+        Self {
+            diagnostics,
+            elaborated_module,
+        }
     }
 
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
 
+    pub fn elaborated_module(&self) -> &Module {
+        &self.elaborated_module
+    }
+
     pub fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    pub fn into_elaborated_module(self) -> Module {
+        self.elaborated_module
     }
 
     pub fn is_ok(&self) -> bool {
@@ -107,7 +143,12 @@ impl TypeCheckReport {
 pub fn typecheck_module(module: &Module) -> TypeCheckReport {
     let mut checker = TypeChecker::new(module);
     checker.run();
-    TypeCheckReport::new(checker.diagnostics)
+    let elaborated_module = checker.build_elaborated_module();
+    TypeCheckReport::new(elaborated_module, checker.diagnostics)
+}
+
+pub fn elaborate_default_record_fields(module: &Module) -> Module {
+    typecheck_module(module).into_elaborated_module()
 }
 
 pub(crate) fn expression_matches(
@@ -126,6 +167,7 @@ struct TypeChecker<'a> {
     typing: GateTypeContext<'a>,
     diagnostics: Vec<Diagnostic>,
     option_default_in_scope: bool,
+    default_record_elisions: Vec<DefaultRecordElision>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,6 +190,7 @@ impl<'a> TypeChecker<'a> {
             typing: GateTypeContext::new(module),
             diagnostics: Vec::new(),
             option_default_in_scope,
+            default_record_elisions: Vec::new(),
         }
     }
 
@@ -172,6 +215,10 @@ impl<'a> TypeChecker<'a> {
                 | Item::Export(_) => {}
             }
         }
+    }
+
+    fn build_elaborated_module(&self) -> Module {
+        apply_default_record_elisions(self.module, &self.default_record_elisions)
     }
 
     fn check_value_item(&mut self, item: &ValueItem) {
@@ -714,8 +761,15 @@ impl<'a> TypeChecker<'a> {
                         value_stack,
                         &mut constraints,
                     );
-                    self.solve_constraints(&constraints);
-                    Some(ok && self.diagnostics.len() == checkpoint)
+                    let solved = self.solve_constraints(&constraints);
+                    let no_new_diagnostics = self.diagnostics.len() == checkpoint;
+                    if ok && no_new_diagnostics && !solved.default_record_fields.is_empty() {
+                        self.default_record_elisions.push(DefaultRecordElision {
+                            record_expr: expr_id,
+                            fields: solved.default_record_fields,
+                        });
+                    }
+                    Some(ok && no_new_diagnostics)
                 }
                 _ => None,
             },
@@ -1248,14 +1302,12 @@ impl<'a> TypeChecker<'a> {
         Ok(current)
     }
 
-    fn has_default_instance(&mut self, ty: &GateType) -> bool {
-        (matches!(ty, GateType::Option(_)) && self.option_default_in_scope)
-            || self.has_same_module_instance("Default", ty)
-    }
-
-    fn require_default(&mut self, ty: &GateType) -> Result<(), String> {
-        if self.has_default_instance(ty) {
-            return Ok(());
+    fn require_default(&mut self, ty: &GateType) -> Result<DefaultEvidence, String> {
+        if matches!(ty, GateType::Option(_)) && self.option_default_in_scope {
+            return Ok(DefaultEvidence::BuiltinOptionNone);
+        }
+        if let Some(body) = self.same_module_default_member_body(ty) {
+            return Ok(DefaultEvidence::SameModuleMemberBody(body));
         }
         match ty {
             GateType::Option(_) => Err(
@@ -1436,7 +1488,8 @@ impl<'a> TypeChecker<'a> {
         );
     }
 
-    fn solve_constraints(&mut self, constraints: &[TypeConstraint]) {
+    fn solve_constraints(&mut self, constraints: &[TypeConstraint]) -> ConstraintSolveReport {
+        let mut report = ConstraintSolveReport::default();
         for constraint in constraints {
             match constraint.class() {
                 ConstraintClass::Eq => {
@@ -1458,25 +1511,34 @@ impl<'a> TypeChecker<'a> {
                         );
                     }
                 }
-                ConstraintClass::Default => {
-                    if let Err(reason) = self.require_default(constraint.subject()) {
+                ConstraintClass::Default => match self.require_default(constraint.subject()) {
+                    Ok(evidence) => {
+                        if let Some(field_name) = constraint.omitted_field_name() {
+                            report.default_record_fields.push(SolvedDefaultRecordField {
+                                field_name: field_name.to_owned(),
+                                evidence,
+                            });
+                        }
+                    }
+                    Err(reason) => {
                         let field_name = constraint.omitted_field_name().unwrap_or("this field");
                         self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "record literal omits field `{field_name}` but no `Default` instance is in scope for `{}`",
-                                constraint.subject()
-                            ))
-                            .with_code(code("missing-default-instance"))
-                            .with_primary_label(
-                                constraint.span(),
-                                format!("field `{field_name}` must be provided or defaultable here"),
-                            )
-                            .with_note(reason),
-                        );
+                                Diagnostic::error(format!(
+                                    "record literal omits field `{field_name}` but no `Default` instance is in scope for `{}`",
+                                    constraint.subject()
+                                ))
+                                .with_code(code("missing-default-instance"))
+                                .with_primary_label(
+                                    constraint.span(),
+                                    format!("field `{field_name}` must be provided or defaultable here"),
+                                )
+                                .with_note(reason),
+                            );
                     }
-                }
+                },
             }
         }
+        report
     }
 
     fn fallback_apply_parameter_types(
@@ -1697,6 +1759,46 @@ impl<'a> TypeChecker<'a> {
         false
     }
 
+    fn same_module_default_member_body(&mut self, ty: &GateType) -> Option<ExprId> {
+        let instances = self
+            .module
+            .items()
+            .iter()
+            .filter_map(|(_, item)| match item {
+                Item::Instance(instance) => Some(instance.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for instance in instances {
+            let ResolutionState::Resolved(TypeResolution::Item(class_item_id)) =
+                instance.class.resolution.as_ref()
+            else {
+                continue;
+            };
+            let Item::Class(class_item) = &self.module.items()[*class_item_id] else {
+                continue;
+            };
+            if class_item.name.text() != "Default" || instance.arguments.len() != 1 {
+                continue;
+            }
+            if !self
+                .typing
+                .lower_annotation(*instance.arguments.first())
+                .is_some_and(|candidate| candidate.same_shape(ty))
+            {
+                continue;
+            }
+            if let Some(member) = instance
+                .members
+                .iter()
+                .find(|member| member.name.text() == "default" && member.parameters.is_empty())
+            {
+                return Some(member.body);
+            }
+        }
+        None
+    }
+
     fn instance_class_item_id(&self, item: &InstanceItem) -> Option<ItemId> {
         let ResolutionState::Resolved(TypeResolution::Item(item_id)) =
             item.class.resolution.as_ref()
@@ -1807,12 +1909,78 @@ fn projection_path_text(path: &NamePath) -> String {
     )
 }
 
+fn apply_default_record_elisions(module: &Module, elisions: &[DefaultRecordElision]) -> Module {
+    if elisions.is_empty() {
+        return module.clone();
+    }
+
+    let mut module = module.clone();
+    for elision in elisions {
+        let record_span = module.exprs()[elision.record_expr].span;
+        let synthesized_fields = elision
+            .fields
+            .iter()
+            .map(|field| synthesize_default_record_field(&mut module, record_span, field))
+            .collect::<Vec<_>>();
+        let Some(expr) = module.arenas.exprs.get_mut(elision.record_expr) else {
+            continue;
+        };
+        let ExprKind::Record(record) = &mut expr.kind else {
+            continue;
+        };
+        record.fields.extend(synthesized_fields);
+    }
+    module
+}
+
+fn synthesize_default_record_field(
+    module: &mut Module,
+    record_span: SourceSpan,
+    field: &SolvedDefaultRecordField,
+) -> RecordExprField {
+    let label = Name::new(field.field_name.clone(), record_span)
+        .expect("typechecked record field names must stay valid");
+    let value = match field.evidence {
+        DefaultEvidence::BuiltinOptionNone => {
+            alloc_builtin_default_expr(module, record_span, BuiltinTerm::None, "None")
+        }
+        DefaultEvidence::SameModuleMemberBody(body) => body,
+    };
+    RecordExprField {
+        span: record_span,
+        label,
+        value,
+        surface: RecordFieldSurface::Defaulted,
+    }
+}
+
+fn alloc_builtin_default_expr(
+    module: &mut Module,
+    span: SourceSpan,
+    builtin: BuiltinTerm,
+    text: &str,
+) -> ExprId {
+    let path = NamePath::from_vec(vec![
+        Name::new(text, span).expect("builtin default term name must stay valid"),
+    ])
+    .expect("builtin default term path must stay valid");
+    module
+        .alloc_expr(crate::Expr {
+            span,
+            kind: ExprKind::Name(TermReference::resolved(
+                path,
+                TermResolution::Builtin(builtin),
+            )),
+        })
+        .expect("default-record elaboration should fit inside the expression arena")
+}
+
 #[cfg(test)]
 mod tests {
     use aivi_base::{DiagnosticCode, SourceDatabase};
     use aivi_syntax::parse_module;
 
-    use crate::lower_module;
+    use crate::{Item, RecordFieldSurface, lower_module};
 
     use super::*;
 
@@ -1853,6 +2021,66 @@ mod tests {
             "expected defaulted record elision to typecheck, got diagnostics: {:?}",
             report.diagnostics()
         );
+    }
+
+    #[test]
+    fn typecheck_elaborates_option_default_record_elision_into_explicit_fields() {
+        let report = typecheck_text(
+            "record-elision-hir.aivi",
+            "use aivi.defaults (Option)\n\
+             type Profile = {\n\
+                 name: Text,\n\
+                 nickname: Option Text,\n\
+                 bio: Option Text\n\
+             }\n\
+             val name = \"Ada\"\n\
+             val nickname = Some \"Countess\"\n\
+             val profile:Profile = { name, nickname }\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected defaulted record elision to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+
+        let module = report.elaborated_module();
+        let profile = value_body(module, "profile");
+        let ExprKind::Record(record) = &module.exprs()[profile].kind else {
+            panic!("expected `profile` to stay a record literal");
+        };
+        assert_eq!(
+            record.fields.len(),
+            3,
+            "expected omitted bio field to be synthesized"
+        );
+        assert_eq!(
+            record
+                .fields
+                .iter()
+                .map(|field| field.label.text())
+                .collect::<Vec<_>>(),
+            vec!["name", "nickname", "bio"]
+        );
+        assert_eq!(
+            record
+                .fields
+                .iter()
+                .map(|field| field.surface)
+                .collect::<Vec<_>>(),
+            vec![
+                RecordFieldSurface::Shorthand,
+                RecordFieldSurface::Shorthand,
+                RecordFieldSurface::Defaulted,
+            ]
+        );
+        let defaulted_value = record.fields[2].value;
+        match &module.exprs()[defaulted_value].kind {
+            ExprKind::Name(reference) => assert!(matches!(
+                reference.resolution.as_ref(),
+                ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::None))
+            )),
+            other => panic!("expected synthesized option default to be `None`, found {other:?}"),
+        }
     }
 
     #[test]
@@ -2092,6 +2320,50 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_elaborates_same_module_default_instances_into_explicit_fields() {
+        let report = typecheck_text(
+            "same-module-default-instance-hir.aivi",
+            "class Default A\n\
+             \x20\x20\x20\x20default : A\n\
+             type Nickname = Nickname Text\n\
+             instance Default Nickname\n\
+             \x20\x20\x20\x20default = Nickname \"\"\n\
+             type User = {\n\
+                 name: Text,\n\
+                 nickname: Nickname\n\
+             }\n\
+             val name = \"Ada\"\n\
+             val user:User = { name }\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected same-module Default instance to satisfy record elision, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+
+        let module = report.elaborated_module();
+        let user = value_body(module, "user");
+        let ExprKind::Record(record) = &module.exprs()[user].kind else {
+            panic!("expected `user` to stay a record literal");
+        };
+        assert_eq!(
+            record
+                .fields
+                .iter()
+                .map(|field| field.label.text())
+                .collect::<Vec<_>>(),
+            vec!["name", "nickname"]
+        );
+        assert_eq!(record.fields[1].surface, RecordFieldSurface::Defaulted);
+
+        let default_body = same_module_default_body(module, "default");
+        assert_eq!(
+            record.fields[1].value, default_body,
+            "same-module Default synthesis should reuse the validated instance member body"
+        );
+    }
+
+    #[test]
     fn typecheck_reports_same_module_constructor_argument_mismatch() {
         let report = typecheck_text(
             "same-module-constructor-mismatch.aivi",
@@ -2271,5 +2543,31 @@ val resultLabel:Result Text Text =
             "expected collection literal mismatches to surface type mismatches, got diagnostics: {:?}",
             report.diagnostics()
         );
+    }
+
+    fn value_body(module: &Module, name: &str) -> ExprId {
+        module
+            .items()
+            .iter()
+            .find_map(|(_, item)| match item {
+                Item::Value(value) if value.name.text() == name => Some(value.body),
+                _ => None,
+            })
+            .expect("expected value item to exist")
+    }
+
+    fn same_module_default_body(module: &Module, member_name: &str) -> ExprId {
+        module
+            .items()
+            .iter()
+            .find_map(|(_, item)| match item {
+                Item::Instance(instance) => instance
+                    .members
+                    .iter()
+                    .find(|member| member.name.text() == member_name)
+                    .map(|member| member.body),
+                _ => None,
+            })
+            .expect("expected same-module Default member to exist")
     }
 }

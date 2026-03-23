@@ -120,6 +120,8 @@ pub enum SourceLifecycleElaborationBlocker {
 }
 
 pub fn elaborate_source_lifecycles(module: &Module) -> SourceLifecycleElaborationReport {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    let module = &module;
     let mut nodes = Vec::new();
     for (owner, item) in module.items().iter() {
         let Item::Signal(signal) = item else {

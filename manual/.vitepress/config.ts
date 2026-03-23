@@ -11,9 +11,9 @@ export default defineConfig({
   description: 'A reactive, functional language for Linux desktop apps',
   base: '/aivi2/',
 
-  themeConfig: {
-    logo: '/logo.svg',
+  head: [['link', { rel: 'icon', type: 'image/png', href: '/aivi2/aivi-a.png' }]],
 
+  themeConfig: {
     nav: [
       { text: 'Introduction',     link: '/introduction' },
       { text: 'Language Tour',    link: '/tour/' },

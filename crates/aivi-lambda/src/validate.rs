@@ -1,0 +1,647 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use aivi_core::{self as core};
+use aivi_hir::BindingId;
+
+use crate::{
+    CaptureId, ClosureId, ClosureKind, GateStage, Item, Module, Pipe, RecurrenceStage, Stage,
+    StageKind,
+    analysis::{AnalysisError, capture_free_bindings},
+};
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ValidationErrors {
+    errors: Vec<ValidationError>,
+}
+
+impl ValidationErrors {
+    pub fn new(errors: Vec<ValidationError>) -> Self {
+        Self { errors }
+    }
+
+    pub fn errors(&self) -> &[ValidationError] {
+        &self.errors
+    }
+
+    pub fn into_errors(self) -> Vec<ValidationError> {
+        self.errors
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+}
+
+impl std::fmt::Display for ValidationErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, error) in self.errors.iter().enumerate() {
+            if index > 0 {
+                f.write_str("; ")?;
+            }
+            write!(f, "{error}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ValidationErrors {}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ValidationError {
+    InvalidCoreModule(core::ValidationError),
+    ItemMirrorCount {
+        expected: usize,
+        found: usize,
+    },
+    PipeMirrorCount {
+        expected: usize,
+        found: usize,
+    },
+    StageMirrorCount {
+        expected: usize,
+        found: usize,
+    },
+    ItemMirrorMismatch {
+        item: core::ItemId,
+    },
+    PipeMirrorMismatch {
+        pipe: core::PipeId,
+    },
+    StageMirrorMismatch {
+        stage: core::StageId,
+    },
+    UnknownClosure {
+        closure: ClosureId,
+    },
+    UnknownCapture {
+        closure: ClosureId,
+        capture: CaptureId,
+    },
+    CaptureOwnerMismatch {
+        closure: ClosureId,
+        capture: CaptureId,
+        owner: ClosureId,
+    },
+    DuplicateClosureParameterBinding {
+        closure: ClosureId,
+        binding: BindingId,
+    },
+    DuplicateClosureCaptureBinding {
+        closure: ClosureId,
+        binding: BindingId,
+    },
+    ClosureMetadataMismatch {
+        closure: ClosureId,
+    },
+    MissingClosureCapture {
+        closure: ClosureId,
+        binding: BindingId,
+    },
+    UnexpectedClosureCapture {
+        closure: ClosureId,
+        binding: BindingId,
+    },
+    CaptureTypeMismatch {
+        closure: ClosureId,
+        capture: CaptureId,
+        expected: core::Type,
+        found: core::Type,
+    },
+    ClosureCaptureTypeConflict {
+        closure: ClosureId,
+        binding: BindingId,
+        previous: core::Type,
+        current: core::Type,
+    },
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCoreModule(error) => {
+                write!(
+                    f,
+                    "typed-lambda module requires valid typed-core storage: {error}"
+                )
+            }
+            Self::ItemMirrorCount { expected, found } => write!(
+                f,
+                "typed-lambda item mirror count disagrees with typed-core: expected {expected}, found {found}"
+            ),
+            Self::PipeMirrorCount { expected, found } => write!(
+                f,
+                "typed-lambda pipe mirror count disagrees with typed-core: expected {expected}, found {found}"
+            ),
+            Self::StageMirrorCount { expected, found } => write!(
+                f,
+                "typed-lambda stage mirror count disagrees with typed-core: expected {expected}, found {found}"
+            ),
+            Self::ItemMirrorMismatch { item } => {
+                write!(
+                    f,
+                    "typed-lambda item mirror does not match typed-core item {item}"
+                )
+            }
+            Self::PipeMirrorMismatch { pipe } => {
+                write!(
+                    f,
+                    "typed-lambda pipe mirror does not match typed-core pipe {pipe}"
+                )
+            }
+            Self::StageMirrorMismatch { stage } => {
+                write!(
+                    f,
+                    "typed-lambda stage mirror does not match typed-core stage {stage}"
+                )
+            }
+            Self::UnknownClosure { closure } => {
+                write!(f, "typed-lambda references unknown closure {closure}")
+            }
+            Self::UnknownCapture { closure, capture } => write!(
+                f,
+                "typed-lambda closure {closure} references unknown capture {capture}"
+            ),
+            Self::CaptureOwnerMismatch {
+                closure,
+                capture,
+                owner,
+            } => write!(
+                f,
+                "typed-lambda closure {closure} references capture {capture} owned by closure {owner}"
+            ),
+            Self::DuplicateClosureParameterBinding { closure, binding } => write!(
+                f,
+                "typed-lambda closure {closure} lists local binding #{} more than once as a parameter",
+                binding.as_raw()
+            ),
+            Self::DuplicateClosureCaptureBinding { closure, binding } => write!(
+                f,
+                "typed-lambda closure {closure} captures binding #{} more than once",
+                binding.as_raw()
+            ),
+            Self::ClosureMetadataMismatch { closure } => write!(
+                f,
+                "typed-lambda closure {closure} does not match the typed-core site that owns it"
+            ),
+            Self::MissingClosureCapture { closure, binding } => write!(
+                f,
+                "typed-lambda closure {closure} is missing explicit capture metadata for binding #{}",
+                binding.as_raw()
+            ),
+            Self::UnexpectedClosureCapture { closure, binding } => write!(
+                f,
+                "typed-lambda closure {closure} captures binding #{} even though it is not free in the body",
+                binding.as_raw()
+            ),
+            Self::CaptureTypeMismatch {
+                closure,
+                capture,
+                expected,
+                found,
+            } => write!(
+                f,
+                "typed-lambda closure {closure} capture {capture} changed type: expected {expected}, found {found}"
+            ),
+            Self::ClosureCaptureTypeConflict {
+                closure,
+                binding,
+                previous,
+                current,
+            } => write!(
+                f,
+                "typed-lambda closure {closure} sees binding #{} at conflicting types: {} then {}",
+                binding.as_raw(),
+                previous,
+                current
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
+pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
+    let mut errors = Vec::new();
+
+    if let Err(core_errors) = core::validate_module(module.core()) {
+        errors.extend(
+            core_errors
+                .into_errors()
+                .into_iter()
+                .map(ValidationError::InvalidCoreModule),
+        );
+    }
+
+    if module.items().len() != module.core().items().len() {
+        errors.push(ValidationError::ItemMirrorCount {
+            expected: module.core().items().len(),
+            found: module.items().len(),
+        });
+    }
+    if module.pipes().len() != module.core().pipes().len() {
+        errors.push(ValidationError::PipeMirrorCount {
+            expected: module.core().pipes().len(),
+            found: module.pipes().len(),
+        });
+    }
+    if module.stages().len() != module.core().stages().len() {
+        errors.push(ValidationError::StageMirrorCount {
+            expected: module.core().stages().len(),
+            found: module.stages().len(),
+        });
+    }
+
+    for (item_id, core_item) in module.core().items().iter() {
+        match module.items().get(item_id) {
+            Some(item)
+                if item.origin == core_item.origin
+                    && item.span == core_item.span
+                    && item.name == core_item.name
+                    && item.kind == core_item.kind
+                    && item.parameters == core_item.parameters
+                    && item.pipes == core_item.pipes =>
+            {
+                validate_item_body(module, item_id, item, core_item, &mut errors);
+            }
+            Some(_) | None => errors.push(ValidationError::ItemMirrorMismatch { item: item_id }),
+        }
+    }
+
+    for (stage_id, core_stage) in module.core().stages().iter() {
+        match module.stages().get(stage_id) {
+            Some(stage)
+                if stage.pipe == core_stage.pipe
+                    && stage.index == core_stage.index
+                    && stage.span == core_stage.span
+                    && stage.input_subject == core_stage.input_subject
+                    && stage.result_subject == core_stage.result_subject =>
+            {
+                validate_stage(module, stage_id, stage, core_stage, &mut errors);
+            }
+            Some(_) | None => errors.push(ValidationError::StageMirrorMismatch { stage: stage_id }),
+        }
+    }
+
+    for (pipe_id, core_pipe) in module.core().pipes().iter() {
+        match module.pipes().get(pipe_id) {
+            Some(pipe)
+                if pipe.owner == core_pipe.owner
+                    && pipe.origin == core_pipe.origin
+                    && pipe.stages == core_pipe.stages =>
+            {
+                validate_pipe(module, pipe_id, pipe, core_pipe, &mut errors);
+            }
+            Some(_) | None => errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id }),
+        }
+    }
+
+    for (closure_id, closure) in module.closures().iter() {
+        validate_closure(module, closure_id, closure, &mut errors);
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(ValidationErrors::new(errors))
+    }
+}
+
+fn validate_item_body(
+    module: &Module,
+    item_id: core::ItemId,
+    item: &Item,
+    core_item: &core::Item,
+    errors: &mut Vec<ValidationError>,
+) {
+    match (item.body, core_item.body) {
+        (None, None) => {}
+        (Some(closure), Some(root)) => validate_expected_closure(
+            module,
+            closure,
+            item_id,
+            ClosureKind::ItemBody,
+            None,
+            &item.parameters,
+            root,
+            errors,
+        ),
+        _ => errors.push(ValidationError::ItemMirrorMismatch { item: item_id }),
+    }
+}
+
+fn validate_pipe(
+    module: &Module,
+    pipe_id: core::PipeId,
+    pipe: &Pipe,
+    core_pipe: &core::Pipe,
+    errors: &mut Vec<ValidationError>,
+) {
+    match (&pipe.recurrence, &core_pipe.recurrence) {
+        (None, None) => {}
+        (Some(recurrence), Some(core_recurrence)) => {
+            if recurrence.target != core_recurrence.target
+                || recurrence.wakeup != core_recurrence.wakeup
+            {
+                errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id });
+                return;
+            }
+            validate_recurrence_stage(
+                module,
+                pipe_id,
+                pipe.owner,
+                ClosureKind::RecurrenceStart,
+                &recurrence.start,
+                &core_recurrence.start,
+                errors,
+            );
+            if recurrence.steps.len() != core_recurrence.steps.len() {
+                errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id });
+            }
+            for (step, core_step) in recurrence.steps.iter().zip(core_recurrence.steps.iter()) {
+                validate_recurrence_stage(
+                    module,
+                    pipe_id,
+                    pipe.owner,
+                    ClosureKind::RecurrenceStep,
+                    step,
+                    core_step,
+                    errors,
+                );
+            }
+            match (
+                &recurrence.non_source_wakeup,
+                &core_recurrence.non_source_wakeup,
+            ) {
+                (None, None) => {}
+                (Some(wakeup), Some(core_wakeup)) => {
+                    if wakeup.cause != core_wakeup.cause
+                        || wakeup.witness_expr != core_wakeup.witness_expr
+                    {
+                        errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id });
+                    } else {
+                        validate_expected_closure(
+                            module,
+                            wakeup.runtime,
+                            pipe.owner,
+                            ClosureKind::RecurrenceWakeupWitness,
+                            None,
+                            &[],
+                            core_wakeup.runtime_witness,
+                            errors,
+                        );
+                    }
+                }
+                _ => errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id }),
+            }
+        }
+        _ => errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id }),
+    }
+}
+
+fn validate_recurrence_stage(
+    module: &Module,
+    pipe_id: core::PipeId,
+    owner: core::ItemId,
+    kind: ClosureKind,
+    stage: &RecurrenceStage,
+    core_stage: &core::RecurrenceStage,
+    errors: &mut Vec<ValidationError>,
+) {
+    if stage.stage_index != core_stage.stage_index
+        || stage.stage_span != core_stage.stage_span
+        || stage.origin_expr != core_stage.origin_expr
+        || stage.input_subject != core_stage.input_subject
+        || stage.result_subject != core_stage.result_subject
+    {
+        errors.push(ValidationError::PipeMirrorMismatch { pipe: pipe_id });
+        return;
+    }
+    validate_expected_closure(
+        module,
+        stage.runtime,
+        owner,
+        kind,
+        Some(&stage.input_subject),
+        &[],
+        core_stage.runtime_expr,
+        errors,
+    );
+}
+
+fn validate_stage(
+    module: &Module,
+    stage_id: core::StageId,
+    stage: &Stage,
+    core_stage: &core::Stage,
+    errors: &mut Vec<ValidationError>,
+) {
+    match (&stage.kind, &core_stage.kind) {
+        (
+            StageKind::Gate(GateStage::Ordinary {
+                when_true,
+                when_false,
+            }),
+            core::StageKind::Gate(core::GateStage::Ordinary {
+                when_true: core_true,
+                when_false: core_false,
+            }),
+        ) => {
+            let owner = module.core().pipes()[stage.pipe].owner;
+            validate_expected_closure(
+                module,
+                *when_true,
+                owner,
+                ClosureKind::GateTrue,
+                Some(&stage.input_subject),
+                &[],
+                *core_true,
+                errors,
+            );
+            validate_expected_closure(
+                module,
+                *when_false,
+                owner,
+                ClosureKind::GateFalse,
+                Some(&stage.input_subject),
+                &[],
+                *core_false,
+                errors,
+            );
+        }
+        (
+            StageKind::Gate(GateStage::SignalFilter {
+                payload_type,
+                predicate,
+                emits_negative_update,
+            }),
+            core::StageKind::Gate(core::GateStage::SignalFilter {
+                payload_type: core_payload,
+                predicate: core_predicate,
+                emits_negative_update: core_negative,
+            }),
+        ) if payload_type == core_payload && emits_negative_update == core_negative => {
+            let owner = module.core().pipes()[stage.pipe].owner;
+            validate_expected_closure(
+                module,
+                *predicate,
+                owner,
+                ClosureKind::SignalFilterPredicate,
+                Some(payload_type),
+                &[],
+                *core_predicate,
+                errors,
+            );
+        }
+        (StageKind::TruthyFalsy(pair), core::StageKind::TruthyFalsy(core_pair))
+            if pair == core_pair => {}
+        (StageKind::Fanout(fanout), core::StageKind::Fanout(core_fanout))
+            if fanout == core_fanout => {}
+        _ => errors.push(ValidationError::StageMirrorMismatch { stage: stage_id }),
+    }
+}
+
+fn validate_expected_closure(
+    module: &Module,
+    closure_id: ClosureId,
+    expected_owner: core::ItemId,
+    expected_kind: ClosureKind,
+    expected_subject: Option<&core::Type>,
+    expected_parameters: &[core::ItemParameter],
+    expected_root: core::ExprId,
+    errors: &mut Vec<ValidationError>,
+) {
+    let Some(closure) = module.closures().get(closure_id) else {
+        errors.push(ValidationError::UnknownClosure {
+            closure: closure_id,
+        });
+        return;
+    };
+    if closure.owner != expected_owner
+        || closure.kind != expected_kind
+        || closure.root != expected_root
+        || closure.parameters != expected_parameters
+        || closure.ambient_subject.as_ref() != expected_subject
+    {
+        errors.push(ValidationError::ClosureMetadataMismatch {
+            closure: closure_id,
+        });
+    }
+}
+
+fn validate_closure(
+    module: &Module,
+    closure_id: ClosureId,
+    closure: &crate::Closure,
+    errors: &mut Vec<ValidationError>,
+) {
+    if !module.items().contains(closure.owner) || !module.exprs().contains(closure.root) {
+        errors.push(ValidationError::ClosureMetadataMismatch {
+            closure: closure_id,
+        });
+        return;
+    }
+
+    let mut parameter_bindings = BTreeSet::new();
+    for parameter in &closure.parameters {
+        if !parameter_bindings.insert(parameter.binding) {
+            errors.push(ValidationError::DuplicateClosureParameterBinding {
+                closure: closure_id,
+                binding: parameter.binding,
+            });
+        }
+    }
+
+    let known_names = parameter_name_map(&closure.parameters);
+    let expected_captures = match capture_free_bindings(
+        module.core(),
+        closure.root,
+        &closure
+            .parameters
+            .iter()
+            .map(|parameter| parameter.binding)
+            .collect::<Vec<_>>(),
+        &known_names,
+    ) {
+        Ok(captures) => captures,
+        Err(AnalysisError::BindingTypeConflict {
+            binding,
+            previous,
+            current,
+            ..
+        }) => {
+            errors.push(ValidationError::ClosureCaptureTypeConflict {
+                closure: closure_id,
+                binding,
+                previous,
+                current,
+            });
+            return;
+        }
+    };
+
+    let mut actual_by_binding = BTreeMap::<BindingId, (CaptureId, core::Type)>::new();
+    for capture_id in &closure.captures {
+        let Some(capture) = module.captures().get(*capture_id) else {
+            errors.push(ValidationError::UnknownCapture {
+                closure: closure_id,
+                capture: *capture_id,
+            });
+            continue;
+        };
+        if capture.closure != closure_id {
+            errors.push(ValidationError::CaptureOwnerMismatch {
+                closure: closure_id,
+                capture: *capture_id,
+                owner: capture.closure,
+            });
+            continue;
+        }
+        if let Some((_, _)) =
+            actual_by_binding.insert(capture.binding, (*capture_id, capture.ty.clone()))
+        {
+            errors.push(ValidationError::DuplicateClosureCaptureBinding {
+                closure: closure_id,
+                binding: capture.binding,
+            });
+        }
+    }
+
+    let expected_by_binding = expected_captures
+        .into_iter()
+        .map(|capture| (capture.binding, capture.ty))
+        .collect::<BTreeMap<_, _>>();
+
+    for (binding, expected_ty) in &expected_by_binding {
+        match actual_by_binding.get(binding) {
+            Some((capture_id, found_ty)) if found_ty == expected_ty => {
+                let _ = capture_id;
+            }
+            Some((capture_id, found_ty)) => errors.push(ValidationError::CaptureTypeMismatch {
+                closure: closure_id,
+                capture: *capture_id,
+                expected: expected_ty.clone(),
+                found: found_ty.clone(),
+            }),
+            None => errors.push(ValidationError::MissingClosureCapture {
+                closure: closure_id,
+                binding: *binding,
+            }),
+        }
+    }
+
+    for binding in actual_by_binding.keys() {
+        if !expected_by_binding.contains_key(binding) {
+            errors.push(ValidationError::UnexpectedClosureCapture {
+                closure: closure_id,
+                binding: *binding,
+            });
+        }
+    }
+}
+
+fn parameter_name_map(parameters: &[core::ItemParameter]) -> BTreeMap<BindingId, Box<str>> {
+    parameters
+        .iter()
+        .map(|parameter| (parameter.binding, parameter.name.clone()))
+        .collect()
+}

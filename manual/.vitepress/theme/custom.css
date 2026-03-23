@@ -58,13 +58,18 @@
   --vp-button-brand-text:      #1D1F21;
 }
 
+/* Hide the hero name text — replaced by the logo image via HomeLayout slot */
+.VPHero .name {
+  display: none;
+}
+
 /* Tighten up code block line height for AIVI's dense pipe chains */
 .vp-code-block pre {
   line-height: 1.55;
 }
 
-/* Subtle border on inline code */
-:root code:not([class]) {
+/* Subtle border on inline code (not inside code blocks) */
+:root :not(pre) > code:not([class]) {
   border: 1px solid var(--vp-c-border);
   border-radius: 3px;
   padding: 1px 4px;

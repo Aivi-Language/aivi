@@ -200,7 +200,10 @@ impl fmt::Display for ValidationError {
                 write!(f, "item {item} is missing its typed-core body expression")
             }
             Self::UnexpectedItemParameters { item } => {
-                write!(f, "item {item} carries parameters in a non-function core item")
+                write!(
+                    f,
+                    "item {item} carries parameters in a non-function core item"
+                )
             }
             Self::UnknownItemBody { item, expr } => {
                 write!(f, "item {item} references unknown body expression {expr}")
@@ -709,15 +712,13 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
                                 || module.exprs()[stage_pair.falsy.body].ty
                                     != stage_pair.falsy.result_type
                             {
-                                errors.push(
-                                    ValidationError::InlinePipeTruthyFalsyResultMismatch {
-                                        expr: expr_id,
-                                        stage_index,
-                                        expected,
-                                        truthy: stage_pair.truthy.result_type.clone(),
-                                        falsy: stage_pair.falsy.result_type.clone(),
-                                    },
-                                );
+                                errors.push(ValidationError::InlinePipeTruthyFalsyResultMismatch {
+                                    expr: expr_id,
+                                    stage_index,
+                                    expected,
+                                    truthy: stage_pair.truthy.result_type.clone(),
+                                    falsy: stage_pair.falsy.result_type.clone(),
+                                });
                             }
                         }
                     }
@@ -918,7 +919,10 @@ fn validate_pattern(
     }
 }
 
-fn inline_pipe_body_result_type(input: &crate::ty::Type, result: &crate::ty::Type) -> crate::ty::Type {
+fn inline_pipe_body_result_type(
+    input: &crate::ty::Type,
+    result: &crate::ty::Type,
+) -> crate::ty::Type {
     match (input, result) {
         (crate::ty::Type::Signal(_), crate::ty::Type::Signal(payload)) => payload.as_ref().clone(),
         _ => result.clone(),
@@ -932,10 +936,7 @@ fn gate_result_type(subject: &crate::ty::Type) -> crate::ty::Type {
     }
 }
 
-fn truthy_falsy_result_type(
-    input: &crate::ty::Type,
-    result: &crate::ty::Type,
-) -> crate::ty::Type {
+fn truthy_falsy_result_type(input: &crate::ty::Type, result: &crate::ty::Type) -> crate::ty::Type {
     match (input, result) {
         (crate::ty::Type::Signal(_), crate::ty::Type::Signal(payload)) => payload.as_ref().clone(),
         _ => result.clone(),

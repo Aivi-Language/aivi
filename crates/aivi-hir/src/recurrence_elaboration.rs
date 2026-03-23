@@ -167,6 +167,8 @@ enum LocalRecurrenceWakeupHint {
 }
 
 pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    let module = &module;
     let items = module
         .items()
         .iter()

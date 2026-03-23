@@ -2,17 +2,16 @@ use std::collections::{BTreeMap, HashMap};
 
 use aivi_base::SourceSpan;
 use aivi_hir::{
-    BlockedFanoutSegment, BlockedGateStage, BlockedRecurrenceNode, BlockedSourceDecodeProgram,
-    BlockedSourceLifecycleNode, BlockedTruthyFalsyStage,
-    BlockedGeneralExpr as BlockedGeneralExprBody, ExprId as HirExprId, GateRuntimeExpr,
-    GateRuntimeExprKind,
-    GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
-    GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
-    GateRuntimeTruthyFalsyBranch, GateStageOutcome, GeneralExprOutcome, Item as HirItem,
-    ItemId as HirItemId, PatternId as HirPatternId, RecurrenceNodeOutcome, SourceDecodeProgram,
-    SourceDecodeProgramOutcome, SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome,
-    elaborate_fanouts, elaborate_gates, elaborate_general_expressions, elaborate_recurrences,
-    elaborate_source_lifecycles, elaborate_truthy_falsy, generate_source_decode_programs,
+    BlockedFanoutSegment, BlockedGateStage, BlockedGeneralExpr as BlockedGeneralExprBody,
+    BlockedRecurrenceNode, BlockedSourceDecodeProgram, BlockedSourceLifecycleNode,
+    BlockedTruthyFalsyStage, ExprId as HirExprId, GateRuntimeExpr, GateRuntimeExprKind,
+    GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeReference,
+    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch, GateStageOutcome,
+    GeneralExprOutcome, Item as HirItem, ItemId as HirItemId, PatternId as HirPatternId,
+    RecurrenceNodeOutcome, SourceDecodeProgram, SourceDecodeProgramOutcome,
+    SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome, elaborate_fanouts, elaborate_gates,
+    elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
+    elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{
@@ -20,10 +19,10 @@ use crate::{
     DomainDecodeSurface, DomainDecodeSurfaceKind, Expr, ExprId, FanoutJoin, FanoutStage, GateStage,
     Item, ItemId, ItemKind, ItemParameter, MapEntry, Module, NonSourceWakeup, Pattern,
     PatternBinding, PatternConstructor, PatternKind, Pipe, PipeCaseArm, PipeExpr, PipeOrigin,
-    PipeRecurrence, PipeStage, PipeTruthyFalsyBranch, PipeTruthyFalsyStage,
-    ProjectionBase, RecordExprField, RecordPatternField, RecurrenceStage, Reference, SignalInfo,
-    SourceId, SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageKind, TextLiteral,
-    TextSegment, TruthyFalsyBranch, TruthyFalsyStage, Type,
+    PipeRecurrence, PipeStage, PipeTruthyFalsyBranch, PipeTruthyFalsyStage, ProjectionBase,
+    RecordExprField, RecordPatternField, RecurrenceStage, Reference, SignalInfo, SourceId,
+    SourceInstanceId, SourceNode, SourceOptionBinding, Stage, StageKind, TextLiteral, TextSegment,
+    TruthyFalsyBranch, TruthyFalsyStage, Type,
     expr::ExprKind,
     validate::{ValidationError, validate_module},
 };
@@ -1084,7 +1083,9 @@ impl<'a> ModuleLowerer<'a> {
                 .copied()
                 .map(Reference::Item)
                 .unwrap_or(Reference::HirItem(*item)),
-            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::DomainMember(resolution)) => self
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::DomainMember(
+                resolution,
+            )) => self
                 .hir
                 .domain_member_handle(*resolution)
                 .map(Reference::DomainMember)
@@ -1893,8 +1894,12 @@ impl PipeStageSpec {
 enum PipeStageKindSpec {
     Transform,
     Tap,
-    Gate { emits_negative_update: bool },
-    Case { arms: Vec<CaseArmSpec> },
+    Gate {
+        emits_negative_update: bool,
+    },
+    Case {
+        arms: Vec<CaseArmSpec>,
+    },
     TruthyFalsy {
         truthy: TruthyFalsyArmSpec,
         falsy: TruthyFalsyArmSpec,
@@ -2258,11 +2263,9 @@ sig timeout : Signal Duration
             .expect("case arm body should exist")
             .ty = Type::Primitive(aivi_hir::BuiltinType::Int);
         let errors = validate_module(&core).expect_err("broken inline case stage should fail");
-        assert!(
-            errors.errors().iter().any(|error| matches!(
-                error,
-                ValidationError::InlinePipeCaseArmResultMismatch { .. }
-            ))
-        );
+        assert!(errors.errors().iter().any(|error| matches!(
+            error,
+            ValidationError::InlinePipeCaseArmResultMismatch { .. }
+        )));
     }
 }

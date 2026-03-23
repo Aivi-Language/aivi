@@ -43,60 +43,76 @@ identically on signals.
 ## Recurrence: @\|>...<\|@
 
 The recurrence pattern is how signals accumulate state over time.
-It is the signal equivalent of a fold:
+`@\|>` starts the recurrent flow; `<\|@` is the recurrence step.
 
 ```aivi
+fun add:Int #x:Int #n:Int => n + x
+
+@source button.clicked "inc"
 sig count : Signal Int =
     0
-    @|> add increment
-    <|@ add decrement
+    @|> add 1
+    <|@ add 1
 ```
 
 Reading this:
 
-- `0` — the initial value.
-- `@\|>` — recur start: on the first event from `increment`, apply `add increment` to `0`.
-- `<\|@` — recur step: on subsequent events from `increment` or `decrement`, apply the
-  function to the **current accumulated value**.
-
-The full form is:
-
-```
-initialValue
-@|> stepFn sourceSignal1
-<|@ stepFn sourceSignal2
-<|@ stepFn sourceSignal3
-...
-```
-
-Each `<\|@` introduces one more source that can trigger an update.
+- `0` — the initial value (the seed of the accumulator).
+- `@\|>` — recurrent flow start: when the source fires, begin the accumulation.
+- `<\|@` — recurrence step: apply the step function to the current accumulated value.
+- `add 1` is partially applied — the step function receives the current `count` as its last
+  argument each time the source fires.
 
 ## Example: direction signal in Snake
 
 ```aivi
+@source window.keyDown with { repeat: False, focusOnly: True }
 sig direction : Signal Direction =
     Right
     @|> keepDirection keyDown
     <|@ keepDirection keyDown
 ```
 
-- Starts as `Right`.
-- Every time `keyDown` fires, applies `keepDirection keyDown` to the current direction.
-- The second `<\|@` line feeds from the same source — in practice, this wires both the
-  initial and subsequent events.
+On each `keyDown` event, `@\|>` starts the recurrence and `<\|@` applies `keepDirection keyDown`
+to the current direction, storing the result as the new direction.
 
 ## Example: game state signal
 
 ```aivi
+@source timer.every 160 with { immediate: True, coalesce: True }
 sig game : Signal Game =
     initialGame
     @|> stepGame boardSize direction
     <|@ stepGame boardSize direction
 ```
 
-On every timer tick (wired via `@source`), `stepGame` is applied to the current `game` value
-with the current `direction`. The output becomes the new `game`.
-The entire game loop is two lines.
+Every 160 ms the timer fires. `stepGame` runs with the current `direction`, producing the next
+`game` state. The entire game loop is two lines.
+
+## Two independent sources — two recurrences
+
+Each `@source` drives one recurrent signal. To respond to two different events, declare two
+signals and derive from both:
+
+```aivi
+fun add:Int #x:Int #n:Int => n + x
+
+@source button.clicked "increment"
+sig added : Signal Int =
+    0
+    @|> add 1
+    <|@ add 1
+
+@source button.clicked "decrement"
+sig removed : Signal Int =
+    0
+    @|> add 1
+    <|@ add 1
+
+sig count : Signal Int = added - removed
+```
+
+`count` is a pure derived signal — the difference of two independent accumulators.
 
 ## Signals are values, not variables
 
@@ -117,24 +133,11 @@ can drive a recurrence.
 A derived signal has no memory — it is a pure transformation.
 A recurrent signal has memory — it folds over a stream of events.
 
-## Multiple sources
-
-A recurrent signal can listen to multiple independent sources:
-
-```aivi
-sig counter : Signal Int =
-    0
-    @|> \_ => \n => n + 1
-    <|@ \_ => \n => n + 1
-```
-
-(Here both sources do the same thing; in real programs they would do different things.)
-
 ## Summary
 
 - `sig name : Signal T = initialValue` declares a time-varying value.
 - Derived signals use `\|>` chains; they recompute automatically.
-- Recurrent signals use `@\|>...<\|@` to fold a stream of events into accumulated state.
+- Recurrent signals use `@\|>` (flow start) and `<\|@` (recurrence step) to fold events into accumulated state.
 - Signals form a dependency graph maintained by the runtime.
 - You never write to a signal; you only declare how it is computed.
 

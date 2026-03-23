@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     fmt,
 };
 
@@ -9,6 +9,7 @@ use aivi_hir::{
     BinaryOperator as HirBinaryOperator, BuiltinTerm as HirBuiltinTerm,
     UnaryOperator as HirUnaryOperator,
 };
+use aivi_lambda::{self as lambda};
 use aivi_typing::{
     DecodeExtraFieldPolicy as TypingDecodeExtraFieldPolicy,
     DecodeFieldRequirement as TypingDecodeFieldRequirement, DecodeMode as TypingDecodeMode,
@@ -74,9 +75,9 @@ impl std::error::Error for LoweringErrors {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LoweringError {
-    InvalidCoreModule(core::ValidationError),
+    InvalidLambdaModule(lambda::ValidationError),
     InvalidBackendProgram(ValidationError),
-    UnknownCoreItem {
+    UnknownLambdaItem {
         item: core::ItemId,
         span: SourceSpan,
     },
@@ -94,11 +95,9 @@ pub enum LoweringError {
         expected: LayoutId,
         found: LayoutId,
     },
-    LocalLayoutMismatch {
+    UnsupportedLocalReference {
         span: SourceSpan,
         binding: u32,
-        previous: LayoutId,
-        current: LayoutId,
     },
     ArenaOverflow {
         family: &'static str,
@@ -109,17 +108,17 @@ pub enum LoweringError {
 impl fmt::Display for LoweringError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidCoreModule(error) => {
+            Self::InvalidLambdaModule(error) => {
                 write!(
                     f,
-                    "backend lowering requires valid typed-core input: {error}"
+                    "backend lowering requires valid typed-lambda input: {error}"
                 )
             }
             Self::InvalidBackendProgram(error) => {
                 write!(f, "backend lowering produced invalid backend IR: {error}")
             }
-            Self::UnknownCoreItem { item, .. } => {
-                write!(f, "backend lowering cannot map typed-core item {item}")
+            Self::UnknownLambdaItem { item, .. } => {
+                write!(f, "backend lowering cannot map typed-lambda item {item}")
             }
             Self::UnresolvedItemReference { .. } => {
                 f.write_str("backend lowering rejects unresolved HIR item references")
@@ -136,14 +135,9 @@ impl fmt::Display for LoweringError {
                 f,
                 "backend subject reference changed layout unexpectedly: expected layout{expected}, found layout{found}"
             ),
-            Self::LocalLayoutMismatch {
-                binding,
-                previous,
-                current,
-                ..
-            } => write!(
+            Self::UnsupportedLocalReference { binding, .. } => write!(
                 f,
-                "backend lowering saw conflicting layouts for local binding {binding}: layout{previous} then layout{current}"
+                "backend lowering does not yet encode closure-local binding {binding} inside runtime kernels"
             ),
             Self::ArenaOverflow {
                 family,
@@ -158,22 +152,22 @@ impl fmt::Display for LoweringError {
 
 impl std::error::Error for LoweringError {}
 
-pub fn lower_module(core_module: &core::Module) -> Result<Program, LoweringErrors> {
-    if let Err(errors) = core::validate_module(core_module) {
+pub fn lower_module(lambda_module: &lambda::Module) -> Result<Program, LoweringErrors> {
+    if let Err(errors) = lambda::validate_module(lambda_module) {
         return Err(LoweringErrors::new(
             errors
                 .into_errors()
                 .into_iter()
-                .map(LoweringError::InvalidCoreModule)
+                .map(LoweringError::InvalidLambdaModule)
                 .collect(),
         ));
     }
 
-    ProgramLowerer::new(core_module).build()
+    ProgramLowerer::new(lambda_module).build()
 }
 
 struct ProgramLowerer<'a> {
-    core: &'a core::Module,
+    lambda: &'a lambda::Module,
     program: Program,
     item_map: HashMap<core::ItemId, ItemId>,
     layout_interner: HashMap<Layout, LayoutId>,
@@ -181,9 +175,9 @@ struct ProgramLowerer<'a> {
 }
 
 impl<'a> ProgramLowerer<'a> {
-    fn new(core: &'a core::Module) -> Self {
+    fn new(lambda: &'a lambda::Module) -> Self {
         Self {
-            core,
+            lambda,
             program: Program::new(),
             item_map: HashMap::new(),
             layout_interner: HashMap::new(),
@@ -209,7 +203,7 @@ impl<'a> ProgramLowerer<'a> {
     }
 
     fn seed_items(&mut self) -> Result<(), LoweringError> {
-        for (core_id, item) in self.core.items().iter() {
+        for (core_id, item) in self.lambda.items().iter() {
             let kind = match &item.kind {
                 core::ItemKind::Value => ItemKind::Value,
                 core::ItemKind::Function => ItemKind::Function,
@@ -233,7 +227,7 @@ impl<'a> ProgramLowerer<'a> {
     }
 
     fn seed_signal_dependencies(&mut self) -> Result<(), LoweringError> {
-        for (core_id, item) in self.core.items().iter() {
+        for (core_id, item) in self.lambda.items().iter() {
             let core::ItemKind::Signal(signal) = &item.kind else {
                 continue;
             };
@@ -257,7 +251,7 @@ impl<'a> ProgramLowerer<'a> {
     }
 
     fn lower_pipelines(&mut self) -> Result<(), LoweringError> {
-        for (core_pipe_id, pipe) in self.core.pipes().iter() {
+        for (core_pipe_id, pipe) in self.lambda.pipes().iter() {
             let owner = self.require_item(pipe.owner, pipe.origin.span)?;
             let pipeline_id = self
                 .program
@@ -275,13 +269,13 @@ impl<'a> ProgramLowerer<'a> {
 
             let mut stages = Vec::with_capacity(pipe.stages.len());
             for stage_id in &pipe.stages {
-                let stage = &self.core.stages()[*stage_id];
-                stages.push(self.lower_stage(pipe.owner, pipeline_id, stage)?);
+                let stage = &self.lambda.stages()[*stage_id];
+                stages.push(self.lower_stage(pipeline_id, stage)?);
             }
             let recurrence = pipe
                 .recurrence
                 .as_ref()
-                .map(|recurrence| self.lower_recurrence(pipe.owner, pipeline_id, recurrence))
+                .map(|recurrence| self.lower_recurrence(pipeline_id, recurrence))
                 .transpose()?;
 
             let backend_pipeline = self
@@ -303,39 +297,32 @@ impl<'a> ProgramLowerer<'a> {
 
     fn lower_stage(
         &mut self,
-        owner_core_item: core::ItemId,
         pipeline_id: PipelineId,
-        stage: &core::Stage,
+        stage: &lambda::Stage,
     ) -> Result<Stage, LoweringError> {
         let input_layout = self.intern_core_type(&stage.input_subject)?;
         let result_layout = self.intern_core_type(&stage.result_subject)?;
         let kind = match &stage.kind {
-            core::StageKind::Gate(core::GateStage::Ordinary {
+            lambda::StageKind::Gate(lambda::GateStage::Ordinary {
                 when_true,
                 when_false,
             }) => StageKind::Gate(GateStage::Ordinary {
                 when_true: self.lower_kernel(
-                    owner_core_item,
-                    stage.span,
                     KernelOriginKind::GateTrue {
                         pipeline: pipeline_id,
                         stage_index: stage.index,
                     },
-                    Some(input_layout),
                     *when_true,
                 )?,
                 when_false: self.lower_kernel(
-                    owner_core_item,
-                    stage.span,
                     KernelOriginKind::GateFalse {
                         pipeline: pipeline_id,
                         stage_index: stage.index,
                     },
-                    Some(input_layout),
                     *when_false,
                 )?,
             }),
-            core::StageKind::Gate(core::GateStage::SignalFilter {
+            lambda::StageKind::Gate(lambda::GateStage::SignalFilter {
                 payload_type,
                 predicate,
                 emits_negative_update,
@@ -344,19 +331,16 @@ impl<'a> ProgramLowerer<'a> {
                 StageKind::Gate(GateStage::SignalFilter {
                     payload_layout,
                     predicate: self.lower_kernel(
-                        owner_core_item,
-                        stage.span,
                         KernelOriginKind::SignalFilterPredicate {
                             pipeline: pipeline_id,
                             stage_index: stage.index,
                         },
-                        Some(payload_layout),
                         *predicate,
                     )?,
                     emits_negative_update: *emits_negative_update,
                 })
             }
-            core::StageKind::TruthyFalsy(pair) => StageKind::TruthyFalsy(TruthyFalsyStage {
+            lambda::StageKind::TruthyFalsy(pair) => StageKind::TruthyFalsy(TruthyFalsyStage {
                 truthy_stage_index: pair.truthy_stage_index,
                 truthy_stage_span: pair.truthy_stage_span,
                 falsy_stage_index: pair.falsy_stage_index,
@@ -382,7 +366,7 @@ impl<'a> ProgramLowerer<'a> {
                     result_layout: self.intern_core_type(&pair.falsy.result_type)?,
                 },
             }),
-            core::StageKind::Fanout(fanout) => StageKind::Fanout(FanoutStage {
+            lambda::StageKind::Fanout(fanout) => StageKind::Fanout(FanoutStage {
                 carrier: map_fanout_carrier(fanout.carrier),
                 element_layout: self.intern_core_type(&fanout.element_subject)?,
                 mapped_element_layout: self.intern_core_type(&fanout.mapped_element_type)?,
@@ -414,13 +398,10 @@ impl<'a> ProgramLowerer<'a> {
 
     fn lower_recurrence(
         &mut self,
-        owner_core_item: core::ItemId,
         pipeline_id: PipelineId,
-        recurrence: &core::PipeRecurrence,
+        recurrence: &lambda::PipeRecurrence,
     ) -> Result<Recurrence, LoweringError> {
         let start = self.lower_recurrence_stage(
-            owner_core_item,
-            pipeline_id,
             KernelOriginKind::RecurrenceStart {
                 pipeline: pipeline_id,
                 stage_index: recurrence.start.stage_index,
@@ -430,8 +411,6 @@ impl<'a> ProgramLowerer<'a> {
         let mut steps = Vec::with_capacity(recurrence.steps.len());
         for step in &recurrence.steps {
             steps.push(self.lower_recurrence_stage(
-                owner_core_item,
-                pipeline_id,
                 KernelOriginKind::RecurrenceStep {
                     pipeline: pipeline_id,
                     stage_index: step.stage_index,
@@ -446,13 +425,10 @@ impl<'a> ProgramLowerer<'a> {
                 Ok(NonSourceWakeup {
                     cause: map_non_source_wakeup_cause(wakeup.cause),
                     kernel: self.lower_kernel(
-                        owner_core_item,
-                        self.program.pipelines()[pipeline_id].origin.span,
                         KernelOriginKind::RecurrenceWakeupWitness {
                             pipeline: pipeline_id,
                         },
-                        None,
-                        wakeup.runtime_witness,
+                        wakeup.runtime,
                     )?,
                 })
             })
@@ -469,10 +445,8 @@ impl<'a> ProgramLowerer<'a> {
 
     fn lower_recurrence_stage(
         &mut self,
-        owner_core_item: core::ItemId,
-        _pipeline_id: PipelineId,
         kind: KernelOriginKind,
-        stage: &core::RecurrenceStage,
+        stage: &lambda::RecurrenceStage,
     ) -> Result<RecurrenceStage, LoweringError> {
         let input_layout = self.intern_core_type(&stage.input_subject)?;
         let result_layout = self.intern_core_type(&stage.result_subject)?;
@@ -481,17 +455,11 @@ impl<'a> ProgramLowerer<'a> {
             stage_span: stage.stage_span,
             input_layout,
             result_layout,
-            kernel: self.lower_kernel(
-                owner_core_item,
-                stage.stage_span,
-                kind,
-                Some(input_layout),
-                stage.runtime_expr,
-            )?,
+            kernel: self.lower_kernel(kind, stage.runtime)?,
         })
     }
     fn lower_sources(&mut self) -> Result<(), LoweringError> {
-        for (_, source) in self.core.sources().iter() {
+        for (_, source) in self.lambda.sources().iter() {
             let owner = self.require_item(source.owner, source.span)?;
             let reconfiguration_dependencies = source
                 .reconfiguration_dependencies
@@ -537,12 +505,12 @@ impl<'a> ProgramLowerer<'a> {
                 .get_mut(owner)
                 .expect("source owner should exist");
             let ItemKind::Signal(info) = &mut backend_item.kind else {
-                unreachable!("typed-core validation should prevent non-signal sources");
+                unreachable!("typed-lambda validation should prevent non-signal sources");
             };
             info.source = Some(source_id);
             if let Some(decode) = source.decode {
                 let decode_id =
-                    self.lower_decode_plan(owner, &self.core.decode_programs()[decode])?;
+                    self.lower_decode_plan(owner, &self.lambda.decode_programs()[decode])?;
                 self.program
                     .sources_mut()
                     .get_mut(source_id)
@@ -882,16 +850,19 @@ impl<'a> ProgramLowerer<'a> {
 
     fn lower_kernel(
         &mut self,
-        owner_core_item: core::ItemId,
-        span: SourceSpan,
         kind: KernelOriginKind,
-        input_hint: Option<LayoutId>,
-        root: core::ExprId,
+        closure_id: lambda::ClosureId,
     ) -> Result<KernelId, LoweringError> {
-        let owner = self.require_item(owner_core_item, span)?;
-        let contract = self.collect_kernel_contract(root, input_hint)?;
-        let lowered = self.lower_kernel_exprs(root, input_hint, &contract.env_map)?;
-        let result_layout = self.intern_core_type(&self.core.exprs()[root].ty)?;
+        let closure = self.lambda.closures()[closure_id].clone();
+        let owner = self.require_item(closure.owner, closure.span)?;
+        let input_hint = closure
+            .ambient_subject
+            .as_ref()
+            .map(|subject| self.intern_core_type(subject))
+            .transpose()?;
+        let contract = self.collect_kernel_contract(&closure, input_hint)?;
+        let lowered = self.lower_kernel_exprs(closure.root, input_hint, &contract.env_map)?;
+        let result_layout = self.intern_core_type(&self.lambda.exprs()[closure.root].ty)?;
         let input_subject = input_hint.filter(|_| contract.uses_input_subject);
         let convention =
             self.build_calling_convention(input_subject, &contract.environment, result_layout);
@@ -900,7 +871,7 @@ impl<'a> ProgramLowerer<'a> {
             .alloc(Kernel::new(
                 KernelOrigin {
                     item: owner,
-                    span,
+                    span: closure.span,
                     kind,
                 },
                 input_subject,
@@ -917,7 +888,7 @@ impl<'a> ProgramLowerer<'a> {
 
     fn collect_kernel_contract(
         &mut self,
-        root: core::ExprId,
+        closure: &lambda::Closure,
         input_hint: Option<LayoutId>,
     ) -> Result<KernelContract, LoweringError> {
         #[derive(Clone, Copy)]
@@ -926,14 +897,19 @@ impl<'a> ProgramLowerer<'a> {
             Inline,
         }
 
-        let mut work = vec![(root, SubjectKind::Input)];
-        let mut bindings = BTreeMap::<u32, LayoutId>::new();
+        let mut work = vec![(closure.root, SubjectKind::Input)];
+        let mut environment = Vec::with_capacity(closure.captures.len());
+        let mut env_map = HashMap::with_capacity(closure.captures.len());
+        for (index, capture_id) in closure.captures.iter().enumerate() {
+            let capture = &self.lambda.captures()[*capture_id];
+            environment.push(self.intern_core_type(&capture.ty)?);
+            env_map.insert(capture.binding.as_raw(), EnvSlotId::from_raw(index as u32));
+        }
         let mut globals = BTreeSet::new();
         let mut uses_input_subject = false;
 
         while let Some((expr_id, subject)) = work.pop() {
-            let expr = &self.core.exprs()[expr_id];
-            let expr_layout = self.intern_core_type(&expr.ty)?;
+            let expr = &self.lambda.exprs()[expr_id];
             match &expr.kind {
                 core::ExprKind::AmbientSubject => {
                     if matches!(subject, SubjectKind::Input) {
@@ -948,22 +924,7 @@ impl<'a> ProgramLowerer<'a> {
                 | core::ExprKind::Integer(_)
                 | core::ExprKind::SuffixedInteger(_) => {}
                 core::ExprKind::Reference(reference) => match reference {
-                    core::Reference::Local(binding) => {
-                        match bindings.get(&binding.as_raw()).copied() {
-                            Some(previous) if previous != expr_layout => {
-                                return Err(LocalLayoutMismatch {
-                                    span: expr.span,
-                                    binding: binding.as_raw(),
-                                    previous,
-                                    current: expr_layout,
-                                });
-                            }
-                            Some(_) => {}
-                            None => {
-                                bindings.insert(binding.as_raw(), expr_layout);
-                            }
-                        }
-                    }
+                    core::Reference::Local(_) => {}
                     core::Reference::Item(item) => {
                         globals.insert(self.require_item(*item, expr.span)?);
                     }
@@ -1043,12 +1004,8 @@ impl<'a> ProgramLowerer<'a> {
 
         Ok(KernelContract {
             uses_input_subject,
-            environment: bindings.values().copied().collect(),
-            env_map: bindings
-                .keys()
-                .enumerate()
-                .map(|(index, binding)| (*binding, EnvSlotId::from_raw(index as u32)))
-                .collect(),
+            environment,
+            env_map,
             global_items: globals.into_iter().collect(),
         })
     }
@@ -1168,7 +1125,7 @@ impl<'a> ProgramLowerer<'a> {
         while let Some(task) = tasks.pop() {
             match task {
                 Task::Visit(expr_id, subject) => {
-                    let expr = &self.core.exprs()[expr_id];
+                    let expr = &self.lambda.exprs()[expr_id];
                     let layout = self.intern_core_type(&expr.ty)?;
                     match &expr.kind {
                         core::ExprKind::AmbientSubject => {
@@ -1209,11 +1166,15 @@ impl<'a> ProgramLowerer<'a> {
                         }
                         core::ExprKind::Reference(reference) => {
                             let kind = match reference {
-                                core::Reference::Local(binding) => KernelExprKind::Environment(
-                                    *env_map.get(&binding.as_raw()).expect(
-                                        "binding should have been collected before lowering",
-                                    ),
-                                ),
+                                core::Reference::Local(binding) => {
+                                    let Some(slot) = env_map.get(&binding.as_raw()).copied() else {
+                                        return Err(UnsupportedLocalReference {
+                                            span: expr.span,
+                                            binding: binding.as_raw(),
+                                        });
+                                    };
+                                    KernelExprKind::Environment(slot)
+                                }
                                 core::Reference::Item(item) => {
                                     KernelExprKind::Item(self.require_item(*item, expr.span)?)
                                 }
@@ -1426,7 +1387,9 @@ impl<'a> ProgramLowerer<'a> {
                                     }
                                     core::PipeStageKind::Case { .. }
                                     | core::PipeStageKind::TruthyFalsy(_) => {
-                                        return Err(UnsupportedInlinePipeStage { span: stage.span });
+                                        return Err(UnsupportedInlinePipeStage {
+                                            span: stage.span,
+                                        });
                                     }
                                 };
                                 stage_specs.push(InlinePipeStageSpec {
@@ -1735,7 +1698,7 @@ impl<'a> ProgramLowerer<'a> {
         self.item_map
             .get(&item)
             .copied()
-            .ok_or(UnknownCoreItem { item, span })
+            .ok_or(UnknownLambdaItem { item, span })
     }
 
     fn intern_layout(&mut self, layout: Layout) -> Result<LayoutId, LoweringError> {

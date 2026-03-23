@@ -115,6 +115,8 @@ pub enum TruthyFalsyElaborationBlocker {
 }
 
 pub fn elaborate_truthy_falsy(module: &Module) -> TruthyFalsyElaborationReport {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    let module = &module;
     let items = module
         .items()
         .iter()

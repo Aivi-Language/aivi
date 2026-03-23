@@ -870,6 +870,7 @@ pub struct MapExprEntry {
 pub enum RecordFieldSurface {
     Explicit,
     Shorthand,
+    Defaulted,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

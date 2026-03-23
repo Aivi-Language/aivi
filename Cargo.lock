@@ -18,6 +18,7 @@ dependencies = [
  "aivi-base",
  "aivi-core",
  "aivi-hir",
+ "aivi-lambda",
  "aivi-syntax",
  "aivi-typing",
 ]
@@ -65,6 +66,17 @@ dependencies = [
  "aivi-syntax",
  "aivi-typing",
  "regex-syntax",
+]
+
+[[package]]
+name = "aivi-lambda"
+version = "0.1.0"
+dependencies = [
+ "aivi-base",
+ "aivi-core",
+ "aivi-hir",
+ "aivi-syntax",
+ "aivi-typing",
 ]
 
 [[package]]
