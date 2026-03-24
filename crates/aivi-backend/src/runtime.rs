@@ -624,6 +624,25 @@ impl<'a> KernelEvaluator<'a> {
         environment: &[RuntimeValue],
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let (result, expected) =
+            self.evaluate_kernel_raw(kernel_id, input_subject, environment, globals)?;
+        if !value_matches_layout(self.program, &result, expected) {
+            return Err(EvaluationError::KernelResultLayoutMismatch {
+                kernel: kernel_id,
+                expected,
+                found: result,
+            });
+        }
+        Ok(result)
+    }
+
+    fn evaluate_kernel_raw(
+        &mut self,
+        kernel_id: KernelId,
+        input_subject: Option<&RuntimeValue>,
+        environment: &[RuntimeValue],
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<(RuntimeValue, LayoutId), EvaluationError> {
         let kernel = self
             .program
             .kernels()
@@ -678,14 +697,7 @@ impl<'a> KernelEvaluator<'a> {
             &inline_subjects,
             globals,
         )?;
-        if !value_matches_layout(self.program, &result, kernel.result_layout) {
-            return Err(EvaluationError::KernelResultLayoutMismatch {
-                kernel: kernel_id,
-                expected: kernel.result_layout,
-                found: result,
-            });
-        }
-        Ok(result)
+        Ok((result, kernel.result_layout))
     }
 
     pub fn evaluate_item(
@@ -718,9 +730,24 @@ impl<'a> KernelEvaluator<'a> {
         if !self.item_stack.insert(item) {
             return Err(EvaluationError::RecursiveItemEvaluation { item });
         }
-        let result = self.evaluate_kernel(kernel, None, &[], globals);
+        let result = self.evaluate_kernel_raw(kernel, None, &[], globals);
         self.item_stack.remove(&item);
-        let result = result?;
+        let (raw_result, expected) = result?;
+        let result = match (&item_decl.kind, raw_result) {
+            (crate::ItemKind::Signal(_), RuntimeValue::Signal(value))
+                if value_matches_layout(self.program, value.as_ref(), expected) =>
+            {
+                *value
+            }
+            (_, value) => value,
+        };
+        if !value_matches_layout(self.program, &result, expected) {
+            return Err(EvaluationError::KernelResultLayoutMismatch {
+                kernel,
+                expected,
+                found: result,
+            });
+        };
         self.item_cache.insert(item, result.clone());
         Ok(result)
     }
@@ -1096,16 +1123,17 @@ impl<'a> KernelEvaluator<'a> {
             globals,
         )?;
         for stage in &pipe.stages {
-            if matches!(current, RuntimeValue::Signal(_)) {
-                return Err(EvaluationError::UnsupportedInlinePipeSignalSubject {
+            let stage_found = current.clone();
+            current = coerce_inline_pipe_value(self.program, current, stage.input_layout).ok_or(
+                EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
-                    expr: expr_id,
-                    found: current,
-                });
-            }
+                    expected: stage.input_layout,
+                    found: stage_found,
+                },
+            )?;
             let mut stage_subjects = inline_subjects.to_vec();
             stage_subjects[stage.subject.index()] = Some(current.clone());
-            current = match &stage.kind {
+            let result = match &stage.kind {
                 InlinePipeStageKind::Transform { expr } => self.evaluate_expr(
                     kernel_id,
                     *expr,
@@ -1191,13 +1219,14 @@ impl<'a> KernelEvaluator<'a> {
                     )?
                 }
             };
-            if !value_matches_layout(self.program, &current, stage.result_layout) {
-                return Err(EvaluationError::KernelResultLayoutMismatch {
+            let result_found = result.clone();
+            current = coerce_inline_pipe_value(self.program, result, stage.result_layout).ok_or(
+                EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
                     expected: stage.result_layout,
-                    found: current,
-                });
-            }
+                    found: result_found,
+                },
+            )?;
         }
         Ok(current)
     }
@@ -1376,7 +1405,18 @@ impl<'a> KernelEvaluator<'a> {
                 parameters,
                 mut bound_arguments,
             } => {
-                bound_arguments.extend(arguments.into_iter().map(strip_signal));
+                let mut remaining_arguments = Vec::new();
+                for argument in arguments {
+                    if let Some(expected) = parameters.get(bound_arguments.len()).copied() {
+                        let argument =
+                            coerce_runtime_value(self.program, argument, expected).unwrap_or_else(
+                                |value| value,
+                            );
+                        bound_arguments.push(argument);
+                    } else {
+                        remaining_arguments.push(argument);
+                    }
+                }
                 if bound_arguments.len() < parameters.len() {
                     return Ok(RuntimeValue::Callable(RuntimeCallable::ItemBody {
                         item,
@@ -1385,7 +1425,8 @@ impl<'a> KernelEvaluator<'a> {
                         bound_arguments,
                     }));
                 }
-                let remaining = bound_arguments.split_off(parameters.len());
+                let mut remaining = bound_arguments.split_off(parameters.len());
+                remaining.extend(remaining_arguments);
                 let result = self.evaluate_kernel(kernel, None, &bound_arguments, globals)?;
                 if remaining.is_empty() {
                     Ok(result)
@@ -2343,6 +2384,41 @@ fn truthy_falsy_payload(
         }
         _ => None,
     }
+}
+
+fn coerce_runtime_value(
+    program: &Program,
+    value: RuntimeValue,
+    layout: LayoutId,
+) -> Result<RuntimeValue, RuntimeValue> {
+    if value_matches_layout(program, &value, layout) {
+        return Ok(value);
+    }
+    if let RuntimeValue::Signal(inner) = &value {
+        let payload = inner.as_ref().clone();
+        if value_matches_layout(program, &payload, layout) {
+            return Ok(payload);
+        }
+    }
+    let Some(layout) = program.layouts().get(layout) else {
+        return Err(value);
+    };
+    let LayoutKind::Signal { element } = &layout.kind else {
+        return Err(value);
+    };
+    if value_matches_layout(program, &value, *element) {
+        Ok(RuntimeValue::Signal(Box::new(value)))
+    } else {
+        Err(value)
+    }
+}
+
+fn coerce_inline_pipe_value(
+    program: &Program,
+    value: RuntimeValue,
+    layout: LayoutId,
+) -> Option<RuntimeValue> {
+    coerce_runtime_value(program, value, layout).ok()
 }
 
 fn strip_signal(value: RuntimeValue) -> RuntimeValue {

@@ -1,0 +1,6 @@
+val pi:Float = 3.14
+val amount:Decimal = 19.25d
+val whole:Decimal = 19d
+val count:BigInt = 123n
+
+export pi

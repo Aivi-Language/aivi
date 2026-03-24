@@ -745,6 +745,9 @@ impl Formatter {
         match &expr.kind {
             ExprKind::Name(name) => name.text.clone(),
             ExprKind::Integer(integer) => integer.raw.clone(),
+            ExprKind::Float(float) => float.raw.clone(),
+            ExprKind::Decimal(decimal) => decimal.raw.clone(),
+            ExprKind::BigInt(bigint) => bigint.raw.clone(),
             ExprKind::SuffixedInteger(literal) => self.format_suffixed_integer_inline(literal),
             ExprKind::Text(text) => self.format_text_literal(text),
             ExprKind::Regex(regex) => regex.raw.clone(),
@@ -1755,6 +1758,22 @@ mod tests {
                 "\n",
                 "val delay:Duration = 250ms\n",
                 "val applied = wrap 250ms\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_keeps_builtin_noninteger_literals() {
+        let formatted = format_text(
+            "val pi:Float=3.14\nval amount:Decimal=19.25d\nval whole:Decimal=19d\nval count:BigInt=123n\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "val pi:Float = 3.14\n",
+                "val amount:Decimal = 19.25d\n",
+                "val whole:Decimal = 19d\n",
+                "val count:BigInt = 123n\n",
             )
         );
     }

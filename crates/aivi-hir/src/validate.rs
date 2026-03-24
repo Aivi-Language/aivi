@@ -307,7 +307,10 @@ impl Validator<'_> {
             self.check_span("expression", expr.span);
             match &expr.kind {
                 ExprKind::Name(reference) => self.check_term_reference(reference),
-                ExprKind::Integer(_) => {}
+                ExprKind::Integer(_)
+                | ExprKind::Float(_)
+                | ExprKind::Decimal(_)
+                | ExprKind::BigInt(_) => {}
                 ExprKind::Regex(regex) => self.check_regex_literal(expr.span, regex),
                 ExprKind::Text(text) => self.check_text_literal(expr.span, text),
                 ExprKind::SuffixedInteger(literal) => self.check_suffixed_integer(literal),
@@ -1649,14 +1652,18 @@ impl Validator<'_> {
         value_stack: &mut Vec<ItemId>,
     ) -> SourceOptionTypeCheck {
         match &self.module.exprs()[expr_id].kind {
-            ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => self
-                .check_source_option_expr_by_inference_or_unknown(
-                    expr_id,
-                    expected,
-                    typing,
-                    bindings,
-                    value_stack,
-                ),
+            ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::Text(_)
+            | ExprKind::Regex(_) => self.check_source_option_expr_by_inference_or_unknown(
+                expr_id,
+                expected,
+                typing,
+                bindings,
+                value_stack,
+            ),
             ExprKind::SuffixedInteger(literal) => self
                 .check_source_option_suffixed_integer(expr_id, literal, expected, typing, bindings),
             ExprKind::Name(reference) => {
@@ -2522,7 +2529,12 @@ impl Validator<'_> {
         value_stack: &mut Vec<ItemId>,
     ) -> Option<SourceOptionActualType> {
         match &self.module.exprs()[expr_id].kind {
-            ExprKind::Integer(_) | ExprKind::Text(_) | ExprKind::Regex(_) => typing
+            ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::Text(_)
+            | ExprKind::Regex(_) => typing
                 .infer_expr(expr_id, &GateExprEnv::default(), None)
                 .actual(),
             ExprKind::SuffixedInteger(literal) => {
@@ -3991,6 +4003,9 @@ impl Validator<'_> {
                     match expr.kind {
                         ExprKind::Name(_)
                         | ExprKind::Integer(_)
+                        | ExprKind::Float(_)
+                        | ExprKind::Decimal(_)
+                        | ExprKind::BigInt(_)
                         | ExprKind::SuffixedInteger(_)
                         | ExprKind::Regex(_) => {}
                         ExprKind::Text(text) => {
@@ -9900,6 +9915,18 @@ impl<'a> GateTypeContext<'a> {
                 ty: Some(GateType::Primitive(BuiltinType::Int)),
                 ..GateExprInfo::default()
             },
+            ExprKind::Float(_) => GateExprInfo {
+                ty: Some(GateType::Primitive(BuiltinType::Float)),
+                ..GateExprInfo::default()
+            },
+            ExprKind::Decimal(_) => GateExprInfo {
+                ty: Some(GateType::Primitive(BuiltinType::Decimal)),
+                ..GateExprInfo::default()
+            },
+            ExprKind::BigInt(_) => GateExprInfo {
+                ty: Some(GateType::Primitive(BuiltinType::BigInt)),
+                ..GateExprInfo::default()
+            },
             ExprKind::SuffixedInteger(literal) => GateExprInfo {
                 ty: match literal.resolution.as_ref() {
                     ResolutionState::Resolved(resolution) => {
@@ -10999,11 +11026,9 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         subject: &GateType,
     ) -> GateExprInfo {
-        if subject.is_signal() {
-            return GateExprInfo::default();
-        }
         let mut info = GateExprInfo::default();
         let mut branch_result = None::<SourceOptionActualType>;
+        let branch_subject = subject.gate_payload().clone();
         for stage in case_stages {
             let PipeStageKind::Case { pattern, body } = &stage.kind else {
                 continue;
@@ -11011,8 +11036,8 @@ impl<'a> GateTypeContext<'a> {
             let mut branch_env = env.clone();
             branch_env
                 .locals
-                .extend(self.case_pattern_bindings(*pattern, subject).locals);
-            let branch = self.infer_pipe_body(*body, &branch_env, subject);
+                .extend(self.case_pattern_bindings(*pattern, &branch_subject).locals);
+            let branch = self.infer_pipe_body(*body, &branch_env, &branch_subject);
             let branch_ty = branch.actual();
             info.merge(branch);
             let Some(branch_ty) = branch_ty else {
@@ -11037,7 +11062,10 @@ impl<'a> GateTypeContext<'a> {
         }
         if info.issues.is_empty() {
             if let Some(branch_result) = branch_result {
-                info.set_actual(branch_result);
+                info.set_actual(match subject.gate_carrier() {
+                    GateCarrier::Ordinary => branch_result,
+                    GateCarrier::Signal => SourceOptionActualType::Signal(Box::new(branch_result)),
+                });
             }
         }
         self.finalize_expr_info(info)
@@ -12552,6 +12580,9 @@ pub(crate) fn walk_expr_tree(
                 match expr.kind {
                     ExprKind::Name(_)
                     | ExprKind::Integer(_)
+                    | ExprKind::Float(_)
+                    | ExprKind::Decimal(_)
+                    | ExprKind::BigInt(_)
                     | ExprKind::SuffixedInteger(_)
                     | ExprKind::Regex(_) => {}
                     ExprKind::Text(text) => {

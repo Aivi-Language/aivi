@@ -1,0 +1,63 @@
+type HttpError =
+  | Timeout
+  | DecodeFailure Text
+
+type User = {
+    id: Int,
+    name: Text
+}
+
+type FsWatchEvent =
+  | Created
+  | Changed
+  | Deleted
+
+type DecodeMode =
+  | Strict
+  | Permissive
+
+type StreamMode =
+  | Ignore
+  | Lines
+  | Bytes
+
+type ProcessEvent =
+  | Spawned
+
+type Map K V =
+  | EmptyMap
+
+domain Duration over Int
+    literal s : Int -> Duration
+
+domain Retry over Int
+    literal x : Int -> Retry
+
+val authHeaders : Map Text Text = EmptyMap
+
+sig apiHost = "https://api.example.com"
+
+@source http.get "{apiHost}/users" with {
+    headers: authHeaders,
+    decode: Strict,
+    retry: 3x,
+    timeout: 5s
+}
+sig users : Signal (Result HttpError (List User))
+
+@source timer.every 120 with {
+    immediate: True,
+    coalesce: True
+}
+sig tick : Signal Unit
+
+@source process.spawn "rg" ["TODO", "."] with {
+    stdout: Lines,
+    stderr: Ignore
+}
+sig grepEvents : Signal ProcessEvent
+
+@source fs.watch "/tmp/demo.txt" with {
+    events: [Created, Changed, Deleted]
+}
+sig fileEvents : Signal FsWatchEvent

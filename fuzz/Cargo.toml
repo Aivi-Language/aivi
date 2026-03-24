@@ -1,0 +1,41 @@
+[package]
+name = "aivi-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.85"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+aivi-backend = { path = "../crates/aivi-backend" }
+aivi-base = { path = "../crates/aivi-base" }
+aivi-hir = { path = "../crates/aivi-hir" }
+aivi-runtime = { path = "../crates/aivi-runtime" }
+aivi-syntax = { path = "../crates/aivi-syntax" }
+aivi-typing = { path = "../crates/aivi-typing" }
+arbitrary = "1.4.2"
+libfuzzer-sys = "0.4.12"
+
+[[bin]]
+name = "parser_lossless"
+path = "fuzz_targets/parser_lossless.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decoder_paths"
+path = "fuzz_targets/decoder_paths.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "refresh_corpus"
+path = "src/bin/refresh_corpus.rs"
+
+[workspace]
+members = ["."]
+resolver = "3"

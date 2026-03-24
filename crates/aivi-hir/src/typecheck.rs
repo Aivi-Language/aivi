@@ -911,6 +911,9 @@ impl<'a> TypeChecker<'a> {
                 self.check_projection_expr(expr_id, &base, &path, env, expected, value_stack)
             }
             ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
             | ExprKind::SuffixedInteger(_)
             | ExprKind::Text(_)
             | ExprKind::Regex(_)
@@ -3409,6 +3412,44 @@ val resultLabel:Result Text Text =
         assert!(
             mismatch_count >= 4,
             "expected collection literal mismatches to surface type mismatches, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_builtin_noninteger_literals_with_matching_annotations() {
+        let report = typecheck_text(
+            "builtin-noninteger-literals-valid.aivi",
+            "val pi:Float = 3.14\n\
+             val amount:Decimal = 19.25d\n\
+             val whole:Decimal = 19d\n\
+             val count:BigInt = 123n\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected builtin noninteger literals to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_noninteger_literal_type_mismatches() {
+        let report = typecheck_text(
+            "builtin-noninteger-literals-invalid.aivi",
+            "val pi:Float = 19.25d\n\
+             val amount:Decimal = 3.14\n\
+             val count:BigInt = 42\n",
+        );
+        let mismatch_count = report
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "type-mismatch"))
+            })
+            .count();
+        assert!(
+            mismatch_count >= 3,
+            "expected noninteger literal mismatches to surface type mismatches, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

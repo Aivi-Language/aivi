@@ -1,0 +1,10 @@
+type Screen =
+  | Loading
+  | Ready Text
+
+val current:Screen = Loading
+
+val broken =
+    current
+     ||> Loading => 0
+     ||> Ready title => title

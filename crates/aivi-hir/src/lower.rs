@@ -5,24 +5,24 @@ use aivi_syntax as syn;
 use aivi_typing::{Kind, SourceOptionWakeupCause};
 
 use crate::{
-    ApplicativeCluster, ApplicativeSpineHead, AtLeastTwo, BinaryOperator, Binding, BindingId,
-    BindingKind, BindingPattern, BuiltinTerm, BuiltinType, CaseControl, ClassItem, ClassMember,
-    ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeId, Decorator, DecoratorCall,
-    DecoratorId, DecoratorPayload, DomainItem, DomainMember, DomainMemberKind,
-    DomainMemberResolution, EachControl, EmptyControl, ExportItem, Expr, ExprId, ExprKind,
-    FragmentControl, FunctionItem, FunctionParameter, ImportBinding, ImportBindingMetadata,
-    ImportBindingResolution, ImportBundleKind, ImportId, ImportModuleResolution, ImportValueType,
-    InstanceItem, InstanceMember, IntegerLiteral, Item, ItemHeader, ItemId, ItemKind,
-    LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue,
-    MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl, Module, Name, NamePath,
-    Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase,
-    RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
-    RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, ShowControl, SignalItem,
-    SourceDecorator, SourceLifecycleDependencies, SourceMetadata, SourceProviderContractItem,
-    SourceProviderRef, SuffixedIntegerLiteral, TermReference, TermResolution, TextFragment,
-    TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId, TypeItem, TypeItemBody,
-    TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference, TypeResolution, TypeVariant,
-    UnaryOperator, UseItem, ValueItem, WithControl,
+    ApplicativeCluster, ApplicativeSpineHead, AtLeastTwo, BigIntLiteral, BinaryOperator, Binding,
+    BindingId, BindingKind, BindingPattern, BuiltinTerm, BuiltinType, CaseControl, ClassItem,
+    ClassMember, ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeId, DecimalLiteral,
+    Decorator, DecoratorCall, DecoratorId, DecoratorPayload, DomainItem, DomainMember,
+    DomainMemberKind, DomainMemberResolution, EachControl, EmptyControl, ExportItem, Expr, ExprId,
+    ExprKind, FloatLiteral, FragmentControl, FunctionItem, FunctionParameter, ImportBinding,
+    ImportBindingMetadata, ImportBindingResolution, ImportBundleKind, ImportId,
+    ImportModuleResolution, ImportValueType, InstanceItem, InstanceMember, IntegerLiteral, Item,
+    ItemHeader, ItemId, ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
+    MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl,
+    Module, Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind,
+    ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
+    RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState,
+    ShowControl, SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
+    SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
+    TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId,
+    TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference,
+    TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {
@@ -1373,6 +1373,24 @@ impl<'a> Lowerer<'a> {
                 span: expr.span,
                 kind: ExprKind::Integer(IntegerLiteral {
                     raw: integer.raw.clone().into_boxed_str(),
+                }),
+            }),
+            syn::ExprKind::Float(float) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::Float(FloatLiteral {
+                    raw: float.raw.clone().into_boxed_str(),
+                }),
+            }),
+            syn::ExprKind::Decimal(decimal) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::Decimal(DecimalLiteral {
+                    raw: decimal.raw.clone().into_boxed_str(),
+                }),
+            }),
+            syn::ExprKind::BigInt(bigint) => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::BigInt(BigIntLiteral {
+                    raw: bigint.raw.clone().into_boxed_str(),
                 }),
             }),
             syn::ExprKind::SuffixedInteger(literal) => self.alloc_expr(Expr {
@@ -3239,6 +3257,9 @@ impl<'a> Lowerer<'a> {
                 } => match &self.module.exprs()[expr].kind {
                     ExprKind::Name(_)
                     | ExprKind::Integer(_)
+                    | ExprKind::Float(_)
+                    | ExprKind::Decimal(_)
+                    | ExprKind::BigInt(_)
                     | ExprKind::SuffixedInteger(_)
                     | ExprKind::Regex(_) => {}
                     ExprKind::Text(text) => {
@@ -3832,6 +3853,9 @@ impl<'a> Lowerer<'a> {
                             }
                         }
                         ExprKind::Integer(_)
+                        | ExprKind::Float(_)
+                        | ExprKind::Decimal(_)
+                        | ExprKind::BigInt(_)
                         | ExprKind::SuffixedInteger(_)
                         | ExprKind::Regex(_) => {}
                         ExprKind::Text(text) => {
@@ -4088,7 +4112,11 @@ impl<'a> Lowerer<'a> {
                     kind: ExprKind::Name(reference),
                 }
             }
-            ExprKind::Integer(_) | ExprKind::Regex(_) => expr,
+            ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::Regex(_) => expr,
             ExprKind::Text(text) => {
                 self.resolve_text_literal(&text, namespaces, env);
                 Expr {
@@ -5292,6 +5320,9 @@ fn surface_exprs_equal(left: &syn::Expr, right: &syn::Expr) -> bool {
         (_, syn::ExprKind::Group(right)) => surface_exprs_equal(left, right),
         (syn::ExprKind::Name(left), syn::ExprKind::Name(right)) => left.text == right.text,
         (syn::ExprKind::Integer(left), syn::ExprKind::Integer(right)) => left.raw == right.raw,
+        (syn::ExprKind::Float(left), syn::ExprKind::Float(right)) => left.raw == right.raw,
+        (syn::ExprKind::Decimal(left), syn::ExprKind::Decimal(right)) => left.raw == right.raw,
+        (syn::ExprKind::BigInt(left), syn::ExprKind::BigInt(right)) => left.raw == right.raw,
         (syn::ExprKind::SuffixedInteger(left), syn::ExprKind::SuffixedInteger(right)) => {
             left.literal.raw == right.literal.raw && left.suffix.text == right.suffix.text
         }
@@ -7670,6 +7701,54 @@ sig updates : Signal Int
             }
             other => panic!("expected suffixed integer expression, found {other:?}"),
         }
+    }
+
+    #[test]
+    fn lowers_builtin_noninteger_literals_and_preserves_raw_spelling() {
+        let lowered = lower_text(
+            "builtin-noninteger-literals.aivi",
+            "val pi:Float = 3.14\n\
+             val amount:Decimal = 19.25d\n\
+             val whole:Decimal = 19d\n\
+             val count:BigInt = 123n\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "builtin noninteger literal source should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let Item::Value(pi) = find_named_item(lowered.module(), "pi") else {
+            panic!("expected `pi` to be a value item");
+        };
+        assert!(matches!(
+            &lowered.module().exprs()[pi.body].kind,
+            ExprKind::Float(literal) if &*literal.raw == "3.14"
+        ));
+
+        let Item::Value(amount) = find_named_item(lowered.module(), "amount") else {
+            panic!("expected `amount` to be a value item");
+        };
+        assert!(matches!(
+            &lowered.module().exprs()[amount.body].kind,
+            ExprKind::Decimal(literal) if &*literal.raw == "19.25d"
+        ));
+
+        let Item::Value(whole) = find_named_item(lowered.module(), "whole") else {
+            panic!("expected `whole` to be a value item");
+        };
+        assert!(matches!(
+            &lowered.module().exprs()[whole.body].kind,
+            ExprKind::Decimal(literal) if &*literal.raw == "19d"
+        ));
+
+        let Item::Value(count) = find_named_item(lowered.module(), "count") else {
+            panic!("expected `count` to be a value item");
+        };
+        assert!(matches!(
+            &lowered.module().exprs()[count.body].kind,
+            ExprKind::BigInt(literal) if &*literal.raw == "123n"
+        ));
     }
 
     #[test]

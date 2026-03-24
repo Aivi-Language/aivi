@@ -845,8 +845,9 @@ fn validate_pipeline(
                 }
             }
             StageKind::TruthyFalsy(pair) => {
+                let expected = truthy_falsy_result_layout(program, stage.result_layout);
                 if pair.truthy.result_layout != pair.falsy.result_layout
-                    || pair.truthy.result_layout != stage.result_layout
+                    || pair.truthy.result_layout != expected
                 {
                     errors.push(ValidationError::TruthyFalsyResultMismatch {
                         pipeline: pipeline_id,
@@ -1314,6 +1315,13 @@ fn is_bool_layout(program: &Program, layout_id: LayoutId) -> bool {
         .layouts()
         .get(layout_id)
         .is_some_and(|layout| matches!(layout.kind, LayoutKind::Primitive(PrimitiveType::Bool)))
+}
+
+fn truthy_falsy_result_layout(program: &Program, layout_id: LayoutId) -> LayoutId {
+    match program.layouts().get(layout_id).map(|layout| &layout.kind) {
+        Some(LayoutKind::Signal { element }) => *element,
+        _ => layout_id,
+    }
 }
 
 fn push_expr(

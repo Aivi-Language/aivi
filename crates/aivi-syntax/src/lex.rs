@@ -17,6 +17,9 @@ pub enum TokenKind {
     DocComment,
     Identifier,
     Integer,
+    Float,
+    Decimal,
+    BigInt,
     StringLiteral,
     RegexLiteral,
     At,
@@ -325,11 +328,41 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
             while cursor < range.end && bytes[cursor].is_ascii_digit() {
                 cursor += 1;
             }
-            tokens.push(Token::new(
-                TokenKind::Integer,
-                source.span(start..cursor),
-                line_start,
-            ));
+            let kind = if cursor < range.end && bytes[cursor] == b'.' {
+                let fractional_start = cursor + 1;
+                if fractional_start < range.end && bytes[fractional_start].is_ascii_digit() {
+                    cursor = fractional_start + 1;
+                    while cursor < range.end && bytes[cursor].is_ascii_digit() {
+                        cursor += 1;
+                    }
+                    if cursor < range.end
+                        && bytes[cursor] == b'd'
+                        && !starts_identifier_continue(text, cursor + 1, range.end)
+                    {
+                        cursor += 1;
+                        TokenKind::Decimal
+                    } else {
+                        TokenKind::Float
+                    }
+                } else {
+                    TokenKind::Integer
+                }
+            } else if cursor < range.end
+                && bytes[cursor] == b'd'
+                && !starts_identifier_continue(text, cursor + 1, range.end)
+            {
+                cursor += 1;
+                TokenKind::Decimal
+            } else if cursor < range.end
+                && bytes[cursor] == b'n'
+                && !starts_identifier_continue(text, cursor + 1, range.end)
+            {
+                cursor += 1;
+                TokenKind::BigInt
+            } else {
+                TokenKind::Integer
+            };
+            tokens.push(Token::new(kind, source.span(start..cursor), line_start));
             at_line_start = false;
             continue;
         }
@@ -480,6 +513,17 @@ fn is_identifier_start(character: char) -> bool {
 
 fn is_identifier_continue(character: char) -> bool {
     is_identifier_start(character) || character.is_ascii_digit()
+}
+
+fn starts_identifier_continue(text: &str, cursor: usize, end: usize) -> bool {
+    if cursor >= end {
+        return false;
+    }
+    text[cursor..]
+        .chars()
+        .next()
+        .map(is_identifier_continue)
+        .unwrap_or(false)
 }
 
 fn scan_quoted_body(text: &str, bytes: &[u8], start: usize, end: usize) -> (usize, bool) {

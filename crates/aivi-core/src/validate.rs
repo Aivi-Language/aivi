@@ -673,7 +673,7 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
                 push_expr(module, pipe.head, &mut work, &mut errors);
                 let mut previous = module.exprs()[pipe.head].ty.clone();
                 for (stage_index, stage) in pipe.stages.iter().enumerate() {
-                    if stage.input_subject != previous {
+                    if !inline_pipe_stage_input_matches(&previous, &stage.input_subject) {
                         errors.push(ValidationError::InlinePipeStageTypeDiscontinuity {
                             expr: expr_id,
                             stage_index,
@@ -726,15 +726,16 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
                                     stage_index,
                                 });
                             }
+                            let expected = case_arm_result_type(&stage.result_subject);
                             for (arm_index, arm) in arms.iter().enumerate() {
                                 push_expr(module, arm.body, &mut work, &mut errors);
                                 validate_pattern(&arm.pattern, module, &mut work, &mut errors);
-                                if module.exprs()[arm.body].ty != stage.result_subject {
+                                if module.exprs()[arm.body].ty != expected {
                                     errors.push(ValidationError::InlinePipeCaseArmResultMismatch {
                                         expr: expr_id,
                                         stage_index,
                                         arm_index,
-                                        expected: stage.result_subject.clone(),
+                                        expected: expected.clone(),
                                         found: module.exprs()[arm.body].ty.clone(),
                                     });
                                 }
@@ -805,8 +806,9 @@ fn validate_stage(
             }
         }
         StageKind::TruthyFalsy(pair) => {
+            let expected = truthy_falsy_result_type(&stage.input_subject, &stage.result_subject);
             if pair.truthy.result_type != pair.falsy.result_type
-                || pair.truthy.result_type != stage.result_subject
+                || pair.truthy.result_type != expected
             {
                 errors.push(ValidationError::TruthyFalsyResultMismatch { stage: stage_id });
             }
@@ -987,6 +989,14 @@ fn inline_pipe_body_result_type(
     }
 }
 
+fn inline_pipe_stage_input_matches(previous: &crate::ty::Type, current: &crate::ty::Type) -> bool {
+    previous == current
+        || matches!(
+            previous,
+            crate::ty::Type::Signal(payload) if payload.as_ref() == current
+        )
+}
+
 fn gate_result_type(subject: &crate::ty::Type) -> crate::ty::Type {
     match subject {
         crate::ty::Type::Signal(payload) => crate::ty::Type::Signal(payload.clone()),
@@ -997,6 +1007,14 @@ fn gate_result_type(subject: &crate::ty::Type) -> crate::ty::Type {
 fn truthy_falsy_result_type(input: &crate::ty::Type, result: &crate::ty::Type) -> crate::ty::Type {
     match (input, result) {
         (crate::ty::Type::Signal(_), crate::ty::Type::Signal(payload)) => payload.as_ref().clone(),
+        (_, crate::ty::Type::Signal(payload)) => payload.as_ref().clone(),
+        _ => result.clone(),
+    }
+}
+
+fn case_arm_result_type(result: &crate::ty::Type) -> crate::ty::Type {
+    match result {
+        crate::ty::Type::Signal(payload) => payload.as_ref().clone(),
         _ => result.clone(),
     }
 }

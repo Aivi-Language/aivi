@@ -1,0 +1,11 @@
+domain Duration over Int
+
+domain Path over Text
+    literal root : Text -> Path
+    (/) : Path -> Text -> Path
+    value : Path -> Text
+
+domain NonEmpty A over List A
+    fromList : List A -> Option (NonEmpty A)
+    head : NonEmpty A -> A
+    tail : NonEmpty A -> List A

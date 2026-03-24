@@ -384,18 +384,24 @@ listed above.
 Accepted surface forms:
 
 - unsuffixed integer literals are ASCII decimal digits only: `0`, `42`, `9000`
-- a compact `digits + identifier` form is parsed as a domain literal suffix candidate:
-  `250ms`, `123n`, `19d`, `0xFF`
+- built-in float literals are ASCII decimal digits, one `.`, and ASCII decimal digits:
+  `0.5`, `3.14`
+- built-in decimal literals are ASCII decimal digits with a trailing `d`, optionally with one
+  fractional `.<digits>` part before the suffix: `19d`, `19.25d`
+- built-in BigInt literals are ASCII decimal digits with a trailing `n`: `123n`
+- a compact `digits + identifier` form is parsed as a domain literal suffix candidate when it does
+  not match one of the built-in non-`Int` literal forms: `250ms`, `0xFF`
 - spacing is semantic: `250ms` is one suffixed literal candidate, while `250 ms` is ordinary
   application
 - leading zeroes do not introduce octal or any other alternate base; `007` is decimal
+- exact one-letter `d` / `n` compact suffixes are reserved for the built-in `Decimal` / `BigInt`
+  literal families; longer suffix spellings remain in the domain-suffix surface
 
 Not part of the v1 literal grammar:
 
 - sign-prefixed numeric literals
 - `_` separators inside numeric tokens
 - built-in hex, binary, or octal integer forms
-- built-in `Float`, `Decimal`, or `BigInt` literal forms
 - exponent notation
 
 A compact suffix form is only well-typed when exactly one domain literal suffix in scope claims

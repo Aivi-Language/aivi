@@ -1,0 +1,3 @@
+val pi:Float = 19.25d
+val amount:Decimal = 3.14
+val count:BigInt = 42

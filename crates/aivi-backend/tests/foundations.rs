@@ -724,6 +724,94 @@ val branch =
 }
 
 #[test]
+fn evaluates_signal_carried_inline_case_pipes_with_committed_snapshots_and_captures() {
+    let backend = lower_text(
+        "backend-signal-inline-case-captures.aivi",
+        r#"
+fun greetSelected:Signal Text #prefix:Text #fallback:Text =>
+    selectedUser
+     ||> Some name => "{prefix}:{name}"
+     ||> None => "{prefix}:{fallback}"
+
+sig selectedUser : Signal (Option Text)
+
+sig greeting : Signal Text =
+    greetSelected "user" "guest"
+"#,
+    );
+
+    let selected_user = find_item(&backend, "selectedUser");
+    let greeting = find_item(&backend, "greeting");
+
+    let present_globals = BTreeMap::from([(
+        selected_user,
+        RuntimeValue::Signal(Box::new(RuntimeValue::OptionSome(Box::new(
+            RuntimeValue::Text("Ada".into()),
+        )))),
+    )]);
+    assert_eq!(
+        KernelEvaluator::new(&backend)
+            .evaluate_item(greeting, &present_globals)
+            .expect("signal-carried inline case should evaluate"),
+        RuntimeValue::Text("user:Ada".into())
+    );
+
+    let missing_globals = BTreeMap::from([(
+        selected_user,
+        RuntimeValue::Signal(Box::new(RuntimeValue::OptionNone)),
+    )]);
+    assert_eq!(
+        KernelEvaluator::new(&backend)
+            .evaluate_item(greeting, &missing_globals)
+            .expect("signal-carried inline case fallback should evaluate"),
+        RuntimeValue::Text("user:guest".into())
+    );
+}
+
+#[test]
+fn evaluates_signal_carried_inline_truthy_falsy_pipes_with_committed_snapshots() {
+    let backend = lower_text(
+        "backend-signal-inline-truthy-falsy.aivi",
+        r#"
+fun renderStatus:Signal Text #prefix:Text #readyText:Text #waitText:Text =>
+    ready
+     T|> "{prefix}:{readyText}"
+     F|> "{prefix}:{waitText}"
+
+sig ready : Signal Bool
+
+sig status : Signal Text =
+    renderStatus "state" "go" "wait"
+"#,
+    );
+
+    let ready = find_item(&backend, "ready");
+    let status = find_item(&backend, "status");
+
+    let ready_globals = BTreeMap::from([(
+        ready,
+        RuntimeValue::Signal(Box::new(RuntimeValue::Bool(true))),
+    )]);
+    assert_eq!(
+        KernelEvaluator::new(&backend)
+            .evaluate_item(status, &ready_globals)
+            .expect("signal-carried truthy branch should evaluate"),
+        RuntimeValue::Text("state:go".into())
+    );
+
+    let waiting_globals = BTreeMap::from([(
+        ready,
+        RuntimeValue::Signal(Box::new(RuntimeValue::Bool(false))),
+    )]);
+    assert_eq!(
+        KernelEvaluator::new(&backend)
+            .evaluate_item(status, &waiting_globals)
+            .expect("signal-carried falsy branch should evaluate"),
+        RuntimeValue::Text("state:wait".into())
+    );
+}
+
+#[test]
 fn lowers_recurrence_targets_and_witnesses() {
     let backend = lower_text(
         "backend-recurrence.aivi",

@@ -112,6 +112,9 @@ pub enum GateElaborationBlocker {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GateRuntimeUnsupportedKind {
     RegexLiteral,
+    FloatLiteral,
+    DecimalLiteral,
+    BigIntLiteral,
     ApplicativeCluster,
     Markup,
     PipeStage(GateRuntimeUnsupportedPipeStageKind),
@@ -133,6 +136,9 @@ impl fmt::Display for GateRuntimeUnsupportedKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RegexLiteral => f.write_str("regex literal"),
+            Self::FloatLiteral => f.write_str("float literal"),
+            Self::DecimalLiteral => f.write_str("decimal literal"),
+            Self::BigIntLiteral => f.write_str("BigInt literal"),
             Self::ApplicativeCluster => f.write_str("applicative cluster"),
             Self::Markup => f.write_str("markup expression"),
             Self::PipeStage(kind) => write!(f, "{kind}"),
@@ -832,6 +838,24 @@ pub(crate) fn lower_gate_runtime_expr(
                             span: expr.span,
                             ty,
                             kind: GateRuntimeExprKind::Integer(literal),
+                        });
+                    }
+                    ExprKind::Float(_) => {
+                        return Err(GateElaborationBlocker::UnsupportedRuntimeExpr {
+                            span: expr.span,
+                            kind: GateRuntimeUnsupportedKind::FloatLiteral,
+                        });
+                    }
+                    ExprKind::Decimal(_) => {
+                        return Err(GateElaborationBlocker::UnsupportedRuntimeExpr {
+                            span: expr.span,
+                            kind: GateRuntimeUnsupportedKind::DecimalLiteral,
+                        });
+                    }
+                    ExprKind::BigInt(_) => {
+                        return Err(GateElaborationBlocker::UnsupportedRuntimeExpr {
+                            span: expr.span,
+                            kind: GateRuntimeUnsupportedKind::BigIntLiteral,
                         });
                     }
                     ExprKind::SuffixedInteger(literal) => {

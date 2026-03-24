@@ -1965,6 +1965,84 @@ sig label = choose maybeName
     }
 
     #[test]
+    fn linked_runtime_evaluates_signal_inline_case_kernels_against_committed_snapshots() {
+        let lowered = lower_text(
+            "runtime-startup-signal-inline-case.aivi",
+            r#"
+fun greetSelected:Signal Text #prefix:Text #fallback:Text #selected:Signal (Option Text) =>
+    selected
+     ||> Some name => "{prefix}:{name}"
+     ||> None => "{prefix}:{fallback}"
+
+sig selectedUser : Signal (Option Text) = Some "Ada"
+
+sig greeting : Signal Text =
+    greetSelected "user" "guest" selectedUser
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let outcome = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let greeting_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "greeting"))
+            .expect("greeting signal binding should exist")
+            .signal();
+        assert_eq!(
+            linked.runtime().current_value(greeting_signal).unwrap(),
+            Some(&RuntimeValue::Text("user:Ada".into()))
+        );
+        assert!(outcome.source_actions().is_empty());
+    }
+
+    #[test]
+    fn linked_runtime_evaluates_signal_truthy_falsy_kernels_against_committed_snapshots() {
+        let lowered = lower_text(
+            "runtime-startup-signal-inline-truthy-falsy.aivi",
+            r#"
+fun renderStatus:Signal Text #prefix:Text #readyText:Text #waitText:Text #statusReady:Signal Bool =>
+    statusReady
+     T|> "{prefix}:{readyText}"
+     F|> "{prefix}:{waitText}"
+
+sig ready : Signal Bool = True
+
+sig status : Signal Text =
+    renderStatus "state" "go" "wait" ready
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let outcome = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let status_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "status"))
+            .expect("status signal binding should exist")
+            .signal();
+        assert_eq!(
+            linked.runtime().current_value(status_signal).unwrap(),
+            Some(&RuntimeValue::Text("state:go".into()))
+        );
+        assert!(outcome.source_actions().is_empty());
+    }
+
+    #[test]
     fn linked_runtime_rejects_source_backed_body_signals() {
         let lowered = lower_text(
             "runtime-startup-source-body-gap.aivi",

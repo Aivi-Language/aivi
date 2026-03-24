@@ -1,0 +1,5 @@
+@source timer.every 120 with {
+    immediate: True,
+    immediate: False
+}
+sig tick : Signal Unit

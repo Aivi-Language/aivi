@@ -1,0 +1,2 @@
+type BrokenMap = (Map Text Text Text)
+type BrokenSet = (Set Text Text)

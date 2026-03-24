@@ -1,0 +1,11 @@
+val main =
+    <fragment>
+        <empty>
+            <Label text="No items" />
+        </empty>
+        <show when={True}>
+            <case pattern={Some value}>
+                <Label text={value} />
+            </case>
+        </show>
+    </fragment>

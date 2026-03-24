@@ -2,17 +2,18 @@ use aivi_base::{Diagnostic, DiagnosticCode, Severity, SourceFile, SourceSpan, Sp
 
 use crate::{
     cst::{
-        BinaryOperator, ClassBody, ClassMember, ClassMemberName, Decorator, DecoratorArguments,
-        DecoratorPayload, DomainBody, DomainItem, DomainMember, DomainMemberName, ErrorItem,
-        ExportItem, Expr, ExprKind, FunctionParam, Identifier, InstanceBody, InstanceItem,
-        InstanceMember, IntegerLiteral, Item, ItemBase, MapExpr, MapExprEntry, MarkupAttribute,
-        MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName, Pattern,
-        PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath,
-        QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral, SourceDecorator,
-        SourceProviderContractBody, SourceProviderContractFieldValue, SourceProviderContractItem,
-        SourceProviderContractMember, SourceProviderContractSchemaMember, SuffixedIntegerLiteral,
-        TextFragment, TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody,
-        TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
+        BigIntLiteral, BinaryOperator, ClassBody, ClassMember, ClassMemberName, DecimalLiteral,
+        Decorator, DecoratorArguments, DecoratorPayload, DomainBody, DomainItem, DomainMember,
+        DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind, FloatLiteral, FunctionParam,
+        Identifier, InstanceBody, InstanceItem, InstanceMember, IntegerLiteral, Item, ItemBase,
+        MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module,
+        NamedItem, NamedItemBody, OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr,
+        PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
+        RecordPatternField, RegexLiteral, SourceDecorator, SourceProviderContractBody,
+        SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
+        SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
+        TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody, TypeExpr,
+        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
@@ -1840,6 +1841,18 @@ impl<'a> Parser<'a> {
                 *cursor = index + 1;
                 Some(self.parse_integer_expr(index, cursor, end))
             }
+            TokenKind::Float => {
+                *cursor = index + 1;
+                Some(self.parse_float_expr(index))
+            }
+            TokenKind::Decimal => {
+                *cursor = index + 1;
+                Some(self.parse_decimal_expr(index))
+            }
+            TokenKind::BigInt => {
+                *cursor = index + 1;
+                Some(self.parse_bigint_expr(index))
+            }
             TokenKind::StringLiteral => {
                 *cursor = index + 1;
                 let literal = self.text_literal_from_token(index);
@@ -1940,6 +1953,39 @@ impl<'a> Parser<'a> {
         Expr {
             span,
             kind: ExprKind::Integer(literal),
+        }
+    }
+
+    fn parse_float_expr(&self, index: usize) -> Expr {
+        let span = self.source_span_of_token(index);
+        Expr {
+            span,
+            kind: ExprKind::Float(FloatLiteral {
+                raw: self.tokens[index].text(self.source).to_owned(),
+                span,
+            }),
+        }
+    }
+
+    fn parse_decimal_expr(&self, index: usize) -> Expr {
+        let span = self.source_span_of_token(index);
+        Expr {
+            span,
+            kind: ExprKind::Decimal(DecimalLiteral {
+                raw: self.tokens[index].text(self.source).to_owned(),
+                span,
+            }),
+        }
+    }
+
+    fn parse_bigint_expr(&self, index: usize) -> Expr {
+        let span = self.source_span_of_token(index);
+        Expr {
+            span,
+            kind: ExprKind::BigInt(BigIntLiteral {
+                raw: self.tokens[index].text(self.source).to_owned(),
+                span,
+            }),
         }
     }
 
@@ -2558,6 +2604,9 @@ impl<'a> Parser<'a> {
             self.tokens[index].kind(),
             TokenKind::Identifier
                 | TokenKind::Integer
+                | TokenKind::Float
+                | TokenKind::Decimal
+                | TokenKind::BigInt
                 | TokenKind::StringLiteral
                 | TokenKind::RegexLiteral
                 | TokenKind::Dot
@@ -3890,7 +3939,43 @@ instance Eq A => Eq (Option A)
     }
 
     #[test]
-    fn parser_treats_builtin_suffix_like_forms_as_suffix_literal_candidates() {
+    fn parser_distinguishes_builtin_noninteger_literals_from_suffix_candidates() {
+        fn expect_float(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::Float(literal)) => {
+                        assert_eq!(literal.raw, raw);
+                    }
+                    other => panic!("expected float literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        fn expect_decimal(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::Decimal(literal)) => {
+                        assert_eq!(literal.raw, raw);
+                    }
+                    other => panic!("expected decimal literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        fn expect_bigint(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::BigInt(literal)) => {
+                        assert_eq!(literal.raw, raw);
+                    }
+                    other => panic!("expected bigint literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
         fn expect_suffixed(item: &Item, raw: &str, suffix: &str) {
             match item {
                 Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
@@ -3904,12 +3989,16 @@ instance Eq A => Eq (Option A)
             }
         }
 
-        let (_, parsed) = load("val bigint = 123n\nval decimal = 19d\nval hexish = 0xFF\n");
+        let (_, parsed) = load(
+            "val bigint = 123n\nval decimal = 19d\nval precise = 19.25d\nval floaty = 3.5\nval hexish = 0xFF\n",
+        );
 
         assert!(!parsed.has_errors());
-        expect_suffixed(&parsed.module.items[0], "123", "n");
-        expect_suffixed(&parsed.module.items[1], "19", "d");
-        expect_suffixed(&parsed.module.items[2], "0", "xFF");
+        expect_bigint(&parsed.module.items[0], "123n");
+        expect_decimal(&parsed.module.items[1], "19d");
+        expect_decimal(&parsed.module.items[2], "19.25d");
+        expect_float(&parsed.module.items[3], "3.5");
+        expect_suffixed(&parsed.module.items[4], "0", "xFF");
     }
 
     #[test]

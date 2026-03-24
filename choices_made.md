@@ -1,279 +1,146 @@
-# Choices made for the initial implementation wave
-
-This file is a plain-language summary of the current implementation choices, with one short explanation per section.
-
-1. **Validation notation:** Keep the behavior the same, but describe it using AIVI's own terms instead of Haskell terms.
-
-2. **`?|>` gate behavior:** This operator means "keep it if the check passes." For changing or live values, only passing updates continue and failures do not create fake opposite updates.
-
-3. **Reactive text inside `@source`:** If a source string includes changing values, those values count as dependencies. When they change, the source is rebuilt using the new text.
-
-4. **HTTP refreshes:** HTTP sources refresh only for explicit reasons, such as changing reactive inputs or timers or retries written in code. There are no hidden refreshes tied to focus, windows, or other app lifecycle events.
-
-5. **Watching files vs reading files:** Watching a file only reports that something changed. Reading and decoding the file must still be done as a separate step.
-
-6. **Orphan instances:** These are fully disallowed for now to keep behavior consistent and easy to reason about.
-
-7. **Milestone order:** Build the system in milestone order and keep each layer responsible for its own job. Later runtime concerns should not leak back into earlier compiler stages.
-
-8. **Advanced type features:** Start with a smaller, predictable set of advanced type features. More powerful type-level features can be added later as a separate design.
-
-9. **`<each>` keys:** Every `<each>` must have a key. This keeps repeated UI items stable when they move or change.
-
-10. **Decoder overrides:** Only the built-in decoding path exists for now. Custom decoder hooks are delayed until the base behavior is fully defined.
-
-11. **Internal data layout:** Use stable internal IDs and iterative walking instead of deep recursion. This makes the compiler safer and more reliable on large inputs.
-
-12. **Equality support:** Equality is provided automatically only for data shapes that are clearly and safely comparable. Functions, live values, tasks, and outside handles are excluded.
-
-13. **Early internal program model:** The early compiler model uses stable IDs for items, bindings, and expressions, and it keeps source locations attached. That makes later processing and error reporting more reliable.
-
-14. **Record shorthand:** Record shorthand stays in shorthand form during early processing. This preserves better errors and avoids pretending the compiler already knows the full record shape.
-
-15. **Applicative clusters:** These special pipe clusters stay grouped together instead of being flattened too early. That keeps their original meaning and diagnostics intact.
-
-16. **Special markup tags:** Tags like `show`, `each`, and `match` are treated as real control features, not normal markup. This makes later UI handling much simpler.
-
-17. **Decorators:** Only `@source`, `@recur.timer`, and `@recur.backoff` are real decorators right now. `@source` stays signal-only, while the two `@recur.*` forms are closed non-source recurrence-wakeup witnesses on `val`, `fun`, and non-`@source` `sig` declarations. Other decorator-like syntax is rejected instead of being carried around as unknown metadata.
-
-18. **Name lookup and imports:** Name lookup stays intentionally simple: local names and a small set of imports work, but there are no aliases, wildcards, or module-qualified names yet. Built-in names also keep priority where needed.
-
-19. **Recent spec updates:** Recent spec updates change what later stages must do, but they do not force a redesign of the current early compiler shape. `domain` will be added as its own feature instead of being squeezed into older type handling.
-
-20. **`domain` declarations:** A `domain` declaration is treated as its own real language feature. You can declare domain suffixes now, but using them directly in expressions is handled later.
-
-21. **Equality for domains:** Domains can automatically get equality when their underlying value can be compared. Even so, they still remain their own named types.
-
-22. **Suffix literals like `250ms`:** Compact forms like `250ms` are treated as special suffix literals, while spaced forms like `250 ms` keep their normal meaning. Only integer-based suffixes are supported for now.
-
-23. **Where suffixes are resolved:** Literal suffixes are resolved only against declarations in the current module for now. No match is an error, and multiple matches are treated as ambiguous.
-
-24. **Newer pipe operator rules:** Only the obvious shape and ordering rules for the newer pipe operators are enforced at this stage. Deeper behavior that depends on typing or runtime rules is left for later.
-
-25. **Interpolated text structure:** Interpolated text is stored as alternating plain text and expression holes instead of one opaque string. That makes dependency tracking and error reporting clearer.
-
-26. **Source dependency tracking:** Source-backed signals record which local signals they depend on. Imported references are not guessed to be signals yet.
-
-27. **General signal dependency tracking:** All signals, not just source-backed ones, now carry an explicit list of local signal dependencies. This gives later scheduling work one consistent dependency story.
-
-28. **Early `@source` errors:** The compiler now catches obviously malformed `@source` declarations early, such as missing variants or duplicate options. More detailed provider-specific checks still come later.
-
-29. **Built-in source options:** Built-in sources now have a known list of allowed option names using clearer names like `timeout` and `refreshEvery`. The compiler checks the option names now, but not yet whether each value has the perfect type.
-
-30. **Unfinished applicative clusters:** These shapes are no longer rejected too early by the parser. They are accepted first and then flagged later in the more appropriate validation step.
-
-31. **Type-shape checking foundation:** The project now has a reusable foundation for checking whether advanced type constructors are being used in the right shape. This is groundwork for later type-checking.
-
-32. **Using that checking in early validation:** That new checking is now used in places where the compiler already has enough trustworthy information. Same-module types are checked directly, and imported type constructors participate too only when the closed Milestone 2 import catalog carries explicit constructor-kind metadata. Imports without that metadata still stay skipped instead of being guessed.
-
-33. **Repeating-flow syntax rules:** Repeating-flow syntax is limited to one narrow, clearly structured trailing form for now. Mixed or messy shapes are rejected.
-
-34. **Internal view of applicative clusters:** The compiler keeps these clusters in their user-facing form, but also records a clean internal recipe for what they mean. Later stages can use that recipe without re-guessing it.
-
-35. **Internal view of repeating-flow tails:** Repeating-flow syntax stays visible in the early internal model, but the compiler also exposes a clean extracted view of the repeating tail. Later stages can use that directly instead of rebuilding it by hand.
-
-36. **Catalog of source option shapes:** There is now a central catalog describing the expected shape of built-in source options. That gives later checking a single source of truth.
-
-37. **Gate behavior checks:** Gate behavior is checked using only type facts the compiler can already prove today. Obvious mistakes are rejected, while uncertain cases are left open instead of over-restricted.
-
-38. **Where repeating flows are allowed:** Repeating flows are allowed only where the compiler can already prove they target something supported, such as a signal or task declaration. Everything else is rejected instead of guessed.
-
-39. **Required trigger for repeating flows:** Every repeating flow must have a clear trigger the compiler can already recognize, like a built-in timer or event source, reactive custom-source input, or an explicit non-source `@recur.timer` / `@recur.backoff` witness. Cases without a provable trigger are rejected for now.
-
-40. **Resolving source option types:** Source option schemas are now matched to real program types where possible. The compiler still stops short of fully type-checking the option values themselves.
-
-41. **Lowering plan for gates:** The compiler now produces a clear lower-level plan for how gate stages should behave later. If it cannot prove enough today, it records the blocker instead of making something up.
-
-42. **Runtime handoff for signal filters:** Signal-based filters now lower into a simple typed filter description that future runtime code can use. Only clearly safe expression forms are included for now.
-
-43. **Local source option value checks:** Source option values are now checked only in cases the current resolved HIR can really prove: same-module annotations, suffix literals, same-module constructors, list elements built from those, and reactive `Signal` payloads used as ordinary source configuration values. Imported bindings and other harder expressions still wait for fuller expression typing.
-
-44. **Custom `@source` recurrence wakeups:** Custom providers now get the largest honest wakeup slice the current compiler can prove. Reactive source inputs count as an explicit source-event wakeup for any provider, because RFC reconfiguration on upstream signal changes is provider-independent. Non-reactive custom providers still need future provider-contract metadata, so the compiler now carries an explicit custom wakeup hook in resolved source metadata instead of guessing that built-in option names like `retry` or `refreshOn` mean the same thing for custom providers.
-
-45. **Non-source recurrence wakeup witnesses:** Plain repeating `Signal` and `Task` bodies now prove timer/backoff wakeups only through compiler-known `@recur.timer expr` and `@recur.backoff expr` decorators. Those decorators each take exactly one positional witness expression, reject `with { ... }` options or duplicates, and are not allowed on `@source` signals so the source-backed proof story stays separate.
-
-46. **Fan-out carrier handoff:** `*|>` and an immediate `<|*` now use one focused typed handoff. `*|>` is only proven on `List A` or `Signal (List A)`, its body sees `A` as the ambient subject, and the result preserves ordinary-vs-`Signal` carrier shape without flattening nested collections or signals. `<|*` stays grouped with that map segment and is typed as a normal pipe body over the mapped collection, with `Signal` joins lifted pointwise instead of inventing scheduler/runtime nodes early.
-
-47. **Bidirectional source constructors:** Source option constructor expressions are now checked against the already-resolved expected source-contract type. Same-module constructors may be used nullary or fully applied, and constructor field types are instantiated from the expected type arguments only when those field annotations lower back into the current closed source-option type surface. Imported bindings and contract-parameter-driven holes still stay blocked instead of being guessed.
-
-48. **Built-in source recurrence metadata:** Built-in `@source` contracts now carry recurrence-specific metadata in the same typed contract layer as option legality. HIR wakeup validation reads retry/polling/trigger slots and intrinsic timer/event wakeups from that contract metadata instead of hard-coding provider semantics in multiple places, so future custom-provider declarations can plug into one contract-shaped handoff when the language grows a real provider declaration surface.
-
-49. **Source contract parameter holes:** Source option checking now keeps provider-local `A` / `B` holes explicit in its internal expected-type patterns instead of erasing them to “anything.” That lets the compiler keep proving known outer structure such as `Signal ...` and same-module constructor field substitutions honestly, while a bare hole by itself still stays unproven until later work adds real provider-level parameter binding.
-
-50. **Typed source-provider identity:** Before provider declarations existed, resolved HIR preserved each `@source` provider as missing, built-in, custom, or invalid-shape and carried custom-provider contract facts through one explicit hook. That kept later declaration/resolution work local and prevented custom metadata from being attached to built-in providers by accident.
-
-51. **Imported source option bindings:** Imported source option values are checked only when the current Milestone 2 import catalog carries an explicit closed value type that resolved HIR can lower directly, such as `Text`, `List ...`, or `Signal ...`. Imports without that metadata still stay unproven instead of being guessed from names or module files the compiler does not yet model.
-
-52. **Local source contract parameter bindings:** Resolved-HIR source option validation now carries a small provider-local binding environment for `A` / `B` across one `@source ... with { ... }` record. Bindings commit only from fully proven option expressions, pending options are retried to a fixed point so later proofs can unlock earlier constructor checks, and those bindings substitute back only through the current closed `GateType` proof surface. Generic constructor roots and other bare-parameter expressions that still lack honest local type evidence remain blocked until fuller ordinary expression typing exists.
-
-53. **Narrow provider contract resolution:** Because the RFC still lacks a full custom-provider declaration chapter, the compiler keeps the smallest coherent declaration-and-resolution surface: a top-level `provider qualified.name` item with an optional indented member body, plus same-module order-independent lookup onto matching custom `@source` use sites. Only `wakeup: timer | backoff | sourceEvent | providerTrigger` lowers today; built-in provider keys, unqualified names, unknown fields, and duplicate `wakeup` members diagnose immediately, while missing or duplicate declarations do not invent extra provider-existence errors or arbitrary custom metadata.
-
-54. **Generic bare source constructor roots:** A bare source-contract parameter like `A` may now bind from a same-module generic constructor root only when the current resolved-HIR layer can prove every constructor field from local evidence: already typed arguments, reactive payload peeling, or concrete field expectations checked through the existing source-option checker. Generic roots whose arguments still lack direct type evidence, or whose field annotations leave the current closed proof surface, remain unproven instead of inventing broader inference.
-
-55. **Canonical recurrence wakeup proof:** For the current explicit-wakeup slice, recurrence planning records one deterministic explicit wakeup witness even when several proofs are available. Built-in sources keep a stable proof order—intrinsic provider wakeups first, then polling, retry, source-trigger options, and finally reactive inputs—while custom providers prefer declared provider-contract wakeups over reactive-input fallback. This keeps validation and later scheduler-node lowering deterministic without pretending the compiler already models combined wakeup graphs.
-
-56. **Custom provider schema surface:** Custom `provider qualified.name` declarations now stay intentionally line-oriented: `wakeup: ...` plus repeated `argument name: Type` and `option name: Type` members. Those schema annotations are checked only through the same honest closed proof surface the compiler already has for source configuration values—primitive types, same-module named types/domains, and those shapes under `List` or `Signal`. Richer forms such as records, arrows, imported constructors, or `Option`/`Result` are rejected on the declaration instead of being guessed.
-
-56. **Recurrence scheduler-node handoff:** The compiler now lowers each validated recurrence suffix into one typed scheduler-node report that keeps the `@|>` start stage, the ordered `<|@` step stages, the canonical target/wakeup plan, and any non-source wakeup witness separate instead of collapsing them into one opaque loop function. This is the narrowest honest handoff because the RFC distinguishes start from step, while later runtime/backend layers can consume that handoff without asking the frontend to guess more.
-
-57. **Source lifecycle handoff:** Source-backed signals now carry one explicit lifecycle handoff. Same-module signal dependencies are split into reactive reconfiguration inputs, explicit trigger-signal slots, and built-in `activeWhen` gates; every `@source` site gets a stable instance ID plus mandatory stale-publication suppression on replaced or disposed work; and only compiler-known request-like built-ins (`http.*`, `fs.read`) are marked for best-effort in-flight cancellation. Custom providers still reuse the generic reconfiguration/stale model, but they do not gain invented `activeWhen` or trigger semantics until provider contracts grow that surface explicitly.
-
-58. **Pipe/source umbrella boundary:** The RFC §11 / §14 frontend umbrella is considered complete once the compiler carries honest gate, fanout, recurrence, provider-contract, and source-lifecycle handoffs into resolved HIR and typing. Fuller ordinary expression typing for harder source option values remains separate follow-on work and should not keep that umbrella blocked.
-
-59. **Recurrence runtime-lowering scope:** `pipe-recurrence-runtime-lowering` is complete once the compiler reaches the last honest pre-runtime handoff: closed target/wakeup proof in resolved HIR plus `aivi-hir::elaborate_recurrences` and `aivi-hir::elaborate_source_lifecycles`. Real typed-core/backend/runtime consumption stays separate follow-on work because those layers do not exist in this workspace yet.
-
-60. **Bare source-root actual typing:** Source option root checking now has its own closed actual-type fallback instead of relying only on ordinary expression inference. It can recursively prove same-module constructor roots, unannotated local `val` bodies, tuple/record/list literals, and `Some` roots directly, while locally expected container shapes can also validate `None` / `Ok` / `Err` / `Valid` / `Invalid` once sibling bindings or concrete field annotations fix the missing type arguments.
-
-61. **Context-free source builtin holes:** Provider-local source-option bindings may now carry a narrow partial actual-type proof for bare `None` / `Ok` / `Err` / `Valid` / `Invalid` roots. Those partial proofs keep only the built-in container shape plus anonymous wildcard leaves, refine when later local evidence arrives, and do not widen into general ordinary-expression inference.
-
-62. **Regex literal validation layer:** Regex literal well-formedness now belongs to HIR validation instead of lexing. The compiler currently uses the Rust `regex-syntax` grammar only to accept or reject `rx"..."` literals at compile time, which keeps the validation slice explicit without pretending runtime lowering semantics already exist.
-
-63. **Truthy/falsy branch handoff:** Resolved HIR now gives `T|>` / `F|>` one deterministic canonical-carrier handoff: builtin `Bool`, `Option`, `Result`, and `Validation` subjects elaborate directly, and exactly one outer `Signal (...)` may lift those same builtin carriers pointwise without changing the inner constructor proof. Each pair still chooses the RFC’s canonical builtin constructors directly, one-payload branches type their body against that payload as the ambient pipe subject, zero-payload branches do not invent an ambient payload, and branch result mismatches are rejected only when the current local proof surface can really see both branch types. User-defined truthy/falsy carriers and bare `_` spellings that still depend on the separate ambient-subject gap remain later work instead of being guessed here.
-
-64. **Focused case exhaustiveness checks:** Resolved HIR now exhaustiveness-checks `||>` and markup `<match>` only when the current local proof surface can already know the scrutinee type honestly: ordinary `Bool`, `Option`, `Result`, `Validation`, and same-module closed sums reached through annotations, function parameters, and typed markup bindings. Missing constructors diagnose by name, `_` and named binding patterns count as explicit catch-alls, and imported sums, signal-lifted case splits, and harder constructor-built scrutinee inference remain later work instead of being guessed.
-
-65. **Compiler-generated domain decode surfaces:** The structural decoder handoff now resolves domain-backed fields only through the narrowest deterministic same-module surface the current compiler can prove: a method named `parse` wins when its annotation has shape `Carrier -> Result E Domain`, otherwise exactly one method with shape `Carrier -> Domain` or `Carrier -> Result E Domain` is accepted. Operators, literal members, and ambiguous multiple constructor-like methods stay blocked instead of guessing runtime decode semantics.
-
-66. **Where module typechecking lives:** The first real module-aware expression typechecker lives in `aivi-hir`, not `aivi-typing`. It depends on resolved item IDs, local bindings, module items, and user-facing diagnostics, so keeping it in the HIR layer preserves the intended compiler boundaries.
-
-67. **Reuse the existing resolved type surface:** That typechecker reuses `GateType` and `GateTypeContext` as its proof surface instead of inventing a second general type representation. The same closed shapes now drive gate/fanout/source proofs, top-level annotation checks, record-default checks, and intrinsic `Eq` constraint solving.
-
-68. **Source config kernels before provider execution:** `@source` arguments and option payloads now travel through the compiler as first-class runtime expressions and backend kernels instead of disappearing at the source-lifecycle handoff. This is the narrowest honest next step: later runtime/startup work can evaluate and route those kernels into providers, while provider execution remains explicitly incomplete until the runtime owns value decoding, reactive config recomputation, and control-option interpretation.
-
-68. **Reject trailing body junk instead of guessing:** Expression-bodied `val`, `fun`, and `sig` declarations must now consume their whole body span. If extra nontrivia tokens remain, the parser reports a syntax error instead of silently truncating the declaration body. That keeps stale non-RFC spellings like `head :: tail` from masquerading as valid programs.
-
-69. **Unary `instance` blocks are now a real frontend slice:** The compiler now accepts user-authored `instance Class Type` blocks with indented method bindings, lowers their local method parameters into explicit HIR bindings, resolves the class head against same-module `class` items, validates that each declared class member is implemented exactly once, and lets same-module `Eq` / `Default` evidence participate in the existing frontend checks. This stays intentionally narrow: instance headers currently carry exactly one class argument, there is no separate surface for instance contexts yet, and the slice stops at frontend validation/evidence use instead of inventing general dictionary passing early.
-
-70. **Prefer unqualified term names with explicit alias fallback:** AIVI should generally prefer unqualified term use and resolve the right binding from the local name plus already-known context, instead of pushing users toward qualified call syntax like `List.map` or `Duration.millis`. When several candidates still remain after that narrow contextual filtering, the compiler should report an ambiguity error and users should disambiguate through import aliases such as `use xy.bla (x as y)` rather than through implicit coercions or projection-like member syntax.
-
-71. **Domain members now resolve as ordinary unqualified terms:** The compiler now puts callable identifier members from `domain` declarations into the ordinary term lookup surface and preserves same-name domain-member collisions as deferred candidate sets instead of rejecting them too early. Later expression typing resolves those candidates from already-known argument and expected-result types when it honestly can, while context-free cases still diagnose `ambiguous-domain-member`, literal suffixes remain in their dedicated suffix namespace, and projection syntax stays record-only.
-
-72. **`use` member aliases are explicit local renames:** `use module (member as localName)` is now the narrow disambiguation escape hatch for imported terms and type constructors. The imported member name still drives compiler-known metadata, while the alias only changes the local binding name that enters term/type scope.
-
-73. **GTK Milestone 7 starts with a typed widget-plan IR, not immediate GTK objects:** The first GTK bridge slice lowers validated HIR markup/control trees into a compile-safe widget plan that preserves stable HIR-backed identities, explicit child operations, setter bindings, event hookups, and control-node branches. This keeps the GTK boundary explicit and testable before real widget allocation or main-loop integration exists.
-
-74. **Markup event hookup detection currently uses an explicit `on*` attribute convention:** RFC §17 requires direct event hookups but does not fully freeze the surface event-attribute naming rule. The current GTK bridge foundation therefore treats expression-valued markup attributes whose names start with `on` as event hookups, while leaving the convention explicit and easy to replace once widget schemas and GTK binding metadata exist.
-
-75. **Scheduler foundations use generation stamps plus owner liveness to make stale publication rejection explicit:** The first runtime slice models input publications as generation-stamped messages into a scheduler-owned queue, rejects stale generations before propagation, and recursively deactivates owner subtrees during disposal. That keeps transactional ticks deterministic and makes cancellation/stale-work suppression a typed runtime contract instead of an incidental behavior.
-
-76. **Typed core starts from already-proven reactive/source handoffs instead of pretending to normalize the whole language at once:** The first `aivi-core` slice owns its own arenas, ids, expression/type nodes, and pipe/source/decode structures, but it only accepts HIR elaboration reports the frontend can already justify and rejects blocked handoffs explicitly. That keeps the typed-core boundary real without inventing unproven general lambda semantics too early.
-
-77. **Task/source workers publish through typed scheduler-owned ports rather than mutating runtime state directly:** The first task/source runtime slice gives workers only publication ports plus read-only cancellation observers. Source/task supersession advances scheduler generations and flips cancellation state, while worker results re-enter through the scheduler queue and remain subject to the same stale-generation and owner-liveness rules as ordinary publications.
-
-78. **Runtime assembly consumes HIR elaboration reports directly instead of re-deriving runtime structure from raw HIR:** The first runtime adapter builds signal ownership, public signal handles, source specs, decode programs, recurrence bindings, and gate attachments straight from `aivi-hir` handoff reports. When those reports are blocked or missing, assembly fails explicitly rather than guessing execution behavior or trying to interpret unresolved surface syntax late.
-
-79. **Builtin constructor inference now carries partial container shape as local evidence:** The typechecker can now preserve `Option` / `Result` / `Validation` constructor shape through ordinary expressions even when the full expected type is not yet known, as long as the current local proof surface can refine it honestly. This stays intentionally local and bidirectional rather than becoming broad, implicit HM-style inference.
-
-80. **Backend IR starts from a backend-owned kernel/layout contract instead of jumping straight to codegen:** The first `aivi-backend` slice lowers `aivi-core` into explicit backend layouts, kernels, pipelines, source plans, and decode plans with validation and pretty/debug surfaces. Full lambda closure conversion and Cranelift integration stay as later layers, which keeps the backend boundary real without pretending codegen or execution semantics already exist.
-
-81. **GTK/runtime integration starts from a typed widget assembly, not live GTK objects:** The first GTK/runtime adapter lowers `WidgetPlan` trees into a `WidgetRuntimeAssembly` that preserves stable node identities, owner hierarchies, dynamic setter/event/control bindings, and localized child-management specs. Real GTK object allocation, main-thread mutation, and value coercion stay deferred until the execution/runtime layer exists.
-
-82. **Instance bodies are checked against resolved class-member arrows rather than treated as untyped syntax:** Once a same-module `instance` head and member are resolved, each member body now checks against the corresponding class-member arrow signature with explicit local parameter bindings. That keeps instance evidence honest without inventing broader dictionary passing.
-
-83. **Operators now type-check explicitly before fallback inference:** Unary and binary operators no longer slip through the generic inference path unchecked. The resolved-HIR typechecker validates operand/result shapes directly, routes `==` / `!=` through `Eq` evidence, and allows same-domain operator declarations to participate when both operands concretely match the declared domain surface.
-
-84. **Bidirectional projection and collection checking stay shape-driven, not globally inferred:** Resolved-HIR typing now only checks projections and tuple/list/map/set literals more deeply when an expected closed shape is already available. That improves diagnostics and catches mismatches earlier without pretending whole-program inference can recover arbitrary projection or collection intent.
-
-85. **Broader name/apply propagation remains local and evidence-based:** Ordinary `Name` and `Apply` expressions now reuse expected-type information more often, but only through the current local proof surface. The checker still avoids speculative HM-style inference or cross-module dictionary guessing, and `Default` now participates through the shared constraint machinery rather than bespoke record-elision checks.
-
-86. **Source-option validation now uses one closed dispatcher for supported expression forms:** The source-option proof layer in `aivi-hir::validate` no longer splits tuple/record/map/set/projection behavior between explicit checking and fallback inference. Supported forms now flow through one narrow dispatcher, while unsupported or still-unprovable source-option shapes remain explicit `Unknown`/blocked cases instead of being guessed.
-
-87. **Domain operators are preserved through an explicit elaboration seam, not re-discovered later:** Once resolved-HIR proves that a unary or binary operator use is backed by a domain member, the compiler now carries that fact forward through stable domain-member handles and rewrites the use into an explicit callable form for core/backend lowering. Backend no longer has to guess whether `+` means builtin arithmetic or a domain-defined operator.
-
-88. **Typed lambda IR currently wraps validated typed-core bodies with explicit closure and capture metadata instead of pretending the whole post-core lambda calculus is already encoded:** The new `aivi-lambda` layer mirrors typed-core items/pipes/stages, keeps the proven core expression graph as its body language for now, and makes every ordinary body or backend-consumable runtime body carry an explicit closure boundary plus deterministic environment captures. That keeps the lambda/backend split honest today without collapsing immediately into backend ABI/layout choices or inventing broader closure semantics the implemented slice still does not justify.
-
-89. **Signal truthy/falsy reuses the ordinary carrier plan instead of inventing a separate branch model:** `T|>` / `F|>` on `Signal Bool`, `Signal (Option A)`, `Signal (Result E A)`, and `Signal (Validation E A)` now unwrap the inner canonical carrier plan, type the branches against that inner plan, and re-wrap the branch result as `Signal ...`. Non-canonical inner carriers stay rejected explicitly.
-
-90. **Source-option domain literals are now proved directly against expected domain types:** The source-option validation layer no longer treats suffixed/domain literals as “just inference and hope.” It now checks them against resolved expected domain members so option contracts can reject wrong literal domains explicitly.
-
-91. **Source-option generic constructor proofs preserve partial evidence instead of collapsing immediately to unknown:** When source-option fixed-point binding can prove the root constructor but not every generic argument yet, the compiler now keeps that proved root with explicit holes for unresolved arguments. Later local evidence can refine those holes instead of redoing the whole proof from scratch.
-
-92. **Satisfied record defaults now elaborate into explicit HIR fields instead of staying only as typecheck facts:** Once the typechecker can justify omitted record fields through `Default` evidence, that proof is recorded and materialized into an elaborated HIR module with `Defaulted` field surfaces. Downstream lowering now consumes explicit fields rather than relying on hidden default semantics.
-
-93. **General typed-core elaboration stays narrow and explicit:** The post-foundation `aivi-core` slice now lowers the current honest set of general expressions—typed value/function bodies, parameters, and inline pipe case/truthy-falsy forms—while unsupported ordinary bodies remain explicitly unlowered instead of being guessed into core.
-
-94. **GTK bridge execution now lowers runtime assemblies into explicit child groups and localized edits:** The next `aivi-gtk` slice keeps the runtime assembly as the owner/input boundary, but lowers it further into a GTK-oriented bridge graph with concrete widget/default-child groups, show/match body groups, each empty/item templates, and deterministic localized child edits. Widget schemas still are not invented early, so ordinary widgets currently expose one default append-style child group until real GTK metadata exists.
-
-95. **Signal propagation now evaluates source lifecycle changes against one committed scheduler snapshot:** Runtime source activation, reconfiguration, and suspension now happen transactionally from committed signal values during one tick. That keeps lifecycle transitions deterministic and avoids half-applied source-state changes interleaving with ordinary propagation.
-
-96. **Built-in source providers now enforce runtime contracts explicitly at registration time:** `aivi-runtime` validates `SourceRuntimeSpec` against provider contracts when sources register, reports typed contract violations for unsupported lifecycle options, and derives default cancellation behavior from the provider contract instead of leaving those rules implicit or duplicated elsewhere.
-
-97. **Cranelift codegen now starts from backend kernels, not from earlier IR shortcuts:** The first executable codegen path lives in `aivi-backend::codegen` and consumes backend kernels/layouts plus `aivi-lambda` output directly. ABI/layout/codegen choices stay in backend/codegen instead of leaking back into typed-lambda or typed-core.
-
-98. **General-expression blockers are now explicit handoff errors instead of opaque downstream failures:** Unsupported regex/cluster/markup and other non-runtime-capable general-expression forms now fail as named blocked elaboration cases. Typed-core, typed-lambda, and backend reject those fatal blocked handoffs directly instead of stumbling into unrelated later errors.
-
-99. **Backend codegen now prevalidates the supported kernel surface instead of attempting partial emission opportunistically:** Cranelift lowering only proceeds for kernels/projections/env layouts the current backend can justify, including by-reference ABI/env projection and pointer-niche `Option` carriers. Unsupported shapes fail at the backend boundary explicitly rather than producing half-lowered machine code paths.
-
-100. **GTK execution now lives in an explicit host/executor layer over the bridge graph:** `aivi-gtk` allocates widgets, caches direct setters, routes events, executes show/match/each child transitions, and performs localized child insert/move/remove operations through a dedicated executor layer. Real widget behavior is driven from the bridge graph instead of being reconstructed ad hoc from plan metadata later.
-
-101. **LSP analysis now goes through a revision-keyed query database instead of ad hoc frontend calls:** `aivi-query` owns cached source/parse/HIR/diagnostic/symbol/format queries, and `aivi-lsp` consumes that database for read-only editor features. This keeps editor tooling incremental and reuses the compiler’s real analysis surfaces instead of forking them.
-
-102. **Imported source-option constructor checks only use cataloged closed constructor metadata:** Source-option validation now supports imported constructors when the import catalog includes a closed variant/field surface for them. Uncataloged imports still stay explicit later work instead of being inferred from partial information.
-
-103. **CLI compilation stops at the honest compile boundary instead of faking runtime startup:** `aivi-cli` now wires syntax → HIR → core → lambda → backend → Cranelift into `aivi compile`, emits explicit per-stage failures, and supports object output, but it still reports the missing runtime/link/startup boundary explicitly instead of pretending full executable launch is ready.
-
-104. **GLib scheduler integration stays main-context-owned even though worker wakeups are cross-thread:** `aivi-runtime` now drives `Scheduler::tick` through a `GlibSchedulerDriver` on an owned `glib::MainContext`, while worker threads only publish immutable values and request a wakeup. The driver uses a narrow shared-state wrapper solely because GLib’s cross-thread scheduling APIs require `Send` captures; actual scheduler mutation still happens on the main-context side, and committed tick outcomes are recorded explicitly instead of hidden in callbacks.
-
-105. **Backend runtime values start from item-body kernels plus explicit signal snapshots:** `aivi-backend` now lowers same-module value/function bodies into dedicated `item-body` kernels, preserves their parameter contracts on backend items, and evaluates the current non-inline kernel surface through a backend-owned `KernelEvaluator` / `RuntimeValue` model. Runtime consumers must supply explicit global signal snapshots, and ordinary operations/interpolation unwrap those snapshots only when they are being consumed as ordinary values. Inline pipes and direct domain-member execution stay explicit later work instead of being guessed into this first evaluator slice.
-
-106. **Runtime startup linking now lives in `aivi-runtime` as an explicit backend/HIR linker:** The runtime does not smuggle backend execution through the CLI or GTK layer. Instead, `aivi-runtime` now links HIR runtime bindings back to backend items and source kernels through typed-core item origins, owns a fallible derived-signal evaluator over committed scheduler snapshots, and exposes evaluated source activation/reconfiguration config as a runtime-facing handoff for later provider execution.
-
-107. **Only ordinary signal bodies join the general-expression/item-body path; top-level signal pipe spines stay on the existing pipe handoff path:** Simple `sig x = expr` bodies now elaborate into typed-core/lambda/backend item bodies so runtime startup can evaluate them honestly, but a top-level signal body whose root is a pipe expression still relies on the separate gate/fanout/recurrence lowering path. This fixes the missing simple-signal runtime body gap without duplicating or fighting the established pipe lowering boundary.
-
-108. **Signal item-body kernels are payload-shaped at runtime, not `Signal A`-shaped:** The scheduler stores payload values, while signal snapshots are only wrapped as `RuntimeValue::Signal(...)` when they are supplied as globals to backend evaluation. Backend item-body lowering now strips one outer `Signal` wrapper from signal item result layouts so derived signal kernels produce payload values that match scheduler/runtime contracts instead of forcing ad hoc unwrapping in startup.
-
-109. **Runtime provider execution starts with real timers and explicit unsupported errors for everything else:** `aivi-runtime` now owns a small `SourceProviderManager` that consumes evaluated source lifecycle actions, executes `timer.every` / `timer.after` through scheduler-owned publication ports, treats bare integer timer arguments as milliseconds, and also accepts common suffixed duration literals. Options that the current runtime does not implement honestly—such as `jitter` or non-coalesced timers—and all non-timer providers fail explicitly instead of being silently ignored or half-executed.
-
-110. **Inline helper pipes now execute only over the runtime carriers the backend already models:** `aivi-backend` now lowers ordinary inline `|>` / ` | ` / `?|>` / `||>` / `T|>` / `F|>` stages inside item/source helper kernels, tracks case-arm pattern bindings as inline subject slots instead of accidental environment captures, and lets startup/runtime consume those helper kernels end to end. To stay honest, the runtime evaluator still rejects signal-carried inline pipes and non-builtin constructor patterns until the backend owns real stream and closed-sum runtime representations for them.
-
-111. **GLib driver reentry is now an explicit invariant instead of a silent mutex hazard:** `aivi-runtime` still keeps the scheduler/evaluator pair behind one mutex because splitting mutation from evaluation would require a larger scheduler API redesign, but the GLib adapter now guards tick execution with a same-thread sentinel and panics immediately on driver reentry during evaluation instead of deadlocking behind the lock.
-
-112. **Interpolated markup text stays dynamic; the concrete GTK host rejects interpolated static text only as a defensive invariant:** `aivi-gtk` lowering already routes interpolated attribute text into runtime setter bindings, so the host does not invent a second interpretation. If any interpolated `StaticPropertyValue::Text` still slips through, the concrete host now rejects it explicitly instead of silently dropping holes.
-
-113. **`aivi run` now owns a live GTK/runtime session instead of stopping at startup hydration:** The CLI still keeps the layer boundary explicit, but it now links the compiled runtime stack, evaluates markup fragments against committed runtime signal snapshots, and re-hydrates the mounted GTK bridge after meaningful scheduler ticks rather than treating dynamic markup as a one-shot launch-only slice.
-
-114. **Static run view selection stays deterministic and narrow:** `aivi run` prefers a top-level markup-valued `val view`, otherwise accepts the unique top-level markup-valued `val`, and requires `--view <name>` when several candidates remain. The selected root must already be a `Window`; the CLI does not auto-wrap arbitrary widgets into windows because that would invent host semantics not stated in the RFC.
-
-115. **Live GTK updates now reuse whole-view fragment re-evaluation before any finer-grained dependency slicing:** The runtime already tracks committed signal snapshots and the bridge executor already exposes deterministic localized mutations, so the first honest live run implementation simply re-evaluates the selected view’s compiled fragments against current snapshots after each committed tick instead of inventing a speculative partial updater.
-
-116. **Same-module closed sums now use first-class constructor handles end to end:** The compiler carries same-module sum constructors through HIR, typed core, backend kernels, and backend runtime as explicit constructor identities instead of smuggling them through generic item references. Runtime sum values are nominally keyed by the originating type item plus variant name, which keeps constructor application, display, and structural equality deterministic.
-
-117. **Dynamic markup execution compiles expression fragments locally instead of lowering whole modules for every setter/control site:** `aivi run` now collects typed runtime expression sites from the selected markup subtree, carries each site’s local binding environment explicitly, and lowers only the reachable fragment bodies plus their ordinary item dependencies. That keeps one blocked or unsupported item elsewhere in the module from preventing honest startup hydration of an otherwise runnable view.
-
-118. **Linked runtime ownership now lives behind `Arc<BackendProgram>` instead of a stack borrow:** `aivi-runtime` no longer ties `BackendLinkedRuntime` to a transient borrowed backend program, which makes a persistent GLib-driven session possible without leaking non-`'static` lifetimes through every live run API.
-
-119. **GTK event hooks now execute through an explicit direct-signal publication contract:** The CLI resolves each `on*={handler}` expression once up front, accepts only handlers that name a publishable runtime signal input, and routes queued GTK event payloads into that input instead of pretending arbitrary callback expressions already exist.
-
-120. **Annotated body-less signals are now first-class input signals instead of a stale Milestone 2 error:** The syntax surface already allowed `sig name : Signal T`; HIR/runtime now preserve that form as an input-backed runtime signal so external event sources such as live GTK hooks can publish into real language-level signals without inventing a second ad-hoc input mechanism.
-
-121. **Discrete GTK events now force their own runtime ticks instead of relying on same-generation batching:** The scheduler intentionally keeps only the last publication per input within one tick because ordinary inputs model stable signal state, not event streams. Live `aivi run` therefore publishes concrete GTK events through an immediate tick path so rapid repeated clicks are processed as separate runtime transactions instead of collapsing accidentally.
-
-122. **Concrete GTK event lowering now matches explicit supported events, not any `on*` expression attribute:** Until widget/event metadata exists, the GTK bridge treats an attribute as an event hook only when the concrete host already supports that exact widget/event pair. Unsupported `on*` names now stay ordinary attributes and are rejected by run-surface validation instead of being silently classified as live events.
-
-123. **Live `aivi run` hydration now plans whole-view updates off the GTK thread and replays only GTK mutations on the main loop:** The CLI still uses one deterministic whole-view pass per committed runtime snapshot, but it now snapshots committed signal globals on the main thread, evaluates runtime fragments plus control-flow decisions on a worker thread, and ships back an immutable hydration plan for GTK-local application instead of doing kernel evaluation and branch discovery during `idle_add` work.
-
-124. **GTK control-node planning now keys dynamic run inputs by explicit runtime handles, including keyed-`<each>` identities:** The widget runtime assembly already allocates stable `InputHandle`s for setters and control expressions, so live `aivi run` now compiles and evaluates those inputs by handle end to end. Keyed `<each>` lowering now preserves a dedicated runtime key input as well, which keeps background hydration planning aligned with the same fine-grained identity model the GTK bridge already exposes.
-
-125. **Multi-file workspace discovery stays nearest-manifest-first and path-derived:** Cross-file compilation now roots itself at the closest `aivi.toml` ancestor of the entry file, or else at the entry file’s parent directory when no manifest exists yet. Module names are derived deterministically from relative `.aivi` paths, and `check` / `compile` / `run` all share that mapping so files do not become “global” just because they exist elsewhere on disk.
-
-126. **`|>` and tap now type-check against the current pipe subject through local polymorphic unification:** The HIR typechecker now introduces implicit function type variables for ordinary function signatures, unifies those variables at call sites and inside pipe bodies, and reports `invalid-pipe-stage-input` when a stage cannot accept the current subject. This keeps the dominant pipe operators sound without pretending the compiler already has whole-program constraint threading.
-
-127. **General same-module instance matching is broadened before dictionary passing exists:** Class/instance lookup is no longer hardcoded only to `Eq` and `Default`; same-module instances now participate through general class-head matching, including higher-kinded member instantiation via partial constructor bindings. Imported instance search, binder-attached signature constraints, and fully polymorphic class members remain explicit follow-on work until the typechecker can carry evidence through signatures end to end.
-
-128. **Runtime source decoding now uses one explicit text/JSON wire shape instead of per-provider guesses:** Non-timer source providers already receive evaluated arguments/options plus a concrete `SourceDecodeProgram`, so the runtime now decodes UTF-8 payload text through one shared worker-side adapter. Plain `Text` payload branches stay raw text; structural payloads parse JSON; and closed sums/`Option`/`Result`/`Validation` use an explicit `{ tag: ..., payload: ... }` shape. Unsupported scalar/runtime gaps such as `Bytes`, `Float`, `Decimal`, `BigInt`, or domain-surface decode still fail at provider startup instead of silently degrading.
-
-129. **Non-timer source execution stays provider-owned but transport-specific, with explicit unsupported edges:** `aivi-runtime` now executes HTTP, file, process, socket, mailbox, and GTK key providers through the existing lifecycle/publication boundary without blocking the GTK thread. Request-style providers publish through typed `Result` decode plans, filesystem watch currently uses a worker-side polling loop, `socket.connect` is narrowed to raw `tcp://host:port` line streams, `mailbox.subscribe` is a process-local text bus with bounded subscriber buffers, and `window.keyDown` listens through focused GTK window key controllers with repeat filtering. Options that the current runtime slice still cannot justify honestly—such as WebSocket handshakes, heartbeat/capture paths, recursive file watching, or bytes-mode streams—raise explicit runtime errors instead of pretending support.
-
-130. **Core typeclasses now live as a compiler-owned ambient prelude instead of a normal imported module:** The requested hierarchy is injected into every checked module as hidden HIR items so local declarations still shadow it, cross-file checked programs can use the same core class names everywhere, and the compiler does not pretend imported ordinary/class items already lower honestly through later layers. This keeps the hierarchy real and checkable today without inventing fake import lowering or dictionary passing.
-
-131. **Binder-attached constraints use one explicit `Constraint => ...` surface, with parenthesized lists for multiple constraints:** Class heads, class members, ordinary functions, and instance heads now all share the same constrained-signature shape, and `(C1, C2) => ...` is the narrowest coherent extension for multiple superclass/context requirements. That keeps the syntax regular and lets HIR carry superclass edges and call-site class requirements through one representation.
-
-132. **Class members are now overloaded term candidates resolved from signatures plus evidence, not inert declarations:** Ambient or same-module class members such as `map`, `pure`, and `compare` now enter name resolution, match against argument/result types through polymorphic HIR bindings, and require concrete builtin or same-module instance evidence before typechecking succeeds. The slice still stops at checked HIR/evidence selection—later dictionary-passing/runtime lowering remains explicit follow-on work—but the hierarchy is no longer “parsed only.”
- 
-133. **Builtin overloaded class-member calls now cross the real lowering pipeline through explicit dispatch witnesses:** Checked HIR now records each overloaded class-member use as a resolved dispatch carrying the chosen class member, subject binding, and whether the evidence came from a compiler builtin or a same-module instance. Typed core lowers the runtime-supported builtin cases (`map`, `pure`, `apply`, `append`, `empty`, `compare`, structural equality) into explicit intrinsic references that survive through lambda, backend kernels, and backend runtime evaluation. Same-module instance member execution is still an explicit boundary: until instance members are materialized as callable lower-level items rather than just checked HIR bodies, typed-core lowering stops with a named blocker instead of faking dictionary passing.
-
-134. **Runtime task execution now uses explicit linked task bindings and hidden sink inputs instead of implicit startup side effects:** `aivi-runtime` emits `TaskRuntimeSpec` for directly annotated top-level task values, allocates one scheduler-owned hidden input per task completion, and starts work only through an explicit runtime spawn path that snapshots current signal globals, evaluates the linked backend item body on a worker thread, and publishes the immutable result back through `TaskCompletionPort`. Preserved wakeup metadata stays on the task spec for later recurrence scheduling, but task items whose current lowering still has no backend body—most notably today’s recurrent `@|> ... <|@ ...` task pipes—raise explicit runtime blockers instead of pretending they already auto-run.
-
-135. **Same-module instance members now lower as hidden callable items instead of stopping at typed core:** resolved HIR already knew which local instance/member pair satisfied an overloaded class-member use, so the narrowest coherent completion was to emit typed general-expression reports for instance-member bodies, seed deterministic hidden callable items for each `(instance, member)` pair in typed core, and point same-module overloaded references at those hidden items. Both full-module lowering and runtime-fragment lowering now pull those dependencies in explicitly, which lets the existing lambda/backend/runtime closure machinery execute local instance members without inventing backend-only special cases or fake dictionary passing.
-
-136. **Builtin multiplicative arithmetic stays symbolic and aligned with the current scalar backend slice:** the narrowest coherent builtin-surface expansion is to keep arithmetic operators symbolic all the way through the language, so modulo spells `%` and shares the same parser/operator-name/domain-resolution machinery as `*` and `/`. Runtime/backend execution mirrors the already-landed scalar arithmetic boundary instead of inventing a half-finished wider numeric model: builtin `*`, `/`, and `%` execute in the current `Int`-only slice, and evaluator division/modulo by zero now surface as explicit arithmetic errors instead of panicking.
+# Implementation Choices
+
+1. **Validation notation:** AIVI terms, not Haskell terms.
+2. **`?|>` gate:** Pass-only; failures drop silently (no fake inverse updates).
+3. **Reactive text in `@source`:** Reactive values in source strings are dependencies; source rebuilds on change.
+4. **HTTP refresh:** Explicit only (reactive inputs, timers, retries). No lifecycle-event refreshes.
+5. **File watch vs read:** Watch = change notification only; read/decode is separate.
+6. **Orphan instances:** Fully disallowed.
+7. **Milestone order:** Strict layer ordering; no later-stage concerns leaking into earlier stages.
+8. **Advanced types:** Start small; extend later as separate design.
+9. **`<each>` keys:** Required; stabilizes repeated UI items.
+10. **Decoder overrides:** Built-in path only; custom hooks deferred.
+11. **Internal data layout:** Stable IDs + iterative walking; no deep recursion.
+12. **Equality:** Auto-derived for comparable data shapes only. Functions, signals, tasks, handles excluded.
+13. **Early IR:** Stable IDs for items/bindings/expressions with source locations.
+14. **Record shorthand:** Stays as-is through early processing; no premature expansion.
+15. **Applicative clusters:** Stay grouped; not flattened early.
+16. **Special markup tags:** `show`, `each`, `match` are control features, not plain markup.
+17. **Decorators:** Only `@source`, `@recur.timer`, `@recur.backoff` are real. Others rejected immediately.
+18. **Name lookup:** Local names + limited imports only. No aliases, wildcards, or qualified names yet.
+19. **Spec updates:** Recent changes affect later stages; no redesign of current early compiler shape. `domain` added as its own feature.
+20. **`domain` declarations:** First-class language feature. Suffixes declarable now; expression use deferred.
+21. **Equality for domains:** Auto-derived when underlying type supports it; domain identity preserved.
+22. **Suffix literals (`250ms`):** Compact = suffix literal; spaced (`250 ms`) = normal. Integer-only for now.
+23. **Suffix resolution:** Against current module only. No match = error; multiple matches = ambiguous.
+24. **Newer pipe operators:** Only shape/ordering rules enforced now; type/runtime rules deferred.
+25. **Interpolated text:** Stored as alternating plain-text/expression segments, not opaque strings.
+26. **Source dependency tracking:** Source-backed signals record local signal deps. Imported refs not assumed to be signals.
+27. **General signal deps:** All signals carry explicit local dep lists for consistent scheduling.
+28. **Early `@source` errors:** Catches missing variants and duplicate options. Provider-specific checks deferred.
+29. **Built-in source options:** Known allowed option names checked by name now; value types deferred.
+30. **Unfinished applicative clusters:** Accepted by parser; rejected in validation (not rejected too early).
+31. **Type-shape checking foundation:** Reusable kind-checking for advanced type constructors.
+32. **Kind checking in validation:** Used where compiler already has trustworthy info. Imports checked only with explicit constructor-kind metadata.
+33. **Repeating-flow syntax:** One narrow trailing form only; mixed shapes rejected.
+34. **Applicative cluster IR:** User-facing form preserved + internal recipe attached. Later stages use recipe.
+35. **Repeating-flow tails:** Early model retains visible tail + extracted clean view for later stages.
+36. **Source option catalog:** Central catalog for built-in source option shapes.
+37. **Gate behavior checks:** Only proven type facts; uncertain cases left open.
+38. **Where repeating flows allowed:** Only proven signal/task targets; others rejected.
+39. **Required trigger:** Repeating flows require a provable trigger (builtin timer, reactive source input, `@recur.*`).
+40. **Source option types:** Schemas matched to program types where possible; values not fully type-checked yet.
+41. **Gate lowering plan:** Compiler produces lower-level plan; records blocker if insufficient proof.
+42. **Signal filter lowering:** Signal filters lower to typed filter description for runtime. Safe expression forms only.
+43. **Local source option value checks:** Same-module annotations, suffix literals, same-module constructors, list elements, reactive `Signal` payloads. Imported bindings deferred.
+44. **Custom `@source` wakeups:** Largest honest wakeup slice. Reactive inputs = source-event wakeup for any provider. Non-reactive custom = explicit hook in resolved metadata; no guessing from option names.
+45. **Non-source recurrence witnesses:** `@recur.timer expr` / `@recur.backoff expr` only; one positional arg, no `with {}`, no duplicates, not on `@source`.
+46. **Fan-out carrier handoff:** `*|>` proven on `List A` / `Signal (List A)` only. Body sees `A`. `<|*` stays grouped, typed over mapped collection. `Signal` joins lifted pointwise.
+47. **Bidirectional source constructors:** Option constructors checked against resolved expected type. Nullary or fully applied. Field types instantiated from expected type args only through closed source-option surface.
+48. **Built-in source recurrence metadata:** Retry/polling/trigger/intrinsic wakeup in typed contract layer. HIR reads from there; future custom providers plug into same contract.
+49. **Source contract parameter holes:** `A`/`B` holes kept explicit in expected-type patterns; not erased to "anything."
+50. **Typed source-provider identity:** HIR preserves provider as missing/builtin/custom/invalid-shape with explicit custom-provider hook.
+51. **Imported source option bindings:** Checked only with explicit closed value type in import catalog. Others stay unproven.
+52. **Local source contract parameter bindings:** Per-`@source` binding env for `A`/`B`. Fixed-point retry. Substitution only through closed `GateType` surface.
+53. **Narrow provider contract resolution:** Top-level `provider qualified.name` with optional members. Only `wakeup: timer|backoff|sourceEvent|providerTrigger` lowers now. Unknown fields diagnosed immediately.
+54. **Generic bare source constructor roots:** Proven only when every constructor field is provable from local evidence. Others stay unproven.
+55. **Canonical wakeup proof order:** Deterministic. Builtins: intrinsic → polling → retry → source-trigger → reactive. Custom: declared contract → reactive fallback.
+56a. **Custom provider schema:** `wakeup:` + `argument name: Type` + `option name: Type`. Only primitive/same-module/`List`/`Signal` shapes. Richer forms rejected on declaration.
+56b. **Recurrence scheduler-node handoff:** Lowers to typed scheduler-node report with `@|>` start, `<|@` steps, canonical target/wakeup, and non-source witness. Not collapsed into opaque loop.
+57. **Source lifecycle handoff:** Explicit lifecycle per source. Deps split into reactive-reconfig/trigger/`activeWhen`. Stable instance ID. Stale-publication suppression. Best-effort cancellation for HTTP/FS only.
+58. **Pipe/source umbrella boundary:** Complete once compiler has gate, fanout, recurrence, provider-contract, lifecycle handoffs in resolved HIR. Harder source-option expression typing is separate.
+59. **Recurrence runtime-lowering scope:** Complete at last pre-runtime handoff: closed proof in HIR + `elaborate_recurrences` + `elaborate_source_lifecycles`. Backend/runtime consumption is separate.
+60. **Bare source-root actual typing:** Closed fallback for same-module constructor roots, unannotated local `val`, tuple/record/list/`Some` literals. `None`/`Ok`/`Err`/`Valid`/`Invalid` when sibling evidence fixes type args.
+61. **Context-free source builtin holes:** Partial proofs for `None`/`Ok`/`Err`/`Valid`/`Invalid`. Keeps container shape with anonymous wildcard leaves; refines on later evidence. No widening to HM.
+62. **Regex literal validation:** In HIR validation, not lexing. Uses Rust `regex-syntax` to accept/reject `rx"..."` at compile time.
+63. **Truthy/falsy branch handoff:** `T|>` / `F|>` on `Bool`, `Option`, `Result`, `Validation` (direct + one `Signal` lift). Canonical constructors used directly. Payload branches get payload as subject. Zero-payload branches get none. Mismatches only rejected when both branch types are locally provable.
+64. **Case exhaustiveness:** `||>` and `<match>` checked only for locally provable scrutinee types (closed same-module sums, `Bool`, `Option`, `Result`, `Validation`). `_` and named bindings count as catch-alls.
+65. **Domain decode surfaces:** Compiler-generated decode uses `parse` method if annotated `Carrier -> Result E Domain`; else unique `Carrier -> Domain` or `Carrier -> Result E Domain`. Ambiguous/operator/literal methods rejected.
+66. **Module typechecker location:** In `aivi-hir`, not `aivi-typing` (depends on resolved IDs, local bindings, diagnostics).
+67. **Type proof surface:** Reuses `GateType`/`GateTypeContext` throughout; no second general type representation.
+68a. **Source config kernels:** `@source` arguments/options travel as first-class runtime expressions/backend kernels into the source-lifecycle handoff.
+68b. **Reject trailing body junk:** Parser error if expression body has trailing non-trivia. Stale spellings like `head :: tail` rejected.
+69. **Unary `instance` blocks:** Accepted with indented method bindings. Class head resolved against same-module `class`. Each member implemented exactly once. One class arg; no instance contexts yet.
+70. **Prefer unqualified terms:** Contextual disambiguation first; explicit `use xy.bla (x as y)` aliases for remaining ambiguity.
+71. **Domain members as unqualified terms:** Callable domain members enter term lookup. Same-name collisions deferred to expression typing. No projection syntax for domains.
+72. **`use` member aliases:** `use module (member as localName)` — alias changes local name only; compiler metadata still tracks original member name.
+73. **GTK Milestone 7 starts with typed widget-plan IR:** HIR markup → `WidgetPlan` with stable identities, child ops, setter bindings, event hookups, control branches. No live GTK objects yet.
+74. **GTK event hookup convention:** Attributes starting with `on` treated as event hookups for now. Explicit and replaceable once widget schemas exist.
+75. **Scheduler generation stamps:** Publications are generation-stamped. Stale generations rejected before propagation. Disposal recursively deactivates subtrees.
+76. **Typed core from proven handoffs only:** `aivi-core` owns arenas/ids/nodes; accepts only HIR elaboration reports the frontend already justifies. Blocked handoffs rejected explicitly.
+77. **Task/source workers use publication ports:** Workers get ports + read-only cancellation observers. Supersession advances generations + flips cancellation. Results re-enter through scheduler queue.
+78. **Runtime assembly from HIR handoffs:** Signal ownership, handles, source specs, decode programs, recurrence bindings, gate attachments built from `aivi-hir` reports directly. Blocked = explicit failure.
+79. **Builtin constructor inference:** Preserves `Option`/`Result`/`Validation` container shape through expressions when local surface can refine honestly. Local + bidirectional; not HM.
+80. **Backend IR from backend-owned kernels:** `aivi-backend` lowers `aivi-core` into layouts/kernels/pipelines/source-plans/decode-plans. Lambda closure + Cranelift are later layers.
+81. **GTK/runtime integration from typed widget assembly:** `WidgetPlan` → `WidgetRuntimeAssembly` with stable nodes, hierarchies, setter/event/control bindings. Real GTK allocation deferred.
+82. **Instance bodies checked against class-member arrows:** Explicit local parameter bindings; no broader dictionary passing.
+83. **Operators type-checked before fallback inference:** Operands/results validated directly. `==`/`!=` routed through `Eq` evidence. Same-domain operator declarations participate when operands concretely match.
+84. **Projections and collection literals stay shape-driven:** Deeper checking only when expected closed shape is already available.
+85. **`Name`/`Apply` propagation local and evidence-based:** Reuses expected-type info through local proof surface only. `Default` through shared constraint machinery.
+86. **Source-option validation one closed dispatcher:** All supported forms through one dispatcher. Unsupported/unprovable = explicit `Unknown`/blocked.
+87. **Domain operators through explicit elaboration seam:** Proven domain-member operator uses carried as stable handles; rewritten to explicit callable form for core/backend. Backend doesn't re-discover.
+88. **Typed lambda IR wraps typed-core with explicit closure/capture metadata:** `aivi-lambda` mirrors typed-core items/pipes/stages. Core expression graph as body language. Explicit closure boundaries + deterministic captures.
+89. **Signal truthy/falsy reuses ordinary carrier plan:** `T|>` / `F|>` on `Signal Bool`/`Signal (Option A)`/etc. unwraps inner plan, types branches, re-wraps. Non-canonical inner carriers rejected.
+90. **Source-option domain literals proved against expected domain types:** Suffixed/domain literals checked against resolved expected domain members explicitly.
+91. **Source-option generic constructor proofs preserve partial evidence:** Proved root + explicit holes for unresolved args. Holes refinable by later evidence.
+92. **Satisfied record defaults elaborated into explicit HIR fields:** `Default` proof → `Defaulted` field surfaces in elaborated HIR. Downstream uses explicit fields.
+93. **Typed-core general elaboration stays narrow:** Lowers typed value/function bodies, parameters, inline pipe forms. Unsupported = explicit unlowered; not guessed.
+94. **GTK bridge execution lowers to child groups + localized edits:** Widget runtime assembly → bridge graph with concrete widget/child groups, show/match/each templates, localized child edits.
+95. **Source lifecycle in committed scheduler snapshot:** Activation/reconfiguration/suspension transactional from committed values within one tick.
+96. **Built-in source providers enforce runtime contracts at registration:** `SourceRuntimeSpec` validated against provider contracts. Typed violations reported. Default cancellation behavior from contract.
+97. **Cranelift from backend kernels:** Codegen in `aivi-backend::codegen` from backend kernels/layouts + `aivi-lambda`. ABI/layout/codegen stays in backend.
+98. **General-expression blockers are named handoff errors:** Regex/cluster/markup and non-runtime-capable forms fail as named blocked cases. Typed-core/lambda/backend reject fatal blockers.
+99. **Backend codegen prevalidates supported kernel surface:** Only proceeds for justifiable kernels/projections/env layouts. Unsupported = fail at boundary.
+100. **GTK execution in explicit host/executor layer:** `aivi-gtk` allocates widgets, routes events, executes transitions through dedicated executor. Driven from bridge graph.
+101. **LSP via revision-keyed query database:** `aivi-query` owns cached source/parse/HIR/diagnostic/symbol/format queries. `aivi-lsp` consumes read-only.
+102. **Imported source-option constructor checks use cataloged metadata:** Supported only when import catalog has closed variant/field surface. Uncataloged = explicit deferred.
+103. **CLI stops at honest compile boundary:** `aivi compile`: syntax → HIR → core → lambda → backend → Cranelift. Missing runtime/link boundary reported explicitly.
+104. **GLib scheduler on main-context; worker wakeups cross-thread:** `GlibSchedulerDriver` on owned `glib::MainContext`. Workers publish + request wakeup only. Narrow shared-state wrapper for GLib `Send` requirement.
+105. **Backend runtime values from item-body kernels + signal snapshots:** Item/function bodies → dedicated `item-body` kernels. `KernelEvaluator`/`RuntimeValue`. Explicit global signal snapshots. Inline pipes and domain-member execution deferred.
+106. **Runtime startup linking in `aivi-runtime`:** Links HIR runtime bindings to backend items/source kernels via typed-core item origins. Owns fallible derived-signal evaluator. Source config as runtime-facing handoff.
+107. **Simple `sig` bodies on item-body path; pipe-spine signals on pipe handoff path:** `sig x = expr` → typed-core/lambda/backend item bodies. Top-level pipe-rooted signal bodies stay on pipe handoff.
+108. **Signal item-body kernels are payload-shaped:** Backend strips outer `Signal` wrapper from signal item result layouts. Runtime wraps as `RuntimeValue::Signal(...)` only when supplying as global.
+109. **Runtime provider execution:** Timer providers (`timer.every`, `timer.after`) first. Bare int args = milliseconds; common suffixed durations accepted. Unimplemented options (jitter, etc.) and non-timer providers fail explicitly.
+110. **Inline helper pipes execute over backend-modeled carriers only:** `|>`, `|`, `?|>`, `||>`, `T|>`, `F|>` inside helper kernels. Case-arm pattern bindings as inline subject slots. Signal-carried inline pipes and non-builtin constructor patterns rejected explicitly.
+111. **GLib driver reentry is explicit invariant:** Scheduler/evaluator behind one mutex. Same-thread sentinel + panic on reentry. No deadlock.
+112. **Interpolated markup text stays dynamic:** GTK host routes interpolated attrs to runtime setter bindings. Interpolated `StaticPropertyValue::Text` rejected defensively.
+113. **`aivi run` owns live GTK/runtime session:** Links compiled runtime stack, evaluates markup fragments against committed snapshots, re-hydrates bridge after meaningful ticks.
+114. **Static run view selection is deterministic:** Prefers `val view`; else unique markup-valued `val`; else `--view <name>` required. Root must be `Window`; no auto-wrapping.
+115. **Live GTK updates via whole-view fragment re-evaluation:** Re-evaluates selected view's compiled fragments against current snapshots after each committed tick. No speculative partial updater.
+116. **Same-module closed sums use constructor handles end to end:** HIR → typed core → backend kernels → backend runtime as explicit constructor identities. Sum values keyed by type item + variant name.
+117. **Dynamic markup compiles expression fragments locally:** Collects typed runtime expression sites from markup subtree with local binding envs. Lowers only reachable fragment bodies + ordinary item deps.
+118. **Linked runtime ownership behind `Arc<BackendProgram>`:** No transient borrowed backend program. Persistent GLib-driven session possible.
+119. **GTK event hooks via direct-signal publication contract:** Handler = publishable runtime signal input. Handler resolved once up front. GTK event payloads routed into that input.
+120. **Annotated body-less signals = input signals:** `sig name : Signal T` preserved as input-backed runtime signal. External event sources publish into real language-level signals.
+121. **Discrete GTK events force own runtime ticks:** GTK events published through immediate tick path. Rapid repeated clicks = separate transactions (not collapsed in same-generation batching).
+122. **Concrete GTK event lowering matches explicit supported events:** Attribute = event hook only when concrete host supports that widget/event pair. Unsupported `on*` = ordinary attribute, rejected at run-surface validation.
+123. **Live `aivi run` plans updates off GTK thread:** Snapshot committed globals on main thread → evaluate fragments on worker → ship immutable hydration plan back → apply GTK mutations via `idle_add`.
+124. **GTK control-node planning keyed by runtime handles including `<each>` keys:** Setter/control expressions compiled and evaluated by handle. Keyed `<each>` preserves dedicated runtime key input.
+125. **Multi-file workspace discovery:** Nearest `aivi.toml` ancestor, or entry file's parent. Module names from relative `.aivi` paths. Shared mapping across `check`/`compile`/`run`.
+126. **`|>` and tap type-check against pipe subject via local polymorphic unification:** Implicit function type variables; unified at call sites and in pipe bodies. `invalid-pipe-stage-input` when stage rejects subject.
+127. **General same-module instance matching:** Class/instance lookup not hardcoded to `Eq`/`Default`. General class-head matching with higher-kinded member instantiation. Imported instances and full polymorphic class members deferred.
+128. **Runtime source decoding via explicit text/JSON wire shape:** UTF-8 payload text decoded by one shared adapter. Plain `Text` = raw; structural = JSON; closed sums/`Option`/`Result`/`Validation` = `{tag, payload}`. Unsupported scalars (`Bytes`, `Float`, `Decimal`, `BigInt`, domain-surface) fail at provider startup.
+129. **Non-timer source execution provider-owned, transport-specific:** HTTP, file, process, socket, mailbox, GTK key providers via lifecycle/publication boundary. FS watch = polling loop. Socket = raw `tcp://` line streams. Mailbox = process-local text bus. Window keyDown = focused GTK window key controller. Unsupported options raise explicit runtime errors.
+130. **Core typeclasses as compiler-owned ambient prelude:** Injected as hidden HIR items into every checked module. Local declarations shadow it. No fake import lowering or dictionary passing.
+131. **Binder-attached constraints use `Constraint => ...`; multiple via `(C1, C2) => ...`:** Shared surface for class heads, class members, functions, instance heads.
+132. **Class members are overloaded term candidates:** Ambient/same-module class members enter name resolution. Match from arg/result types through polymorphic HIR bindings. Require concrete evidence. Checked HIR/evidence selection only; dictionary-passing deferred.
+133. **Builtin overloaded class-member calls via explicit dispatch witnesses:** Checked HIR records chosen class member, subject binding, evidence source. Typed core lowers runtime-supported builtins (`map`, `pure`, `apply`, `append`, `empty`, `compare`, structural equality) to intrinsic refs. Same-module instance member execution = explicit boundary until instance members are callable lower-level items.
+134. **Runtime task execution via linked task bindings + hidden sink inputs:** `TaskRuntimeSpec` for directly annotated top-level task values. One scheduler-owned hidden input per completion. Worker thread evaluates linked backend item body; publishes result via `TaskCompletionPort`. Recurrent `@|>...<|@` tasks raise explicit runtime blockers.
+135. **Same-module instance members lower as hidden callable items:** Hidden typed-core items per `(instance, member)`. Overloaded references point to those items. Full-module + runtime-fragment lowering pull deps explicitly. Existing lambda/backend/runtime closure machinery executes them.
+136. **Builtin multiplicative arithmetic stays symbolic:** `%` = modulo; same parser/operator-name/domain-resolution machinery as `*` and `/`. `Int`-only slice. Division/modulo by zero = explicit arithmetic error.
+137. **Built-in non-`Int` literal surface stays narrow and raw-preserving:** `Float` literals are `digits.digits`; `Decimal` literals are `digitsd` or `digits.digitsd`; `BigInt` literals are `digitsn`; all keep their exact source spelling in CST/HIR. Exact one-letter `d` / `n` suffixes now bind to those builtin families before domain-suffix lookup, while longer compact suffixes like `250ms` remain domain literals. Literal patterns stay on the existing integer/text-only slice for now instead of widening pattern semantics and runtime lowering prematurely.
+137. **Fuzzing stays in a standalone cargo-fuzz workspace with stable corpus replay tests:** Parser and decoder fuzzing now live under a dedicated top-level `fuzz/` package instead of the main workspace. That keeps libFuzzer-only tooling, corpora, and refresh scripts scoped to this hardening slice, while stable tests replay the committed seed corpus and check fixture drift so CI can validate the harness without needing the `cargo fuzz` subcommand installed.
+138. **Decoder fuzzing only executes compiler-generated decode programs and checks schema-owned errors:** The decoder target parses and lowers arbitrary source text first, then exercises only the `SourceDecodeProgram`s that the compiler itself generated. Supported programs must accept one deterministic shape-guided sample and round-trip through runtime JSON; malformed JSON or arbitrary external values may fail, but only through typed decode errors whose field and variant names still come from the generated schema instead of invented runtime strings.
+139. **Signal-carried inline pipes now cross stage boundaries through explicit layout-directed snapshot coercion:** Backend runtime kernels still receive committed signal globals as `RuntimeValue::Signal(...)`, but inline pipe execution no longer treats that wrapper as an ad hoc hard stop. Each inline stage now coerces its current value against the declared stage input/result layout, stripping one committed signal wrapper when the stage expects payloads and re-wrapping payload results only when the lowered layout still requires `Signal`. That keeps evaluation deterministic per committed snapshot and reuses the existing inline-subject/environment capture machinery for case and truthy/falsy branches instead of introducing scheduler-only shortcuts.
+140. **Signal item bodies keep payload-shaped backend layouts and normalize only at the runtime item boundary:** Backend lowering still strips the outer `Signal` wrapper from signal item-body result layouts so ordinary derived signals and scheduler snapshots stay payload-shaped. When a signal item body kernel legitimately evaluates to a wrapped `RuntimeValue::Signal(...)`, runtime item evaluation now unwraps exactly one outer layer only if the payload matches the declared payload layout, instead of widening every signal-body kernel to wrapped layouts.
+141. **Callable argument binding is layout-directed, not blanket signal-stripping:** Backend runtime application now coerces each argument against the callee parameter layout before partial/full application. Payload-typed parameters still accept committed signal snapshots by unwrapping one outer signal, while `Signal A` parameters now receive a wrapped snapshot value when the committed payload matches `A`. Linked-runtime startup coverage for lifted `||>` / `T|>` / `F|>` helpers therefore uses explicit signal parameters rather than pretending top-level signal pipeline linking already exists.

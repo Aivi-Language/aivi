@@ -1,0 +1,18 @@
+type HttpError =
+  | Timeout
+
+type Session = {
+    token: Text
+}
+
+type DecodeMode =
+  | Strict
+  | Permissive
+
+val decodeMode:DecodeMode =
+    Strict
+
+@source http.post "/login" with {
+    decode: decodeMode
+}
+sig login : Signal (Result HttpError Session)

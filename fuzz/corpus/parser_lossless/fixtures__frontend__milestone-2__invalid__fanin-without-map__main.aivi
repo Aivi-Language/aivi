@@ -1,0 +1,7 @@
+fun collect #items =>
+    items
+
+val users = []
+val emails =
+    users
+     <|* collect

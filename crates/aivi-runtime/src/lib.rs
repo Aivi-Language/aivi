@@ -39,6 +39,10 @@ pub use scheduler::{
     SchedulerMessage, TickOutcome, TryDerivedNodeEvaluator, WorkerPublicationSender,
     WorkerSendError,
 };
+pub use source_decode::{
+    ExternalSourceValue, SourceDecodeError, SourceDecodeProgramSupportError, decode_external,
+    encode_runtime_json, parse_json_text, validate_supported_program,
+};
 pub use startup::{
     BackendLinkedRuntime, BackendRuntimeError, BackendRuntimeLinkError, BackendRuntimeLinkErrors,
     EvaluatedSourceConfig, EvaluatedSourceOption, LinkedDerivedSignal, LinkedSourceArgument,

@@ -777,6 +777,24 @@ pub struct IntegerLiteral {
     pub raw: Box<str>,
 }
 
+/// One float literal preserved in raw form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FloatLiteral {
+    pub raw: Box<str>,
+}
+
+/// One decimal literal preserved in raw form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecimalLiteral {
+    pub raw: Box<str>,
+}
+
+/// One BigInt literal preserved in raw form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BigIntLiteral {
+    pub raw: Box<str>,
+}
+
 /// One integer literal immediately suffixed by a resolved-or-resolvable domain suffix.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SuffixedIntegerLiteral {
@@ -856,6 +874,9 @@ pub struct Expr {
 pub enum ExprKind {
     Name(TermReference),
     Integer(IntegerLiteral),
+    Float(FloatLiteral),
+    Decimal(DecimalLiteral),
+    BigInt(BigIntLiteral),
     SuffixedInteger(SuffixedIntegerLiteral),
     Text(TextLiteral),
     Regex(RegexLiteral),

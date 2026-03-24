@@ -34,6 +34,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/domain-declarations/main.aivi",
         "milestone-2/valid/domain-member-resolution/main.aivi",
         "milestone-2/valid/domain-literal-suffixes/main.aivi",
+        "milestone-2/valid/noninteger-literals/main.aivi",
         "milestone-2/valid/domain-operator-usage/main.aivi",
         "milestone-2/valid/domain-operator-usage-parameterized/main.aivi",
         "milestone-2/valid/type-kinds/main.aivi",
@@ -122,6 +123,7 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/source-option-constructor-mismatch/main.aivi",
         "milestone-2/invalid/source-option-list-element-mismatch/main.aivi",
         "milestone-2/invalid/value-annotation-type-mismatch/main.aivi",
+        "milestone-2/invalid/noninteger-literal-type-mismatch/main.aivi",
         "milestone-2/invalid/equality-missing-eq-instance/main.aivi",
         "milestone-2/invalid/ambiguous-domain-member/main.aivi",
         "milestone-2/invalid/mixed-applicative-cluster/main.aivi",
@@ -256,6 +258,38 @@ fn check_reports_type_mismatch_from_hir_typechecker() {
     assert!(
         stderr.contains("expected `Text` but found `Int`"),
         "expected explicit type mismatch message, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_noninteger_literal_type_mismatches_from_hir_typechecker() {
+    let path = fixture_path("milestone-2/invalid/noninteger-literal-type-mismatch/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected noninteger literal mismatch fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::type-mismatch"),
+        "expected type mismatch diagnostic code, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("expected `Float` but found `Decimal`"),
+        "expected Float/Decimal mismatch message, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("expected `Decimal` but found `Float`"),
+        "expected Decimal/Float mismatch message, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("expected `BigInt` but found `Int`"),
+        "expected BigInt/Int mismatch message, got stderr: {stderr}"
     );
 }
 

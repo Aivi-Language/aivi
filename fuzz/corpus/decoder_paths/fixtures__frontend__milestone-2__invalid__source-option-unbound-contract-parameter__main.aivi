@@ -1,0 +1,17 @@
+type HttpError =
+  | Timeout
+
+type Session = {
+    token: Text
+}
+
+type Box A =
+  | Box A
+
+val emptyBody =
+    Box None
+
+@source http.post "/login" with {
+    body: emptyBody
+}
+sig login : Signal (Result HttpError Session)

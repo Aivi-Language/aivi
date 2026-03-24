@@ -894,6 +894,24 @@ impl<'a> GeneralExprElaborator<'a> {
                     kind: GateRuntimeUnsupportedKind::RegexLiteral,
                 }]);
             }
+            ExprKind::Float(_) => {
+                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                    span: expr.span,
+                    kind: GateRuntimeUnsupportedKind::FloatLiteral,
+                }]);
+            }
+            ExprKind::Decimal(_) => {
+                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                    span: expr.span,
+                    kind: GateRuntimeUnsupportedKind::DecimalLiteral,
+                }]);
+            }
+            ExprKind::BigInt(_) => {
+                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                    span: expr.span,
+                    kind: GateRuntimeUnsupportedKind::BigIntLiteral,
+                }]);
+            }
             ExprKind::Cluster(_) => {
                 return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
                     span: expr.span,
@@ -914,6 +932,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 self.runtime_reference_for_name(expr.span, &reference, &ty)?,
             ),
             ExprKind::Integer(literal) => GateRuntimeExprKind::Integer(literal),
+            ExprKind::Float(_) | ExprKind::Decimal(_) | ExprKind::BigInt(_) => {
+                unreachable!("unsupported runtime forms should be returned before type inference")
+            }
             ExprKind::SuffixedInteger(literal) => GateRuntimeExprKind::SuffixedInteger(literal),
             ExprKind::Text(text) => {
                 GateRuntimeExprKind::Text(self.lower_text_literal(&text, env, ambient)?)
@@ -1327,29 +1348,28 @@ impl<'a> GeneralExprElaborator<'a> {
         subject: &GateType,
         expected: Option<&GateType>,
     ) -> Result<GateRuntimePipeStage, Vec<GeneralExprBlocker>> {
-        if subject.is_signal() {
-            return Err(vec![GeneralExprBlocker::UnsupportedSignalCase {
-                span: stages.first().map(|stage| stage.span).unwrap_or_default(),
-                subject: subject.clone(),
-            }]);
-        }
-
         let mut arms = Vec::with_capacity(stages.len());
         let mut result_subject = None::<GateType>;
         let mut blockers = Vec::new();
+        let branch_subject = subject.gate_payload().clone();
+        let branch_expected = self.inline_pipe_stage_result_body_type(subject, expected);
         for stage in stages {
             let PipeStageKind::Case { pattern, body } = &stage.kind else {
                 continue;
             };
-            let branch_env = self.case_branch_env(env, *pattern, subject);
-            let lowered_body =
-                match self.lower_body_expr(*body, &branch_env, Some(subject), expected) {
-                    Ok(body) => body,
-                    Err(errors) => {
-                        blockers.extend(errors);
-                        continue;
-                    }
-                };
+            let branch_env = self.case_branch_env(env, *pattern, &branch_subject);
+            let lowered_body = match self.lower_body_expr(
+                *body,
+                &branch_env,
+                Some(&branch_subject),
+                branch_expected.as_ref(),
+            ) {
+                Ok(body) => body,
+                Err(errors) => {
+                    blockers.extend(errors);
+                    continue;
+                }
+            };
             let branch_ty = lowered_body.ty.clone();
             match result_subject.as_ref() {
                 Some(current) if !current.same_shape(&branch_ty) => {
@@ -1376,9 +1396,14 @@ impl<'a> GeneralExprElaborator<'a> {
                 span: stages.first().map(|stage| stage.span).unwrap_or_default(),
             }]
         })?;
+        let result_subject = if subject.is_signal() {
+            GateType::Signal(Box::new(result_subject))
+        } else {
+            result_subject
+        };
         Ok(GateRuntimePipeStage {
             span: join_stage_spans(stages),
-            input_subject: subject.clone(),
+            input_subject: branch_subject,
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::Case { arms },
         })
@@ -1428,7 +1453,7 @@ impl<'a> GeneralExprElaborator<'a> {
         };
         Ok(GateRuntimePipeStage {
             span: join_spans(pair.truthy_stage.span, pair.falsy_stage.span),
-            input_subject: subject.clone(),
+            input_subject: subject.gate_payload().clone(),
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::TruthyFalsy {
                 truthy: GateRuntimeTruthyFalsyBranch {

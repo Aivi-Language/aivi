@@ -1,0 +1,13 @@
+class Eq A
+    (==) : A -> A -> Bool
+
+type Blob = Blob Bytes
+
+fun blobEquals:Bool #left:Blob #right:Blob =>
+    True
+
+instance Eq Blob
+    (==) left right = blobEquals left right
+
+instance Eq Blob
+    (==) left right = blobEquals left right

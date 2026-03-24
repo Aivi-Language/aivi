@@ -8,14 +8,14 @@ pub mod lex;
 pub mod parse;
 
 pub use cst::{
-    BinaryOperator, ClassBody, ClassMember, ClassMemberName, Decorator, DecoratorArguments,
-    DecoratorPayload, DomainBody, DomainItem, DomainMember, DomainMemberName, ErrorItem,
-    ExportItem, Expr, ExprKind, FunctionParam, Identifier, InstanceBody, InstanceItem,
-    InstanceMember, IntegerLiteral, Item, ItemBase, ItemKind, MapExpr, MapExprEntry,
-    MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody,
-    OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind,
-    ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral,
-    SourceDecorator, SourceProviderContractBody, SourceProviderContractFieldValue,
+    BigIntLiteral, BinaryOperator, ClassBody, ClassMember, ClassMemberName, DecimalLiteral,
+    Decorator, DecoratorArguments, DecoratorPayload, DomainBody, DomainItem, DomainMember,
+    DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind, FloatLiteral, FunctionParam,
+    Identifier, InstanceBody, InstanceItem, InstanceMember, IntegerLiteral, Item, ItemBase,
+    ItemKind, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module,
+    NamedItem, NamedItemBody, OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage,
+    PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField,
+    RegexLiteral, SourceDecorator, SourceProviderContractBody, SourceProviderContractFieldValue,
     SourceProviderContractItem, SourceProviderContractMember, SourceProviderContractSchemaMember,
     SuffixedIntegerLiteral, TextFragment, TextInterpolation, TextLiteral, TextSegment, TokenRange,
     TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport,
