@@ -91,6 +91,59 @@ pub enum RuntimeValue {
     Callable(RuntimeCallable),
 }
 
+/// Explicit snapshot used when runtime values cross GTK/worker/FFI boundaries.
+///
+/// Future moving-collector work must not let those boundaries assume that
+/// ordinary language values keep stable addresses. This wrapper forces callers to
+/// either deep-copy a live runtime value (`from_runtime_copy`) or to explicitly
+/// mark an already-owned value as boundary-ready (`from_runtime_owned`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DetachedRuntimeValue(RuntimeValue);
+
+impl DetachedRuntimeValue {
+    pub const fn unit() -> Self {
+        Self(RuntimeValue::Unit)
+    }
+
+    pub fn from_runtime_copy(value: &RuntimeValue) -> Self {
+        Self(value.clone())
+    }
+
+    pub fn from_runtime_owned(value: RuntimeValue) -> Self {
+        Self(value)
+    }
+
+    pub const fn as_runtime(&self) -> &RuntimeValue {
+        &self.0
+    }
+
+    pub fn to_runtime(&self) -> RuntimeValue {
+        self.0.clone()
+    }
+
+    pub fn into_runtime(self) -> RuntimeValue {
+        self.0
+    }
+}
+
+impl PartialEq<RuntimeValue> for DetachedRuntimeValue {
+    fn eq(&self, other: &RuntimeValue) -> bool {
+        self.as_runtime() == other
+    }
+}
+
+impl PartialEq<DetachedRuntimeValue> for RuntimeValue {
+    fn eq(&self, other: &DetachedRuntimeValue) -> bool {
+        self == other.as_runtime()
+    }
+}
+
+impl fmt::Display for DetachedRuntimeValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_runtime().fmt(f)
+    }
+}
+
 impl RuntimeValue {
     pub fn as_bool(&self) -> Option<bool> {
         match self {
@@ -2432,7 +2485,9 @@ fn strip_signal(value: RuntimeValue) -> RuntimeValue {
 mod tests {
     use aivi_hir::{ItemId as HirItemId, SumConstructorHandle};
 
-    use super::{RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeValue};
+    use super::{
+        DetachedRuntimeValue, RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeValue,
+    };
 
     #[test]
     fn display_formats_nested_runtime_values_without_intermediate_joining() {
@@ -2503,5 +2558,31 @@ mod tests {
         });
 
         assert_eq!(format!("{value}"), "<constructor Status.Ready>");
+    }
+
+    #[test]
+    fn detached_runtime_values_copy_text_storage_at_boundary() {
+        let original = RuntimeValue::Signal(Box::new(RuntimeValue::Text("hello".into())));
+        let detached = DetachedRuntimeValue::from_runtime_copy(&original);
+
+        let RuntimeValue::Signal(original_inner) = &original else {
+            panic!("expected wrapped signal value")
+        };
+        let RuntimeValue::Text(original_text) = original_inner.as_ref() else {
+            panic!("expected wrapped text payload")
+        };
+        let RuntimeValue::Signal(detached_inner) = detached.as_runtime() else {
+            panic!("expected detached wrapped signal value")
+        };
+        let RuntimeValue::Text(detached_text) = detached_inner.as_ref() else {
+            panic!("expected detached wrapped text payload")
+        };
+
+        assert_eq!(detached, original);
+        assert_ne!(
+            original_text.as_ptr(),
+            detached_text.as_ptr(),
+            "detaching must copy boundary text storage instead of preserving addresses"
+        );
     }
 }

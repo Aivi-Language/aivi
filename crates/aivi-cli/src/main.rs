@@ -1716,7 +1716,12 @@ fn plan_run_node(
                 if let RuntimePropertyBinding::Setter(setter) = property {
                     properties.push(HydratedRunProperty {
                         input: setter.input,
-                        value: evaluate_run_input(&shared.inputs, globals, setter.input, env)?,
+                        value: DetachedRuntimeValue::from_runtime_owned(evaluate_run_input(
+                            &shared.inputs,
+                            globals,
+                            setter.input,
+                            env,
+                        )?),
                     });
                 }
             }

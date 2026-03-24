@@ -6,8 +6,9 @@ use std::{
 };
 
 use aivi_backend::{
-    EvaluationError, ItemId as BackendItemId, ItemKind as BackendItemKind, KernelEvaluator,
-    KernelId, Program as BackendProgram, RuntimeValue, SourceId as BackendSourceId,
+    DetachedRuntimeValue, EvaluationError, ItemId as BackendItemId,
+    ItemKind as BackendItemKind, KernelEvaluator, KernelId, Program as BackendProgram,
+    RuntimeValue, SourceId as BackendSourceId,
 };
 use aivi_core as core;
 use aivi_hir as hir;
@@ -113,7 +114,7 @@ impl BackendLinkedRuntime {
 
     pub fn current_signal_globals(
         &self,
-    ) -> Result<BTreeMap<BackendItemId, RuntimeValue>, BackendRuntimeError> {
+    ) -> Result<BTreeMap<BackendItemId, DetachedRuntimeValue>, BackendRuntimeError> {
         self.committed_signal_snapshots()
     }
 
@@ -202,7 +203,7 @@ impl BackendLinkedRuntime {
                 let port = self.runtime.activate_source(instance)?;
                 actions.push(LinkedSourceLifecycleAction::Activate {
                     instance,
-                    port: DetachedRuntimePublicationPort { inner: port },
+                    port,
                     config,
                 });
                 continue;
@@ -223,7 +224,7 @@ impl BackendLinkedRuntime {
                 let port = self.runtime.reconfigure_source(instance)?;
                 actions.push(LinkedSourceLifecycleAction::Reconfigure {
                     instance,
-                    port: DetachedRuntimePublicationPort { inner: port },
+                    port,
                     config,
                 });
             }
@@ -306,11 +307,16 @@ impl BackendLinkedRuntime {
 
     fn committed_signal_snapshots(
         &self,
-    ) -> Result<BTreeMap<BackendItemId, RuntimeValue>, BackendRuntimeError> {
+    ) -> Result<BTreeMap<BackendItemId, DetachedRuntimeValue>, BackendRuntimeError> {
         let mut snapshots = BTreeMap::new();
         for (&signal, &item) in &self.signal_items_by_handle {
             if let Some(value) = self.runtime.current_value(signal)? {
-                snapshots.insert(item, RuntimeValue::Signal(Box::new(value.clone())));
+                snapshots.insert(
+                    item,
+                    DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Signal(Box::new(
+                        value.clone(),
+                    ))),
+                );
             }
         }
         Ok(snapshots)
@@ -321,8 +327,8 @@ impl BackendLinkedRuntime {
         instance: SourceInstanceId,
         kernel: KernelId,
         required: &[BackendItemId],
-        snapshots: &BTreeMap<BackendItemId, RuntimeValue>,
-    ) -> Result<BTreeMap<BackendItemId, RuntimeValue>, BackendRuntimeError> {
+        snapshots: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+    ) -> Result<BTreeMap<BackendItemId, DetachedRuntimeValue>, BackendRuntimeError> {
         let mut globals = BTreeMap::new();
         for item in required {
             let signal = self.runtime_signal_by_item.get(item).copied().ok_or(
@@ -385,8 +391,8 @@ impl BackendLinkedRuntime {
         instance: TaskInstanceId,
         kernel: KernelId,
         required: &[BackendItemId],
-        snapshots: &BTreeMap<BackendItemId, RuntimeValue>,
-    ) -> Result<BTreeMap<BackendItemId, RuntimeValue>, BackendRuntimeError> {
+        snapshots: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+    ) -> Result<BTreeMap<BackendItemId, DetachedRuntimeValue>, BackendRuntimeError> {
         let mut globals = BTreeMap::new();
         for item in required {
             let signal = self.runtime_signal_by_item.get(item).copied().ok_or(

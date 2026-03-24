@@ -56,7 +56,7 @@ pub use program::{
     SourceTeardownPolicy, Stage, StageKind, TruthyFalsyBranch, TruthyFalsyStage,
 };
 pub use runtime::{
-    EvaluationError, KernelEvaluator, RuntimeCallable, RuntimeConstructor, RuntimeMapEntry,
-    RuntimeRecordField, RuntimeSumValue, RuntimeValue,
+    DetachedRuntimeValue, EvaluationError, KernelEvaluator, RuntimeCallable, RuntimeConstructor,
+    RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeValue,
 };
 pub use validate::{ValidationError, ValidationErrors, validate_program};

@@ -365,7 +365,7 @@ impl GlibLinkedRuntimeDriver {
                 .runtime_mut()
                 .queue_publication(Publication::new(stamp, value.into_runtime()))
         })
-            .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
+        .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
         self.shared.request_tick();
         Ok(())
     }
@@ -381,7 +381,7 @@ impl GlibLinkedRuntimeDriver {
                 .runtime_mut()
                 .queue_publication(Publication::new(stamp, value.into_runtime()))
         })
-            .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
+        .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
         self.tick_now();
         Ok(())
     }
@@ -624,7 +624,7 @@ mod tests {
         thread,
     };
 
-    use aivi_backend::{DetachedRuntimeValue, ItemId as BackendItemId, RuntimeValue};
+    use aivi_backend::{ItemId as BackendItemId, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_core as core;
     use aivi_hir as hir;
@@ -676,10 +676,8 @@ mod tests {
             .unwrap_or_else(|| panic!("expected backend item named {name}"))
     }
 
-    fn expected_signal_text(value: &str) -> DetachedRuntimeValue {
-        DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Signal(Box::new(
-            RuntimeValue::Text(value.into()),
-        )))
+    fn expected_signal_text(value: &str) -> RuntimeValue {
+        RuntimeValue::Signal(Box::new(RuntimeValue::Text(value.into())))
     }
 
     fn pump_until(context: &MainContext, mut condition: impl FnMut() -> bool) {
