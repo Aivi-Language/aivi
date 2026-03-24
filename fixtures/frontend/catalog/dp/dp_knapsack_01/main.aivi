@@ -29,7 +29,7 @@ type KnapsackSummary = {
     note: Text
 }
 
-val emptyPlan: Plan = {
+val emptyPlan:Plan = {
     total: 0,
     picked: []
 }
@@ -65,14 +65,12 @@ fun nextCell:Cell #item:KnapsackItem #previous:(List Cell) #capacity:Int =>
         plan: choosePlan (planAt capacity previous) (includePlan item previous capacity)
     }
 
-fun appendCell:(List Cell) #item:KnapsackItem #previous:(List Cell) #cells:(List Cell) #capacity:Int =>
-    append cells [
-        nextCell item previous capacity
-    ]
+fun appendBuilt:(List B) #build:(A -> B) #items:(List B) #value:A =>
+    append items [build value]
 
 fun stepRow:(List Cell) #capacities:(List Int) #previous:(List Cell) #item:KnapsackItem =>
     capacities
-     |> reduce (appendCell item previous) []
+     |> reduce (appendBuilt (nextCell item previous)) []
 
 fun baseCell:Cell #capacity:Int =>
     {
@@ -80,17 +78,12 @@ fun baseCell:Cell #capacity:Int =>
         plan: emptyPlan
     }
 
-fun appendBaseCell:(List Cell) #cells:(List Cell) #capacity:Int =>
-    append cells [
-        baseCell capacity
-    ]
-
 fun pickedLabel:Text #plan:Plan =>
     isEmpty plan.picked
      T|> "none"
      F|> join " + " plan.picked
 
-val capacities: List Int = [
+val capacities:List Int = [
     0,
     1,
     2,
@@ -101,7 +94,7 @@ val capacities: List Int = [
     7
 ]
 
-val items: List KnapsackItem = [
+val items:List KnapsackItem = [
     {
         label: "map",
         weight: 1,
@@ -124,19 +117,19 @@ val items: List KnapsackItem = [
     }
 ]
 
-val initialRow: List Cell =
+val initialRow:List Cell =
     capacities
-     |> reduce appendBaseCell []
+     |> reduce (appendBuilt baseCell) []
 
-val optimizedRow: List Cell =
+val optimizedRow:List Cell =
     items
      |> reduce (stepRow capacities) initialRow
 
-val bestPlan: Plan = planAt 7 optimizedRow
-val zeroPlan: Plan = planAt 0 optimizedRow
-val emptyItemsPlan: Plan = planAt 7 initialRow
+val bestPlan:Plan = planAt 7 optimizedRow
+val zeroPlan:Plan = planAt 0 optimizedRow
+val emptyItemsPlan:Plan = planAt 7 initialRow
 
-val knapsackSummary: KnapsackSummary = {
+val knapsackSummary:KnapsackSummary = {
     bestAtSeven: bestPlan.total,
     pickedAtSeven: pickedLabel bestPlan,
     bestAtZero: zeroPlan.total,

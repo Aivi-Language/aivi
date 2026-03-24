@@ -146,7 +146,9 @@ fn fmt_check_accepts_stdlib_modules() {
         "aivi/list.aivi",
         "aivi/nonEmpty.aivi",
         "aivi/option.aivi",
+        "aivi/order.aivi",
         "aivi/path.aivi",
+        "aivi/prelude.aivi",
         "aivi/result.aivi",
         "aivi/text.aivi",
         "aivi/url.aivi",
@@ -160,6 +162,28 @@ fn fmt_check_accepts_stdlib_modules() {
     assert!(
         output.status.success(),
         "expected stdlib modules to already be formatted, stdout was: {}, stderr was: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn fmt_check_accepts_order_helper_surfaces() {
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("fmt")
+        .arg("--check")
+        .arg(stdlib_path("aivi/order.aivi"))
+        .arg(stdlib_path("aivi/prelude.aivi"))
+        .arg(stdlib_path("tests/foundation-validation/main.aivi"))
+        .arg(fixture_path(
+            "milestone-2/valid/bundled-root-prelude-stdlib/main.aivi",
+        ))
+        .output()
+        .expect("fmt --check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected order helper surfaces to already be formatted, stdout was: {}, stderr was: {}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );

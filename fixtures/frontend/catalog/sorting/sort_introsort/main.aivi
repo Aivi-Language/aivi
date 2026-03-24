@@ -1,6 +1,6 @@
 use aivi.list (
     head
-    tail
+    tailOrEmpty
     length
     partition
 )
@@ -42,25 +42,18 @@ fun mergeHeap:Heap #left:Heap #right:Heap =>
      ||> (other, Empty)                                               => other
      ||> (Node leftValue leftChildren, Node rightValue rightChildren) => mergeNodes leftValue leftChildren rightValue rightChildren
 
-fun mergePairsAfterSecond:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
-    tail remaining
-     ||> Some rest => mergeHeap (mergeHeap first second) (mergePairs rest)
-     ||> None      => mergeHeap first second
+fun mergePairRest:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
+    mergeHeap (mergeHeap first second) (mergePairs (tailOrEmpty remaining))
 
-fun mergePairsAfterFirst:Heap #first:Heap #remaining:(List Heap) =>
+fun mergePairsWithFirst:Heap #first:Heap #remaining:(List Heap) =>
     head remaining
+     ||> Some second => mergePairRest first second remaining
      ||> None        => first
-     ||> Some second => mergePairsAfterSecond first second remaining
-
-fun mergePairsFromFirst:Heap #first:Heap #children:(List Heap) =>
-    tail children
-     ||> Some remaining => mergePairsAfterFirst first remaining
-     ||> None           => first
 
 fun mergePairs:Heap #children:(List Heap) =>
     head children
+     ||> Some first => mergePairsWithFirst first (tailOrEmpty children)
      ||> None       => Empty
-     ||> Some first => mergePairsFromFirst first children
 
 fun heapInsert:Heap #heap:Heap #value:Int =>
     mergeHeap heap (Node value [])
@@ -80,25 +73,15 @@ fun heapSort:(List Int) #items:(List Int) =>
      |> reduce heapInsert Empty
      |> heapDrain
 
-fun insertAfterHead:(List Int) #value:Int #first:Int #rest:(List Int) =>
-    value < first or value == first
+fun insertAfterFirst:(List Int) #value:Int #first:Int #rest:(List Int) =>
+    earlier value first
      T|> append [value, first] rest
      F|> append [first] (insertOrdered value rest)
 
-fun insertSingle:(List Int) #value:Int #first:Int =>
-    value < first or value == first
-     T|> [value, first]
-     F|> [first, value]
-
-fun insertFromFirst:(List Int) #value:Int #first:Int #items:(List Int) =>
-    tail items
-     ||> Some rest => insertAfterHead value first rest
-     ||> None      => insertSingle value first
-
 fun insertOrdered:(List Int) #value:Int #items:(List Int) =>
     head items
+     ||> Some first => insertAfterFirst value first (tailOrEmpty items)
      ||> None       => [value]
-     ||> Some first => insertFromFirst value first items
 
 fun insertionSort:(List Int) #items:(List Int) =>
     items
@@ -147,7 +130,7 @@ fun introsort:(List Int) #depth:Int #items:(List Int) =>
      T|> items
      F|> introsortAfterBase depth items
 
-val sample: List Int = [
+val sample:List Int = [
     9,
     3,
     7,
@@ -159,10 +142,10 @@ val sample: List Int = [
     5
 ]
 
-val tiny: List Int = [3, 1, 2]
-val emptyInput: List Int = []
+val tiny:List Int = [3, 1, 2]
+val emptyInput:List Int = []
 
-val sortSummary: SortSummary = {
+val sortSummary:SortSummary = {
     sorted: introsort 2 sample,
     heapFallback: introsort 0 sample,
     tinySort: introsort 2 tiny,

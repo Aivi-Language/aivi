@@ -33,19 +33,8 @@ type NfaCatalog = {
     missingOnZero: DfaSummary
 }
 
-fun sameState:Bool #left:NfaState #right:NfaState =>
-    (left, right)
-     ||> (Start, Start)     => True
-     ||> (BranchA, BranchA) => True
-     ||> (BranchB, BranchB) => True
-     ||> (Accept, Accept)   => True
-     ||> (_, _)             => False
-
-fun sameSymbol:Bool #left:Symbol #right:Symbol =>
-    (left, right)
-     ||> (Zero, Zero) => True
-     ||> (One, One)   => True
-     ||> (_, _)       => False
+fun isState:Bool #expected:NfaState #candidate:NfaState =>
+    candidate == expected
 
 fun stateName:Text #state:NfaState =>
     state
@@ -59,25 +48,19 @@ fun collectNames:(List Text) #labels:(List Text) #state:NfaState =>
         stateName state
     ]
 
-val emptyLabels: List Text = []
-
 fun subsetLabel:Text #subset:(List NfaState) =>
     length subset == 0
      T|> "empty"
-     F|> join "," (subset |> reduce collectNames emptyLabels)
+     F|> join "," (subset |> reduce collectNames [])
 
 fun containsState:Bool #candidate:NfaState #subset:(List NfaState) =>
-    any (sameState candidate) subset
+    subset
+     |> any (isState candidate)
 
 fun insertState:(List NfaState) #subset:(List NfaState) #state:NfaState =>
     containsState state subset
      T|> subset
      F|> append subset [state]
-
-fun edgeTargets:(Option (List NfaState)) #from:NfaState #symbol:Symbol #edge:Edge =>
-    sameState from edge.from and sameSymbol symbol edge.symbol
-     T|> Some edge.to
-     F|> None
 
 val transitions: List Edge = [
     {
@@ -102,13 +85,16 @@ val transitions: List Edge = [
     }
 ]
 
-val emptySubset: List NfaState = []
+fun matchingTargets:(Option (List NfaState)) #from:NfaState #symbol:Symbol #edge:Edge =>
+    (edge.from == from) and (edge.symbol == symbol)
+     T|> Some edge.to
+     F|> None
 
 fun moveFromState:(List NfaState) #from:NfaState #symbol:Symbol =>
     transitions
-     |> findMap (edgeTargets from symbol)
+     |> findMap (matchingTargets from symbol)
      ||> Some targets => targets
-     ||> None         => emptySubset
+     ||> None         => []
 
 fun moveStep:(List NfaState) #symbol:Symbol #subset:(List NfaState) #state:NfaState =>
     moveFromState state symbol
@@ -116,10 +102,11 @@ fun moveStep:(List NfaState) #symbol:Symbol #subset:(List NfaState) #state:NfaSt
 
 fun moveSet:(List NfaState) #subset:(List NfaState) #symbol:Symbol =>
     subset
-     |> reduce (moveStep symbol) emptySubset
+     |> reduce (moveStep symbol) []
 
 fun acceptingSubset:Bool #subset:(List NfaState) =>
-    any (sameState Accept) subset
+    subset
+     |> any (isState Accept)
 
 fun summarize:DfaSummary #subset:(List NfaState) =>
     {

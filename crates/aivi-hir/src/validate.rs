@@ -7975,12 +7975,7 @@ impl GateType {
                     right_parameter,
                     left_to_right,
                     right_to_left,
-                ) && Self::same_shape_inner(
-                    left_result,
-                    right_result,
-                    left_to_right,
-                    right_to_left,
-                )
+                ) && Self::same_shape_inner(left_result, right_result, left_to_right, right_to_left)
             }
             (Self::List(left), Self::List(right))
             | (Self::Set(left), Self::Set(right))
@@ -7999,12 +7994,7 @@ impl GateType {
                 },
             ) => {
                 Self::same_shape_inner(left_key, right_key, left_to_right, right_to_left)
-                    && Self::same_shape_inner(
-                        left_value,
-                        right_value,
-                        left_to_right,
-                        right_to_left,
-                    )
+                    && Self::same_shape_inner(left_value, right_value, left_to_right, right_to_left)
             }
             (
                 Self::Result {
@@ -8037,12 +8027,7 @@ impl GateType {
                 },
             ) => {
                 Self::same_shape_inner(left_error, right_error, left_to_right, right_to_left)
-                    && Self::same_shape_inner(
-                        left_value,
-                        right_value,
-                        left_to_right,
-                        right_to_left,
-                    )
+                    && Self::same_shape_inner(left_value, right_value, left_to_right, right_to_left)
             }
             (
                 Self::Domain {
@@ -8764,7 +8749,10 @@ impl<'a> GateTypeContext<'a> {
                         }
                         None => Some(GateType::TypeParameter {
                             parameter: *parameter,
-                            name: self.module.type_parameters()[*parameter].name.text().to_owned(),
+                            name: self.module.type_parameters()[*parameter]
+                                .name
+                                .text()
+                                .to_owned(),
                         }),
                     }
                 }
@@ -8803,11 +8791,9 @@ impl<'a> GateTypeContext<'a> {
                 Some(GateType::Record(lowered))
             }
             TypeKind::Arrow { parameter, result } => Some(GateType::Arrow {
-                parameter: Box::new(self.lower_poly_type_partially(
-                    *parameter,
-                    bindings,
-                    item_stack,
-                )?),
+                parameter: Box::new(
+                    self.lower_poly_type_partially(*parameter, bindings, item_stack)?,
+                ),
                 result: Box::new(self.lower_poly_type_partially(*result, bindings, item_stack)?),
             }),
             TypeKind::Apply { callee, arguments } => {
@@ -8823,16 +8809,18 @@ impl<'a> GateTypeContext<'a> {
                             Vec::with_capacity(binding.arguments.len() + arguments.len());
                         all_arguments.extend(binding.arguments.iter().cloned());
                         for argument in arguments.iter() {
-                            all_arguments.push(self.lower_poly_type_partially(
-                                *argument,
-                                bindings,
-                                item_stack,
-                            )?);
+                            all_arguments.push(
+                                self.lower_poly_type_partially(*argument, bindings, item_stack)?,
+                            );
                         }
                         let arity = type_constructor_arity(binding.head, self.module);
                         (all_arguments.len() == arity)
                             .then(|| {
-                                self.apply_type_constructor(binding.head, &all_arguments, item_stack)
+                                self.apply_type_constructor(
+                                    binding.head,
+                                    &all_arguments,
+                                    item_stack,
+                                )
                             })
                             .flatten()
                     }
@@ -8843,11 +8831,9 @@ impl<'a> GateTypeContext<'a> {
                         }
                         let mut lowered_arguments = Vec::with_capacity(arguments.len());
                         for argument in arguments.iter() {
-                            lowered_arguments.push(self.lower_poly_type_partially(
-                                *argument,
-                                bindings,
-                                item_stack,
-                            )?);
+                            lowered_arguments.push(
+                                self.lower_poly_type_partially(*argument, bindings, item_stack)?,
+                            );
                         }
                         self.apply_type_constructor(head, &lowered_arguments, item_stack)
                     }
@@ -9470,12 +9456,7 @@ impl<'a> GateTypeContext<'a> {
         let mut parameters = Vec::with_capacity(parameter_type_ids.len());
         for parameter in parameter_type_ids {
             let mut item_stack = Vec::new();
-            parameters.push(self.lower_type(
-                parameter,
-                &substitutions,
-                &mut item_stack,
-                false,
-            )?);
+            parameters.push(self.lower_type(parameter, &substitutions, &mut item_stack, false)?);
         }
         let mut item_stack = Vec::new();
         let result = self.lower_type(current, &substitutions, &mut item_stack, false)?;
@@ -9699,14 +9680,12 @@ impl<'a> GateTypeContext<'a> {
         allow_open_type_parameters: bool,
     ) -> Option<GateType> {
         match &self.module.types()[type_id].kind {
-            TypeKind::Name(reference) => {
-                self.lower_type_reference(
-                    reference,
-                    substitutions,
-                    item_stack,
-                    allow_open_type_parameters,
-                )
-            }
+            TypeKind::Name(reference) => self.lower_type_reference(
+                reference,
+                substitutions,
+                item_stack,
+                allow_open_type_parameters,
+            ),
             TypeKind::Tuple(elements) => {
                 let mut lowered = Vec::with_capacity(elements.len());
                 for element in elements.iter() {
@@ -9793,7 +9772,10 @@ impl<'a> GateTypeContext<'a> {
                 substitutions.get(parameter).cloned().or_else(|| {
                     allow_open_type_parameters.then(|| GateType::TypeParameter {
                         parameter: *parameter,
-                        name: self.module.type_parameters()[*parameter].name.text().to_owned(),
+                        name: self.module.type_parameters()[*parameter]
+                            .name
+                            .text()
+                            .to_owned(),
                     })
                 })
             }
@@ -9853,12 +9835,7 @@ impl<'a> GateTypeContext<'a> {
                 })
             }
             ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
-                self.lower_type_item(
-                    *item_id,
-                    arguments,
-                    item_stack,
-                    allow_open_type_parameters,
-                )
+                self.lower_type_item(*item_id, arguments, item_stack, allow_open_type_parameters)
             }
             ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
                 substitutions.get(parameter).cloned()
@@ -10804,9 +10781,7 @@ impl<'a> GateTypeContext<'a> {
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => {
                 GateExprInfo::default()
             }
-            ResolutionState::Resolved(TermResolution::IntrinsicValue(_)) => {
-                GateExprInfo::default()
-            }
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(_)) => GateExprInfo::default(),
             ResolutionState::Resolved(TermResolution::Builtin(builtin)) => {
                 let (ty, actual) = match builtin {
                     crate::hir::BuiltinTerm::True | crate::hir::BuiltinTerm::False => {
@@ -11196,7 +11171,8 @@ impl<'a> GateTypeContext<'a> {
             for (argument, parameter) in explicit_arguments.iter().zip(function.parameters.iter()) {
                 let annotation = parameter.annotation?;
                 let argument_info = self.infer_expr(*argument, env, Some(ambient));
-                let Some(argument_ty) = argument_info.actual_gate_type().or(argument_info.ty) else {
+                let Some(argument_ty) = argument_info.actual_gate_type().or(argument_info.ty)
+                else {
                     signal_payload_arguments.push(false);
                     continue;
                 };
@@ -11219,7 +11195,11 @@ impl<'a> GateTypeContext<'a> {
 
             let result_annotation = function.annotation?;
             if let Some(expected) = expected_result {
-                self.match_function_parameter_annotation(result_annotation, expected, &mut bindings)?;
+                self.match_function_parameter_annotation(
+                    result_annotation,
+                    expected,
+                    &mut bindings,
+                )?;
             }
 
             let mut parameter_types = Vec::with_capacity(function.parameters.len());
@@ -11259,7 +11239,10 @@ impl<'a> GateTypeContext<'a> {
                 return Some(PipeFunctionSignatureMatch {
                     callee_expr,
                     explicit_arguments,
-                    signal_payload_arguments: vec![false; matched.parameters.len().saturating_sub(1)],
+                    signal_payload_arguments: vec![
+                        false;
+                        matched.parameters.len().saturating_sub(1)
+                    ],
                     parameter_types: matched.parameters,
                     result_type: matched.result,
                 });
@@ -11274,7 +11257,8 @@ impl<'a> GateTypeContext<'a> {
             let mut parameter_type_ids = Vec::with_capacity(explicit_arguments.len() + 1);
             let mut signal_payload_arguments = Vec::with_capacity(explicit_arguments.len());
             for argument_ty in explicit_argument_types.iter().cloned() {
-                let TypeKind::Arrow { parameter, result } = self.module.types()[current].kind.clone()
+                let TypeKind::Arrow { parameter, result } =
+                    self.module.types()[current].kind.clone()
                 else {
                     continue;
                 };
@@ -11592,23 +11576,26 @@ impl<'a> GateTypeContext<'a> {
         for ((argument, expected), reads_signal_payload) in plan
             .explicit_arguments
             .iter()
-            .zip(plan.parameter_types.iter().take(plan.explicit_arguments.len()))
+            .zip(
+                plan.parameter_types
+                    .iter()
+                    .take(plan.explicit_arguments.len()),
+            )
             .zip(plan.signal_payload_arguments.iter())
         {
             let argument_info = self.infer_expr(*argument, env, Some(ambient));
-            let argument_ty = argument_info.actual_gate_type().or(argument_info.ty.clone());
+            let argument_ty = argument_info
+                .actual_gate_type()
+                .or(argument_info.ty.clone());
             info.merge(argument_info);
-            let matches_expected = argument_ty
-                .as_ref()
-                .is_some_and(|actual| {
-                    actual.same_shape(expected)
-                        || (*reads_signal_payload
-                            && matches!(
-                                actual,
-                                GateType::Signal(payload) if payload.same_shape(expected)
-                            ))
-                })
-                || expression_matches(self.module, *argument, env, expected);
+            let matches_expected = argument_ty.as_ref().is_some_and(|actual| {
+                actual.same_shape(expected)
+                    || (*reads_signal_payload
+                        && matches!(
+                            actual,
+                            GateType::Signal(payload) if payload.same_shape(expected)
+                        ))
+            }) || expression_matches(self.module, *argument, env, expected);
             if !matches_expected {
                 return Some(info);
             }

@@ -1,7 +1,7 @@
 use aivi.list (
     zip
     all
-    find
+    findMap
     length
 )
 
@@ -34,36 +34,41 @@ fun pairedTokensMatch:Bool #left:(List Text) #right:(List Text) =>
     zip left right
      |> all samePair
 
+fun sameCount:Bool #left:Int #right:Int =>
+    left == right
+
 fun sameTokens:Bool #left:(List Text) #right:(List Text) =>
-    length left == length right and pairedTokensMatch left right
+    sameCount (length left) (length right)
+     T|> pairedTokensMatch left right
+     F|> False
 
-fun matchingCandidate:Bool #candidate:PrefixCandidate =>
-    candidate
-     ||> { prefix, slice } => sameTokens prefix slice
+fun matchedWhenEqual:(Option Int) #matched:Int #prefix:(List Text) #slice:(List Text) =>
+    sameTokens prefix slice
+     T|> Some matched
+     F|> None
 
-fun candidateValue:Int #candidate:PrefixCandidate =>
+fun matchingLength:(Option Int) #candidate:PrefixCandidate =>
     candidate
-     ||> { matched } => matched
+     ||> { matched, prefix, slice } => matchedWhenEqual matched prefix slice
 
 fun matchedLength:Int #candidates:(List PrefixCandidate) =>
-    find matchingCandidate candidates
-     ||> Some candidate => candidateValue candidate
-     ||> None           => 0
+    findMap matchingLength candidates
+     ||> Some matched => matched
+     ||> None         => 0
+
+fun zValue:Int #probe:ZProbe =>
+    probe
+     ||> { candidates } => matchedLength candidates
 
 fun appendZ:(List Int) #values:(List Int) #probe:ZProbe =>
-    probe
-     ||> { candidates } => append values [matchedLength candidates]
+    append values [zValue probe]
 
 fun probeMatchIndex:Int #patternLength:Int #probe:ZProbe =>
     probe
      ||> { index } => index - (patternLength + 1)
 
-fun probeMatchLength:Int #probe:ZProbe =>
-    probe
-     ||> { candidates } => matchedLength candidates
-
 fun keepMatch:(List Int) #patternLength:Int #matches:(List Int) #probe:ZProbe =>
-    probeMatchLength probe == patternLength
+    zValue probe == patternLength
      T|> append matches [probeMatchIndex patternLength probe]
      F|> matches
 

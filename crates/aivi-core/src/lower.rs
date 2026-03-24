@@ -11,9 +11,9 @@ use aivi_hir::{
     ImportBindingMetadata, ImportId, ImportValueType, Item as HirItem, ItemId as HirItemId,
     PatternId as HirPatternId, RecurrenceNodeOutcome, ResolvedClassMemberDispatch,
     SourceDecodeProgram, SourceDecodeProgramOutcome, SourceLifecycleNodeOutcome,
-    TruthyFalsyStageOutcome, TypeBinding, TypeConstructorHead,
-    elaborate_fanouts, elaborate_gates, elaborate_general_expressions, elaborate_recurrences,
-    elaborate_source_lifecycles, elaborate_truthy_falsy, generate_source_decode_programs,
+    TruthyFalsyStageOutcome, TypeBinding, TypeConstructorHead, elaborate_fanouts, elaborate_gates,
+    elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
+    elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{
@@ -273,7 +273,10 @@ impl std::fmt::Display for LoweringError {
                 "typed-core lowering cannot lower overloaded class member `{class_name}.{member_name}` for `{subject}`: {reason}"
             ),
             Self::UnsupportedImportBinding {
-                import, name, reason, ..
+                import,
+                name,
+                reason,
+                ..
             } => write!(
                 f,
                 "typed-core lowering cannot synthesize imported binding `{name}` ({import}): {reason}"
@@ -1776,13 +1779,19 @@ impl<'a> ModuleLowerer<'a> {
             ImportBindingMetadata::Value { ty }
             | ImportBindingMetadata::IntrinsicValue { ty, .. } => ty,
             ImportBindingMetadata::AmbientValue { .. } => {
-                return Err(unsupported("ambient imports do not carry lowered value types"));
+                return Err(unsupported(
+                    "ambient imports do not carry lowered value types",
+                ));
             }
             ImportBindingMetadata::OpaqueValue => {
-                return Err(unsupported("opaque imports do not carry executable value types"));
+                return Err(unsupported(
+                    "opaque imports do not carry executable value types",
+                ));
             }
             ImportBindingMetadata::Unknown => {
-                return Err(unsupported("unresolved imports cannot be lowered into typed-core"));
+                return Err(unsupported(
+                    "unresolved imports cannot be lowered into typed-core",
+                ));
             }
             ImportBindingMetadata::TypeConstructor { .. }
             | ImportBindingMetadata::BuiltinType(_)
@@ -1809,7 +1818,9 @@ impl<'a> ModuleLowerer<'a> {
         }
 
         let kind = match current {
-            ImportValueType::Signal(_) if parameters.is_empty() => ItemKind::Signal(SignalInfo::default()),
+            ImportValueType::Signal(_) if parameters.is_empty() => {
+                ItemKind::Signal(SignalInfo::default())
+            }
             _ if parameters.is_empty() => ItemKind::Value,
             _ => ItemKind::Function,
         };
@@ -2011,17 +2022,15 @@ impl<'a> ModuleLowerer<'a> {
                                     Reference::IntrinsicValue(*value)
                                 }
                             };
-                            values.push(
-                                self.alloc_expr(
-                                    owner,
-                                    expr.span,
-                                    Expr {
-                                        span: expr.span,
-                                        ty,
-                                        kind: ExprKind::Reference(reference),
-                                    },
-                                )?,
-                            );
+                            values.push(self.alloc_expr(
+                                owner,
+                                expr.span,
+                                Expr {
+                                    span: expr.span,
+                                    ty,
+                                    kind: ExprKind::Reference(reference),
+                                },
+                            )?);
                         }
                         GateRuntimeExprKind::Integer(integer) => {
                             values.push(self.alloc_expr(

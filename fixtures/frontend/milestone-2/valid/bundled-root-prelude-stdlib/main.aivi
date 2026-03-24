@@ -27,36 +27,55 @@ use aivi.prelude (
     withDefault
     length
     head
+    min
+    max
+    minOf
     join
 )
 
 type NameSignal = Signal Text
+
 type CountTask = Task Text Int
-type CheckedName = Validation Text Text
 
-val maybeName:Option Text = Some "Ada"
-val missingName:Option Text = None
-val chosenName:Text = getOrElse "guest" missingName
+type CheckedName =
+  | Validation Text Text
 
-val okCount:Result Text Int = Ok 2
-val errCount:Result Text Int = Err "missing"
-val chosenCount:Int = withDefault 0 okCount
+val maybeName: Option Text = Some "Ada"
+val missingName: Option Text = None
+val chosenName: Text = getOrElse "guest" missingName
+val okCount: Result Text Int = Ok 2
+val errCount: Result Text Int = Err "missing"
+val chosenCount: Int = withDefault 0 okCount
+val checkedName: CheckedName = Valid "Ada"
 
-val checkedName:CheckedName = Valid "Ada"
+val nameCount: Int =
+    length [
+        "Ada",
+        "Grace"
+    ]
 
-val nameCount:Int = length [
-    "Ada",
-    "Grace"
-]
+val firstName: Option Text =
+    head [
+        "Ada",
+        "Grace"
+    ]
 
-val firstName:Option Text = head [
-    "Ada",
-    "Grace"
-]
+fun smaller:Bool #left:Int #right:Int =>
+    left < right
 
-val labels:Text = join ", " [
-    "Ada",
-    "Grace"
-]
+val leastCount: Int = min smaller 4 2
+val greatestCount: Int = max smaller 4 2
 
-val sameCount:Bool = chosenCount == 2
+val leastOfCounts: Int =
+    minOf smaller 5 [
+        3,
+        4
+    ]
+
+val labels: Text =
+    join ", " [
+        "Ada",
+        "Grace"
+    ]
+
+val sameCount: Bool = chosenCount == 2

@@ -84,14 +84,14 @@ fun partitionStep:(Partition A) #predicate:(A -> Bool) #state:(Partition A) #ite
     state
      ||> { matched, unmatched } => partitionItems matched unmatched item (predicate item)
 
-fun remainingTail:(List A) #items:(List A) =>
+fun tailOrEmpty:(List A) #items:(List A) =>
     tail items
      ||> Some remaining => remaining
      ||> None           => []
 
 fun appendZipPair:(ZipState A B) #state:(ZipState A B) #left:A #right:B =>
     state
-     ||> { remaining, pairs } => { remaining: remainingTail remaining, pairs: append pairs [(left, right)] }
+     ||> { remaining, pairs } => { remaining: tailOrEmpty remaining, pairs: append pairs [(left, right)] }
 
 fun zipHead:(ZipState A B) #state:(ZipState A B) #left:A #headValue:(Option B) =>
     headValue
@@ -168,6 +168,7 @@ export nonEmpty
 export length
 export head
 export tail
+export tailOrEmpty
 export last
 export zip
 export any

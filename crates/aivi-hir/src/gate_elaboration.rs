@@ -753,7 +753,11 @@ fn lower_function_pipe_body_runtime_expr(
     for ((argument, expected_parameter), reads_signal_payload) in plan
         .explicit_arguments
         .iter()
-        .zip(plan.parameter_types.iter().take(plan.explicit_arguments.len()))
+        .zip(
+            plan.parameter_types
+                .iter()
+                .take(plan.explicit_arguments.len()),
+        )
         .zip(plan.signal_payload_arguments.iter())
     {
         arguments.push(lower_pipe_argument_runtime_expr(
@@ -786,9 +790,7 @@ fn lower_pipe_argument_runtime_expr(
     typing: &mut GateTypeContext<'_>,
     purity: GateRuntimePurity,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
-    if reads_signal_payload
-        && let ExprKind::Name(reference) = &module.exprs()[expr_id].kind
-    {
+    if reads_signal_payload && let ExprKind::Name(reference) = &module.exprs()[expr_id].kind {
         let info = typing.infer_expr(expr_id, env, ambient);
         if let Some(GateType::Signal(payload)) = info.ty
             && payload.same_shape(expected)
@@ -1376,18 +1378,16 @@ fn lower_runtime_text_literal(
     for segment in &text.segments {
         let lowered = match segment {
             TextSegment::Text(fragment) => GateRuntimeTextSegment::Fragment(fragment.clone()),
-            TextSegment::Interpolation(interpolation) => {
-                GateRuntimeTextSegment::Interpolation(Box::new(
-                    lower_gate_runtime_expr_with_purity(
-                        module,
-                        interpolation.expr,
-                        env,
-                        ambient,
-                        typing,
-                        purity,
-                    )?,
-                ))
-            }
+            TextSegment::Interpolation(interpolation) => GateRuntimeTextSegment::Interpolation(
+                Box::new(lower_gate_runtime_expr_with_purity(
+                    module,
+                    interpolation.expr,
+                    env,
+                    ambient,
+                    typing,
+                    purity,
+                )?),
+            ),
         };
         segments.push(lowered);
     }
@@ -1402,7 +1402,8 @@ fn lower_runtime_pipe_expr(
     typing: &mut GateTypeContext<'_>,
     purity: GateRuntimePurity,
 ) -> Result<GateRuntimePipeExpr, GateElaborationBlocker> {
-    let head = lower_gate_runtime_expr_with_purity(module, pipe.head, env, ambient, typing, purity)?;
+    let head =
+        lower_gate_runtime_expr_with_purity(module, pipe.head, env, ambient, typing, purity)?;
     let mut current = head.ty.clone();
     let mut stages = Vec::with_capacity(pipe.stages.len());
     for stage in pipe.stages.iter() {

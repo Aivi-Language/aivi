@@ -1,8 +1,8 @@
 # AIVI Language Specification
 
-## Draft v0.5 — implementation-facing
+## Draft v0.7 — implementation-facing resolved pass
 
-> Status: normative working draft. Milestones 1–8 (surface through backend) are substantially complete. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
+> Status: normative working draft with implementation choices merged. Later implementation decisions override earlier exploratory notes, and this pass resolves the recorded choice log into the RFC text. Milestones 1–8 (surface through backend) are substantially complete. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
 
 ---
 
@@ -273,9 +273,15 @@ The core top-level forms are:
 - `sig`
 - `use`
 - `export`
+- `provider`
 - decorators via `@name`
 
-A module may export exactly one process entry point named `main`.
+A module may export at most one conventional process-entry binding named `main`.
+
+When present, `main` remains the conventional standalone-process entry for future packaging and full
+runtime/link integration. The current `aivi run` surface is preview-oriented and does **not**
+privilege `main` over the static view-selection rules in §26.3. A top-level markup-valued `val`
+named `view` is the preferred unqualified preview entry when no explicit `--view` is given.
 
 Comment syntax in v1:
 
@@ -293,23 +299,35 @@ Name lookup is intentionally simple in v1:
 
 - local names and a small explicit import set work
 - no wildcard imports in v1
-- no module-qualified call syntax such as `List.map` in v1
+- no arbitrary value-level module qualification for imported module members in v1
+- compiler-known type/domain/class namespaces may still expose qualified member lookup syntax such
+  as `Duration.value`, `Text.join`, or `Foldable.reduce`
 - built-in names keep priority where needed
+- callable domain members and class members participate in ordinary term lookup when they are in
+  scope; this is still term lookup, not projection syntax
 
 #### Import aliases
 
-`use module (member as localName)` is the disambiguation escape hatch when two imports would otherwise provide the same local name:
+`use module (member as localName)` is the disambiguation escape hatch when two imports would
+otherwise provide the same local name:
 
 ```aivi
 use aivi.network (http)
 use my.client (fetch as clientFetch)
 ```
 
-The original member name still drives compiler-known metadata. The alias changes only the local binding name.
+The original member name still drives compiler-known metadata. The alias changes only the local
+binding name.
 
 #### Name resolution for terms
 
-The compiler generally prefers unqualified term use and resolves the right binding from local name plus already-known context. When several candidates remain after contextual filtering, the compiler reports an `ambiguous-domain-member` or similar diagnostic and requires explicit disambiguation through an import alias.
+The compiler prefers unqualified term use and resolves the right binding from local name plus
+already-known context. When several candidates remain after contextual filtering, the compiler
+reports an ambiguity diagnostic and requires explicit disambiguation through an import alias.
+
+Qualified member syntax such as `Duration.value` or `Text.join` is therefore not a general
+module-qualification escape hatch. It is a compiler-known lookup surface for the owning
+ type/domain/class namespace only.
 
 ---
 
@@ -389,13 +407,16 @@ Accepted surface forms:
 - built-in decimal literals are ASCII decimal digits with a trailing `d`, optionally with one
   fractional `.<digits>` part before the suffix: `19d`, `19.25d`
 - built-in BigInt literals are ASCII decimal digits with a trailing `n`: `123n`
-- a compact `digits + identifier` form is parsed as a domain literal suffix candidate when it does
-  not match one of the built-in non-`Int` literal forms: `250ms`, `0xFF`
+- a compact `digits + suffix` form is parsed as a domain literal suffix candidate only when the
+  suffix is at least two ASCII letters and the token does not match one of the built-in non-`Int`
+  literal forms: `250ms`, `10sec`, `3min`
 - spacing is semantic: `250ms` is one suffixed literal candidate, while `250 ms` is ordinary
   application
 - leading zeroes do not introduce octal or any other alternate base; `007` is decimal
-- exact one-letter `d` / `n` compact suffixes are reserved for the built-in `Decimal` / `BigInt`
-  literal families; longer suffix spellings remain in the domain-suffix surface
+- exact one-letter alphabetic compact suffixes are reserved for built-in numeric literal families
+  and future core numeric extensions
+- in the current surface, `d` and `n` are allocated to the built-in `Decimal` / `BigInt` literal
+  families; user-defined and domain-defined suffixes must therefore use two or more letters
 
 Not part of the v1 literal grammar:
 
@@ -404,9 +425,10 @@ Not part of the v1 literal grammar:
 - built-in hex, binary, or octal integer forms
 - exponent notation
 
-A compact suffix form is only well-typed when exactly one domain literal suffix in scope claims
-that suffix name and accepts the base integer family. Otherwise it is rejected during later
-validation as an unresolved or ambiguous suffix literal.
+A compact suffix form is only well-typed when exactly one current-module domain literal suffix
+claims that suffix name and accepts the base integer family. Domain suffixes in v1 are
+multi-character only. Otherwise the literal is rejected during later validation as an unresolved or
+ambiguous suffix literal.
 
 ### 6.2.2 Executable numeric literal slice
 
@@ -525,9 +547,11 @@ Rules:
 
 ## 7. Core abstraction model
 
-AIVI includes a small class/instance abstraction mechanism, lowered by dictionary passing or intrinsics.
+AIVI includes a small class/instance abstraction mechanism. In the current implementation slice,
+core typeclasses are compiler-owned ambient prelude items injected into every checked module; local
+declarations may shadow them. This keeps the surface explicit without inventing fake imports.
 
-Conceptually:
+Constraint syntax is shared across class heads, class members, functions, and instance heads:
 
 ```aivi
 class Functor F
@@ -537,16 +561,56 @@ class Functor F => Applicative F
     pure  : A -> F A
     apply : F (A -> B) -> F A -> F B
 
-class Applicative F => Monad F
-    bind : F A -> (A -> F B) -> F B
+class (Eq A, Show A) => Example A
+    render : A -> Text
 ```
+
+The surface form `Constraint => ...` attaches a single constraint; `(C1, C2) => ...` attaches
+multiple constraints.
 
 ### 7.1 Resolution rules
 
 - instance resolution is coherent
 - overlapping instances are not allowed in v1
-- orphan instances are **fully disallowed** in v1 to keep behavior consistent and easy to reason about
+- orphan instances are **fully disallowed** in v1
 - instance search is compile-time only
+- user-authored instance lookup is currently same-module only; imported user instances remain
+  deferred
+- unary `instance` blocks with indented member bindings are the implemented surface; instance
+  contexts are deferred
+- instance bodies are checked directly against the class-member arrow types with explicit local
+  parameter bindings
+
+### 7.1.1 Overloaded term lookup
+
+Class members are overloaded term candidates. Ambient-prelude and same-module class members enter
+term lookup, and evidence selection is driven by concrete argument/result types that the checker can
+prove locally.
+
+This does **not** imply open-ended global search or unrestricted higher-rank inference. The current
+surface remains deliberately narrow:
+
+- evidence must be concrete enough for checked HIR to choose a member
+- imported polymorphic class-member execution remains deferred
+- unresolved or multiply valid candidates are diagnosed explicitly rather than guessed
+
+### 7.1.2 Lowering strategy
+
+Checked HIR records the chosen class member, subject binding, and evidence source explicitly.
+Typed core lowers the builtin runtime-supported class-member surface to intrinsic references for:
+
+- `map`
+- `pure`
+- `apply`
+- `reduce`
+- `append`
+- `empty`
+- `compare`
+- structural equality
+
+Same-module instance members lower as hidden callable items per `(instance, member)`. Overloaded
+references point to those hidden callables rather than asking later layers to rediscover instance
+selection.
 
 ### 7.2 Core instances
 
@@ -559,6 +623,7 @@ Recommended v1 instances:
 - `Signal` implements `Functor`, `Applicative`
 - `Validation E` implements `Functor`, `Applicative`
 - `Eq` is compiler-provided for the structural cases in §7.3
+- `Default` participates through the same evidence machinery used for other constraints
 
 ### 7.2.1 `Foldable.reduce`
 
@@ -585,7 +650,9 @@ class Eq A
     (==) : A -> A -> Bool
 ```
 
-`Eq` uses the ordinary class/instance resolution rules in §7.1. In the initial implementation, the compiler provides the required `Eq` instances; user-authored `Eq` instances are deferred until the wider instance system is implemented end to end.
+`Eq` uses the ordinary class/instance resolution rules in §7.1. In the current implementation
+slice, compiler-derived and builtin evidence covers the executable surface; user-authored `Eq`
+instances beyond same-module explicit evidence remain deferred.
 
 Compiler-derived `Eq` instances are required for:
 
@@ -593,10 +660,10 @@ Compiler-derived `Eq` instances are required for:
 - tuples whose element types are `Eq`
 - closed records whose field types are `Eq`
 - closed sums whose constructor payload types are all `Eq`
+- constructor-headed product declarations through the same closed-sum rule
 - `List A` and `Option A` when `A` is `Eq`
 - `Result E A` and `Validation E A` when both `E` and `A` are `Eq`
-
-Constructor-headed product declarations such as `type Vec2 = Vec2 Int Int` participate through the closed-sum rule.
+- domains whose underlying carrier supports `Eq`, while still preserving domain identity
 
 Derived equality is structural and type-directed:
 
@@ -606,7 +673,9 @@ Derived equality is structural and type-directed:
 - list equality is length- and order-sensitive
 - primitive scalar equality is same-type only; it is not coercive or approximate
 
-`Eq` is not compiler-derived in v1 for `Bytes`, `Map`, `Set`, `Signal`, `Task`, function values, GTK/foreign handles, or other runtime-managed boundary types whose equality semantics have not yet been specified.
+`Eq` is not compiler-derived in v1 for `Bytes`, `Map`, `Set`, `Signal`, `Task`, function values,
+GTK/foreign handles, or other runtime-managed boundary types whose equality semantics have not yet
+been specified.
 
 ### 7.4 Non-instances
 
@@ -618,7 +687,8 @@ Rationale:
 - that complicates graph extraction, scheduling, teardown, and diagnostics
 - AIVI wants a static, explicit, topologically scheduled signal graph
 
-`Validation E` is **not** a `Monad` in v1 because the intended accumulation semantics are applicative rather than dependent short-circuiting.
+`Validation E` is **not** a `Monad` in v1 because the intended accumulation semantics are
+applicative rather than dependent short-circuiting.
 
 ### 7.5 Laws
 
@@ -929,7 +999,8 @@ status
 
 ### 11.4.1 `T|>` and `F|>` truthy / falsy branching
 
-`T|>` and `F|>` are shorthand predicate-gated branch operators for carriers with canonical positive and negative constructors.
+`T|>` and `F|>` are shorthand predicate-gated branch operators for carriers with canonical
+positive and negative constructors.
 
 They are surface sugar over `||>` and elaborate deterministically.
 
@@ -988,14 +1059,20 @@ The canonical truthy / falsy constructor pairs in v1 are:
 - `Ok _` / `Err _`
 - `Valid _` / `Invalid _`
 
+A single outer `Signal` lift is also part of the implemented surface. `Signal Bool`,
+`Signal (Option A)`, `Signal (Result E A)`, and `Signal (Validation E A)` reuse the same carrier
+plan pointwise: the runtime types the inner carrier, elaborates the branches, and then re-wraps the
+result as `Signal`.
+
 Rules:
 
 - `T|>` and `F|>` may appear only as an adjacent pair within one pipe spine
 - the subject type must have a known canonical truthy / falsy pair
-- inside a `T|>` or `F|>` body, `_` is rebound to the matched payload when that constructor has exactly one payload
+- inside a `T|>` or `F|>` body, `_` is rebound to the matched payload when that constructor has
+  exactly one payload
 - zero-payload cases such as `True`, `False`, and `None` do not introduce a branch payload
+- non-canonical inner carriers under `Signal` are rejected
 - use `||>` when named binding, nested patterns, or more than two constructors are required
-- user-defined truthy / falsy overloads are not supported in v1
 
 ### 11.5 `*|>` map / fan-out
 
@@ -1262,7 +1339,9 @@ sig x = 3
 sig y = x + 5
 ```
 
-A signal referenced inside a `sig` is read as its current value during evaluation of that `sig`. The enclosing `sig` becomes dependent on every signal referenced in its definition.
+A signal referenced inside a `sig` is read as its current committed value during evaluation of that
+`sig`. The enclosing `sig` becomes dependent on every **locally provable** signal referenced in its
+definition.
 
 ### 13.1 Rules
 
@@ -1270,22 +1349,30 @@ A signal referenced inside a `sig` is read as its current value during evaluatio
 - `val` must not depend on signals
 - pure helper functions used inside `sig` stay pure
 - signal dependency extraction happens after elaboration
-- dependency graphs are static after elaboration for ordinary derived signals
+- ordinary derived-signal dependency graphs are static after elaboration
+- all signals carry explicit local dependency lists for scheduling and diagnostics
+- source-backed signals record local signal dependencies only; imported references are not assumed
+  to be publishable signals unless the compiler has explicit proof
 
-### 13.5 Input signals
+### 13.2 Input signals
 
-An annotated body-less `sig` declaration is a first-class input signal — an externally publishable entry point for reactive inputs such as GTK events.
+An annotated body-less `sig` declaration is a first-class input signal — an externally publishable
+entry point for reactive inputs such as GTK events, tests, and runtime-owned completions.
 
 ```aivi
 sig clicked : Signal Unit
 sig query   : Signal Text
 ```
 
-These are not errors. They define runtime-owned slots that external code (event handlers, tests, FFI) may publish into. Their type annotation is mandatory. They participate in the signal dependency graph exactly like derived signals.
+These are not errors. They define runtime-owned slots that external code may publish into. Their
+type annotation is mandatory. They participate in the signal dependency graph exactly like derived
+signals, but their publication port is owned by the runtime rather than by user code.
 
-Input signals are the canonical mechanism for routing GTK event payloads into the language-level reactive graph. See §17.2 for event hookup rules.
+Input signals are the canonical mechanism for routing GTK event payloads into the language-level
+reactive graph. They are also the publication target used internally for task completions and other
+runtime-owned boundaries.
 
-### 13.2 Applicative meaning of `Signal`
+### 13.3 Applicative meaning of `Signal`
 
 `pure x` creates a constant signal.
 
@@ -1296,20 +1383,29 @@ Input signals are the canonical mechanism for routing GTK event payloads into th
 - transactional visibility per scheduler tick
 - glitch-free propagation
 
-### 13.3 Scheduler guarantees
+`Signal` remains applicative rather than monadic. Dynamic rewiring must be expressed through
+explicit runtime/source nodes rather than through `bind`.
+
+### 13.4 Scheduler guarantees
 
 The runtime scheduler must provide:
 
 - topological propagation order
-- batched delivery per tick
+- committed-snapshot evaluation per tick
 - no mixed-time intermediate observations
 - deterministic behavior for a fixed input event order
+- generation-stamped publication so stale source/task results are rejected before propagation
+- recursive owner disposal so torn-down subtrees deactivate their dependent runtime-owned nodes
 
-### 13.4 No `Monad Signal`
+The scheduler is driven from an owned GLib main context. Worker threads may publish results and
+request wakeups, but they do not mutate scheduler-owned state directly.
+
+### 13.5 No `Monad Signal`
 
 AIVI v1 does not expose `bind` for `Signal`.
 
-Any feature that would imply dynamic dependency rewiring must be expressed through explicit source/runtime nodes rather than a general `Monad Signal`.
+Any feature that would imply dynamic dependency rewiring must be expressed through explicit
+source/runtime nodes rather than a general `Monad Signal`.
 
 ---
 
@@ -1322,7 +1418,8 @@ External inputs enter through `@source` on `sig`.
 sig users : Signal (Result HttpError (List User))
 ```
 
-Source arguments and options are ordinary typed expressions. They may use interpolation and may depend on signals whose dependency sets are statically known.
+Source arguments and options are ordinary typed expressions. They may use interpolation and may
+depend on signals whose dependency sets are statically known.
 
 Example:
 
@@ -1334,7 +1431,9 @@ Example:
 sig users : Signal (Result HttpError (List User))
 ```
 
-If an argument or option depends on a signal, the source node becomes dependent on that signal. Changing that dependency reconfigures the source transactionally while keeping the graph shape static.
+Reactive values in source strings, positional arguments, and options are real dependencies. When
+those committed values change, the runtime rebuilds or retriggers the source according to the
+provider contract while keeping the static graph shape fixed.
 
 ### 14.1 Source contract
 
@@ -1350,10 +1449,21 @@ Sources may represent:
 - timers
 - process events
 - mailboxes/channels
+- GTK/window events
+
+The HIR surface preserves, for every `@source` site:
+
+- provider identity: missing / builtin / custom / invalid-shape
+- positional arguments as runtime expressions
+- options as runtime expressions
+- lifecycle metadata
+- decode program selection
+- stable source instance identity
 
 ### 14.1.1 Recurrence decorators on non-source declarations
 
-Plain repeating `sig` and `val` bodies prove their wakeup only through explicit `@recur.timer` or `@recur.backoff` decorators. Each takes exactly one positional witness expression.
+Plain repeating `sig` and `val` bodies prove their wakeup only through explicit `@recur.timer` or
+`@recur.backoff` decorators. Each takes exactly one positional witness expression.
 
 ```aivi
 @recur.timer 1000ms
@@ -1364,9 +1474,14 @@ sig retried : Signal (Result FetchError Data)
 ```
 
 Rules:
-- `@recur.timer expr` and `@recur.backoff expr` are the only recurrence decorators for non-`@source` declarations
+
+- `@recur.timer expr` and `@recur.backoff expr` are the only recurrence decorators for non-`@source`
+  declarations
 - neither accepts `with { ... }` options or duplicates
-- they are not allowed on `@source` signals (source wakeups use the source contract)
+- they are not allowed on `@source` signals; source wakeups come from the source contract
+- a recurrent pipe is legal only where the compiler can prove a built-in runtime lowering target
+- recurrence lowering produces an explicit scheduler-node handoff; it is not collapsed into opaque
+  self-recursion
 
 ### 14.1.2 Source declaration shape
 
@@ -1394,8 +1509,8 @@ Optioned form:
 ```aivi
 @source http.get "/users" with {
     decode: Strict,
-    retry: 3x,
-    timeout: 5s
+    retry: Retry.times 3,
+    timeout: 5sec
 }
 sig users : Signal (Result HttpError (List User))
 ```
@@ -1404,14 +1519,23 @@ Rules:
 
 - the provider and variant are resolved statically
 - positional arguments are provider-defined and typed
-- options are a closed record whose legal fields are provider-defined
+- options are a closed record whose legal fields come from a central provider option catalog
 - unknown options are a compile-time error
 - duplicate options are a compile-time error
-- argument and option expressions may be ordinary values or signal-derived expressions with statically known dependencies
-- if a reactive argument or option changes, the runtime re-evaluates the source configuration using the latest stable upstream values for that scheduler tick
-- if the change affects source identity such as URL, path, channel, or process arguments, the old runtime subscription is disposed and a new one is created
+- value checking is intentionally staged: the compiler validates supported local closed shapes now
+  and records explicit blockers for unsupported or unproven forms rather than guessing
+- argument and option expressions may be ordinary values or signal-derived expressions with
+  statically known dependencies
+- reactive changes are split into three lifecycle classes: reconfiguration inputs,
+  trigger/refresh inputs, and `activeWhen` gating inputs
+- if a reactive reconfiguration input changes, the old runtime instance is superseded and a new one
+  is created with a fresh generation
+- imported option bindings are checked only when the import catalog provides an explicit closed
+  value surface; otherwise the option remains deliberately unproven
 
-Reactive source configuration does not make sources dynamic in the type-theoretic sense. The provider kind and dependency graph remain statically known; only runtime configuration values change.
+Reactive source configuration does not make sources dynamic in the type-theoretic sense. The
+provider kind and dependency graph remain statically known; only runtime configuration values
+change.
 
 ### 14.1.3 Recommended v1 source variants
 
@@ -1427,7 +1551,7 @@ sig users : Signal (Result HttpError (List User))
     body: creds,
     headers: authHeaders,
     decode: Strict,
-    timeout: 5s
+    timeout: 5sec
 }
 sig login : Signal (Result HttpError Session)
 ```
@@ -1446,19 +1570,18 @@ Recommended HTTP options:
 
 HTTP source semantics:
 
-- a request source issues one request when subscribed unless the provider defines a different default
+- refresh is explicit only: reactive config changes, `refreshOn`, `refreshEvery`, retries, or
+  provider-defined intrinsic wakeups
+- there are no lifecycle-event refreshes hidden behind GTK visibility or mount/unmount
 - `refreshOn` reissues the request whenever the trigger signal updates
 - `refreshEvery` creates scheduler-owned polling using the latest stable source configuration
-- `activeWhen` gates startup and refresh; when it becomes `False`, polling is suspended, the
-  current request generation becomes inactive, and any later completion from that inactive
-  generation must not publish
+- `activeWhen` gates startup and refresh; when it becomes `False`, polling is suspended and the
+  current generation becomes inactive
 - when reactive URL, query, header, or body inputs change, the runtime creates a replacement
-  request generation using the latest stable values
-- if `refreshOn`, `refreshEvery`, or reactive reconfiguration fires while an earlier HTTP request
-  is still in flight, the newest request supersedes the older one
-- built-in HTTP providers request best-effort cancellation of the superseded request; regardless of
-  cancellation success, stale completions from superseded generations are dropped
-- v1 does not require a queue of pending HTTP refreshes; request issuance is latest-generation-wins
+  request generation using the latest committed values
+- newer request generations supersede older ones; stale completions from superseded generations are
+  dropped before publication
+- built-in HTTP providers request best-effort cancellation of superseded or suspended requests
 
 #### Timer
 
@@ -1477,6 +1600,9 @@ Recommended timer options:
 - `coalesce : Bool`
 - `activeWhen : Signal Bool`
 
+Bare integer timer arguments mean milliseconds. Common suffixed durations such as `250ms` are also
+accepted when the duration domain surface is in place.
+
 #### File watching and reading
 
 ```aivi
@@ -1492,8 +1618,8 @@ sig fileEvents : Signal FsEvent
 sig fileText : Signal (Result FsError Text)
 ```
 
-`fs.watch` publishes file-system events only. It does not implicitly read file contents.
-`fs.read` publishes a snapshot of the current file contents and may be retriggered explicitly.
+`fs.watch` publishes file-system change notifications only. It does **not** implicitly read file
+contents. `fs.read` performs snapshot loading and decode. This split is normative.
 
 Recommended file-watch options:
 
@@ -1506,28 +1632,29 @@ Recommended file-read options:
 - `reloadOn : Signal A`
 - `debounce : Duration`
 - `readOnStart : Bool`
+- `activeWhen : Signal Bool`
 
-This split keeps change detection and snapshot loading explicit. A common pattern is to watch a path, debounce the resulting events, and use those events to trigger `fs.read`.
+Built-in file sources request best-effort cancellation when they are superseded, suspended, or
+ torn down.
 
-#### Socket / channel / mailbox
+#### Socket / mailbox
 
 ```aivi
-@source socket.connect "ws://localhost:8080" with {
+@source socket.connect "tcp://localhost:8080" with {
     decode: Strict
 }
 sig inbox : Signal (Result SocketError Message)
 
 @source mailbox.subscribe "jobs"
-sig jobs : Signal Job
+sig jobs : Signal Text
 ```
 
-Recommended socket and mailbox options:
+Socket and mailbox semantics in the current runtime slice are intentionally transport-specific:
 
-- `decode : DecodeMode`
-- `buffer : Int`
-- `reconnect : Bool`
-- `heartbeat : Duration`
-- `activeWhen : Signal Bool`
+- `socket.connect` is a raw `tcp://` line-stream provider rather than a general WebSocket surface
+- `mailbox.subscribe` is a process-local text bus
+- unsupported options raise explicit runtime errors at provider registration rather than being
+  silently ignored
 
 #### Process events
 
@@ -1559,6 +1686,30 @@ Recommended window-event options:
 - `repeat : Bool`
 - `focusOnly : Bool`
 
+The current GTK host lowers `window.keyDown` through the focused window's key controller. This is a
+provider-owned host boundary, not a generic DOM-like event model.
+
+#### D-Bus
+
+```aivi
+@source dbus.ownName "org.example.Mail"
+sig busName : Signal BusNameState
+
+@source dbus.signal "org.example.Mail" "/org/example/Mail" "NewMessage"
+sig busEvents : Signal MailBusEvent
+
+@source dbus.method "org.example.Mail" "/org/example/Mail" "ShowWindow"
+sig showWindow : Signal Unit
+```
+
+The user-facing D-Bus surface in this RFC slice is:
+
+- `dbus.ownName` as a source tracking `Owned`, `Queued`, or `Lost`
+- `dbus.signal` as a source subscribing to inbound remote signals
+- `dbus.method` as a source for fire-and-forget inbound method dispatch where the Unit reply is
+  placed on the D-Bus wire before the AIVI signal is published
+- non-Unit reply-producing methods are deferred
+
 ### 14.1.4 Decode and delivery modes
 
 Recommended supporting enums:
@@ -1577,7 +1728,8 @@ type StreamMode =
 Semantics:
 
 - `Strict` rejects unknown or missing required fields according to closed-type decoding rules
-- `Permissive` may ignore extra fields but still requires required fields unless a decoder override says otherwise
+- `Permissive` may ignore extra fields but still requires required fields unless the built-in decode
+  surface says otherwise
 - decode happens before scheduler publication
 - delivery into the scheduler remains typed and transactional
 
@@ -1590,32 +1742,56 @@ Default decoding rules:
 - closed records reject missing required fields
 - extra fields are rejected in strict mode by default
 - sum decoding is explicit
-- decoder override remains possible where necessary
-- domain-backed fields decode through the domain's explicit parser or constructor surface; they do not silently accept the raw carrier unless that surface says so
+- decoder overrides are limited to the built-in decode surface; general custom decode hooks remain
+  deferred
+- domain-backed fields decode through the domain's explicit parser or constructor surface; they do
+  not silently accept the raw carrier unless that surface says so
 
-Record default elision for user-written literals does **not** weaken source decoding by default.
+The runtime decode wire shape is explicit:
 
-Decode failures are reported through the source's typed error channel. They do not escape as untyped runtime exceptions.
+- payload bytes are first interpreted as UTF-8 text for providers that promise text transport
+- plain `Text` targets accept the raw text unchanged
+- structural targets decode from JSON
+- closed sums, `Option`, `Result`, and `Validation` use a canonical JSON object shape
+  `{ tag, payload }`
+- unsupported scalar target families in the current provider startup slice (`Bytes`, `Float`,
+  `Decimal`, `BigInt`, and domain-surface direct transport) fail explicitly at provider
+  registration rather than later during silent coercion
+
+Domain decode uses the following resolution order:
+
+1. a domain-owned `parse` method when it has the shape `Carrier -> Result E Domain`
+2. otherwise, a unique domain-owned `Carrier -> Domain` or `Carrier -> Result E Domain`
+3. otherwise, decode is rejected as ambiguous or unsupported
+
+Operator methods, literal methods, and multiply matching domain conversions are not decode
+surfaces.
+
+Record default elision for user-written literals does **not** weaken source decoding.
+Decode failures flow through the source's typed error channel. They do not escape as untyped runtime
+exceptions.
+
+Regex literals are validated earlier, in HIR validation, rather than being delegated to source
+providers.
 
 ### 14.3 Cancellation and lifecycle
 
-Source subscriptions must carry explicit runtime cancellation and disposal semantics. Every
-`@source` site owns one stable runtime instance identity. When the owning graph or view is torn
-down, that instance is disposed.
+Source subscriptions carry explicit runtime cancellation and disposal semantics. Every `@source`
+site owns one stable runtime instance identity.
 
-Additional lifecycle rules:
+Lifecycle rules:
 
+- lifecycle metadata distinguishes reactive reconfiguration, trigger, and `activeWhen` inputs
 - reconfiguration caused by reactive source arguments or options replaces the superseded runtime
-  resource before the replacement may publish
+  resource transactionally from committed scheduler values
 - stale work from a superseded, disposed, or inactive source generation is dropped and must never
   publish into the live graph
-- built-in `activeWhen` gates suspend delivery without changing the static graph shape; while the
-  gate is `False`, new trigger work is not started for that inactive generation
-- request-like built-ins such as HTTP and `fs.read` additionally request best-effort in-flight
-  cancellation when they are replaced, suspended, or disposed
-- custom providers inherit the generic replacement and stale-publication rules, but option names
-  such as `activeWhen` or `refreshOn` have built-in meaning only where the provider contract
-  explicitly defines that wakeup surface
+- `activeWhen` suspends delivery without changing the static graph shape
+- request-like built-ins such as HTTP and `fs.read` request best-effort in-flight cancellation when
+  they are replaced, suspended, or disposed
+- built-in `SourceRuntimeSpec` values are validated against provider contracts at registration
+- custom providers inherit the generic replacement and stale-publication rules, but built-in option
+  names have semantics only when the provider contract declares them
 
 ### 14.4 Custom provider declarations
 
@@ -1623,24 +1799,22 @@ Custom source providers are declared at the top level with a `provider` keyword:
 
 ```aivi
 provider my.data.source
-    wakeup: timer
+    wakeup: providerTrigger
     argument url: Url
     option timeout: Duration
     option retries: Int
 ```
 
-Declaration rules:
+Implemented declaration rules:
 
-- the provider name must be fully qualified with a `.`-separated path
-- `wakeup` is mandatory and must be one of: `timer`, `backoff`, `sourceEvent`, `providerTrigger`
-- `argument` members declare positional source arguments in order
-- `option` members declare named source options
-- argument and option types must be from the current closed proof surface: primitive types, same-module named types and domains, and those shapes under `List` or `Signal`
-- richer types such as records, arrows, imported constructors, or `Option`/`Result` in provider schemas are rejected on the declaration
-- duplicate declarations for the same qualified name are an error
-- unqualified provider names are not allowed
-
-Provider declarations match against `@source` use sites in the same module through same-module order-independent lookup. Custom providers reuse the standard reactive-reconfiguration and stale-publication model; additional `activeWhen` or trigger semantics require explicit `wakeup` metadata.
+- the provider name is a qualified top-level name
+- `wakeup:` may currently be `timer`, `backoff`, `sourceEvent`, or `providerTrigger`
+- unknown declaration fields are immediate diagnostics
+- argument and option declarations are restricted to primitive types, same-module types,
+  `List`, and `Signal` compositions over those closed shapes
+- richer schemas are rejected at declaration time rather than being carried as vague metadata
+- reactive source inputs always count as `sourceEvent` wakeups for any provider; non-reactive custom
+  wakeups must be declared explicitly by the provider contract
 
 ---
 
@@ -1669,6 +1843,13 @@ Effects enter through:
 - is schedulable by the runtime
 - is lawful as `Functor`, `Applicative`, and `Monad`
 
+Runtime execution uses linked task bindings plus scheduler-owned hidden completion inputs. A direct
+top-level task value lowers to a `TaskRuntimeSpec`; a worker thread evaluates the linked backend
+item body and publishes its result through a typed completion port back into the scheduler.
+
+Recurrent `@|> ... <|@` tasks are outside the current executable slice and remain explicit runtime
+blockers rather than being guessed into a looping task engine.
+
 ## 15.3 Event handler routing
 
 The implemented GTK event surface is intentionally narrower than a future general callback
@@ -1682,15 +1863,21 @@ In v1 live GTK routing:
 - the concrete GTK host must recognize the exact widget/event pair before the attribute is treated
   as live event routing
 - the routed input signal payload type must match the concrete GTK event payload type
+- handler resolution is performed once up front; GTK event payloads are then published directly into
+  that input signal
 - discrete GTK events publish one payload into the scheduler input signal and force their own
   runtime tick
 
-Broader internal normalization of arbitrary handler expressions into runtime-owned actions remains
-future work. It is not part of the current implemented surface contract.
+Broader normalization of arbitrary handler expressions into runtime-owned actions remains future
+work.
 
 ## 15.4 Inter-thread communication
 
-Message-passing primitives may exist as runtime/library types:
+The runtime uses explicit publication ports at worker boundaries. Workers receive read-only
+cancellation observers and may publish source/task results back to the scheduler queue, but they do
+not mutate GTK state or committed signal storage directly.
+
+Library-level message-passing primitives may exist as runtime/library types:
 
 ```aivi
 type Sender A
@@ -1698,7 +1885,7 @@ type Receiver A
 type Mailbox A
 ```
 
-with effects returning `Task` and receiving through `@source` integration.
+with sending expressed through `Task` and receiving expressed through `@source` integration.
 
 ---
 
@@ -1706,21 +1893,33 @@ with effects returning `Task` and receiving through `@source` integration.
 
 ## 16.1 Memory management
 
-The target runtime is a mostly-moving generational collector with incremental scheduling plus narrow stable-handle support at foreign boundaries.
+The target runtime is a mostly-moving generational collector with incremental scheduling plus
+narrow stable-handle support at foreign boundaries.
 
 Language-visible guarantees:
 
 - ordinary values may move
 - stable addresses are not guaranteed
 - GTK/GObject/FFI interactions use stable handles, pinned wrappers, or copied values
+- values that cross GTK, worker, source-provider, or other foreign seams use explicit detached
+  boundary wrappers or ports; boundary detachment is never implicit
+
+Initial GC rollout scope is intentionally narrow: only scheduler-committed runtime snapshots are in
+the moving-GC root set. Pending evaluator/source/task results remain ordinary Rust-owned values
+until commit.
 
 ## 16.2 Threads
 
 Recommended runtime shape:
 
-- one GTK UI island on the main thread
-- worker threads for I/O, decoding, and heavy computation
+- one GTK UI island on an owned GLib main context
+- worker threads for I/O, decoding, task execution, and heavy fragment evaluation
 - immutable message passing from workers to scheduler-owned queues
+- no direct GTK mutation from workers
+
+The GLib driver reentry rule is explicit: scheduler/evaluator ownership sits behind one guarded
+critical section, and same-thread reentry is a runtime invariant violation rather than a best-effort
+fallback.
 
 ## 16.3 Scheduler
 
@@ -1731,6 +1930,7 @@ The scheduler owns:
 - task completion publication
 - cancellation/disposal
 - tick boundaries
+- committed runtime snapshots
 
 The scheduler must be designed so that it cannot:
 
@@ -1738,6 +1938,10 @@ The scheduler must be designed so that it cannot:
 - deadlock on normal cross-thread publication
 - recurse unboundedly during propagation
 - leak torn-down subscriptions
+- accept stale publications from superseded generations
+
+Committed scheduler state is the source of truth for runtime evaluation. Worker-computed results are
+admitted only at tick-safe boundaries.
 
 ---
 
@@ -1745,7 +1949,8 @@ The scheduler must be designed so that it cannot:
 
 AIVI's primary UI target is GTK4/libadwaita on Linux.
 
-The pure language core must remain pure. UI effects cross a controlled boundary through the GTK bridge.
+The pure language core remains pure. UI effects cross a controlled boundary through a typed GTK
+bridge.
 
 ## 17.1 View model
 
@@ -1755,7 +1960,16 @@ It does **not** use a virtual DOM.
 
 ### 17.1.1 Direct lowering rules
 
-Each markup node compiles to:
+The implementation path is explicit:
+
+- HIR markup lowers to a typed `WidgetPlan` with stable identities, child operations, setter
+  bindings, event hookups, and control branches
+- `WidgetPlan` lowers to a `WidgetRuntimeAssembly` with concrete runtime handles and child-group
+  structure
+- the GTK executor consumes that runtime assembly through a bridge graph and applies direct GTK
+  mutations
+
+Each markup node therefore compiles to:
 
 - widget/control-node kind
 - static property initializers
@@ -1764,9 +1978,12 @@ Each markup node compiles to:
 - child-slot instructions
 - teardown logic
 
-Ordinary widget nodes are created once per node identity. Dynamic props update through direct setter calls. Event handlers connect directly to GTK signals.
+Ordinary widget nodes are created once per node identity. Dynamic props update through direct setter
+calls. There is no generic diff engine over a virtual tree.
 
-There is no generic diff engine over a virtual tree.
+Live `aivi run` updates are planned off the GTK thread: the runtime snapshots committed globals on
+the main thread, evaluates the selected view fragments on a worker, produces an immutable hydration
+plan, and applies GTK mutations back on the main thread via `idle_add`.
 
 ## 17.2 Property and event binding
 
@@ -1782,6 +1999,9 @@ If an expression is reactive, the compiler extracts a derived signal and the run
 - subscribes once
 - calls the concrete GTK setter on change
 
+Interpolated markup text remains genuinely dynamic. The GTK host routes interpolated text-valued
+attributes through runtime setter bindings rather than freezing them into static property values.
+
 ### 17.2.1 Event hookups
 
 Expression-valued markup attributes lower as live GTK event routes only when the widget schema
@@ -1795,16 +2015,17 @@ sig clicked : Signal Unit
 
 Event hookup rules:
 
-- the handler expression must name a directly publishable input signal (see §13.5 and §15.3)
+- the handler expression must name a directly publishable input signal
 - only direct input signals are legal in the current live GTK surface; arbitrary callback
   expressions are future work
 - the input signal's payload type must match the GTK event's concrete payload type
 - unsupported event names on a given widget type remain ordinary attributes and are rejected by
   run-surface validation rather than silently treated as live events
-- GTK discrete events (such as button clicks) force their own runtime ticks; rapid repeated events are processed as separate transactions and not collapsed within one tick
+- GTK discrete events force their own runtime ticks; rapid repeated events are processed as separate
+  transactions and not collapsed within one generation
 
-Event props lower to direct GTK signal connections that publish into runtime input signals, not
-user-visible callbacks.
+Attributes that start with `on` are treated as event-hook candidates only through this schema-backed
+rule. The host does not guess event semantics from spelling alone.
 
 ### 17.2.2 Executable widget schema metadata
 
@@ -1813,11 +2034,15 @@ validation, and concrete GTK hookup.
 
 Each widget schema entry defines:
 
-- the current markup lookup key (today: the final widget path segment)
+- the current markup lookup key
 - property descriptors: exact property name, semantic value shape, and GTK setter route
 - event descriptors: exact event name, GTK signal route, and payload shape
 - child-group descriptors: group name, container policy, and child-count bounds
 - whether the widget is window-like for root validation/presentation
+
+In the current markup surface, unlabeled child content may populate only the schema's single
+default child group. Widgets that need multiple named child groups remain deferred rather than being
+filled by hidden host heuristics.
 
 Current executable catalog:
 
@@ -1836,8 +2061,25 @@ Current executable catalog:
 - `Switch` — properties `active`, `visible`, `sensitive`, `hexpand`, `vexpand`; no markup
   events; no child groups
 
-Widgets outside this catalog are not part of the current live GTK surface. Expanding the catalog to
-more GTK4/libadwaita widgets is separate follow-on work.
+Widgets outside this catalog are not part of the current live GTK surface.
+
+### 17.2.3 Host lifecycle attributes
+
+`trackVisible={sig}` is a host-backed lifecycle attribute that routes GTK `map` / `unmap` into a
+user-declared `Signal Bool` input signal.
+
+Rules:
+
+- the bound signal must be a body-less annotated `Signal Bool` input signal
+- the host publishes `False` immediately at registration, `True` on first `map`, and then `True` /
+  `False` on later `map` / `unmap` transitions
+- `map` / `unmap` is used rather than `show` / `hide` because a widget may be shown while still not
+  mapped through an unshown parent
+- this is the canonical way to drive `@source activeWhen` from visibility state
+
+`hideOnClose={True}` on `ApplicationWindow` intercepts the delete event and calls `window.hide()`
+instead of destroying the window. This keeps the process alive and allows later restoration through
+normal presentation or an external activation path such as D-Bus.
 
 ## 17.3 Control nodes
 
@@ -1866,8 +2108,7 @@ Optional flag:
 ```
 
 - `keepMounted = False` is the default
-- if `False`, hide means full subtree teardown per §17.4: unmount widgets, disconnect event
-  handlers, and dispose owned subscriptions; show means recreate the subtree from scratch
+- if `False`, hide means full subtree teardown per §17.4
 - if `True`, the subtree mounts once and hide/show becomes a visibility transition rather than an
   unmount/remount cycle
 - while hidden under `keepMounted = True`, property bindings, signal subscriptions, source
@@ -1875,8 +2116,6 @@ Optional flag:
 - concrete input delivery while hidden follows the host toolkit; for the current GTK host,
   invisible widgets do not receive pointer or keyboard events even though their handlers remain
   connected
-- when visibility returns under `keepMounted = True`, the existing subtree becomes visible again
-  without recreation
 
 ### 17.3.2 `<each>`
 
@@ -1891,12 +2130,13 @@ Semantics:
 - `of` must yield `List A`
 - `as` binds the element within the body
 - the body must produce valid child content for the parent slot
-- `key` is required for reorderable/dynamic collections and strongly recommended in general
+- `key` is required in the current RFC slice
 
 Runtime behavior:
 
-- keyed child identity is maintained by key
-- updates compute localized child edits
+- child identity is maintained by key
+- control-node planning is keyed by runtime handles, including the `<each>` key input
+- updates compute localized child edits rather than whole-tree replacement
 - existing child subtrees are reused by key where possible
 - actual GTK child insertion/removal/reordering happens directly
 
@@ -1934,8 +2174,8 @@ Rules:
 
 - `on` is any expression
 - cases use ordinary AIVI patterns
-- exhaustiveness follows ordinary match rules
-- lowering selects/deselects concrete subtrees directly
+- exhaustiveness follows ordinary match rules where the scrutinee type is locally provable
+- lowering selects and deselects concrete subtrees directly
 
 ### 17.3.4 `<fragment>`
 
@@ -1958,7 +2198,8 @@ Useful local naming is allowed in markup through a non-reactive binding node:
 </with>
 ```
 
-`<with>` introduces a pure local binding for the subtree. It does not create an independent signal node.
+`<with>` introduces a pure local binding for the subtree. It does not create an independent signal
+node.
 
 ## 17.4 Teardown and lifecycle
 
@@ -1967,7 +2208,8 @@ Tearing down a subtree must:
 - disconnect event handlers
 - dispose source subscriptions owned by that subtree
 - release widget handles
-- preserve correctness under repeated show/hide and list churn
+- preserve correctness under repeated show/hide and keyed list churn
+- recursively deactivate owned runtime nodes so stale publications are rejected after teardown
 
 GTK correctness is part of the language runtime contract, not a best-effort library concern.
 
@@ -2024,6 +2266,10 @@ rx"\d{4}-\d{2}-\d{2}"
 
 Invalid regex literals are compile-time errors.
 
+Validation happens in HIR validation rather than in lexing. The compiler uses the Rust
+`regex-syntax` acceptance surface to decide whether a regex literal is valid. This keeps the token
+stream lossless while still making malformed regexes early, typed diagnostics.
+
 ---
 
 ## 20. Domains
@@ -2050,79 +2296,35 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 
 ### 20.1 Declaration form
 
-Canonical syntax:
+Canonical shape:
 
 ```aivi
 domain Duration over Int
-domain Url over Text
-domain Path over Text
-domain NonEmpty A over List A
-domain ResourceId A over Text
+    literal ms  : Int -> Duration
+    millis      : Int -> Duration
+    parse       : Int -> Result DurationError Duration
+    value       : Duration -> Int
 ```
 
-General form:
-
-```text
-DomainDecl ::= "domain" TypeName TypeParam* "over" Type DomainBody?
-```
-
-Rules:
-
-- `domain D over C` introduces a new nominal type `D`
-- `domain D A over C A` introduces a new unary type constructor
-- the domain's kind is determined by its parameters exactly as for ordinary type constructors
-- the carrier type on the right of `over` may mention only the domain's declared type parameters
-- full type-level lambdas remain out of scope for v1
-
-Examples of kinds:
-
-- `Duration : Type`
-- `Url : Type`
-- `NonEmpty : Type -> Type`
-- `ResourceId : Type -> Type`
+Domains are first-class language declarations in v1.
 
 ### 20.2 Core meaning
 
-A declaration:
+A domain introduces a nominal type over a carrier type while preserving explicit construction and
+elimination.
 
-```aivi
-domain D A1 ... An over C
-```
+The domain, not the carrier, owns:
 
-defines a fresh nominal type constructor `D A1 ... An` with carrier `C`.
-
-From the user's point of view:
-
-- `D A1 ... An` is distinct from `C`
-- `D A1 ... An` is distinct from every other domain, even if they share the same carrier
-- carrier operations are not inherited implicitly
-- domain values do not pattern-match as carrier values
-- implicit conversion between domain and carrier does not exist
-
-This means:
-
-```aivi
-domain Duration over Int
-domain UserId over Int
-```
-
-do **not** allow `Duration` where `Int` is expected, and do **not** allow `UserId` where `Duration` is expected.
+- literal suffixes
+- smart construction
+- explicit unwrapping
+- domain-local operators
+- optional decode/parse surfaces
 
 ### 20.3 Relation to opaque and branded types
 
-A domain is the canonical surface form for a branded or opaque wrapper whose representation is intentionally based on another type.
-
-Conceptually, a domain behaves like an opaque nominal wrapper over its carrier, but with optional language support for:
-
-- literals
-- operators
-- parsing and smart construction
-- formatting hooks
-
-In other words:
-
-- use `type` for ordinary ADTs and records
-- use `domain` for nominal value spaces over an existing representation
+Use `domain` when the nominal wrapper is expected to carry domain-owned literal, parsing, decode,
+or operator surfaces. Use `type` when an ordinary ADT or record is enough.
 
 ### 20.4 Construction and elimination
 
@@ -2143,14 +2345,12 @@ domain Duration over Int
     value      : Duration -> Int
 ```
 
-The exact names are domain-defined, but the semantics are fixed:
+Construction is explicit. Unwrapping is explicit. Unsafe construction should remain internal or be
+spelled as such.
 
-- construction is explicit
-- unwrapping is explicit
-- domain invariants may be enforced by smart constructors
-- unsafe or unchecked construction should be library-internal or explicitly marked
-
-For v1, domains should not expose implicit coercions, automatic unboxing, or pattern aliases over the carrier.
+Callable domain members enter ordinary term lookup when they are in scope. There is no projection
+syntax for domains in v1; the compiler may still expose compiler-known qualified lookup surfaces
+such as `Duration.value` for disambiguation/documentation.
 
 ### 20.5 Literal suffixes
 
@@ -2175,11 +2375,16 @@ val c:Duration = 3min
 
 Literal-suffix rules:
 
+- domain suffix names in v1 must be at least two ASCII letters long
+- single-letter alphabetic suffixes are reserved for built-in numeric literal families and future
+  core numeric extensions
+- compact `digits + suffix` is a suffix literal candidate; spaced forms such as `250 ms` are
+  ordinary application
+- the current surface only supports integer-family domain suffix literals
 - suffix resolution is compile-time only
-- a suffix maps to exactly one domain literal definition in scope
-- the suffix function must accept the literal family's base type
-- numeric suffixes do not imply cross-domain arithmetic
-- unsuffixed literals remain ordinary numeric literals
+- suffix resolution is against matching domain literal declarations in the **current module only**
+- no match is an error; more than one current-module match is an ambiguity error
+- imported modules do not extend the literal-suffix search space in the current slice
 
 Examples:
 
@@ -2187,8 +2392,6 @@ Examples:
 - `250 : Int`
 - `250ms + 3min` is legal only if `Duration` defines `+`
 - `250ms + 3` is illegal unless an explicit constructor or operator admits it
-
-If two imported domains define the same suffix, that is a compile-time ambiguity error.
 
 ### 20.6 Domain operators
 
@@ -2216,8 +2419,10 @@ Operator rules:
 
 - operator resolution is static
 - operators are not inherited from the carrier automatically
-- operators must be declared by the domain or provided by instances over the domain type
-- domain operators must preserve explicitness and must not trigger hidden conversion to or from the carrier
+- operators must be declared by the domain or provided by explicit class evidence over the domain
+- operators are type-checked before any fallback inference logic
+- proven domain operators cross an explicit elaboration seam into typed core/backend; later layers do
+  not rediscover them heuristically
 
 ### 20.7 Smart construction and invariants
 
@@ -2257,9 +2462,8 @@ Typing rules:
 - parameters are ordinary type parameters
 - kinds follow the ordinary kind system
 - the carrier may use those parameters
-- partial application of parameterized domains is allowed when the resulting kind matches the expected constructor kind
-
-This keeps domain syntax parallel to the rest of the type system without adding new kind machinery.
+- partial application of parameterized domains is allowed when the resulting kind matches the
+  expected constructor kind
 
 ### 20.9 Equality and instances
 
@@ -2268,74 +2472,28 @@ A domain does not automatically inherit all instances of its carrier.
 Recommended v1 rule:
 
 - `Eq` may be compiler-derived for a domain if its carrier has `Eq` and the domain does not opt out
-
-Example:
-
-```aivi
-domain Duration over Int
-```
-
-may derive `Eq`, but that does **not** make it interchangeable with `Int`.
-
-For other classes, instances should be explicit unless the language later adopts a clear derive mechanism for domains.
+- domain identity is preserved even when equality is derived from the carrier's structure
+- other class evidence is explicit unless separately declared
 
 ### 20.10 Runtime representation
 
-A domain is representation-backed by its carrier, but user code must not rely on that representation detail for semantics.
-
-Implementation guidance:
-
-- a domain may compile to the same runtime layout as its carrier
-- the compiler may erase wrapper overhead where sound
-- diagnostics and typing must still treat the domain as distinct
-
-This preserves performance without weakening the surface model.
+A domain reuses its carrier runtime representation unless a later lowering layer documents a more
+specialized ABI. The nominal distinction is preserved in typing and diagnostics.
 
 ### 20.11 No implicit casts
 
-Domains never participate in implicit cast chains.
-
-Illegal examples:
-
-```aivi
-val x:Int = 250ms
-val y:Duration = 250
-val z:UserId = durationValue
-```
-
-Legal examples:
-
-```aivi
-val x:Duration = 250ms
-val y:Int = Duration.value x
-val z:Duration = Duration.millis 250
-```
-
-This rule is normative.
+Domains do not introduce implicit coercions to or from the carrier.
 
 ### 20.12 Diagnostics
 
-Diagnostics for domains should be explicit and domain-aware.
+Diagnostics should name the domain rather than erasing it to the carrier.
 
-Examples:
+For literal/decode/operator failures, diagnostics should explain whether the failing surface was:
 
-- when a carrier is used where a domain is expected:
-  
-  - `expected Duration but found Int`
-  - suggestion: `use Duration.millis`, `Duration.parse`, or another domain constructor
-
-- when a domain is used where a carrier is expected:
-  
-  - `expected Text but found Url`
-  - suggestion: `use Url.value`
-
-- when a suffix is ambiguous:
-  
-  - `literal suffix 'ms' is provided by multiple domains in scope`
-
-- when an operator is missing:
-  
-  - `operator '+' is not defined for Duration and Int`
+- unresolved suffix lookup
+- ambiguous suffix or decode surface
+- illegal raw-carrier use where a domain value was required
+- missing domain operator or parser surface
 
 ### 20.13 Recommended examples
 
@@ -2345,10 +2503,8 @@ Examples:
 domain Duration over Int
     literal ms  : Int -> Duration
     literal sec : Int -> Duration
-    literal min : Int -> Duration
-    (+)         : Duration -> Duration -> Duration
-    (-)         : Duration -> Duration -> Duration
     value       : Duration -> Int
+    (+)         : Duration -> Duration -> Duration
 ```
 
 #### Url
@@ -2363,9 +2519,8 @@ domain Url over Text
 
 ```aivi
 domain Path over Text
-    parse : Text -> Result PathError Path
-    (/)   : Path -> Text -> Path
     value : Path -> Text
+    (/)   : Path -> Text -> Path
 ```
 
 #### NonEmpty
@@ -2379,23 +2534,15 @@ domain NonEmpty A over List A
 
 ### 20.14 Design boundary for v1
 
-Domains in v1 are intentionally narrow.
+The implemented v1 domain slice is intentionally narrow:
 
-They do:
-
-- define nominal carrier-backed types
-- support optional literals
-- support optional domain operators
-- support explicit smart constructors and explicit unwrapping
-- compose with the existing kind system
-
-They do **not**:
-
-- introduce subtyping
-- introduce implicit casts
-- introduce open-ended type-level computation
-- allow arbitrary carrier pattern matching through the domain
-- replace ordinary ADTs or records
+- declarations, callable members, explicit construction/unwrapping, explicit decode surfaces, and
+  domain-local operators are in scope
+- literal suffixes are current-module integer-family surfaces only
+- no implicit casts
+- no projection syntax
+- literal patterns remain on the existing integer/text-only slice rather than widening pattern
+  matching around domain literals prematurely
 
 ---
 
@@ -2448,19 +2595,30 @@ This is a first-class canonical style, not a tolerated edge case.
 
 ## 23. Testing and hardening
 
-The implementation must include:
+AIVI requires aggressive implementation hardening. The baseline implementation strategy includes:
 
-- unit tests
-- parser golden tests
-- formatter golden tests
-- type-checker expectation tests
-- property tests for lawful core instances where practical
-- fuzzing for parser and decoder paths
-- scheduler stress tests
+- parser and decoder fuzzing in a standalone top-level `fuzz/` cargo-fuzz workspace
+- stable corpus replay tests in ordinary CI so committed seeds are checked without requiring the
+  `cargo fuzz` subcommand
+- scheduler stress coverage that stays deterministic and in-process
 - GTK subtree lifecycle tests
 - stack-depth torture tests
 - teardown/leak tests
-- deterministic scheduling tests
+- deterministic scheduling tests with generation-stamped publication scripts
+- GLib wakeup and reentry tests
+
+Decoder fuzzing is schema-owned rather than arbitrary-runtime-string fuzzing. The fuzz target first
+parses and lowers source text, then executes only compiler-generated decode programs. Malformed
+inputs may fail, but failures must flow through typed decode errors whose field and variant names
+come from the generated schema rather than ad hoc runtime strings.
+
+Performance work is benchmark-gated. Each performance-oriented pass should land with:
+
+- one checked-in corpus
+- one machine-stable structural metric
+- one release timing metric
+
+Anecdotal speedups do not count.
 
 Every bug fix should add a regression test that names the failed invariant.
 
@@ -2470,7 +2628,8 @@ Every bug fix should add a regression test that names the failed invariant.
 
 These milestones do **not** reduce scope. They partition implementation work.
 
-Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implemented with known gaps; **PENDING** = not yet started.
+Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implemented with known
+gaps; **PENDING** = not yet started.
 
 ### Milestone 1 — Surface and CST freeze — **COMPLETE**
 
@@ -2478,9 +2637,10 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - parser ✓
 - CST (lossless for formatting and diagnostics) ✓
 - formatter (canonical pipe, arrow, cluster alignment) ✓
-- syntax for `type`, `class`, `instance`, `val`, `fun`, `sig`, `use`, `export`, markup, and pipe operators ✓
+- syntax for `type`, `class`, `instance`, `val`, `fun`, `sig`, `use`, `export`, `provider`, markup,
+  and pipe operators ✓
 - line/block/doc comment lexing (`//`, `/* */`, `/** **/`) and trivia retention in the token stream ✓
-- regex literal lexing and HIR validation ✓
+- regex literal lexing plus HIR validation ✓
 - compact suffix literal lexing (`250ms`) ✓
 
 ### Milestone 2 — HIR and names — **COMPLETE**
@@ -2494,6 +2654,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - `instance` blocks with same-module class resolution ✓
 - provider declarations (`provider qualified.name`) ✓
 - input signal declarations (body-less annotated `sig`) ✓
+- module-aware expression typechecker in `aivi-hir` ✓
 
 ### Milestone 3 — Kinds and core typing — **COMPLETE**
 
@@ -2503,9 +2664,8 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - `Validation` ✓
 - `Default` and record default elaboration ✓
 - `Eq` compiler derivation ✓
-- module-aware expression typechecker in `aivi-hir` ✓
 - operator typechecking (`==`, `!=`, domain operators) ✓
-- truthy/falsy branch handoff (`T|>`, `F|>`) ✓
+- truthy/falsy branch handoff (`T|>`, `F|>`) including one-layer `Signal` lift ✓
 - case exhaustiveness checks for known closed sums ✓
 - bidirectional record/collection/projection shape checking ✓
 
@@ -2530,15 +2690,15 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 
 ### Milestone 6 — Tasks and sources — **PARTIAL**
 
-- `Task` typed IR and scheduler ports ✓
+- `Task` typed IR and scheduler completion ports ✓
 - `@source` runtime contract and instance lifecycle ✓
 - decode integration (structural decoder, domain parse method resolution) ✓
 - worker/UI publication boundary ✓
 - timer sources (`timer.every`, `timer.after`) — fully working ✓
-- HTTP sources — runtime contract wired, provider execution pending
-- `fs.read`, `fs.watch` — contract wired, full runtime execution pending
-- socket / mailbox / process / window-event sources — pending
-- `Task` full worker execution — pending
+- HTTP sources — runtime contract wired, provider execution slice partial
+- `fs.read`, `fs.watch` — contract wired, provider execution slice partial
+- socket / mailbox / process / D-Bus / window-event sources — partial or provider-specific
+- full recurrent-task execution — pending
 
 ### Milestone 7 — GTK bridge — **PARTIAL**
 
@@ -2546,10 +2706,9 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - runtime assembly ✓
 - GTK bridge graph and child-group lowering ✓
 - executor with direct setter/event/child management ✓
-- `<show>` (mount/unmount) ✓
-- `keepMounted` on `<show>` ✓
-- `<each>` with keys and localized child edits ✓
-- `<empty>` branch ✓
+- `<show>` / `keepMounted` ✓
+- `<each>` with required keys and localized child edits ✓
+- `<empty>` ✓
 - `<match>` ✓
 - `<fragment>` ✓
 - `<with>` ✓
@@ -2559,20 +2718,16 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 ### Milestone 8 — Backend and hardening — **PARTIAL**
 
 - lambda IR with explicit closures and environments ✓
-- backend IR with layouts, kernels, pipelines ✓
+- backend IR with layouts, kernels, pipelines, source plans, and decode plans ✓
 - Cranelift AOT codegen for scalars and item-body kernels ✓
 - runtime startup linking (HIR → backend → scheduler) ✓
 - inline helper pipe execution in item/source kernels ✓
 - body-backed signal inline transform/tap/case/truthy-falsy execution against committed snapshots ✓
 - general lambda/closure conversion for arbitrary bodies — pending
 - scheduler-owned signal filter/fanout/recurrence pipeline execution — pending
-- GC integration — pending
-- performance pass plan frozen; implementation pending (see §28.9)
-- fuzzing and stress infrastructure — pending
-
-Milestone 8 performance work is scoped narrowly: post-typed-core lambda/backend/codegen/runtime
-passes only. HIR, typechecking, and typed core remain the proof and diagnostic source-of-truth
-layers. The normative pass order and benchmark gates are defined in §28.9.
+- initial moving-GC integration — pending
+- fuzzing and deterministic stress infrastructure — in progress
+- performance pass plan frozen and benchmark-gated (see §28.8–§28.9)
 
 ---
 
@@ -2600,9 +2755,13 @@ The implementation should prefer one correct algebraic model over many local pat
 
 The `aivi` CLI provides the following subcommands.
 
+Unless otherwise stated, multi-file module discovery uses the nearest ancestor `aivi.toml`; if no
+such file exists, the entry file's parent directory is the workspace root. Module names come from
+relative `.aivi` paths under that root.
+
 ### 26.1 `aivi check <path>`
 
-Validates an AIVI source file through the full frontend pipeline:
+Validates an AIVI source file through the honest frontend/compiler boundary:
 
 ```
 aivi check src/main.aivi
@@ -2610,7 +2769,8 @@ aivi check src/main.aivi
 
 Pipeline: source → CST → HIR → typed core → lambda → backend (no code emission).
 
-Reports diagnostics with source locations. Exits 0 if there are no errors, 1 if there are errors, 2 on internal failure.
+Reports diagnostics with source locations. Exits 0 if there are no errors, 1 if there are errors,
+2 on internal failure.
 
 Invoking `aivi <path>` with no subcommand is equivalent to `aivi check <path>`.
 
@@ -2625,9 +2785,11 @@ aivi compile src/main.aivi --output build/main.o
 
 Pipeline: source → CST → HIR → typed core → lambda → backend → Cranelift → object file.
 
-If `-o` / `--output` is omitted, no output file is written but the pipeline is validated. Exits 0 on success, 1 on compilation errors.
+If `-o` / `--output` is omitted, no output file is written but the pipeline is validated. Exits 0
+on success, 1 on compilation errors.
 
-**Current limitation**: object output is emitted but runtime startup, linking, and executable launch are not yet fully automated. The explicit per-stage failure boundary is reported rather than pretending a full executable is produced.
+`aivi compile` stops at the honest compile boundary. Runtime startup, final linking, and executable
+launch are reported as separate work rather than being implied.
 
 ### 26.3 `aivi run <path> [--view <name>]`
 
@@ -2641,13 +2803,15 @@ aivi run src/app.aivi --view mainWindow
 View selection rules:
 
 1. If `--view <name>` is given, the named top-level markup-valued `val` is used.
-2. Otherwise, if there is exactly one top-level markup-valued `val` named `view`, that is used.
+2. Otherwise, if there is a top-level markup-valued `val` named `view`, that is used.
 3. Otherwise, if there is a unique top-level markup-valued `val`, that is used.
-4. If several candidates remain, `--view` is required.
+4. Otherwise, `--view <name>` is required.
 
 The selected root must be a `Window`. The CLI does not auto-wrap arbitrary widgets into windows.
 
-The run session integrates a GLib main loop, evaluates markup fragments against committed runtime signal snapshots, and re-evaluates the selected view after each meaningful scheduler tick. Live GTK updates are applied through the bridge executor.
+`aivi run` owns the live GTK/runtime session. It links the compiled runtime stack, evaluates the
+selected view fragments against committed runtime snapshots, re-evaluates those fragments after each
+meaningful committed tick, and applies GTK updates through the bridge executor.
 
 Exits 0 on clean application close, 1 on startup/compilation error.
 
@@ -2661,7 +2825,8 @@ aivi fmt --stdin                  # read from stdin, write to stdout
 aivi fmt --check src/a.aivi src/b.aivi   # verify formatting; exit 1 if any differ
 ```
 
-The formatter is canonical: it produces a single deterministic output for any valid source. Formatting is part of the language contract (§22).
+The formatter is canonical: it produces a single deterministic output for any valid source.
+Formatting is part of the language contract (§22).
 
 ### 26.5 `aivi lex <path>`
 
@@ -2671,7 +2836,7 @@ Tokenizes an AIVI source file and prints the token stream:
 aivi lex src/app.aivi
 ```
 
-Useful for debugging lexer behavior or suffix literal resolution.
+Useful for debugging lexer behavior, regex literal handling, or suffix literal resolution.
 
 ### 26.6 `aivi lsp`
 
@@ -2681,13 +2846,39 @@ Starts the AIVI Language Server on stdin/stdout using the Language Server Protoc
 aivi lsp
 ```
 
-Editor integrations should launch this subprocess and communicate over stdio. See §27 for supported LSP capabilities.
+Editor integrations should launch this subprocess and communicate over stdio. See §27 for
+supported LSP capabilities.
+
+### 26.7 `aivi db migrate`
+
+Generates a plain SQL migration from the current record-schema surface:
+
+```
+aivi db migrate
+```
+
+The command diffs the current record types against the last applied migration state and writes a new
+SQL file under `db/migrations/` with a timestamp-prefixed filename. The generated file is ordinary
+SQL intended for review and commit.
+
+### 26.8 `aivi db apply`
+
+Applies pending SQL migrations:
+
+```
+aivi db apply
+```
+
+Pending files are applied in lexicographic order using a `_schema_migrations` tracking table inside
+one transaction. On failure, the whole migration application rolls back.
 
 ---
 
 ## 27. Language server (LSP)
 
-The AIVI language server (`aivi lsp`) provides editor integration through the Language Server Protocol. It is backed by the `aivi-query` incremental query database, which caches source, parse, HIR, diagnostic, symbol, and format results per revision.
+The AIVI language server (`aivi lsp`) provides editor integration through the Language Server
+Protocol. It is backed by the `aivi-query` incremental query database, which caches source, parse,
+HIR, diagnostic, symbol, and format results per revision.
 
 ### 27.1 Supported capabilities
 
@@ -2697,18 +2888,132 @@ The AIVI language server (`aivi lsp`) provides editor integration through the La
 | Diagnostics (publish on open/change) | ✓ |
 | Document formatting | ✓ |
 | Document symbols | ✓ |
-| Workspace symbols | ✓ |
+| Workspace symbols | Partial |
 | Hover documentation | ✓ |
 | Go-to-definition | ✓ |
 | Completion (triggered on `.`) | ✓ |
-| Semantic tokens (full) | ✓ |
+| Semantic tokens (full) | Partial |
 
 ### 27.2 Architecture
 
-The LSP server is read-only from the user model's point of view. All editor features go through the query database rather than invoking ad-hoc frontend passes. Incremental memoization is per file revision so rapid keystroke changes do not invalidate unrelated cached queries.
+The LSP server is read-only from the user model's point of view. All editor features go through the
+revision-keyed query database rather than invoking ad-hoc frontend passes.
+
+When a workspace root is known, the server uses the same `aivi.toml` / relative-path module mapping
+as the CLI. Incremental memoization is per file revision so rapid keystroke changes do not
+invalidate unrelated cached queries.
 
 ### 27.3 Current limitations
 
-- multi-file workspace analysis is not yet implemented; each file is checked independently
-- completion suggestions are basic; type-directed completion over expected record fields and constructor arguments is pending
-- semantic token legend is defined but token-type coverage is partial
+- whole-workspace semantic queries remain partial; the checked/open file set is still the primary
+  working set for symbols and diagnostics
+- completion suggestions are basic; richer type-directed completion over expected record fields and
+  constructor arguments is pending
+- semantic token legend exists but token-type coverage is still incomplete
+- editor-facing project orchestration does not yet replace the explicit CLI workflow for runtime,
+  migrations, or provider startup validation
+
+---
+
+## 28. Pre-stdlib runtime and application surfaces
+
+This section records implementation-facing surfaces that are real parts of the current runtime slice
+but are not yet a polished standard library.
+
+### 28.1 Workspace and module discovery
+
+Multi-file workspace discovery is shared across `check`, `compile`, and `run`:
+
+- the nearest ancestor `aivi.toml` is the workspace root when present
+- otherwise the entry file's parent directory is the root
+- module names come from relative `.aivi` paths under that root
+- all commands must agree on this mapping
+
+### 28.2 Database schema and migrations
+
+The database surface treats AIVI record types as the schema source of truth.
+
+Rules:
+
+- migrations are CLI-generated SQL files, not an AIVI-specific migration DSL
+- generated migrations live under `db/migrations/`
+- runtime startup checks that the applied migration state matches the schema version the program was
+  compiled against
+- if the versions differ, startup fails with `DbError.SchemaMismatch` before any query runs
+- there is no auto-migration in production
+
+### 28.3 D-Bus surface
+
+The user-facing D-Bus surface in the current slice is intentionally narrow and explicit:
+
+- `dbus.ownName` is a `@source` for name ownership state
+- `dbus.call` is a `Task`
+- `dbus.emit` is a `Task`
+- `dbus.signal` is a `@source` for inbound signal subscription
+- `dbus.method` is a `@source` for fire-and-forget inbound method dispatch with immediate Unit
+  reply semantics on the wire
+
+Methods that return non-Unit values to the caller are deferred.
+
+### 28.4 Local-first sync architecture
+
+The reference email-oriented runtime shape is local-first:
+
+- IMAP sync runs on a worker and writes fetched mail into SQLite through the database layer
+- the UI reads via `db.query` over the local database rather than binding directly to a live IMAP
+  stream
+- the sync source publishes typed `SyncState`
+- credential errors surface in `SyncState.error` and do not permanently tear down the source on the
+  first auth failure
+- SMTP send is a separate one-shot `Task SmtpError Unit`
+
+### 28.5 Multi-process desktop architecture
+
+The intended cooperating-process shape for the reference desktop application is:
+
+- a headless sync daemon
+- a GTK UI process
+- a GJS GNOME Shell extension
+
+The daemon owns the D-Bus well-known name and SQLite write lock. The UI reads through SQLite and
+subscribes to daemon D-Bus signals. The extension communicates with the daemon through D-Bus only.
+SQLite WAL mode covers daemon writes plus UI reads.
+
+Closing the main window with `hideOnClose=True` hides the window rather than terminating the live
+process. The existing instance is later restored by presentation or D-Bus activation.
+
+### 28.6 Moving-GC rollout boundary
+
+The initial moving-GC boundary is deliberately narrow:
+
+- only scheduler-committed runtime snapshots are in moving-GC storage
+- pending worker/source/task/evaluator results remain ordinary Rust-owned runtime values until
+  commit
+- GTK, worker, and provider seams keep explicit detached boundary wrappers so later GC expansion can
+  happen without reopening those contracts
+
+### 28.7 Runtime startup and linked ownership
+
+Runtime startup links HIR runtime bindings to backend items, source kernels, and widget fragments.
+The long-lived linked runtime owns its compiled backend program behind shared ownership suitable for
+persistent GLib-driven sessions.
+
+### 28.8 Hardening requirements
+
+Hardening remains deterministic and in-process:
+
+- scheduler stress uses the existing runtime/unit harnesses rather than a separate async test stack
+- teardown, wakeup, and reentry behavior must be testable without sleep-driven flakiness
+- parser and decoder fuzzing live in the standalone `fuzz/` workspace described in §23
+
+### 28.9 Performance gate policy
+
+Performance passes start only after typed-core validation. First-wave scope is intentionally narrow:
+
+- typed-lambda capture pruning
+- backend kernel simplification
+- direct self-tail loop lowering
+- scheduler frontier deduplication
+
+HIR, typechecking, and typed core remain proof and diagnostic layers rather than speculative
+performance layers. Every performance pass must satisfy the benchmark gate policy in §23.

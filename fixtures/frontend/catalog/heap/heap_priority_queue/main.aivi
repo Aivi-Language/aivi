@@ -1,6 +1,6 @@
 use aivi.list (
     head
-    tail
+    tailOrEmpty
 )
 
 type Entry = {
@@ -39,25 +39,18 @@ fun merge:Heap #left:Heap #right:Heap =>
      ||> (other, Empty)                                               => other
      ||> (Node leftEntry leftChildren, Node rightEntry rightChildren) => mergeNodes leftEntry leftChildren rightEntry rightChildren
 
-fun mergePairsAfterSecond:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
-    tail remaining
-     ||> Some rest => merge (merge first second) (mergePairs rest)
-     ||> None      => merge first second
+fun mergePairRest:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
+    merge (merge first second) (mergePairs (tailOrEmpty remaining))
 
-fun mergePairsAfterFirst:Heap #first:Heap #remaining:(List Heap) =>
+fun mergePairsWithFirst:Heap #first:Heap #remaining:(List Heap) =>
     head remaining
+     ||> Some second => mergePairRest first second remaining
      ||> None        => first
-     ||> Some second => mergePairsAfterSecond first second remaining
-
-fun mergePairsFromFirst:Heap #first:Heap #children:(List Heap) =>
-    tail children
-     ||> Some remaining => mergePairsAfterFirst first remaining
-     ||> None           => first
 
 fun mergePairs:Heap #children:(List Heap) =>
     head children
+     ||> Some first => mergePairsWithFirst first (tailOrEmpty children)
      ||> None       => Empty
-     ||> Some first => mergePairsFromFirst first children
 
 fun insert:Heap #heap:Heap #entry:Entry =>
     merge heap (Node entry [])
@@ -72,12 +65,12 @@ fun labelOf:Text #value:(Option Entry) =>
      ||> Some entry => entry.label
      ||> None       => "empty"
 
-fun isMissing:Bool #value:(Option A) =>
+fun isEmptyEntry:Bool #value:(Option Entry) =>
     value
-     F|> True
-     T|> False
+     ||> None   => True
+     ||> Some _ => False
 
-val tasks: List Entry = [
+val tasks:List Entry = [
     { priority: 3, label: "lint" },
     { priority: 1, label: "parse" },
     {
@@ -90,20 +83,20 @@ val tasks: List Entry = [
     }
 ]
 
-val queue: Heap =
+val queue:Heap =
     tasks
      |> reduce insert Empty
 
-val firstPop: Pop = pop queue
-val secondPop: Pop = pop firstPop.rest
-val thirdPop: Pop = pop secondPop.rest
-val emptyPop: Pop = pop Empty
+val firstPop:Pop = pop queue
+val secondPop:Pop = pop firstPop.rest
+val thirdPop:Pop = pop secondPop.rest
+val emptyPop:Pop = pop Empty
 
-val queueSummary: QueueSummary = {
+val queueSummary:QueueSummary = {
     first: labelOf firstPop.entry,
     second: labelOf secondPop.entry,
     third: labelOf thirdPop.entry,
-    emptyPop: isMissing emptyPop.entry,
+    emptyPop: isEmptyEntry emptyPop.entry,
     note: "pairing-heap queue with empty-pop edge"
 }
 

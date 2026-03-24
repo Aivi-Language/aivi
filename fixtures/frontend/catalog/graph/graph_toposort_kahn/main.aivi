@@ -76,13 +76,16 @@ val initialEmitted: Emitted = {
     publish: False
 }
 
-fun phaseLabel:Text #phase:Phase =>
+fun choosePhase:A #phase:Phase #fetch:A #parse:A #analyze:A #package:A #publish:A =>
     phase
-     ||> Fetch   => "fetch"
-     ||> Parse   => "parse"
-     ||> Analyze => "analyze"
-     ||> Package => "package"
-     ||> Publish => "publish"
+     ||> Fetch   => fetch
+     ||> Parse   => parse
+     ||> Analyze => analyze
+     ||> Package => package
+     ||> Publish => publish
+
+fun phaseLabel:Text #phase:Phase =>
+    choosePhase phase "fetch" "parse" "analyze" "package" "publish"
 
 fun appendPhaseLabel:(List Text) #parts:(List Text) #phase:Phase =>
     append parts [
@@ -95,12 +98,7 @@ fun orderLabel:Text #order:(List Phase) =>
      |> join " -> "
 
 fun incomingOf:Int #incoming:Incoming #phase:Phase =>
-    phase
-     ||> Fetch   => incoming.fetch
-     ||> Parse   => incoming.parse
-     ||> Analyze => incoming.analyze
-     ||> Package => incoming.package
-     ||> Publish => incoming.publish
+    choosePhase phase incoming.fetch incoming.parse incoming.analyze incoming.package incoming.publish
 
 fun setIncoming:Incoming #incoming:Incoming #phase:Phase #value:Int =>
     phase
@@ -117,12 +115,7 @@ fun decrementIncoming:Incoming #incoming:Incoming #phase:Phase =>
     setIncoming incoming phase ((incomingOf incoming phase) - 1)
 
 fun emittedOf:Bool #emitted:Emitted #phase:Phase =>
-    phase
-     ||> Fetch   => emitted.fetch
-     ||> Parse   => emitted.parse
-     ||> Analyze => emitted.analyze
-     ||> Package => emitted.package
-     ||> Publish => emitted.publish
+    choosePhase phase emitted.fetch emitted.parse emitted.analyze emitted.package emitted.publish
 
 fun setEmitted:Emitted #emitted:Emitted #phase:Phase #value:Bool =>
     phase
@@ -132,27 +125,34 @@ fun setEmitted:Emitted #emitted:Emitted #phase:Phase #value:Bool =>
      ||> Package => { fetch: emitted.fetch, parse: emitted.parse, analyze: emitted.analyze, package: value, publish: emitted.publish }
      ||> Publish => { fetch: emitted.fetch, parse: emitted.parse, analyze: emitted.analyze, package: emitted.package, publish: value }
 
-fun samePhase:Bool #expected:Phase #candidate:Phase =>
+fun isPhase:Bool #expected:Phase #candidate:Phase =>
     candidate == expected
 
 fun queuedContains:Bool #queued:(List Phase) #phase:Phase =>
     queued
-     |> any (samePhase phase)
-
-fun countIncoming:Incoming #incoming:Incoming #edge:Dependency =>
-    incrementIncoming incoming edge.to
+     |> any (isPhase phase)
 
 fun readyPhase:Bool #state:KahnState #phase:Phase =>
-    (incomingOf state.incoming phase) == 0 and (emittedOf state.emitted phase) == False and (queuedContains state.queued phase) == False
+    ((incomingOf state.incoming phase) == 0)
+        and ((emittedOf state.emitted phase) == False)
+        and ((queuedContains state.queued phase) == False)
 
 fun enqueueReady:KahnState #state:KahnState #phase:Phase =>
     readyPhase state phase
-     T|> { incoming: state.incoming, queued: append state.queued [phase], emitted: state.emitted, order: state.order }
+     T|> {
+            incoming: state.incoming,
+            queued: append state.queued [phase],
+            emitted: state.emitted,
+            order: state.order
+        }
      F|> state
 
 fun replenish:KahnState #graph:DependencyGraph #state:KahnState =>
     graph.nodes
      |> reduce enqueueReady state
+
+fun countIncoming:Incoming #incoming:Incoming #edge:Dependency =>
+    incrementIncoming incoming edge.to
 
 fun decrementOutgoing:Incoming #current:Phase #incoming:Incoming #edge:Dependency =>
     edge.from == current
@@ -185,17 +185,11 @@ fun consume:KahnState #graph:DependencyGraph #state:KahnState #tick:Phase =>
      ||> Some current => emitReady graph state current
      ||> None         => state
 
-fun countsMatch:Bool #left:Int #right:Int =>
-    left == right
-
-fun emittedAll:Bool #graph:DependencyGraph #state:KahnState =>
-    countsMatch (length state.order) (length graph.nodes)
-
 fun summarize:ToposortSummary #graph:DependencyGraph #state:KahnState =>
     {
         order: orderLabel state.order,
         emittedCount: length state.order,
-        hasCycle: emittedAll graph state
+        hasCycle: length state.order == length graph.nodes
          T|> False
          F|> True
     }

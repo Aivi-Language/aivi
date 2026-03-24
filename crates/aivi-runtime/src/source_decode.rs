@@ -351,9 +351,7 @@ fn runtime_to_json(value: &RuntimeValue) -> Result<JsonValue, Box<str>> {
         RuntimeValue::Bytes(_) => {
             Err("runtime JSON encoding does not support Bytes values yet".into())
         }
-        RuntimeValue::Task(_) => {
-            Err("runtime JSON encoding does not support Task values".into())
-        }
+        RuntimeValue::Task(_) => Err("runtime JSON encoding does not support Task values".into()),
     }
 }
 

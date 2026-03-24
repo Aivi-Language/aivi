@@ -1,10 +1,12 @@
 use aivi.list (
     head
-    tail
+    tailOrEmpty
     last
     length
     zip
 )
+
+use aivi.order (minOf)
 
 type InitialRowState = {
     next: Int,
@@ -35,13 +37,8 @@ type EditDistanceSummary = {
     rows: List (List Int)
 }
 
-fun chooseLower:Int #left:Int #right:Int =>
+fun earlier:Bool #left:Int #right:Int =>
     left < right
-     T|> left
-     F|> right
-
-fun minimum:Int #first:Int #second:Int #third:Int =>
-    chooseLower (chooseLower first second) third
 
 fun substitutionCost:Int #left:Text #right:Text =>
     left == right
@@ -58,11 +55,6 @@ fun lastValue:Int #values:(List Int) =>
      ||> Some value => value
      ||> None       => 0
 
-fun remainingValues:(List Int) #values:(List Int) =>
-    tail values
-     ||> Some rest => rest
-     ||> None      => []
-
 fun extendInitialRow:InitialRowState #state:InitialRowState #token:Text =>
     state
      ||> { next, values } => { next: next + 1, values: append values [next + 1] }
@@ -73,46 +65,61 @@ fun initialRow:(List Int) #tokens:(List Text) =>
      |> .values
 
 fun nextCell:Int #sourceToken:Text #prevDiagonal:Int #leftValue:Int #targetToken:Text #aboveValue:Int =>
-    minimum (leftValue + 1) (aboveValue + 1) (prevDiagonal + substitutionCost sourceToken targetToken)
+    minOf earlier (leftValue + 1) [
+        aboveValue + 1,
+        prevDiagonal + substitutionCost sourceToken targetToken
+    ]
 
-fun pairTarget:Text #pair:(Text, Int) =>
-    pair
-     ||> (targetToken, aboveValue) => targetToken
-
-fun pairAbove:Int #pair:(Text, Int) =>
-    pair
-     ||> (targetToken, aboveValue) => aboveValue
+fun recordCell:CellState #sourceToken:Text #aboveValue:Int #values:(List Int) #value:Int =>
+    {
+        sourceToken,
+        prevDiagonal: aboveValue,
+        leftValue: value,
+        values: append values [value]
+    }
 
 fun updatedCell:CellState #sourceToken:Text #prevDiagonal:Int #leftValue:Int #values:(List Int) #targetToken:Text #aboveValue:Int =>
-    {
-        sourceToken: sourceToken,
-        prevDiagonal: aboveValue,
-        leftValue: nextCell sourceToken prevDiagonal leftValue targetToken aboveValue,
-        values: append values [
-            nextCell sourceToken prevDiagonal leftValue targetToken aboveValue
-        ]
-    }
+    nextCell sourceToken prevDiagonal leftValue targetToken aboveValue
+     |> recordCell sourceToken aboveValue values
+
+fun advancePair:CellState #sourceToken:Text #prevDiagonal:Int #leftValue:Int #values:(List Int) #pair:(Text, Int) =>
+    pair
+     ||> (targetToken, aboveValue) => updatedCell sourceToken prevDiagonal leftValue values targetToken aboveValue
 
 fun advanceCell:CellState #state:CellState #pair:(Text, Int) =>
     state
-     ||> { sourceToken, prevDiagonal, leftValue, values } => updatedCell sourceToken prevDiagonal leftValue values (pairTarget pair) (pairAbove pair)
+     ||> { sourceToken, prevDiagonal, leftValue, values } => advancePair sourceToken prevDiagonal leftValue values pair
 
 fun nextRow:(List Int) #targetTokens:(List Text) #rowIndex:Int #prevRow:(List Int) #sourceToken:Text =>
-    zip targetTokens (remainingValues prevRow)
+    zip targetTokens (tailOrEmpty prevRow)
      |> reduce advanceCell { sourceToken, prevDiagonal: firstValue prevRow, leftValue: rowIndex, values: [rowIndex] }
      |> .values
 
-fun seedMatrix:MatrixState #targetTokens:(List Text) =>
+fun recordRow:MatrixState #rowIndex:Int #targetTokens:(List Text) #rows:(List (List Int)) #row:(List Int) =>
+    {
+        rowIndex: rowIndex + 1,
+        targetTokens,
+        finalRow: row,
+        rows: append rows [row]
+    }
+
+fun seedRows:MatrixState #targetTokens:(List Text) #row:(List Int) =>
     {
         rowIndex: 0,
         targetTokens,
-        finalRow: initialRow targetTokens,
-        rows: [initialRow targetTokens]
+        finalRow: row,
+        rows: [row]
     }
+
+fun seedMatrix:MatrixState #targetTokens:(List Text) =>
+    seedRows targetTokens (initialRow targetTokens)
+
+fun commitRow:MatrixState #rowIndex:Int #targetTokens:(List Text) #rows:(List (List Int)) #sourceToken:Text #finalRow:(List Int) =>
+    recordRow rowIndex targetTokens rows (nextRow targetTokens (rowIndex + 1) finalRow sourceToken)
 
 fun advanceMatrix:MatrixState #state:MatrixState #sourceToken:Text =>
     state
-     ||> { rowIndex, targetTokens, finalRow, rows } => { rowIndex: rowIndex + 1, targetTokens, finalRow: nextRow targetTokens (rowIndex + 1) finalRow sourceToken, rows: append rows [nextRow targetTokens (rowIndex + 1) finalRow sourceToken] }
+     ||> { rowIndex, targetTokens, finalRow, rows } => commitRow rowIndex targetTokens rows sourceToken finalRow
 
 fun buildMatrix:MatrixState #sourceTokens:(List Text) #targetTokens:(List Text) =>
     sourceTokens
@@ -123,10 +130,10 @@ fun editDistance:Int #sourceTokens:(List Text) #targetTokens:(List Text) =>
      |> .finalRow
      |> lastValue
 
-val leftText: Text = "kitten"
-val rightText: Text = "sitting"
+val leftText:Text = "kitten"
+val rightText:Text = "sitting"
 
-val leftTokens: List Text = [
+val leftTokens:List Text = [
     "k",
     "i",
     "t",
@@ -135,7 +142,7 @@ val leftTokens: List Text = [
     "n"
 ]
 
-val rightTokens: List Text = [
+val rightTokens:List Text = [
     "s",
     "i",
     "t",
@@ -145,11 +152,11 @@ val rightTokens: List Text = [
     "g"
 ]
 
-val emptyTokens: List Text = []
-val sampleMatrix: MatrixState = buildMatrix leftTokens rightTokens
-val blankDistance: Int = editDistance emptyTokens rightTokens
+val emptyTokens:List Text = []
+val sampleMatrix:MatrixState = buildMatrix leftTokens rightTokens
+val blankDistance:Int = editDistance emptyTokens rightTokens
 
-val editDistanceSummary: EditDistanceSummary =
+val editDistanceSummary:EditDistanceSummary =
     sampleMatrix
      ||> { finalRow, rows } => { left: leftText, right: rightText, distance: lastValue finalRow, blankDistance, rowCount: length rows, finalRow, rows }
 

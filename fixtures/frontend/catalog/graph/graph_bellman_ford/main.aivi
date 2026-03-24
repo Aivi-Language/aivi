@@ -60,18 +60,21 @@ val negativeWeightEdge: WeightedEdge = {
 
 val negativeCycleWitness: Text = "mid -> detour -> mid"
 
+fun chooseNode:A #node:Node #source:A #mid:A #detour:A #goal:A #stranded:A =>
+    node
+     ||> Source   => source
+     ||> Mid      => mid
+     ||> Detour   => detour
+     ||> Goal     => goal
+     ||> Stranded => stranded
+
 fun distanceText:Text #distance:Distance =>
     distance
      ||> Unreachable => "unreachable"
      ||> Cost value  => "{value}"
 
 fun distanceOf:Distance #distances:Distances #node:Node =>
-    node
-     ||> Source   => distances.source
-     ||> Mid      => distances.mid
-     ||> Detour   => distances.detour
-     ||> Goal     => distances.goal
-     ||> Stranded => distances.stranded
+    chooseNode node distances.source distances.mid distances.detour distances.goal distances.stranded
 
 fun setDistance:Distances #distances:Distances #node:Node #value:Distance =>
     node
@@ -95,10 +98,13 @@ fun plusDistance:Distance #distance:Distance #weight:Int =>
 fun candidateDistance:Distance #distances:Distances #edge:WeightedEdge =>
     plusDistance (distanceOf distances edge.from) edge.weight
 
+fun preferDistance:Distance #current:Distance #candidate:Distance =>
+    betterDistance candidate current
+     T|> candidate
+     F|> current
+
 fun relaxTarget:Distances #distances:Distances #target:Node #candidate:Distance =>
-    betterDistance candidate (distanceOf distances target)
-     T|> setDistance distances target candidate
-     F|> distances
+    setDistance distances target (preferDistance (distanceOf distances target) candidate)
 
 fun relaxEdge:Distances #distances:Distances #edge:WeightedEdge =>
     relaxTarget distances edge.to (candidateDistance distances edge)

@@ -1482,9 +1482,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 span: join_spans(pair.truthy_stage.span, pair.falsy_stage.span),
             }]);
         }
-        let result_subject =
-            self.typing
-                .apply_truthy_falsy_result_type(subject, truthy_body.ty.clone());
+        let result_subject = self
+            .typing
+            .apply_truthy_falsy_result_type(subject, truthy_body.ty.clone());
         Ok(GateRuntimePipeStage {
             span: join_spans(pair.truthy_stage.span, pair.falsy_stage.span),
             input_subject: subject.gate_payload().clone(),
@@ -1574,7 +1574,12 @@ impl<'a> GeneralExprElaborator<'a> {
             .iter()
             .zip(plan.parameter_types.iter())
         {
-            arguments.push(self.lower_expr(*argument, env, Some(ambient), Some(expected_parameter))?);
+            arguments.push(self.lower_expr(
+                *argument,
+                env,
+                Some(ambient),
+                Some(expected_parameter),
+            )?);
         }
         arguments.push(GateRuntimeExpr {
             span: expr.span,
@@ -2163,9 +2168,8 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use super::{
-        ExprKind, Item,
-        GateRuntimeExprKind, GateRuntimePipeStageKind, GeneralExprBlocker, GeneralExprOutcome,
-        elaborate_general_expressions,
+        ExprKind, GateRuntimeExprKind, GateRuntimePipeStageKind, GeneralExprBlocker,
+        GeneralExprOutcome, Item, elaborate_general_expressions,
     };
     use crate::{
         typecheck::resolve_class_member_dispatch,
@@ -2528,12 +2532,8 @@ fun appendOne:(List A) #items:(List A) #item:A =>
             let expected = typing
                 .lower_open_annotation(function.annotation.expect("appendOne is annotated"))
                 .expect("appendOne result type should lower");
-            let dispatch = resolve_class_member_dispatch(
-                module,
-                reference,
-                &argument_types,
-                Some(&expected),
-            );
+            let dispatch =
+                resolve_class_member_dispatch(module, reference, &argument_types, Some(&expected));
             panic!(
                 "expected generic append body to lower, found {:?}; argument_types={argument_types:?}; expected={expected:?}; dispatch={dispatch:?}",
                 append_one.outcome
@@ -2610,7 +2610,12 @@ fun length:Int #items:(List A) =>
                 .next()
                 .expect("length should have one parameter")
                 .clone();
-            let plan = typing.match_pipe_function_signature(stage_expr, &env, ambient.gate_payload(), None);
+            let plan = typing.match_pipe_function_signature(
+                stage_expr,
+                &env,
+                ambient.gate_payload(),
+                None,
+            );
             let full_argument_types = argument_types
                 .iter()
                 .flatten()
@@ -2621,7 +2626,12 @@ fun length:Int #items:(List A) =>
             panic!(
                 "expected generic reduce body to lower, found {:?}; argument_infos={argument_infos:?}; argument_types={argument_types:?}; ambient={ambient:?}; full_argument_types={full_argument_types:?}; selection={selection:?}; plan={plan:?}; dispatch={:?}",
                 length.outcome,
-                resolve_class_member_dispatch(module, reference, &argument_types.iter().flatten().cloned().collect::<Vec<_>>(), None)
+                resolve_class_member_dispatch(
+                    module,
+                    reference,
+                    &argument_types.iter().flatten().cloned().collect::<Vec<_>>(),
+                    None
+                )
             );
         }
     }
@@ -2682,7 +2692,8 @@ fun take:(List A) #n:Int #xs:(List A) =>
                 crate::PipeStageKind::Transform { expr } => *expr,
                 other => panic!("expected transform stage, found {other:?}"),
             };
-            let ExprKind::Apply { callee, arguments } = module.exprs()[reduce_expr].kind.clone() else {
+            let ExprKind::Apply { callee, arguments } = module.exprs()[reduce_expr].kind.clone()
+            else {
                 panic!("take reduce stage should be an apply expression");
             };
             let ExprKind::Name(reference) = &module.exprs()[callee].kind else {
@@ -2707,8 +2718,12 @@ fun take:(List A) #n:Int #xs:(List A) =>
                 )
                 .expect("take xs parameter should be in env")
                 .clone();
-            let plan =
-                typing.match_pipe_function_signature(reduce_expr, &env, ambient.gate_payload(), None);
+            let plan = typing.match_pipe_function_signature(
+                reduce_expr,
+                &env,
+                ambient.gate_payload(),
+                None,
+            );
             let full_argument_types = argument_types
                 .iter()
                 .flatten()
@@ -2773,7 +2788,8 @@ fun head:(Option A) #items:(List A) =>
                 crate::PipeStageKind::Transform { expr } => *expr,
                 other => panic!("expected transform stage, found {other:?}"),
             };
-            let ExprKind::Apply { callee, arguments } = module.exprs()[reduce_expr].kind.clone() else {
+            let ExprKind::Apply { callee, arguments } = module.exprs()[reduce_expr].kind.clone()
+            else {
                 panic!("head reduce stage should be an apply expression");
             };
             let ExprKind::Name(reference) = &module.exprs()[callee].kind else {
@@ -2867,7 +2883,8 @@ fun any:Bool #predicate:(A -> Bool) #items:(List A) =>
                 crate::PipeStageKind::Transform { expr } => *expr,
                 other => panic!("expected transform stage, found {other:?}"),
             };
-            let ExprKind::Apply { callee, arguments } = module.exprs()[reduce_expr].kind.clone() else {
+            let ExprKind::Apply { callee, arguments } = module.exprs()[reduce_expr].kind.clone()
+            else {
                 panic!("any reduce stage should be an apply expression");
             };
             let ExprKind::Name(reference) = &module.exprs()[callee].kind else {

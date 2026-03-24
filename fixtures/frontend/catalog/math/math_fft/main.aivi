@@ -37,6 +37,14 @@ type FftCatalog = {
 fun realSample:Complex #value:Int =>
     { real: value, imag: 0 }
 
+fun realSignal4:Signal4 #x0:Int #x1:Int #x2:Int #x3:Int =>
+    {
+        x0: realSample x0,
+        x1: realSample x1,
+        x2: realSample x2,
+        x3: realSample x3
+    }
+
 fun addComplex:Complex #left:Complex #right:Complex =>
     {
         real: left.real + right.real,
@@ -118,35 +126,12 @@ fun summarizeSpectrum:FftSummary #label:Text #spectrum:Spectrum4 =>
 fun summarizeFft:FftSummary #label:Text #signal:Signal4 =>
     summarizeSpectrum label (fft4 signal)
 
-val impulseSignal: Signal4 = {
-    x0: realSample 1,
-    x1: realSample 0,
-    x2: realSample 0,
-    x3: realSample 0
-}
+val impulseSignal:Signal4 = realSignal4 1 0 0 0
+val constantSignal:Signal4 = realSignal4 2 2 2 2
+val alternatingSignal:Signal4 = realSignal4 1 (0 - 1) 1 (0 - 1)
+val zeroSignal:Signal4 = realSignal4 0 0 0 0
 
-val constantSignal: Signal4 = {
-    x0: realSample 2,
-    x1: realSample 2,
-    x2: realSample 2,
-    x3: realSample 2
-}
-
-val alternatingSignal: Signal4 = {
-    x0: realSample 1,
-    x1: realSample (0 - 1),
-    x2: realSample 1,
-    x3: realSample (0 - 1)
-}
-
-val zeroSignal: Signal4 = {
-    x0: realSample 0,
-    x1: realSample 0,
-    x2: realSample 0,
-    x3: realSample 0
-}
-
-val fftCatalog: FftCatalog = {
+val fftCatalog:FftCatalog = {
     impulse: summarizeFft "impulse" impulseSignal,
     constant: summarizeFft "constant" constantSignal,
     alternating: summarizeFft "alternating" alternatingSignal,

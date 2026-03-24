@@ -39,10 +39,10 @@ fun withFallback:Int #fallback:Int #value:(Option Int) =>
      ||> Some found => found
      ||> None       => fallback
 
-fun isMissing:Bool #value:(Option A) =>
+fun isMissing:Bool #value:(Option Int) =>
     value
-     F|> True
-     T|> False
+     ||> None   => True
+     ||> Some _ => False
 
 fun chooseUpper:(Option Int) #rank:Int #lower:(List Int) #equal:(List Int) #higher:(List Int) =>
     rank > length lower + length equal - 1
@@ -54,16 +54,13 @@ fun chooseRank:(Option Int) #rank:Int #lower:(List Int) #equal:(List Int) #highe
      T|> quickselect rank lower
      F|> chooseUpper rank lower equal higher
 
-fun selectFromPivot:(Option Int) #rank:Int #pivot:Int #items:(List Int) =>
-    classify pivot items
-     ||> { lower, equal, higher } => chooseRank rank lower equal higher
-
 fun quickselect:(Option Int) #rank:Int #items:(List Int) =>
     head items
-     ||> None       => None
-     ||> Some pivot => selectFromPivot rank pivot items
+     ||> None                     => None
+     ||> Some pivot               => classify pivot items
+     ||> { lower, equal, higher } => chooseRank rank lower equal higher
 
-val sample: List Int = [
+val sample:List Int = [
     7,
     2,
     9,
@@ -73,13 +70,13 @@ val sample: List Int = [
     6
 ]
 
-val duplicates: List Int = [
+val duplicates:List Int = [
     3,
     3,
     3
 ]
 
-val quickselectSummary: QuickselectSummary = {
+val quickselectSummary:QuickselectSummary = {
     fourthSmallest: withFallback 0 (quickselect 3 sample),
     minimum: withFallback 0 (quickselect 0 sample),
     duplicatePick: withFallback 0 (quickselect 1 duplicates),

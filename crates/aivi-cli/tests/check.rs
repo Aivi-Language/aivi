@@ -322,6 +322,8 @@ fn check_reports_non_exhaustive_case_from_hir() {
 fn check_accepts_stdlib_validation_files() {
     for relative in [
         "aivi/nonEmpty.aivi",
+        "aivi/order.aivi",
+        "aivi/prelude.aivi",
         "aivi/validation.aivi",
         "aivi/http.aivi",
         "aivi/timer.aivi",
@@ -344,6 +346,39 @@ fn check_accepts_stdlib_validation_files() {
         assert!(
             String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
             "expected success output for {relative}, got stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+}
+
+#[test]
+fn check_accepts_order_helper_surfaces() {
+    for (label, path) in [
+        ("stdlib/aivi/order.aivi", stdlib_path("aivi/order.aivi")),
+        ("stdlib/aivi/prelude.aivi", stdlib_path("aivi/prelude.aivi")),
+        (
+            "stdlib/tests/foundation-validation/main.aivi",
+            stdlib_path("tests/foundation-validation/main.aivi"),
+        ),
+        (
+            "fixtures/frontend/milestone-2/valid/bundled-root-prelude-stdlib/main.aivi",
+            fixture_path("milestone-2/valid/bundled-root-prelude-stdlib/main.aivi"),
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .expect("check command should run");
+
+        assert!(
+            output.status.success(),
+            "expected {label} to pass check, stderr was: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+            "expected success output for {label}, got stdout: {}",
             String::from_utf8_lossy(&output.stdout)
         );
     }

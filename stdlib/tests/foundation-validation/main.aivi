@@ -31,6 +31,12 @@ use aivi.list (
     Partition
 )
 
+use aivi.order (
+    min
+    max
+    minOf
+)
+
 use aivi.option (
     isSome
     isNone
@@ -70,75 +76,104 @@ use aivi.path (
     PathError
 )
 
-use aivi.color (
-    Color
-)
+use aivi.color (Color)
 
 type LeadingName = NonEmpty Text
 
 type User = {
-    name     : Text,
-    nickname : Option Text,
-    email    : Option Text
+    name: Text,
+    nickname: Option Text,
+    email: Option Text
 }
 
-val user:User = { name: "Ada" }
+val user: User = { name: "Ada" }
+val ok: Validation (NonEmptyList Text) Text = Valid "Ada"
+val err: Validation (NonEmptyList Text) Text = Invalid (singleton "field required")
+val isOkSentinel: Bool = isValid ok
+val isErrSentinel: Bool = isInvalid err
+val names: NonEmptyList Text = singleton "Ada"
+val nameHead: Text = nelHead names
+val nameList: List Text = nelToList names
+val longerNames: NonEmptyList Text = nelCons "Grace" names
+val errors: Errors Text = singleton "field required"
 
-val ok:Validation (NonEmptyList Text) Text = Valid "Ada"
-val err:Validation (NonEmptyList Text) Text = Invalid (singleton "field required")
+val numbers: List Int = [
+    1,
+    2,
+    3
+]
 
-val isOkSentinel:Bool = isValid ok
-val isErrSentinel:Bool = isInvalid err
+val emptyList: List Int = []
+val numsEmpty: Bool = isEmpty emptyList
+val numsPresent: Bool = nonEmpty numbers
+val numsLength: Int = length numbers
+val numsHead: Option Int = head numbers
+val numsTail: Option (List Int) = tail numbers
+val numsLast: Option Int = last numbers
 
-val names:NonEmptyList Text = singleton "Ada"
-val nameHead:Text = nelHead names
-val nameList:List Text = nelToList names
-val longerNames:NonEmptyList Text = nelCons "Grace" names
+fun smaller:Bool #left:Int #right:Int =>
+    left < right
 
-val errors:Errors Text = singleton "field required"
+val smallestNumber: Int = min smaller 4 2
+val largestNumber: Int = max smaller 4 2
 
-val numbers:List Int = [1, 2, 3]
-val emptyList:List Int = []
-val numsEmpty:Bool = isEmpty emptyList
-val numsPresent:Bool = nonEmpty numbers
-val numsLength:Int = length numbers
-val numsHead:Option Int = head numbers
-val numsTail:Option (List Int) = tail numbers
-val numsLast:Option Int = last numbers
+val smallestFromMany: Int =
+    minOf smaller 6 [
+        4,
+        9,
+        2
+    ]
 
-fun positive:Bool #n:Int => n > 0
-val foundPositive:Option Int = find positive numbers
+fun positive:Bool #n:Int =>
+    n > 0
 
-fun even:Bool #n:Int => n == 2
-val split:(Partition Int) = partition even numbers
+val foundPositive: Option Int = find positive numbers
 
-val greeting:Text = join ", " ["Hello", "World"]
-val combined:Text = concat ["a", "i", "v", "i"]
-val wrapped:Text = surround "[" "]" greeting
-val emptyStr:Bool = textIsEmpty ""
-val nonEmptyStr:Bool = textNonEmpty "aivi"
+fun even:Bool #n:Int =>
+    n == 2
 
-val maybeId:Option Int = Some 42
-val hasId:Bool = isSome maybeId
-val noId:Option Int = None
-val missingId:Bool = isNone noId
-val idValue:Int = getOrElse 0 maybeId
-val idItems:List Int = optionToList maybeId
-val idResult:Result Text Int = toResult "no-id" maybeId
+val split: (Partition Int) = partition even numbers
 
-val okAge:Result Text Int = Ok 30
-val errAge:Result Text Int = Err "missing"
-val ageOk:Bool = isOk okAge
-val ageErr:Bool = isErr errAge
-val ageValue:Int = withDefault 0 okAge
-val ageOption:Option Int = toOption okAge
+val greeting: Text =
+    join ", " [
+        "Hello",
+        "World"
+    ]
 
-fun prefixErr:Text #msg:Text => "error:{msg}"
-val prefixedErr:Result Text Int = mapErr prefixErr errAge
+val combined: Text =
+    concat [
+        "a",
+        "i",
+        "v",
+        "i"
+    ]
+
+val wrapped: Text = surround "[" "]" greeting
+val emptyStr: Bool = textIsEmpty ""
+val nonEmptyStr: Bool = textNonEmpty "aivi"
+val maybeId: Option Int = Some 42
+val hasId: Bool = isSome maybeId
+val noId: Option Int = None
+val missingId: Bool = isNone noId
+val idValue: Int = getOrElse 0 maybeId
+val idItems: List Int = optionToList maybeId
+val idResult: Result Text Int = toResult "no-id" maybeId
+val okAge: Result Text Int = Ok 30
+val errAge: Result Text Int = Err "missing"
+val ageOk: Bool = isOk okAge
+val ageErr: Bool = isErr errAge
+val ageValue: Int = withDefault 0 okAge
+val ageOption: Option Int = toOption okAge
+
+fun prefixErr:Text #msg:Text =>
+    "error:{msg}"
+
+val prefixedErr: Result Text Int = mapErr prefixErr errAge
 
 type PollDelay = Duration
+
 type ServiceUrl = Url
+
 type DataPath = Path
+
 type ThemeColor = Color
-
-

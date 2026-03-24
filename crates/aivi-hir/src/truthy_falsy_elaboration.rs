@@ -136,7 +136,8 @@ pub fn elaborate_truthy_falsy(module: &Module) -> TruthyFalsyElaborationReport {
                 owner,
                 item.body,
                 &GateExprEnv::default(),
-                item.annotation.and_then(|annotation| typing.lower_annotation(annotation)),
+                item.annotation
+                    .and_then(|annotation| typing.lower_annotation(annotation)),
                 &mut typing,
                 &mut stages,
             ),
@@ -160,7 +161,8 @@ pub fn elaborate_truthy_falsy(module: &Module) -> TruthyFalsyElaborationReport {
                         owner,
                         body,
                         &GateExprEnv::default(),
-                        item.annotation.and_then(|annotation| typing.lower_annotation(annotation)),
+                        item.annotation
+                            .and_then(|annotation| typing.lower_annotation(annotation)),
                         &mut typing,
                         &mut stages,
                     );

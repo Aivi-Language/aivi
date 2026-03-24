@@ -1200,10 +1200,16 @@ sig counter : Signal Int =
 
         match &counter.outcome {
             RecurrenceNodeOutcome::Planned(plan) => {
-                assert_eq!(plan.start.result_subject, GateType::Primitive(crate::BuiltinType::Int));
+                assert_eq!(
+                    plan.start.result_subject,
+                    GateType::Primitive(crate::BuiltinType::Int)
+                );
                 assert_eq!(plan.guards.len(), 1);
                 assert_eq!(plan.steps.len(), 1);
-                assert_eq!(plan.steps[0].result_subject, GateType::Primitive(crate::BuiltinType::Int));
+                assert_eq!(
+                    plan.steps[0].result_subject,
+                    GateType::Primitive(crate::BuiltinType::Int)
+                );
             }
             other => panic!("expected planned recurrence node, found {other:?}"),
         }
