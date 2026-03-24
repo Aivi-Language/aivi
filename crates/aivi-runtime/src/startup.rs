@@ -151,10 +151,11 @@ impl BackendLinkedRuntime {
 
     pub fn tick(&mut self) -> Result<TickOutcome, BackendRuntimeError> {
         let committed = self.committed_signal_snapshots()?;
+        let runtime_committed = materialize_detached_globals(&committed);
         let mut evaluator = LinkedDerivedEvaluator {
             backend: self.backend.as_ref(),
             derived_signals: &self.derived_signals,
-            committed_signals: &committed,
+            committed_signals: &runtime_committed,
         };
         self.runtime.try_tick(&mut evaluator)
     }
@@ -254,14 +255,15 @@ impl BackendLinkedRuntime {
                 &argument.required_signals,
                 &snapshots,
             )?;
+            let runtime_globals = materialize_detached_globals(&globals);
             let value = evaluator
-                .evaluate_kernel(argument.kernel, None, &[], &globals)
+                .evaluate_kernel(argument.kernel, None, &[], &runtime_globals)
                 .map_err(|error| BackendRuntimeError::EvaluateSourceArgument {
                     instance,
                     index,
                     error,
                 })?;
-            arguments.push(value);
+            arguments.push(DetachedRuntimeValue::from_runtime_owned(value));
         }
         let mut options = Vec::with_capacity(binding.options.len());
         for option in &binding.options {
@@ -271,8 +273,9 @@ impl BackendLinkedRuntime {
                 &option.required_signals,
                 &snapshots,
             )?;
+            let runtime_globals = materialize_detached_globals(&globals);
             let value = evaluator
-                .evaluate_kernel(option.kernel, None, &[], &globals)
+                .evaluate_kernel(option.kernel, None, &[], &runtime_globals)
                 .map_err(|error| BackendRuntimeError::EvaluateSourceOption {
                     instance,
                     option_name: option.option_name.clone(),
@@ -280,7 +283,7 @@ impl BackendLinkedRuntime {
                 })?;
             options.push(EvaluatedSourceOption {
                 option_name: option.option_name.clone(),
-                value,
+                value: DetachedRuntimeValue::from_runtime_owned(value),
             });
         }
 
@@ -375,7 +378,9 @@ impl BackendLinkedRuntime {
         let snapshots = self.committed_signal_snapshots()?;
         let globals =
             self.required_task_globals(instance, kernel, required_signals.as_ref(), &snapshots)?;
-        let completion = self.runtime.start_task(instance)?;
+        let completion = DetachedRuntimeCompletionPort {
+            inner: self.runtime.start_task(instance)?,
+        };
         Ok(PreparedTaskExecution {
             instance,
             owner: binding.owner,
@@ -616,8 +621,8 @@ struct PreparedTaskExecution {
     owner: hir::ItemId,
     backend_item: BackendItemId,
     backend: Arc<BackendProgram>,
-    globals: BTreeMap<BackendItemId, RuntimeValue>,
-    completion: TaskCompletionPort<RuntimeValue>,
+    globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
+    completion: DetachedRuntimeCompletionPort,
 }
 
 fn execute_task_plan(
@@ -635,15 +640,16 @@ fn execute_task_plan(
         return Ok(LinkedTaskWorkerOutcome::Cancelled);
     }
     let mut evaluator = KernelEvaluator::new(backend.as_ref());
+    let runtime_globals = materialize_detached_globals(&globals);
     let value = evaluator
-        .evaluate_item(backend_item, &globals)
+        .evaluate_item(backend_item, &runtime_globals)
         .map_err(|error| LinkedTaskWorkerError::Evaluation {
             instance,
             owner,
             backend_item,
             error,
         })?;
-    match completion.complete(value) {
+    match completion.complete(DetachedRuntimeValue::from_runtime_owned(value)) {
         Ok(()) => Ok(LinkedTaskWorkerOutcome::Published),
         Err(PublicationPortError::Cancelled { .. }) => Ok(LinkedTaskWorkerOutcome::Cancelled),
         Err(PublicationPortError::Disconnected { stamp, value }) => {
