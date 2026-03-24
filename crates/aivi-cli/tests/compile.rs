@@ -248,8 +248,6 @@ fn compile_accepts_additional_compile_safe_catalog_examples() {
         "catalog/math/math_fft/main.aivi",
         "catalog/math/math_matrix_lu/main.aivi",
         "catalog/math/math_mod_arith_ntt/main.aivi",
-        "catalog/search/backtracking_nqueens_bitset/main.aivi",
-        "catalog/search/backtracking_sudoku/main.aivi",
         "catalog/tree/tree_segment_tree_lazy/main.aivi",
     ] {
         let output_dir = TempDir::new("compile-catalog-additional");

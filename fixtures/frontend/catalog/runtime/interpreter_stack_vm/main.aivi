@@ -79,7 +79,7 @@ fun summarize:VmSummary #state:VmState =>
     state
      ||> { stack, log, halted } => { top: head stack, depth: length stack, halted, log: join " -> " log }
 
-val initialState:VmState = {
+val initialState: VmState = {
     stack: [],
     log: [],
     halted: False
@@ -89,7 +89,7 @@ fun runProgram:VmState #program:(List Instruction) =>
     program
      |> reduce step initialState
 
-val balancedProgram:List Instruction = [
+val balancedProgram: List Instruction = [
     Push 7,
     Push 5,
     Add,
@@ -99,12 +99,12 @@ val balancedProgram:List Instruction = [
     Add
 ]
 
-val brokenProgram:List Instruction = [
+val brokenProgram: List Instruction = [
     Push 1,
     Add
 ]
 
-val vmCatalog:VmCatalog = {
+val vmCatalog: VmCatalog = {
     completed: summarize (runProgram balancedProgram),
     haltedEarly: summarize (runProgram brokenProgram)
 }

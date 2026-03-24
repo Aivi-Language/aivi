@@ -130,10 +130,10 @@ fun editDistance:Int #sourceTokens:(List Text) #targetTokens:(List Text) =>
      |> .finalRow
      |> lastValue
 
-val leftText:Text = "kitten"
-val rightText:Text = "sitting"
+val leftText: Text = "kitten"
+val rightText: Text = "sitting"
 
-val leftTokens:List Text = [
+val leftTokens: List Text = [
     "k",
     "i",
     "t",
@@ -142,7 +142,7 @@ val leftTokens:List Text = [
     "n"
 ]
 
-val rightTokens:List Text = [
+val rightTokens: List Text = [
     "s",
     "i",
     "t",
@@ -152,11 +152,11 @@ val rightTokens:List Text = [
     "g"
 ]
 
-val emptyTokens:List Text = []
-val sampleMatrix:MatrixState = buildMatrix leftTokens rightTokens
-val blankDistance:Int = editDistance emptyTokens rightTokens
+val emptyTokens: List Text = []
+val sampleMatrix: MatrixState = buildMatrix leftTokens rightTokens
+val blankDistance: Int = editDistance emptyTokens rightTokens
 
-val editDistanceSummary:EditDistanceSummary =
+val editDistanceSummary: EditDistanceSummary =
     sampleMatrix
      ||> { finalRow, rows } => { left: leftText, right: rightText, distance: lastValue finalRow, blankDistance, rowCount: length rows, finalRow, rows }
 

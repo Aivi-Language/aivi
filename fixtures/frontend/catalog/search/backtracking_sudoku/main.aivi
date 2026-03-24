@@ -35,12 +35,15 @@ fun board:SudokuBoard #cells:(List Int) =>
 fun isBlank:Bool #value:Int =>
     value == 0
 
-fun cellAt:(Option Int) #cells:(List Int) #index:Int =>
+fun advanceCellAt:(Option Int) #cells:(List Int) #index:Int #current:Int =>
     index == 0
-     T|> head cells
-     F|> tail cells
-     ||> Some rest => cellAt rest (index - 1)
-     ||> None      => None
+     T|> Some current
+     F|> cellAt (tailOrEmpty cells) (index - 1)
+
+fun cellAt:(Option Int) #cells:(List Int) #index:Int =>
+    head cells
+     ||> Some current => advanceCellAt cells index current
+     ||> None         => None
 
 fun valueAt:Int #cells:(List Int) #index:Int =>
     cellAt cells index
@@ -106,12 +109,15 @@ fun boardConsistent:Bool #cells:(List Int) #index:Int =>
      T|> True
      F|> cellConsistent cells index and boardConsistent cells (index + 1)
 
-fun findEmpty:(Option Int) #cells:(List Int) #index:Int =>
-    head cells
-     ||> Some current => current == 0
+fun advanceFindEmpty:(Option Int) #cells:(List Int) #index:Int #current:Int =>
+    current == 0
      T|> Some index
      F|> findEmpty (tailOrEmpty cells) (index + 1)
-     ||> None => None
+
+fun findEmpty:(Option Int) #cells:(List Int) #index:Int =>
+    head cells
+     ||> Some current => advanceFindEmpty cells index current
+     ||> None         => None
 
 fun nextCandidate:(Result Text (List Int)) #cells:(List Int) #index:Int #candidate:Int =>
     solveMode cells (TryAt index (candidate + 1))
@@ -172,7 +178,7 @@ fun summarizeSudoku:SudokuSummary #label:Text #board:SudokuBoard =>
         note: summaryNote (boardConsistent board.cells 0) (blankCount board.cells)
     }
 
-val classicPuzzle:SudokuBoard =
+val classicPuzzle: SudokuBoard =
     board [
         1,
         0,
@@ -192,7 +198,7 @@ val classicPuzzle:SudokuBoard =
         1
     ]
 
-val nearlySolvedPuzzle:SudokuBoard =
+val nearlySolvedPuzzle: SudokuBoard =
     board [
         1,
         2,
@@ -212,7 +218,7 @@ val nearlySolvedPuzzle:SudokuBoard =
         0
     ]
 
-val invalidPuzzle:SudokuBoard =
+val invalidPuzzle: SudokuBoard =
     board [
         1,
         1,
@@ -232,7 +238,7 @@ val invalidPuzzle:SudokuBoard =
         1
     ]
 
-val emptyPuzzle:SudokuBoard =
+val emptyPuzzle: SudokuBoard =
     board [
         0,
         0,
@@ -252,7 +258,7 @@ val emptyPuzzle:SudokuBoard =
         0
     ]
 
-val sudokuCatalog:SudokuCatalog = {
+val sudokuCatalog: SudokuCatalog = {
     classic: summarizeSudoku "classic" classicPuzzle,
     nearlySolved: summarizeSudoku "nearly-solved" nearlySolvedPuzzle,
     invalid: summarizeSudoku "invalid" invalidPuzzle,

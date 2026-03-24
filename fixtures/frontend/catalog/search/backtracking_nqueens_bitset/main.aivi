@@ -84,14 +84,14 @@ fun search:SolveState #size:Int #row:Int #col:Int #state:SearchState #found:Solv
      T|> addSolution found state.placements
      F|> continueRow size row col state found
 
-val emptySearchState:SearchState = {
+val emptySearchState: SearchState = {
     columns: 0,
     diagDown: 0,
     diagUp: 0,
     placements: []
 }
 
-val emptySolveState:SolveState = {
+val emptySolveState: SolveState = {
     solutions: 0,
     first: None
 }
@@ -108,7 +108,7 @@ fun summarizeQueens:NQueensSummary #label:Text #size:Int =>
     solveQueens size
      ||> { solutions, first } => { label, size, solutions, first: summarizeBoard first, columnMaskWidth: pow2 size, diagonalMaskWidth: pow2 (size + size - 1) }
 
-val nQueensCatalog:NQueensCatalog = {
+val nQueensCatalog: NQueensCatalog = {
     single: summarizeQueens "single" 1,
     impossible: summarizeQueens "impossible" 2,
     classic: summarizeQueens "classic" 4,

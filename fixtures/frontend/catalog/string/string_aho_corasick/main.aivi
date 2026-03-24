@@ -69,10 +69,7 @@ fun defaultAdvance:Advance #symbol:Symbol =>
 
 fun matchingAdvance:(Option Advance) #state:AutomatonState #symbol:Symbol #transition:Transition =>
     (transition.from == state) and (transition.symbol == symbol)
-     T|> Some {
-            next: transition.next,
-            emitted: transition.emitted
-        }
+     T|> Some { next: transition.next, emitted: transition.emitted }
      F|> None
 
 val specialTransitions: List Transition = [
@@ -116,11 +113,7 @@ fun advance:Advance #state:AutomatonState #symbol:Symbol =>
 
 fun applyAdvance:ScanState #trail:(List Text) #matches:(List Text) #step:Advance =>
     step
-     ||> { next, emitted } => {
-            state: next,
-            trail: append trail [stateName next],
-            matches: append matches emitted
-        }
+     ||> { next, emitted } => { state: next, trail: append trail [stateName next], matches: append matches emitted }
 
 fun step:ScanState #scan:ScanState #symbol:Symbol =>
     scan
@@ -133,11 +126,7 @@ fun renderList:Text #items:(List Text) #separator:Text #fallback:Text =>
 
 fun summarize:ScanSummary #scan:ScanState =>
     scan
-     ||> { state, trail, matches } => {
-            finalState: stateName state,
-            trail: renderList trail " -> " "root",
-            matches: renderList matches ", " "none"
-        }
+     ||> { state, trail, matches } => { finalState: stateName state, trail: renderList trail " -> " "root", matches: renderList matches ", " "none" }
 
 val initialScan: ScanState = {
     state: Root,

@@ -20,13 +20,13 @@ fun sumBigInts:BigInt #values:(List BigInt) =>
 fun productBigInts:BigInt #values:(List BigInt) =>
     reduce multiplyBigInt 1n values
 
-val archiveChunks:List BigInt = [
+val archiveChunks: List BigInt = [
     9999999999999999999999n,
     8888888888888888888888n,
     7777777777777777777777n
 ]
 
-val factorialFactors:List BigInt = [
+val factorialFactors: List BigInt = [
     1n,
     2n,
     3n,
@@ -41,11 +41,11 @@ val factorialFactors:List BigInt = [
     12n
 ]
 
-val noFactors:List BigInt = []
-val totalBytes:BigInt = sumBigInts archiveChunks
-val factorialTwelve:BigInt = productBigInts factorialFactors
+val noFactors: List BigInt = []
+val totalBytes: BigInt = sumBigInts archiveChunks
+val factorialTwelve: BigInt = productBigInts factorialFactors
 
-val bigIntSummary:BigIntSummary = {
+val bigIntSummary: BigIntSummary = {
     totalBytes,
     factorialTwelve,
     emptyFactorial: productBigInts noFactors,

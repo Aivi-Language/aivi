@@ -104,8 +104,7 @@ fun popNote:Text #stacked:Operator #incoming:Operator =>
      ||> (_, _)         => pushNote incoming
 
 fun shouldPop:Bool #stacked:Operator #incoming:Operator =>
-    ((precedence stacked) > (precedence incoming))
-        or ((precedence stacked) == (precedence incoming))
+    ((precedence stacked) > (precedence incoming)) or ((precedence stacked) == (precedence incoming))
 
 fun popThenPush:ParseState #remaining:(List Token) #output:(List Text) #stacked:Operator #incoming:Operator =>
     continueState (pushToken (OperatorToken incoming) remaining) (emitOperator output stacked) (popNote stacked incoming)
@@ -118,9 +117,9 @@ fun handleStackedOperator:ParseState #stack:(List Token) #output:(List Text) #in
 fun handleOperatorFrom:ParseState #stack:(List Token) #output:(List Text) #incoming:Operator =>
     viewTokens stack
      ||> { top: Some (OperatorToken stacked), rest: Some remaining } => handleStackedOperator stack output incoming stacked remaining
-     ||> { top: Some OpenGroup }  => continueState (pushToken (OperatorToken incoming) stack) output (pushNote incoming)
-     ||> { top: Some CloseGroup } => invalidState stack output "unexpected close on stack"
-     ||> { top: None }            => continueState (pushToken (OperatorToken incoming) stack) output (pushNote incoming)
+     ||> { top: Some OpenGroup }                                     => continueState (pushToken (OperatorToken incoming) stack) output (pushNote incoming)
+     ||> { top: Some CloseGroup }                                    => invalidState stack output "unexpected close on stack"
+     ||> { top: None }                                               => continueState (pushToken (OperatorToken incoming) stack) output (pushNote incoming)
 
 fun handleOperator:ParseState #state:ParseState #operator:Operator =>
     state

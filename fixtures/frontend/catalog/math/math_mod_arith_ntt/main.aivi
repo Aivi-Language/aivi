@@ -109,19 +109,19 @@ fun summarizeForward:NttSummary #label:Text #params:NttParams #input:Poly4 #spec
 fun summarizeNtt:NttSummary #label:Text #params:NttParams #input:Poly4 =>
     summarizeForward label params input (forwardNtt params input)
 
-val params:NttParams = {
+val params: NttParams = {
     modulus: 17,
     root: 4,
     inverseRoot: 13,
     inverseLength: 13
 }
 
-val canonicalCoeffs:Poly4 = poly4 1 2 3 4
-val wrappedCoeffs:Poly4 = poly4 16 17 18 (0 - 1)
-val deltaCoeffs:Poly4 = poly4 1 0 0 0
-val zeroCoeffs:Poly4 = poly4 0 0 0 0
+val canonicalCoeffs: Poly4 = poly4 1 2 3 4
+val wrappedCoeffs: Poly4 = poly4 16 17 18 (0 - 1)
+val deltaCoeffs: Poly4 = poly4 1 0 0 0
+val zeroCoeffs: Poly4 = poly4 0 0 0 0
 
-val nttCatalog:NttCatalog = {
+val nttCatalog: NttCatalog = {
     canonical: summarizeNtt "canonical" params canonicalCoeffs,
     wrapped: summarizeNtt "wrapped" params wrappedCoeffs,
     delta: summarizeNtt "delta" params deltaCoeffs,

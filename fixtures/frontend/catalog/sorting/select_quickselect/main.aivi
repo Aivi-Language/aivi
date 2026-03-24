@@ -56,11 +56,10 @@ fun chooseRank:(Option Int) #rank:Int #lower:(List Int) #equal:(List Int) #highe
 
 fun quickselect:(Option Int) #rank:Int #items:(List Int) =>
     head items
-     ||> None                     => None
-     ||> Some pivot               => classify pivot items
-     ||> { lower, equal, higher } => chooseRank rank lower equal higher
+     ||> None       => None
+     ||> Some pivot => (items |> classify pivot ||> { lower, equal, higher } => chooseRank rank lower equal higher)
 
-val sample:List Int = [
+val sample: List Int = [
     7,
     2,
     9,
@@ -70,13 +69,13 @@ val sample:List Int = [
     6
 ]
 
-val duplicates:List Int = [
+val duplicates: List Int = [
     3,
     3,
     3
 ]
 
-val quickselectSummary:QuickselectSummary = {
+val quickselectSummary: QuickselectSummary = {
     fourthSmallest: withFallback 0 (quickselect 3 sample),
     minimum: withFallback 0 (quickselect 0 sample),
     duplicatePick: withFallback 0 (quickselect 1 duplicates),

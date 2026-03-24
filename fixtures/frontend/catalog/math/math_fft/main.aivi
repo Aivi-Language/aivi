@@ -126,12 +126,12 @@ fun summarizeSpectrum:FftSummary #label:Text #spectrum:Spectrum4 =>
 fun summarizeFft:FftSummary #label:Text #signal:Signal4 =>
     summarizeSpectrum label (fft4 signal)
 
-val impulseSignal:Signal4 = realSignal4 1 0 0 0
-val constantSignal:Signal4 = realSignal4 2 2 2 2
-val alternatingSignal:Signal4 = realSignal4 1 (0 - 1) 1 (0 - 1)
-val zeroSignal:Signal4 = realSignal4 0 0 0 0
+val impulseSignal: Signal4 = realSignal4 1 0 0 0
+val constantSignal: Signal4 = realSignal4 2 2 2 2
+val alternatingSignal: Signal4 = realSignal4 1 (0 - 1) 1 (0 - 1)
+val zeroSignal: Signal4 = realSignal4 0 0 0 0
 
-val fftCatalog:FftCatalog = {
+val fftCatalog: FftCatalog = {
     impulse: summarizeFft "impulse" impulseSignal,
     constant: summarizeFft "constant" constantSignal,
     alternating: summarizeFft "alternating" alternatingSignal,

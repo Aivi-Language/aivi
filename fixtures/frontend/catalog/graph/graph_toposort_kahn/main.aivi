@@ -133,18 +133,11 @@ fun queuedContains:Bool #queued:(List Phase) #phase:Phase =>
      |> any (isPhase phase)
 
 fun readyPhase:Bool #state:KahnState #phase:Phase =>
-    ((incomingOf state.incoming phase) == 0)
-        and ((emittedOf state.emitted phase) == False)
-        and ((queuedContains state.queued phase) == False)
+    ((incomingOf state.incoming phase) == 0) and ((emittedOf state.emitted phase) == False) and ((queuedContains state.queued phase) == False)
 
 fun enqueueReady:KahnState #state:KahnState #phase:Phase =>
     readyPhase state phase
-     T|> {
-            incoming: state.incoming,
-            queued: append state.queued [phase],
-            emitted: state.emitted,
-            order: state.order
-        }
+     T|> { incoming: state.incoming, queued: append state.queued [phase], emitted: state.emitted, order: state.order }
      F|> state
 
 fun replenish:KahnState #graph:DependencyGraph #state:KahnState =>

@@ -122,6 +122,8 @@ The repository keeps the implementation-facing companion contract for these laye
 `docs/ir-boundary-contracts.md`. The RFC freezes the minimum semantics each boundary must
 preserve.
 
+> **TODO:** `docs/ir-boundary-contracts.md` does not yet exist. The boundary contracts are currently described only in this RFC (§4.1–§4.5).
+
 ### 4.1 CST
 
 The CST is source-oriented and lossless enough for formatting and diagnostics.
@@ -1691,6 +1693,8 @@ provider-owned host boundary, not a generic DOM-like event model.
 
 #### D-Bus
 
+> **TODO:** D-Bus sources (`dbus.ownName`, `dbus.signal`, `dbus.method`) are not yet registered in the source contracts catalog (`aivi-typing`) or implemented in the runtime. The syntax examples below describe the intended surface.
+
 ```aivi
 @source dbus.ownName "org.example.Mail"
 sig busName : Signal BusNameState
@@ -1702,7 +1706,7 @@ sig busEvents : Signal MailBusEvent
 sig showWindow : Signal Unit
 ```
 
-The user-facing D-Bus surface in this RFC slice is:
+The intended user-facing D-Bus surface is:
 
 - `dbus.ownName` as a source tracking `Owned`, `Queued`, or `Lost`
 - `dbus.signal` as a source subscribing to inbound remote signals
@@ -2065,21 +2069,23 @@ Widgets outside this catalog are not part of the current live GTK surface.
 
 ### 17.2.3 Host lifecycle attributes
 
-`trackVisible={sig}` is a host-backed lifecycle attribute that routes GTK `map` / `unmap` into a
-user-declared `Signal Bool` input signal.
+> **TODO:** `trackVisible` and `hideOnClose` are planned but not yet implemented. `ApplicationWindow` is not in the current widget schema catalog. This section describes the intended design for a future GTK lifecycle attribute surface.
 
-Rules:
+`trackVisible={sig}` is a planned host-backed lifecycle attribute that would route GTK `map` /
+`unmap` into a user-declared `Signal Bool` input signal.
+
+Intended rules:
 
 - the bound signal must be a body-less annotated `Signal Bool` input signal
 - the host publishes `False` immediately at registration, `True` on first `map`, and then `True` /
   `False` on later `map` / `unmap` transitions
 - `map` / `unmap` is used rather than `show` / `hide` because a widget may be shown while still not
   mapped through an unshown parent
-- this is the canonical way to drive `@source activeWhen` from visibility state
+- this is the intended canonical way to drive `@source activeWhen` from visibility state
 
-`hideOnClose={True}` on `ApplicationWindow` intercepts the delete event and calls `window.hide()`
-instead of destroying the window. This keeps the process alive and allows later restoration through
-normal presentation or an external activation path such as D-Bus.
+`hideOnClose={True}` on `ApplicationWindow` would intercept the delete event and call
+`window.hide()` instead of destroying the window. This is planned to keep the process alive and
+allow later restoration through normal presentation or an external activation path such as D-Bus.
 
 ## 17.3 Control nodes
 
@@ -2749,6 +2755,7 @@ The implementation should prefer one correct algebraic model over many local pat
 - record omission must remain explicit-default completion, not open records
 - `Task` must remain the only user-visible one-shot effect carrier
 - GTK markup must lower directly and predictably to widgets, setters, handlers, and child management
+
 ---
 
 ## 26. CLI reference
@@ -2851,6 +2858,8 @@ supported LSP capabilities.
 
 ### 26.7 `aivi db migrate`
 
+> **TODO:** `aivi db migrate` is not yet implemented. Neither the `aivi db` subcommand parser nor the database schema diffing logic exists in the current CLI. The description below is the intended design.
+
 Generates a plain SQL migration from the current record-schema surface:
 
 ```
@@ -2862,6 +2871,8 @@ SQL file under `db/migrations/` with a timestamp-prefixed filename. The generate
 SQL intended for review and commit.
 
 ### 26.8 `aivi db apply`
+
+> **TODO:** `aivi db apply` is not yet implemented. See §26.7.
 
 Applies pending SQL migrations:
 
@@ -2905,11 +2916,12 @@ invalidate unrelated cached queries.
 
 ### 27.3 Current limitations
 
+- workspace symbol queries are registered as a capability but currently return no results; the handler is a stub
 - whole-workspace semantic queries remain partial; the checked/open file set is still the primary
-  working set for symbols and diagnostics
+  working set for diagnostics
 - completion suggestions are basic; richer type-directed completion over expected record fields and
   constructor arguments is pending
-- semantic token legend exists but token-type coverage is still incomplete
+- semantic tokens are registered as a capability but the current handler returns no tokens; the implementation is a stub that falls back to TextMate grammar coloring
 - editor-facing project orchestration does not yet replace the explicit CLI workflow for runtime,
   migrations, or provider startup validation
 
@@ -2931,6 +2943,8 @@ Multi-file workspace discovery is shared across `check`, `compile`, and `run`:
 
 ### 28.2 Database schema and migrations
 
+> **TODO:** The database layer (`db.query`, SQLite integration, schema versioning, `DbError.SchemaMismatch`) is not yet implemented. No database-facing code exists in the current crates. The description below is the intended design.
+
 The database surface treats AIVI record types as the schema source of truth.
 
 Rules:
@@ -2944,7 +2958,9 @@ Rules:
 
 ### 28.3 D-Bus surface
 
-The user-facing D-Bus surface in the current slice is intentionally narrow and explicit:
+> **TODO:** D-Bus integration is not yet implemented. `dbus.ownName`, `dbus.call`, `dbus.emit`, `dbus.signal`, and `dbus.method` are not registered in the source contracts catalog (`aivi-typing`) or the runtime. The description below is the intended design.
+
+The intended user-facing D-Bus surface is intentionally narrow and explicit:
 
 - `dbus.ownName` is a `@source` for name ownership state
 - `dbus.call` is a `Task`
@@ -2957,7 +2973,9 @@ Methods that return non-Unit values to the caller are deferred.
 
 ### 28.4 Local-first sync architecture
 
-The reference email-oriented runtime shape is local-first:
+> **TODO:** The database layer and D-Bus integration described here are not yet implemented (see §28.2 and §28.3). This section describes the intended reference application architecture.
+
+The intended reference email-oriented runtime shape is local-first:
 
 - IMAP sync runs on a worker and writes fetched mail into SQLite through the database layer
 - the UI reads via `db.query` over the local database rather than binding directly to a live IMAP
@@ -2968,6 +2986,8 @@ The reference email-oriented runtime shape is local-first:
 - SMTP send is a separate one-shot `Task SmtpError Unit`
 
 ### 28.5 Multi-process desktop architecture
+
+> **TODO:** `ApplicationWindow`, `hideOnClose`, D-Bus, and SQLite integration described here are not yet implemented. This section describes the intended reference application architecture.
 
 The intended cooperating-process shape for the reference desktop application is:
 

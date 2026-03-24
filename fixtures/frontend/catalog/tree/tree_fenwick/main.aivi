@@ -57,7 +57,7 @@ fun selectPrefixPath:(Option (List Int)) #target:Int #entry:(Int, List Int) =>
     entry
      ||> (index, path) => selectKnownPath target index path
 
-val prefixPaths:List (Int, List Int) = [
+val prefixPaths: List (Int, List Int) = [
     (0, []),
     (1, [1]),
     (2, [2]),
@@ -90,7 +90,7 @@ fun bucketTotal:Int #tree:(List FenwickNode) #target:Int =>
      ||> Some total => total
      ||> None       => 0
 
-val emptyTree:List FenwickNode = [
+val emptyTree: List FenwickNode = [
     { index: 1, start: 1, total: 0 },
     { index: 2, start: 1, total: 0 },
     { index: 3, start: 3, total: 0 },
@@ -101,18 +101,18 @@ val emptyTree:List FenwickNode = [
     { index: 8, start: 1, total: 0 }
 ]
 
-val updates:List Update = [
+val updates: List Update = [
     { index: 1, delta: 3 },
     { index: 3, delta: 2 },
     { index: 5, delta: 4 },
     { index: 7, delta: 1 }
 ]
 
-val tree:List FenwickNode =
+val tree: List FenwickNode =
     updates
      |> reduce applyUpdate emptyTree
 
-val fenwickSummary:FenwickSummary = {
+val fenwickSummary: FenwickSummary = {
     prefixFive: prefixSum tree 5,
     prefixZero: prefixSum tree 0,
     prefixSeven: prefixSum tree 7,

@@ -95,13 +95,8 @@ val emptyFirst: Option Int =
     emptyNumbers
      |> head
 
-val collectionNote: Text =
-    join ", " [
-        "{countFromPipe} items",
-        "total {totalFromReduce}",
-        displayNameFromPipe,
-        recoveredName
-    ]
+val collectionNote: Text = ["{countFromPipe} items", "total {totalFromReduce}", displayNameFromPipe, recoveredName]
+ |> join ", "
 
 val collectionSummary: CollectionSummary = {
     count: countFromPipe,

@@ -29,7 +29,7 @@ type KnapsackSummary = {
     note: Text
 }
 
-val emptyPlan:Plan = {
+val emptyPlan: Plan = {
     total: 0,
     picked: []
 }
@@ -83,7 +83,7 @@ fun pickedLabel:Text #plan:Plan =>
      T|> "none"
      F|> join " + " plan.picked
 
-val capacities:List Int = [
+val capacities: List Int = [
     0,
     1,
     2,
@@ -94,7 +94,7 @@ val capacities:List Int = [
     7
 ]
 
-val items:List KnapsackItem = [
+val items: List KnapsackItem = [
     {
         label: "map",
         weight: 1,
@@ -117,19 +117,19 @@ val items:List KnapsackItem = [
     }
 ]
 
-val initialRow:List Cell =
+val initialRow: List Cell =
     capacities
      |> reduce (appendBuilt baseCell) []
 
-val optimizedRow:List Cell =
+val optimizedRow: List Cell =
     items
      |> reduce (stepRow capacities) initialRow
 
-val bestPlan:Plan = planAt 7 optimizedRow
-val zeroPlan:Plan = planAt 0 optimizedRow
-val emptyItemsPlan:Plan = planAt 7 initialRow
+val bestPlan: Plan = planAt 7 optimizedRow
+val zeroPlan: Plan = planAt 0 optimizedRow
+val emptyItemsPlan: Plan = planAt 7 initialRow
 
-val knapsackSummary:KnapsackSummary = {
+val knapsackSummary: KnapsackSummary = {
     bestAtSeven: bestPlan.total,
     pickedAtSeven: pickedLabel bestPlan,
     bestAtZero: zeroPlan.total,
