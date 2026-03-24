@@ -533,6 +533,52 @@ sig accessTokenForAccount =
 HTTP sources via `activeWhen` or `refreshOn` rather than being threaded through
 a runtime handle.
 
+### 5.2 GTK markup: `trackVisible`
+
+`trackVisible={signal}` is a GTK markup attribute that routes widget visibility
+lifecycle events into a user-declared `Signal Bool` input signal.
+
+```aivi
+sig inboxVisible : Signal Bool
+
+@source db.query Email with {
+    where: { folder: currentFolder },
+    activeWhen: inboxVisible
+}
+sig emails : Signal (Result DbError (List Email))
+
+<Stack>
+    <InboxView trackVisible={inboxVisible} emails=emails />
+    <SettingsView />
+</Stack>
+```
+
+When `InboxView` is mapped to screen, the runtime publishes `True` into
+`inboxVisible`. When it is unmapped (hidden, replaced by another view, or
+destroyed), it publishes `False`. The `db.query` source suspends when
+`inboxVisible` is `False` and resumes with a fresh query execution when it
+becomes `True` again.
+
+Required behavior:
+
+- the GTK host publishes `False` immediately at signal registration, before the
+  first map event, so the query never activates before the widget is on screen
+- subsequent `map` / `unmap` events publish `True` / `False` respectively
+- `map` / `unmap` is used rather than `show` / `hide` because a widget can be
+  shown but not yet mapped (e.g. inside an unshown parent container)
+- the bound signal must be a body-less annotated `Signal Bool` input signal;
+  binding a derived signal is a compile-time error
+
+The visibility signal is a plain `Signal Bool`. It is not coupled to
+`activeWhen` automatically; the user wires it explicitly. This keeps the two
+concerns separate: `trackVisible` tracks screen presence, `activeWhen` controls
+source activation. A visibility signal can also be used for lazy image loading,
+animation triggers, analytics, or any other purpose.
+
+Queries that live outside the UI (background sync, scheduled polling) do not
+need `trackVisible` at all. `activeWhen` accepts any `Signal Bool` regardless of
+how it is produced.
+
 ---
 
 ## 6. What is not in the first stdlib wave
