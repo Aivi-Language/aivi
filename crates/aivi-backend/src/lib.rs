@@ -22,6 +22,7 @@ mod ids;
 mod kernel;
 mod layout;
 mod lower;
+mod numeric;
 mod program;
 mod runtime;
 mod validate;
@@ -37,18 +38,20 @@ pub use ids::{
 };
 pub use kernel::{
     AbiParameter, AbiResult, BinaryOperator, BuiltinAppendCarrier, BuiltinApplicativeCarrier,
-    BuiltinApplyCarrier, BuiltinClassMemberIntrinsic, BuiltinFunctorCarrier, BuiltinOrdSubject,
-    BuiltinTerm, CallingConvention, CallingConventionKind, InlinePipeCaseArm, InlinePipeExpr,
-    InlinePipePattern, InlinePipePatternKind, InlinePipeRecordPatternField, InlinePipeStage,
-    InlinePipeStageKind, InlinePipeTruthyFalsyBranch, IntegerLiteral, Kernel, KernelExpr,
-    KernelExprKind, KernelOrigin, KernelOriginKind, MapEntry, ParameterRole, ProjectionBase,
-    RecordExprField, SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment, UnaryOperator,
-    describe_expr_kind,
+    BuiltinApplyCarrier, BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier,
+    BuiltinFunctorCarrier, BuiltinOrdSubject, BuiltinTerm, CallingConvention,
+    CallingConventionKind, DecimalLiteral, FloatLiteral, BigIntLiteral, InlinePipeCaseArm,
+    InlinePipeExpr, InlinePipePattern, InlinePipePatternKind, InlinePipeRecordPatternField,
+    InlinePipeStage, InlinePipeStageKind, InlinePipeTruthyFalsyBranch, IntegerLiteral, Kernel,
+    KernelExpr, KernelExprKind, KernelOrigin, KernelOriginKind, MapEntry, ParameterRole,
+    ProjectionBase, RecordExprField, SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment,
+    UnaryOperator, describe_expr_kind,
 };
 pub use layout::{
     AbiPassMode, Layout, LayoutKind, PrimitiveType, RecordFieldLayout, VariantLayout,
 };
 pub use lower::{LoweringError, LoweringErrors, lower_module};
+pub use numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat};
 pub use program::{
     DecodeExtraFieldPolicy, DecodeField, DecodeFieldRequirement, DecodeMode, DecodePlan,
     DecodeStep, DecodeStepKind, DecodeSumStrategy, DecodeVariant, DomainDecodeSurface,

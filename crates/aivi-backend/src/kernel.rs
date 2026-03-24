@@ -33,6 +33,7 @@ pub enum BuiltinClassMemberIntrinsic {
     Map(BuiltinFunctorCarrier),
     Pure(BuiltinApplicativeCarrier),
     Apply(BuiltinApplyCarrier),
+    Reduce(BuiltinFoldableCarrier),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -59,6 +60,14 @@ pub enum BuiltinApplyCarrier {
     Option,
     Result,
     Signal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BuiltinFoldableCarrier {
+    List,
+    Option,
+    Result,
+    Validation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -138,6 +147,21 @@ impl fmt::Display for BinaryOperator {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntegerLiteral {
+    pub raw: Box<str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FloatLiteral {
+    pub raw: Box<str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DecimalLiteral {
+    pub raw: Box<str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BigIntLiteral {
     pub raw: Box<str>,
 }
 
@@ -386,6 +410,9 @@ pub enum KernelExprKind {
     BuiltinClassMember(BuiltinClassMemberIntrinsic),
     Builtin(BuiltinTerm),
     Integer(IntegerLiteral),
+    Float(FloatLiteral),
+    Decimal(DecimalLiteral),
+    BigInt(BigIntLiteral),
     SuffixedInteger(SuffixedIntegerLiteral),
     Text(TextLiteral),
     Tuple(Vec<KernelExprId>),
@@ -551,6 +578,9 @@ pub fn describe_expr_kind(kind: &KernelExprKind) -> String {
         }
         KernelExprKind::Builtin(term) => format!("builtin {term}"),
         KernelExprKind::Integer(integer) => integer.raw.to_string(),
+        KernelExprKind::Float(float) => float.raw.to_string(),
+        KernelExprKind::Decimal(decimal) => decimal.raw.to_string(),
+        KernelExprKind::BigInt(bigint) => bigint.raw.to_string(),
         KernelExprKind::SuffixedInteger(integer) => format!("{}{}", integer.raw, integer.suffix),
         KernelExprKind::Text(text) => format!("text segments={}", text.segments.len()),
         KernelExprKind::Tuple(elements) => format!("tuple elems={}", elements.len()),

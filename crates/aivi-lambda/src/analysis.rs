@@ -42,6 +42,9 @@ pub(crate) fn capture_free_bindings(
             ExprKind::AmbientSubject
             | ExprKind::OptionNone
             | ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
             | ExprKind::SuffixedInteger(_)
             | ExprKind::Reference(Reference::Item(_))
             | ExprKind::Reference(Reference::HirItem(_))

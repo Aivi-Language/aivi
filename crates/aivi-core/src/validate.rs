@@ -602,6 +602,9 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             ExprKind::AmbientSubject
             | ExprKind::OptionNone
             | ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
             | ExprKind::SuffixedInteger(_)
             | ExprKind::Reference(Reference::Local(_))
             | ExprKind::Reference(Reference::BuiltinClassMember(_))

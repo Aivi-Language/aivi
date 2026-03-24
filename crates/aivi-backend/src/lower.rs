@@ -24,6 +24,7 @@ use crate::{
     BuiltinApplicativeCarrier as BackendBuiltinApplicativeCarrier,
     BuiltinApplyCarrier as BackendBuiltinApplyCarrier,
     BuiltinClassMemberIntrinsic as BackendBuiltinClassMemberIntrinsic,
+    BuiltinFoldableCarrier as BackendBuiltinFoldableCarrier,
     BuiltinFunctorCarrier as BackendBuiltinFunctorCarrier,
     BuiltinOrdSubject as BackendBuiltinOrdSubject, BuiltinTerm, CallingConvention,
     CallingConventionKind, DecodeExtraFieldPolicy, DecodeField, DecodeFieldRequirement, DecodeMode,
@@ -31,16 +32,17 @@ use crate::{
     DecodeVariant, DomainDecodeSurface, DomainDecodeSurfaceKind, EnvSlotId, FanoutCarrier,
     FanoutJoin, FanoutStage, GateStage, InlinePipeCaseArm, InlinePipeExpr, InlinePipePattern,
     InlinePipePatternKind, InlinePipeRecordPatternField, InlinePipeStage, InlinePipeStageKind,
-    InlinePipeTruthyFalsyBranch, InlineSubjectId, IntegerLiteral, Item, ItemId, ItemKind, Kernel,
-    KernelExpr, KernelExprId, KernelExprKind, KernelId, KernelOrigin, KernelOriginKind, Layout,
-    LayoutId, LayoutKind, LoweringError::*, MapEntry, NonSourceWakeup, NonSourceWakeupCause,
-    ParameterRole, Pipeline, PipelineId, PipelineOrigin, PrimitiveType, Program, ProjectionBase,
-    RecordExprField, RecordFieldLayout, Recurrence, RecurrenceStage, RecurrenceTarget,
-    RecurrenceWakeupKind, SignalInfo, SourceArgumentKernel, SourceCancellationPolicy,
-    SourceInstanceId, SourceOptionBinding, SourceOptionKernel, SourcePlan, SourceProvider,
-    SourceReplacementPolicy, SourceStaleWorkPolicy, SourceTeardownPolicy, Stage, StageKind,
-    SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment, TruthyFalsyBranch,
-    TruthyFalsyStage, UnaryOperator, ValidationError, VariantLayout, validate_program,
+    InlinePipeTruthyFalsyBranch, InlineSubjectId, IntegerLiteral, FloatLiteral, DecimalLiteral,
+    BigIntLiteral, Item, ItemId, ItemKind, Kernel, KernelExpr, KernelExprId, KernelExprKind,
+    KernelId, KernelOrigin, KernelOriginKind, Layout, LayoutId, LayoutKind, LoweringError::*,
+    MapEntry, NonSourceWakeup, NonSourceWakeupCause, ParameterRole, Pipeline, PipelineId,
+    PipelineOrigin, PrimitiveType, Program, ProjectionBase, RecordExprField, RecordFieldLayout,
+    Recurrence, RecurrenceStage, RecurrenceTarget, RecurrenceWakeupKind, SignalInfo,
+    SourceArgumentKernel, SourceCancellationPolicy, SourceInstanceId, SourceOptionBinding,
+    SourceOptionKernel, SourcePlan, SourceProvider, SourceReplacementPolicy,
+    SourceStaleWorkPolicy, SourceTeardownPolicy, Stage, StageKind, SubjectRef,
+    SuffixedIntegerLiteral, TextLiteral, TextSegment, TruthyFalsyBranch, TruthyFalsyStage,
+    UnaryOperator, ValidationError, VariantLayout, validate_program,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1076,6 +1078,9 @@ impl<'a> ProgramLowerer<'a> {
                 core::ExprKind::OptionSome { payload } => work.push((*payload, subject)),
                 core::ExprKind::OptionNone
                 | core::ExprKind::Integer(_)
+                | core::ExprKind::Float(_)
+                | core::ExprKind::Decimal(_)
+                | core::ExprKind::BigInt(_)
                 | core::ExprKind::SuffixedInteger(_) => {}
                 core::ExprKind::Reference(reference) => match reference {
                     core::Reference::Local(_) => {}
@@ -1408,6 +1413,42 @@ impl<'a> ProgramLowerer<'a> {
                                     layout,
                                     kind: KernelExprKind::Integer(IntegerLiteral {
                                         raw: integer.raw.clone(),
+                                    }),
+                                },
+                            )?);
+                        }
+                        core::ExprKind::Float(float) => {
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::Float(FloatLiteral {
+                                        raw: float.raw.clone(),
+                                    }),
+                                },
+                            )?);
+                        }
+                        core::ExprKind::Decimal(decimal) => {
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::Decimal(DecimalLiteral {
+                                        raw: decimal.raw.clone(),
+                                    }),
+                                },
+                            )?);
+                        }
+                        core::ExprKind::BigInt(bigint) => {
+                            values.push(alloc_kernel_expr(
+                                &mut exprs,
+                                KernelExpr {
+                                    span: expr.span,
+                                    layout,
+                                    kind: KernelExprKind::BigInt(BigIntLiteral {
+                                        raw: bigint.raw.clone(),
                                     }),
                                 },
                             )?);
@@ -2572,6 +2613,9 @@ fn map_builtin_class_member_intrinsic(
         core::BuiltinClassMemberIntrinsic::Apply(carrier) => {
             BackendBuiltinClassMemberIntrinsic::Apply(map_builtin_apply_carrier(carrier))
         }
+        core::BuiltinClassMemberIntrinsic::Reduce(carrier) => {
+            BackendBuiltinClassMemberIntrinsic::Reduce(map_builtin_foldable_carrier(carrier))
+        }
     }
 }
 
@@ -2605,6 +2649,17 @@ fn map_builtin_apply_carrier(carrier: core::BuiltinApplyCarrier) -> BackendBuilt
         core::BuiltinApplyCarrier::Option => BackendBuiltinApplyCarrier::Option,
         core::BuiltinApplyCarrier::Result => BackendBuiltinApplyCarrier::Result,
         core::BuiltinApplyCarrier::Signal => BackendBuiltinApplyCarrier::Signal,
+    }
+}
+
+fn map_builtin_foldable_carrier(
+    carrier: core::BuiltinFoldableCarrier,
+) -> BackendBuiltinFoldableCarrier {
+    match carrier {
+        core::BuiltinFoldableCarrier::List => BackendBuiltinFoldableCarrier::List,
+        core::BuiltinFoldableCarrier::Option => BackendBuiltinFoldableCarrier::Option,
+        core::BuiltinFoldableCarrier::Result => BackendBuiltinFoldableCarrier::Result,
+        core::BuiltinFoldableCarrier::Validation => BackendBuiltinFoldableCarrier::Validation,
     }
 }
 

@@ -2,10 +2,11 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use aivi_backend::{
     BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinClassMemberIntrinsic,
-    BuiltinFunctorCarrier, CodegenError, DecodeStepKind, DomainDecodeSurfaceKind, EvaluationError,
-    GateStage as BackendGateStage, ItemKind as BackendItemKind, KernelEvaluator, KernelExprKind,
-    LayoutKind, LoweringError, NonSourceWakeupCause, RecurrenceTarget, RuntimeValue,
-    SourceProvider, StageKind as BackendStageKind, ValidationError, compile_program,
+    BuiltinFoldableCarrier, BuiltinFunctorCarrier, CodegenError, DecodeStepKind,
+    DomainDecodeSurfaceKind, EvaluationError, GateStage as BackendGateStage,
+    ItemKind as BackendItemKind, KernelEvaluator, KernelExprKind, LayoutKind, LoweringError,
+    NonSourceWakeupCause, RecurrenceTarget, RuntimeBigInt, RuntimeDecimal, RuntimeFloat,
+    RuntimeValue, SourceProvider, StageKind as BackendStageKind, ValidationError, compile_program,
     lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::{SourceDatabase, SourceSpan};
@@ -17,8 +18,9 @@ use aivi_core::{
     lower_module as lower_core_module, validate_module as validate_core_module,
 };
 use aivi_hir::{
-    BinaryOperator as HirBinaryOperator, BindingId as HirBindingId, BuiltinTerm as HirBuiltinTerm,
-    BuiltinType, ExprId as HirExprId, IntegerLiteral, ItemId as HirItemId,
+    BigIntLiteral, BinaryOperator as HirBinaryOperator, BindingId as HirBindingId,
+    BuiltinTerm as HirBuiltinTerm, BuiltinType, DecimalLiteral, ExprId as HirExprId, FloatLiteral,
+    IntegerLiteral, ItemId as HirItemId,
 };
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_query::RootDatabase;
@@ -288,6 +290,40 @@ fn division_by_zero_reports_backend_evaluation_error() {
             ..
         })
     ));
+}
+
+#[test]
+fn evaluates_noninteger_literal_item_bodies_from_source() {
+    let backend = lower_fixture("milestone-2/valid/noninteger-literals/main.aivi");
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "pi"), &globals)
+            .expect("Float literal item should evaluate"),
+        RuntimeValue::Float(RuntimeFloat::parse_literal("3.14").expect("literal should parse"))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "amount"), &globals)
+            .expect("Decimal literal item should evaluate"),
+        RuntimeValue::Decimal(
+            RuntimeDecimal::parse_literal("19.25d").expect("literal should parse")
+        )
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "whole"), &globals)
+            .expect("whole-number Decimal literal item should evaluate"),
+        RuntimeValue::Decimal(RuntimeDecimal::parse_literal("19d").expect("literal should parse"))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "count"), &globals)
+            .expect("BigInt literal item should evaluate"),
+        RuntimeValue::BigInt(RuntimeBigInt::parse_literal("123n").expect("literal should parse"))
+    );
 }
 
 #[test]
@@ -577,6 +613,139 @@ val none:List Int =
             .evaluate_item(none, &globals)
             .expect("empty should evaluate"),
         RuntimeValue::List(Vec::new())
+    );
+}
+
+#[test]
+fn runtime_evaluates_builtin_foldable_reduce_members() {
+    let backend = lower_text(
+        "backend-foldable-reduce.aivi",
+        r#"
+fun add:Int #acc:Int #value:Int =>
+    acc + value
+
+fun joinStep:Text #acc:Text #value:Text =>
+    append acc value
+
+val maybeInput:Option Int =
+    Some 4
+
+val noneInput:Option Int =
+    None
+
+val okInput:Result Text Int =
+    Ok 5
+
+val errInput:Result Text Int =
+    Err "bad"
+
+val validInput:Validation Text Int =
+    Valid 6
+
+val invalidInput:Validation Text Int =
+    Invalid "missing"
+
+val total:Int =
+    reduce add 10 [1, 2, 3]
+
+val joined:Text =
+    reduce joinStep "" ["hel", "lo"]
+
+val maybeTotal:Int =
+    reduce add 10 maybeInput
+
+val noneTotal:Int =
+    reduce add 10 noneInput
+
+val okTotal:Int =
+    reduce add 10 okInput
+
+val errTotal:Int =
+    reduce add 10 errInput
+
+val validTotal:Int =
+    reduce add 10 validInput
+
+val invalidTotal:Int =
+    reduce add 10 invalidInput
+"#,
+    );
+
+    let total = find_item(&backend, "total");
+    let joined = find_item(&backend, "joined");
+    let maybe_total = find_item(&backend, "maybeTotal");
+    let none_total = find_item(&backend, "noneTotal");
+    let ok_total = find_item(&backend, "okTotal");
+    let err_total = find_item(&backend, "errTotal");
+    let valid_total = find_item(&backend, "validTotal");
+    let invalid_total = find_item(&backend, "invalidTotal");
+
+    let total_kernel = backend.kernels()[backend.items()[total]
+        .body
+        .expect("total should carry a body")]
+    .clone();
+    match &total_kernel.exprs()[total_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 3);
+            assert!(matches!(
+                &total_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Reduce(
+                    BuiltinFoldableCarrier::List
+                ))
+            ));
+        }
+        other => panic!("expected reduce body to lower into an apply tree, found {other:?}"),
+    }
+
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+    assert_eq!(
+        evaluator
+            .evaluate_item(total, &globals)
+            .expect("list reduce should evaluate"),
+        RuntimeValue::Int(16)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(joined, &globals)
+            .expect("text reduce should evaluate"),
+        RuntimeValue::Text("hello".into())
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(maybe_total, &globals)
+            .expect("option reduce should evaluate"),
+        RuntimeValue::Int(14)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(none_total, &globals)
+            .expect("empty option reduce should evaluate"),
+        RuntimeValue::Int(10)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(ok_total, &globals)
+            .expect("result reduce should evaluate"),
+        RuntimeValue::Int(15)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(err_total, &globals)
+            .expect("error result reduce should evaluate"),
+        RuntimeValue::Int(10)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(valid_total, &globals)
+            .expect("validation reduce should evaluate"),
+        RuntimeValue::Int(16)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(invalid_total, &globals)
+            .expect("invalid validation reduce should evaluate"),
+        RuntimeValue::Int(10)
     );
 }
 
@@ -1198,6 +1367,108 @@ fn cranelift_codegen_compiles_environment_slots() {
     assert!(artifact.code_size > 0);
     assert!(artifact.clif.contains("iadd"));
     assert!(artifact.clif.contains("(i64) -> i64"));
+}
+
+#[test]
+fn cranelift_codegen_compiles_noninteger_literal_gate_kernels() {
+    fn compile_literal_gate(
+        result_type: BuiltinType,
+        when_true: CoreExprKind,
+        when_false: CoreExprKind,
+        expected_value: RuntimeValue,
+        expected_signature: &str,
+        expected_clif_fragment: Option<&str>,
+    ) {
+        let result_ty = CoreType::Primitive(result_type);
+        let core = manual_core_gate_stage(
+            CoreType::Primitive(BuiltinType::Bool),
+            result_ty.clone(),
+            {
+                let result_ty = result_ty.clone();
+                move |module, span| {
+                    module
+                        .exprs_mut()
+                        .alloc(CoreExpr {
+                            span,
+                            ty: result_ty.clone(),
+                            kind: when_true,
+                        })
+                        .expect("literal allocation should fit")
+                }
+            },
+            move |module, span| {
+                module
+                    .exprs_mut()
+                    .alloc(CoreExpr {
+                        span,
+                        ty: result_ty.clone(),
+                        kind: when_false,
+                    })
+                    .expect("fallback literal allocation should fit")
+            },
+        );
+        validate_core_module(&core).expect("manual core module should validate");
+        let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
+        validate_lambda_module(&lambda).expect("typed lambda should validate");
+        let backend = lower_backend_module(&lambda).expect("backend lowering should succeed");
+        validate_program(&backend).expect("backend program should validate");
+
+        let item = find_item(&backend, "captured");
+        let pipeline = &backend.pipelines()[first_pipeline(&backend, item)];
+        let BackendStageKind::Gate(BackendGateStage::Ordinary { when_true, .. }) =
+            &pipeline.stages[0].kind
+        else {
+            panic!("expected ordinary gate stage");
+        };
+
+        let mut evaluator = KernelEvaluator::new(&backend);
+        assert_eq!(
+            evaluator
+                .evaluate_kernel(*when_true, None, &[], &BTreeMap::new())
+                .expect("literal kernel should evaluate"),
+            expected_value
+        );
+
+        let compiled = compile_program(&backend).expect("literal gate kernels should compile");
+        let artifact = compiled
+            .kernel(*when_true)
+            .expect("compiled program should retain per-kernel metadata");
+        assert!(artifact.code_size > 0);
+        assert!(artifact.clif.contains(expected_signature));
+        if let Some(fragment) = expected_clif_fragment {
+            assert!(artifact.clif.contains(fragment));
+        }
+        assert!(!compiled.object().is_empty());
+    }
+
+    compile_literal_gate(
+        BuiltinType::Float,
+        CoreExprKind::Float(FloatLiteral { raw: "3.14".into() }),
+        CoreExprKind::Float(FloatLiteral { raw: "2.5".into() }),
+        RuntimeValue::Float(RuntimeFloat::parse_literal("3.14").expect("literal should parse")),
+        "() -> f64",
+        Some("f64const"),
+    );
+    compile_literal_gate(
+        BuiltinType::Decimal,
+        CoreExprKind::Decimal(DecimalLiteral {
+            raw: "19.25d".into(),
+        }),
+        CoreExprKind::Decimal(DecimalLiteral { raw: "7d".into() }),
+        RuntimeValue::Decimal(
+            RuntimeDecimal::parse_literal("19.25d").expect("literal should parse"),
+        ),
+        &format!("() -> {}", clif_pointer_ty()),
+        Some("symbol_value"),
+    );
+    compile_literal_gate(
+        BuiltinType::BigInt,
+        CoreExprKind::BigInt(BigIntLiteral { raw: "123n".into() }),
+        CoreExprKind::BigInt(BigIntLiteral { raw: "456n".into() }),
+        RuntimeValue::BigInt(RuntimeBigInt::parse_literal("123n").expect("literal should parse")),
+        &format!("() -> {}", clif_pointer_ty()),
+        Some("symbol_value"),
+    );
 }
 
 #[test]

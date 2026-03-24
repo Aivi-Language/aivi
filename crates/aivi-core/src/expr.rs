@@ -1,7 +1,8 @@
 use aivi_base::SourceSpan;
 use aivi_hir::{
-    BinaryOperator, BindingId as HirBindingId, BuiltinTerm, DomainMemberHandle, IntegerLiteral,
-    ItemId as HirItemId, SuffixedIntegerLiteral, SumConstructorHandle, UnaryOperator,
+    BigIntLiteral, BinaryOperator, BindingId as HirBindingId, BuiltinTerm, DecimalLiteral,
+    DomainMemberHandle, FloatLiteral, IntegerLiteral, ItemId as HirItemId,
+    SuffixedIntegerLiteral, SumConstructorHandle, UnaryOperator,
 };
 
 use crate::{ids::ExprId, ty::Type};
@@ -22,6 +23,9 @@ pub enum ExprKind {
     OptionNone,
     Reference(Reference),
     Integer(IntegerLiteral),
+    Float(FloatLiteral),
+    Decimal(DecimalLiteral),
+    BigInt(BigIntLiteral),
     SuffixedInteger(SuffixedIntegerLiteral),
     Text(TextLiteral),
     Tuple(Vec<ExprId>),
@@ -72,6 +76,7 @@ pub enum BuiltinClassMemberIntrinsic {
     Map(BuiltinFunctorCarrier),
     Pure(BuiltinApplicativeCarrier),
     Apply(BuiltinApplyCarrier),
+    Reduce(BuiltinFoldableCarrier),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -98,6 +103,14 @@ pub enum BuiltinApplyCarrier {
     Option,
     Result,
     Signal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinFoldableCarrier {
+    List,
+    Option,
+    Result,
+    Validation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

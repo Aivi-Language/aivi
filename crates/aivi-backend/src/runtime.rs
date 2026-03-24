@@ -7,10 +7,11 @@ use aivi_hir::{DomainMemberHandle, ItemId as HirItemId, SumConstructorHandle};
 
 use crate::{
     BinaryOperator, BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier,
-    BuiltinClassMemberIntrinsic, BuiltinFunctorCarrier, BuiltinOrdSubject, BuiltinTerm, EnvSlotId,
-    InlinePipePattern, InlinePipePatternKind, InlinePipeStageKind, InlineSubjectId, ItemId,
-    KernelExprId, KernelExprKind, KernelId, LayoutId, LayoutKind, PrimitiveType, Program,
-    ProjectionBase, SubjectRef, UnaryOperator,
+    BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject,
+    BuiltinTerm, EnvSlotId, InlinePipePattern, InlinePipePatternKind, InlinePipeStageKind,
+    InlineSubjectId, ItemId, KernelExprId, KernelExprKind, KernelId, LayoutId, LayoutKind,
+    PrimitiveType, Program, ProjectionBase, SubjectRef, UnaryOperator,
+    numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +74,9 @@ pub enum RuntimeValue {
     Unit,
     Bool(bool),
     Int(i64),
+    Float(RuntimeFloat),
+    Decimal(RuntimeDecimal),
+    BigInt(RuntimeBigInt),
     Text(Box<str>),
     Tuple(Vec<RuntimeValue>),
     List(Vec<RuntimeValue>),
@@ -159,6 +163,13 @@ impl RuntimeValue {
         }
     }
 
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            Self::Float(value) => Some(value.to_f64()),
+            _ => None,
+        }
+    }
+
     pub fn as_text(&self) -> Option<&str> {
         match self {
             Self::Text(value) => Some(value.as_ref()),
@@ -175,6 +186,9 @@ impl RuntimeValue {
                     Self::Bool(true) => target.write_str("True")?,
                     Self::Bool(false) => target.write_str("False")?,
                     Self::Int(value) => write!(target, "{value}")?,
+                    Self::Float(value) => write!(target, "{value}")?,
+                    Self::Decimal(value) => write!(target, "{value}")?,
+                    Self::BigInt(value) => write!(target, "{value}")?,
                     Self::Text(value) => target.write_str(value)?,
                     Self::Tuple(elements) => {
                         push_delimited_values(&mut stack, elements, "(", ")");
@@ -476,6 +490,21 @@ pub enum EvaluationError {
         expr: KernelExprId,
         raw: Box<str>,
     },
+    InvalidFloatLiteral {
+        kernel: KernelId,
+        expr: KernelExprId,
+        raw: Box<str>,
+    },
+    InvalidDecimalLiteral {
+        kernel: KernelId,
+        expr: KernelExprId,
+        raw: Box<str>,
+    },
+    InvalidBigIntLiteral {
+        kernel: KernelId,
+        expr: KernelExprId,
+        raw: Box<str>,
+    },
     UnsupportedStructuralEquality {
         kernel: KernelId,
         expr: KernelExprId,
@@ -635,6 +664,18 @@ impl fmt::Display for EvaluationError {
             ),
             Self::InvalidIntegerLiteral { kernel, raw, .. } => {
                 write!(f, "kernel {kernel} could not parse integer literal `{raw}`")
+            }
+            Self::InvalidFloatLiteral { kernel, raw, .. } => {
+                write!(
+                    f,
+                    "kernel {kernel} could not parse finite Float literal `{raw}`"
+                )
+            }
+            Self::InvalidDecimalLiteral { kernel, raw, .. } => {
+                write!(f, "kernel {kernel} could not parse Decimal literal `{raw}`")
+            }
+            Self::InvalidBigIntLiteral { kernel, raw, .. } => {
+                write!(f, "kernel {kernel} could not parse BigInt literal `{raw}`")
             }
             Self::UnsupportedStructuralEquality {
                 kernel,
@@ -920,6 +961,36 @@ impl<'a> KernelEvaluator<'a> {
                                     raw: integer.raw.clone(),
                                 },
                             )?;
+                            values.push(value);
+                        }
+                        KernelExprKind::Float(float) => {
+                            let value = RuntimeFloat::parse_literal(float.raw.as_ref())
+                                .map(RuntimeValue::Float)
+                                .ok_or_else(|| EvaluationError::InvalidFloatLiteral {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                    raw: float.raw.clone(),
+                                })?;
+                            values.push(value);
+                        }
+                        KernelExprKind::Decimal(decimal) => {
+                            let value = RuntimeDecimal::parse_literal(decimal.raw.as_ref())
+                                .map(RuntimeValue::Decimal)
+                                .ok_or_else(|| EvaluationError::InvalidDecimalLiteral {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                    raw: decimal.raw.clone(),
+                                })?;
+                            values.push(value);
+                        }
+                        KernelExprKind::BigInt(bigint) => {
+                            let value = RuntimeBigInt::parse_literal(bigint.raw.as_ref())
+                                .map(RuntimeValue::BigInt)
+                                .ok_or_else(|| EvaluationError::InvalidBigIntLiteral {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                    raw: bigint.raw.clone(),
+                                })?;
                             values.push(value);
                         }
                         KernelExprKind::SuffixedInteger(integer) => {
@@ -1680,6 +1751,20 @@ impl<'a> KernelEvaluator<'a> {
                     kernel_id, expr, intrinsic, carrier, functions, values, globals,
                 )
             }
+            BuiltinClassMemberIntrinsic::Reduce(carrier) => {
+                let [function, initial, subject] =
+                    expect_arity::<3>(arguments).map_err(|reason| {
+                        EvaluationError::UnsupportedBuiltinClassMember {
+                            kernel: kernel_id,
+                            expr,
+                            intrinsic,
+                            reason,
+                        }
+                    })?;
+                self.reduce_builtin_carrier(
+                    kernel_id, expr, intrinsic, carrier, function, initial, subject, globals,
+                )
+            }
         }
     }
 
@@ -1934,6 +2019,79 @@ impl<'a> KernelEvaluator<'a> {
         }
     }
 
+    fn reduce_builtin_carrier(
+        &mut self,
+        kernel_id: KernelId,
+        expr: KernelExprId,
+        intrinsic: BuiltinClassMemberIntrinsic,
+        carrier: BuiltinFoldableCarrier,
+        function: RuntimeValue,
+        initial: RuntimeValue,
+        subject: RuntimeValue,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        let initial = strip_signal(initial);
+        match carrier {
+            BuiltinFoldableCarrier::List => match strip_signal(subject) {
+                RuntimeValue::List(values) => {
+                    let mut accumulator = initial;
+                    for value in values {
+                        accumulator = self.apply_callable(
+                            kernel_id,
+                            expr,
+                            function.clone(),
+                            vec![accumulator, value],
+                            globals,
+                        )?;
+                    }
+                    Ok(accumulator)
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "reduce received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinFoldableCarrier::Option => match strip_signal(subject) {
+                RuntimeValue::OptionNone => Ok(initial),
+                RuntimeValue::OptionSome(value) => {
+                    self.apply_callable(kernel_id, expr, function, vec![initial, *value], globals)
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "reduce received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinFoldableCarrier::Result => match strip_signal(subject) {
+                RuntimeValue::ResultErr(_) => Ok(initial),
+                RuntimeValue::ResultOk(value) => {
+                    self.apply_callable(kernel_id, expr, function, vec![initial, *value], globals)
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "reduce received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinFoldableCarrier::Validation => match strip_signal(subject) {
+                RuntimeValue::ValidationInvalid(_) => Ok(initial),
+                RuntimeValue::ValidationValid(value) => {
+                    self.apply_callable(kernel_id, expr, function, vec![initial, *value], globals)
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "reduce received values outside the supported runtime carriers",
+                }),
+            },
+        }
+    }
+
     fn apply_unary(
         &self,
         kernel_id: KernelId,
@@ -2157,6 +2315,7 @@ fn builtin_class_member_arity(intrinsic: BuiltinClassMemberIntrinsic) -> usize {
     match intrinsic {
         BuiltinClassMemberIntrinsic::Empty(_) => 0,
         BuiltinClassMemberIntrinsic::Pure(_) => 1,
+        BuiltinClassMemberIntrinsic::Reduce(_) => 3,
         BuiltinClassMemberIntrinsic::StructuralEq
         | BuiltinClassMemberIntrinsic::Compare { .. }
         | BuiltinClassMemberIntrinsic::Append(_)
@@ -2204,6 +2363,9 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
         (LayoutKind::Primitive(PrimitiveType::Unit), RuntimeValue::Unit) => true,
         (LayoutKind::Primitive(PrimitiveType::Bool), RuntimeValue::Bool(_)) => true,
         (LayoutKind::Primitive(PrimitiveType::Int), RuntimeValue::Int(_)) => true,
+        (LayoutKind::Primitive(PrimitiveType::Float), RuntimeValue::Float(_)) => true,
+        (LayoutKind::Primitive(PrimitiveType::Decimal), RuntimeValue::Decimal(_)) => true,
+        (LayoutKind::Primitive(PrimitiveType::BigInt), RuntimeValue::BigInt(_)) => true,
         (LayoutKind::Primitive(PrimitiveType::Text), RuntimeValue::Text(_)) => true,
         (LayoutKind::Tuple(expected), RuntimeValue::Tuple(elements)) => {
             expected.len() == elements.len()
@@ -2308,6 +2470,9 @@ fn structural_eq(
         (RuntimeValue::Unit, RuntimeValue::Unit) => true,
         (RuntimeValue::Bool(left), RuntimeValue::Bool(right)) => left == right,
         (RuntimeValue::Int(left), RuntimeValue::Int(right)) => left == right,
+        (RuntimeValue::Float(left), RuntimeValue::Float(right)) => left == right,
+        (RuntimeValue::Decimal(left), RuntimeValue::Decimal(right)) => left == right,
+        (RuntimeValue::BigInt(left), RuntimeValue::BigInt(right)) => left == right,
         (RuntimeValue::Text(left), RuntimeValue::Text(right)) => left == right,
         (
             RuntimeValue::SuffixedInteger {

@@ -4,18 +4,22 @@ use std::{
 };
 
 use cranelift_codegen::{
-    ir::{AbiParam, InstBuilder, MemFlags, Type, UserFuncName, Value, condcodes::IntCC, types},
+    ir::{
+        AbiParam, InstBuilder, MemFlags, Type, UserFuncName, Value, condcodes::IntCC,
+        immediates::Ieee64, types,
+    },
     print_errors::pretty_verifier_error,
     settings, verify_function,
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-use cranelift_module::{Linkage, Module, default_libcall_names};
+use cranelift_module::{DataDescription, Linkage, Module, default_libcall_names};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{
     AbiPassMode, BinaryOperator, BuiltinTerm, CallingConventionKind, EnvSlotId, Kernel,
     KernelExprId, KernelExprKind, KernelId, KernelOriginKind, LayoutId, LayoutKind, ParameterRole,
     PrimitiveType, Program, SubjectRef, UnaryOperator, ValidationError, describe_expr_kind,
+    numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat},
     validate_program,
 };
 
@@ -127,6 +131,21 @@ pub enum CodegenError {
         expr: KernelExprId,
         raw: Box<str>,
     },
+    InvalidFloatLiteral {
+        kernel: KernelId,
+        expr: KernelExprId,
+        raw: Box<str>,
+    },
+    InvalidDecimalLiteral {
+        kernel: KernelId,
+        expr: KernelExprId,
+        raw: Box<str>,
+    },
+    InvalidBigIntLiteral {
+        kernel: KernelId,
+        expr: KernelExprId,
+        raw: Box<str>,
+    },
     CraneliftModule {
         kernel: Option<KernelId>,
         message: Box<str>,
@@ -198,6 +217,18 @@ impl fmt::Display for CodegenError {
                 f,
                 "kernel {kernel} expression {expr} integer literal `{raw}` does not fit in the current i64 ABI slice"
             ),
+            Self::InvalidFloatLiteral { kernel, expr, raw } => write!(
+                f,
+                "kernel {kernel} expression {expr} Float literal `{raw}` does not fit in the current finite f64 ABI slice"
+            ),
+            Self::InvalidDecimalLiteral { kernel, expr, raw } => write!(
+                f,
+                "kernel {kernel} expression {expr} Decimal literal `{raw}` does not fit the current backend decimal-literal cell format"
+            ),
+            Self::InvalidBigIntLiteral { kernel, expr, raw } => write!(
+                f,
+                "kernel {kernel} expression {expr} BigInt literal `{raw}` does not fit the current backend BigInt-literal cell format"
+            ),
             Self::CraneliftModule {
                 kernel: Some(kernel),
                 message,
@@ -226,8 +257,10 @@ impl std::error::Error for CodegenError {}
 /// The current slice is intentionally narrow:
 /// - it consumes backend-owned ABI/layout contracts only,
 /// - it maps `RuntimeKernelV1` onto the target's default call convention,
-/// - it materializes `Int` as `i64`, `Bool` as `i8`, and backend by-reference values as host
-///   pointers,
+/// - it materializes `Int` as `i64`, `Float` as finite `f64`, `Bool` as `i8`, and backend
+///   by-reference values as host pointers,
+/// - it materializes `Decimal` / `BigInt` literals as immutable backend-owned constant cells behind
+///   those by-reference pointers,
 /// - it uses a backend-local pointer niche for `Option` over by-reference payloads,
 /// - it resolves record projection offsets inside backend/codegen,
 /// - and it explicitly rejects general apply/domain/collection/text/inline-pipe lowering until
@@ -252,6 +285,7 @@ struct CraneliftCompiler<'a> {
     program: &'a Program,
     module: ObjectModule,
     function_builder_ctx: FunctionBuilderContext,
+    next_data_symbol: u64,
 }
 
 impl<'a> CraneliftCompiler<'a> {
@@ -277,6 +311,7 @@ impl<'a> CraneliftCompiler<'a> {
             program,
             module,
             function_builder_ctx: FunctionBuilderContext::new(),
+            next_data_symbol: 0,
         })
     }
 
@@ -358,6 +393,36 @@ impl<'a> CraneliftCompiler<'a> {
                             expr_id,
                             expr.layout,
                             "integer literal",
+                        ) {
+                            errors.push(error);
+                        }
+                    }
+                    KernelExprKind::Float(_) => {
+                        if let Err(error) = self.require_float_expression(
+                            kernel_id,
+                            expr_id,
+                            expr.layout,
+                            "Float literal",
+                        ) {
+                            errors.push(error);
+                        }
+                    }
+                    KernelExprKind::Decimal(_) => {
+                        if let Err(error) = self.require_decimal_expression(
+                            kernel_id,
+                            expr_id,
+                            expr.layout,
+                            "Decimal literal",
+                        ) {
+                            errors.push(error);
+                        }
+                    }
+                    KernelExprKind::BigInt(_) => {
+                        if let Err(error) = self.require_bigint_expression(
+                            kernel_id,
+                            expr_id,
+                            expr.layout,
+                            "BigInt literal",
                         ) {
                             errors.push(error);
                         }
@@ -685,7 +750,7 @@ impl<'a> CraneliftCompiler<'a> {
     }
 
     fn lower_kernel_body(
-        &self,
+        &mut self,
         kernel_id: KernelId,
         kernel: &Kernel,
         builder: &mut FunctionBuilder<'_>,
@@ -772,6 +837,66 @@ impl<'a> CraneliftCompiler<'a> {
                                 }
                             })?;
                             values.push(builder.ins().iconst(types::I64, value));
+                        }
+                        KernelExprKind::Float(float) => {
+                            self.require_float_expression(
+                                kernel_id,
+                                expr_id,
+                                expr.layout,
+                                "Float literal",
+                            )?;
+                            let value = RuntimeFloat::parse_literal(float.raw.as_ref()).ok_or(
+                                CodegenError::InvalidFloatLiteral {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                    raw: float.raw.clone(),
+                                },
+                            )?;
+                            values.push(builder.ins().f64const(Ieee64::with_float(value.to_f64())));
+                        }
+                        KernelExprKind::Decimal(decimal) => {
+                            self.require_decimal_expression(
+                                kernel_id,
+                                expr_id,
+                                expr.layout,
+                                "Decimal literal",
+                            )?;
+                            let value = RuntimeDecimal::parse_literal(decimal.raw.as_ref()).ok_or(
+                                CodegenError::InvalidDecimalLiteral {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                    raw: decimal.raw.clone(),
+                                },
+                            )?;
+                            values.push(self.materialize_literal_pointer(
+                                kernel_id,
+                                "decimal_literal",
+                                value.encode_constant_bytes(),
+                                16,
+                                builder,
+                            )?);
+                        }
+                        KernelExprKind::BigInt(bigint) => {
+                            self.require_bigint_expression(
+                                kernel_id,
+                                expr_id,
+                                expr.layout,
+                                "BigInt literal",
+                            )?;
+                            let value = RuntimeBigInt::parse_literal(bigint.raw.as_ref()).ok_or(
+                                CodegenError::InvalidBigIntLiteral {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                    raw: bigint.raw.clone(),
+                                },
+                            )?;
+                            values.push(self.materialize_literal_pointer(
+                                kernel_id,
+                                "bigint_literal",
+                                value.encode_constant_bytes(),
+                                8,
+                                builder,
+                            )?);
                         }
                         KernelExprKind::Builtin(BuiltinTerm::True) => {
                             self.require_bool_expression(kernel_id, expr_id, expr.layout, "True")?;
@@ -1166,6 +1291,66 @@ impl<'a> CraneliftCompiler<'a> {
         }
     }
 
+    fn require_float_expression(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        layout: LayoutId,
+        detail: &str,
+    ) -> Result<(), CodegenError> {
+        match &self.program.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::Float) => Ok(()),
+            _ => Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!(
+                    "{detail} expects Float, found `{}`",
+                    self.program.layouts()[layout]
+                ),
+            )),
+        }
+    }
+
+    fn require_decimal_expression(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        layout: LayoutId,
+        detail: &str,
+    ) -> Result<(), CodegenError> {
+        match &self.program.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::Decimal) => Ok(()),
+            _ => Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!(
+                    "{detail} expects Decimal, found `{}`",
+                    self.program.layouts()[layout]
+                ),
+            )),
+        }
+    }
+
+    fn require_bigint_expression(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        layout: LayoutId,
+        detail: &str,
+    ) -> Result<(), CodegenError> {
+        match &self.program.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::BigInt) => Ok(()),
+            _ => Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!(
+                    "{detail} expects BigInt, found `{}`",
+                    self.program.layouts()[layout]
+                ),
+            )),
+        }
+    }
+
     fn require_bool_expression(
         &self,
         kernel_id: KernelId,
@@ -1400,13 +1585,13 @@ impl<'a> CraneliftCompiler<'a> {
                     .checked_add(abi.size)
                     .ok_or_else(|| {
                         CodegenError::UnsupportedLayout {
-                    kernel: kernel_id,
-                    layout: record_layout,
-                    detail: format!(
+                        kernel: kernel_id,
+                        layout: record_layout,
+                        detail: format!(
                         "record layout{record_layout} overflows backend field-offset computation"
                     )
-                    .into_boxed_str(),
-                }
+                        .into_boxed_str(),
+                    }
                     })?;
         }
 
@@ -1454,6 +1639,11 @@ impl<'a> CraneliftCompiler<'a> {
                     size: 8,
                     align: 8,
                 }),
+                LayoutKind::Primitive(PrimitiveType::Float) => Ok(AbiShape {
+                    ty: types::F64,
+                    size: 8,
+                    align: 8,
+                }),
                 LayoutKind::Primitive(PrimitiveType::Bool) => Ok(AbiShape {
                     ty: types::I8,
                     size: 1,
@@ -1463,7 +1653,7 @@ impl<'a> CraneliftCompiler<'a> {
                     kernel: kernel_id,
                     layout,
                     detail: format!(
-                        "{detail} uses primitive `{other}`, but the current Cranelift slice only materializes Int and Bool by value"
+                        "{detail} uses primitive `{other}`, but the current Cranelift slice only materializes Int, Float, and Bool by value"
                     )
                     .into_boxed_str(),
                 }),
@@ -1482,6 +1672,40 @@ impl<'a> CraneliftCompiler<'a> {
 
     fn pointer_type(&self) -> Type {
         self.module.isa().pointer_type()
+    }
+
+    fn materialize_literal_pointer(
+        &mut self,
+        kernel_id: KernelId,
+        family: &str,
+        bytes: Box<[u8]>,
+        align: u64,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let symbol = format!(
+            "aivi_backend_{family}_{}_{}",
+            kernel_id.as_raw(),
+            self.next_data_symbol
+        );
+        self.next_data_symbol += 1;
+        let data_id = self
+            .module
+            .declare_data(&symbol, Linkage::Local, false, false)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(kernel_id),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        let mut data = DataDescription::new();
+        data.define(bytes);
+        data.set_align(align);
+        self.module
+            .define_data(data_id, &data)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(kernel_id),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        let global = self.module.declare_data_in_func(data_id, builder.func);
+        Ok(builder.ins().symbol_value(self.pointer_type(), global))
     }
 
     fn unsupported_expression(

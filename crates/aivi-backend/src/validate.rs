@@ -1144,6 +1144,9 @@ fn validate_kernel(
             | KernelExprKind::BuiltinClassMember(_)
             | KernelExprKind::Builtin(_)
             | KernelExprKind::Integer(_)
+            | KernelExprKind::Float(_)
+            | KernelExprKind::Decimal(_)
+            | KernelExprKind::BigInt(_)
             | KernelExprKind::SuffixedInteger(_) => {}
             KernelExprKind::Text(text) => {
                 for segment in &text.segments {

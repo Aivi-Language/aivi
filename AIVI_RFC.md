@@ -540,6 +540,22 @@ Recommended v1 instances:
 - `Validation E` implements `Functor`, `Applicative`
 - `Eq` is compiler-provided for the structural cases in §7.3
 
+### 7.2.1 `Foldable.reduce`
+
+`Foldable.reduce` is the current compiler-provided reduction surface for builtin collection/error
+carriers:
+
+- `List A` folds left-to-right in source order
+- `Option A` folds zero or one payloads: `None` returns the seed unchanged, `Some x` applies the
+  step once
+- `Result E A` folds over the success payload only: `Err _` returns the seed unchanged, `Ok x`
+  applies the step once
+- `Validation E A` folds over the valid payload only: `Invalid _` returns the seed unchanged,
+  `Valid x` applies the step once
+
+This surface is intentionally narrow: it preserves the applicative meaning of `Validation` and
+does not imply any `Foldable Task` or `Foldable Signal` instance in v1.
+
 ### 7.3 Equality
 
 AIVI includes a first-order equality class:

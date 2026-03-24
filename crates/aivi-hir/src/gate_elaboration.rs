@@ -4,9 +4,10 @@ use aivi_base::SourceSpan;
 use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
-    BinaryOperator, BindingId, BuiltinTerm, DomainMemberHandle, ExprId, ExprKind, IntegerLiteral,
-    Item, ItemId, Module, Name, NamePath, PatternId, PipeExpr, PipeStageKind, ProjectionBase,
-    SuffixedIntegerLiteral, TermResolution, TextFragment, TextSegment, UnaryOperator,
+    BigIntLiteral, BinaryOperator, BindingId, BuiltinTerm, DecimalLiteral, DomainMemberHandle,
+    ExprId, ExprKind, FloatLiteral, IntegerLiteral, Item, ItemId, Module, Name, NamePath,
+    PatternId, PipeExpr, PipeStageKind, ProjectionBase, SuffixedIntegerLiteral, TermResolution,
+    TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeSubjectStepOutcome,
@@ -186,6 +187,9 @@ pub enum GateRuntimeExprKind {
     AmbientSubject,
     Reference(GateRuntimeReference),
     Integer(IntegerLiteral),
+    Float(FloatLiteral),
+    Decimal(DecimalLiteral),
+    BigInt(BigIntLiteral),
     SuffixedInteger(SuffixedIntegerLiteral),
     Text(GateRuntimeTextLiteral),
     Tuple(Vec<GateRuntimeExpr>),
@@ -840,22 +844,25 @@ pub(crate) fn lower_gate_runtime_expr(
                             kind: GateRuntimeExprKind::Integer(literal),
                         });
                     }
-                    ExprKind::Float(_) => {
-                        return Err(GateElaborationBlocker::UnsupportedRuntimeExpr {
+                    ExprKind::Float(literal) => {
+                        results.push(GateRuntimeExpr {
                             span: expr.span,
-                            kind: GateRuntimeUnsupportedKind::FloatLiteral,
+                            ty,
+                            kind: GateRuntimeExprKind::Float(literal),
                         });
                     }
-                    ExprKind::Decimal(_) => {
-                        return Err(GateElaborationBlocker::UnsupportedRuntimeExpr {
+                    ExprKind::Decimal(literal) => {
+                        results.push(GateRuntimeExpr {
                             span: expr.span,
-                            kind: GateRuntimeUnsupportedKind::DecimalLiteral,
+                            ty,
+                            kind: GateRuntimeExprKind::Decimal(literal),
                         });
                     }
-                    ExprKind::BigInt(_) => {
-                        return Err(GateElaborationBlocker::UnsupportedRuntimeExpr {
+                    ExprKind::BigInt(literal) => {
+                        results.push(GateRuntimeExpr {
                             span: expr.span,
-                            kind: GateRuntimeUnsupportedKind::BigIntLiteral,
+                            ty,
+                            kind: GateRuntimeExprKind::BigInt(literal),
                         });
                     }
                     ExprKind::SuffixedInteger(literal) => {

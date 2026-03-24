@@ -17,8 +17,8 @@ use aivi_hir::{
 
 use crate::{
     Arena, ArenaOverflow, BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier,
-    BuiltinClassMemberIntrinsic, BuiltinFunctorCarrier, BuiltinOrdSubject, DecodeField,
-    DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, DomainDecodeSurface,
+    BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject,
+    DecodeField, DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, DomainDecodeSurface,
     DomainDecodeSurfaceKind, Expr, ExprId, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item,
     ItemId, ItemKind, ItemParameter, MapEntry, Module, NonSourceWakeup, Pattern, PatternBinding,
     PatternConstructor, PatternKind, Pipe, PipeCaseArm, PipeExpr, PipeOrigin, PipeRecurrence,
@@ -1505,6 +1505,25 @@ impl<'a> ModuleLowerer<'a> {
                     ));
                 }
             },
+            ("Foldable", "reduce", TypeBinding::Constructor(binding)) => match binding.head() {
+                TypeConstructorHead::Builtin(aivi_hir::BuiltinType::List) => {
+                    BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::List)
+                }
+                TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Option) => {
+                    BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::Option)
+                }
+                TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Result) => {
+                    BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::Result)
+                }
+                TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Validation) => {
+                    BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::Validation)
+                }
+                _ => {
+                    return Err(unsupported(
+                        "runtime lowering only supports reduce for List, Option, Result, and Validation",
+                    ));
+                }
+            },
             ("Ord", "compare", _) => {
                 let ordering_item =
                     self.ordering_item_from_gate_type(expr_ty).ok_or_else(|| {
@@ -2901,7 +2920,8 @@ mod tests {
 
     use super::{LoweringError, RuntimeFragmentSpec, lower_module, lower_runtime_fragment};
     use crate::{
-        DecodeStep, GateStage, ItemKind, StageKind, Type,
+        BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, DecodeStep, GateStage, ItemKind,
+        Reference, StageKind, Type,
         validate::{ValidationError, validate_module},
     };
 
@@ -3343,6 +3363,52 @@ val combined:Blob =
             hidden.body.is_some(),
             "hidden instance-member item should carry a lowered body"
         );
+    }
+
+    #[test]
+    fn lowers_prelude_foldable_reduce_calls_into_builtin_intrinsics() {
+        let lowered = lower_text(
+            "typed-core-foldable-reduce.aivi",
+            r#"
+fun add:Int #acc:Int #value:Int =>
+    acc + value
+
+fun joinStep:Text #acc:Text #value:Text =>
+    append acc value
+
+val joined:Text =
+    reduce joinStep "" ["hel", "lo"]
+
+val total:Int =
+    reduce add 10 [1, 2, 3]
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "reduce example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        let joined = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "joined")
+            .map(|(id, _)| id)
+            .expect("expected joined value item");
+        let joined_body = core.items()[joined]
+            .body
+            .expect("joined should carry a lowered body");
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[joined_body].kind else {
+            panic!("joined should lower to an apply expression");
+        };
+        assert_eq!(arguments.len(), 3);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::List),
+        )) = &core.exprs()[*callee].kind
+        else {
+            panic!("reduce should lower to the builtin Foldable list intrinsic");
+        };
     }
 
     #[test]

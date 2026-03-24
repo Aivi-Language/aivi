@@ -682,6 +682,9 @@ fn format_expr(module: &Module, expr_id: ExprId, f: &mut fmt::Formatter<'_>) -> 
             Reference::Builtin(term) => write!(f, "{term:?}"),
         },
         crate::expr::ExprKind::Integer(value) => write!(f, "{}", value.raw),
+        crate::expr::ExprKind::Float(value) => write!(f, "{}", value.raw),
+        crate::expr::ExprKind::Decimal(value) => write!(f, "{}", value.raw),
+        crate::expr::ExprKind::BigInt(value) => write!(f, "{}", value.raw),
         crate::expr::ExprKind::SuffixedInteger(value) => {
             write!(f, "{}{}", value.raw, value.suffix.text())
         }

@@ -2902,6 +2902,21 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_prelude_foldable_reduce_calls() {
+        let report = typecheck_text(
+            "prelude-reduce-call.aivi",
+            "fun add:Int #acc:Int #value:Int => acc + value\n\
+             val joined:Text = reduce append empty [\"hel\", \"lo\"]\n\
+             val total:Int = reduce add 10 (Some 2)\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected ambient prelude Foldable reduce calls to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
     fn typecheck_accepts_class_member_names_from_expected_arrow_types() {
         let report = typecheck_text(
             "class-member-name-expected-arrow.aivi",

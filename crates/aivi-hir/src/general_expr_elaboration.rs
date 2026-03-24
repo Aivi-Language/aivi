@@ -7,14 +7,14 @@ use aivi_base::SourceSpan;
 use aivi_typing::GatePlanner;
 
 use crate::{
-    BindingId, BuiltinTerm, ExprId, ExprKind, FunctionItem, FunctionParameter, GateRuntimeCaseArm,
-    GateRuntimeExpr, GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStage,
-    GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeRecordField,
-    GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
-    GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind,
-    InstanceItem, InstanceMember, Item, ItemId, Module, PipeExpr, PipeStageKind, ProjectionBase,
-    ResolutionState, SignalItem, TermReference, TermResolution, TypeItemBody, TypeResolution,
-    ValueItem,
+    BigIntLiteral, BindingId, BuiltinTerm, DecimalLiteral, ExprId, ExprKind, FloatLiteral,
+    FunctionItem, FunctionParameter, GateRuntimeCaseArm, GateRuntimeExpr, GateRuntimeExprKind,
+    GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind,
+    GateRuntimeProjectionBase, GateRuntimeRecordField, GateRuntimeReference,
+    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
+    GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, InstanceItem, InstanceMember,
+    Item, ItemId, Module, PipeExpr, PipeStageKind, ProjectionBase, ResolutionState, SignalItem,
+    TermReference, TermResolution, TypeItemBody, TypeResolution, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{expression_matches, resolve_class_member_dispatch},
     validate::{
@@ -894,24 +894,6 @@ impl<'a> GeneralExprElaborator<'a> {
                     kind: GateRuntimeUnsupportedKind::RegexLiteral,
                 }]);
             }
-            ExprKind::Float(_) => {
-                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
-                    span: expr.span,
-                    kind: GateRuntimeUnsupportedKind::FloatLiteral,
-                }]);
-            }
-            ExprKind::Decimal(_) => {
-                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
-                    span: expr.span,
-                    kind: GateRuntimeUnsupportedKind::DecimalLiteral,
-                }]);
-            }
-            ExprKind::BigInt(_) => {
-                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
-                    span: expr.span,
-                    kind: GateRuntimeUnsupportedKind::BigIntLiteral,
-                }]);
-            }
             ExprKind::Cluster(_) => {
                 return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
                     span: expr.span,
@@ -932,9 +914,15 @@ impl<'a> GeneralExprElaborator<'a> {
                 self.runtime_reference_for_name(expr.span, &reference, &ty)?,
             ),
             ExprKind::Integer(literal) => GateRuntimeExprKind::Integer(literal),
-            ExprKind::Float(_) | ExprKind::Decimal(_) | ExprKind::BigInt(_) => {
-                unreachable!("unsupported runtime forms should be returned before type inference")
-            }
+            ExprKind::Float(literal) => GateRuntimeExprKind::Float(FloatLiteral {
+                raw: literal.raw,
+            }),
+            ExprKind::Decimal(literal) => GateRuntimeExprKind::Decimal(DecimalLiteral {
+                raw: literal.raw,
+            }),
+            ExprKind::BigInt(literal) => GateRuntimeExprKind::BigInt(BigIntLiteral {
+                raw: literal.raw,
+            }),
             ExprKind::SuffixedInteger(literal) => GateRuntimeExprKind::SuffixedInteger(literal),
             ExprKind::Text(text) => {
                 GateRuntimeExprKind::Text(self.lower_text_literal(&text, env, ambient)?)

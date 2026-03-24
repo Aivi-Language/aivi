@@ -270,6 +270,15 @@ fn runtime_to_json(value: &RuntimeValue) -> Result<JsonValue, Box<str>> {
         RuntimeValue::Unit => Ok(JsonValue::Null),
         RuntimeValue::Bool(value) => Ok(JsonValue::Bool(*value)),
         RuntimeValue::Int(value) => Ok(JsonValue::Number((*value).into())),
+        RuntimeValue::Float(_) => {
+            Err("runtime JSON encoding does not support Float values yet".into())
+        }
+        RuntimeValue::Decimal(_) => {
+            Err("runtime JSON encoding does not support Decimal values yet".into())
+        }
+        RuntimeValue::BigInt(_) => {
+            Err("runtime JSON encoding does not support BigInt values yet".into())
+        }
         RuntimeValue::Text(value) => Ok(JsonValue::String(value.as_ref().to_owned())),
         RuntimeValue::Tuple(values) | RuntimeValue::List(values) | RuntimeValue::Set(values) => {
             values

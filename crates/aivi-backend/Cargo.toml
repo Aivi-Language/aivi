@@ -15,6 +15,8 @@ cranelift-frontend = "0.126.2"
 cranelift-module = "0.126.2"
 cranelift-native = "0.126.2"
 cranelift-object = "0.126.2"
+num-bigint = "0.4.6"
+rust_decimal = "1.40.0"
 
 [dev-dependencies]
 aivi-query.workspace = true
