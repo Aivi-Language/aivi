@@ -1,6 +1,6 @@
 # Plan: AIVI standard library scope
 
-## Status: design draft - not yet implemented
+## Status: design draft — partially implemented (runtime, source, task layers active)
 
 ---
 
@@ -9,12 +9,18 @@
 Define a small, typed, GNOME-first standard library that matches the current
 language model in `AGENTS.md` and `AIVI_RFC.md`.
 
-The stdlib should center four ideas:
+The anchor application is a native GNOME email client. It requires GNOME Online
+Accounts, OAuth2 with PKCE, persistent local storage via SQL, and reactive inbox
+state. The stdlib must be sufficient to build this application without reaching
+outside its boundaries.
+
+The stdlib centers five ideas:
 
 - pure value-level programming by default
 - one-shot effects through `Task E A`
 - long-lived external input through `sig` plus `@source`
 - explicit domain-backed wrappers for values such as `Duration`, `Url`, and `Path`
+- local persistent state through `@source db.query` with compiler-lowered SQL
 
 The initial stdlib should be opinionated and narrow. It should provide the
 pieces needed for native desktop applications without turning the language into
@@ -29,14 +35,14 @@ These rules are normative for the first stdlib wave.
 1. Pure helpers stay pure. They must not hide runtime handles, blocking I/O, or
    mutable state.
 2. One-shot external work uses `Task E A`.
-3. Long-lived subscriptions, polling, watches, and event feeds use `@source`
-   providers.
+3. Long-lived subscriptions, polling, watches, event feeds, and reactive database
+   queries use `@source` providers.
 4. Source options are closed and typed. Unknown or duplicate options are errors.
 5. Source decoding is strict by default and uses typed error channels.
 6. Public surfaces should expose domain values rather than raw carrier types
    when invariants matter.
-7. GTK, D-Bus, network clients, file watching, and similar runtime integrations
-   remain behind controlled effect or source boundaries.
+7. GTK, D-Bus, network clients, file watching, database access, and similar
+   runtime integrations remain behind controlled effect or source boundaries.
 8. The stdlib must not re-expose runtime internals as public APIs:
    - no public mutable `Signal` API
    - no public scheduler API
@@ -44,6 +50,9 @@ These rules are normative for the first stdlib wave.
    - no general resource choreography as the default user model
 9. Prefer one canonical surface per capability. Avoid duplicated umbrella
    namespaces.
+10. Database sources follow the same lifecycle contract as HTTP sources:
+    reactive reconfiguration is transactional, stale publications are suppressed,
+    and mutation is Task-only.
 
 ---
 
@@ -263,6 +272,187 @@ It should support:
 This surface is for tracing, diagnostics, and application logs. It should stay
 small and not grow into a general observability framework.
 
+### 4.5 Database
+
+Implement local persistent storage as:
+
+- a typed reactive query surface via `@source db.query`
+- one-shot mutation `Task` entry points
+- a transaction combinator for atomic multi-step mutations
+
+The database provider targets a local embedded SQL engine (SQLite via a
+GNOME-friendly binding). It is not a general RDBMS abstraction layer. The
+surface is intentionally narrow: it covers what a local-first desktop
+application needs, not a server-side ORM.
+
+#### Query source model
+
+Reactive queries follow the same lifecycle contract as HTTP sources:
+
+- the source activates when the signal is first observed
+- reactive inputs in `with {}` trigger transactional reconfiguration
+- stale publications from superseded query generations are suppressed
+- `activeWhen` suspends the query without tearing down the schema connection
+
+Required source surface:
+
+```aivi
+@source db.query Email with {
+    where: { folder: currentFolder, isDeleted: False },
+    orderBy: [{ field: .receivedAt, dir: Desc }],
+    limit: pageSize
+}
+sig emails : Signal (Result DbError (List Email))
+
+@source db.query Thread with {
+    where: { accountId: account.id },
+    include: [.messages, .labels],
+    orderBy: [{ field: .lastMessageAt, dir: Desc }]
+}
+sig threads : Signal (Result DbError (List Thread))
+```
+
+Required option concepts:
+
+- `where`: a typed field-predicate record matched against the row type `T`
+- `orderBy`: a list of `{ field, dir }` records; `dir` is `Asc` or `Desc`
+- `limit`: a positive integer or reactive `Signal Int`
+- `offset`: a non-negative integer or reactive `Signal Int` for pagination
+- `include`: a list of relation paths to eagerly fetch via JOIN
+- `refreshOn`: a `Signal B` that forces re-execution on update
+- `activeWhen`: a `Signal Bool` gate
+
+#### SQL lowering
+
+The `db.query` provider lowers the `with {}` option record to SQL at compile
+time. This is the mechanism by which writing AIVI query options produces SQL
+without user code touching a query builder directly.
+
+The lowering rules are:
+
+- `where` record fields map to `WHERE col = ?` clauses joined by `AND`; nested
+  field access maps to joined relation columns
+- `orderBy` maps to `ORDER BY col ASC|DESC`
+- `limit` and `offset` map to `LIMIT ? OFFSET ?` with bound parameters
+- `include` paths trigger `LEFT JOIN` clauses for declared relation fields
+
+Reactive expressions in any option position become bound SQL parameters that
+are substituted at query execution time, not embedded as literals. When a
+reactive input changes, the runtime re-executes the compiled query plan with the
+new parameter values rather than regenerating SQL.
+
+The row type `T` is the source of truth for the schema. The compiler validates
+option field references against `T`'s declared fields at elaboration time. An
+unknown field in `where`, an unknown relation in `include`, or a direction value
+other than `Asc`/`Desc` is a compile-time error.
+
+#### Schema and table binding
+
+A schema record type is an ordinary AIVI `type` declaration. The database
+provider infers the SQL table name from the type name by convention (snake_case
+of the type name). An explicit table annotation is not needed for v1;
+convention-based resolution keeps the surface minimal.
+
+Relation fields are declared as list-typed or option-typed fields within the
+record and are resolved against foreign-key constraints embedded in the schema
+migration file. The schema migration file is managed separately and is not
+generated by the compiler. The compiler only validates field names and types
+against the declared AIVI record; it does not generate or apply migrations.
+
+#### Mutation task surface
+
+Mutations are one-shot tasks. They do not produce reactive updates directly.
+Reactive query sources that cover the mutated rows will pick up the change on
+the next scheduled query execution or via the `refreshOn` mechanism.
+
+Required mutation surface:
+
+```aivi
+db.insert : T -> Task DbError T
+db.update : T -> Task DbError T
+db.delete : T -> Task DbError Unit
+db.upsert : T -> Task DbError T
+```
+
+The insert and upsert variants return the persisted row including any
+database-generated fields (auto-incremented IDs, server-side timestamps).
+
+#### Transaction combinator
+
+Atomic multi-step mutations use a `Task`-level transaction combinator:
+
+```aivi
+db.transaction : Task DbError A -> Task DbError A
+```
+
+All mutation tasks inside a `db.transaction` body either commit atomically or
+roll back as a unit. Transactions do not nest in v1; a `db.transaction` inside
+another `db.transaction` raises a `DbError.NestedTransaction` at runtime.
+
+Transactions are not woven through reactive query sources. A committed
+transaction does not directly push a publication into the scheduler. Reactive
+queries that cover affected rows will pick up the change on their next
+configured wakeup (next `refreshOn` trigger or next timer tick).
+
+### 4.6 Auth: OAuth2 with PKCE
+
+Implement an auth provider surface under `aivi.auth` that covers the OAuth2
+PKCE flow required for non-GOA providers and for providers where GOA does not
+supply the needed credential type.
+
+PKCE is required for the email client use case: it is the standard mechanism
+for obtaining OAuth2 tokens from providers (such as Gmail and Outlook) in
+contexts where a client secret cannot be embedded securely.
+
+This section covers the PKCE flow specifically. GOA-backed credentials are
+handled separately in §5.1.
+
+Required surface:
+
+```aivi
+type PkceConfig = {
+    clientId     : Text,
+    authEndpoint : Url,
+    tokenEndpoint: Url,
+    scopes       : List Text,
+    redirectPort : Int
+}
+
+type PkceToken = {
+    accessToken  : Text,
+    refreshToken : Option Text,
+    expiresAt    : Option Int
+}
+
+type PkceError
+    = UserCancelled
+    | NetworkError Text
+    | InvalidResponse Text
+    | Timeout
+
+auth.pkce.authorize : PkceConfig -> Task PkceError PkceToken
+auth.pkce.refresh   : PkceConfig -> Text -> Task PkceError PkceToken
+```
+
+Required runtime behavior:
+
+- `auth.pkce.authorize` opens a temporary localhost HTTP listener on
+  `redirectPort`, launches the system browser to the authorization URL with a
+  PKCE challenge, waits for the redirect callback, exchanges the code for
+  tokens, and closes the listener
+- the listener must shut down whether the flow succeeds, fails, or times out;
+  no dangling ports
+- the code verifier is generated internally and never exposed to user code
+- `auth.pkce.refresh` exchanges a refresh token for a new access token without
+  browser interaction
+- token storage is the user's responsibility; the runtime does not persist
+  tokens automatically
+
+This surface is intentionally minimal. It provides the PKCE flow as a `Task`
+and leaves token storage, expiry tracking, and proactive refresh scheduling to
+the application layer. A higher-level credential manager can be built on top in
+a later phase if demand emerges.
+
 ---
 
 ## 5. GNOME-first integration surfaces
@@ -308,6 +498,7 @@ sig accounts : Signal (Result GoaError (List GoaAccount))
 
 ensureCredentials : GoaAccountId -> Task GoaError Unit
 accessToken       : GoaAccountId -> Task GoaError AccessToken
+oauthToken        : GoaAccountId -> Task GoaError OAuthToken
 ```
 
 Implementation guidance:
@@ -316,6 +507,31 @@ Implementation guidance:
 - keep D-Bus details out of the language-facing types
 - expose only typed account and credential concepts
 - publish account changes through a source, not polling hidden inside helpers
+- `oauthToken` should return a typed record containing the access token, token
+  type, and expiry hint, not a raw string
+- when GOA signals that a credential needs attention, surface that through the
+  `attentionNeeded` field on the account rather than raising an error at the
+  call site; errors from `ensureCredentials` indicate actual failure, not
+  user-interaction requirements
+
+#### Credential handoff for the email client
+
+The email client needs to route GOA credentials into HTTP requests. The
+recommended handoff pattern:
+
+```aivi
+@source goa.accounts with { capability: Mail }
+sig mailAccounts : Signal (Result GoaError (List GoaAccount))
+
+sig accessTokenForAccount =
+    selectedAccount
+     |> .id
+     |> ensureCredentials
+```
+
+`ensureCredentials` returns `Task GoaError Unit`; the result is used to gate
+HTTP sources via `activeWhen` or `refreshOn` rather than being threaded through
+a runtime handle.
 
 ---
 
@@ -324,16 +540,18 @@ Implementation guidance:
 The first wave should stay focused. The following areas are out of scope unless
 later work proves they are necessary:
 
-- database abstraction layers
-- IMAP/SMTP or other mail protocol clients
-- generic secret-storage APIs
+- IMAP and SMTP protocol clients (the email client uses a server-side relay or
+  an existing GNOME service rather than embedding raw mail protocol stacks)
+- generic secret-storage APIs (use GOA or the PKCE task surface instead)
 - raw sockets and generic streaming APIs
 - general HTTP server frameworks
-- PKCE and localhost loopback auth helpers
 - public signal or scheduler manipulation APIs
 - UI tree or form helper DSLs
 - broad math, graph, geometry, matrix, vector, or linear-algebra libraries
 - large generic crypto toolkits
+- generic RDBMS abstraction layers or ORM query planners beyond the `db.query`
+  surface defined in §4.5
+- schema migration tooling (migrations are managed outside the compiler)
 
 These capabilities can be reconsidered later, but they should not shape the v1
 stdlib architecture.
@@ -351,8 +569,14 @@ These are reasonable follow-on candidates after the first wave is stable:
 - limited process and mailbox provider surfaces
 - carefully scoped system access
 - GNOME-native secret-store integration if real needs appear
-- PKCE or other localhost loopback auth support if a concrete integration needs it
 - calendar and time-zone support once the domain and source foundations are solid
+- SQL predicate pushdown from pipe algebra: once the `db.query` source is
+  stable, the compiler can analyze pipe chains that follow a `db.query` source
+  and push eligible `?|>` and `|>` stages down into the SQL plan rather than
+  executing them in-process; this is an optimization, not a correctness
+  requirement
+- higher-level credential manager built on the PKCE task surface
+- IMAP or SMTP integration if the email client architecture requires it
 
 Later work should reuse the same rules:
 
@@ -389,20 +613,30 @@ Later work should reuse the same rules:
 - minimal `aivi.log`
 - typed decode support and source option types
 
-### Phase 3: GNOME-native account support
+### Phase 3: GNOME-native account support and auth
 
 - `aivi.gnome.onlineAccounts`
 - internal D-Bus plumbing needed for that surface
+- `aivi.auth` PKCE task surface (required alongside GOA for providers that
+  need a manual OAuth2 flow)
 
-### Phase 4: later expansions
+### Phase 4: database
 
-- JSON
+- `aivi.db` with `db.query` source family and mutation task surface
+- SQL lowering of `where`, `orderBy`, `limit`, `offset`, and `include` options
+- `db.transaction` combinator
+- schema validation against declared AIVI record types
+
+### Phase 5: later expansions
+
+- JSON escape hatch
 - regex
 - testing
 - i18n
 - process and mailbox providers
+- SQL predicate and projection pushdown from pipe algebra chains
 - limited system and secret-store integrations
-- optional PKCE or localhost loopback auth helper
+- optional IMAP/SMTP integration if concrete email client architecture requires it
 
 ---
 
@@ -419,22 +653,33 @@ This plan is complete only when the implementation follows these constraints:
    machinery.
 6. GOA support matches the GNOME-first philosophy and remains typed, narrow, and
    deterministic.
-7. Tests cover:
+7. The database source follows the same lifecycle contract as the HTTP source:
+   reactive reconfiguration is transactional, stale publications are suppressed,
+   and the `activeWhen` gate works correctly.
+8. The PKCE auth surface opens and closes its localhost listener cleanly under
+   success, failure, and timeout conditions.
+9. Tests cover:
    - domain invariants
    - strict decode behavior
    - source reconfiguration and stale-result suppression
    - GOA account change delivery
+   - `db.query` reconfiguration when reactive `where` inputs change
+   - `db.transaction` rollback on task failure
+   - PKCE listener teardown under all exit conditions
 
 ---
 
 ## 10. Final recommendation
 
-Implement the smallest stdlib that makes the current language real:
+Implement the smallest stdlib that makes the GNOME email client real:
 
 - a strong pure foundation
 - explicit domains
 - source-first external input
 - task-based one-shot effects
-- GNOME Online Accounts
+- GNOME Online Accounts with typed credential handoff
+- OAuth2 PKCE for providers outside GOA
+- local persistent storage via reactive SQL-lowered `db.query` sources and
+  mutation tasks
 
 Everything else should wait until it is justified by the current architecture.
