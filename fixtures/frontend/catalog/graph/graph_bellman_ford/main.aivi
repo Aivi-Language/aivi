@@ -1,0 +1,202 @@
+use aivi.list (
+    any
+    tail
+)
+
+use aivi.option (getOrElse)
+
+type Node =
+  | Source
+  | Mid
+  | Detour
+  | Goal
+  | Stranded
+
+type WeightedEdge = {
+    from: Node,
+    to: Node,
+    weight: Int
+}
+
+type WeightedGraph = {
+    nodes: List Node,
+    edges: List WeightedEdge,
+    source: Node
+}
+
+type Distance =
+  | Unreachable
+  | Cost Int
+
+type Distances = {
+    source: Distance,
+    mid: Distance,
+    detour: Distance,
+    goal: Distance,
+    stranded: Distance
+}
+
+type BellmanFordCatalog = {
+    stableGoal: Text,
+    stableDetour: Text,
+    stableStranded: Text,
+    negativeCycleDetected: Bool,
+    negativeWitness: Text
+}
+
+val emptyDistances: Distances = {
+    source: Unreachable,
+    mid: Unreachable,
+    detour: Unreachable,
+    goal: Unreachable,
+    stranded: Unreachable
+}
+
+val negativeWeightEdge: WeightedEdge = {
+    from: Mid,
+    to: Detour,
+    weight: 0 - 2
+}
+
+val negativeCycleWitness: Text = "mid -> detour -> mid"
+
+fun distanceText:Text #distance:Distance =>
+    distance
+     ||> Unreachable => "unreachable"
+     ||> Cost value  => "{value}"
+
+fun distanceOf:Distance #distances:Distances #node:Node =>
+    node
+     ||> Source   => distances.source
+     ||> Mid      => distances.mid
+     ||> Detour   => distances.detour
+     ||> Goal     => distances.goal
+     ||> Stranded => distances.stranded
+
+fun setDistance:Distances #distances:Distances #node:Node #value:Distance =>
+    node
+     ||> Source   => { source: value, mid: distances.mid, detour: distances.detour, goal: distances.goal, stranded: distances.stranded }
+     ||> Mid      => { source: distances.source, mid: value, detour: distances.detour, goal: distances.goal, stranded: distances.stranded }
+     ||> Detour   => { source: distances.source, mid: distances.mid, detour: value, goal: distances.goal, stranded: distances.stranded }
+     ||> Goal     => { source: distances.source, mid: distances.mid, detour: distances.detour, goal: value, stranded: distances.stranded }
+     ||> Stranded => { source: distances.source, mid: distances.mid, detour: distances.detour, goal: distances.goal, stranded: value }
+
+fun betterDistance:Bool #left:Distance #right:Distance =>
+    (left, right)
+     ||> (Cost _, Unreachable) => True
+     ||> (Cost l, Cost r)      => l < r
+     ||> (Unreachable, _)      => False
+
+fun plusDistance:Distance #distance:Distance #weight:Int =>
+    distance
+     ||> Cost value  => Cost (value + weight)
+     ||> Unreachable => Unreachable
+
+fun candidateDistance:Distance #distances:Distances #edge:WeightedEdge =>
+    plusDistance (distanceOf distances edge.from) edge.weight
+
+fun relaxTarget:Distances #distances:Distances #target:Node #candidate:Distance =>
+    betterDistance candidate (distanceOf distances target)
+     T|> setDistance distances target candidate
+     F|> distances
+
+fun relaxEdge:Distances #distances:Distances #edge:WeightedEdge =>
+    relaxTarget distances edge.to (candidateDistance distances edge)
+
+fun runPass:Distances #graph:WeightedGraph #distances:Distances #tick:Node =>
+    graph.edges
+     |> reduce relaxEdge distances
+
+fun passSchedule:(List Node) #graph:WeightedGraph =>
+    graph.nodes
+     |> tail
+     |> getOrElse []
+
+fun edgeCanRelax:Bool #distances:Distances #edge:WeightedEdge =>
+    betterDistance (candidateDistance distances edge) (distanceOf distances edge.to)
+
+fun cycleWitness:Text #detected:Bool =>
+    detected
+     T|> negativeCycleWitness
+     F|> "none"
+
+fun initialDistances:Distances #graph:WeightedGraph =>
+    setDistance emptyDistances graph.source (Cost 0)
+
+val stableGraph: WeightedGraph = {
+    nodes: [
+        Source,
+        Mid,
+        Detour,
+        Goal,
+        Stranded
+    ],
+    source: Source,
+    edges: [
+        {
+            from: Source,
+            to: Mid,
+            weight: 4
+        },
+        {
+            from: Source,
+            to: Detour,
+            weight: 5
+        },
+        negativeWeightEdge,
+        {
+            from: Detour,
+            to: Goal,
+            weight: 3
+        }
+    ]
+}
+
+val negativeCycleGraph: WeightedGraph = {
+    nodes: [Source, Mid, Detour, Goal],
+    source: Source,
+    edges: [
+        {
+            from: Source,
+            to: Mid,
+            weight: 1
+        },
+        {
+            from: Mid,
+            to: Detour,
+            weight: 0 - 2
+        },
+        {
+            from: Detour,
+            to: Mid,
+            weight: 0 - 2
+        },
+        {
+            from: Detour,
+            to: Goal,
+            weight: 1
+        }
+    ]
+}
+
+val stableDistances: Distances =
+    passSchedule stableGraph
+     |> reduce (runPass stableGraph) (initialDistances stableGraph)
+
+val negativeCycleDistances: Distances =
+    passSchedule negativeCycleGraph
+     |> reduce (runPass negativeCycleGraph) (initialDistances negativeCycleGraph)
+
+val negativeCycleDetected: Bool =
+    negativeCycleGraph.edges
+     |> any (edgeCanRelax negativeCycleDistances)
+
+val bellmanFordCatalog: BellmanFordCatalog = {
+    stableGoal: distanceText (distanceOf stableDistances Goal),
+    stableDetour: distanceText (distanceOf stableDistances Detour),
+    stableStranded: distanceText (distanceOf stableDistances Stranded),
+    negativeCycleDetected,
+    negativeWitness: cycleWitness negativeCycleDetected
+}
+
+export bellmanFordCatalog

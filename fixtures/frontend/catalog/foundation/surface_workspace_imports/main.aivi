@@ -1,0 +1,31 @@
+use shared.catalog (
+    greetUser
+    joinLabels
+    defaultRole
+)
+
+type WorkspaceSummary = {
+    primaryGreeting: Text,
+    backupGreeting: Text,
+    ownerRole: Text,
+    banner: Text
+}
+
+fun readyLabel:Text #ready:Bool =>
+    ready
+     T|> "ready"
+     F|> "waiting"
+
+val primaryGreeting: Text = greetUser "Ada"
+val backupGreeting: Text = greetUser "Grace"
+val ownerRole: Text = defaultRole
+val workspaceBanner: Text = joinLabels primaryGreeting (readyLabel True)
+
+val workspaceSummary: WorkspaceSummary = {
+    primaryGreeting,
+    backupGreeting,
+    ownerRole,
+    banner: workspaceBanner
+}
+
+export workspaceSummary

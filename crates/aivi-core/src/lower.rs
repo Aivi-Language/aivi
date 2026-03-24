@@ -8,9 +8,10 @@ use aivi_hir::{
     GateRuntimePipeExpr, GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeReference,
     GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch, GateStageOutcome,
     GeneralExprInstanceMemberElaboration, GeneralExprOutcome, GeneralExprParameter,
-    Item as HirItem, ItemId as HirItemId, PatternId as HirPatternId, RecurrenceNodeOutcome,
-    ResolvedClassMemberDispatch, SourceDecodeProgram, SourceDecodeProgramOutcome,
-    SourceLifecycleNodeOutcome, TruthyFalsyStageOutcome, TypeBinding, TypeConstructorHead,
+    ImportBindingMetadata, ImportId, ImportValueType, Item as HirItem, ItemId as HirItemId,
+    PatternId as HirPatternId, RecurrenceNodeOutcome, ResolvedClassMemberDispatch,
+    SourceDecodeProgram, SourceDecodeProgramOutcome, SourceLifecycleNodeOutcome,
+    TruthyFalsyStageOutcome, TypeBinding, TypeConstructorHead,
     elaborate_fanouts, elaborate_gates, elaborate_general_expressions, elaborate_recurrences,
     elaborate_source_lifecycles, elaborate_truthy_falsy, generate_source_decode_programs,
 };
@@ -72,6 +73,9 @@ impl std::error::Error for LoweringErrors {}
 pub enum LoweringError {
     UnknownOwner {
         owner: HirItemId,
+    },
+    UnknownImport {
+        import: ImportId,
     },
     BlockedGateStage {
         owner: HirItemId,
@@ -152,6 +156,12 @@ pub enum LoweringError {
         subject: Box<str>,
         reason: &'static str,
     },
+    UnsupportedImportBinding {
+        import: ImportId,
+        span: SourceSpan,
+        name: Box<str>,
+        reason: &'static str,
+    },
     Validation(ValidationError),
 }
 
@@ -160,6 +170,9 @@ impl std::fmt::Display for LoweringError {
         match self {
             Self::UnknownOwner { owner } => {
                 write!(f, "typed-core lowering cannot find owner item {owner}")
+            }
+            Self::UnknownImport { import } => {
+                write!(f, "typed-core lowering cannot find import binding {import}")
             }
             Self::BlockedGateStage {
                 owner,
@@ -259,6 +272,12 @@ impl std::fmt::Display for LoweringError {
                 f,
                 "typed-core lowering cannot lower overloaded class member `{class_name}.{member_name}` for `{subject}`: {reason}"
             ),
+            Self::UnsupportedImportBinding {
+                import, name, reason, ..
+            } => write!(
+                f,
+                "typed-core lowering cannot synthesize imported binding `{name}` ({import}): {reason}"
+            ),
             Self::Validation(error) => write!(f, "typed-core validation failed: {error}"),
         }
     }
@@ -327,10 +346,13 @@ struct ModuleLowerer<'a> {
     included_items: Option<HashSet<HirItemId>>,
     module: Module,
     item_map: HashMap<HirItemId, ItemId>,
+    import_item_map: HashMap<ImportId, ItemId>,
     instance_member_item_map: HashMap<InstanceMemberKey, ItemId>,
     pipe_builders: BTreeMap<PipeKey, PipeBuilder>,
     source_by_owner: HashMap<ItemId, SourceId>,
     decode_by_owner: HashMap<ItemId, DecodeProgramId>,
+    next_synthetic_item_origin_raw: u32,
+    next_synthetic_binding_raw: u32,
     errors: Vec<LoweringError>,
 }
 
@@ -347,15 +369,22 @@ struct RuntimeFragmentLowerer<'a> {
 
 impl<'a> ModuleLowerer<'a> {
     fn new(hir: &'a aivi_hir::Module) -> Self {
+        let next_synthetic_item_origin_raw =
+            u32::try_from(hir.items().iter().count()).expect("HIR item count should fit in u32");
+        let next_synthetic_binding_raw = u32::try_from(hir.bindings().iter().count())
+            .expect("HIR binding count should fit in u32");
         Self {
             hir,
             included_items: None,
             module: Module::new(),
             item_map: HashMap::new(),
+            import_item_map: HashMap::new(),
             instance_member_item_map: HashMap::new(),
             pipe_builders: BTreeMap::new(),
             source_by_owner: HashMap::new(),
             decode_by_owner: HashMap::new(),
+            next_synthetic_item_origin_raw,
+            next_synthetic_binding_raw,
             errors: Vec::new(),
         }
     }
@@ -373,15 +402,22 @@ impl<'a> ModuleLowerer<'a> {
                 _ => Some(item_id),
             })
             .collect::<HashSet<_>>();
+        let next_synthetic_item_origin_raw =
+            u32::try_from(hir.items().iter().count()).expect("HIR item count should fit in u32");
+        let next_synthetic_binding_raw = u32::try_from(hir.bindings().iter().count())
+            .expect("HIR binding count should fit in u32");
         Self {
             hir,
             included_items: Some(included_items),
             module: Module::new(),
             item_map: HashMap::new(),
+            import_item_map: HashMap::new(),
             instance_member_item_map: HashMap::new(),
             pipe_builders: BTreeMap::new(),
             source_by_owner: HashMap::new(),
             decode_by_owner: HashMap::new(),
+            next_synthetic_item_origin_raw,
+            next_synthetic_binding_raw,
             errors: Vec::new(),
         }
     }
@@ -1697,6 +1733,121 @@ impl<'a> ModuleLowerer<'a> {
             })
     }
 
+    fn next_synthetic_item_origin(&mut self) -> Result<HirItemId, LoweringError> {
+        let raw = self.next_synthetic_item_origin_raw;
+        self.next_synthetic_item_origin_raw = self
+            .next_synthetic_item_origin_raw
+            .checked_add(1)
+            .ok_or(LoweringError::ArenaOverflow {
+                arena: "synthetic import item origins",
+                attempted_len: usize::MAX,
+            })?;
+        Ok(HirItemId::from_raw(raw))
+    }
+
+    fn next_synthetic_binding(&mut self) -> Result<aivi_hir::BindingId, LoweringError> {
+        let raw = self.next_synthetic_binding_raw;
+        self.next_synthetic_binding_raw =
+            self.next_synthetic_binding_raw
+                .checked_add(1)
+                .ok_or(LoweringError::ArenaOverflow {
+                    arena: "synthetic import bindings",
+                    attempted_len: usize::MAX,
+                })?;
+        Ok(aivi_hir::BindingId::from_raw(raw))
+    }
+
+    fn lower_import_type(&self, ty: &ImportValueType) -> Type {
+        Type::lower_import(ty)
+    }
+
+    fn import_item_shape(
+        &mut self,
+        import: ImportId,
+        binding: &aivi_hir::ImportBinding,
+    ) -> Result<(ItemKind, Vec<ItemParameter>), LoweringError> {
+        let unsupported = |reason| LoweringError::UnsupportedImportBinding {
+            import,
+            span: binding.span,
+            name: binding.local_name.text().into(),
+            reason,
+        };
+        let ty = match &binding.metadata {
+            ImportBindingMetadata::Value { ty }
+            | ImportBindingMetadata::IntrinsicValue { ty, .. } => ty,
+            ImportBindingMetadata::AmbientValue { .. } => {
+                return Err(unsupported("ambient imports do not carry lowered value types"));
+            }
+            ImportBindingMetadata::OpaqueValue => {
+                return Err(unsupported("opaque imports do not carry executable value types"));
+            }
+            ImportBindingMetadata::Unknown => {
+                return Err(unsupported("unresolved imports cannot be lowered into typed-core"));
+            }
+            ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::BuiltinType(_)
+            | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::AmbientType
+            | ImportBindingMetadata::Bundle(_) => {
+                return Err(unsupported(
+                    "non-value imports cannot be lowered as typed-core item references",
+                ));
+            }
+        };
+
+        let mut parameters = Vec::new();
+        let mut current = ty;
+        while let ImportValueType::Arrow { parameter, result } = current {
+            let parameter_index = parameters.len();
+            parameters.push(ItemParameter {
+                binding: self.next_synthetic_binding()?,
+                span: binding.span,
+                name: format!("arg{parameter_index}").into_boxed_str(),
+                ty: self.lower_import_type(parameter),
+            });
+            current = result;
+        }
+
+        let kind = match current {
+            ImportValueType::Signal(_) if parameters.is_empty() => ItemKind::Signal(SignalInfo::default()),
+            _ if parameters.is_empty() => ItemKind::Value,
+            _ => ItemKind::Function,
+        };
+        Ok((kind, parameters))
+    }
+
+    fn seed_import_item(&mut self, import: ImportId) -> Result<ItemId, LoweringError> {
+        if let Some(item) = self.import_item_map.get(&import).copied() {
+            return Ok(item);
+        }
+        let binding = self
+            .hir
+            .imports()
+            .get(import)
+            .ok_or(LoweringError::UnknownImport { import })?
+            .clone();
+        let (kind, parameters) = self.import_item_shape(import, &binding)?;
+        let origin = self.next_synthetic_item_origin()?;
+        let item_id = self
+            .module
+            .items_mut()
+            .alloc(Item {
+                origin,
+                span: binding.span,
+                name: binding.local_name.text().into(),
+                kind,
+                parameters,
+                body: None,
+                pipes: Vec::new(),
+            })
+            .map_err(|overflow| LoweringError::ArenaOverflow {
+                arena: "items",
+                attempted_len: overflow.attempted_len(),
+            })?;
+        self.import_item_map.insert(import, item_id);
+        Ok(item_id)
+    }
+
     fn seed_instance_member_item(
         &mut self,
         instance: HirItemId,
@@ -1834,6 +1985,32 @@ impl<'a> ModuleLowerer<'a> {
                             )?);
                         }
                         GateRuntimeExprKind::Reference(reference) => {
+                            let reference = match reference {
+                                GateRuntimeReference::Local(binding) => Reference::Local(*binding),
+                                GateRuntimeReference::Item(item) => self
+                                    .item_map
+                                    .get(item)
+                                    .copied()
+                                    .map(Reference::Item)
+                                    .unwrap_or(Reference::HirItem(*item)),
+                                GateRuntimeReference::Import(import) => {
+                                    Reference::Item(self.seed_import_item(*import)?)
+                                }
+                                GateRuntimeReference::SumConstructor(handle) => {
+                                    Reference::SumConstructor(handle.clone())
+                                }
+                                GateRuntimeReference::DomainMember(handle) => {
+                                    Reference::DomainMember(handle.clone())
+                                }
+                                GateRuntimeReference::ClassMember(dispatch) => self
+                                    .lower_class_member_reference(
+                                        owner, expr.span, dispatch, &expr.ty,
+                                    )?,
+                                GateRuntimeReference::Builtin(term) => Reference::Builtin(*term),
+                                GateRuntimeReference::IntrinsicValue(value) => {
+                                    Reference::IntrinsicValue(*value)
+                                }
+                            };
                             values.push(
                                 self.alloc_expr(
                                     owner,
@@ -1841,33 +2018,7 @@ impl<'a> ModuleLowerer<'a> {
                                     Expr {
                                         span: expr.span,
                                         ty,
-                                        kind: ExprKind::Reference(match reference {
-                                            GateRuntimeReference::Local(binding) => {
-                                                Reference::Local(*binding)
-                                            }
-                                            GateRuntimeReference::Item(item) => self
-                                                .item_map
-                                                .get(item)
-                                                .copied()
-                                                .map(Reference::Item)
-                                                .unwrap_or(Reference::HirItem(*item)),
-                                            GateRuntimeReference::SumConstructor(handle) => {
-                                                Reference::SumConstructor(handle.clone())
-                                            }
-                                            GateRuntimeReference::DomainMember(handle) => {
-                                                Reference::DomainMember(handle.clone())
-                                            }
-                                            GateRuntimeReference::ClassMember(dispatch) => self
-                                                .lower_class_member_reference(
-                                                    owner, expr.span, dispatch, &expr.ty,
-                                                )?,
-                                            GateRuntimeReference::Builtin(term) => {
-                                                Reference::Builtin(*term)
-                                            }
-                                            GateRuntimeReference::IntrinsicValue(value) => {
-                                                Reference::IntrinsicValue(*value)
-                                            }
-                                        }),
+                                        kind: ExprKind::Reference(reference),
                                     },
                                 )?,
                             );
@@ -2925,6 +3076,7 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Builtin(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::IntrinsicValue(_))
+            | GateRuntimeExprKind::Reference(GateRuntimeReference::Import(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(_)) => {}
             GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item)) => {
@@ -3387,32 +3539,35 @@ sig cursor : Signal Cursor =
     }
 
     #[test]
-    fn rejects_blocked_general_expr_handoffs_instead_of_guessing() {
+    fn lowers_workspace_imports_into_declaration_stubs() {
         let lowered = lower_fixture("milestone-2/valid/use-member-imports/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "blocked general-expression fixture should lower cleanly before typed-core lowering: {:?}",
+            "workspace import fixture should lower cleanly before typed-core lowering: {:?}",
             lowered.diagnostics()
         );
 
-        let errors = lower_module(lowered.module())
-            .expect_err("blocked general expression should stop lowering");
-        let blocked = errors
-            .errors()
+        let core = lower_module(lowered.module()).expect("workspace imports should lower");
+        let primary_provider = core
+            .items()
             .iter()
-            .find_map(|error| match error {
-                LoweringError::BlockedGeneralExpr { blocked, .. } => Some(blocked),
-                _ => None,
-            })
-            .expect("expected blocked general-expression error");
-        assert!(matches!(
-            blocked.blockers.as_slice(),
-            [aivi_hir::GeneralExprBlocker::UnsupportedImportReference { .. }]
-        ));
-        let rendered = errors.to_string();
+            .find(|(_, item)| item.name.as_ref() == "primaryProvider")
+            .map(|(id, _)| id)
+            .expect("expected primaryProvider value item");
+        let primary_body = core.items()[primary_provider]
+            .body
+            .expect("primaryProvider should carry a lowered body");
+        let crate::ExprKind::Reference(crate::Reference::Item(imported_item)) =
+            &core.exprs()[primary_body].kind
+        else {
+            panic!("primaryProvider should lower to an imported item reference");
+        };
+        let imported = &core.items()[*imported_item];
+        assert_eq!(imported.name.as_ref(), "http");
+        assert!(matches!(imported.kind, ItemKind::Value));
         assert!(
-            rendered.contains("imported names are not supported in typed-core general expressions"),
-            "blocked general-expression error should explain the unsupported import handoff: {rendered}"
+            imported.body.is_none(),
+            "imported declaration stubs should stay bodyless in typed-core"
         );
     }
 

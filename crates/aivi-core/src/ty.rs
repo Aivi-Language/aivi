@@ -1,7 +1,7 @@
 use std::fmt;
 
 use aivi_hir::{
-    BuiltinType, GateType as HirGateType, ItemId as HirItemId,
+    BuiltinType, GateType as HirGateType, ImportValueType, ItemId as HirItemId,
     TypeParameterId as HirTypeParameterId,
 };
 
@@ -287,6 +287,169 @@ impl Type {
         values
             .pop()
             .expect("typed-core type lowering should always produce one result")
+    }
+
+    pub fn lower_import(root: &ImportValueType) -> Self {
+        enum Task<'a> {
+            Visit(&'a ImportValueType),
+            BuildTuple(usize),
+            BuildRecord(Vec<Box<str>>),
+            BuildArrow,
+            BuildList,
+            BuildMap,
+            BuildSet,
+            BuildOption,
+            BuildResult,
+            BuildValidation,
+            BuildSignal,
+            BuildTask,
+        }
+
+        let mut tasks = vec![Task::Visit(root)];
+        let mut values = Vec::new();
+
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Visit(ty) => match ty {
+                    ImportValueType::Primitive(builtin) => values.push(Self::Primitive(*builtin)),
+                    ImportValueType::Tuple(elements) => {
+                        tasks.push(Task::BuildTuple(elements.len()));
+                        for element in elements.iter().rev() {
+                            tasks.push(Task::Visit(element));
+                        }
+                    }
+                    ImportValueType::Record(fields) => {
+                        tasks.push(Task::BuildRecord(
+                            fields.iter().map(|field| field.name.clone()).collect(),
+                        ));
+                        for field in fields.iter().rev() {
+                            tasks.push(Task::Visit(&field.ty));
+                        }
+                    }
+                    ImportValueType::Arrow { parameter, result } => {
+                        tasks.push(Task::BuildArrow);
+                        tasks.push(Task::Visit(result));
+                        tasks.push(Task::Visit(parameter));
+                    }
+                    ImportValueType::List(element) => {
+                        tasks.push(Task::BuildList);
+                        tasks.push(Task::Visit(element));
+                    }
+                    ImportValueType::Map { key, value } => {
+                        tasks.push(Task::BuildMap);
+                        tasks.push(Task::Visit(value));
+                        tasks.push(Task::Visit(key));
+                    }
+                    ImportValueType::Set(element) => {
+                        tasks.push(Task::BuildSet);
+                        tasks.push(Task::Visit(element));
+                    }
+                    ImportValueType::Option(element) => {
+                        tasks.push(Task::BuildOption);
+                        tasks.push(Task::Visit(element));
+                    }
+                    ImportValueType::Result { error, value } => {
+                        tasks.push(Task::BuildResult);
+                        tasks.push(Task::Visit(value));
+                        tasks.push(Task::Visit(error));
+                    }
+                    ImportValueType::Validation { error, value } => {
+                        tasks.push(Task::BuildValidation);
+                        tasks.push(Task::Visit(value));
+                        tasks.push(Task::Visit(error));
+                    }
+                    ImportValueType::Signal(inner) => {
+                        tasks.push(Task::BuildSignal);
+                        tasks.push(Task::Visit(inner));
+                    }
+                    ImportValueType::Task { error, value } => {
+                        tasks.push(Task::BuildTask);
+                        tasks.push(Task::Visit(value));
+                        tasks.push(Task::Visit(error));
+                    }
+                },
+                Task::BuildTuple(len) => {
+                    let tuple = Self::Tuple(drain_tail(&mut values, len));
+                    values.push(tuple);
+                }
+                Task::BuildRecord(names) => {
+                    let len = names.len();
+                    let record = Self::Record(
+                        names
+                            .into_iter()
+                            .zip(drain_tail(&mut values, len))
+                            .map(|(name, ty)| RecordField { name, ty })
+                            .collect(),
+                    );
+                    values.push(record);
+                }
+                Task::BuildArrow => {
+                    let mut drained = drain_tail(&mut values, 2);
+                    let parameter = drained.remove(0);
+                    let result = drained.remove(0);
+                    values.push(Self::Arrow {
+                        parameter: Box::new(parameter),
+                        result: Box::new(result),
+                    });
+                }
+                Task::BuildList => {
+                    let child = values.pop().expect("list child should exist");
+                    values.push(Self::List(Box::new(child)));
+                }
+                Task::BuildMap => {
+                    let mut drained = drain_tail(&mut values, 2);
+                    let key = drained.remove(0);
+                    let value = drained.remove(0);
+                    values.push(Self::Map {
+                        key: Box::new(key),
+                        value: Box::new(value),
+                    });
+                }
+                Task::BuildSet => {
+                    let child = values.pop().expect("set child should exist");
+                    values.push(Self::Set(Box::new(child)));
+                }
+                Task::BuildOption => {
+                    let child = values.pop().expect("option child should exist");
+                    values.push(Self::Option(Box::new(child)));
+                }
+                Task::BuildResult => {
+                    let mut drained = drain_tail(&mut values, 2);
+                    let error = drained.remove(0);
+                    let value = drained.remove(0);
+                    values.push(Self::Result {
+                        error: Box::new(error),
+                        value: Box::new(value),
+                    });
+                }
+                Task::BuildValidation => {
+                    let mut drained = drain_tail(&mut values, 2);
+                    let error = drained.remove(0);
+                    let value = drained.remove(0);
+                    values.push(Self::Validation {
+                        error: Box::new(error),
+                        value: Box::new(value),
+                    });
+                }
+                Task::BuildSignal => {
+                    let child = values.pop().expect("signal child should exist");
+                    values.push(Self::Signal(Box::new(child)));
+                }
+                Task::BuildTask => {
+                    let mut drained = drain_tail(&mut values, 2);
+                    let error = drained.remove(0);
+                    let value = drained.remove(0);
+                    values.push(Self::Task {
+                        error: Box::new(error),
+                        value: Box::new(value),
+                    });
+                }
+            }
+        }
+
+        values
+            .pop()
+            .expect("typed-core import type lowering should always produce one result")
     }
 
     pub fn is_bool(&self) -> bool {

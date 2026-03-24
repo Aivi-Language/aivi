@@ -1,0 +1,67 @@
+use aivi.list (length)
+
+type CatalogBatch = {
+    label: Text,
+    chunks: List BigInt
+}
+
+type BigIntSummary = {
+    totalBytes: BigInt,
+    factorialTwelve: BigInt,
+    emptyFactorial: BigInt,
+    replicationLag: BigInt,
+    factorCount: Int
+}
+
+fun addBigInt:BigInt #total:BigInt #value:BigInt =>
+    total + value
+
+fun multiplyBigInt:BigInt #product:BigInt #value:BigInt =>
+    product * value
+
+fun batchTotal:BigInt #batch:CatalogBatch =>
+    batch
+     ||> { chunks } => reduce addBigInt 0n chunks
+
+fun factorial:BigInt #factors:(List BigInt) =>
+    reduce multiplyBigInt 1n factors
+
+val archiveBatch: CatalogBatch = {
+    label: "archive-shards",
+    chunks: [
+        9999999999999999999999n,
+        8888888888888888888888n,
+        7777777777777777777777n
+    ]
+}
+
+val factorialFactors: List BigInt = [
+    1n,
+    2n,
+    3n,
+    4n,
+    5n,
+    6n,
+    7n,
+    8n,
+    9n,
+    10n,
+    11n,
+    12n
+]
+
+val noFactors: List BigInt = []
+val totalBytes: BigInt = batchTotal archiveBatch
+val factorialTwelve: BigInt = factorial factorialFactors
+val emptyFactorial: BigInt = factorial noFactors
+val replicationLag: BigInt = 100000000000000000000000n - totalBytes
+
+val bigIntSummary: BigIntSummary = {
+    totalBytes,
+    factorialTwelve,
+    emptyFactorial,
+    replicationLag,
+    factorCount: length factorialFactors
+}
+
+export bigIntSummary

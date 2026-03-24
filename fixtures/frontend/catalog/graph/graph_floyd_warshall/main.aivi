@@ -1,0 +1,209 @@
+use aivi.text (join)
+
+type Node = A | B | C | D
+
+type WeightedEdge = {
+    from: Node,
+    to: Node,
+    weight: Int
+}
+
+type WeightedGraph = {
+    nodes: List Node,
+    edges: List WeightedEdge
+}
+
+type Distance =
+  | Unreachable
+  | Cost Int
+
+type Row = {
+    a: Distance,
+    b: Distance,
+    c: Distance,
+    d: Distance
+}
+
+type Matrix = {
+    a: Row,
+    b: Row,
+    c: Row,
+    d: Row
+}
+
+type FloydWarshallSummary = {
+    viaOrder: Text,
+    aToC: Text,
+    aToD: Text,
+    dToA: Text
+}
+
+val negativeEdge: WeightedEdge = {
+    from: B,
+    to: C,
+    weight: 0 - 2
+}
+
+val unreachablePair: (Node, Node) = (
+    D,
+    A
+)
+
+fun nodeLabel:Text #node:Node =>
+    node
+     ||> A => "A"
+     ||> B => "B"
+     ||> C => "C"
+     ||> D => "D"
+
+fun appendNodeLabel:(List Text) #parts:(List Text) #node:Node =>
+    append parts [
+        nodeLabel node
+    ]
+
+fun orderLabel:Text #nodes:(List Node) =>
+    nodes
+     |> reduce appendNodeLabel []
+     |> join " -> "
+
+fun distanceText:Text #distance:Distance =>
+    distance
+     ||> Unreachable => "unreachable"
+     ||> Cost value  => "{value}"
+
+fun betterDistance:Bool #left:Distance #right:Distance =>
+    (left, right)
+     ||> (Cost _, Unreachable) => True
+     ||> (Cost l, Cost r)      => l < r
+     ||> (Unreachable, _)      => False
+
+fun minDistance:Distance #left:Distance #right:Distance =>
+    betterDistance left right
+     T|> left
+     F|> right
+
+fun composeDistance:Distance #left:Distance #right:Distance =>
+    (left, right)
+     ||> (Cost l, Cost r) => Cost (l + r)
+     ||> (_, _)           => Unreachable
+
+fun rowOf:Row #matrix:Matrix #node:Node =>
+    node
+     ||> A => matrix.a
+     ||> B => matrix.b
+     ||> C => matrix.c
+     ||> D => matrix.d
+
+fun setRow:Matrix #matrix:Matrix #node:Node #row:Row =>
+    node
+     ||> A => { a: row, b: matrix.b, c: matrix.c, d: matrix.d }
+     ||> B => { a: matrix.a, b: row, c: matrix.c, d: matrix.d }
+     ||> C => { a: matrix.a, b: matrix.b, c: row, d: matrix.d }
+     ||> D => { a: matrix.a, b: matrix.b, c: matrix.c, d: row }
+
+fun distanceInRow:Distance #row:Row #node:Node =>
+    node
+     ||> A => row.a
+     ||> B => row.b
+     ||> C => row.c
+     ||> D => row.d
+
+fun setRowDistance:Row #row:Row #node:Node #value:Distance =>
+    node
+     ||> A => { a: value, b: row.b, c: row.c, d: row.d }
+     ||> B => { a: row.a, b: value, c: row.c, d: row.d }
+     ||> C => { a: row.a, b: row.b, c: value, d: row.d }
+     ||> D => { a: row.a, b: row.b, c: row.c, d: value }
+
+fun distanceBetween:Distance #matrix:Matrix #from:Node #to:Node =>
+    distanceInRow (rowOf matrix from) to
+
+fun setDistance:Matrix #matrix:Matrix #from:Node #to:Node #value:Distance =>
+    setRow matrix from (setRowDistance (rowOf matrix from) to value)
+
+fun bestDistance:Distance #matrix:Matrix #from:Node #to:Node #via:Node =>
+    minDistance (distanceBetween matrix from to) (composeDistance (distanceBetween matrix from via) (distanceBetween matrix via to))
+
+fun updatePairVia:Matrix #via:Node #matrix:Matrix #pair:(Node, Node) =>
+    pair
+     ||> (from, to) => setDistance matrix from to (bestDistance matrix from to via)
+
+fun runVia:Matrix #matrix:Matrix #via:Node =>
+    allPairs
+     |> reduce (updatePairVia via) matrix
+
+fun addEdge:Matrix #matrix:Matrix #edge:WeightedEdge =>
+    setDistance matrix edge.from edge.to (Cost edge.weight)
+
+val baseMatrix: Matrix = {
+    a: {
+        a: Cost 0,
+        b: Unreachable,
+        c: Unreachable,
+        d: Unreachable
+    },
+    b: {
+        a: Unreachable,
+        b: Cost 0,
+        c: Unreachable,
+        d: Unreachable
+    },
+    c: {
+        a: Unreachable,
+        b: Unreachable,
+        c: Cost 0,
+        d: Unreachable
+    },
+    d: {
+        a: Unreachable,
+        b: Unreachable,
+        c: Unreachable,
+        d: Cost 0
+    }
+}
+
+val allPairs: List (Node, Node) = [
+    (A, A),
+    (A, B),
+    (A, C),
+    (A, D),
+    (B, A),
+    (B, B),
+    (B, C),
+    (B, D),
+    (C, A),
+    (C, B),
+    (C, C),
+    (C, D),
+    (D, A),
+    (D, B),
+    (D, C),
+    (D, D)
+]
+
+val floydWarshallGraph: WeightedGraph = {
+    nodes: [A, B, C, D],
+    edges: [
+        { from: A, to: B, weight: 3 },
+        negativeEdge,
+        { from: A, to: C, weight: 8 },
+        { from: C, to: D, weight: 2 }
+    ]
+}
+
+val initialMatrix: Matrix =
+    floydWarshallGraph.edges
+     |> reduce addEdge baseMatrix
+
+val finalMatrix: Matrix =
+    floydWarshallGraph.nodes
+     |> reduce runVia initialMatrix
+
+val floydWarshallSummary: FloydWarshallSummary = {
+    viaOrder: orderLabel floydWarshallGraph.nodes,
+    aToC: distanceText (distanceBetween finalMatrix A C),
+    aToD: distanceText (distanceBetween finalMatrix A D),
+    dToA: distanceText (distanceBetween finalMatrix D A)
+}
+
+export floydWarshallSummary

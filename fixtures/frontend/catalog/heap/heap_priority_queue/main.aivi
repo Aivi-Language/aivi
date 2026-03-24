@@ -1,0 +1,110 @@
+use aivi.list (
+    head
+    tail
+)
+
+type Entry = {
+    priority: Int,
+    label: Text
+}
+
+type Heap =
+  | Empty
+  | Node Entry (List Heap)
+
+type Pop = {
+    entry: Option Entry,
+    rest: Heap
+}
+
+type QueueSummary = {
+    first: Text,
+    second: Text,
+    third: Text,
+    emptyPop: Bool,
+    note: Text
+}
+
+fun earlier:Bool #left:Entry #right:Entry =>
+    left.priority < right.priority or left.priority == right.priority
+
+fun mergeNodes:Heap #leftEntry:Entry #leftChildren:(List Heap) #rightEntry:Entry #rightChildren:(List Heap) =>
+    earlier leftEntry rightEntry
+     T|> Node leftEntry (append [Node rightEntry rightChildren] leftChildren)
+     F|> Node rightEntry (append [Node leftEntry leftChildren] rightChildren)
+
+fun merge:Heap #left:Heap #right:Heap =>
+    (left, right)
+     ||> (Empty, other)                                               => other
+     ||> (other, Empty)                                               => other
+     ||> (Node leftEntry leftChildren, Node rightEntry rightChildren) => mergeNodes leftEntry leftChildren rightEntry rightChildren
+
+fun mergePairsAfterSecond:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
+    tail remaining
+     ||> Some rest => merge (merge first second) (mergePairs rest)
+     ||> None      => merge first second
+
+fun mergePairsAfterFirst:Heap #first:Heap #remaining:(List Heap) =>
+    head remaining
+     ||> None        => first
+     ||> Some second => mergePairsAfterSecond first second remaining
+
+fun mergePairsFromFirst:Heap #first:Heap #children:(List Heap) =>
+    tail children
+     ||> Some remaining => mergePairsAfterFirst first remaining
+     ||> None           => first
+
+fun mergePairs:Heap #children:(List Heap) =>
+    head children
+     ||> None       => Empty
+     ||> Some first => mergePairsFromFirst first children
+
+fun insert:Heap #heap:Heap #entry:Entry =>
+    merge heap (Node entry [])
+
+fun pop:Pop #heap:Heap =>
+    heap
+     ||> Empty               => { entry: None, rest: Empty }
+     ||> Node entry children => { entry: Some entry, rest: mergePairs children }
+
+fun labelOf:Text #value:(Option Entry) =>
+    value
+     ||> Some entry => entry.label
+     ||> None       => "empty"
+
+fun isMissing:Bool #value:(Option A) =>
+    value
+     F|> True
+     T|> False
+
+val tasks: List Entry = [
+    { priority: 3, label: "lint" },
+    { priority: 1, label: "parse" },
+    {
+        priority: 4,
+        label: "package"
+    },
+    {
+        priority: 2,
+        label: "typecheck"
+    }
+]
+
+val queue: Heap =
+    tasks
+     |> reduce insert Empty
+
+val firstPop: Pop = pop queue
+val secondPop: Pop = pop firstPop.rest
+val thirdPop: Pop = pop secondPop.rest
+val emptyPop: Pop = pop Empty
+
+val queueSummary: QueueSummary = {
+    first: labelOf firstPop.entry,
+    second: labelOf secondPop.entry,
+    third: labelOf thirdPop.entry,
+    emptyPop: isMissing emptyPop.entry,
+    note: "pairing-heap queue with empty-pop edge"
+}
+
+export queueSummary

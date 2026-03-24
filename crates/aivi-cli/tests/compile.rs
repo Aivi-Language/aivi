@@ -144,33 +144,142 @@ fn compile_accepts_workspace_type_imports() {
 }
 
 #[test]
-fn compile_reports_typed_core_lowering_errors_without_hiding_stage() {
+fn compile_accepts_workspace_value_imports() {
+    let output_dir = TempDir::new("compile-workspace-values");
+    let output_path = output_dir.path().join("workspace-values.o");
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("compile")
         .arg(fixture_path(
             "milestone-2/valid/use-member-imports/main.aivi",
         ))
+        .arg("-o")
+        .arg(&output_path)
         .output()
         .expect("compile command should run");
 
     assert!(
-        !output.status.success(),
-        "expected compile to fail before codegen, stdout was: {}",
-        String::from_utf8_lossy(&output.stdout)
+        output.status.success(),
+        "expected workspace value compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let metadata =
+        fs::metadata(&output_path).expect("workspace value compile should write an object file");
     assert!(
-        stderr.contains("typed-core lowering failed"),
-        "expected typed-core stage heading, got stderr: {stderr}"
+        metadata.len() > 0,
+        "workspace value object file should not be empty"
     );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stderr.contains("imported names are not supported in typed-core general expressions"),
-        "expected typed-core blocker detail, got stderr: {stderr}"
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
     );
+}
+
+#[test]
+fn compile_accepts_catalog_foundation_example() {
+    let output_dir = TempDir::new("compile-catalog-foundation");
+    let output_path = output_dir.path().join("catalog-foundation.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(fixture_path(
+            "catalog/foundation/surface_values_patterns/main.aivi",
+        ))
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
     assert!(
-        stderr.contains("compile pipeline stopped at typed-core lowering"),
-        "expected explicit stop boundary, got stderr: {stderr}"
+        output.status.success(),
+        "expected catalog foundation compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    let metadata =
+        fs::metadata(&output_path).expect("catalog foundation compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "catalog foundation object file should not be empty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+}
+
+#[test]
+fn compile_accepts_catalog_multifile_example() {
+    let output_dir = TempDir::new("compile-catalog-workspace");
+    let output_path = output_dir.path().join("catalog-workspace.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(fixture_path(
+            "catalog/foundation/surface_workspace_imports/main.aivi",
+        ))
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
+    assert!(
+        output.status.success(),
+        "expected catalog multifile compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata =
+        fs::metadata(&output_path).expect("catalog multifile compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "catalog multifile object file should not be empty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+}
+
+#[test]
+fn compile_accepts_additional_compile_safe_catalog_examples() {
+    for relative in [
+        "catalog/math/math_fft/main.aivi",
+        "catalog/math/math_matrix_lu/main.aivi",
+        "catalog/math/math_mod_arith_ntt/main.aivi",
+        "catalog/search/backtracking_nqueens_bitset/main.aivi",
+        "catalog/search/backtracking_sudoku/main.aivi",
+        "catalog/tree/tree_segment_tree_lazy/main.aivi",
+    ] {
+        let output_dir = TempDir::new("compile-catalog-additional");
+        let output_path = output_dir.path().join("catalog-example.o");
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("compile")
+            .arg(fixture_path(relative))
+            .arg("-o")
+            .arg(&output_path)
+            .output()
+            .expect("compile command should run");
+
+        assert!(
+            output.status.success(),
+            "expected {relative} to compile successfully, stderr was: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let metadata =
+            fs::metadata(&output_path).expect("catalog compile should write an object file");
+        assert!(
+            metadata.len() > 0,
+            "catalog object file should not be empty for {relative}"
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("compile pipeline passed"),
+            "expected compile summary for {relative}, got stdout: {stdout}"
+        );
+    }
 }
 
 #[test]

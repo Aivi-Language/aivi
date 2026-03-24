@@ -1,0 +1,247 @@
+use aivi.list (
+    any
+    head
+    length
+    tail
+)
+
+use aivi.option (getOrElse)
+
+use aivi.text (join)
+
+type Phase =
+  | Fetch
+  | Parse
+  | Analyze
+  | Package
+  | Publish
+
+type Dependency = {
+    from: Phase,
+    to: Phase
+}
+
+type DependencyGraph = {
+    nodes: List Phase,
+    edges: List Dependency
+}
+
+type Incoming = {
+    fetch: Int,
+    parse: Int,
+    analyze: Int,
+    package: Int,
+    publish: Int
+}
+
+type Emitted = {
+    fetch: Bool,
+    parse: Bool,
+    analyze: Bool,
+    package: Bool,
+    publish: Bool
+}
+
+type KahnState = {
+    incoming: Incoming,
+    queued: List Phase,
+    emitted: Emitted,
+    order: List Phase
+}
+
+type ToposortSummary = {
+    order: Text,
+    emittedCount: Int,
+    hasCycle: Bool
+}
+
+type ToposortCatalog = {
+    dag: ToposortSummary,
+    cycle: ToposortSummary
+}
+
+val zeroIncoming: Incoming = {
+    fetch: 0,
+    parse: 0,
+    analyze: 0,
+    package: 0,
+    publish: 0
+}
+
+val initialEmitted: Emitted = {
+    fetch: False,
+    parse: False,
+    analyze: False,
+    package: False,
+    publish: False
+}
+
+fun phaseLabel:Text #phase:Phase =>
+    phase
+     ||> Fetch   => "fetch"
+     ||> Parse   => "parse"
+     ||> Analyze => "analyze"
+     ||> Package => "package"
+     ||> Publish => "publish"
+
+fun appendPhaseLabel:(List Text) #parts:(List Text) #phase:Phase =>
+    append parts [
+        phaseLabel phase
+    ]
+
+fun orderLabel:Text #order:(List Phase) =>
+    order
+     |> reduce appendPhaseLabel []
+     |> join " -> "
+
+fun incomingOf:Int #incoming:Incoming #phase:Phase =>
+    phase
+     ||> Fetch   => incoming.fetch
+     ||> Parse   => incoming.parse
+     ||> Analyze => incoming.analyze
+     ||> Package => incoming.package
+     ||> Publish => incoming.publish
+
+fun setIncoming:Incoming #incoming:Incoming #phase:Phase #value:Int =>
+    phase
+     ||> Fetch   => { fetch: value, parse: incoming.parse, analyze: incoming.analyze, package: incoming.package, publish: incoming.publish }
+     ||> Parse   => { fetch: incoming.fetch, parse: value, analyze: incoming.analyze, package: incoming.package, publish: incoming.publish }
+     ||> Analyze => { fetch: incoming.fetch, parse: incoming.parse, analyze: value, package: incoming.package, publish: incoming.publish }
+     ||> Package => { fetch: incoming.fetch, parse: incoming.parse, analyze: incoming.analyze, package: value, publish: incoming.publish }
+     ||> Publish => { fetch: incoming.fetch, parse: incoming.parse, analyze: incoming.analyze, package: incoming.package, publish: value }
+
+fun incrementIncoming:Incoming #incoming:Incoming #phase:Phase =>
+    setIncoming incoming phase ((incomingOf incoming phase) + 1)
+
+fun decrementIncoming:Incoming #incoming:Incoming #phase:Phase =>
+    setIncoming incoming phase ((incomingOf incoming phase) - 1)
+
+fun emittedOf:Bool #emitted:Emitted #phase:Phase =>
+    phase
+     ||> Fetch   => emitted.fetch
+     ||> Parse   => emitted.parse
+     ||> Analyze => emitted.analyze
+     ||> Package => emitted.package
+     ||> Publish => emitted.publish
+
+fun setEmitted:Emitted #emitted:Emitted #phase:Phase #value:Bool =>
+    phase
+     ||> Fetch   => { fetch: value, parse: emitted.parse, analyze: emitted.analyze, package: emitted.package, publish: emitted.publish }
+     ||> Parse   => { fetch: emitted.fetch, parse: value, analyze: emitted.analyze, package: emitted.package, publish: emitted.publish }
+     ||> Analyze => { fetch: emitted.fetch, parse: emitted.parse, analyze: value, package: emitted.package, publish: emitted.publish }
+     ||> Package => { fetch: emitted.fetch, parse: emitted.parse, analyze: emitted.analyze, package: value, publish: emitted.publish }
+     ||> Publish => { fetch: emitted.fetch, parse: emitted.parse, analyze: emitted.analyze, package: emitted.package, publish: value }
+
+fun samePhase:Bool #expected:Phase #candidate:Phase =>
+    candidate == expected
+
+fun queuedContains:Bool #queued:(List Phase) #phase:Phase =>
+    queued
+     |> any (samePhase phase)
+
+fun countIncoming:Incoming #incoming:Incoming #edge:Dependency =>
+    incrementIncoming incoming edge.to
+
+fun readyPhase:Bool #state:KahnState #phase:Phase =>
+    (incomingOf state.incoming phase) == 0 and (emittedOf state.emitted phase) == False and (queuedContains state.queued phase) == False
+
+fun enqueueReady:KahnState #state:KahnState #phase:Phase =>
+    readyPhase state phase
+     T|> { incoming: state.incoming, queued: append state.queued [phase], emitted: state.emitted, order: state.order }
+     F|> state
+
+fun replenish:KahnState #graph:DependencyGraph #state:KahnState =>
+    graph.nodes
+     |> reduce enqueueReady state
+
+fun decrementOutgoing:Incoming #current:Phase #incoming:Incoming #edge:Dependency =>
+    edge.from == current
+     T|> decrementIncoming incoming edge.to
+     F|> incoming
+
+fun initialState:KahnState #graph:DependencyGraph =>
+    replenish graph {
+        incoming: graph.edges
+         |> reduce countIncoming zeroIncoming,
+        queued: [],
+        emitted: initialEmitted,
+        order: []
+    }
+
+fun emitReady:KahnState #graph:DependencyGraph #state:KahnState #current:Phase =>
+    replenish graph {
+        incoming: graph.edges
+         |> reduce (decrementOutgoing current) state.incoming,
+        queued: state.queued
+         |> tail
+         |> getOrElse [],
+        emitted: setEmitted state.emitted current True,
+        order: append state.order [current]
+    }
+
+fun consume:KahnState #graph:DependencyGraph #state:KahnState #tick:Phase =>
+    state.queued
+     |> head
+     ||> Some current => emitReady graph state current
+     ||> None         => state
+
+fun countsMatch:Bool #left:Int #right:Int =>
+    left == right
+
+fun emittedAll:Bool #graph:DependencyGraph #state:KahnState =>
+    countsMatch (length state.order) (length graph.nodes)
+
+fun summarize:ToposortSummary #graph:DependencyGraph #state:KahnState =>
+    {
+        order: orderLabel state.order,
+        emittedCount: length state.order,
+        hasCycle: emittedAll graph state
+         T|> False
+         F|> True
+    }
+
+val dagGraph: DependencyGraph = {
+    nodes: [
+        Fetch,
+        Parse,
+        Package,
+        Analyze,
+        Publish
+    ],
+    edges: [
+        { from: Fetch, to: Parse },
+        { from: Parse, to: Analyze },
+        { from: Fetch, to: Package },
+        { from: Package, to: Publish },
+        { from: Analyze, to: Publish }
+    ]
+}
+
+val cycleBackEdge: Dependency = {
+    from: Analyze,
+    to: Fetch
+}
+
+val cyclicGraph: DependencyGraph = {
+    nodes: [Fetch, Parse, Analyze],
+    edges: [
+        { from: Fetch, to: Parse },
+        { from: Parse, to: Analyze },
+        cycleBackEdge
+    ]
+}
+
+val dagState: KahnState =
+    dagGraph.nodes
+     |> reduce (consume dagGraph) (initialState dagGraph)
+
+val cycleState: KahnState =
+    cyclicGraph.nodes
+     |> reduce (consume cyclicGraph) (initialState cyclicGraph)
+
+val toposortCatalog: ToposortCatalog = {
+    dag: summarize dagGraph dagState,
+    cycle: summarize cyclicGraph cycleState
+}
+
+export toposortCatalog

@@ -124,6 +124,61 @@ fn check_accepts_valid_hir_fixtures() {
 }
 
 #[test]
+fn check_accepts_catalog_fixtures() {
+    for relative in [
+        "catalog/automata/automata_nfa_to_dfa/main.aivi",
+        "catalog/dp/dp_edit_distance/main.aivi",
+        "catalog/dp/dp_knapsack_01/main.aivi",
+        "catalog/dp/dp_lis_patience/main.aivi",
+        "catalog/foundation/surface_collections_pipes/main.aivi",
+        "catalog/foundation/surface_values_patterns/main.aivi",
+        "catalog/foundation/surface_workspace_imports/main.aivi",
+        "catalog/graph/graph_bellman_ford/main.aivi",
+        "catalog/graph/graph_dijkstra/main.aivi",
+        "catalog/graph/graph_floyd_warshall/main.aivi",
+        "catalog/graph/graph_tarjan_scc/main.aivi",
+        "catalog/graph/graph_toposort_kahn/main.aivi",
+        "catalog/graph/graph_union_find_kruskal/main.aivi",
+        "catalog/heap/heap_priority_queue/main.aivi",
+        "catalog/math/math_bigint/main.aivi",
+        "catalog/math/math_fft/main.aivi",
+        "catalog/math/math_matrix_lu/main.aivi",
+        "catalog/math/math_mod_arith_ntt/main.aivi",
+        "catalog/parsing/parser_pratt_expr/main.aivi",
+        "catalog/parsing/parser_shunting_yard/main.aivi",
+        "catalog/runtime/interpreter_stack_vm/main.aivi",
+        "catalog/search/backtracking_nqueens_bitset/main.aivi",
+        "catalog/search/backtracking_sudoku/main.aivi",
+        "catalog/sorting/select_quickselect/main.aivi",
+        "catalog/sorting/sort_introsort/main.aivi",
+        "catalog/string/string_aho_corasick/main.aivi",
+        "catalog/string/string_kmp/main.aivi",
+        "catalog/string/string_suffix_array/main.aivi",
+        "catalog/string/string_z_algorithm/main.aivi",
+        "catalog/tree/tree_fenwick/main.aivi",
+        "catalog/tree/tree_segment_tree_lazy/main.aivi",
+    ] {
+        let path = fixture_path(relative);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .expect("check command should run");
+
+        assert!(
+            output.status.success(),
+            "expected {relative} to pass check, stderr was: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+            "expected success output for {relative}, got stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+}
+
+#[test]
 fn check_rejects_invalid_hir_fixtures() {
     for relative in [
         "milestone-2/invalid/duplicate-top-level-names/main.aivi",

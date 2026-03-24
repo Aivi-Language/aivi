@@ -1,0 +1,146 @@
+use aivi.list (
+    any
+    findMap
+    length
+)
+
+use aivi.text (join)
+
+type Symbol = Zero | One
+
+type NfaState =
+  | Start
+  | BranchA
+  | BranchB
+  | Accept
+
+type Edge = {
+    from: NfaState,
+    symbol: Symbol,
+    to: List NfaState
+}
+
+type DfaSummary = {
+    label: Text,
+    count: Int,
+    accepting: Bool
+}
+
+type NfaCatalog = {
+    start: DfaSummary,
+    onZero: DfaSummary,
+    onOneAfterZero: DfaSummary,
+    missingOnZero: DfaSummary
+}
+
+fun sameState:Bool #left:NfaState #right:NfaState =>
+    (left, right)
+     ||> (Start, Start)     => True
+     ||> (BranchA, BranchA) => True
+     ||> (BranchB, BranchB) => True
+     ||> (Accept, Accept)   => True
+     ||> (_, _)             => False
+
+fun sameSymbol:Bool #left:Symbol #right:Symbol =>
+    (left, right)
+     ||> (Zero, Zero) => True
+     ||> (One, One)   => True
+     ||> (_, _)       => False
+
+fun stateName:Text #state:NfaState =>
+    state
+     ||> Start   => "start"
+     ||> BranchA => "branch-a"
+     ||> BranchB => "branch-b"
+     ||> Accept  => "accept"
+
+fun collectNames:(List Text) #labels:(List Text) #state:NfaState =>
+    append labels [
+        stateName state
+    ]
+
+val emptyLabels: List Text = []
+
+fun subsetLabel:Text #subset:(List NfaState) =>
+    length subset == 0
+     T|> "empty"
+     F|> join "," (subset |> reduce collectNames emptyLabels)
+
+fun containsState:Bool #candidate:NfaState #subset:(List NfaState) =>
+    any (sameState candidate) subset
+
+fun insertState:(List NfaState) #subset:(List NfaState) #state:NfaState =>
+    containsState state subset
+     T|> subset
+     F|> append subset [state]
+
+fun edgeTargets:(Option (List NfaState)) #from:NfaState #symbol:Symbol #edge:Edge =>
+    sameState from edge.from and sameSymbol symbol edge.symbol
+     T|> Some edge.to
+     F|> None
+
+val transitions: List Edge = [
+    {
+        from: Start,
+        symbol: Zero,
+        to: [BranchA, BranchB]
+    },
+    {
+        from: BranchA,
+        symbol: One,
+        to: [Accept]
+    },
+    {
+        from: BranchB,
+        symbol: Zero,
+        to: [BranchB]
+    },
+    {
+        from: BranchB,
+        symbol: One,
+        to: [Accept]
+    }
+]
+
+val emptySubset: List NfaState = []
+
+fun moveFromState:(List NfaState) #from:NfaState #symbol:Symbol =>
+    transitions
+     |> findMap (edgeTargets from symbol)
+     ||> Some targets => targets
+     ||> None         => emptySubset
+
+fun moveStep:(List NfaState) #symbol:Symbol #subset:(List NfaState) #state:NfaState =>
+    moveFromState state symbol
+     |> reduce insertState subset
+
+fun moveSet:(List NfaState) #subset:(List NfaState) #symbol:Symbol =>
+    subset
+     |> reduce (moveStep symbol) emptySubset
+
+fun acceptingSubset:Bool #subset:(List NfaState) =>
+    any (sameState Accept) subset
+
+fun summarize:DfaSummary #subset:(List NfaState) =>
+    {
+        label: subsetLabel subset,
+        count: length subset,
+        accepting: acceptingSubset subset
+    }
+
+val startSubset: List NfaState = [
+    Start
+]
+
+val zeroSubset: List NfaState = moveSet startSubset Zero
+val oneAfterZeroSubset: List NfaState = moveSet zeroSubset One
+val missingOnZeroSubset: List NfaState = moveSet oneAfterZeroSubset Zero
+
+val nfaCatalog: NfaCatalog = {
+    start: summarize startSubset,
+    onZero: summarize zeroSubset,
+    onOneAfterZero: summarize oneAfterZeroSubset,
+    missingOnZero: summarize missingOnZeroSubset
+}
+
+export nfaCatalog

@@ -1674,10 +1674,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     .map(GateRuntimeReference::ClassMember)
                     .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span }])
             }
-            ResolutionState::Resolved(TermResolution::Import(_)) => {
-                Err(vec![GeneralExprBlocker::UnsupportedImportReference {
-                    span,
-                }])
+            ResolutionState::Resolved(TermResolution::Import(import)) => {
+                Ok(GateRuntimeReference::Import(*import))
             }
             ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(candidates)) => {
                 Err(vec![GeneralExprBlocker::AmbiguousDomainMember {

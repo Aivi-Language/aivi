@@ -1,0 +1,104 @@
+type Matrix2 = {
+    a11: Int,
+    a12: Int,
+    a21: Int,
+    a22: Int
+}
+
+type LuFactors = {
+    lower: Matrix2,
+    upper: Matrix2,
+    determinant: Int
+}
+
+type LuSummary = {
+    label: Text,
+    pivot: Int,
+    lowerLeft: Int,
+    schur: Int,
+    determinant: Int,
+    reconstructionOk: Bool
+}
+
+type LuCatalog = {
+    stable: Result Text LuSummary,
+    identity: Result Text LuSummary,
+    singular: Result Text LuSummary,
+    fractional: Result Text LuSummary,
+    zeroPivot: Result Text LuSummary,
+    coverage: Text
+}
+
+fun multiply2:Matrix2 #left:Matrix2 #right:Matrix2 =>
+    {
+        a11: left.a11 * right.a11 + left.a12 * right.a21,
+        a12: left.a11 * right.a12 + left.a12 * right.a22,
+        a21: left.a21 * right.a11 + left.a22 * right.a21,
+        a22: left.a21 * right.a12 + left.a22 * right.a22
+    }
+
+fun exactLu:(Result Text LuFactors) #matrix:Matrix2 #lowerLeft:Int =>
+    matrix.a22 - lowerLeft * matrix.a12 == 0
+     T|> Err "singular"
+     F|> Ok { lower: { a11: 1, a12: 0, a21: lowerLeft, a22: 1 }, upper: { a11: matrix.a11, a12: matrix.a12, a21: 0, a22: matrix.a22 - lowerLeft * matrix.a12 }, determinant: matrix.a11 * (matrix.a22 - lowerLeft * matrix.a12) }
+
+fun nonzeroPivotLu:(Result Text LuFactors) #matrix:Matrix2 =>
+    matrix.a21 % matrix.a11 != 0
+     T|> Err "fractional-lower-factor"
+     F|> exactLu matrix (matrix.a21 / matrix.a11)
+
+fun lu2:(Result Text LuFactors) #matrix:Matrix2 =>
+    matrix.a11 == 0
+     T|> Err "zero-pivot"
+     F|> nonzeroPivotLu matrix
+
+fun summarizeLu:(Result Text LuSummary) #label:Text #matrix:Matrix2 =>
+    lu2 matrix
+     ||> Ok factors => Ok { label, pivot: factors.upper.a11, lowerLeft: factors.lower.a21, schur: factors.upper.a22, determinant: factors.determinant, reconstructionOk: multiply2 factors.lower factors.upper == matrix }
+     ||> Err reason => Err "{label}:{reason}"
+
+val stableMatrix: Matrix2 = {
+    a11: 2,
+    a12: 3,
+    a21: 4,
+    a22: 7
+}
+
+val identityMatrix: Matrix2 = {
+    a11: 1,
+    a12: 0,
+    a21: 0,
+    a22: 1
+}
+
+val singularMatrix: Matrix2 = {
+    a11: 2,
+    a12: 4,
+    a21: 4,
+    a22: 8
+}
+
+val fractionalMatrix: Matrix2 = {
+    a11: 2,
+    a12: 1,
+    a21: 3,
+    a22: 2
+}
+
+val zeroPivotMatrix: Matrix2 = {
+    a11: 0,
+    a12: 5,
+    a21: 4,
+    a22: 9
+}
+
+val luCatalog: LuCatalog = {
+    stable: summarizeLu "stable" stableMatrix,
+    identity: summarizeLu "identity" identityMatrix,
+    singular: summarizeLu "singular" singularMatrix,
+    fractional: summarizeLu "fractional" fractionalMatrix,
+    zeroPivot: summarizeLu "zero-pivot" zeroPivotMatrix,
+    coverage: "stable exact, identity exact, singular reject, fractional reject, zero pivot reject"
+}
+
+export luCatalog

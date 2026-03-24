@@ -1,0 +1,173 @@
+use aivi.list (
+    head
+    tail
+    length
+    partition
+)
+
+type Heap =
+  | Empty
+  | Node Int (List Heap)
+
+type HeapPop = {
+    value: Option Int,
+    rest: Heap
+}
+
+type Buckets = {
+    lower: List Int,
+    equal: List Int,
+    higher: List Int
+}
+
+type SortSummary = {
+    sorted: List Int,
+    heapFallback: List Int,
+    tinySort: List Int,
+    emptySort: List Int,
+    note: Text
+}
+
+fun earlier:Bool #left:Int #right:Int =>
+    left < right or left == right
+
+fun mergeNodes:Heap #leftValue:Int #leftChildren:(List Heap) #rightValue:Int #rightChildren:(List Heap) =>
+    earlier leftValue rightValue
+     T|> Node leftValue (append [Node rightValue rightChildren] leftChildren)
+     F|> Node rightValue (append [Node leftValue leftChildren] rightChildren)
+
+fun mergeHeap:Heap #left:Heap #right:Heap =>
+    (left, right)
+     ||> (Empty, other)                                               => other
+     ||> (other, Empty)                                               => other
+     ||> (Node leftValue leftChildren, Node rightValue rightChildren) => mergeNodes leftValue leftChildren rightValue rightChildren
+
+fun mergePairsAfterSecond:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
+    tail remaining
+     ||> Some rest => mergeHeap (mergeHeap first second) (mergePairs rest)
+     ||> None      => mergeHeap first second
+
+fun mergePairsAfterFirst:Heap #first:Heap #remaining:(List Heap) =>
+    head remaining
+     ||> None        => first
+     ||> Some second => mergePairsAfterSecond first second remaining
+
+fun mergePairsFromFirst:Heap #first:Heap #children:(List Heap) =>
+    tail children
+     ||> Some remaining => mergePairsAfterFirst first remaining
+     ||> None           => first
+
+fun mergePairs:Heap #children:(List Heap) =>
+    head children
+     ||> None       => Empty
+     ||> Some first => mergePairsFromFirst first children
+
+fun heapInsert:Heap #heap:Heap #value:Int =>
+    mergeHeap heap (Node value [])
+
+fun heapPop:HeapPop #heap:Heap =>
+    heap
+     ||> Empty               => { value: None, rest: Empty }
+     ||> Node value children => { value: Some value, rest: mergePairs children }
+
+fun heapDrain:(List Int) #heap:Heap =>
+    heapPop heap
+     ||> { value: None }             => []
+     ||> { value: Some value, rest } => append [value] (heapDrain rest)
+
+fun heapSort:(List Int) #items:(List Int) =>
+    items
+     |> reduce heapInsert Empty
+     |> heapDrain
+
+fun insertAfterHead:(List Int) #value:Int #first:Int #rest:(List Int) =>
+    value < first or value == first
+     T|> append [value, first] rest
+     F|> append [first] (insertOrdered value rest)
+
+fun insertSingle:(List Int) #value:Int #first:Int =>
+    value < first or value == first
+     T|> [value, first]
+     F|> [first, value]
+
+fun insertFromFirst:(List Int) #value:Int #first:Int #items:(List Int) =>
+    tail items
+     ||> Some rest => insertAfterHead value first rest
+     ||> None      => insertSingle value first
+
+fun insertOrdered:(List Int) #value:Int #items:(List Int) =>
+    head items
+     ||> None       => [value]
+     ||> Some first => insertFromFirst value first items
+
+fun insertionSort:(List Int) #items:(List Int) =>
+    items
+     |> reduce insertOrdered []
+
+fun lowerThan:Bool #pivot:Int #value:Int =>
+    value < pivot
+
+fun equalTo:Bool #pivot:Int #value:Int =>
+    value == pivot
+
+fun classifyRest:Buckets #lower:(List Int) #pivot:Int #rest:(List Int) =>
+    rest
+     |> partition (equalTo pivot)
+     ||> { matched: equal, unmatched: higher } => { lower, equal, higher }
+
+fun classify:Buckets #pivot:Int #items:(List Int) =>
+    items
+     |> partition (lowerThan pivot)
+     ||> { matched: lower, unmatched: rest } => classifyRest lower pivot rest
+
+fun appendThree:(List Int) #left:(List Int) #middle:(List Int) #right:(List Int) =>
+    append left (append middle right)
+
+fun introsortAfterBase:(List Int) #depth:Int #items:(List Int) =>
+    depth == 0
+     T|> heapSort items
+     F|> introsortAfterDepth depth items
+
+fun introsortAfterDepth:(List Int) #depth:Int #items:(List Int) =>
+    length items < 4
+     T|> insertionSort items
+     F|> introsortPartition depth items
+
+fun introsortFromPivot:(List Int) #depth:Int #pivot:Int #items:(List Int) =>
+    classify pivot items
+     ||> { lower, equal, higher } => appendThree (introsort (depth - 1) lower) equal (introsort (depth - 1) higher)
+
+fun introsortPartition:(List Int) #depth:Int #items:(List Int) =>
+    head items
+     ||> None       => []
+     ||> Some pivot => introsortFromPivot depth pivot items
+
+fun introsort:(List Int) #depth:Int #items:(List Int) =>
+    length items < 2
+     T|> items
+     F|> introsortAfterBase depth items
+
+val sample: List Int = [
+    9,
+    3,
+    7,
+    1,
+    8,
+    2,
+    6,
+    4,
+    5
+]
+
+val tiny: List Int = [3, 1, 2]
+val emptyInput: List Int = []
+
+val sortSummary: SortSummary = {
+    sorted: introsort 2 sample,
+    heapFallback: introsort 0 sample,
+    tinySort: introsort 2 tiny,
+    emptySort: introsort 2 emptyInput,
+    note: "depth-limited quick partition with heap fallback"
+}
+
+export sortSummary

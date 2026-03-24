@@ -1,0 +1,118 @@
+type SearchState = {
+    columns: Int,
+    diagDown: Int,
+    diagUp: Int,
+    placements: List Int
+}
+
+type SolveState = {
+    solutions: Int,
+    first: Option (List Int)
+}
+
+type BoardSummary = {
+    columns: List Int,
+    depth: Int
+}
+
+type NQueensSummary = {
+    label: Text,
+    size: Int,
+    solutions: Int,
+    first: Option BoardSummary,
+    columnMaskWidth: Int,
+    diagonalMaskWidth: Int
+}
+
+type NQueensCatalog = {
+    single: NQueensSummary,
+    impossible: NQueensSummary,
+    classic: NQueensSummary,
+    wider: NQueensSummary,
+    coverage: Text
+}
+
+fun pow2:Int #exponent:Int =>
+    exponent == 0
+     T|> 1
+     F|> 2 * pow2 (exponent - 1)
+
+fun bitSet:Bool #mask:Int #index:Int =>
+    (mask / (pow2 index)) % 2 == 1
+
+fun setBit:Int #mask:Int #index:Int =>
+    bitSet mask index
+     T|> mask
+     F|> mask + pow2 index
+
+fun diagUpIndex:Int #size:Int #row:Int #col:Int =>
+    row - col + size - 1
+
+fun bitClear:Bool #mask:Int #index:Int =>
+    bitSet mask index == False
+
+fun safeColumn:Bool #size:Int #row:Int #col:Int #state:SearchState =>
+    bitClear state.columns col and bitClear state.diagDown (row + col) and bitClear state.diagUp (diagUpIndex size row col)
+
+fun placeQueen:SearchState #size:Int #row:Int #col:Int #state:SearchState =>
+    {
+        columns: setBit state.columns col,
+        diagDown: setBit state.diagDown (row + col),
+        diagUp: setBit state.diagUp (diagUpIndex size row col),
+        placements: append state.placements [col]
+    }
+
+fun keepFirstBoard:(Option (List Int)) #current:(Option (List Int)) #placements:(List Int) =>
+    current
+     ||> Some board => Some board
+     ||> None       => Some placements
+
+fun addSolution:SolveState #found:SolveState #placements:(List Int) =>
+    {
+        solutions: found.solutions + 1,
+        first: keepFirstBoard found.first placements
+    }
+
+fun advanceColumn:SolveState #size:Int #row:Int #col:Int #state:SearchState #found:SolveState =>
+    safeColumn size row col state
+     T|> search size row (col + 1) state (search size (row + 1) 0 (placeQueen size row col state) found)
+     F|> search size row (col + 1) state found
+
+fun continueRow:SolveState #size:Int #row:Int #col:Int #state:SearchState #found:SolveState =>
+    col == size
+     T|> found
+     F|> advanceColumn size row col state found
+
+fun search:SolveState #size:Int #row:Int #col:Int #state:SearchState #found:SolveState =>
+    row == size
+     T|> addSolution found state.placements
+     F|> continueRow size row col state found
+
+fun solveQueens:SolveState #size:Int =>
+    search size 0 0 { columns: 0, diagDown: 0, diagUp: 0, placements: [] } { solutions: 0, first: None }
+
+fun countPlacementStep:Int #total:Int #column:Int =>
+    total + 1
+
+fun placementCount:Int #columns:(List Int) =>
+    columns
+     |> reduce countPlacementStep 0
+
+fun summarizeBoard:(Option BoardSummary) #solution:(Option (List Int)) =>
+    solution
+     ||> Some columns => Some { columns, depth: placementCount columns }
+     ||> None         => None
+
+fun summarizeQueens:NQueensSummary #label:Text #size:Int =>
+    solveQueens size
+     ||> { solutions, first } => { label, size, solutions, first: summarizeBoard first, columnMaskWidth: pow2 size, diagonalMaskWidth: pow2 (size + size - 1) }
+
+val nQueensCatalog: NQueensCatalog = {
+    single: summarizeQueens "single" 1,
+    impossible: summarizeQueens "impossible" 2,
+    classic: summarizeQueens "classic" 4,
+    wider: summarizeQueens "wider" 5,
+    coverage: "singleton success, unsatisfiable pair, classic four queens, and wider bitset search cases"
+}
+
+export nQueensCatalog

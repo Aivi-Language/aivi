@@ -1,0 +1,222 @@
+use aivi.list (
+    zip
+    all
+    find
+    length
+    nonEmpty
+)
+
+type PrefixCandidate = {
+    matched: Int,
+    prefix: List Text,
+    slice: List Text
+}
+
+type PrefixEntry = {
+    prefixTokens: List Text,
+    candidates: List PrefixCandidate
+}
+
+type SearchWindow = {
+    start: Int,
+    tokens: List Text
+}
+
+type KmpSummary = {
+    pattern: Text,
+    haystack: Text,
+    lpsTable: List Int,
+    matches: List Int,
+    found: Bool,
+    missingMatches: List Int
+}
+
+fun samePair:Bool #pair:(Text, Text) =>
+    pair
+     ||> (left, right) => left == right
+
+fun pairedTokensMatch:Bool #left:(List Text) #right:(List Text) =>
+    zip left right
+     |> all samePair
+
+fun sameTokens:Bool #left:(List Text) #right:(List Text) =>
+    length left == length right and pairedTokensMatch left right
+
+fun matchingCandidate:Bool #candidate:PrefixCandidate =>
+    candidate
+     ||> { prefix, slice } => sameTokens prefix slice
+
+fun candidateValue:Int #candidate:PrefixCandidate =>
+    candidate
+     ||> { matched } => matched
+
+fun matchedLength:Int #candidates:(List PrefixCandidate) =>
+    find matchingCandidate candidates
+     ||> Some candidate => candidateValue candidate
+     ||> None           => 0
+
+fun appendLps:(List Int) #values:(List Int) #entry:PrefixEntry =>
+    entry
+     ||> { candidates } => append values [matchedLength candidates]
+
+fun windowStart:Int #window:SearchWindow =>
+    window
+     ||> { start } => start
+
+fun sameWindow:Bool #patternTokens:(List Text) #window:SearchWindow =>
+    window
+     ||> { tokens } => sameTokens patternTokens tokens
+
+fun collectMatch:(List Int) #patternTokens:(List Text) #matches:(List Int) #window:SearchWindow =>
+    sameWindow patternTokens window
+     T|> append matches [windowStart window]
+     F|> matches
+
+val pattern: Text = "ababc"
+val haystack: Text = "ababcababc"
+
+val patternTokens: List Text = [
+    "a",
+    "b",
+    "a",
+    "b",
+    "c"
+]
+
+val lpsEntries: List PrefixEntry = [
+    {
+        prefixTokens: ["a"],
+        candidates: []
+    },
+    {
+        prefixTokens: ["a", "b"],
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["b"]
+            }
+        ]
+    },
+    {
+        prefixTokens: ["a", "b", "a"],
+        candidates: [
+            {
+                matched: 2,
+                prefix: ["a", "b"],
+                slice: ["b", "a"]
+            },
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["a"]
+            }
+        ]
+    },
+    {
+        prefixTokens: ["a", "b", "a", "b"],
+        candidates: [
+            {
+                matched: 3,
+                prefix: ["a", "b", "a"],
+                slice: ["b", "a", "b"]
+            },
+            {
+                matched: 2,
+                prefix: ["a", "b"],
+                slice: ["a", "b"]
+            },
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["b"]
+            }
+        ]
+    },
+    {
+        prefixTokens: ["a", "b", "a", "b", "c"],
+        candidates: [
+            {
+                matched: 4,
+                prefix: ["a", "b", "a", "b"],
+                slice: ["b", "a", "b", "c"]
+            },
+            {
+                matched: 3,
+                prefix: ["a", "b", "a"],
+                slice: ["a", "b", "c"]
+            },
+            {
+                matched: 2,
+                prefix: ["a", "b"],
+                slice: ["b", "c"]
+            },
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["c"]
+            }
+        ]
+    }
+]
+
+val searchWindows: List SearchWindow = [
+    {
+        start: 0,
+        tokens: ["a", "b", "a", "b", "c"]
+    },
+    {
+        start: 1,
+        tokens: ["b", "a", "b", "c", "a"]
+    },
+    {
+        start: 2,
+        tokens: ["a", "b", "c", "a", "b"]
+    },
+    {
+        start: 3,
+        tokens: ["b", "c", "a", "b", "a"]
+    },
+    {
+        start: 4,
+        tokens: ["c", "a", "b", "a", "b"]
+    },
+    {
+        start: 5,
+        tokens: ["a", "b", "a", "b", "c"]
+    }
+]
+
+val missingWindows: List SearchWindow = [
+    {
+        start: 0,
+        tokens: ["a", "a", "a", "a", "a"]
+    },
+    {
+        start: 1,
+        tokens: ["a", "a", "a", "a", "b"]
+    }
+]
+
+val lpsTable: List Int =
+    lpsEntries
+     |> reduce appendLps []
+
+val matches: List Int =
+    searchWindows
+     |> reduce (collectMatch patternTokens) []
+
+val missingMatches: List Int =
+    missingWindows
+     |> reduce (collectMatch patternTokens) []
+
+val kmpSummary: KmpSummary = {
+    pattern,
+    haystack,
+    lpsTable,
+    matches,
+    found: nonEmpty matches,
+    missingMatches
+}
+
+export kmpSummary

@@ -1,0 +1,247 @@
+use aivi.list (length)
+
+use aivi.text (join)
+
+type Node =
+  | Source
+  | Relay
+  | Scenic
+  | Goal
+  | Detached
+
+type WeightedEdge = {
+    from: Node,
+    to: Node,
+    weight: Int
+}
+
+type WeightedGraph = {
+    nodes: List Node,
+    edges: List WeightedEdge,
+    start: Node
+}
+
+type Distance =
+  | Unreachable
+  | Cost Int
+
+type Distances = {
+    source: Distance,
+    relay: Distance,
+    scenic: Distance,
+    goal: Distance,
+    detached: Distance
+}
+
+type Visited = {
+    source: Bool,
+    relay: Bool,
+    scenic: Bool,
+    goal: Bool,
+    detached: Bool
+}
+
+type Candidate = {
+    node: Option Node,
+    distance: Distance
+}
+
+type DijkstraState = {
+    distances: Distances,
+    visited: Visited,
+    order: List Node
+}
+
+type DijkstraSummary = {
+    visitOrder: Text,
+    visitedCount: Int,
+    scenic: Text,
+    goal: Text,
+    detached: Text
+}
+
+val emptyDistances: Distances = {
+    source: Unreachable,
+    relay: Unreachable,
+    scenic: Unreachable,
+    goal: Unreachable,
+    detached: Unreachable
+}
+
+val noVisited: Visited = {
+    source: False,
+    relay: False,
+    scenic: False,
+    goal: False,
+    detached: False
+}
+
+val noCandidate: Candidate = {
+    node: None,
+    distance: Unreachable
+}
+
+val unreachableNode: Node = Detached
+
+fun nodeLabel:Text #node:Node =>
+    node
+     ||> Source   => "source"
+     ||> Relay    => "relay"
+     ||> Scenic   => "scenic"
+     ||> Goal     => "goal"
+     ||> Detached => "detached"
+
+fun appendNodeLabel:(List Text) #parts:(List Text) #node:Node =>
+    append parts [
+        nodeLabel node
+    ]
+
+fun orderLabel:Text #nodes:(List Node) =>
+    nodes
+     |> reduce appendNodeLabel []
+     |> join " -> "
+
+fun distanceText:Text #distance:Distance =>
+    distance
+     ||> Unreachable => "unreachable"
+     ||> Cost value  => "{value}"
+
+fun distanceOf:Distance #distances:Distances #node:Node =>
+    node
+     ||> Source   => distances.source
+     ||> Relay    => distances.relay
+     ||> Scenic   => distances.scenic
+     ||> Goal     => distances.goal
+     ||> Detached => distances.detached
+
+fun setDistance:Distances #distances:Distances #node:Node #value:Distance =>
+    node
+     ||> Source   => { source: value, relay: distances.relay, scenic: distances.scenic, goal: distances.goal, detached: distances.detached }
+     ||> Relay    => { source: distances.source, relay: value, scenic: distances.scenic, goal: distances.goal, detached: distances.detached }
+     ||> Scenic   => { source: distances.source, relay: distances.relay, scenic: value, goal: distances.goal, detached: distances.detached }
+     ||> Goal     => { source: distances.source, relay: distances.relay, scenic: distances.scenic, goal: value, detached: distances.detached }
+     ||> Detached => { source: distances.source, relay: distances.relay, scenic: distances.scenic, goal: distances.goal, detached: value }
+
+fun visitedOf:Bool #visited:Visited #node:Node =>
+    node
+     ||> Source   => visited.source
+     ||> Relay    => visited.relay
+     ||> Scenic   => visited.scenic
+     ||> Goal     => visited.goal
+     ||> Detached => visited.detached
+
+fun setVisited:Visited #visited:Visited #node:Node #value:Bool =>
+    node
+     ||> Source   => { source: value, relay: visited.relay, scenic: visited.scenic, goal: visited.goal, detached: visited.detached }
+     ||> Relay    => { source: visited.source, relay: value, scenic: visited.scenic, goal: visited.goal, detached: visited.detached }
+     ||> Scenic   => { source: visited.source, relay: visited.relay, scenic: value, goal: visited.goal, detached: visited.detached }
+     ||> Goal     => { source: visited.source, relay: visited.relay, scenic: visited.scenic, goal: value, detached: visited.detached }
+     ||> Detached => { source: visited.source, relay: visited.relay, scenic: visited.scenic, goal: visited.goal, detached: value }
+
+fun betterDistance:Bool #left:Distance #right:Distance =>
+    (left, right)
+     ||> (Cost _, Unreachable) => True
+     ||> (Cost l, Cost r)      => l < r
+     ||> (Unreachable, _)      => False
+
+fun plusDistance:Distance #distance:Distance #weight:Int =>
+    distance
+     ||> Cost value  => Cost (value + weight)
+     ||> Unreachable => Unreachable
+
+fun selectCandidate:Candidate #candidate:Candidate #node:Node #distance:Distance =>
+    betterDistance distance candidate.distance
+     T|> { node: Some node, distance }
+     F|> candidate
+
+fun chooseCandidate:Candidate #state:DijkstraState #candidate:Candidate #node:Node =>
+    visitedOf state.visited node
+     T|> candidate
+     F|> selectCandidate candidate node (distanceOf state.distances node)
+
+fun nextNode:(Option Node) #graph:WeightedGraph #state:DijkstraState =>
+    graph.nodes
+     |> reduce (chooseCandidate state) noCandidate
+     |> .node
+
+fun relaxTarget:Distances #distances:Distances #target:Node #candidate:Distance =>
+    betterDistance candidate (distanceOf distances target)
+     T|> setDistance distances target candidate
+     F|> distances
+
+fun relaxEdge:Distances #current:Node #currentDistance:Distance #distances:Distances #edge:WeightedEdge =>
+    edge.from == current
+     T|> relaxTarget distances edge.to (plusDistance currentDistance edge.weight)
+     F|> distances
+
+fun visitNode:DijkstraState #graph:WeightedGraph #state:DijkstraState #node:Node =>
+    {
+        distances: graph.edges
+         |> reduce (relaxEdge node (distanceOf state.distances node)) state.distances,
+        visited: setVisited state.visited node True,
+        order: append state.order [node]
+    }
+
+fun advance:DijkstraState #graph:WeightedGraph #state:DijkstraState #tick:Node =>
+    nextNode graph state
+     ||> Some current => visitNode graph state current
+     ||> None         => state
+
+fun initialState:DijkstraState #graph:WeightedGraph =>
+    {
+        distances: setDistance emptyDistances graph.start (Cost 0),
+        visited: noVisited,
+        order: []
+    }
+
+val dijkstraGraph: WeightedGraph = {
+    nodes: [
+        Source,
+        Relay,
+        Scenic,
+        Goal,
+        Detached
+    ],
+    start: Source,
+    edges: [
+        {
+            from: Source,
+            to: Relay,
+            weight: 2
+        },
+        {
+            from: Source,
+            to: Scenic,
+            weight: 5
+        },
+        {
+            from: Relay,
+            to: Scenic,
+            weight: 1
+        },
+        {
+            from: Relay,
+            to: Goal,
+            weight: 5
+        },
+        {
+            from: Scenic,
+            to: Goal,
+            weight: 1
+        }
+    ]
+}
+
+val dijkstraState: DijkstraState =
+    dijkstraGraph.nodes
+     |> reduce (advance dijkstraGraph) (initialState dijkstraGraph)
+
+val dijkstraSummary: DijkstraSummary = {
+    visitOrder: orderLabel dijkstraState.order,
+    visitedCount: length dijkstraState.order,
+    scenic: distanceText (distanceOf dijkstraState.distances Scenic),
+    goal: distanceText (distanceOf dijkstraState.distances Goal),
+    detached: distanceText (distanceOf dijkstraState.distances unreachableNode)
+}
+
+export dijkstraSummary

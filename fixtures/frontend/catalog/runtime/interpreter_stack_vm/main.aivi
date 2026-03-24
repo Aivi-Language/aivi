@@ -1,0 +1,119 @@
+use aivi.list (
+    head
+    tail
+    length
+)
+
+use aivi.text (join)
+
+type Instruction =
+  | Push Int
+  | Add
+  | Negate
+  | Mark Text
+
+type StackView = {
+    top: Option Int,
+    rest: Option (List Int)
+}
+
+type VmState = {
+    stack: List Int,
+    log: List Text,
+    halted: Bool
+}
+
+type VmSummary = {
+    top: Option Int,
+    depth: Int,
+    halted: Bool,
+    log: Text
+}
+
+type VmCatalog = {
+    completed: VmSummary,
+    haltedEarly: VmSummary
+}
+
+fun viewStack:StackView #stack:(List Int) =>
+    {
+        top: head stack,
+        rest: tail stack
+    }
+
+fun stateWithLog:VmState #stack:(List Int) #halted:Bool #log:(List Text) #entry:Text =>
+    {
+        stack,
+        halted,
+        log: append log [entry]
+    }
+
+fun underflowState:VmState #stack:(List Int) #log:(List Text) =>
+    stateWithLog stack True log "underflow"
+
+fun addLeft:VmState #log:(List Text) #rest:(List Int) #right:Int =>
+    viewStack rest
+     ||> { top: Some left, rest: Some remaining } => stateWithLog (append remaining [left + right]) False log "add"
+     ||> { top: None }                            => underflowState rest log
+
+fun applyAdd:VmState #log:(List Text) #stack:(List Int) =>
+    viewStack stack
+     ||> { top: Some right, rest: Some remaining } => addLeft log remaining right
+     ||> { top: None }                             => underflowState stack log
+
+fun applyNegate:VmState #log:(List Text) #stack:(List Int) =>
+    viewStack stack
+     ||> { top: Some value, rest: Some remaining } => stateWithLog (append remaining [0 - value]) False log "negate"
+     ||> { top: None }                             => underflowState stack log
+
+fun continueStep:VmState #stack:(List Int) #log:(List Text) #instruction:Instruction =>
+    instruction
+     ||> Push value => stateWithLog (append stack [value]) False log "push {value}"
+     ||> Add        => applyAdd log stack
+     ||> Negate     => applyNegate log stack
+     ||> Mark note  => stateWithLog stack False log note
+
+fun step:VmState #state:VmState #instruction:Instruction =>
+    state
+     ||> { halted: True }              => state
+     ||> { stack, log, halted: False } => continueStep stack log instruction
+
+fun summarize:VmSummary #state:VmState =>
+    state
+     ||> { stack, log, halted } => { top: head stack, depth: length stack, halted, log: join " -> " log }
+
+val initialState: VmState = {
+    stack: [],
+    log: [],
+    halted: False
+}
+
+val balancedProgram: List Instruction = [
+    Push 7,
+    Push 5,
+    Add,
+    Mark "combined",
+    Push 3,
+    Negate,
+    Add
+]
+
+val brokenProgram: List Instruction = [
+    Push 1,
+    Add
+]
+
+val completedState: VmState =
+    balancedProgram
+     |> reduce step initialState
+
+val haltedEarlyState: VmState =
+    brokenProgram
+     |> reduce step initialState
+
+val vmCatalog: VmCatalog = {
+    completed: summarize completedState,
+    haltedEarly: summarize haltedEarlyState
+}
+
+export vmCatalog

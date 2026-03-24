@@ -1,0 +1,147 @@
+use aivi.list (
+    findMap
+    isEmpty
+)
+
+use aivi.text (join)
+
+type KnapsackItem = {
+    label: Text,
+    weight: Int,
+    value: Int
+}
+
+type Plan = {
+    total: Int,
+    picked: List Text
+}
+
+type Cell = {
+    capacity: Int,
+    plan: Plan
+}
+
+type KnapsackSummary = {
+    bestAtSeven: Int,
+    pickedAtSeven: Text,
+    bestAtZero: Int,
+    emptyItems: Int,
+    note: Text
+}
+
+val emptyPlan: Plan = {
+    total: 0,
+    picked: []
+}
+
+fun choosePlan:Plan #left:Plan #right:Plan =>
+    right.total > left.total
+     T|> right
+     F|> left
+
+fun selectCell:(Option Cell) #target:Int #cell:Cell =>
+    cell.capacity == target
+     T|> Some cell
+     F|> None
+
+fun planAt:Plan #capacity:Int #row:(List Cell) =>
+    row
+     |> findMap (selectCell capacity)
+     ||> Some cell => cell.plan
+     ||> None      => emptyPlan
+
+fun extendPlan:Plan #item:KnapsackItem #base:Plan =>
+    base
+     ||> { total, picked } => { total: total + item.value, picked: append picked [item.label] }
+
+fun includePlan:Plan #item:KnapsackItem #previous:(List Cell) #capacity:Int =>
+    capacity < item.weight
+     T|> emptyPlan
+     F|> extendPlan item (planAt (capacity - item.weight) previous)
+
+fun nextCell:Cell #item:KnapsackItem #previous:(List Cell) #capacity:Int =>
+    {
+        capacity,
+        plan: choosePlan (planAt capacity previous) (includePlan item previous capacity)
+    }
+
+fun appendCell:(List Cell) #item:KnapsackItem #previous:(List Cell) #cells:(List Cell) #capacity:Int =>
+    append cells [
+        nextCell item previous capacity
+    ]
+
+fun stepRow:(List Cell) #capacities:(List Int) #previous:(List Cell) #item:KnapsackItem =>
+    capacities
+     |> reduce (appendCell item previous) []
+
+fun baseCell:Cell #capacity:Int =>
+    {
+        capacity,
+        plan: emptyPlan
+    }
+
+fun appendBaseCell:(List Cell) #cells:(List Cell) #capacity:Int =>
+    append cells [
+        baseCell capacity
+    ]
+
+fun pickedLabel:Text #plan:Plan =>
+    isEmpty plan.picked
+     T|> "none"
+     F|> join " + " plan.picked
+
+val capacities: List Int = [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+]
+
+val items: List KnapsackItem = [
+    {
+        label: "map",
+        weight: 1,
+        value: 1
+    },
+    {
+        label: "rope",
+        weight: 3,
+        value: 4
+    },
+    {
+        label: "jacket",
+        weight: 4,
+        value: 5
+    },
+    {
+        label: "tent",
+        weight: 5,
+        value: 7
+    }
+]
+
+val initialRow: List Cell =
+    capacities
+     |> reduce appendBaseCell []
+
+val optimizedRow: List Cell =
+    items
+     |> reduce (stepRow capacities) initialRow
+
+val bestPlan: Plan = planAt 7 optimizedRow
+val zeroPlan: Plan = planAt 0 optimizedRow
+val emptyItemsPlan: Plan = planAt 7 initialRow
+
+val knapsackSummary: KnapsackSummary = {
+    bestAtSeven: bestPlan.total,
+    pickedAtSeven: pickedLabel bestPlan,
+    bestAtZero: zeroPlan.total,
+    emptyItems: emptyItemsPlan.total,
+    note: "0/1 fold with empty-capacity edge"
+}
+
+export knapsackSummary

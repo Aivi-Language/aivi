@@ -1,0 +1,140 @@
+use aivi.list (
+    any
+    findMap
+)
+
+type Update = {
+    index: Int,
+    delta: Int
+}
+
+type FenwickNode = {
+    index: Int,
+    start: Int,
+    total: Int
+}
+
+type FenwickSummary = {
+    prefixFive: Int,
+    prefixZero: Int,
+    prefixSeven: Int,
+    bucketFour: Int,
+    emptyPrefix: Int,
+    note: Text
+}
+
+fun matchesIndex:Bool #target:Int #value:Int =>
+    value == target
+
+fun onPath:Bool #path:(List Int) #node:FenwickNode =>
+    any (matchesIndex node.index) path
+
+fun addIfOnPath:Int #path:(List Int) #total:Int #node:FenwickNode =>
+    onPath path node
+     T|> total + node.total
+     F|> total
+
+fun withinNode:Bool #update:Update #node:FenwickNode =>
+    update.index > node.start - 1 and update.index < node.index + 1
+
+fun applyNode:FenwickNode #update:Update #node:FenwickNode =>
+    withinNode update node
+     T|> { index: node.index, start: node.start, total: node.total + update.delta }
+     F|> node
+
+fun appendUpdatedNode:(List FenwickNode) #update:Update #nodes:(List FenwickNode) #node:FenwickNode =>
+    append nodes [
+        applyNode update node
+    ]
+
+fun applyUpdate:(List FenwickNode) #tree:(List FenwickNode) #update:Update =>
+    tree
+     |> reduce (appendUpdatedNode update) []
+
+fun prefixPathAfterZero:(List Int) #target:Int =>
+    target == 1
+     T|> [1]
+     F|> prefixPathAfterOne target
+
+fun prefixPathAfterOne:(List Int) #target:Int =>
+    target == 2
+     T|> [2]
+     F|> prefixPathAfterTwo target
+
+fun prefixPathAfterTwo:(List Int) #target:Int =>
+    target == 3
+     T|> [3, 2]
+     F|> prefixPathAfterThree target
+
+fun prefixPathAfterThree:(List Int) #target:Int =>
+    target == 4
+     T|> [4]
+     F|> prefixPathAfterFour target
+
+fun prefixPathAfterFour:(List Int) #target:Int =>
+    target == 5
+     T|> [5, 4]
+     F|> prefixPathAfterFive target
+
+fun prefixPathAfterFive:(List Int) #target:Int =>
+    target == 6
+     T|> [6, 4]
+     F|> prefixPathAfterSix target
+
+fun prefixPathAfterSix:(List Int) #target:Int =>
+    target == 7
+     T|> [7, 6, 4]
+     F|> [8]
+
+fun prefixPath:(List Int) #target:Int =>
+    target == 0
+     T|> []
+     F|> prefixPathAfterZero target
+
+fun prefixSum:Int #tree:(List FenwickNode) #target:Int =>
+    tree
+     |> reduce (addIfOnPath (prefixPath target)) 0
+
+fun selectNodeTotal:(Option Int) #target:Int #node:FenwickNode =>
+    node.index == target
+     T|> Some node.total
+     F|> None
+
+fun bucketTotal:Int #tree:(List FenwickNode) #target:Int =>
+    tree
+     |> findMap (selectNodeTotal target)
+     ||> Some total => total
+     ||> None       => 0
+
+val emptyTree: List FenwickNode = [
+    { index: 1, start: 1, total: 0 },
+    { index: 2, start: 1, total: 0 },
+    { index: 3, start: 3, total: 0 },
+    { index: 4, start: 1, total: 0 },
+    { index: 5, start: 5, total: 0 },
+    { index: 6, start: 5, total: 0 },
+    { index: 7, start: 7, total: 0 },
+    { index: 8, start: 1, total: 0 }
+]
+
+val updates: List Update = [
+    { index: 1, delta: 3 },
+    { index: 3, delta: 2 },
+    { index: 5, delta: 4 },
+    { index: 7, delta: 1 }
+]
+
+val tree: List FenwickNode =
+    updates
+     |> reduce applyUpdate emptyTree
+
+val fenwickSummary: FenwickSummary = {
+    prefixFive: prefixSum tree 5,
+    prefixZero: prefixSum tree 0,
+    prefixSeven: prefixSum tree 7,
+    bucketFour: bucketTotal tree 4,
+    emptyPrefix: prefixSum emptyTree 7,
+    note: "size-8 coverage tree with zero-prefix edge"
+}
+
+export fenwickSummary

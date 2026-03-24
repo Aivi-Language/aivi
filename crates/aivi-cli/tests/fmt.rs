@@ -9,6 +9,15 @@ struct TempFile {
     path: PathBuf,
 }
 
+fn fixture_path(relative: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("fixtures")
+        .join("frontend")
+        .join(relative)
+}
+
 fn stdlib_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -151,6 +160,57 @@ fn fmt_check_accepts_stdlib_modules() {
     assert!(
         output.status.success(),
         "expected stdlib modules to already be formatted, stdout was: {}, stderr was: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn fmt_check_accepts_catalog_examples() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_aivi"));
+    command.arg("fmt").arg("--check");
+    for relative in [
+        "catalog/automata/automata_nfa_to_dfa/main.aivi",
+        "catalog/dp/dp_edit_distance/main.aivi",
+        "catalog/dp/dp_knapsack_01/main.aivi",
+        "catalog/dp/dp_lis_patience/main.aivi",
+        "catalog/foundation/surface_values_patterns/main.aivi",
+        "catalog/foundation/surface_collections_pipes/main.aivi",
+        "catalog/foundation/surface_workspace_imports/main.aivi",
+        "catalog/foundation/surface_workspace_imports/shared/catalog.aivi",
+        "catalog/graph/graph_bellman_ford/main.aivi",
+        "catalog/graph/graph_dijkstra/main.aivi",
+        "catalog/graph/graph_floyd_warshall/main.aivi",
+        "catalog/graph/graph_tarjan_scc/main.aivi",
+        "catalog/graph/graph_toposort_kahn/main.aivi",
+        "catalog/graph/graph_union_find_kruskal/main.aivi",
+        "catalog/heap/heap_priority_queue/main.aivi",
+        "catalog/math/math_bigint/main.aivi",
+        "catalog/math/math_fft/main.aivi",
+        "catalog/math/math_matrix_lu/main.aivi",
+        "catalog/math/math_mod_arith_ntt/main.aivi",
+        "catalog/parsing/parser_pratt_expr/main.aivi",
+        "catalog/parsing/parser_shunting_yard/main.aivi",
+        "catalog/runtime/interpreter_stack_vm/main.aivi",
+        "catalog/search/backtracking_nqueens_bitset/main.aivi",
+        "catalog/search/backtracking_sudoku/main.aivi",
+        "catalog/sorting/select_quickselect/main.aivi",
+        "catalog/sorting/sort_introsort/main.aivi",
+        "catalog/string/string_aho_corasick/main.aivi",
+        "catalog/string/string_kmp/main.aivi",
+        "catalog/string/string_suffix_array/main.aivi",
+        "catalog/string/string_z_algorithm/main.aivi",
+        "catalog/tree/tree_fenwick/main.aivi",
+        "catalog/tree/tree_segment_tree_lazy/main.aivi",
+    ] {
+        command.arg(fixture_path(relative));
+    }
+
+    let output = command.output().expect("fmt --check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected catalog examples to already be formatted, stdout was: {}, stderr was: {}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );

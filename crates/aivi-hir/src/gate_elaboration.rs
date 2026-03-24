@@ -228,6 +228,7 @@ pub enum GateRuntimeExprKind {
 pub enum GateRuntimeReference {
     Local(BindingId),
     Item(ItemId),
+    Import(crate::ImportId),
     SumConstructor(crate::SumConstructorHandle),
     DomainMember(DomainMemberHandle),
     ClassMember(crate::ResolvedClassMemberDispatch),

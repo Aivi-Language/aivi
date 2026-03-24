@@ -1,0 +1,157 @@
+type Complex = {
+    real: Int,
+    imag: Int
+}
+
+type Signal4 = {
+    x0: Complex,
+    x1: Complex,
+    x2: Complex,
+    x3: Complex
+}
+
+type Spectrum4 = {
+    k0: Complex,
+    k1: Complex,
+    k2: Complex,
+    k3: Complex
+}
+
+type FftSummary = {
+    label: Text,
+    spectrum: Spectrum4,
+    totalMagnitude: Int,
+    mirrored: Bool,
+    flat: Bool,
+    note: Text
+}
+
+type FftCatalog = {
+    impulse: FftSummary,
+    constant: FftSummary,
+    alternating: FftSummary,
+    zero: FftSummary,
+    coverage: Text
+}
+
+fun realSample:Complex #value:Int =>
+    { real: value, imag: 0 }
+
+fun addComplex:Complex #left:Complex #right:Complex =>
+    {
+        real: left.real + right.real,
+        imag: left.imag + right.imag
+    }
+
+fun subComplex:Complex #left:Complex #right:Complex =>
+    {
+        real: left.real - right.real,
+        imag: left.imag - right.imag
+    }
+
+fun conjugate:Complex #value:Complex =>
+    {
+        real: value.real,
+        imag: 0 - value.imag
+    }
+
+fun quarterTurn:Complex #value:Complex =>
+    {
+        real: value.imag,
+        imag: 0 - value.real
+    }
+
+fun twoPoint:(Complex, Complex) #left:Complex #right:Complex =>
+    (
+        addComplex left right,
+        subComplex left right
+    )
+
+fun combineOdd:Spectrum4 #even0:Complex #even1:Complex #odd:(Complex, Complex) =>
+    odd
+     ||> (odd0, odd1) => { k0: addComplex even0 odd0, k1: addComplex even1 (quarterTurn odd1), k2: subComplex even0 odd0, k3: subComplex even1 (quarterTurn odd1) }
+
+fun combineSpectrum:Spectrum4 #even:(Complex, Complex) #odd:(Complex, Complex) =>
+    even
+     ||> (even0, even1) => combineOdd even0 even1 odd
+
+fun fft4:Spectrum4 #signal:Signal4 =>
+    combineSpectrum (twoPoint signal.x0 signal.x2) (twoPoint signal.x1 signal.x3)
+
+fun absolute:Int #value:Int =>
+    value < 0
+     T|> 0 - value
+     F|> value
+
+fun magnitude1:Int #value:Complex =>
+    absolute value.real + absolute value.imag
+
+fun spectrumMagnitude:Int #spectrum:Spectrum4 =>
+    magnitude1 spectrum.k0 + magnitude1 spectrum.k1 + magnitude1 spectrum.k2 + magnitude1 spectrum.k3
+
+fun isMirrored:Bool #spectrum:Spectrum4 =>
+    spectrum.k1 == conjugate spectrum.k3
+
+fun isFlatSpectrum:Bool #spectrum:Spectrum4 =>
+    magnitude1 spectrum.k0 == magnitude1 spectrum.k1 and magnitude1 spectrum.k1 == magnitude1 spectrum.k2 and magnitude1 spectrum.k2 == magnitude1 spectrum.k3
+
+fun mirroredNote:Text #mirrored:Bool =>
+    mirrored
+     T|> "conjugate-pair"
+     F|> "skewed-spectrum"
+
+fun spectrumNote:Text #spectrum:Spectrum4 =>
+    isFlatSpectrum spectrum
+     T|> "flat-spectrum"
+     F|> mirroredNote (isMirrored spectrum)
+
+fun summarizeSpectrum:FftSummary #label:Text #spectrum:Spectrum4 =>
+    {
+        label,
+        spectrum,
+        totalMagnitude: spectrumMagnitude spectrum,
+        mirrored: isMirrored spectrum,
+        flat: isFlatSpectrum spectrum,
+        note: spectrumNote spectrum
+    }
+
+fun summarizeFft:FftSummary #label:Text #signal:Signal4 =>
+    summarizeSpectrum label (fft4 signal)
+
+val impulseSignal: Signal4 = {
+    x0: realSample 1,
+    x1: realSample 0,
+    x2: realSample 0,
+    x3: realSample 0
+}
+
+val constantSignal: Signal4 = {
+    x0: realSample 2,
+    x1: realSample 2,
+    x2: realSample 2,
+    x3: realSample 2
+}
+
+val alternatingSignal: Signal4 = {
+    x0: realSample 1,
+    x1: realSample (0 - 1),
+    x2: realSample 1,
+    x3: realSample (0 - 1)
+}
+
+val zeroSignal: Signal4 = {
+    x0: realSample 0,
+    x1: realSample 0,
+    x2: realSample 0,
+    x3: realSample 0
+}
+
+val fftCatalog: FftCatalog = {
+    impulse: summarizeFft "impulse" impulseSignal,
+    constant: summarizeFft "constant" constantSignal,
+    alternating: summarizeFft "alternating" alternatingSignal,
+    zero: summarizeFft "zero" zeroSignal,
+    coverage: "impulse, constant, alternating, and zero-energy edge cases"
+}
+
+export fftCatalog

@@ -1,4 +1,0 @@
-type Ordering = LT | EQ | GT
-
-class Ord A
-    compare : A -> A -> Ordering

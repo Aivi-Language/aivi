@@ -1,0 +1,264 @@
+use aivi.list (
+    zip
+    all
+    find
+    length
+)
+
+type PrefixCandidate = {
+    matched: Int,
+    prefix: List Text,
+    slice: List Text
+}
+
+type ZProbe = {
+    index: Int,
+    candidates: List PrefixCandidate
+}
+
+type ZSummary = {
+    pattern: Text,
+    text: Text,
+    combined: Text,
+    zValues: List Int,
+    matches: List Int,
+    matchCount: Int,
+    distinctMatches: List Int
+}
+
+fun samePair:Bool #pair:(Text, Text) =>
+    pair
+     ||> (left, right) => left == right
+
+fun pairedTokensMatch:Bool #left:(List Text) #right:(List Text) =>
+    zip left right
+     |> all samePair
+
+fun sameTokens:Bool #left:(List Text) #right:(List Text) =>
+    length left == length right and pairedTokensMatch left right
+
+fun matchingCandidate:Bool #candidate:PrefixCandidate =>
+    candidate
+     ||> { prefix, slice } => sameTokens prefix slice
+
+fun candidateValue:Int #candidate:PrefixCandidate =>
+    candidate
+     ||> { matched } => matched
+
+fun matchedLength:Int #candidates:(List PrefixCandidate) =>
+    find matchingCandidate candidates
+     ||> Some candidate => candidateValue candidate
+     ||> None           => 0
+
+fun appendZ:(List Int) #values:(List Int) #probe:ZProbe =>
+    probe
+     ||> { candidates } => append values [matchedLength candidates]
+
+fun probeMatchIndex:Int #patternLength:Int #probe:ZProbe =>
+    probe
+     ||> { index } => index - (patternLength + 1)
+
+fun probeMatchLength:Int #probe:ZProbe =>
+    probe
+     ||> { candidates } => matchedLength candidates
+
+fun keepMatch:(List Int) #patternLength:Int #matches:(List Int) #probe:ZProbe =>
+    probeMatchLength probe == patternLength
+     T|> append matches [probeMatchIndex patternLength probe]
+     F|> matches
+
+val pattern: Text = "aba"
+val text: Text = "ababa"
+val combined: Text = "aba#ababa"
+
+val patternTokens: List Text = [
+    "a",
+    "b",
+    "a"
+]
+
+val zProbes: List ZProbe = [
+    {
+        index: 1,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["b"]
+            }
+        ]
+    },
+    {
+        index: 2,
+        candidates: [
+            {
+                matched: 2,
+                prefix: ["a", "b"],
+                slice: ["a", "#"]
+            },
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["a"]
+            }
+        ]
+    },
+    {
+        index: 3,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["#"]
+            }
+        ]
+    },
+    {
+        index: 4,
+        candidates: [
+            {
+                matched: 4,
+                prefix: ["a", "b", "a", "#"],
+                slice: ["a", "b", "a", "b"]
+            },
+            {
+                matched: 3,
+                prefix: ["a", "b", "a"],
+                slice: ["a", "b", "a"]
+            }
+        ]
+    },
+    {
+        index: 5,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["b"]
+            }
+        ]
+    },
+    {
+        index: 6,
+        candidates: [
+            {
+                matched: 3,
+                prefix: ["a", "b", "a"],
+                slice: ["a", "b", "a"]
+            }
+        ]
+    },
+    {
+        index: 7,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["b"]
+            }
+        ]
+    },
+    {
+        index: 8,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["a"]
+            }
+        ]
+    }
+]
+
+val distinctPatternTokens: List Text = [
+    "a",
+    "b",
+    "c"
+]
+
+val distinctProbes: List ZProbe = [
+    {
+        index: 1,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["b"]
+            }
+        ]
+    },
+    {
+        index: 2,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["c"]
+            }
+        ]
+    },
+    {
+        index: 3,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["#"]
+            }
+        ]
+    },
+    {
+        index: 4,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["x"]
+            }
+        ]
+    },
+    {
+        index: 5,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["y"]
+            }
+        ]
+    },
+    {
+        index: 6,
+        candidates: [
+            {
+                matched: 1,
+                prefix: ["a"],
+                slice: ["z"]
+            }
+        ]
+    }
+]
+
+val zValues: List Int =
+    zProbes
+     |> reduce appendZ [0]
+
+val matches: List Int =
+    zProbes
+     |> reduce (keepMatch (length patternTokens)) []
+
+val distinctMatches: List Int =
+    distinctProbes
+     |> reduce (keepMatch (length distinctPatternTokens)) []
+
+val zSummary: ZSummary = {
+    pattern,
+    text,
+    combined,
+    zValues,
+    matches,
+    matchCount: length matches,
+    distinctMatches
+}
+
+export zSummary

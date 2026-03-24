@@ -1,0 +1,90 @@
+use aivi.list (
+    head
+    length
+    partition
+)
+
+type Buckets = {
+    lower: List Int,
+    equal: List Int,
+    higher: List Int
+}
+
+type QuickselectSummary = {
+    fourthSmallest: Int,
+    minimum: Int,
+    duplicatePick: Int,
+    missing: Bool,
+    note: Text
+}
+
+fun lowerThan:Bool #pivot:Int #value:Int =>
+    value < pivot
+
+fun equalTo:Bool #pivot:Int #value:Int =>
+    value == pivot
+
+fun classifyRest:Buckets #lower:(List Int) #pivot:Int #rest:(List Int) =>
+    rest
+     |> partition (equalTo pivot)
+     ||> { matched: equal, unmatched: higher } => { lower, equal, higher }
+
+fun classify:Buckets #pivot:Int #items:(List Int) =>
+    items
+     |> partition (lowerThan pivot)
+     ||> { matched: lower, unmatched: rest } => classifyRest lower pivot rest
+
+fun withFallback:Int #fallback:Int #value:(Option Int) =>
+    value
+     ||> Some found => found
+     ||> None       => fallback
+
+fun isMissing:Bool #value:(Option A) =>
+    value
+     F|> True
+     T|> False
+
+fun chooseUpper:(Option Int) #rank:Int #lower:(List Int) #equal:(List Int) #higher:(List Int) =>
+    rank > length lower + length equal - 1
+     T|> quickselect (rank - length lower - length equal) higher
+     F|> head equal
+
+fun chooseRank:(Option Int) #rank:Int #lower:(List Int) #equal:(List Int) #higher:(List Int) =>
+    rank < length lower
+     T|> quickselect rank lower
+     F|> chooseUpper rank lower equal higher
+
+fun selectFromPivot:(Option Int) #rank:Int #pivot:Int #items:(List Int) =>
+    classify pivot items
+     ||> { lower, equal, higher } => chooseRank rank lower equal higher
+
+fun quickselect:(Option Int) #rank:Int #items:(List Int) =>
+    head items
+     ||> None       => None
+     ||> Some pivot => selectFromPivot rank pivot items
+
+val sample: List Int = [
+    7,
+    2,
+    9,
+    2,
+    5,
+    1,
+    6
+]
+
+val duplicates: List Int = [
+    3,
+    3,
+    3
+]
+
+val quickselectSummary: QuickselectSummary = {
+    fourthSmallest: withFallback 0 (quickselect 3 sample),
+    minimum: withFallback 0 (quickselect 0 sample),
+    duplicatePick: withFallback 0 (quickselect 1 duplicates),
+    missing: isMissing (quickselect 10 sample),
+    note: "two-stage partition with missing-rank edge"
+}
+
+export quickselectSummary
