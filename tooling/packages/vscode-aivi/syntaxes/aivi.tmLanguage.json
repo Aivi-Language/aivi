@@ -6,6 +6,7 @@
   "patterns": [
     { "include": "#pipe-operators" },
     { "include": "#doc-comment" },
+    { "include": "#block-comment" },
     { "include": "#line-comment" },
     { "include": "#string" },
     { "include": "#decorator" },
@@ -23,9 +24,12 @@
 
     "doc-comment": {
       "name": "comment.block.documentation.aivi",
-      "begin": "---",
-      "end": "$",
+      "begin": "/\\*\\*",
+      "end": "\\*\\*/",
       "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.aivi" }
+      },
+      "endCaptures": {
         "0": { "name": "punctuation.definition.comment.aivi" }
       },
       "patterns": [
@@ -49,9 +53,21 @@
       ]
     },
 
+    "block-comment": {
+      "name": "comment.block.aivi",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.comment.aivi" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.comment.aivi" }
+      }
+    },
+
     "line-comment": {
-      "name": "comment.line.double-dash.aivi",
-      "match": "--(?!-).*$"
+      "name": "comment.line.double-slash.aivi",
+      "match": "//.*$"
     },
 
     "string": {
@@ -193,7 +209,8 @@
               "match": "\\b([a-z_][a-zA-Z0-9_]*)\\b",
               "name": "variable.other.import.aivi"
             },
-            { "include": "#line-comment" }
+            { "include": "#line-comment" },
+            { "include": "#block-comment" }
           ]
         },
         {

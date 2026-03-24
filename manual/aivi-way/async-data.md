@@ -20,15 +20,15 @@ There is no `async`/`await`, no `.then()`, no `Promise`.
 Fetching a user profile:
 
 ```text
--- declare a product type 'User' with integer id and text fields name, email, bio
--- declare a parametric type 'LoadState A' with variants Loading, Loaded (carrying A), Failed (carrying error text)
--- bind 'userResponse' to an HTTP GET request for user 1, producing Ok User or Err HttpError
--- derive 'userState' by mapping Ok to Loaded and Err to Failed
--- derive 'userName': show user's name when loaded, "Loading…" when loading, "Unknown" on failure
--- derive 'userBio': show user's bio when loaded, empty string when loading, error message on failure
--- render a Window titled "User Profile" with a vertical Box
---   containing Labels bound to userName and userBio
--- export main as the application entry point
+// declare a product type 'User' with integer id and text fields name, email, bio
+// declare a parametric type 'LoadState A' with variants Loading, Loaded (carrying A), Failed (carrying error text)
+// bind 'userResponse' to an HTTP GET request for user 1, producing Ok User or Err HttpError
+// derive 'userState' by mapping Ok to Loaded and Err to Failed
+// derive 'userName': show user's name when loaded, "Loading…" when loading, "Unknown" on failure
+// derive 'userBio': show user's bio when loaded, empty string when loading, error message on failure
+// render a Window titled "User Profile" with a vertical Box
+//   containing Labels bound to userName and userBio
+// export main as the application entry point
 ```
 
 ## Handling the loading state
@@ -36,18 +36,18 @@ Fetching a user profile:
 The above example maps `Loading` to a placeholder string. For a proper loading spinner:
 
 ```text
--- derive 'isLoading' as True when userState is Loading, False otherwise
--- render a Window titled "Profile" with a vertical Box
--- show an active Spinner only while isLoading is True
--- show a Label with the user name below
+// derive 'isLoading' as True when userState is Loading, False otherwise
+// render a Window titled "Profile" with a vertical Box
+// show an active Spinner only while isLoading is True
+// show a Label with the user name below
 ```
 
 ## Retrying on error
 
 ```text
--- bind 'retryClicked' to clicks on the "retry" button
--- bind 'data' to an HTTP GET request that re-fetches whenever retryClicked fires
--- the signal carries either a Payload or an HttpError
+// bind 'retryClicked' to clicks on the "retry" button
+// bind 'data' to an HTTP GET request that re-fetches whenever retryClicked fires
+// the signal carries either a Payload or an HttpError
 ```
 
 Passing `refreshOn: retryClicked` tells the source to re-fetch when `retryClicked` fires.
@@ -58,10 +58,10 @@ When a second request depends on the result of a first, use `||>` to extract the
 The signal only produces a value when the result is `Ok`:
 
 ```text
--- bind 'userResult' to an HTTP GET for user 1
--- derive 'userId' as Some user's id when the user loaded successfully, or None on error
--- bind 'postsResult' to an HTTP GET for posts, passing userId as a query parameter
--- postsResult only fetches when userId has a value
+// bind 'userResult' to an HTTP GET for user 1
+// derive 'userId' as Some user's id when the user loaded successfully, or None on error
+// bind 'postsResult' to an HTTP GET for posts, passing userId as a query parameter
+// postsResult only fetches when userId has a value
 ```
 
 `userId` holds `Some id` when the user loaded successfully and `None` on error.
@@ -85,10 +85,10 @@ fetchUser(id, (err, user) => {
 In AIVI, the dependency is declared, not nested:
 
 ```text
--- derive userId from userResult: Some id on success, None on error
--- derive posts using userId as a dependency
--- derive view by rendering posts when they load successfully
--- each step is a separate named signal with no nesting
+// derive userId from userResult: Some id on success, None on error
+// derive posts using userId as a dependency
+// derive view by rendering posts when they load successfully
+// each step is a separate named signal with no nesting
 ```
 
 Each step is a separate named signal. No nesting, no error routing, no lifecycle cleanup.

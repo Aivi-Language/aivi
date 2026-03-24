@@ -3289,7 +3289,7 @@ val datePattern = rx"\d{4}-\d{2}-\d{2}"
         let mut sources = SourceDatabase::new();
         let file_id = sources.add_file(
             "comments.aivi",
-            "--- module doc\nval answer = 42 -- inline note\n",
+            "/** module doc **/\nval answer = 42 // inline note\n",
         );
         let lexed = lex_module(&sources[file_id]);
         let comment_kinds = lexed

@@ -36,13 +36,13 @@ features:
 This complete program renders a counter with increment and decrement buttons.
 
 ```text
--- declare a signal 'count' starting at 0
--- when the "increment" button is clicked, increase count by 1
--- when the "decrement" button is clicked, decrease count by 1
--- derive 'label' as the text representation of count
--- render a Window titled "Counter" containing a vertical Box
---   with a Label bound to label, a "+" Button, and a "−" Button
--- export main as the application entry point
+// declare a signal 'count' starting at 0
+// when the "increment" button is clicked, increase count by 1
+// when the "decrement" button is clicked, decrease count by 1
+// derive 'label' as the text representation of count
+// render a Window titled "Counter" containing a vertical Box
+//   with a Label bound to label, a "+" Button, and a "−" Button
+// export main as the application entry point
 ```
 
 `count` starts at `0`. Each `increment` or `decrement` event folds through `update`.

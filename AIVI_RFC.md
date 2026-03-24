@@ -277,15 +277,15 @@ The core top-level forms are:
 
 A module may export exactly one process entry point named `main`.
 
-Comment syntax in v1 is intentionally narrow:
+Comment syntax in v1:
 
-- `--` starts a line comment and runs to end of line
-- `---` starts a doc comment and runs to end of line
-- both forms are trivia in the lossless token stream; they do not create ordinary expression or
+- `//` starts a line comment and runs to end of line
+- `/* ... */` is a block comment (may span multiple lines)
+- `/** ... **/` is a doc comment (may span multiple lines)
+- all three forms are trivia in the lossless token stream; they do not create ordinary expression or
   item nodes in the CST
-- block comments are out of scope for v1
-- the lexical distinction between `--` and `---` is stable; declaration attachment and doc
-  extraction remain tooling-owned work above the syntax layer
+- the lexical distinction between `//`, `/* */`, and `/** **/` is stable; declaration attachment
+  and doc extraction remain tooling-owned work above the syntax layer
 
 ### 5.1 Import rules
 
@@ -2404,7 +2404,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - CST (lossless for formatting and diagnostics) ✓
 - formatter (canonical pipe, arrow, cluster alignment) ✓
 - syntax for `type`, `class`, `instance`, `val`, `fun`, `sig`, `use`, `export`, markup, and pipe operators ✓
-- line/doc comment lexing (`--`, `---`) and trivia retention in the token stream ✓
+- line/block/doc comment lexing (`//`, `/* */`, `/** **/`) and trivia retention in the token stream ✓
 - regex literal lexing and HIR validation ✓
 - compact suffix literal lexing (`250ms`) ✓
 

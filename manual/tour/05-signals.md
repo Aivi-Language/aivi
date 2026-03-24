@@ -10,7 +10,7 @@ Think of it like a spreadsheet cell: when a cell it depends on changes, it updat
 ## Declaring a signal
 
 ```text
--- declare a signal 'count' of type Int starting at 0
+// declare a signal 'count' of type Int starting at 0
 ```
 
 This declares a signal named `count` that holds an `Int`. Its initial value is `0`.
@@ -18,7 +18,7 @@ This declares a signal named `count` that holds an `Int`. Its initial value is `
 A signal that derives from another signal uses `\|>`:
 
 ```text
--- derive a signal 'doubled' from count, always equal to count multiplied by 2
+// derive a signal 'doubled' from count, always equal to count multiplied by 2
 ```
 
 `doubled` is always `count * 2`. You do not manually update it; the runtime maintains the
@@ -29,10 +29,10 @@ dependency.
 Any pipe chain that starts with a signal produces a new signal:
 
 ```text
--- derive 'scoreLine' from the game signal
--- extract the score field
--- format it as the text "Score: N"
--- recomputes whenever game changes
+// derive 'scoreLine' from the game signal
+// extract the score field
+// format it as the text "Score: N"
+// recomputes whenever game changes
 ```
 
 `scoreLine` recomputes whenever `game` changes. The `\|>` pipes you already know work
@@ -44,10 +44,10 @@ The recurrence pattern is how signals accumulate state over time.
 `@\|>` starts the recurrent flow; `<\|@` is the recurrence step.
 
 ```text
--- declare a helper function 'add' that adds x to n
--- bind the signal 'count' to the "inc" button click event
--- count starts at 0
--- each time the button fires, fold "add 1" into the accumulated count
+// declare a helper function 'add' that adds x to n
+// bind the signal 'count' to the "inc" button click event
+// count starts at 0
+// each time the button fires, fold "add 1" into the accumulated count
 ```
 
 Reading this:
@@ -61,9 +61,9 @@ Reading this:
 ## Example: direction signal in Snake
 
 ```text
--- bind 'direction' to keyboard key-down events, ignoring key repeats, only when focused
--- direction starts as Right
--- on each key-down event, apply keepDirection with the key press to compute the new direction
+// bind 'direction' to keyboard key-down events, ignoring key repeats, only when focused
+// direction starts as Right
+// on each key-down event, apply keepDirection with the key press to compute the new direction
 ```
 
 On each `keyDown` event, `@\|>` starts the recurrence and `<\|@` applies `keepDirection keyDown`
@@ -72,9 +72,9 @@ to the current direction, storing the result as the new direction.
 ## Example: game state signal
 
 ```text
--- bind 'game' to a timer that fires every 160 milliseconds, firing once immediately and coalescing rapid ticks
--- game starts at the initial game state
--- on each timer tick, apply stepGame with boardSize and current direction to advance the game
+// bind 'game' to a timer that fires every 160 milliseconds, firing once immediately and coalescing rapid ticks
+// game starts at the initial game state
+// on each timer tick, apply stepGame with boardSize and current direction to advance the game
 ```
 
 Every 160 ms the timer fires. `stepGame` runs with the current `direction`, producing the next
@@ -85,13 +85,13 @@ Every 160 ms the timer fires. `stepGame` runs with the current `direction`, prod
 `<|@` can introduce a different source from `@|>`. A counter with two buttons:
 
 ```text
--- declare a message type 'Msg' with variants Increment and Decrement
--- declare a function 'update' that increments or decrements count based on a message
--- bind 'increment' signal to the "increment" button, emitting the Increment message
--- bind 'decrement' signal to the "decrement" button, emitting the Decrement message
--- count starts at 0
--- on each increment event, fold update with Increment into the accumulated count
--- on each decrement event, fold update with Decrement into the accumulated count
+// declare a message type 'Msg' with variants Increment and Decrement
+// declare a function 'update' that increments or decrements count based on a message
+// bind 'increment' signal to the "increment" button, emitting the Increment message
+// bind 'decrement' signal to the "decrement" button, emitting the Decrement message
+// count starts at 0
+// on each increment event, fold update with Increment into the accumulated count
+// on each decrement event, fold update with Decrement into the accumulated count
 ```
 
 `@|>` opens the recurrence triggered by `increment`; `<|@` adds `decrement` as a second
