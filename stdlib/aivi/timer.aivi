@@ -1,0 +1,5 @@
+type TimerTick  = Unit
+type TimerReady = Unit
+
+export TimerTick
+export TimerReady

@@ -1422,6 +1422,9 @@ impl<'a> ModuleLowerer<'a> {
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Builtin(term)) => {
                 Reference::Builtin(*term)
             }
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::IntrinsicValue(
+                value,
+            )) => Reference::IntrinsicValue(*value),
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Import(_))
             | aivi_hir::ResolutionState::Resolved(
                 aivi_hir::TermResolution::AmbiguousDomainMembers(_),
@@ -1860,6 +1863,9 @@ impl<'a> ModuleLowerer<'a> {
                                                 )?,
                                             GateRuntimeReference::Builtin(term) => {
                                                 Reference::Builtin(*term)
+                                            }
+                                            GateRuntimeReference::IntrinsicValue(value) => {
+                                                Reference::IntrinsicValue(*value)
                                             }
                                         }),
                                     },
@@ -2918,6 +2924,7 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
             | GateRuntimeExprKind::SuffixedInteger(_)
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Builtin(_))
+            | GateRuntimeExprKind::Reference(GateRuntimeReference::IntrinsicValue(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(_)) => {}
             GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item)) => {

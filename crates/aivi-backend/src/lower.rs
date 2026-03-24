@@ -1091,6 +1091,7 @@ impl<'a> ProgramLowerer<'a> {
                     core::Reference::SumConstructor(_) => {}
                     core::Reference::DomainMember(_) => {}
                     core::Reference::BuiltinClassMember(_) => {}
+                    core::Reference::IntrinsicValue(_) => {}
                     core::Reference::HirItem(_) => {
                         return Err(UnresolvedItemReference { span: expr.span });
                     }
@@ -1395,6 +1396,9 @@ impl<'a> ProgramLowerer<'a> {
                                 }
                                 core::Reference::Builtin(term) => {
                                     KernelExprKind::Builtin(map_builtin_term(*term))
+                                }
+                                core::Reference::IntrinsicValue(value) => {
+                                    KernelExprKind::IntrinsicValue(*value)
                                 }
                             };
                             values.push(alloc_kernel_expr(

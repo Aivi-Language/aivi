@@ -1691,6 +1691,9 @@ impl<'a> GeneralExprElaborator<'a> {
             ResolutionState::Resolved(TermResolution::Builtin(builtin)) => {
                 Ok(GateRuntimeReference::Builtin(*builtin))
             }
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => {
+                Ok(GateRuntimeReference::IntrinsicValue(*value))
+            }
             ResolutionState::Resolved(TermResolution::ClassMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => {
                 resolve_class_member_dispatch(self.module, reference, &[], Some(expected))
@@ -1918,6 +1921,7 @@ impl<'a> GeneralExprElaborator<'a> {
             }
             ResolutionState::Resolved(TermResolution::Local(_))
             | ResolutionState::Resolved(TermResolution::Import(_))
+            | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
             | ResolutionState::Resolved(TermResolution::ClassMember(_))

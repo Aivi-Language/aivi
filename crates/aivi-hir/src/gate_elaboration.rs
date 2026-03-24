@@ -5,9 +5,9 @@ use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
     BigIntLiteral, BinaryOperator, BindingId, BuiltinTerm, DecimalLiteral, DomainMemberHandle,
-    ExprId, ExprKind, FloatLiteral, IntegerLiteral, Item, ItemId, Module, Name, NamePath,
-    PatternId, PipeExpr, PipeStageKind, ProjectionBase, SuffixedIntegerLiteral, TermResolution,
-    TextFragment, TextSegment, UnaryOperator,
+    ExprId, ExprKind, FloatLiteral, IntegerLiteral, IntrinsicValue, Item, ItemId, Module, Name,
+    NamePath, PatternId, PipeExpr, PipeStageKind, ProjectionBase, SuffixedIntegerLiteral,
+    TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeSubjectStepOutcome,
@@ -225,6 +225,7 @@ pub enum GateRuntimeReference {
     DomainMember(DomainMemberHandle),
     ClassMember(crate::ResolvedClassMemberDispatch),
     Builtin(BuiltinTerm),
+    IntrinsicValue(IntrinsicValue),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1406,6 +1407,9 @@ fn runtime_reference_for_name(
             .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span }),
         crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) => {
             Ok(GateRuntimeReference::Builtin(*builtin))
+        }
+        crate::ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => {
+            Ok(GateRuntimeReference::IntrinsicValue(*value))
         }
         crate::ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | crate::ResolutionState::Resolved(TermResolution::ClassMember(_))

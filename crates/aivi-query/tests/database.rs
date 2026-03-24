@@ -240,6 +240,164 @@ fn hir_queries_fallback_to_bundled_root_and_prelude_modules() {
 }
 
 #[test]
+fn hir_queries_fallback_to_bundled_phase_two_boundary_modules() {
+    let workspace = TempDir::new("bundled-phase-two-boundaries");
+    workspace.write("aivi.toml", "");
+    let main_path = workspace.write(
+        "main.aivi",
+        r#"use aivi.duration (
+    Duration
+)
+
+use aivi.http (
+    HttpError
+    Timeout
+    DecodeFailure
+    RequestFailure
+    HttpHeaders
+    HttpQuery
+    HttpResponse
+    HttpTask
+    DecodeMode
+    Strict
+    Retry
+)
+
+use aivi.timer (
+    TimerTick
+    TimerReady
+)
+
+use aivi.log (
+    LogLevel
+    Debug
+    Error
+    LogContext
+    LogEntry
+    LogError
+    LogTask
+    LogWrite
+)
+
+type User = {
+    id: Int,
+    name: Text
+}
+
+val headers:HttpHeaders =
+    Map {
+        "Authorization": "Bearer demo"
+    }
+
+val query:HttpQuery =
+    Map {
+        "page": "1"
+    }
+
+val decodeMode:DecodeMode =
+    Strict
+
+type RetryBudget = Retry
+
+type UsersResponse = HttpResponse (List User)
+type UsersTask = HttpTask (List User)
+
+@source http.get "https://api.example.com/users"
+sig users : Signal UsersResponse
+
+@source timer.every 120 with {
+    immediate: True,
+    coalesce: True
+}
+sig tick : Signal TimerTick
+
+@source timer.after 1000
+sig ready : Signal TimerReady
+
+val timeoutError:HttpError =
+    Timeout
+
+val decodeError:HttpError =
+    DecodeFailure "bad-json"
+
+val requestError:HttpError =
+    RequestFailure "offline"
+
+val level:LogLevel =
+    Debug
+
+val context:LogContext =
+    Map {
+        "module": "query"
+    }
+
+val entry:LogEntry = {
+    level: level,
+    message: "loaded",
+    context: context
+}
+
+type Writer = LogWrite
+type CurrentLogTask = LogTask
+type CurrentLogError = LogError
+
+type PollDelay = Duration
+
+val errorLevel:LogLevel =
+    Error
+"#,
+    );
+
+    let db = RootDatabase::new();
+    let main = SourceFile::new(
+        &db,
+        main_path.clone(),
+        fs::read_to_string(&main_path).expect("main fixture should exist"),
+    );
+
+    let hir = hir_module(&db, main);
+    assert!(
+        hir.hir_diagnostics().is_empty(),
+        "bundled phase-two boundary imports should lower cleanly: {:?}",
+        hir.hir_diagnostics()
+    );
+
+    let http_module = db
+        .file_at_path(&stdlib_path("aivi/http.aivi"))
+        .expect("bundled http stdlib module should be loaded lazily");
+    let timer_module = db
+        .file_at_path(&stdlib_path("aivi/timer.aivi"))
+        .expect("bundled timer stdlib module should be loaded lazily");
+    let log_module = db
+        .file_at_path(&stdlib_path("aivi/log.aivi"))
+        .expect("bundled log stdlib module should be loaded lazily");
+    let duration_module = db
+        .file_at_path(&stdlib_path("aivi/duration.aivi"))
+        .expect("bundled duration stdlib dependency should be loaded lazily");
+
+    let http_exports = exported_names(&db, http_module);
+    assert!(http_exports.find("HttpError").is_some());
+    assert!(http_exports.find("RequestFailure").is_some());
+    assert!(http_exports.find("HttpResponse").is_some());
+    assert!(http_exports.find("Retry").is_some());
+
+    let timer_exports = exported_names(&db, timer_module);
+    assert!(timer_exports.find("TimerTick").is_some());
+    assert!(timer_exports.find("TimerReady").is_some());
+
+    let log_exports = exported_names(&db, log_module);
+    assert!(log_exports.find("LogLevel").is_some());
+    assert!(log_exports.find("Debug").is_some());
+    assert!(log_exports.find("LogWrite").is_some());
+
+    assert!(
+        exported_names(&db, duration_module)
+            .find("Duration")
+            .is_some()
+    );
+}
+
+#[test]
 fn hir_queries_prefer_workspace_modules_over_bundled_stdlib_fallback() {
     let workspace = TempDir::new("bundled-stdlib-overlay");
     workspace.write("aivi.toml", "");

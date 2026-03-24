@@ -1,0 +1,30 @@
+type Attachment = {
+    filename: Text,
+    contentType: Text,
+    data: Bytes
+}
+
+type SmtpConfig = {
+    host: Text,
+    port: Int
+}
+
+type SmtpMessage = {
+    from: Text,
+    to: List Text,
+    cc: List Text,
+    bcc: List Text,
+    subject: Text,
+    bodyText: Text,
+    bodyHtml: Option Text,
+    attachments: List Attachment
+}
+
+type SmtpError =
+  | SmtpAuthFailed
+  | SmtpConnectionFailed Text
+  | RecipientRejected Text
+  | MessageTooLarge
+  | SmtpProtocolError Text
+
+export (Attachment, SmtpConfig, SmtpMessage, SmtpError, SmtpAuthFailed, SmtpConnectionFailed, RecipientRejected, MessageTooLarge, SmtpProtocolError)

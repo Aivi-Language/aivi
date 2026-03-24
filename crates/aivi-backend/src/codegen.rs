@@ -595,6 +595,7 @@ impl<'a> CraneliftCompiler<'a> {
                     | KernelExprKind::DomainMember(_)
                     | KernelExprKind::BuiltinClassMember(_)
                     | KernelExprKind::Builtin(_)
+                    | KernelExprKind::IntrinsicValue(_)
                     | KernelExprKind::SuffixedInteger(_)
                     | KernelExprKind::Text(_)
                     | KernelExprKind::Tuple(_)

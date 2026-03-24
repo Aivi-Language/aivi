@@ -10,7 +10,7 @@ type Key =
   | ArrowUp
   | ArrowDown
   | ArrowLeft
-  | ArrowRight
+  |   ArrowRight
 
 type Orientation =
   | Vertical

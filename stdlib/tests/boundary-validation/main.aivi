@@ -1,0 +1,230 @@
+use aivi.duration (
+  Duration
+)
+use aivi.http (
+  HttpError
+  Timeout
+  DecodeFailure
+  RequestFailure
+  HttpHeaders
+  HttpQuery
+  HttpResponse
+  HttpTask
+  DecodeMode
+  Strict
+  Retry
+)
+use aivi.timer (
+  TimerTick
+  TimerReady
+)
+use aivi.log (
+  LogLevel
+  Debug
+  Error
+  LogContext
+  LogEntry
+  LogError
+  LogTask
+  LogWrite
+)
+use aivi.fs (
+  FsError
+  NotFound
+  PermissionDenied
+  ReadFailed
+  WriteFailed
+  FsEvent
+  Created
+  Changed
+  Deleted
+)
+use aivi.auth (
+  PkceConfig
+  PkceToken
+  PkceError
+  UserCancelled
+  PkceTimeout
+)
+use aivi.dbus (
+  DbusValue
+  DbusString
+  DbusInt
+  DbusBool
+  DbusCall
+  DbusSignal
+  BusNameState
+  Owned
+  Queued
+  Lost
+  DbusError
+  NoReply
+)
+use aivi.gnome.onlineAccounts (
+  GoaAccount
+  GoaAccountId
+  GoaCapability
+  Mail
+  GoaProvider
+  GoaError
+  AccessToken
+  OAuthToken
+)
+use aivi.gnome.notifications (
+  Notification
+  NotificationAction
+  NotificationError
+  NotificationFailed
+)
+use aivi.db (
+  DbError
+  SchemaMismatch
+  QueryFailed
+  SortDir
+  Asc
+  Desc
+)
+use aivi.imap (
+  SyncState
+  ImapError
+  ImapAuthFailed
+  ImapConnectionFailed
+)
+use aivi.smtp (
+  SmtpConfig
+  SmtpMessage
+  SmtpError
+  SmtpAuthFailed
+  Attachment
+)
+use aivi.url (
+  Url
+  UrlError
+)
+use aivi.path (
+  Path
+  PathError
+)
+
+type User = {
+  id: Int
+  name: Text
+}
+
+val headers: HttpHeaders = Map {
+  "Authorization": "Bearer demo"
+}
+
+val query: HttpQuery = Map {
+  "page": "1"
+}
+
+val decodeMode: DecodeMode = Strict
+
+type RetryBudget = Retry
+
+type UsersResponse = HttpResponse (List User)
+type UsersTask     = HttpTask (List User)
+
+@source http.get "https://api.example.com/users"
+sig users: Signal UsersResponse
+
+@source timer.every 120 with {
+  immediate: True
+  coalesce: True
+}
+sig tick: Signal TimerTick
+
+@source timer.after 1000
+sig ready: Signal TimerReady
+
+val timeoutError: HttpError = Timeout
+
+val decodeError: HttpError = DecodeFailure "bad-json"
+
+val requestError: HttpError = RequestFailure "offline"
+
+val level: LogLevel = Debug
+
+val context: LogContext = Map {
+  "module": "stdlib"
+}
+
+val entry: LogEntry = {
+  level: level,
+  message: "loaded",
+  context: context
+}
+
+type Writer          = LogWrite
+type CurrentLogTask  = LogTask
+type CurrentLogError = LogError
+
+type PollDelay = Duration
+
+val errorLevel: LogLevel = Error
+
+val fsCreated: FsEvent = Created
+val fsChanged: FsEvent = Changed
+val fsDeleted: FsEvent = Deleted
+
+val fsNotFound: FsError = NotFound "/etc/missing"
+val fsPermDenied: FsError = PermissionDenied "/root/file"
+
+val pkceUserCancelled: PkceError = UserCancelled
+val pkceTimedOut: PkceError = PkceTimeout
+
+val busOwned: BusNameState = Owned
+val busQueued: BusNameState = Queued
+val busLost: BusNameState = Lost
+val dbusNoReply: DbusError = NoReply
+
+val testCall: DbusCall = {
+  destination: "org.gnome.AiviMail.Daemon",
+  path: "/org/gnome/AiviMail/Daemon",
+  interface: "org.gnome.AiviMail.IDaemon",
+  member: "TriggerSync",
+  body: []
+}
+
+val testSignal: DbusSignal = {
+  path: "/org/gnome/AiviMail/Daemon",
+  interface: "org.gnome.AiviMail.IDaemon",
+  member: "SyncStateChanged",
+  body: []
+}
+
+type MailCapability = GoaCapability
+
+val mailCap: GoaCapability = Mail
+
+val notification: Notification = {
+  summary: "New mail",
+  body: Some "You have 3 new messages",
+  icon: Some "mail-unread",
+  actions: []
+}
+
+val notifFailed: NotificationError = NotificationFailed "dbus error"
+
+val schemaMismatch: DbError = SchemaMismatch "v2 required"
+val queryFailed: DbError = QueryFailed "no such table"
+val sortAsc: SortDir = Asc
+val sortDesc: SortDir = Desc
+
+val syncState: SyncState = {
+  lastSyncedAt: None,
+  inProgress: True,
+  error: None
+}
+
+val imapAuthFailed: ImapError = ImapAuthFailed
+val imapConnFailed: ImapError = ImapConnectionFailed "timeout"
+
+val smtpConfig: SmtpConfig = {
+  host: "smtp.gmail.com",
+  port: 587
+}
+
+val smtpAuthFailed: SmtpError = SmtpAuthFailed
+

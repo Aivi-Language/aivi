@@ -1,0 +1,23 @@
+use aivi.url (Url)
+
+type PkceConfig = {
+    clientId: Text,
+    authEndpoint: Url,
+    tokenEndpoint: Url,
+    scopes: List Text,
+    redirectPort: Int
+}
+
+type PkceToken = {
+    accessToken: Text,
+    refreshToken: Option Text,
+    expiresAt: Option Int
+}
+
+type PkceError =
+  | UserCancelled
+  | NetworkError Text
+  | InvalidResponse Text
+  | PkceTimeout
+
+export (PkceConfig, PkceToken, PkceError, UserCancelled, NetworkError, InvalidResponse, PkceTimeout)

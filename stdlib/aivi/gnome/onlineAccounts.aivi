@@ -1,0 +1,35 @@
+type GoaAccountId = Text
+
+type GoaCapability =
+  | Mail
+  | Calendar
+  | Contacts
+  | Files
+  | Photos
+
+type GoaProvider = Text
+
+type GoaAccount = {
+    id: GoaAccountId
+}
+
+type AccessToken = {
+    token: Text,
+    tokenType: Text,
+    expiresAt: Option Int
+}
+
+type OAuthToken = {
+    accessToken: Text,
+    refreshToken: Option Text,
+    tokenType: Text,
+    expiresAt: Option Int
+}
+
+type GoaError =
+  | AccountNotFound Text
+  | CredentialUnavailable Text
+  | AttentionRequired Text
+  | GoaProtocolError Text
+
+export (GoaAccountId, GoaCapability, Mail, Calendar, Contacts, Files, Photos, GoaProvider, GoaAccount, AccessToken, OAuthToken, GoaError, AccountNotFound, CredentialUnavailable, AttentionRequired, GoaProtocolError)

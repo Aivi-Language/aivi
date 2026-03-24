@@ -13,11 +13,11 @@ use crate::{
     ExportResolution, Expr, ExprId, ExprKind, FloatLiteral, FragmentControl, FunctionItem,
     FunctionParameter, ImportBinding, ImportBindingMetadata, ImportBindingResolution,
     ImportBundleKind, ImportId, ImportModuleResolution, ImportValueType, InstanceItem,
-    InstanceMember, IntegerLiteral, Item, ItemHeader, ItemId, ItemKind, LiteralSuffixResolution,
-    MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode,
-    MarkupNodeId, MarkupNodeKind, MatchControl, Module, Name, NamePath, Pattern, PatternId,
-    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase, RecordExpr, RecordExprField,
-    RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
+    InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemId, ItemKind,
+    LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue,
+    MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl, Module, Name, NamePath,
+    Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase,
+    RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
     RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, ShowControl, SignalItem,
     SourceDecorator, SourceLifecycleDependencies, SourceMetadata, SourceProviderContractItem,
     SourceProviderRef, SuffixedIntegerLiteral, TermReference, TermResolution, TextFragment,
@@ -3190,6 +3190,7 @@ impl<'a> Lowerer<'a> {
 
             match import.metadata.clone() {
                 ImportBindingMetadata::Value { .. }
+                | ImportBindingMetadata::IntrinsicValue { .. }
                 | ImportBindingMetadata::OpaqueValue
                 | ImportBindingMetadata::BuiltinTerm(_) => insert_site(
                     &mut namespaces.term_imports,
@@ -4670,6 +4671,9 @@ impl<'a> Lowerer<'a> {
                     ImportBindingMetadata::BuiltinTerm(builtin) => {
                         ResolutionState::Resolved(TermResolution::Builtin(builtin))
                     }
+                    ImportBindingMetadata::IntrinsicValue { value, .. } => {
+                        ResolutionState::Resolved(TermResolution::IntrinsicValue(value))
+                    }
                     _ => ResolutionState::Resolved(TermResolution::Import(import)),
                 };
                 return;
@@ -5403,7 +5407,7 @@ fn builtin_type(name: &str) -> Option<BuiltinType> {
 }
 
 fn is_known_module(module: &str) -> bool {
-    matches!(module, "aivi.network" | "aivi.defaults")
+    matches!(module, "aivi.network" | "aivi.defaults" | "aivi.random")
 }
 
 fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMetadata> {
@@ -5422,7 +5426,55 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.defaults", "Option") => Some(ImportBindingMetadata::Bundle(
             ImportBundleKind::BuiltinOption,
         )),
+        ("aivi.random", "RandomError") => Some(ImportBindingMetadata::TypeConstructor {
+            kind: Kind::constructor(0),
+        }),
+        ("aivi.random", "randomBytes") => Some(intrinsic_import_value(
+            IntrinsicValue::RandomBytes,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bytes),
+                ),
+            ),
+        )),
+        ("aivi.random", "randomInt") => Some(intrinsic_import_value(
+            IntrinsicValue::RandomInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Int),
+                    ),
+                ),
+            ),
+        )),
         _ => None,
+    }
+}
+
+fn intrinsic_import_value(value: IntrinsicValue, ty: ImportValueType) -> ImportBindingMetadata {
+    ImportBindingMetadata::IntrinsicValue { value, ty }
+}
+
+fn primitive_import_type(builtin: BuiltinType) -> ImportValueType {
+    ImportValueType::Primitive(builtin)
+}
+
+fn arrow_import_type(parameter: ImportValueType, result: ImportValueType) -> ImportValueType {
+    ImportValueType::Arrow {
+        parameter: Box::new(parameter),
+        result: Box::new(result),
+    }
+}
+
+fn task_import_type(error: ImportValueType, value: ImportValueType) -> ImportValueType {
+    ImportValueType::Task {
+        error: Box::new(error),
+        value: Box::new(value),
     }
 }
 

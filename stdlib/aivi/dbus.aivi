@@ -1,0 +1,42 @@
+type DbusValue =
+  | DbusString Text
+  | DbusInt Int
+  | DbusBool Bool
+  | DbusList (List DbusValue)
+  | DbusStruct (List DbusValue)
+  | DbusVariant DbusValue
+
+type DbusCall = {
+    destination: Text,
+    path: Text,
+    interface: Text,
+    member: Text,
+    body: List DbusValue
+}
+
+type DbusSignal = {
+    path: Text,
+    interface: Text,
+    member: Text,
+    body: List DbusValue
+}
+
+type BusNameFlag =
+  | AllowReplacement
+  | ReplaceExisting
+  | DoNotQueue
+
+type BusNameState =
+  | Owned
+  | Queued
+  | Lost
+
+type DbusError =
+  | NameNotOwned Text
+  | ServiceUnknown Text
+  | NoReply
+  | AccessDenied Text
+  | InvalidArgs Text
+  | DbusProtocolError Text
+
+export (DbusValue, DbusString, DbusInt, DbusBool, DbusList, DbusStruct, DbusVariant, DbusCall, DbusSignal, BusNameFlag, AllowReplacement, ReplaceExisting, DoNotQueue, BusNameState, Owned, Queued, Lost, DbusError, NameNotOwned, ServiceUnknown, NoReply, AccessDenied, InvalidArgs, DbusProtocolError)

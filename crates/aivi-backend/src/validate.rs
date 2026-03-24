@@ -1143,6 +1143,7 @@ fn validate_kernel(
             | KernelExprKind::DomainMember(_)
             | KernelExprKind::BuiltinClassMember(_)
             | KernelExprKind::Builtin(_)
+            | KernelExprKind::IntrinsicValue(_)
             | KernelExprKind::Integer(_)
             | KernelExprKind::Float(_)
             | KernelExprKind::Decimal(_)

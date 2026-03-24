@@ -1,0 +1,13 @@
+type FsError =
+  | NotFound Text
+  | PermissionDenied Text
+  | ReadFailed Text
+  | WriteFailed Text
+  | FsProtocolError Text
+
+type FsEvent =
+  | Created
+  | Changed
+  | Deleted
+
+export (FsError, NotFound, PermissionDenied, ReadFailed, WriteFailed, FsProtocolError, FsEvent, Created, Changed, Deleted)

@@ -1,0 +1,13 @@
+type SyncState = {
+    lastSyncedAt: Option Int,
+    inProgress: Bool,
+    error: Option ImapError
+}
+
+type ImapError =
+  | ImapAuthFailed
+  | ImapConnectionFailed Text
+  | FolderNotFound Text
+  | ImapProtocolError Text
+
+export (SyncState, ImapError, ImapAuthFailed, ImapConnectionFailed, FolderNotFound, ImapProtocolError)

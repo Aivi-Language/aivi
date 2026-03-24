@@ -90,6 +90,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/type-kinds/main.aivi",
         "milestone-2/valid/bundled-collection-stdlib/main.aivi",
         "milestone-2/valid/bundled-root-prelude-stdlib/main.aivi",
+        "milestone-2/valid/bundled-phase-two-stdlib/main.aivi",
         "milestone-2/valid/pipe-branch-and-join/main.aivi",
         "milestone-2/valid/pipe-truthy-falsy-carriers/main.aivi",
         "milestone-2/valid/pipe-fanout-carriers/main.aivi",
@@ -263,11 +264,15 @@ fn check_reports_non_exhaustive_case_from_hir() {
 }
 
 #[test]
-fn check_accepts_stdlib_foundation_validation_files() {
+fn check_accepts_stdlib_validation_files() {
     for relative in [
         "aivi/nonEmpty.aivi",
         "aivi/validation.aivi",
+        "aivi/http.aivi",
+        "aivi/timer.aivi",
+        "aivi/log.aivi",
         "tests/foundation-validation/main.aivi",
+        "tests/boundary-validation/main.aivi",
     ] {
         let path = stdlib_path(relative);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -596,6 +601,133 @@ fn check_accepts_bundled_root_and_prelude_stdlib_imports() {
     assert!(
         output.status.success(),
         "expected bundled root/prelude imports to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+fn check_accepts_bundled_phase_two_boundary_stdlib_imports() {
+    let workspace = TempDir::new("check-phase-two-boundary-stdlib");
+    workspace.write("aivi.toml", "");
+    let main = workspace.write(
+        "main.aivi",
+        r#"use aivi.duration (
+    Duration
+)
+
+use aivi.http (
+    HttpError
+    Timeout
+    DecodeFailure
+    RequestFailure
+    HttpHeaders
+    HttpQuery
+    HttpResponse
+    HttpTask
+    DecodeMode
+    Strict
+    Retry
+)
+
+use aivi.timer (
+    TimerTick
+    TimerReady
+)
+
+use aivi.log (
+    LogLevel
+    Debug
+    Error
+    LogContext
+    LogEntry
+    LogError
+    LogTask
+    LogWrite
+)
+
+type User = {
+    id: Int,
+    name: Text
+}
+
+val headers:HttpHeaders =
+    Map {
+        "Authorization": "Bearer demo"
+    }
+
+val query:HttpQuery =
+    Map {
+        "page": "1"
+    }
+
+val decodeMode:DecodeMode =
+    Strict
+
+type RetryBudget = Retry
+
+type UsersResponse = HttpResponse (List User)
+type UsersTask = HttpTask (List User)
+
+@source http.get "https://api.example.com/users"
+sig users : Signal UsersResponse
+
+@source timer.every 120 with {
+    immediate: True,
+    coalesce: True
+}
+sig tick : Signal TimerTick
+
+@source timer.after 1000
+sig ready : Signal TimerReady
+
+val timeoutError:HttpError =
+    Timeout
+
+val decodeError:HttpError =
+    DecodeFailure "bad-json"
+
+val requestError:HttpError =
+    RequestFailure "offline"
+
+val level:LogLevel =
+    Debug
+
+val context:LogContext =
+    Map {
+        "module": "cli"
+    }
+
+val entry:LogEntry = {
+    level: level,
+    message: "loaded",
+    context: context
+}
+
+type Writer = LogWrite
+type CurrentLogTask = LogTask
+type CurrentLogError = LogError
+
+type PollDelay = Duration
+
+val errorLevel:LogLevel =
+    Error
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&main)
+        .current_dir(workspace.path())
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected bundled phase-two boundary imports to pass check, stderr was: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(

@@ -144,6 +144,7 @@ impl Validator<'_> {
                     | ImportBindingResolution::MissingExport
                     | ImportBindingResolution::Cycle,
                     ImportBindingMetadata::Value { .. }
+                    | ImportBindingMetadata::IntrinsicValue { .. }
                     | ImportBindingMetadata::OpaqueValue
                     | ImportBindingMetadata::TypeConstructor { .. }
                     | ImportBindingMetadata::BuiltinType(_)
@@ -2054,6 +2055,7 @@ impl Validator<'_> {
             ResolutionState::Unresolved
             | ResolutionState::Resolved(TermResolution::Local(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_))
+            | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
             | ResolutionState::Resolved(TermResolution::ClassMember(_))
@@ -2713,6 +2715,7 @@ impl Validator<'_> {
                     ),
                 }
             }
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(_)) => None,
         }
     }
 
@@ -6481,6 +6484,7 @@ impl Validator<'_> {
             ImportBindingMetadata::TypeConstructor { kind } => Some(kind.clone()),
             ImportBindingMetadata::BuiltinType(builtin) => Some(builtin_kind(*builtin)),
             ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::AmbientType
@@ -6610,6 +6614,7 @@ impl Validator<'_> {
                     }
                 }
                 TermResolution::Builtin(_) => {}
+                TermResolution::IntrinsicValue(_) => {}
             },
         );
     }
@@ -8756,7 +8761,10 @@ impl<'a> GateTypeContext<'a> {
     fn import_value_type(&self, import_id: ImportId) -> Option<GateType> {
         let import = &self.module.imports()[import_id];
         match &import.metadata {
-            ImportBindingMetadata::Value { ty } => Some(self.lower_import_value_type(ty)),
+            ImportBindingMetadata::Value { ty }
+            | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
+                Some(self.lower_import_value_type(ty))
+            }
             ImportBindingMetadata::TypeConstructor { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::BuiltinType(_)
@@ -8837,6 +8845,7 @@ impl<'a> GateTypeContext<'a> {
             | ResolutionState::Resolved(TermResolution::Import(_))
             | ResolutionState::Resolved(TermResolution::ClassMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
+            | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_)) => None,
         }
     }
@@ -8908,6 +8917,7 @@ impl<'a> GateTypeContext<'a> {
             | ResolutionState::Resolved(TermResolution::Import(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
+            | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_)) => None,
         }
     }
@@ -10383,6 +10393,9 @@ impl<'a> GateTypeContext<'a> {
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => {
                 GateExprInfo::default()
             }
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(_)) => {
+                GateExprInfo::default()
+            }
             ResolutionState::Resolved(TermResolution::Builtin(builtin)) => {
                 let (ty, actual) = match builtin {
                     crate::hir::BuiltinTerm::True | crate::hir::BuiltinTerm::False => {
@@ -11464,7 +11477,8 @@ fn case_constructor_key(reference: &TermReference) -> Option<CaseConstructorKey>
         | ResolutionState::Resolved(TermResolution::DomainMember(_))
         | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | ResolutionState::Resolved(TermResolution::ClassMember(_))
-        | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => None,
+        | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
+        | ResolutionState::Resolved(TermResolution::IntrinsicValue(_)) => None,
     }
 }
 

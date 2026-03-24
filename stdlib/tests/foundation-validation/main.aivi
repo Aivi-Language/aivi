@@ -3,15 +3,142 @@ use aivi.defaults (Option)
 use aivi.nonEmpty (
     NonEmpty
     NonEmptyList
+    singleton
+    head as nelHead
+    toList as nelToList
+    cons as nelCons
+)
+
+use aivi.validation (
+    Errors
+    isValid
+    isInvalid
+    getOrElse as validationGetOrElse
+    toResult as validationToResult
+    toOption as validationToOption
+    mapErr as validationMapErr
+)
+
+use aivi.list (
+    isEmpty
+    nonEmpty
+    length
+    head
+    tail
+    last
+    find
+    partition
+    Partition
+)
+
+use aivi.option (
+    isSome
+    isNone
+    getOrElse
+    toResult
+    toList as optionToList
+)
+
+use aivi.result (
+    isOk
+    isErr
+    withDefault
+    mapErr
+    toOption
+)
+
+use aivi.text (
+    join
+    concat
+    surround
+    isEmpty as textIsEmpty
+    nonEmpty as textNonEmpty
+)
+
+use aivi.duration (
+    Duration
+    DurationError
+)
+
+use aivi.url (
+    Url
+    UrlError
+)
+
+use aivi.path (
+    Path
+    PathError
+)
+
+use aivi.color (
+    Color
 )
 
 type LeadingName = NonEmpty Text
 
 type User = {
-    name: Text,
-    nickname: Option Text,
-    email: Option Text
+    name     : Text,
+    nickname : Option Text,
+    email    : Option Text
 }
 
 val user:User = { name: "Ada" }
+
 val ok:Validation (NonEmptyList Text) Text = Valid "Ada"
+val err:Validation (NonEmptyList Text) Text = Invalid (singleton "field required")
+
+val isOkSentinel:Bool = isValid ok
+val isErrSentinel:Bool = isInvalid err
+
+val names:NonEmptyList Text = singleton "Ada"
+val nameHead:Text = nelHead names
+val nameList:List Text = nelToList names
+val longerNames:NonEmptyList Text = nelCons "Grace" names
+
+val errors:Errors Text = singleton "field required"
+
+val numbers:List Int = [1, 2, 3]
+val emptyList:List Int = []
+val numsEmpty:Bool = isEmpty emptyList
+val numsPresent:Bool = nonEmpty numbers
+val numsLength:Int = length numbers
+val numsHead:Option Int = head numbers
+val numsTail:Option (List Int) = tail numbers
+val numsLast:Option Int = last numbers
+
+fun positive:Bool #n:Int => n > 0
+val foundPositive:Option Int = find positive numbers
+
+fun even:Bool #n:Int => n == 2
+val split:(Partition Int) = partition even numbers
+
+val greeting:Text = join ", " ["Hello", "World"]
+val combined:Text = concat ["a", "i", "v", "i"]
+val wrapped:Text = surround "[" "]" greeting
+val emptyStr:Bool = textIsEmpty ""
+val nonEmptyStr:Bool = textNonEmpty "aivi"
+
+val maybeId:Option Int = Some 42
+val hasId:Bool = isSome maybeId
+val noId:Option Int = None
+val missingId:Bool = isNone noId
+val idValue:Int = getOrElse 0 maybeId
+val idItems:List Int = optionToList maybeId
+val idResult:Result Text Int = toResult "no-id" maybeId
+
+val okAge:Result Text Int = Ok 30
+val errAge:Result Text Int = Err "missing"
+val ageOk:Bool = isOk okAge
+val ageErr:Bool = isErr errAge
+val ageValue:Int = withDefault 0 okAge
+val ageOption:Option Int = toOption okAge
+
+fun prefixErr:Text #msg:Text => "error:{msg}"
+val prefixedErr:Result Text Int = mapErr prefixErr errAge
+
+type PollDelay = Duration
+type ServiceUrl = Url
+type DataPath = Path
+type ThemeColor = Color
+
+

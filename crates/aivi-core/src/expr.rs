@@ -1,8 +1,8 @@
 use aivi_base::SourceSpan;
 use aivi_hir::{
     BigIntLiteral, BinaryOperator, BindingId as HirBindingId, BuiltinTerm, DecimalLiteral,
-    DomainMemberHandle, FloatLiteral, IntegerLiteral, ItemId as HirItemId, SuffixedIntegerLiteral,
-    SumConstructorHandle, UnaryOperator,
+    DomainMemberHandle, FloatLiteral, IntegerLiteral, IntrinsicValue, ItemId as HirItemId,
+    SuffixedIntegerLiteral, SumConstructorHandle, UnaryOperator,
 };
 
 use crate::{ids::ExprId, ty::Type};
@@ -62,6 +62,7 @@ pub enum Reference {
     DomainMember(DomainMemberHandle),
     BuiltinClassMember(BuiltinClassMemberIntrinsic),
     Builtin(BuiltinTerm),
+    IntrinsicValue(IntrinsicValue),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

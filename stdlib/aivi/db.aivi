@@ -1,0 +1,10 @@
+type DbError =
+  | SchemaMismatch Text
+  | QueryFailed Text
+  | ConstraintViolation Text
+  | NestedTransaction
+  | ConnectionFailed Text
+
+type SortDir = Asc | Desc
+
+export (DbError, SchemaMismatch, QueryFailed, ConstraintViolation, NestedTransaction, ConnectionFailed, SortDir, Asc, Desc)

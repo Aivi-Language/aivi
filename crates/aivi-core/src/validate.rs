@@ -609,6 +609,7 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             | ExprKind::Reference(Reference::Local(_))
             | ExprKind::Reference(Reference::BuiltinClassMember(_))
             | ExprKind::Reference(Reference::Builtin(_))
+            | ExprKind::Reference(Reference::IntrinsicValue(_))
             | ExprKind::Reference(Reference::DomainMember(_))
             | ExprKind::Reference(Reference::SumConstructor(_))
             | ExprKind::Reference(Reference::HirItem(_)) => {}

@@ -1,18 +1,26 @@
 use aivi.option (
     getOrElse as optionGetOrElse
+    isSome as optionIsSome
+    isNone as optionIsNone
 )
 
 use aivi.result (
     withDefault as resultWithDefault
+    isOk as resultIsOk
+    isErr as resultIsErr
 )
 
 use aivi.list (
     length as listLength
     head as listHead
+    isEmpty as listIsEmpty
+    nonEmpty as listNonEmpty
 )
 
 use aivi.text (
     join as textJoin
+    concat as textConcat
+    isEmpty as textIsEmpty
 )
 
 fun getOrElse:A #fallback:A #value:(Option A) =>
@@ -30,29 +38,25 @@ fun head:(Option A) #items:(List A) =>
 fun join:Text #separator:Text #parts:(List Text) =>
     textJoin separator parts
 
-export (
-    Int,
-    Float,
-    Decimal,
-    BigInt,
-    Bool,
-    Text,
-    Unit,
-    List,
-    Option,
-    Result,
-    Validation,
-    Signal,
-    Task,
-    Eq,
-    Default,
-    Functor,
-    Applicative,
-    Monad,
-    Foldable,
-    getOrElse,
-    withDefault,
-    length,
-    head,
-    join
-)
+fun concat:Text #parts:(List Text) =>
+    textConcat parts
+
+fun isEmpty:Bool #items:(List A) =>
+    listIsEmpty items
+
+fun nonEmpty:Bool #items:(List A) =>
+    listNonEmpty items
+
+fun isSome:Bool #value:(Option A) =>
+    optionIsSome value
+
+fun isNone:Bool #value:(Option A) =>
+    optionIsNone value
+
+fun isOk:Bool #value:(Result E A) =>
+    resultIsOk value
+
+fun isErr:Bool #value:(Result E A) =>
+    resultIsErr value
+
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Applicative, Monad, Foldable, getOrElse, withDefault, length, head, join, concat, isEmpty, nonEmpty, isSome, isNone, isOk, isErr)

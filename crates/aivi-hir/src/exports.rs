@@ -405,6 +405,7 @@ fn resolve_type_constructor(
             ImportBindingMetadata::Bundle(bundle) => Some(ResolvedTypeConstructor::Bundle(*bundle)),
             ImportBindingMetadata::Unknown
             | ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::TypeConstructor { .. }
             | ImportBindingMetadata::BuiltinTerm(_)

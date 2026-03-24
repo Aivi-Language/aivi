@@ -1,0 +1,30 @@
+type LogLevel =
+  | Debug
+  | Info
+  | Warn
+  | Error
+
+type LogContext = (Map Text Text)
+
+type LogEntry = {
+  level: LogLevel
+  message: Text
+  context: LogContext
+}
+
+type LogError = Text
+type LogTask  = (Task LogError Unit)
+type LogWrite = (LogEntry -> LogTask)
+
+export (
+  LogLevel,
+  Debug,
+  Info,
+  Warn,
+  Error,
+  LogContext,
+  LogEntry,
+  LogError,
+  LogTask,
+  LogWrite
+)

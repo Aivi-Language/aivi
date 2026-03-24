@@ -1,14 +1,32 @@
 type NonEmpty A =
-  | NonEmpty A (List A)
+  | MkNonEmpty A (List A)
 
 type NonEmptyList A =
-  | NonEmptyList A (List A)
+  | MkNEL A (List A)
 
-val sampleNames:NonEmptyList Text =
-    NonEmptyList "Ada" [
-        "Lovelace"
-    ]
+fun singleton:(NonEmptyList A) #item:A =>
+    MkNEL item []
+
+fun cons:(NonEmptyList A) #item:A #nel:(NonEmptyList A) =>
+    nel
+     ||> MkNEL h t => MkNEL item (append [h] t)
+
+fun head:A #nel:(NonEmptyList A) =>
+    nel
+     ||> MkNEL h _ => h
+
+fun toList:(List A) #nel:(NonEmptyList A) =>
+    nel
+     ||> MkNEL h t => append [h] t
+
+fun fromNonEmpty:(NonEmptyList A) #ne:(NonEmpty A) =>
+    ne
+     ||> MkNonEmpty h t => MkNEL h t
 
 export NonEmpty
 export NonEmptyList
-export sampleNames
+export singleton
+export cons
+export head
+export toList
+export fromNonEmpty

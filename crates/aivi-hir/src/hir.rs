@@ -246,6 +246,22 @@ pub enum BuiltinTerm {
     Invalid,
 }
 
+/// Compiler-known stdlib values that lower through dedicated runtime seams.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IntrinsicValue {
+    RandomInt,
+    RandomBytes,
+}
+
+impl fmt::Display for IntrinsicValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RandomInt => f.write_str("aivi.random.randomInt"),
+            Self::RandomBytes => f.write_str("aivi.random.randomBytes"),
+        }
+    }
+}
+
 /// Compiler-known builtin type references that live outside the current module graph.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinType {
@@ -275,9 +291,17 @@ pub enum BuiltinType {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImportBindingMetadata {
     Unknown,
-    Value { ty: ImportValueType },
+    Value {
+        ty: ImportValueType,
+    },
+    IntrinsicValue {
+        value: IntrinsicValue,
+        ty: ImportValueType,
+    },
     OpaqueValue,
-    TypeConstructor { kind: Kind },
+    TypeConstructor {
+        kind: Kind,
+    },
     BuiltinType(BuiltinType),
     BuiltinTerm(BuiltinTerm),
     AmbientType,
@@ -337,6 +361,7 @@ pub enum TermResolution {
     Local(BindingId),
     Item(ItemId),
     Import(ImportId),
+    IntrinsicValue(IntrinsicValue),
     DomainMember(DomainMemberResolution),
     AmbiguousDomainMembers(NonEmpty<DomainMemberResolution>),
     ClassMember(ClassMemberResolution),

@@ -1,0 +1,16 @@
+type NotificationAction = {
+    label: Text,
+    id: Text
+}
+
+type Notification = {
+    summary: Text,
+    body: Option Text,
+    icon: Option Text,
+    actions: List NotificationAction
+}
+
+type NotificationError =
+  | NotificationFailed Text
+
+export (NotificationAction, Notification, NotificationError, NotificationFailed)

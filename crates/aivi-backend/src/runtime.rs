@@ -3,7 +3,7 @@ use std::{
     fmt,
 };
 
-use aivi_hir::{DomainMemberHandle, ItemId as HirItemId, SumConstructorHandle};
+use aivi_hir::{DomainMemberHandle, IntrinsicValue, ItemId as HirItemId, SumConstructorHandle};
 
 use crate::{
     BinaryOperator, BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier,
@@ -44,6 +44,21 @@ pub enum RuntimeConstructor {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RuntimeTaskPlan {
+    RandomInt { low: i64, high: i64 },
+    RandomBytes { count: i64 },
+}
+
+impl fmt::Display for RuntimeTaskPlan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RandomInt { low, high } => write!(f, "randomInt({low}, {high})"),
+            Self::RandomBytes { count } => write!(f, "randomBytes({count})"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeCallable {
     ItemBody {
         item: ItemId,
@@ -67,6 +82,10 @@ pub enum RuntimeCallable {
         intrinsic: BuiltinClassMemberIntrinsic,
         bound_arguments: Vec<RuntimeValue>,
     },
+    IntrinsicValue {
+        value: IntrinsicValue,
+        bound_arguments: Vec<RuntimeValue>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +97,7 @@ pub enum RuntimeValue {
     Decimal(RuntimeDecimal),
     BigInt(RuntimeBigInt),
     Text(Box<str>),
+    Bytes(Box<[u8]>),
     Tuple(Vec<RuntimeValue>),
     List(Vec<RuntimeValue>),
     Map(Vec<RuntimeMapEntry>),
@@ -91,6 +111,7 @@ pub enum RuntimeValue {
     ValidationValid(Box<RuntimeValue>),
     ValidationInvalid(Box<RuntimeValue>),
     Signal(Box<RuntimeValue>),
+    Task(RuntimeTaskPlan),
     SuffixedInteger { raw: Box<str>, suffix: Box<str> },
     Callable(RuntimeCallable),
 }
@@ -177,6 +198,13 @@ impl RuntimeValue {
         }
     }
 
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::Bytes(value) => Some(value.as_ref()),
+            _ => None,
+        }
+    }
+
     fn write_display_text(&self, target: &mut impl fmt::Write) -> fmt::Result {
         let mut stack = vec![DisplayFrame::Value(self)];
         while let Some(frame) = stack.pop() {
@@ -190,6 +218,7 @@ impl RuntimeValue {
                     Self::Decimal(value) => write!(target, "{value}")?,
                     Self::BigInt(value) => write!(target, "{value}")?,
                     Self::Text(value) => target.write_str(value)?,
+                    Self::Bytes(value) => write!(target, "<bytes:{}>", value.len())?,
                     Self::Tuple(elements) => {
                         push_delimited_values(&mut stack, elements, "(", ")");
                     }
@@ -234,6 +263,7 @@ impl RuntimeValue {
                         stack.push(DisplayFrame::Value(value));
                         stack.push(DisplayFrame::StaticText("Signal("));
                     }
+                    Self::Task(task) => write!(target, "<task {task}>")?,
                     Self::SuffixedInteger { raw, suffix } => write!(target, "{raw}{suffix}")?,
                     Self::Callable(callable) => match callable {
                         RuntimeCallable::ItemBody { item, .. } => {
@@ -254,6 +284,9 @@ impl RuntimeValue {
                         )?,
                         RuntimeCallable::BuiltinClassMember { intrinsic, .. } => {
                             write!(target, "<builtin-class-member {intrinsic:?}>")?
+                        }
+                        RuntimeCallable::IntrinsicValue { value, .. } => {
+                            write!(target, "<intrinsic-value {value}>")?
                         }
                     },
                 },
@@ -430,6 +463,13 @@ pub enum EvaluationError {
         expr: KernelExprId,
         found: RuntimeValue,
     },
+    InvalidIntrinsicArgument {
+        kernel: KernelId,
+        expr: KernelExprId,
+        value: IntrinsicValue,
+        index: usize,
+        found: RuntimeValue,
+    },
     UnsupportedDomainMemberCall {
         kernel: KernelId,
         expr: KernelExprId,
@@ -595,6 +635,17 @@ impl fmt::Display for EvaluationError {
             Self::InvalidCallee { kernel, found, .. } => write!(
                 f,
                 "kernel {kernel} attempted to call non-callable runtime value `{found}`"
+            ),
+            Self::InvalidIntrinsicArgument {
+                kernel,
+                value,
+                index,
+                found,
+                ..
+            } => write!(
+                f,
+                "kernel {kernel} received invalid argument {} for intrinsic `{value}`: `{found}`",
+                index + 1
             ),
             Self::UnsupportedDomainMemberCall { kernel, handle, .. } => write!(
                 f,
@@ -953,6 +1004,9 @@ impl<'a> KernelEvaluator<'a> {
                             values.push(runtime_class_member_value(*intrinsic))
                         }
                         KernelExprKind::Builtin(term) => values.push(map_builtin(*term)),
+                        KernelExprKind::IntrinsicValue(value) => {
+                            values.push(runtime_intrinsic_value(*value))
+                        }
                         KernelExprKind::Integer(integer) => {
                             let value = integer.raw.parse::<i64>().map(RuntimeValue::Int).map_err(
                                 |_| EvaluationError::InvalidIntegerLiteral {
@@ -1676,6 +1730,26 @@ impl<'a> KernelEvaluator<'a> {
                     self.apply_callable(kernel_id, expr, value, remaining, globals)
                 }
             }
+            RuntimeCallable::IntrinsicValue {
+                value,
+                mut bound_arguments,
+            } => {
+                bound_arguments.extend(arguments.into_iter().map(strip_signal));
+                let arity = intrinsic_value_arity(value);
+                if bound_arguments.len() < arity {
+                    return Ok(RuntimeValue::Callable(RuntimeCallable::IntrinsicValue {
+                        value,
+                        bound_arguments,
+                    }));
+                }
+                let remaining = bound_arguments.split_off(arity);
+                let value = evaluate_intrinsic_value(kernel_id, expr, value, bound_arguments)?;
+                if remaining.is_empty() {
+                    Ok(value)
+                } else {
+                    self.apply_callable(kernel_id, expr, value, remaining, globals)
+                }
+            }
         }
     }
 
@@ -2357,6 +2431,13 @@ fn map_builtin(term: BuiltinTerm) -> RuntimeValue {
     }
 }
 
+fn runtime_intrinsic_value(value: IntrinsicValue) -> RuntimeValue {
+    RuntimeValue::Callable(RuntimeCallable::IntrinsicValue {
+        value,
+        bound_arguments: Vec::new(),
+    })
+}
+
 fn runtime_class_member_value(intrinsic: BuiltinClassMemberIntrinsic) -> RuntimeValue {
     match intrinsic {
         BuiltinClassMemberIntrinsic::Empty(BuiltinAppendCarrier::Text) => {
@@ -2372,6 +2453,35 @@ fn runtime_class_member_value(intrinsic: BuiltinClassMemberIntrinsic) -> Runtime
     }
 }
 
+fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
+    match value {
+        IntrinsicValue::RandomBytes => 1,
+        IntrinsicValue::RandomInt => 2,
+    }
+}
+
+fn evaluate_intrinsic_value(
+    kernel: KernelId,
+    expr: KernelExprId,
+    value: IntrinsicValue,
+    arguments: Vec<RuntimeValue>,
+) -> Result<RuntimeValue, EvaluationError> {
+    match (value, arguments.as_slice()) {
+        (IntrinsicValue::RandomBytes, [count]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomBytes {
+                count: expect_intrinsic_i64(kernel, expr, value, 0, count)?,
+            }))
+        }
+        (IntrinsicValue::RandomInt, [low, high]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomInt {
+                low: expect_intrinsic_i64(kernel, expr, value, 0, low)?,
+                high: expect_intrinsic_i64(kernel, expr, value, 1, high)?,
+            }))
+        }
+        _ => unreachable!("intrinsic arity should be enforced before evaluation"),
+    }
+}
+
 fn builtin_class_member_arity(intrinsic: BuiltinClassMemberIntrinsic) -> usize {
     match intrinsic {
         BuiltinClassMemberIntrinsic::Empty(_) => 0,
@@ -2382,6 +2492,25 @@ fn builtin_class_member_arity(intrinsic: BuiltinClassMemberIntrinsic) -> usize {
         | BuiltinClassMemberIntrinsic::Append(_)
         | BuiltinClassMemberIntrinsic::Map(_)
         | BuiltinClassMemberIntrinsic::Apply(_) => 2,
+    }
+}
+
+fn expect_intrinsic_i64(
+    kernel: KernelId,
+    expr: KernelExprId,
+    value: IntrinsicValue,
+    index: usize,
+    argument: &RuntimeValue,
+) -> Result<i64, EvaluationError> {
+    match strip_signal(argument.clone()) {
+        RuntimeValue::Int(found) => Ok(found),
+        found => Err(EvaluationError::InvalidIntrinsicArgument {
+            kernel,
+            expr,
+            value,
+            index,
+            found: found.clone(),
+        }),
     }
 }
 
@@ -2428,6 +2557,8 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
         (LayoutKind::Primitive(PrimitiveType::Decimal), RuntimeValue::Decimal(_)) => true,
         (LayoutKind::Primitive(PrimitiveType::BigInt), RuntimeValue::BigInt(_)) => true,
         (LayoutKind::Primitive(PrimitiveType::Text), RuntimeValue::Text(_)) => true,
+        (LayoutKind::Primitive(PrimitiveType::Bytes), RuntimeValue::Bytes(_)) => true,
+        (LayoutKind::Primitive(PrimitiveType::Task), RuntimeValue::Task(_)) => true,
         (LayoutKind::Tuple(expected), RuntimeValue::Tuple(elements)) => {
             expected.len() == elements.len()
                 && expected

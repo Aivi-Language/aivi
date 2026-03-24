@@ -1,0 +1,88 @@
+use aivi.duration (
+  Duration
+)
+use aivi.http (
+  HttpError
+  Timeout
+  DecodeFailure
+  RequestFailure
+  HttpHeaders
+  HttpQuery
+  HttpResponse
+  HttpTask
+  DecodeMode
+  Strict
+  Retry
+)
+use aivi.timer (
+  TimerTick
+  TimerReady
+)
+use aivi.log (
+  LogLevel
+  Debug
+  Error
+  LogContext
+  LogEntry
+  LogError
+  LogTask
+  LogWrite
+)
+
+type User = {
+  id: Int
+  name: Text
+}
+
+val headers: HttpHeaders = Map {
+  "Authorization": "Bearer demo"
+}
+
+val query: HttpQuery = Map {
+  "page": "1"
+}
+
+val decodeMode: DecodeMode = Strict
+
+type RetryBudget = Retry
+
+type UsersResponse = HttpResponse (List User)
+type UsersTask     = HttpTask (List User)
+
+@source http.get "https://api.example.com/users"
+sig users: Signal UsersResponse
+
+@source timer.every 120 with {
+  immediate: True
+  coalesce: True
+}
+sig tick: Signal TimerTick
+
+@source timer.after 1000
+sig ready: Signal TimerReady
+
+val timeoutError: HttpError = Timeout
+
+val decodeError: HttpError = DecodeFailure "bad-json"
+
+val requestError: HttpError = RequestFailure "offline"
+
+val level: LogLevel = Debug
+
+val context: LogContext = Map {
+  "module": "fixtures"
+}
+
+val entry: LogEntry = {
+  level: level,
+  message: "loaded",
+  context: context
+}
+
+type Writer          = LogWrite
+type CurrentLogTask  = LogTask
+type CurrentLogError = LogError
+
+type PollDelay = Duration
+
+val errorLevel: LogLevel = Error

@@ -284,6 +284,7 @@ fn resolve_decode_mode_name(
         | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
         | ResolutionState::Resolved(TermResolution::Import(_))
         | ResolutionState::Resolved(TermResolution::Builtin(_))
+        | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
         | ResolutionState::Unresolved => None,
     }
 }

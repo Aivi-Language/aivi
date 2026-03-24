@@ -2,7 +2,7 @@ use std::fmt;
 
 use aivi_base::SourceSpan;
 use aivi_core::Arena;
-use aivi_hir::{DomainMemberHandle, SumConstructorHandle};
+use aivi_hir::{DomainMemberHandle, IntrinsicValue, SumConstructorHandle};
 
 use crate::{
     EnvSlotId, InlineSubjectId, ItemId, KernelExprId, LayoutId, PipelineId, SourceId,
@@ -410,6 +410,7 @@ pub enum KernelExprKind {
     DomainMember(DomainMemberHandle),
     BuiltinClassMember(BuiltinClassMemberIntrinsic),
     Builtin(BuiltinTerm),
+    IntrinsicValue(IntrinsicValue),
     Integer(IntegerLiteral),
     Float(FloatLiteral),
     Decimal(DecimalLiteral),
@@ -584,6 +585,7 @@ pub fn describe_expr_kind(kind: &KernelExprKind) -> String {
             format!("builtin-class-member {intrinsic:?}")
         }
         KernelExprKind::Builtin(term) => format!("builtin {term}"),
+        KernelExprKind::IntrinsicValue(value) => format!("intrinsic {value}"),
         KernelExprKind::Integer(integer) => integer.raw.to_string(),
         KernelExprKind::Float(float) => float.raw.to_string(),
         KernelExprKind::Decimal(decimal) => decimal.raw.to_string(),

@@ -1,0 +1,31 @@
+type HttpError =
+  | Timeout
+  | DecodeFailure Text
+  | RequestFailure Text
+
+type HttpHeaders    = (Map Text Text)
+type HttpQuery      = (Map Text Text)
+type HttpResponse A = (Result HttpError A)
+type HttpTask A     = (Task HttpError A)
+
+type DecodeMode =
+  | Strict
+  | Permissive
+
+domain Retry over Int
+literal x: Int -> Retry
+
+export (
+  HttpError,
+  Timeout,
+  DecodeFailure,
+  RequestFailure,
+  HttpHeaders,
+  HttpQuery,
+  HttpResponse,
+  HttpTask,
+  DecodeMode,
+  Strict,
+  Permissive,
+  Retry
+)
