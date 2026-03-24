@@ -14,14 +14,15 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
-use aivi_backend::{RuntimeCallable, RuntimeValue};
+use aivi_backend::{DetachedRuntimeValue, RuntimeCallable, RuntimeValue};
 use aivi_hir as hir;
 use aivi_typing::BuiltinSourceProvider;
 use url::Url;
 
+use crate::startup::DetachedRuntimePublicationPort;
 use crate::{
     CancellationObserver, EvaluatedSourceConfig, LinkedSourceLifecycleAction,
-    RuntimeSourceProvider, SourceInstanceId, SourceLifecycleActionKind, SourcePublicationPort,
+    RuntimeSourceProvider, SourceInstanceId, SourceLifecycleActionKind,
     source_decode::{
         ExternalSourceValue, SourceDecodeError, decode_external, encode_runtime_json,
         parse_json_text, validate_supported_program,
@@ -124,7 +125,7 @@ enum ActiveProviderState {
         provider: RuntimeSourceProvider,
         output: WindowKeyOutputPlan,
         allow_repeat: bool,
-        port: SourcePublicationPort<RuntimeValue>,
+        port: DetachedRuntimePublicationPort,
     },
 }
 
@@ -183,7 +184,7 @@ impl SourceProviderManager {
             let Ok(Some(value)) = output.value_for_key(&event.name) else {
                 continue;
             };
-            let _ = port.publish(value);
+            let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
         }
     }
 
@@ -216,7 +217,7 @@ impl SourceProviderManager {
         action_kind: SourceLifecycleActionKind,
         instance: SourceInstanceId,
         config: &EvaluatedSourceConfig,
-        port: SourcePublicationPort<RuntimeValue>,
+        port: DetachedRuntimePublicationPort,
     ) -> Result<(), SourceProviderExecutionError> {
         self.remove_active(instance);
         let state = match &config.provider {
@@ -1692,9 +1693,9 @@ impl WindowKeyOutputPlan {
     }
 }
 
-fn spawn_timer_every(port: SourcePublicationPort<RuntimeValue>, plan: TimerPlan) {
+fn spawn_timer_every(port: DetachedRuntimePublicationPort, plan: TimerPlan) {
     thread::spawn(move || {
-        if plan.immediate && port.publish(RuntimeValue::Unit).is_err() {
+        if plan.immediate && port.publish(DetachedRuntimeValue::unit()).is_err() {
             return;
         }
         while !port.is_cancelled() {
@@ -1702,14 +1703,14 @@ fn spawn_timer_every(port: SourcePublicationPort<RuntimeValue>, plan: TimerPlan)
             if port.is_cancelled() {
                 break;
             }
-            if port.publish(RuntimeValue::Unit).is_err() {
+            if port.publish(DetachedRuntimeValue::unit()).is_err() {
                 break;
             }
         }
     });
 }
 
-fn spawn_timer_after(port: SourcePublicationPort<RuntimeValue>, plan: TimerPlan) {
+fn spawn_timer_after(port: DetachedRuntimePublicationPort, plan: TimerPlan) {
     thread::spawn(move || {
         if !plan.immediate {
             thread::sleep(plan.delay);
@@ -1717,17 +1718,20 @@ fn spawn_timer_after(port: SourcePublicationPort<RuntimeValue>, plan: TimerPlan)
                 return;
             }
         }
-        let _ = port.publish(RuntimeValue::Unit);
+        let _ = port.publish(DetachedRuntimeValue::unit());
     });
 }
 
-fn spawn_http_worker(port: SourcePublicationPort<RuntimeValue>, plan: HttpPlan) {
+fn spawn_http_worker(port: DetachedRuntimePublicationPort, plan: HttpPlan) {
     thread::spawn(move || {
         loop {
             let Some(value) = execute_http_cycle(&plan, &port) else {
                 return;
             };
-            if port.publish(value).is_err() {
+            if port
+                .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                .is_err()
+            {
                 return;
             }
             let Some(refresh_every) = plan.refresh_every else {
@@ -1742,7 +1746,7 @@ fn spawn_http_worker(port: SourcePublicationPort<RuntimeValue>, plan: HttpPlan) 
 
 fn execute_http_cycle(
     plan: &HttpPlan,
-    port: &SourcePublicationPort<RuntimeValue>,
+    port: &DetachedRuntimePublicationPort,
 ) -> Option<RuntimeValue> {
     let mut attempt = 0;
     loop {
@@ -1790,7 +1794,7 @@ fn execute_http_cycle(
     }
 }
 
-fn spawn_fs_read_worker(port: SourcePublicationPort<RuntimeValue>, plan: FsReadPlan) {
+fn spawn_fs_read_worker(port: DetachedRuntimePublicationPort, plan: FsReadPlan) {
     thread::spawn(move || {
         if sleep_with_cancellation(plan.debounce, &port) {
             return;
@@ -1818,11 +1822,11 @@ fn spawn_fs_read_worker(port: SourcePublicationPort<RuntimeValue>, plan: FsReadP
                 }
             }
         };
-        let _ = port.publish(result);
+        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(result));
     });
 }
 
-fn spawn_fs_watch_worker(port: SourcePublicationPort<RuntimeValue>, plan: FsWatchPlan) {
+fn spawn_fs_watch_worker(port: DetachedRuntimePublicationPort, plan: FsWatchPlan) {
     thread::spawn(move || {
         let mut previous = file_signature(&plan.path);
         while !port.is_cancelled() {
@@ -1847,14 +1851,17 @@ fn spawn_fs_watch_worker(port: SourcePublicationPort<RuntimeValue>, plan: FsWatc
             let Ok(Some(value)) = plan.output.value_for_name(event) else {
                 continue;
             };
-            if port.publish(value).is_err() {
+            if port
+                .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                .is_err()
+            {
                 break;
             }
         }
     });
 }
 
-fn spawn_socket_worker(port: SourcePublicationPort<RuntimeValue>, plan: SocketPlan) {
+fn spawn_socket_worker(port: DetachedRuntimePublicationPort, plan: SocketPlan) {
     thread::spawn(move || {
         loop {
             if port.is_cancelled() {
@@ -1884,7 +1891,10 @@ fn spawn_socket_worker(port: SourcePublicationPort<RuntimeValue>, plan: SocketPl
                                         Err(_) => break,
                                     },
                                 };
-                                if port.publish(value).is_err() {
+                                if port
+                                    .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                                    .is_err()
+                                {
                                     return;
                                 }
                             }
@@ -1901,7 +1911,8 @@ fn spawn_socket_worker(port: SourcePublicationPort<RuntimeValue>, plan: SocketPl
                                     .result
                                     .error_value(TextSourceErrorKind::Request, &error.to_string())
                                 {
-                                    let _ = port.publish(value);
+                                    let _ = port
+                                        .publish(DetachedRuntimeValue::from_runtime_owned(value));
                                 }
                                 break;
                             }
@@ -1913,7 +1924,7 @@ fn spawn_socket_worker(port: SourcePublicationPort<RuntimeValue>, plan: SocketPl
                         .result
                         .error_value(TextSourceErrorKind::Connect, &error.to_string())
                     {
-                        let _ = port.publish(value);
+                        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
                     }
                 }
             }
@@ -1925,7 +1936,7 @@ fn spawn_socket_worker(port: SourcePublicationPort<RuntimeValue>, plan: SocketPl
 }
 
 fn spawn_mailbox_worker(
-    port: SourcePublicationPort<RuntimeValue>,
+    port: DetachedRuntimePublicationPort,
     plan: MailboxPlan,
     receiver: mpsc::Receiver<Box<str>>,
 ) {
@@ -1946,7 +1957,10 @@ fn spawn_mailbox_worker(
                             Err(_) => return,
                         },
                     };
-                    if port.publish(value).is_err() {
+                    if port
+                        .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                        .is_err()
+                    {
                         return;
                     }
                 }
@@ -1956,7 +1970,7 @@ fn spawn_mailbox_worker(
                         .result
                         .error_value(TextSourceErrorKind::Mailbox, "mailbox disconnected")
                     {
-                        let _ = port.publish(value);
+                        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
                     }
                     return;
                 }
@@ -1965,7 +1979,7 @@ fn spawn_mailbox_worker(
     });
 }
 
-fn spawn_process_worker(port: SourcePublicationPort<RuntimeValue>, plan: ProcessPlan) {
+fn spawn_process_worker(port: DetachedRuntimePublicationPort, plan: ProcessPlan) {
     thread::spawn(move || {
         let mut command = Command::new(plan.command.as_ref());
         command.args(plan.args.iter().map(|arg| arg.as_ref()));
@@ -1982,7 +1996,7 @@ fn spawn_process_worker(port: SourcePublicationPort<RuntimeValue>, plan: Process
             Ok(child) => child,
             Err(error) => {
                 if let Some(value) = plan.events.failed_value(&error.to_string()).ok().flatten() {
-                    let _ = port.publish(value);
+                    let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
                 }
                 return;
             }
@@ -2001,7 +2015,10 @@ fn spawn_process_worker(port: SourcePublicationPort<RuntimeValue>, plan: Process
             }
         });
         if let Some(value) = plan.events.spawned_value().ok().flatten() {
-            if port.publish(value).is_err() {
+            if port
+                .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                .is_err()
+            {
                 done.store(true, Ordering::Release);
                 kill_pid(pid);
                 return;
@@ -2032,7 +2049,7 @@ fn spawn_process_worker(port: SourcePublicationPort<RuntimeValue>, plan: Process
             Ok(status) => {
                 if let Some(code) = status.code() {
                     if let Some(value) = plan.events.exited_value(code as i64).ok().flatten() {
-                        let _ = port.publish(value);
+                        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
                     } else if !status.success()
                         && let Some(value) = plan
                             .events
@@ -2040,13 +2057,13 @@ fn spawn_process_worker(port: SourcePublicationPort<RuntimeValue>, plan: Process
                             .ok()
                             .flatten()
                     {
-                        let _ = port.publish(value);
+                        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
                     }
                 }
             }
             Err(error) => {
                 if let Some(value) = plan.events.failed_value(&error.to_string()).ok().flatten() {
-                    let _ = port.publish(value);
+                    let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
                 }
             }
         }
@@ -2055,7 +2072,7 @@ fn spawn_process_worker(port: SourcePublicationPort<RuntimeValue>, plan: Process
 
 fn read_process_stream(
     stream: impl std::io::Read,
-    port: SourcePublicationPort<RuntimeValue>,
+    port: DetachedRuntimePublicationPort,
     plan: ProcessEventPlan,
     stdout: bool,
 ) {
@@ -2073,7 +2090,9 @@ fn read_process_stream(
                     plan.stderr_value(line_text)
                 };
                 if let Ok(Some(value)) = value
-                    && port.publish(value).is_err()
+                    && port
+                        .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                        .is_err()
                 {
                     break;
                 }
@@ -2181,7 +2200,7 @@ fn retry_backoff(attempt: u32) -> Duration {
     Duration::from_millis(100_u64.saturating_mul(factor))
 }
 
-fn sleep_with_cancellation(duration: Duration, port: &SourcePublicationPort<RuntimeValue>) -> bool {
+fn sleep_with_cancellation(duration: Duration, port: &DetachedRuntimePublicationPort) -> bool {
     if duration.is_zero() {
         return port.is_cancelled();
     }
@@ -2235,13 +2254,17 @@ fn strip_signal(value: &RuntimeValue) -> &RuntimeValue {
     current
 }
 
+fn strip_detached_signal(value: &DetachedRuntimeValue) -> &RuntimeValue {
+    strip_signal(value.as_runtime())
+}
+
 fn parse_bool(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<bool, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Bool(value) => Ok(*value),
         other => Err(SourceProviderExecutionError::InvalidOption {
             instance,
@@ -2257,9 +2280,9 @@ fn parse_nonnegative_int(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<i64, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Int(value) if *value >= 0 => Ok(*value),
         other => Err(SourceProviderExecutionError::InvalidOption {
             instance,
@@ -2275,9 +2298,9 @@ fn parse_text_argument(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     index: usize,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Box<str>, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Text(value) => Ok(value.clone()),
         other => Err(SourceProviderExecutionError::InvalidArgument {
             instance,
@@ -2293,9 +2316,9 @@ fn parse_text_option(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Box<str>, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Text(value) => Ok(value.clone()),
         other => Err(SourceProviderExecutionError::InvalidOption {
             instance,
@@ -2311,15 +2334,15 @@ fn parse_text_list(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     index: usize,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Vec<Box<str>>, SourceProviderExecutionError> {
-    let RuntimeValue::List(values) = strip_signal(value) else {
+    let RuntimeValue::List(values) = strip_detached_signal(value) else {
         return Err(SourceProviderExecutionError::InvalidArgument {
             instance,
             provider,
             index,
             expected: "List Text".into(),
-            value: strip_signal(value).clone(),
+            value: strip_detached_signal(value).clone(),
         });
     };
     values
@@ -2341,15 +2364,15 @@ fn parse_text_map(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Vec<(Box<str>, Box<str>)>, SourceProviderExecutionError> {
-    let RuntimeValue::Map(entries) = strip_signal(value) else {
+    let RuntimeValue::Map(entries) = strip_detached_signal(value) else {
         return Err(SourceProviderExecutionError::InvalidOption {
             instance,
             provider,
             option_name: option_name.into(),
             expected: "Map Text Text".into(),
-            value: strip_signal(value).clone(),
+            value: strip_detached_signal(value).clone(),
         });
     };
     entries
@@ -2382,15 +2405,15 @@ fn parse_named_variants(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<BTreeSet<Box<str>>, SourceProviderExecutionError> {
-    let RuntimeValue::List(values) = strip_signal(value) else {
+    let RuntimeValue::List(values) = strip_detached_signal(value) else {
         return Err(SourceProviderExecutionError::InvalidOption {
             instance,
             provider,
             option_name: option_name.into(),
             expected: "List payloadless variants".into(),
-            value: strip_signal(value).clone(),
+            value: strip_detached_signal(value).clone(),
         });
     };
     values
@@ -2413,9 +2436,9 @@ fn parse_duration(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     index: usize,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Duration, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Int(value) if *value >= 0 => Ok(Duration::from_millis(*value as u64)),
         RuntimeValue::SuffixedInteger { raw, suffix } => {
             let amount =
@@ -2425,7 +2448,7 @@ fn parse_duration(
                         provider,
                         index,
                         expected: "Duration".into(),
-                        value: value.clone(),
+                        value: value.to_runtime(),
                     })?;
             duration_from_suffix(amount, suffix).ok_or_else(|| {
                 SourceProviderExecutionError::InvalidArgument {
@@ -2433,7 +2456,7 @@ fn parse_duration(
                     provider,
                     index,
                     expected: "Duration".into(),
-                    value: value.clone(),
+                    value: value.to_runtime(),
                 }
             })
         }
@@ -2451,9 +2474,9 @@ fn parse_option_duration(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Duration, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Int(value) if *value >= 0 => Ok(Duration::from_millis(*value as u64)),
         RuntimeValue::SuffixedInteger { raw, suffix } => {
             let amount =
@@ -2463,7 +2486,7 @@ fn parse_option_duration(
                         provider,
                         option_name: option_name.into(),
                         expected: "Duration".into(),
-                        value: value.clone(),
+                        value: value.to_runtime(),
                     })?;
             duration_from_suffix(amount, suffix).ok_or_else(|| {
                 SourceProviderExecutionError::InvalidOption {
@@ -2471,7 +2494,7 @@ fn parse_option_duration(
                     provider,
                     option_name: option_name.into(),
                     expected: "Duration".into(),
-                    value: value.clone(),
+                    value: value.to_runtime(),
                 }
             })
         }
@@ -2489,9 +2512,9 @@ fn parse_retry(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<u32, SourceProviderExecutionError> {
-    match strip_signal(value) {
+    match strip_detached_signal(value) {
         RuntimeValue::Int(value) if *value >= 0 => Ok(*value as u32),
         RuntimeValue::SuffixedInteger { raw, suffix } if suffix.as_ref() == "x" => raw
             .parse::<u32>()
@@ -2500,7 +2523,7 @@ fn parse_retry(
                 provider,
                 option_name: option_name.into(),
                 expected: "Retry".into(),
-                value: value.clone(),
+                value: value.to_runtime(),
             }),
         other => Err(SourceProviderExecutionError::InvalidOption {
             instance,
@@ -2516,9 +2539,9 @@ fn parse_stream_mode(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     option_name: &str,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<ProcessStreamMode, SourceProviderExecutionError> {
-    let value = strip_signal(value);
+    let value = strip_detached_signal(value);
     let Some(name) = variant_name_value(value) else {
         return Err(SourceProviderExecutionError::InvalidOption {
             instance,
@@ -2563,9 +2586,9 @@ fn variant_name_value(value: &RuntimeValue) -> Option<Box<str>> {
 fn encode_runtime_body(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
-    value: &RuntimeValue,
+    value: &DetachedRuntimeValue,
 ) -> Result<Box<str>, SourceProviderExecutionError> {
-    let value = strip_signal(value);
+    let value = strip_detached_signal(value);
     match value {
         RuntimeValue::Text(value) => Ok(value.clone()),
         _ => encode_runtime_json(value)

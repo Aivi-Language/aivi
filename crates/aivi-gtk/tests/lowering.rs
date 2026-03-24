@@ -131,6 +131,73 @@ val view =
 }
 
 #[test]
+fn lowers_expanded_catalog_widgets_with_entry_events_and_scrolled_children() {
+    let hir = lower_text(
+        "expanded-widget-catalog.aivi",
+        r#"
+val query = "Draft"
+val canEdit = False
+val submit = True
+val view =
+    <ScrolledWindow>
+        <Entry text={query} placeholderText="Search" editable={canEdit} onActivate={submit} />
+    </ScrolledWindow>
+"#,
+    );
+    assert!(
+        !hir.has_errors(),
+        "HIR lowering should succeed before GTK lowering: {:?}",
+        hir.diagnostics()
+    );
+
+    let module = hir.module();
+    let value = find_value_item(module, "view");
+    let plan = lower_markup_expr(module, value.body).expect("markup should lower to a widget plan");
+
+    let root = plan.node(plan.root()).expect("root node should exist");
+    let PlanNodeKind::Widget(scrolled_window) = &root.kind else {
+        panic!("expected root widget, found {:?}", root.kind.tag());
+    };
+    assert_eq!(scrolled_window.widget.to_string(), "ScrolledWindow");
+    assert_eq!(scrolled_window.children.len(), 1);
+
+    let entry = plan
+        .node(child_id(scrolled_window.children[0]))
+        .expect("scrolled window child should exist");
+    let PlanNodeKind::Widget(entry) = &entry.kind else {
+        panic!("expected entry widget child, found {:?}", entry.kind.tag());
+    };
+    assert_eq!(entry.widget.to_string(), "Entry");
+    assert_eq!(entry.properties.len(), 3);
+    assert_eq!(entry.event_hooks.len(), 1);
+    assert!(matches!(
+        &entry.properties[0],
+        PropertyPlan::Setter(setter)
+            if setter.name.text() == "text"
+                && matches!(setter.source, SetterSource::Expr(_))
+    ));
+    assert!(matches!(
+        &entry.properties[1],
+        PropertyPlan::Static(static_prop)
+            if static_prop.name.text() == "placeholderText"
+    ));
+    assert!(matches!(
+        &entry.properties[2],
+        PropertyPlan::Setter(setter)
+            if setter.name.text() == "editable"
+                && matches!(setter.source, SetterSource::Expr(_))
+    ));
+    assert!(matches!(
+        &entry.event_hooks[0],
+        aivi_gtk::EventHookPlan {
+            hookup: EventHookStrategy::DirectSignal,
+            ..
+        }
+    ));
+    assert_eq!(entry.event_hooks[0].name.text(), "onActivate");
+}
+
+#[test]
 fn lowers_markup_control_fixture_into_explicit_control_nodes() {
     let fixture = fixture_root()
         .join("milestone-2")

@@ -23,8 +23,11 @@ impl GtkConcreteEventPayload {
 pub enum GtkConcreteWidgetKind {
     Window,
     Box,
+    ScrolledWindow,
     Label,
     Button,
+    Entry,
+    Switch,
 }
 
 impl GtkConcreteWidgetKind {
@@ -32,8 +35,11 @@ impl GtkConcreteWidgetKind {
         match self {
             Self::Window => "Window",
             Self::Box => "Box",
+            Self::ScrolledWindow => "ScrolledWindow",
             Self::Label => "Label",
             Self::Button => "Button",
+            Self::Entry => "Entry",
+            Self::Switch => "Switch",
         }
     }
 }
@@ -81,6 +87,8 @@ pub enum GtkBoolPropertySetter {
     Sensitive,
     Hexpand,
     Vexpand,
+    EntryEditable,
+    SwitchActive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -90,6 +98,8 @@ pub enum GtkTextPropertySetter {
     LabelLabel,
     ButtonLabel,
     BoxOrientation,
+    EntryText,
+    EntryPlaceholderText,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -127,6 +137,7 @@ pub struct GtkPropertyDescriptor {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GtkEventSignal {
     ButtonClicked,
+    EntryActivated,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -155,6 +166,7 @@ impl GtkChildContainerKind {
 pub enum GtkChildMountRoute {
     WindowContent,
     BoxChildren,
+    ScrolledWindowContent,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -268,6 +280,24 @@ const BOX_SPACING_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     setter: GtkPropertySetter::TextOrI64(GtkTextOrI64PropertySetter::BoxSpacing),
 };
 
+const ENTRY_TEXT_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "text",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::EntryText),
+};
+
+const ENTRY_PLACEHOLDER_TEXT_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "placeholderText",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::EntryPlaceholderText),
+};
+
+const ENTRY_EDITABLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "editable",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::EntryEditable),
+};
+
 const LABEL_TEXT_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "text",
     value_shape: GtkPropertyValueShape::Text,
@@ -292,6 +322,18 @@ const BUTTON_CLICK_EVENT: GtkEventDescriptor = GtkEventDescriptor {
     signal: GtkEventSignal::ButtonClicked,
 };
 
+const ENTRY_ACTIVATE_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onActivate",
+    payload: GtkConcreteEventPayload::Unit,
+    signal: GtkEventSignal::EntryActivated,
+};
+
+const SWITCH_ACTIVE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "active",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::SwitchActive),
+};
+
 const WINDOW_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
     name: "content",
     container: GtkChildContainerKind::Single,
@@ -306,6 +348,14 @@ const BOX_CHILDREN_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescripto
     mount: GtkChildMountRoute::BoxChildren,
     min_children: 0,
     max_children: None,
+};
+
+const SCROLLED_WINDOW_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "content",
+    container: GtkChildContainerKind::Single,
+    mount: GtkChildMountRoute::ScrolledWindowContent,
+    min_children: 0,
+    max_children: Some(1),
 };
 
 const WINDOW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
@@ -339,6 +389,20 @@ const BOX_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     child_groups: &[BOX_CHILDREN_CHILD_GROUP],
 };
 
+const SCROLLED_WINDOW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "ScrolledWindow",
+    kind: GtkConcreteWidgetKind::ScrolledWindow,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+    ],
+    events: &[],
+    child_groups: &[SCROLLED_WINDOW_CONTENT_CHILD_GROUP],
+};
+
 const LABEL_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "Label",
     kind: GtkConcreteWidgetKind::Label,
@@ -370,8 +434,47 @@ const BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     child_groups: &[],
 };
 
-const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] =
-    &[WINDOW_SCHEMA, BOX_SCHEMA, LABEL_SCHEMA, BUTTON_SCHEMA];
+const ENTRY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "Entry",
+    kind: GtkConcreteWidgetKind::Entry,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        ENTRY_TEXT_PROPERTY,
+        ENTRY_PLACEHOLDER_TEXT_PROPERTY,
+        ENTRY_EDITABLE_PROPERTY,
+    ],
+    events: &[ENTRY_ACTIVATE_EVENT],
+    child_groups: &[],
+};
+
+const SWITCH_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "Switch",
+    kind: GtkConcreteWidgetKind::Switch,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        SWITCH_ACTIVE_PROPERTY,
+    ],
+    events: &[],
+    child_groups: &[],
+};
+
+const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] = &[
+    WINDOW_SCHEMA,
+    BOX_SCHEMA,
+    SCROLLED_WINDOW_SCHEMA,
+    LABEL_SCHEMA,
+    BUTTON_SCHEMA,
+    ENTRY_SCHEMA,
+    SWITCH_SCHEMA,
+];
 
 pub fn supported_widget_schemas() -> &'static [GtkWidgetSchema] {
     GTK_WIDGET_SCHEMAS
@@ -448,7 +551,18 @@ mod tests {
             .iter()
             .map(|schema| schema.markup_name)
             .collect::<Vec<_>>();
-        assert_eq!(names, ["Window", "Box", "Label", "Button"]);
+        assert_eq!(
+            names,
+            [
+                "Window",
+                "Box",
+                "ScrolledWindow",
+                "Label",
+                "Button",
+                "Entry",
+                "Switch",
+            ]
+        );
     }
 
     #[test]
@@ -461,21 +575,33 @@ mod tests {
     #[test]
     fn property_descriptors_are_exact_and_widget_specific() {
         let button = path(&["Button"]);
+        let entry = path(&["Entry"]);
         let label = path(&["Label"]);
+        let switch = path(&["Switch"]);
         let property = lookup_widget_property(&button, "label")
             .expect("Button.label should be part of the catalog");
         assert_eq!(property.value_shape, GtkPropertyValueShape::Text);
         assert!(lookup_widget_property(&button, "text").is_none());
         assert!(lookup_widget_property(&label, "label").is_some());
+        assert!(lookup_widget_property(&entry, "text").is_some());
+        assert!(lookup_widget_property(&entry, "placeholderText").is_some());
+        assert!(lookup_widget_property(&entry, "label").is_none());
+        assert!(lookup_widget_property(&switch, "active").is_some());
+        assert!(lookup_widget_property(&switch, "text").is_none());
     }
 
     #[test]
     fn event_descriptors_are_exact_and_case_sensitive() {
         let button = path(&["Button"]);
+        let entry = path(&["Entry"]);
         let event =
             lookup_widget_event(&button, "onClick").expect("Button.onClick should be in catalog");
         assert_eq!(event.payload, GtkConcreteEventPayload::Unit);
+        let event = lookup_widget_event(&entry, "onActivate")
+            .expect("Entry.onActivate should be part of the catalog");
+        assert_eq!(event.payload, GtkConcreteEventPayload::Unit);
         assert!(lookup_widget_event(&button, "onclick").is_none());
+        assert!(lookup_widget_event(&entry, "onactivate").is_none());
         assert!(lookup_widget_event(&path(&["Label"]), "onClick").is_none());
     }
 
@@ -484,6 +610,17 @@ mod tests {
         let window = lookup_widget_schema_by_name("Window").expect("Window schema should exist");
         assert!(matches!(
             window.default_child_group(),
+            GtkDefaultChildGroup::One(group)
+                if group.name == "content"
+                    && group.container == GtkChildContainerKind::Single
+                    && group.accepts_child_count(1)
+                    && !group.accepts_child_count(2)
+        ));
+
+        let scrolled_window = lookup_widget_schema_by_name("ScrolledWindow")
+            .expect("ScrolledWindow schema should exist");
+        assert!(matches!(
+            scrolled_window.default_child_group(),
             GtkDefaultChildGroup::One(group)
                 if group.name == "content"
                     && group.container == GtkChildContainerKind::Single

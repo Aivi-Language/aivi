@@ -1789,10 +1789,16 @@ Current executable catalog:
   child group `content` accepting at most one child; treated as a window root
 - `Box` — properties `orientation`, `spacing`, `visible`, `sensitive`, `hexpand`, `vexpand`; no
   markup events; child group `children` with append-only sequence semantics
+- `ScrolledWindow` — properties `visible`, `sensitive`, `hexpand`, `vexpand`; no markup events;
+  child group `content` accepting at most one child
 - `Label` — properties `text`, `label`, `visible`, `sensitive`, `hexpand`, `vexpand`; no markup
   events; no child groups
 - `Button` — properties `label`, `visible`, `sensitive`, `hexpand`, `vexpand`; event `onClick`
   publishing `Unit`; no child groups
+- `Entry` — properties `text`, `placeholderText`, `editable`, `visible`, `sensitive`, `hexpand`,
+  `vexpand`; event `onActivate` publishing `Unit`; no child groups
+- `Switch` — properties `active`, `visible`, `sensitive`, `hexpand`, `vexpand`; no markup
+  events; no child groups
 
 Widgets outside this catalog are not part of the current live GTK surface. Expanding the catalog to
 more GTK4/libadwaita widgets is separate follow-on work.
@@ -2719,8 +2725,9 @@ The GTK executor, bridge graph, and host are implemented. `<show>` including `ke
 `<each>` (with keys), `<empty>`, `<match>`, `<fragment>`, and `<with>` work.
 
 **Gap**:
-- the executable widget schema catalog currently covers only `Window`, `Box`, `Label`, and
-  `Button`; broader GTK4 and libadwaita widget/property/event coverage is the next expansion step
+- the executable widget schema catalog currently covers `Window`, `Box`, `ScrolledWindow`,
+  `Label`, `Button`, `Entry`, and `Switch`; broader GTK4 and libadwaita
+  widget/property/event coverage is the next expansion step
 - libadwaita widget bindings beyond that basic GTK4 slice are not yet enumerated
 
 ### 28.6 Multi-file compilation and modules

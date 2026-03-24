@@ -238,8 +238,13 @@ where
             GtkConcreteWidgetKind::Box => {
                 gtk::Box::new(Orientation::Vertical, 0).upcast::<gtk::Widget>()
             }
+            GtkConcreteWidgetKind::ScrolledWindow => {
+                gtk::ScrolledWindow::new().upcast::<gtk::Widget>()
+            }
             GtkConcreteWidgetKind::Label => gtk::Label::new(None).upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::Button => gtk::Button::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::Entry => gtk::Entry::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::Switch => gtk::Switch::new().upcast::<gtk::Widget>(),
         };
         Ok((schema, widget))
     }
@@ -335,6 +340,20 @@ where
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::Hexpand) => widget.set_hexpand(value),
             GtkPropertySetter::Bool(GtkBoolPropertySetter::Vexpand) => widget.set_vexpand(value),
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::EntryEditable) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::Entry>()
+                    .expect("entry widget should downcast")
+                    .set_editable(value);
+            }
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::SwitchActive) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::Switch>()
+                    .expect("switch widget should downcast")
+                    .set_active(value);
+            }
             _ => {
                 return Err(self.invalid_property_value(
                     schema,
@@ -391,6 +410,20 @@ where
                     .downcast::<gtk::Box>()
                     .expect("box widget should downcast")
                     .set_orientation(orientation);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::EntryText) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::Entry>()
+                    .expect("entry widget should downcast")
+                    .set_text(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::EntryPlaceholderText) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::Entry>()
+                    .expect("entry widget should downcast")
+                    .set_placeholder_text(Some(value));
             }
             GtkPropertySetter::TextOrI64(GtkTextOrI64PropertySetter::BoxSpacing) => {
                 let spacing = value.parse::<i32>().map_err(|_| {
@@ -454,6 +487,33 @@ where
                     widget: schema.markup_name.into(),
                     operation: operation.into(),
                 })
+            }
+        }
+    }
+
+    fn set_single_child(
+        &self,
+        parent_widget: &gtk::Widget,
+        route: GtkChildMountRoute,
+        child: Option<&gtk::Widget>,
+    ) {
+        match route {
+            GtkChildMountRoute::WindowContent => {
+                parent_widget
+                    .clone()
+                    .downcast::<gtk::Window>()
+                    .expect("window widget should downcast")
+                    .set_child(child);
+            }
+            GtkChildMountRoute::ScrolledWindowContent => {
+                parent_widget
+                    .clone()
+                    .downcast::<gtk::ScrolledWindow>()
+                    .expect("scrolled window widget should downcast")
+                    .set_child(child);
+            }
+            GtkChildMountRoute::BoxChildren => {
+                unreachable!("box children are handled by append/reorder APIs")
             }
         }
     }
@@ -591,6 +651,19 @@ where
                         notifier();
                     }
                 }),
+            GtkEventSignal::EntryActivated => widget
+                .clone()
+                .downcast::<gtk::Entry>()
+                .expect("entry widget should downcast")
+                .connect_activate(move |_| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::unit(),
+                    });
+                    if let Some(notifier) = &notifier {
+                        notifier();
+                    }
+                }),
         };
         self.events.insert(
             handle.0,
@@ -636,7 +709,8 @@ where
             .collect::<Result<Vec<_>, _>>()?;
         let mut next_children = current_children.clone();
         match self.child_mount_route(parent, schema, "insert_children")? {
-            GtkChildMountRoute::WindowContent => {
+            route @ (GtkChildMountRoute::WindowContent
+            | GtkChildMountRoute::ScrolledWindowContent) => {
                 if current_children.len() + children.len() > 1 || index != 0 {
                     return Err(GtkConcreteHostError::UnsupportedParentOperation {
                         parent: parent.clone(),
@@ -651,11 +725,7 @@ where
                         operation: "insert_children".into(),
                     }
                 })?;
-                parent_widget
-                    .clone()
-                    .downcast::<gtk::Window>()
-                    .expect("window widget should downcast")
-                    .set_child(Some(child));
+                self.set_single_child(&parent_widget, route, Some(child));
                 next_children.splice(index..index, children.iter().cloned());
             }
             GtkChildMountRoute::BoxChildren => {
@@ -704,12 +774,9 @@ where
             .collect::<Result<Vec<_>, _>>()?;
         let mut next_children = current_children.clone();
         match self.child_mount_route(parent, schema, "remove_children")? {
-            GtkChildMountRoute::WindowContent => {
-                parent_widget
-                    .clone()
-                    .downcast::<gtk::Window>()
-                    .expect("window widget should downcast")
-                    .set_child(None::<&gtk::Widget>);
+            route @ (GtkChildMountRoute::WindowContent
+            | GtkChildMountRoute::ScrolledWindowContent) => {
+                self.set_single_child(&parent_widget, route, None);
                 next_children.clear();
             }
             GtkChildMountRoute::BoxChildren => {
@@ -775,8 +842,12 @@ where
                 }
                 self.update_children(parent, next_children)
             }
-            GtkChildMountRoute::WindowContent if from == 0 && count == 1 && to == 0 => Ok(()),
-            GtkChildMountRoute::WindowContent => {
+            GtkChildMountRoute::WindowContent | GtkChildMountRoute::ScrolledWindowContent
+                if from == 0 && count == 1 && to == 0 =>
+            {
+                Ok(())
+            }
+            GtkChildMountRoute::WindowContent | GtkChildMountRoute::ScrolledWindowContent => {
                 Err(GtkConcreteHostError::UnsupportedParentOperation {
                     parent: parent.clone(),
                     widget: schema.markup_name.into(),
@@ -1194,6 +1265,124 @@ val view =
             assert_eq!(label.text().as_str(), "Runtime title");
 
             button.emit_clicked();
+            let queued = executor.host_mut().drain_events();
+            assert_eq!(queued.len(), 1);
+            assert_eq!(queued[0].route, routes[0].id);
+            assert_eq!(queued[0].value, TestValue::Unit);
+        });
+    }
+
+    #[test]
+    fn concrete_host_mounts_expanded_widget_catalog_and_captures_entry_activation() {
+        gtk::test_synced(|| {
+            let graph = lower_graph(
+                "gtk-host-expanded.aivi",
+                r#"
+val query = "Runtime query"
+val canEdit = False
+val isEnabled = True
+val submit = True
+val view =
+    <Window title="Host">
+        <ScrolledWindow>
+            <Box>
+                <Entry text={query} placeholderText="Search" editable={canEdit} onActivate={submit} />
+                <Switch active={isEnabled} />
+            </Box>
+        </ScrolledWindow>
+    </Window>
+"#,
+            );
+            let text_input = find_widget_input(&graph, "Entry", "text");
+            let editable_input = find_widget_input(&graph, "Entry", "editable");
+            let active_input = find_widget_input(&graph, "Switch", "active");
+            let mut executor = GtkRuntimeExecutor::new_with_values(
+                graph,
+                GtkConcreteHost::<TestValue>::default(),
+                [
+                    (text_input, TestValue::Text("Runtime query".to_string())),
+                    (editable_input, TestValue::Bool(false)),
+                    (active_input, TestValue::Bool(true)),
+                ],
+            )
+            .expect("concrete GTK host should mount the expanded widget slice");
+
+            let root = executor
+                .root_widgets()
+                .expect("root widget should exist")
+                .into_iter()
+                .next()
+                .expect("window root should exist");
+            let window = executor
+                .host()
+                .widget(&root)
+                .expect("window handle should resolve")
+                .downcast::<gtk::Window>()
+                .expect("root should be a GTK window");
+            let scrolled = window
+                .child()
+                .expect("window should host the scrolled window child")
+                .downcast::<gtk::ScrolledWindow>()
+                .expect("window child should be a scrolled window");
+            assert!(
+                scrolled.child().is_some(),
+                "scrolled window should host the box child (possibly through a viewport wrapper)"
+            );
+
+            let window_children = executor
+                .host()
+                .child_handles(&root)
+                .expect("window child order should be tracked");
+            let scrolled_handle = window_children
+                .first()
+                .expect("window should contain the scrolled window child")
+                .clone();
+            let scrolled_children = executor
+                .host()
+                .child_handles(&scrolled_handle)
+                .expect("scrolled window child order should be tracked");
+            assert_eq!(scrolled_children.len(), 1);
+
+            let child_handles = executor
+                .host()
+                .child_handles(
+                    scrolled_children
+                        .first()
+                        .expect("scrolled window should contain the box child"),
+                )
+                .expect("box child order should be tracked");
+            assert_eq!(child_handles.len(), 2);
+
+            let entry = executor
+                .host()
+                .widget(&child_handles[0])
+                .expect("entry handle should resolve")
+                .downcast::<gtk::Entry>()
+                .expect("first box child should be an entry");
+            assert_eq!(entry.text().as_str(), "Runtime query");
+            assert_eq!(
+                entry.property::<Option<String>>("placeholder-text"),
+                Some("Search".to_string())
+            );
+            assert!(!entry.property::<bool>("editable"));
+
+            let switch = executor
+                .host()
+                .widget(&child_handles[1])
+                .expect("switch handle should resolve")
+                .downcast::<gtk::Switch>()
+                .expect("second box child should be a switch");
+            assert!(switch.property::<bool>("active"));
+
+            let routes = executor.event_routes();
+            assert_eq!(routes.len(), 1);
+            let entry_handle = executor
+                .widget_handle(&routes[0].instance)
+                .expect("event route should point at the mounted entry")
+                .clone();
+            assert_eq!(entry_handle, child_handles[0]);
+
+            entry.emit_by_name::<()>("activate", &[]);
             let queued = executor.host_mut().drain_events();
             assert_eq!(queued.len(), 1);
             assert_eq!(queued[0].route, routes[0].id);

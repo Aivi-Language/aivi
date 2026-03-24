@@ -3,6 +3,7 @@ use std::{
     fmt,
 };
 
+use aivi_backend::{CommittedValueStore, InlineCommittedValueStore};
 use aivi_base::SourceSpan;
 use aivi_hir as hir;
 use aivi_typing::RecurrenceTarget;
@@ -577,7 +578,17 @@ impl HirRuntimeAssembly {
     pub fn instantiate_runtime<V>(
         &self,
     ) -> Result<TaskSourceRuntime<V, hir::SourceDecodeProgram>, HirRuntimeInstantiationError> {
-        let mut runtime = TaskSourceRuntime::new(self.graph.clone());
+        self.instantiate_runtime_with_value_store(InlineCommittedValueStore::default())
+    }
+
+    pub fn instantiate_runtime_with_value_store<V, S>(
+        &self,
+        storage: S,
+    ) -> Result<TaskSourceRuntime<V, hir::SourceDecodeProgram, S>, HirRuntimeInstantiationError>
+    where
+        S: CommittedValueStore<V>,
+    {
+        let mut runtime = TaskSourceRuntime::with_value_store(self.graph.clone(), storage);
         for source in &self.sources {
             runtime
                 .register_source(source.spec.clone())

@@ -17,6 +17,7 @@
 //! are already backend-owned into real Cranelift functions and object bytes.
 
 mod codegen;
+mod gc;
 mod ids;
 mod kernel;
 mod layout;
@@ -27,6 +28,9 @@ mod validate;
 
 pub use aivi_core::{Arena, ArenaId, ArenaOverflow};
 pub use codegen::{CodegenError, CodegenErrors, CompiledKernel, CompiledProgram, compile_program};
+pub use gc::{
+    CommittedValueStore, InlineCommittedValueStore, MovingRuntimeValueStore, RuntimeGcHandle,
+};
 pub use ids::{
     DecodePlanId, DecodeStepId, EnvSlotId, InlineSubjectId, ItemId, KernelExprId, KernelId,
     LayoutId, PipelineId, SourceId,

@@ -619,12 +619,12 @@ struct GlibLinkedRuntimeState {
 #[cfg(test)]
 mod tests {
     use std::{
-        sync::{Arc, Mutex},
         panic::{AssertUnwindSafe, catch_unwind},
+        sync::{Arc, Mutex},
         thread,
     };
 
-    use aivi_backend::{ItemId as BackendItemId, RuntimeValue};
+    use aivi_backend::{DetachedRuntimeValue, ItemId as BackendItemId, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_core as core;
     use aivi_hir as hir;
@@ -676,8 +676,10 @@ mod tests {
             .unwrap_or_else(|| panic!("expected backend item named {name}"))
     }
 
-    fn expected_signal_text(value: &str) -> RuntimeValue {
-        RuntimeValue::Signal(Box::new(RuntimeValue::Text(value.into())))
+    fn expected_signal_text(value: &str) -> DetachedRuntimeValue {
+        DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Signal(Box::new(
+            RuntimeValue::Text(value.into()),
+        )))
     }
 
     fn pump_until(context: &MainContext, mut condition: impl FnMut() -> bool) {

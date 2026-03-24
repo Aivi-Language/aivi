@@ -10,6 +10,7 @@ use std::{
 // backend share one definition instead of two independent macro-generated
 // newtypes that could diverge (I2).
 pub use aivi_backend::SourceInstanceId;
+use aivi_backend::{CommittedValueStore, InlineCommittedValueStore};
 use aivi_typing::{
     BuiltinSourceProvider, RecurrenceWakeupPlan, SourceCancellationPolicy, SourceOptionWakeupCause,
 };
@@ -418,20 +419,32 @@ impl<V> TaskSourceTickOutcome<V> {
     }
 }
 
-pub struct TaskSourceRuntime<V, D = ()> {
-    scheduler: Scheduler<V>,
+pub struct TaskSourceRuntime<V, D = (), S = InlineCommittedValueStore<V>>
+where
+    S: CommittedValueStore<V>,
+{
+    scheduler: Scheduler<V, S>,
     sources: BTreeMap<SourceInstanceId, SourceSlot<D>>,
     tasks: BTreeMap<TaskInstanceId, TaskSlot>,
     claimed_inputs: BTreeMap<u32, ManagedInputKind>,
     pending_owner_disposals: BTreeSet<OwnerHandle>,
 }
 
-impl<V, D> TaskSourceRuntime<V, D> {
+impl<V, D> TaskSourceRuntime<V, D, InlineCommittedValueStore<V>> {
     pub fn new(graph: SignalGraph) -> Self {
         Self::from_scheduler(Scheduler::new(graph))
     }
+}
 
-    pub fn from_scheduler(scheduler: Scheduler<V>) -> Self {
+impl<V, D, S> TaskSourceRuntime<V, D, S>
+where
+    S: CommittedValueStore<V>,
+{
+    pub fn with_value_store(graph: SignalGraph, storage: S) -> Self {
+        Self::from_scheduler(Scheduler::with_value_store(graph, storage))
+    }
+
+    pub fn from_scheduler(scheduler: Scheduler<V, S>) -> Self {
         Self {
             scheduler,
             sources: BTreeMap::new(),
@@ -1422,6 +1435,203 @@ mod tests {
             Err(TaskSourceRuntimeError::Scheduler(
                 SchedulerAccessError::OwnerInactive { owner: actual_owner }
             )) if actual_owner == owner
+        ));
+    }
+
+    #[test]
+    fn source_reconfiguration_bursts_and_parent_teardown_drop_every_stale_publication() {
+        let mut builder = SignalGraphBuilder::new();
+        let session = builder.add_owner("session", None).unwrap();
+        let widget = builder.add_owner("widget", Some(session)).unwrap();
+        let input = builder.add_input("users", Some(widget)).unwrap();
+        let graph = builder.build().unwrap();
+        let mut runtime: TaskSourceRuntime<i32> = TaskSourceRuntime::new(graph);
+        let instance = SourceInstanceId::from_raw(21);
+        runtime
+            .register_source(SourceRuntimeSpec::new(
+                instance,
+                input,
+                RuntimeSourceProvider::builtin(aivi_typing::BuiltinSourceProvider::HttpGet),
+            ))
+            .unwrap();
+
+        let mut active = runtime.activate_source(instance).unwrap();
+        let mut stale_stamps = Vec::new();
+        for round in 0..24_i32 {
+            stale_stamps.push(active.stamp());
+            let next = runtime.reconfigure_source(instance).unwrap();
+            assert!(active.is_cancelled());
+            assert_eq!(
+                active.publish(-1),
+                Err(PublicationPortError::Cancelled {
+                    stamp: stale_stamps.last().copied().unwrap(),
+                    value: -1,
+                })
+            );
+
+            for (index, stamp) in stale_stamps.iter().copied().enumerate() {
+                runtime
+                    .worker_sender()
+                    .publish(Publication::new(
+                        stamp,
+                        -10_000 - round * 100 - index as i32,
+                    ))
+                    .unwrap();
+            }
+            let fresh_value = round * 11 + 7;
+            next.publish(fresh_value).unwrap();
+
+            let outcome = runtime.tick(&mut |_, _: DependencyValues<'_, i32>| None);
+            let drops = outcome
+                .dropped_publications()
+                .iter()
+                .filter(|publication| publication.stamp().input() == input)
+                .collect::<Vec<_>>();
+            assert_eq!(drops.len(), stale_stamps.len());
+            assert!(drops.iter().all(|publication| publication.reason()
+                == PublicationDropReason::StaleGeneration {
+                    active: next.stamp().generation(),
+                }));
+            assert_eq!(
+                runtime.current_value(input.as_signal()).unwrap().copied(),
+                Some(fresh_value)
+            );
+            active = next;
+        }
+
+        runtime.dispose_owner(session).unwrap();
+        assert!(active.is_cancelled());
+        assert!(matches!(
+            runtime.activate_source(instance),
+            Err(TaskSourceRuntimeError::OwnerPendingDisposal { owner }) if owner == widget
+        ));
+        for stamp in stale_stamps
+            .iter()
+            .copied()
+            .chain(std::iter::once(active.stamp()))
+        {
+            runtime
+                .worker_sender()
+                .publish(Publication::new(stamp, 99))
+                .unwrap();
+        }
+
+        let outcome = runtime.tick(&mut |_, _: DependencyValues<'_, i32>| None);
+        assert_eq!(runtime.is_owner_active(session).unwrap(), false);
+        assert_eq!(runtime.is_owner_active(widget).unwrap(), false);
+        assert_eq!(runtime.current_value(input.as_signal()).unwrap(), None);
+        assert_eq!(outcome.dropped_publications().len(), stale_stamps.len() + 1);
+        assert!(
+            outcome
+                .dropped_publications()
+                .iter()
+                .all(|publication| publication.reason()
+                    == PublicationDropReason::OwnerInactive { owner: widget })
+        );
+        assert!(matches!(
+            runtime.activate_source(instance),
+            Err(TaskSourceRuntimeError::Scheduler(
+                SchedulerAccessError::OwnerInactive { owner }
+            )) if owner == widget
+        ));
+    }
+
+    #[test]
+    fn task_cancellation_bursts_and_parent_teardown_drop_every_stale_completion() {
+        let mut builder = SignalGraphBuilder::new();
+        let session = builder.add_owner("session", None).unwrap();
+        let widget = builder.add_owner("widget", Some(session)).unwrap();
+        let input = builder.add_input("task-result", Some(widget)).unwrap();
+        let graph = builder.build().unwrap();
+        let mut runtime: TaskSourceRuntime<i32> = TaskSourceRuntime::new(graph);
+        let instance = TaskInstanceId::from_raw(22);
+        runtime
+            .register_task(TaskRuntimeSpec::new(instance, input))
+            .unwrap();
+
+        let mut latest_fresh = None;
+        let mut stale_stamps = Vec::new();
+        for round in 0..24_i32 {
+            if let Some(previous) = latest_fresh.take() {
+                stale_stamps.push(previous);
+            }
+
+            let cancelled = runtime.start_task(instance).unwrap();
+            let cancelled_stamp = cancelled.stamp();
+            runtime.cancel_task(instance).unwrap();
+            assert!(cancelled.is_cancelled());
+            assert_eq!(
+                cancelled.complete(-1),
+                Err(PublicationPortError::Cancelled {
+                    stamp: cancelled_stamp,
+                    value: -1,
+                })
+            );
+            stale_stamps.push(cancelled_stamp);
+
+            let fresh = runtime.start_task(instance).unwrap();
+            let fresh_stamp = fresh.stamp();
+            for (index, stamp) in stale_stamps.iter().copied().enumerate() {
+                runtime
+                    .worker_sender()
+                    .publish(Publication::new(
+                        stamp,
+                        -20_000 - round * 100 - index as i32,
+                    ))
+                    .unwrap();
+            }
+            let fresh_value = round * 13 + 5;
+            fresh.complete(fresh_value).unwrap();
+
+            let outcome = runtime.tick(&mut |_, _: DependencyValues<'_, i32>| None);
+            let drops = outcome
+                .dropped_publications()
+                .iter()
+                .filter(|publication| publication.stamp().input() == input)
+                .collect::<Vec<_>>();
+            assert_eq!(drops.len(), stale_stamps.len());
+            assert!(drops.iter().all(|publication| publication.reason()
+                == PublicationDropReason::StaleGeneration {
+                    active: fresh_stamp.generation(),
+                }));
+            assert_eq!(
+                runtime.current_value(input.as_signal()).unwrap().copied(),
+                Some(fresh_value)
+            );
+            latest_fresh = Some(fresh_stamp);
+        }
+
+        runtime.dispose_owner(session).unwrap();
+        assert!(matches!(
+            runtime.start_task(instance),
+            Err(TaskSourceRuntimeError::OwnerPendingDisposal { owner }) if owner == widget
+        ));
+        for stamp in stale_stamps.iter().copied().chain(std::iter::once(
+            latest_fresh.expect("loop should record one live task generation"),
+        )) {
+            runtime
+                .worker_sender()
+                .publish(Publication::new(stamp, 77))
+                .unwrap();
+        }
+
+        let outcome = runtime.tick(&mut |_, _: DependencyValues<'_, i32>| None);
+        assert_eq!(runtime.is_owner_active(session).unwrap(), false);
+        assert_eq!(runtime.is_owner_active(widget).unwrap(), false);
+        assert_eq!(runtime.current_value(input.as_signal()).unwrap(), None);
+        assert_eq!(outcome.dropped_publications().len(), stale_stamps.len() + 1);
+        assert!(
+            outcome
+                .dropped_publications()
+                .iter()
+                .all(|publication| publication.reason()
+                    == PublicationDropReason::OwnerInactive { owner: widget })
+        );
+        assert!(matches!(
+            runtime.start_task(instance),
+            Err(TaskSourceRuntimeError::Scheduler(
+                SchedulerAccessError::OwnerInactive { owner }
+            )) if owner == widget
         ));
     }
 

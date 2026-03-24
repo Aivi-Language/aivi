@@ -3207,6 +3207,65 @@ val view =
     }
 
     #[test]
+    fn prepare_run_accepts_expanded_widget_catalog_entries() {
+        let artifact = prepare_run_from_text(
+            "expanded-widget-catalog.aivi",
+            r#"
+sig submit : Signal Unit
+
+val entryText = "Draft"
+val canEdit = False
+val isEnabled = True
+val view =
+    <Window title="Host">
+        <ScrolledWindow>
+            <Box>
+                <Entry text={entryText} placeholderText="Search" editable={canEdit} onActivate={submit} />
+                <Switch active={isEnabled} />
+            </Box>
+        </ScrolledWindow>
+    </Window>
+"#,
+            None,
+        )
+        .expect("expanded widget catalog entries should validate and prepare for run");
+        let widget_names = artifact
+            .bridge
+            .nodes()
+            .iter()
+            .filter_map(|node| match &node.kind {
+                GtkBridgeNodeKind::Widget(widget) => {
+                    Some(widget.widget.segments().last().text().to_owned())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(widget_names.iter().any(|name| name == "ScrolledWindow"));
+        assert!(widget_names.iter().any(|name| name == "Entry"));
+        assert!(widget_names.iter().any(|name| name == "Switch"));
+
+        let entry = artifact
+            .bridge
+            .nodes()
+            .iter()
+            .find_map(|node| match &node.kind {
+                GtkBridgeNodeKind::Widget(widget)
+                    if widget.widget.segments().last().text() == "Entry" =>
+                {
+                    Some(widget)
+                }
+                _ => None,
+            })
+            .expect("bridge should keep the entry widget");
+        let handler = entry
+            .event_hooks
+            .first()
+            .expect("entry should keep one activation event hook")
+            .handler;
+        assert!(artifact.event_handlers.contains_key(&handler));
+    }
+
+    #[test]
     fn prepare_run_rejects_non_window_root_widgets() {
         let error = prepare_run_from_text(
             "button-root.aivi",
@@ -3228,13 +3287,13 @@ val view =
             r#"
 val view =
     <Window title="Host">
-        <Entry />
+        <ToggleButton />
     </Window>
 "#,
             None,
         )
         .expect_err("widgets outside the schema catalog should be rejected before launch");
-        assert!(error.contains("does not support GTK widget `Entry`"));
+        assert!(error.contains("does not support GTK widget `ToggleButton`"));
     }
 
     #[test]
@@ -3269,6 +3328,27 @@ val view =
             None,
         )
         .expect_err("single-child window content should be validated before launch");
+        assert!(error.contains("group `content`"));
+        assert!(error.contains("allows at most 1"));
+    }
+
+    #[test]
+    fn prepare_run_rejects_multiple_scrolled_window_children() {
+        let error = prepare_run_from_text(
+            "scrolled-window-too-many-children.aivi",
+            r#"
+val view =
+    <Window title="Host">
+        <ScrolledWindow>
+            <Label text="First" />
+            <Label text="Second" />
+        </ScrolledWindow>
+    </Window>
+"#,
+            None,
+        )
+        .expect_err("single-child scrolled window content should be validated before launch");
+        assert!(error.contains("ScrolledWindow"));
         assert!(error.contains("group `content`"));
         assert!(error.contains("allows at most 1"));
     }

@@ -6,9 +6,9 @@ use std::{
 };
 
 use aivi_backend::{
-    DetachedRuntimeValue, EvaluationError, ItemId as BackendItemId,
-    ItemKind as BackendItemKind, KernelEvaluator, KernelId, Program as BackendProgram,
-    RuntimeValue, SourceId as BackendSourceId,
+    DetachedRuntimeValue, EvaluationError, ItemId as BackendItemId, ItemKind as BackendItemKind,
+    KernelEvaluator, KernelId, MovingRuntimeValueStore, Program as BackendProgram, RuntimeValue,
+    SourceId as BackendSourceId,
 };
 use aivi_core as core;
 use aivi_hir as hir;
@@ -28,7 +28,7 @@ pub fn link_backend_runtime(
     backend: Arc<BackendProgram>,
 ) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors> {
     let runtime = assembly
-        .instantiate_runtime::<RuntimeValue>()
+        .instantiate_runtime_with_value_store::<RuntimeValue, _>(MovingRuntimeValueStore::default())
         .map_err(|error| {
             BackendRuntimeLinkErrors::new(vec![BackendRuntimeLinkError::InstantiateRuntime {
                 error,
@@ -56,7 +56,7 @@ pub fn link_backend_runtime(
 /// without a lifetime coupling to the stack that produced the program (M5).
 pub struct BackendLinkedRuntime {
     assembly: HirRuntimeAssembly,
-    runtime: TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram>,
+    runtime: TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram, MovingRuntimeValueStore>,
     backend: Arc<BackendProgram>,
     signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
     runtime_signal_by_item: BTreeMap<BackendItemId, SignalHandle>,
@@ -74,13 +74,16 @@ impl BackendLinkedRuntime {
         self.backend.as_ref()
     }
 
-    pub fn runtime(&self) -> &TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram> {
+    pub fn runtime(
+        &self,
+    ) -> &TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram, MovingRuntimeValueStore> {
         &self.runtime
     }
 
     pub fn runtime_mut(
         &mut self,
-    ) -> &mut TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram> {
+    ) -> &mut TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram, MovingRuntimeValueStore>
+    {
         &mut self.runtime
     }
 
@@ -201,7 +204,9 @@ impl BackendLinkedRuntime {
 
             if !self.runtime.is_source_active(instance) {
                 let config = self.evaluate_source_config(instance)?;
-                let port = self.runtime.activate_source(instance)?;
+                let port = DetachedRuntimePublicationPort {
+                    inner: self.runtime.activate_source(instance)?,
+                };
                 actions.push(LinkedSourceLifecycleAction::Activate {
                     instance,
                     port,
@@ -222,7 +227,9 @@ impl BackendLinkedRuntime {
                 .any(|signal| committed[signal.index()]);
             if dependency_changed || trigger_changed {
                 let config = self.evaluate_source_config(instance)?;
-                let port = self.runtime.reconfigure_source(instance)?;
+                let port = DetachedRuntimePublicationPort {
+                    inner: self.runtime.reconfigure_source(instance)?,
+                };
                 actions.push(LinkedSourceLifecycleAction::Reconfigure {
                     instance,
                     port,
@@ -420,6 +427,15 @@ impl BackendLinkedRuntime {
     }
 }
 
+fn materialize_detached_globals(
+    globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+) -> BTreeMap<BackendItemId, RuntimeValue> {
+    globals
+        .iter()
+        .map(|(&item, value)| (item, value.to_runtime()))
+        .collect()
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinkedDerivedSignal {
     pub item: hir::ItemId,
@@ -511,7 +527,7 @@ pub enum LinkedTaskWorkerError {
         instance: TaskInstanceId,
         owner: hir::ItemId,
         stamp: crate::PublicationStamp,
-        value: RuntimeValue,
+        value: DetachedRuntimeValue,
     },
 }
 
@@ -542,6 +558,76 @@ impl fmt::Display for LinkedTaskWorkerError {
 
 impl std::error::Error for LinkedTaskWorkerError {}
 
+#[derive(Clone)]
+pub struct DetachedRuntimePublicationPort {
+    inner: SourcePublicationPort<RuntimeValue>,
+}
+
+impl DetachedRuntimePublicationPort {
+    pub fn stamp(&self) -> crate::PublicationStamp {
+        self.inner.stamp()
+    }
+
+    pub fn cancellation(&self) -> crate::CancellationObserver {
+        self.inner.cancellation()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+
+    pub fn publish(
+        &self,
+        value: DetachedRuntimeValue,
+    ) -> Result<(), PublicationPortError<DetachedRuntimeValue>> {
+        self.inner
+            .publish(value.into_runtime())
+            .map_err(map_detached_publication_port_error)
+    }
+}
+
+pub struct DetachedRuntimeCompletionPort {
+    inner: TaskCompletionPort<RuntimeValue>,
+}
+
+impl DetachedRuntimeCompletionPort {
+    pub fn stamp(&self) -> crate::PublicationStamp {
+        self.inner.stamp()
+    }
+
+    pub fn cancellation(&self) -> crate::CancellationObserver {
+        self.inner.cancellation()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.inner.is_cancelled()
+    }
+
+    pub fn complete(
+        self,
+        value: DetachedRuntimeValue,
+    ) -> Result<(), PublicationPortError<DetachedRuntimeValue>> {
+        self.inner
+            .complete(value.into_runtime())
+            .map_err(map_detached_publication_port_error)
+    }
+}
+
+fn map_detached_publication_port_error(
+    error: PublicationPortError<RuntimeValue>,
+) -> PublicationPortError<DetachedRuntimeValue> {
+    match error {
+        PublicationPortError::Cancelled { stamp, value } => PublicationPortError::Cancelled {
+            stamp,
+            value: DetachedRuntimeValue::from_runtime_owned(value),
+        },
+        PublicationPortError::Disconnected { stamp, value } => PublicationPortError::Disconnected {
+            stamp,
+            value: DetachedRuntimeValue::from_runtime_owned(value),
+        },
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvaluatedSourceConfig {
     pub owner: hir::ItemId,
@@ -549,14 +635,14 @@ pub struct EvaluatedSourceConfig {
     pub source: BackendSourceId,
     pub provider: RuntimeSourceProvider,
     pub decode: Option<hir::SourceDecodeProgram>,
-    pub arguments: Box<[RuntimeValue]>,
+    pub arguments: Box<[DetachedRuntimeValue]>,
     pub options: Box<[EvaluatedSourceOption]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvaluatedSourceOption {
     pub option_name: Box<str>,
-    pub value: RuntimeValue,
+    pub value: DetachedRuntimeValue,
 }
 
 pub struct LinkedSourceTickOutcome {
@@ -578,12 +664,12 @@ impl LinkedSourceTickOutcome {
 pub enum LinkedSourceLifecycleAction {
     Activate {
         instance: SourceInstanceId,
-        port: SourcePublicationPort<RuntimeValue>,
+        port: DetachedRuntimePublicationPort,
         config: EvaluatedSourceConfig,
     },
     Reconfigure {
         instance: SourceInstanceId,
-        port: SourcePublicationPort<RuntimeValue>,
+        port: DetachedRuntimePublicationPort,
         config: EvaluatedSourceConfig,
     },
     Suspend {
@@ -1578,6 +1664,13 @@ mod tests {
             .unwrap_or_else(|| panic!("expected backend item named {name}"))
     }
 
+    fn text_ptr(value: &RuntimeValue) -> *const u8 {
+        let RuntimeValue::Text(text) = value else {
+            panic!("expected text runtime value");
+        };
+        text.as_ptr()
+    }
+
     fn manual_task_linked_runtime(
         lowered: &LoweredStack,
         owner_name: &str,
@@ -1596,8 +1689,11 @@ mod tests {
             .expect("task input should allocate");
         let graph = graph.build().expect("task graph should build");
 
-        let mut runtime: TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram> =
-            TaskSourceRuntime::new(graph);
+        let mut runtime: TaskSourceRuntime<
+            RuntimeValue,
+            hir::SourceDecodeProgram,
+            MovingRuntimeValueStore,
+        > = TaskSourceRuntime::with_value_store(graph, MovingRuntimeValueStore::default());
         let instance = TaskInstanceId::from_raw(owner.as_raw());
         runtime
             .register_task(TaskRuntimeSpec::new(instance, input))
@@ -1640,6 +1736,7 @@ val prefix = "https://example.com/"
 sig id = 7
 sig next = id + 1
 sig enabled = True
+sig label = "Ada"
 
 @source http.get "{prefix}{id}" with {
     activeWhen: enabled
@@ -1669,6 +1766,11 @@ sig users : Signal Text
             .signal(item_id(lowered.hir.module(), "id"))
             .expect("id signal binding should exist")
             .signal();
+        let label_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "label"))
+            .expect("label signal binding should exist")
+            .signal();
         assert_eq!(
             linked.runtime().current_value(id_signal).unwrap(),
             Some(&RuntimeValue::Int(7))
@@ -1676,6 +1778,32 @@ sig users : Signal Text
         assert_eq!(
             linked.runtime().current_value(next_signal).unwrap(),
             Some(&RuntimeValue::Int(8))
+        );
+        let label_value = linked
+            .runtime()
+            .current_value(label_signal)
+            .unwrap()
+            .expect("label signal should commit");
+        let globals = linked
+            .current_signal_globals()
+            .expect("signal globals should snapshot committed values");
+        let label_item = backend_item_id(&lowered.backend, "label");
+        let label_snapshot = globals
+            .get(&label_item)
+            .expect("signal snapshot should carry label value");
+        let RuntimeValue::Text(committed_label) = label_value else {
+            panic!("label signal should carry text")
+        };
+        let RuntimeValue::Signal(snapshot_inner) = label_snapshot.as_runtime() else {
+            panic!("signal snapshot should preserve wrapped signal shape")
+        };
+        let RuntimeValue::Text(snapshot_label) = snapshot_inner.as_ref() else {
+            panic!("signal snapshot should carry text payload")
+        };
+        assert_ne!(
+            committed_label.as_ptr(),
+            snapshot_label.as_ptr(),
+            "committed signal snapshots must detach boundary storage from scheduler-owned values"
         );
         assert_eq!(outcome.source_actions().len(), 1);
         let action = &outcome.source_actions()[0];
@@ -1690,6 +1818,58 @@ sig users : Signal Text
         assert_eq!(
             config.options[0].value,
             RuntimeValue::Signal(Box::new(RuntimeValue::Bool(true)))
+        );
+    }
+
+    #[test]
+    fn linked_runtime_relocates_committed_signal_values_between_ticks() {
+        let lowered = lower_text(
+            "runtime-startup-moving-gc.aivi",
+            r#"
+sig label = "Ada"
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let label_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "label"))
+            .expect("label signal binding should exist")
+            .signal();
+
+        linked
+            .tick()
+            .expect("initial linked runtime tick should succeed");
+        let first = linked
+            .runtime()
+            .current_value(label_signal)
+            .unwrap()
+            .expect("label signal should commit on the first tick");
+        let first_ptr = text_ptr(first);
+
+        let outcome = linked
+            .tick()
+            .expect("second linked runtime tick should succeed");
+        assert!(
+            outcome.is_empty(),
+            "empty linked-runtime ticks should still serve as moving-GC safe points"
+        );
+        let second = linked
+            .runtime()
+            .current_value(label_signal)
+            .unwrap()
+            .expect("label signal should stay committed after relocation");
+        assert_eq!(second, &RuntimeValue::Text("Ada".into()));
+        assert_ne!(
+            first_ptr,
+            text_ptr(second),
+            "linked runtime must expose relocated committed text storage on the next tick"
         );
     }
 

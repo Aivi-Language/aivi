@@ -4,6 +4,8 @@ use std::{
     sync::{Arc, mpsc},
 };
 
+use aivi_backend::{CommittedValueStore, InlineCommittedValueStore};
+
 use crate::graph::{
     DerivedHandle, InputHandle, OwnerHandle, SignalGraph, SignalHandle, SignalKind,
 };
@@ -187,11 +189,15 @@ pub enum SchedulerAccessError {
     OwnerInactive { owner: OwnerHandle },
 }
 
-pub struct Scheduler<V> {
+pub struct Scheduler<V, S = InlineCommittedValueStore<V>>
+where
+    S: CommittedValueStore<V>,
+{
     graph: SignalGraph,
+    storage: S,
     owners: Vec<OwnerRuntimeState>,
     inputs: Vec<Option<InputRuntimeState>>,
-    signals: Vec<SignalRuntimeState<V>>,
+    signals: Vec<SignalRuntimeState<S::Slot>>,
     queue: VecDeque<SchedulerMessage<V>>,
     queued_messages_scratch: Vec<SchedulerMessage<V>>,
     pending_scratch: Vec<PendingValue<V>>,
@@ -205,8 +211,17 @@ pub struct Scheduler<V> {
     next_tick: u64,
 }
 
-impl<V> Scheduler<V> {
+impl<V> Scheduler<V, InlineCommittedValueStore<V>> {
     pub fn new(graph: SignalGraph) -> Self {
+        Self::with_value_store(graph, InlineCommittedValueStore::default())
+    }
+}
+
+impl<V, S> Scheduler<V, S>
+where
+    S: CommittedValueStore<V>,
+{
+    pub fn with_value_store(graph: SignalGraph, storage: S) -> Self {
         let (worker_publication_tx, worker_publication_rx) = mpsc::channel();
         let owners = (0..graph.owner_count())
             .map(|_| OwnerRuntimeState { active: true })
@@ -222,11 +237,14 @@ impl<V> Scheduler<V> {
             )
             .collect();
         let signals = (0..graph.signal_count())
-            .map(|_| SignalRuntimeState { current: None })
+            .map(|_| SignalRuntimeState {
+                current: Default::default(),
+            })
             .collect();
 
         Self {
             graph,
+            storage,
             owners,
             inputs,
             signals,
@@ -272,7 +290,7 @@ impl<V> Scheduler<V> {
 
     pub fn current_value(&self, signal: SignalHandle) -> Result<Option<&V>, SchedulerAccessError> {
         self.validate_signal(signal)?;
-        Ok(self.signals[signal.index()].current.as_ref())
+        Ok(self.storage.get(&self.signals[signal.index()].current))
     }
 
     pub fn is_owner_active(&self, owner: OwnerHandle) -> Result<bool, SchedulerAccessError> {
@@ -434,49 +452,55 @@ impl<V> Scheduler<V> {
             }
         }
 
-        for batch in self.graph.batches() {
-            for &signal in batch.signals() {
-                if !dirty[signal.index()] || !self.signal_active(signal.as_signal()) {
-                    continue;
-                }
+        {
+            let committed_values = self
+                .signals
+                .iter()
+                .map(|state| self.storage.get(&state.current))
+                .collect::<Vec<_>>();
+            for batch in self.graph.batches() {
+                for &signal in batch.signals() {
+                    if !dirty[signal.index()] || !self.signal_active(signal.as_signal()) {
+                        continue;
+                    }
 
-                let dependencies = self
-                    .graph
-                    .dependencies(signal)
-                    .expect("topology batches only contain derived signals");
-                let inputs = DependencyValues {
-                    dependencies,
-                    pending: &pending,
-                    committed: &self.signals,
-                };
-                pending[signal.index()] = match evaluate(signal, inputs)? {
-                    Some(value) => PendingValue::NextSome(value),
-                    None => PendingValue::NextNone,
-                };
+                    let dependencies = self
+                        .graph
+                        .dependencies(signal)
+                        .expect("topology batches only contain derived signals");
+                    let inputs = DependencyValues {
+                        dependencies,
+                        pending: &pending,
+                        committed: &committed_values,
+                    };
+                    pending[signal.index()] = match evaluate(signal, inputs)? {
+                        Some(value) => PendingValue::NextSome(value),
+                        None => PendingValue::NextNone,
+                    };
+                }
             }
         }
         self.dirty_scratch = dirty;
 
-        let committed = pending
-            .drain(..)
-            .enumerate()
-            .filter_map(|(index, pending)| {
-                let handle = SignalHandle::from_raw(index as u32);
-                match pending {
-                    PendingValue::Unchanged => None,
-                    PendingValue::NextNone => self.signals[index]
-                        .current
-                        .take()
-                        .is_some()
-                        .then_some(handle),
-                    PendingValue::NextSome(value) => {
-                        self.signals[index].current = Some(value);
-                        Some(handle)
+        let mut committed = Vec::new();
+        for (index, pending_value) in pending.drain(..).enumerate() {
+            let handle = SignalHandle::from_raw(index as u32);
+            match pending_value {
+                PendingValue::Unchanged => {}
+                PendingValue::NextNone => {
+                    if self.storage.clear(&mut self.signals[index].current) {
+                        committed.push(handle);
                     }
                 }
-            })
-            .collect::<Vec<_>>();
+                PendingValue::NextSome(value) => {
+                    self.storage
+                        .replace(&mut self.signals[index].current, value);
+                    committed.push(handle);
+                }
+            }
+        }
         self.pending_scratch = pending;
+        self.collect_committed_values();
 
         self.initialized = true;
         // Drain `dropped` into a boxed slice for the outcome, then return the
@@ -488,6 +512,15 @@ impl<V> Scheduler<V> {
             committed: committed.into_boxed_slice(),
             dropped_publications,
         })
+    }
+
+    fn collect_committed_values(&mut self) {
+        let roots = self
+            .signals
+            .iter()
+            .map(|state| &state.current)
+            .collect::<Vec<_>>();
+        self.storage.collect(&roots);
     }
 
     fn collect_disposed_owners(&self, messages: &[SchedulerMessage<V>]) -> BTreeSet<OwnerHandle> {
@@ -672,7 +705,7 @@ impl<V> Scheduler<V> {
 pub struct DependencyValues<'a, V> {
     dependencies: &'a [SignalHandle],
     pending: &'a [PendingValue<V>],
-    committed: &'a [SignalRuntimeState<V>],
+    committed: &'a [Option<&'a V>],
 }
 
 impl<'a, V> DependencyValues<'a, V> {
@@ -708,7 +741,7 @@ impl<'a, V> DependencyValues<'a, V> {
 
     fn resolve(&self, signal: SignalHandle) -> Option<&'a V> {
         match &self.pending[signal.index()] {
-            PendingValue::Unchanged => self.committed[signal.index()].current.as_ref(),
+            PendingValue::Unchanged => self.committed[signal.index()],
             PendingValue::NextNone => None,
             PendingValue::NextSome(value) => Some(value),
         }
@@ -740,8 +773,8 @@ struct InputRuntimeState {
     generation: Generation,
 }
 
-struct SignalRuntimeState<V> {
-    current: Option<V>,
+struct SignalRuntimeState<S> {
+    current: S,
 }
 
 enum PendingValue<V> {
@@ -760,12 +793,21 @@ impl<V> PendingValue<V> {
 mod tests {
     use std::thread;
 
+    use aivi_backend::{MovingRuntimeValueStore, RuntimeValue};
+
     use crate::{
         graph::SignalGraphBuilder,
         scheduler::{Publication, PublicationDropReason, Scheduler, SchedulerAccessError},
     };
 
     use super::{DependencyValues, DroppedPublication};
+
+    fn text_ptr(value: &RuntimeValue) -> *const u8 {
+        let RuntimeValue::Text(text) = value else {
+            panic!("expected text runtime value");
+        };
+        text.as_ptr()
+    }
 
     #[test]
     fn scheduler_uses_latest_tick_snapshot_transactionally() {
@@ -988,6 +1030,343 @@ mod tests {
                 stamp: source_stamp,
                 reason: PublicationDropReason::OwnerInactive { owner: widget },
             }]
+        );
+    }
+
+    #[test]
+    fn adversarial_generation_bursts_and_owner_teardown_preserve_scheduler_invariants() {
+        let mut builder = SignalGraphBuilder::new();
+        let session = builder.add_owner("session", None).unwrap();
+        let widget = builder.add_owner("widget", Some(session)).unwrap();
+        let root = builder.add_input("root", None).unwrap();
+        let owned = builder.add_input("owned", Some(session)).unwrap();
+        let nested = builder.add_input("nested", Some(widget)).unwrap();
+        let owned_view = builder.add_derived("owned-view", Some(session)).unwrap();
+        let nested_view = builder.add_derived("nested-view", Some(widget)).unwrap();
+        let aggregate = builder.add_derived("aggregate", None).unwrap();
+        builder
+            .define_derived(owned_view, [owned.as_signal()])
+            .unwrap();
+        builder
+            .define_derived(nested_view, [nested.as_signal()])
+            .unwrap();
+        builder
+            .define_derived(
+                aggregate,
+                [
+                    root.as_signal(),
+                    owned_view.as_signal(),
+                    nested_view.as_signal(),
+                ],
+            )
+            .unwrap();
+
+        let graph = builder.build().unwrap();
+        let mut scheduler = Scheduler::new(graph);
+        let mut evaluator = |signal, inputs: DependencyValues<'_, i32>| {
+            if signal == owned_view {
+                Some(inputs.value(0).copied()? + 1)
+            } else if signal == nested_view {
+                Some(inputs.value(0).copied()? + 10)
+            } else if signal == aggregate {
+                Some(
+                    inputs.value(0).copied()?
+                        + inputs.value(1).copied()?
+                        + inputs.value(2).copied()?,
+                )
+            } else {
+                None
+            }
+        };
+
+        scheduler
+            .queue_publication(Publication::new(
+                scheduler.current_stamp(root).unwrap(),
+                0_i32,
+            ))
+            .unwrap();
+        scheduler
+            .queue_publication(Publication::new(
+                scheduler.current_stamp(owned).unwrap(),
+                10_i32,
+            ))
+            .unwrap();
+        scheduler
+            .queue_publication(Publication::new(
+                scheduler.current_stamp(nested).unwrap(),
+                100_i32,
+            ))
+            .unwrap();
+        scheduler.tick(&mut evaluator);
+
+        let mut stale_owned = Vec::new();
+        let mut stale_nested = Vec::new();
+        for round in 0..24_i32 {
+            let stale_owned_stamp = scheduler.current_stamp(owned).unwrap();
+            let fresh_owned = scheduler.advance_generation(owned).unwrap();
+            stale_owned.push(stale_owned_stamp);
+
+            let stale_nested_stamp = scheduler.current_stamp(nested).unwrap();
+            let fresh_nested = scheduler.advance_generation(nested).unwrap();
+            stale_nested.push(stale_nested_stamp);
+
+            scheduler
+                .queue_publication(Publication::new(
+                    scheduler.current_stamp(root).unwrap(),
+                    round,
+                ))
+                .unwrap();
+            for (index, stamp) in stale_owned.iter().copied().enumerate() {
+                scheduler
+                    .queue_publication(Publication::new(stamp, -1_000 - round * 100 - index as i32))
+                    .unwrap();
+            }
+            for (index, stamp) in stale_nested.iter().copied().enumerate() {
+                scheduler
+                    .queue_publication(Publication::new(
+                        stamp,
+                        -10_000 - round * 100 - index as i32,
+                    ))
+                    .unwrap();
+            }
+
+            let fresh_owned_value = round * 2 + 1;
+            let fresh_nested_value = round * 3 + 2;
+            scheduler
+                .queue_publication(Publication::new(fresh_owned, fresh_owned_value))
+                .unwrap();
+            scheduler
+                .queue_publication(Publication::new(fresh_nested, fresh_nested_value))
+                .unwrap();
+
+            let outcome = scheduler.tick(&mut evaluator);
+            let owned_drops = outcome
+                .dropped_publications()
+                .iter()
+                .filter(|publication| publication.stamp().input() == owned)
+                .collect::<Vec<_>>();
+            let nested_drops = outcome
+                .dropped_publications()
+                .iter()
+                .filter(|publication| publication.stamp().input() == nested)
+                .collect::<Vec<_>>();
+            assert_eq!(owned_drops.len(), stale_owned.len());
+            assert_eq!(nested_drops.len(), stale_nested.len());
+            assert!(owned_drops.iter().all(|publication| publication.reason()
+                == PublicationDropReason::StaleGeneration {
+                    active: fresh_owned.generation(),
+                }));
+            assert!(nested_drops.iter().all(|publication| publication.reason()
+                == PublicationDropReason::StaleGeneration {
+                    active: fresh_nested.generation(),
+                }));
+
+            assert_eq!(
+                scheduler.current_value(root.as_signal()).unwrap().copied(),
+                Some(round)
+            );
+            assert_eq!(
+                scheduler.current_value(owned.as_signal()).unwrap().copied(),
+                Some(fresh_owned_value)
+            );
+            assert_eq!(
+                scheduler
+                    .current_value(nested.as_signal())
+                    .unwrap()
+                    .copied(),
+                Some(fresh_nested_value)
+            );
+            assert_eq!(
+                scheduler
+                    .current_value(owned_view.as_signal())
+                    .unwrap()
+                    .copied(),
+                Some(fresh_owned_value + 1)
+            );
+            assert_eq!(
+                scheduler
+                    .current_value(nested_view.as_signal())
+                    .unwrap()
+                    .copied(),
+                Some(fresh_nested_value + 10)
+            );
+            assert_eq!(
+                scheduler
+                    .current_value(aggregate.as_signal())
+                    .unwrap()
+                    .copied(),
+                Some(round + fresh_owned_value + fresh_nested_value + 11)
+            );
+        }
+
+        let active_owned = scheduler.current_stamp(owned).unwrap();
+        let active_nested = scheduler.current_stamp(nested).unwrap();
+        scheduler.queue_dispose_owner(session).unwrap();
+        scheduler
+            .queue_publication(Publication::new(
+                scheduler.current_stamp(root).unwrap(),
+                999_i32,
+            ))
+            .unwrap();
+        for (index, stamp) in stale_owned
+            .iter()
+            .copied()
+            .chain(std::iter::once(active_owned))
+            .enumerate()
+        {
+            scheduler
+                .queue_publication(Publication::new(stamp, 50_000 + index as i32))
+                .unwrap();
+        }
+        for (index, stamp) in stale_nested
+            .iter()
+            .copied()
+            .chain(std::iter::once(active_nested))
+            .enumerate()
+        {
+            scheduler
+                .queue_publication(Publication::new(stamp, 60_000 + index as i32))
+                .unwrap();
+        }
+
+        let outcome = scheduler.tick(&mut evaluator);
+        assert_eq!(scheduler.is_owner_active(session).unwrap(), false);
+        assert_eq!(scheduler.is_owner_active(widget).unwrap(), false);
+        assert_eq!(
+            scheduler.current_value(root.as_signal()).unwrap().copied(),
+            Some(999)
+        );
+        assert_eq!(scheduler.current_value(owned.as_signal()).unwrap(), None);
+        assert_eq!(scheduler.current_value(nested.as_signal()).unwrap(), None);
+        assert_eq!(
+            scheduler.current_value(owned_view.as_signal()).unwrap(),
+            None
+        );
+        assert_eq!(
+            scheduler.current_value(nested_view.as_signal()).unwrap(),
+            None
+        );
+        assert_eq!(
+            scheduler.current_value(aggregate.as_signal()).unwrap(),
+            None
+        );
+
+        let owned_drops = outcome
+            .dropped_publications()
+            .iter()
+            .filter(|publication| publication.stamp().input() == owned)
+            .collect::<Vec<_>>();
+        let nested_drops = outcome
+            .dropped_publications()
+            .iter()
+            .filter(|publication| publication.stamp().input() == nested)
+            .collect::<Vec<_>>();
+        assert_eq!(owned_drops.len(), stale_owned.len() + 1);
+        assert_eq!(nested_drops.len(), stale_nested.len() + 1);
+        assert!(owned_drops.iter().all(|publication| publication.reason()
+            == PublicationDropReason::OwnerInactive { owner: session }));
+        assert!(nested_drops.iter().all(|publication| publication.reason()
+            == PublicationDropReason::OwnerInactive { owner: widget }));
+        assert_eq!(
+            scheduler.current_stamp(owned),
+            Err(SchedulerAccessError::OwnerInactive { owner: session })
+        );
+        assert_eq!(
+            scheduler.current_stamp(nested),
+            Err(SchedulerAccessError::OwnerInactive { owner: widget })
+        );
+    }
+
+    #[test]
+    fn moving_store_relocates_live_values_and_collects_disposed_owner_roots() {
+        let mut builder = SignalGraphBuilder::new();
+        let owner = builder.add_owner("owner", None).unwrap();
+        let input = builder.add_input("input", Some(owner)).unwrap();
+        let mirror = builder.add_derived("mirror", Some(owner)).unwrap();
+        builder.define_derived(mirror, [input.as_signal()]).unwrap();
+
+        let graph = builder.build().unwrap();
+        let mut scheduler = Scheduler::with_value_store(graph, MovingRuntimeValueStore::default());
+        let stamp = scheduler.current_stamp(input).unwrap();
+        scheduler
+            .queue_publication(Publication::new(stamp, RuntimeValue::Text("Ada".into())))
+            .unwrap();
+
+        scheduler.tick(&mut |_, inputs: DependencyValues<'_, RuntimeValue>| {
+            Some(inputs.value(0)?.clone())
+        });
+
+        assert_eq!(scheduler.storage.live_root_count(), 2);
+        assert_eq!(scheduler.storage.allocated_value_count(), 2);
+        let first_input_handle = scheduler.signals[input.index()]
+            .current
+            .expect("input signal should hold a GC root");
+        let first_mirror_handle = scheduler.signals[mirror.as_signal().index()]
+            .current
+            .expect("derived signal should hold a GC root");
+        let first_input_ptr = text_ptr(
+            scheduler
+                .current_value(input.as_signal())
+                .unwrap()
+                .expect("input value should remain readable"),
+        );
+        let first_mirror_ptr = text_ptr(
+            scheduler
+                .current_value(mirror.as_signal())
+                .unwrap()
+                .expect("derived value should remain readable"),
+        );
+
+        let outcome = scheduler.tick(&mut |_, inputs: DependencyValues<'_, RuntimeValue>| {
+            Some(inputs.value(0)?.clone())
+        });
+        assert!(
+            outcome.is_empty(),
+            "empty ticks should still be valid GC safe points"
+        );
+        assert_eq!(scheduler.storage.live_root_count(), 2);
+        assert_eq!(
+            scheduler.signals[input.index()].current,
+            Some(first_input_handle),
+            "stable GC handles must survive relocation"
+        );
+        assert_eq!(
+            scheduler.signals[mirror.as_signal().index()].current,
+            Some(first_mirror_handle),
+            "stable GC handles must survive relocation for derived signals too"
+        );
+        assert_ne!(
+            first_input_ptr,
+            text_ptr(
+                scheduler
+                    .current_value(input.as_signal())
+                    .unwrap()
+                    .expect("relocated input value should stay readable"),
+            ),
+            "moving collection must relocate committed input payloads"
+        );
+        assert_ne!(
+            first_mirror_ptr,
+            text_ptr(
+                scheduler
+                    .current_value(mirror.as_signal())
+                    .unwrap()
+                    .expect("relocated derived value should stay readable"),
+            ),
+            "moving collection must relocate derived payloads too"
+        );
+
+        scheduler.queue_dispose_owner(owner).unwrap();
+        scheduler.tick(&mut |_, inputs: DependencyValues<'_, RuntimeValue>| {
+            Some(inputs.value(0)?.clone())
+        });
+        assert_eq!(scheduler.current_value(input.as_signal()).unwrap(), None);
+        assert_eq!(scheduler.current_value(mirror.as_signal()).unwrap(), None);
+        assert_eq!(scheduler.storage.live_root_count(), 0);
+        assert_eq!(
+            scheduler.storage.allocated_value_count(),
+            0,
+            "owner disposal should leave no retained GC objects after the collection safe point"
         );
     }
 

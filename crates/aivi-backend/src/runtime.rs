@@ -1461,10 +1461,8 @@ impl<'a> KernelEvaluator<'a> {
                 let mut remaining_arguments = Vec::new();
                 for argument in arguments {
                     if let Some(expected) = parameters.get(bound_arguments.len()).copied() {
-                        let argument =
-                            coerce_runtime_value(self.program, argument, expected).unwrap_or_else(
-                                |value| value,
-                            );
+                        let argument = coerce_runtime_value(self.program, argument, expected)
+                            .unwrap_or_else(|value| value);
                         bound_arguments.push(argument);
                     } else {
                         remaining_arguments.push(argument);
