@@ -11,13 +11,13 @@ It is created when the component mounts and destroyed when it unmounts.
 A counter is the canonical example of local state:
 
 ```text
--- declare a local signal 'count' starting at 0
--- bind 'increment' to the "increment" button click, updating count by adding 1
--- bind 'decrement' to the "decrement" button click, updating count by subtracting 1
--- derive 'label' as the text representation of count
--- render a Window titled "Counter" with a vertical Box
---   containing a Label bound to label, a "+" Button, and a "−" Button
--- export main as the application entry point
+// declare a local signal 'count' starting at 0
+// bind 'increment' to the "increment" button click, updating count by adding 1
+// bind 'decrement' to the "decrement" button click, updating count by subtracting 1
+// derive 'label' as the text representation of count
+// render a Window titled "Counter" with a vertical Box
+//   containing a Label bound to label, a "+" Button, and a "−" Button
+// export main as the application entry point
 ```
 
 `count` starts at `0`. `@|>` opens the recurrence on `increment`; `<|@` adds `decrement` as
@@ -39,10 +39,10 @@ Examples: accordion open/closed, tooltip visibility, input focus, scroll positio
 When state needs to be accessible from multiple parts of the UI, it belongs in a `domain`:
 
 ```text
--- declare a domain 'AppState' holding application-wide signals
--- 'currentUser' starts as None (no logged-in user)
--- 'theme' starts as Light
--- 'notifications' starts as an empty list
+// declare a domain 'AppState' holding application-wide signals
+// 'currentUser' starts as None (no logged-in user)
+// 'theme' starts as Light
+// 'notifications' starts as an empty list
 ```
 
 A `domain` is a named collection of signals. Any component can read from a domain signal.
@@ -51,9 +51,9 @@ Only the domain itself (or providers) can write to it.
 ## Reading from a domain
 
 ```text
--- derive 'headerUser' by reading AppState.currentUser
--- if a user is logged in, use their name
--- if no user, use the text "Guest"
+// derive 'headerUser' by reading AppState.currentUser
+// if a user is logged in, use their name
+// if no user, use the text "Guest"
 ```
 
 The dot notation `AppState.currentUser` reads a signal from the domain.
@@ -63,10 +63,10 @@ The dot notation `AppState.currentUser` reads a signal from the domain.
 Domain signals accept updates through `provider` declarations:
 
 ```text
--- declare a provider 'LoginProvider' that writes to the AppState domain
--- bind 'loginResult' to the result of an HTTP POST to "/api/login"
--- when the login succeeds, set AppState.currentUser to Some user
--- when the login fails, set AppState.currentUser to None
+// declare a provider 'LoginProvider' that writes to the AppState domain
+// bind 'loginResult' to the result of an HTTP POST to "/api/login"
+// when the login succeeds, set AppState.currentUser to Some user
+// when the login fails, set AppState.currentUser to None
 ```
 
 Providers are the only mechanism for writing to domain state.

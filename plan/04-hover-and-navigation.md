@@ -72,7 +72,7 @@ For a pipe operator (hovering over `||>`):
 
 ````markdown
 ```aivi
-||> : (A -> B) -> A -> B  -- case split
+||> : (A -> B) -> A -> B  // case split
 ```
 ````
 
@@ -124,7 +124,7 @@ Default `depth` = 3. The compiler controls the depth; the TypeScript server does
 For `val user : User` where `User = { name: Text, birthday: DateTime, email: Option Text }`:
 
 ```markdown
----
+/** **/
 **`User`** &nbsp;·&nbsp; [→ definition](command:aivi.goToDefinition?...)
 
 | Field      | Type            |
@@ -133,7 +133,7 @@ For `val user : User` where `User = { name: Text, birthday: DateTime, email: Opt
 | `birthday` | [`DateTime`](command:aivi.goToDefinition?...)  |
 | `email`    | `Option Text`   |
 
----
+/** **/
 **`DateTime`** &nbsp;·&nbsp; [→ definition](command:aivi.goToDefinition?...)
 
 | Field   | Type                                    |
@@ -142,7 +142,7 @@ For `val user : User` where `User = { name: Text, birthday: DateTime, email: Opt
 | `month` | [`Month`](command:aivi.goToDefinition?...) |
 | `day`   | [`Day`](command:aivi.goToDefinition?...)   |
 
----
+/** **/
 **`Year`** &nbsp;·&nbsp; `domain Int` &nbsp;·&nbsp; [→ definition](command:aivi.goToDefinition?...)
 **`Month`** &nbsp;·&nbsp; `domain Int` &nbsp;·&nbsp; [→ definition](command:aivi.goToDefinition?...)
 **`Day`** &nbsp;·&nbsp; `domain Int` &nbsp;·&nbsp; [→ definition](command:aivi.goToDefinition?...)
@@ -155,7 +155,7 @@ The `---` divider separates each type level. The hover popup is scrollable in VS
 For `Option DateTime`:
 
 ```markdown
----
+/** **/
 **`Option DateTime`**
 
 | Constructor | Payload |
@@ -169,7 +169,7 @@ For `Option DateTime`:
 For `Year` where `domain Year : Int`:
 
 ```markdown
----
+/** **/
 **`Year`** &nbsp;·&nbsp; domain of `Int` &nbsp;·&nbsp; [→ definition](command:aivi.goToDefinition?...)
 ```
 
@@ -289,18 +289,18 @@ Stdlib source lives at a path discoverable from the binary:
 ```
 $(dirname $(which aivi))/../lib/aivi/std/
 ├── core/
-│   ├── types.aivi     -- Int, Float, Text, Bool, Unit, Bytes
-│   ├── option.aivi    -- Option A
-│   ├── result.aivi    -- Result E A
-│   ├── list.aivi      -- List A
-│   ├── signal.aivi    -- Signal A, class Functor, Applicative
-│   ├── task.aivi      -- Task E A
+│   ├── types.aivi     // Int, Float, Text, Bool, Unit, Bytes
+│   ├── option.aivi    // Option A
+│   ├── result.aivi    // Result E A
+│   ├── list.aivi      // List A
+│   ├── signal.aivi    // Signal A, class Functor, Applicative
+│   ├── task.aivi      // Task E A
 │   └── ...
 ├── network/
-│   ├── http.aivi      -- @source http.get, http.post ...
+│   ├── http.aivi      // @source http.get, http.post ...
 │   └── ...
 └── fs/
-    └── fs.aivi        -- @source fs.watch, fs.read
+    └── fs.aivi        // @source fs.watch, fs.read
 ```
 
 The compiler exposes the stdlib root path as:

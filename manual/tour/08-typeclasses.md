@@ -7,9 +7,9 @@ type class instances come with **laws** — invariants the implementation must u
 ## Declaring a class
 
 ```text
--- declare a type class 'Eq' for any type A
--- requires an equality operator returning Bool
--- requires an inequality operator returning Bool
+// declare a type class 'Eq' for any type A
+// requires an equality operator returning Bool
+// requires an inequality operator returning Bool
 ```
 
 This declares a class `Eq` parameterized over a type `A`.
@@ -18,8 +18,8 @@ Any type that implements `Eq` must provide `==` and `!=`.
 ## Writing an instance
 
 ```text
--- declare a sum type 'Color' with variants Red, Green, Blue
--- declare that Color implements the Eq class (compiler derives equality from the type structure)
+// declare a sum type 'Color' with variants Red, Green, Blue
+// declare that Color implements the Eq class (compiler derives equality from the type structure)
 ```
 
 The compiler derives structural equality for closed product and sum types whose fields all
@@ -34,7 +34,7 @@ AIVI ships three fundamental classes:
 ### Eq — equality
 
 ```text
--- define the Eq class: requires equality and inequality operators for type A
+// define the Eq class: requires equality and inequality operators for type A
 ```
 
 Most built-in types (`Int`, `Bool`, `Text`, `List A`) are instances of `Eq`.
@@ -43,8 +43,8 @@ Your product and sum types get `Eq` for free if all their fields have `Eq` insta
 ### Show — text representation
 
 ```text
--- declare a type class 'Show' for any type A
--- requires a 'show' function that converts A to a human-readable Text
+// declare a type class 'Show' for any type A
+// requires a 'show' function that converts A to a human-readable Text
 ```
 
 `show` converts a value to a human-readable `Text`.
@@ -52,7 +52,7 @@ The snake game uses this pattern with hand-written text functions rather than th
 but `Show` is the standard interface:
 
 ```text
--- declare that Direction implements the Show class (compiler derives text representation from constructor names)
+// declare that Direction implements the Show class (compiler derives text representation from constructor names)
 ```
 
 The instance body is filled in by the compiler based on the constructor names.
@@ -60,9 +60,9 @@ The instance body is filled in by the compiler based on the constructor names.
 ### Ord — ordering
 
 ```text
--- declare a type class 'Ord' for any type A (requires Eq as a superclass)
--- requires a 'compare' function returning an Ordering value
--- Ordering is a sum type with variants LT (less than), EQ (equal), GT (greater than)
+// declare a type class 'Ord' for any type A (requires Eq as a superclass)
+// requires a 'compare' function returning an Ordering value
+// Ordering is a sum type with variants LT (less than), EQ (equal), GT (greater than)
 ```
 
 `Ord` requires `Eq` as a superclass constraint. Any type with a meaningful ordering can
@@ -73,9 +73,9 @@ implement `Ord`, enabling use with sorting and comparison functions.
 When a function is generic but requires a class capability, you express this with a constraint:
 
 ```text
--- declare a generic function 'matches' comparing two values of type A, requiring Eq for A
--- declare a generic function 'contains' checking whether a list includes a given item, requiring Eq for A
--- filter the list to items matching the target, count them, and return True if the count is greater than zero
+// declare a generic function 'matches' comparing two values of type A, requiring Eq for A
+// declare a generic function 'contains' checking whether a list includes a given item, requiring Eq for A
+// filter the list to items matching the target, count them, and return True if the count is greater than zero
 ```
 
 The `with Eq A` syntax says: "this function works for any type `A`, but only if `A` has

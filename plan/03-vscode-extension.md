@@ -171,7 +171,8 @@ tooling/packages/vscode-aivi/
 ```json
 {
   "comments": {
-    "lineComment": "--"
+    "lineComment": "//",
+    "blockComment": ["/*", "*/"]
   },
   "brackets": [
     ["(", ")"],
@@ -200,8 +201,8 @@ tooling/packages/vscode-aivi/
   },
   "folding": {
     "markers": {
-      "start": "^\\s*-- #region",
-      "end": "^\\s*-- #endregion"
+      "start": "^\\s*// #region",
+      "end": "^\\s*// #endregion"
     }
   },
   "onEnterRules": [
@@ -244,7 +245,7 @@ The grammar file `aivi.tmLanguage.json` is written in JSON (converted from Plist
 | `constant.numeric.integer.aivi`         | integer literals                                     |
 | `constant.numeric.float.aivi`           | float literals                                       |
 | `constant.numeric.suffix.aivi`          | suffix literals `250ms`, `5s`                        |
-| `comment.line.double-dash.aivi`         | `-- ...`                                             |
+| `comment.line.double-slash.aivi`        | `// ...`                                             |
 | `punctuation.definition.record.aivi`    | `{` `}` in record context                            |
 | `punctuation.definition.list.aivi`      | `[` `]`                                              |
 | `punctuation.definition.tuple.aivi`     | `(` `)`                                              |
@@ -256,7 +257,7 @@ The grammar file `aivi.tmLanguage.json` is written in JSON (converted from Plist
 
 The grammar uses a single `source.aivi` root scope with the following top-level patterns:
 
-1. `comment` — matches `--` line comments
+1. `comment` — matches `//` line comments, `/* ... */` block comments, and `/** ... **/` doc comments
 2. `decorator` — matches `@source`, `@recur.timer`, `@recur.backoff` and captures the decorator arguments
 3. `use-declaration` — matches `use module.path (...)` with nested name list
 4. `type-declaration` — matches `type Name = ...` with separate patterns for sums vs records
@@ -571,17 +572,17 @@ The `aivi` binary is **not** bundled in the VSIX. Users install it separately (v
 Each `.aivi` test file in `tests/grammar/` uses the `vscode-tmgrammar-test` format:
 
 ```aivi
--- SYNTAX TEST "source.aivi"
+// SYNTAX TEST "source.aivi"
 
 type Bool = True | False
---   ^^^^ entity.name.type.aivi
---          ^^^^ support.class.aivi
---                  ^^^^^ support.class.aivi
+//   ^^^^ entity.name.type.aivi
+//          ^^^^ support.class.aivi
+//                  ^^^^^ support.class.aivi
 
 fun add: Int #x: Int #y: Int => x + y
--- ^^^ keyword.declaration.aivi
---     ^^^ entity.name.function.aivi
---             ^^ variable.parameter.aivi
+// ^^^ keyword.declaration.aivi
+//     ^^^ entity.name.function.aivi
+//             ^^ variable.parameter.aivi
 ```
 
 Grammar tests run as part of `pnpm test`.

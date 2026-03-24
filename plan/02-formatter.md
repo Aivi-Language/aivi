@@ -41,12 +41,12 @@ The LSP server (`aivi lsp`) calls `aivi_syntax::format::format_cst(...)` directl
 - Consecutive `use` declarations for the same module are merged into one.
 
 ```aivi
--- before
+// before
 use aivi.network (http)
 use aivi.fs (read)
 use aivi.network (socket)
 
--- after
+// after
 use aivi.fs (
     read
 )
@@ -295,9 +295,9 @@ Tags with multiple attributes: attributes on the same line if total ≤ 100 char
 
 ### 3.11 Comments
 
-Line comments (`--`) are preserved verbatim. Their placement (before a declaration, inline after an expression) is preserved. Blank lines between a comment and its target are collapsed to zero.
+Line comments (`//`) are preserved verbatim. Their placement (before a declaration, inline after an expression) is preserved. Blank lines between a comment and its target are collapsed to zero.
 
-Block comments are not currently in the syntax spec; if added, they would be formatted with alignment.
+Block comments (`/* ... */`) and doc comments (`/** ... **/`) are preserved verbatim.
 
 ### 3.12 String literals and interpolation
 

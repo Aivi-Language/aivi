@@ -10,11 +10,11 @@ structure, not just equality.
 Multiple arms are written as successive `\|\|>` lines:
 
 ```text
--- declare a function 'directionText' mapping a Direction to a Text label
--- Up maps to "up"
--- Down maps to "down"
--- Left maps to "left"
--- Right maps to "right"
+// declare a function 'directionText' mapping a Direction to a Text label
+// Up maps to "up"
+// Down maps to "down"
+// Left maps to "left"
+// Right maps to "right"
 ```
 
 Each arm is: `\|\|> pattern => expression`.
@@ -26,11 +26,11 @@ The body of the first matching arm is evaluated and returned.
 The most common use is matching on sum type variants:
 
 ```text
--- declare a sum type 'Status' with variants Running, Paused, GameOver
--- declare a function 'statusLabel' mapping a Status to a Text label
--- Running maps to "In progress"
--- Paused maps to "Paused"
--- GameOver maps to "Game over"
+// declare a sum type 'Status' with variants Running, Paused, GameOver
+// declare a function 'statusLabel' mapping a Status to a Text label
+// Running maps to "In progress"
+// Paused maps to "Paused"
+// GameOver maps to "Game over"
 ```
 
 ## Exhaustiveness
@@ -42,11 +42,11 @@ a compile error until you handle the new case.
 This is the key advantage over `switch` statements: you cannot accidentally forget a case.
 
 ```text
--- declare a sum type 'Color' with variants Red, Green, Blue
--- declare a function 'colorName' matching on Color
--- Red maps to "red"
--- Green maps to "green"
--- the Blue case is missing — this would be a compile error
+// declare a sum type 'Color' with variants Red, Green, Blue
+// declare a function 'colorName' matching on Color
+// Red maps to "red"
+// Green maps to "green"
+// the Blue case is missing — this would be a compile error
 ```
 
 ## Wildcard patterns
@@ -54,9 +54,9 @@ This is the key advantage over `switch` statements: you cannot accidentally forg
 When you want a catch-all, use `_`:
 
 ```text
--- declare a function 'growLength' matching on specific integer values
--- 1 maps to 2, 2 maps to 3, 3 maps to 4, 4 maps to 5, 5 maps to 6
--- any other value maps to 6 via the wildcard catch-all
+// declare a function 'growLength' matching on specific integer values
+// 1 maps to 2, 2 maps to 3, 3 maps to 4, 4 maps to 5, 5 maps to 6
+// any other value maps to 6 via the wildcard catch-all
 ```
 
 `_` matches anything and does not bind the value.
@@ -66,11 +66,11 @@ When you want a catch-all, use `_`:
 You can match on integer and text literals directly:
 
 ```text
--- declare a function 'fizzBuzz' taking an integer n
--- if n is divisible by 15, return "FizzBuzz"
--- else if n is divisible by 3, return "Fizz"
--- else if n is divisible by 5, return "Buzz"
--- otherwise return n converted to text
+// declare a function 'fizzBuzz' taking an integer n
+// if n is divisible by 15, return "FizzBuzz"
+// else if n is divisible by 3, return "Fizz"
+// else if n is divisible by 5, return "Buzz"
+// otherwise return n converted to text
 ```
 
 ## Destructuring product types (records)
@@ -78,16 +78,16 @@ You can match on integer and text literals directly:
 You can destructure a record in a pattern arm, binding its fields to names:
 
 ```text
--- declare a function 'describePoint' matching on a Vec2 value
--- destructure the Vec2 into its x and y components
--- format them as "(x, y)"
+// declare a function 'describePoint' matching on a Vec2 value
+// destructure the Vec2 into its x and y components
+// format them as "(x, y)"
 ```
 
 Record patterns work similarly:
 
 ```text
--- declare a function 'scoreOf' matching on a Game record
--- destructure the record to extract the 'score' field and return it
+// declare a function 'scoreOf' matching on a Game record
+// destructure the record to extract the 'score' field and return it
 ```
 
 Here `{ score }` matches any `Game` record and binds the `score` field.
@@ -97,10 +97,10 @@ Here `{ score }` matches any `Game` record and binds the `score` field.
 When a variant carries data, the pattern binds the inner values:
 
 ```text
--- Option A is a sum type: Some (carrying A) or None
--- declare a generic function 'unwrapOr' taking a default value and an Option A
--- if the option is Some, return the wrapped value
--- if the option is None, return the default
+// Option A is a sum type: Some (carrying A) or None
+// declare a generic function 'unwrapOr' taking a default value and an Option A
+// if the option is Some, return the wrapped value
+// if the option is None, return the default
 ```
 
 `Some value` binds the wrapped `A` to the name `value` in the body.
@@ -111,9 +111,9 @@ Patterns can be nested. In the snake game, the step logic matches on a record ex
 from a record:
 
 ```text
--- declare a function 'runningStep' taking boardSize, direction, and current game state
--- destructure the current game to extract snake, food, and score fields simultaneously
--- pass them to movedGame along with size and direction to produce the next game state
+// declare a function 'runningStep' taking boardSize, direction, and current game state
+// destructure the current game to extract snake, food, and score fields simultaneously
+// pass them to movedGame along with size and direction to produce the next game state
 ```
 
 The record pattern `{ snake, food, score }` binds three fields of `Game` simultaneously,
@@ -125,8 +125,8 @@ Use `\|\|>` when matching on a general sum type or literal. Use `T\|>` / `F\|>` 
 value is already a `Bool` and you want a two-branch conditional:
 
 ```text
--- when branching on a Bool: use the truthy/falsy pipe — if true use valueIfTrue, else valueIfFalse
--- when matching a sum type with two or more variants: match Some carrying x to call useIt on it, and None to use a fallback
+// when branching on a Bool: use the truthy/falsy pipe — if true use valueIfTrue, else valueIfFalse
+// when matching a sum type with two or more variants: match Some carrying x to call useIt on it, and None to use a fallback
 ```
 
 ## Summary

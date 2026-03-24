@@ -47,8 +47,8 @@ automatically. You do not call a setter. You do not subscribe to an event. You d
 dependency, and the runtime ensures the value is always current.
 
 ```text
--- derive 'fullName' as a signal combining firstName and lastName into one text value
--- whenever firstName or lastName changes, fullName recomputes automatically
+// derive 'fullName' as a signal combining firstName and lastName into one text value
+// whenever firstName or lastName changes, fullName recomputes automatically
 ```
 
 When either `firstName` or `lastName` changes, `fullName` recomputes. That is it.
@@ -85,8 +85,8 @@ and a pipe-oriented surface syntax rather than an ML-style record syntax.
 ## Hello, world
 
 ```text
--- render a Window titled "Hello" containing a Label with the text "Hello, world!"
--- export main as the application entry point
+// render a Window titled "Hello" containing a Label with the text "Hello, world!"
+// export main as the application entry point
 ```
 
 That is a complete AIVI application. One `val`, one `export`, two GTK widgets.

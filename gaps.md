@@ -35,10 +35,10 @@ as already normative behavior.
 
 Draft v0.5 now freezes the implemented syntax:
 
-- `--` line comments
-- `---` doc comments
-- both forms preserved as trivia in the lossless token stream
-- no block comments in v1
+- `//` line comments
+- `/* ... */` block comments
+- `/** ... **/` doc comments
+- all three forms preserved as trivia in the lossless token stream
 
 The remaining work in this area is comment-aware formatting and doc extraction, not comment syntax
 definition.

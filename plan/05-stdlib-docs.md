@@ -19,37 +19,37 @@ This plan does not design the stdlib itself — it designs the documentation *in
 
 ## 2. Doc comment syntax
 
-Doc comments in AIVI source use triple-dash `---` for doc comments, distinguished from ordinary
-`--` line comments. The current compiler only freezes that lexical distinction and preserves the
-tokens as trivia; the planned doc-extraction surface attaches a doc comment block to the
-declaration immediately below it.
+Doc comments in AIVI source use `/** ... **/` for doc comments, distinguished from ordinary
+`//` line comments and `/* ... */` block comments. The current compiler only freezes that lexical
+distinction and preserves the tokens as trivia; the planned doc-extraction surface attaches a doc
+comment block to the declaration immediately below it.
 
 ```aivi
---- The integer type.
---- Represented as a signed 64-bit integer.
---- Arithmetic overflow wraps with two's complement semantics.
+/** The integer type. **/
+/** Represented as a signed 64-bit integer. **/
+/** Arithmetic overflow wraps with two's complement semantics. **/
 type Int
 
---- The UTF-8 text type.
---- AIVI `Text` values are immutable and do not expose raw byte indices.
---- All indexing is by Unicode scalar value.
+/** The UTF-8 text type. **/
+/** AIVI `Text` values are immutable and do not expose raw byte indices. **/
+/** All indexing is by Unicode scalar value. **/
 type Text
 
---- Returns the length of a list.
----
---- ```aivi
---- List.length [1, 2, 3]  -- 3
---- ```
----
---- Complexity: O(n).
+/** Returns the length of a list. **/
+/** **/
+/** ```aivi **/
+/** List.length [1, 2, 3]  // 3 **/
+/** ``` **/
+/** **/
+/** Complexity: O(n). **/
 fun length: Int #xs: List A =>
     ...
 ```
 
 ### 2.1 Syntax rules
 
-- `---` followed by a space (or nothing) starts a doc comment line.
-- Doc comment lines must be consecutive; a blank line or `--` line ends the block.
+- `/**` opens a doc comment and `**/` closes it; doc comments may span multiple lines.
+- Doc comment blocks must be consecutive with the declaration they document; a blank line or `//` comment ends the block.
 - In the planned extraction phase, doc comments attach to the *next* top-level declaration.
   Attachment fails if there is no declaration below (diagnostic: `W_ORPHAN_DOC`).
 - Nested declarations (class methods, constructors) have their own doc comments written directly above them inside the block.
@@ -62,14 +62,14 @@ fun length: Int #xs: List A =>
 Examples:
 
 ```aivi
---- Combines two `Option` values applicatively.
---- See also: [Applicative], [Result].
+/** Combines two `Option` values applicatively. **/
+/** See also: [Applicative], [Result]. **/
 fun Option.apply: ...
 ```
 
 ```aivi
---- The canonical truthy/falsy type.
---- Used with [T|>] and [F|>] operators.
+/** The canonical truthy/falsy type. **/
+/** Used with [T|>] and [F|>] operators. **/
 type Bool = True | False
 ```
 
@@ -80,11 +80,11 @@ Cross-references resolve at doc-extraction time. Unresolvable references emit `W
 Named parameters are documented with `@param` tags inside the doc comment block:
 
 ```aivi
---- Applies a function to each element of a list and returns the results.
----
---- @param f  The mapping function.
---- @param xs The input list.
---- @returns  A new list of the same length with each element transformed.
+/** Applies a function to each element of a list and returns the results. **/
+/** **/
+/** @param f  The mapping function. **/
+/** @param xs The input list. **/
+/** @returns  A new list of the same length with each element transformed. **/
 fun map: List B #f: (A -> B) #xs: List A => ...
 ```
 
@@ -97,7 +97,7 @@ fun map: List B #f: (A -> B) #xs: List A => ...
 `@deprecated` marks the symbol as deprecated with a replacement note:
 
 ```aivi
---- @deprecated Use [Option.getOr] instead.
+/** @deprecated Use [Option.getOr] instead. **/
 fun Option.fromMaybe: ...
 ```
 
@@ -265,7 +265,7 @@ RETURNS
   A new list of the same length with each element transformed.
 
 EXAMPLES
-  List.map (x => x + 1) [1, 2, 3]   -- [2, 3, 4]
+  List.map (x => x + 1) [1, 2, 3]   // [2, 3, 4]
 
 SEE ALSO
   List.filter, List.foldl, *|> operator
@@ -313,7 +313,7 @@ These are the rules for writing doc comments in AIVI stdlib source files.
 
 ## 8. Required Rust changes
 
-1. **Doc comment lexer**: the lexer in `aivi-syntax/src/lex.rs` must recognize `---` as a `DocComment` token distinct from `--`.
+1. **Doc comment lexer**: the lexer in `aivi-syntax/src/lex.rs` must recognize `/** ... **/` as a `DocComment` token distinct from `//` line comments and `/* ... */` block comments.
 2. **Doc comment attachment**: a post-parse pass attaches `DocComment` token sequences to the next declaration node in the CST.
 3. **Doc extraction pass**: a pass over the stdlib CST extracts `SymbolDocs` structs. This pass runs at stdlib build time.
 4. **Index serializer**: serializes `DocsIndex` to MessagePack using `rmp-serde`.
@@ -370,7 +370,7 @@ export class DocsStore {
 
 | Milestone | Deliverable                                                                  |
 |-----------|------------------------------------------------------------------------------|
-| M1        | `---` doc comment lexer token + attachment pass in Rust                      |
+| M1        | `/** **/` doc comment lexer token + attachment pass in Rust                  |
 | M2        | Doc extraction pass + `aivi docs build-index` command                        |
 | M3        | `aivi-docs.json` (JSON fallback) generated for the stdlib skeleton           |
 | M4        | `DocsStore` in LSP server; stdlib docs appear in hover Layer 2               |

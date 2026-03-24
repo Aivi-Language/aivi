@@ -6,9 +6,9 @@ on its explicit parameters and always returns the same result for the same input
 ## Basic syntax
 
 ```text
--- declare a pure function 'add' returning Int
--- takes two integer parameters x and y
--- returns their sum
+// declare a pure function 'add' returning Int
+// takes two integer parameters x and y
+// returns their sum
 ```
 
 Breaking this down:
@@ -32,9 +32,9 @@ All parameters in AIVI are labeled with `#`. This means you always know what an 
 represents at the call site:
 
 ```text
--- declare a function 'greet' returning Text, taking a name and a title
--- returns a greeting string combining title and name
--- call greet with "Lovelace" and "Ms", binding the result to 'msg'
+// declare a function 'greet' returning Text, taking a name and a title
+// returns a greeting string combining title and name
+// call greet with "Lovelace" and "Ms", binding the result to 'msg'
 ```
 
 Function calls are positional juxtaposition. You pass arguments in the order the parameters
@@ -44,10 +44,10 @@ parameter, which is visible in syntax highlighting — labeled params appear in 
 ## Multi-parameter functions
 
 ```text
--- declare a function 'clamp' returning Int, taking lo, hi, and value
--- if value is less than lo, return lo
--- otherwise if value is greater than hi, return hi
--- otherwise return value unchanged
+// declare a function 'clamp' returning Int, taking lo, hi, and value
+// if value is less than lo, return lo
+// otherwise if value is greater than hi, return hi
+// otherwise return value unchanged
 ```
 
 Functions can have as many labeled parameters as needed.
@@ -57,15 +57,15 @@ Functions can have as many labeled parameters as needed.
 Pass arguments positionally after the function name:
 
 ```text
--- call clamp with bounds 0–100 and value 42, result is 42
--- call clamp with bounds 0–100 and value -5, result is 0 (clamped to lower bound)
+// call clamp with bounds 0–100 and value 42, result is 42
+// call clamp with bounds 0–100 and value -5, result is 0 (clamped to lower bound)
 ```
 
 When the argument is a complex expression, wrap it in parentheses:
 
 ```text
--- call nextHead with direction and snake's head position, bind result to 'moved'
--- call willEat with boardSize, direction, food, and snake, bind result to 'eaten'
+// call nextHead with direction and snake's head position, bind result to 'moved'
+// call willEat with boardSize, direction, food, and snake, bind result to 'eaten'
 ```
 
 Note that in AIVI, function application is juxtaposition (no parentheses for the call itself,
@@ -77,9 +77,9 @@ arguments: `direction` and `snake.head`.
 Functions in AIVI are first-class. You can pass a function as an argument:
 
 ```text
--- declare a function 'applyTwice' that takes a function from Int to Int and an integer x
--- applies the function to x twice, returning the final Int
--- call applyTwice with "add 1" and 5, result is 7
+// declare a function 'applyTwice' that takes a function from Int to Int and an integer x
+// applies the function to x twice, returning the final Int
+// call applyTwice with "add 1" and 5, result is 7
 ```
 
 The `->` in `(Int -> Int)` is a function type: a function that takes `Int` and returns `Int`.
@@ -87,14 +87,14 @@ The `->` in `(Int -> Int)` is a function type: a function that takes `Int` and r
 ## Anonymous functions (lambdas)
 
 ```text
--- declare an anonymous function 'double' that multiplies its argument by 2
--- declare an anonymous function 'add5' that adds 5 to its argument
+// declare an anonymous function 'double' that multiplies its argument by 2
+// declare an anonymous function 'add5' that adds 5 to its argument
 ```
 
 Lambdas use the `\` syntax. They appear frequently in pipe chains:
 
 ```text
--- derive 'labelText' from the signal 'count', formatting it as "You clicked N times"
+// derive 'labelText' from the signal 'count', formatting it as "You clicked N times"
 ```
 
 ## Pure by default
@@ -108,10 +108,10 @@ This means AIVI functions are easy to reason about and easy to test:
 - they can be called in any order without affecting each other
 
 ```text
--- declare a pure function 'double' that returns x multiplied by 2
--- declare a pure function 'square' that returns x multiplied by itself
--- call double with 5, always produces 10
--- call square with 4, always produces 16
+// declare a pure function 'double' that returns x multiplied by 2
+// declare a pure function 'square' that returns x multiplied by itself
+// call double with 5, always produces 10
+// call square with 4, always produces 16
 ```
 
 ## Summary

@@ -9,9 +9,11 @@ const UNTERMINATED_REGEX: DiagnosticCode = DiagnosticCode::new("syntax", "unterm
 pub enum TokenKind {
     Whitespace,
     Newline,
-    /// Line comment (`-- ...`), trivia.
+    /// Line comment (`// ...`), trivia.
     LineComment,
-    /// Doc comment (`--- ...`), trivia.
+    /// Block comment (`/* ... */`), trivia.
+    BlockComment,
+    /// Doc comment (`/** ... **/`), trivia.
     DocComment,
     Identifier,
     Integer,
@@ -73,6 +75,7 @@ impl TokenKind {
             TokenKind::Whitespace
                 | TokenKind::Newline
                 | TokenKind::LineComment
+                | TokenKind::BlockComment
                 | TokenKind::DocComment
         )
     }
@@ -220,10 +223,15 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
 
         let line_start = at_line_start;
 
-        // Handle doc comments (`---`) before regular comments (`--`).
-        if bytes[cursor..range.end].starts_with(b"---") {
+        // Handle doc comments (`/** ... **/`) before block comments (`/* ... */`).
+        if bytes[cursor..range.end].starts_with(b"/**") {
             let start = cursor;
-            while cursor < range.end && bytes[cursor] != b'\n' {
+            cursor += 3;
+            while cursor < range.end {
+                if bytes[cursor..range.end].starts_with(b"**/") {
+                    cursor += 3;
+                    break;
+                }
                 cursor += 1;
             }
             tokens.push(Token::new(
@@ -235,7 +243,28 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
             continue;
         }
 
-        if bytes[cursor..range.end].starts_with(b"--") {
+        // Handle block comments (`/* ... */`).
+        if bytes[cursor..range.end].starts_with(b"/*") {
+            let start = cursor;
+            cursor += 2;
+            while cursor < range.end {
+                if bytes[cursor..range.end].starts_with(b"*/") {
+                    cursor += 2;
+                    break;
+                }
+                cursor += 1;
+            }
+            tokens.push(Token::new(
+                TokenKind::BlockComment,
+                source.span(start..cursor),
+                line_start,
+            ));
+            at_line_start = false;
+            continue;
+        }
+
+        // Handle line comments (`//`).
+        if bytes[cursor..range.end].starts_with(b"//") {
             let start = cursor;
             while cursor < range.end && bytes[cursor] != b'\n' {
                 cursor += 1;
