@@ -6,7 +6,7 @@ type Direction =
   | Up
   | Down
   | Left
-  | Right
+  | Right 
 
 type Orientation =
   | Vertical

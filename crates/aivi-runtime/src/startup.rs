@@ -8,8 +8,8 @@ use std::{
 use aivi_backend::{
     DetachedRuntimeValue, EvaluationError, GateStage as BackendGateStage, ItemId as BackendItemId,
     ItemKind as BackendItemKind, KernelEvaluator, KernelId, MovingRuntimeValueStore,
-    PipelineId as BackendPipelineId, Program as BackendProgram, RuntimeValue,
-    SourceId as BackendSourceId, StageKind as BackendStageKind,
+    PipelineId as BackendPipelineId, Program as BackendProgram, RuntimeCallable, RuntimeSumValue,
+    RuntimeValue, SourceId as BackendSourceId, StageKind as BackendStageKind,
 };
 use aivi_core as core;
 use aivi_hir as hir;
@@ -1294,13 +1294,17 @@ impl LinkedDerivedEvaluator<'_> {
 
         if previous.is_none() {
             // First tick: evaluate the seed kernel (no input subject).
-            let seed_value = evaluator
-                .evaluate_kernel(binding.seed_kernel, None, &[], &globals)
-                .map_err(|error| BackendRuntimeError::EvaluateRecurrenceSignal {
-                    signal,
-                    item: binding.item,
-                    error,
-                })?;
+            let seed_value = evaluate_kernel_coercing_zero_arity(
+                &mut evaluator,
+                binding.seed_kernel,
+                None,
+                &globals,
+            )
+            .map_err(|error| BackendRuntimeError::EvaluateRecurrenceSignal {
+                signal,
+                item: binding.item,
+                error,
+            })?;
             return Ok(Some(seed_value));
         }
 
@@ -1324,6 +1328,48 @@ impl LinkedDerivedEvaluator<'_> {
             })?;
 
         Ok(Some(result))
+    }
+}
+
+/// Evaluate a kernel, applying zero-arity sum constructors when the kernel returns a Callable
+/// where a fully-applied Sum value is expected.
+///
+/// This is needed for seed expressions that are zero-arity sum constructors (e.g., `Direction.Right`).
+/// The kernel evaluator always returns `Callable(SumConstructor)` for constructor references, even
+/// when the constructor has no fields. This helper detects that case and applies the constructor to
+/// produce the expected `Sum` value.
+fn evaluate_kernel_coercing_zero_arity(
+    evaluator: &mut KernelEvaluator<'_>,
+    kernel_id: KernelId,
+    input_subject: Option<&RuntimeValue>,
+    globals: &std::collections::BTreeMap<BackendItemId, RuntimeValue>,
+) -> Result<RuntimeValue, EvaluationError> {
+    match evaluator.evaluate_kernel(kernel_id, input_subject, &[], globals) {
+        Ok(value) => Ok(value),
+        Err(EvaluationError::KernelResultLayoutMismatch { expected, found }) => {
+            // If the value is a zero-arity sum constructor callable, apply it to get
+            // the actual Sum value.
+            if let RuntimeValue::Callable(RuntimeCallable::SumConstructor {
+                handle,
+                ref bound_arguments,
+            }) = found
+            {
+                if handle.field_count == 0 && bound_arguments.is_empty() {
+                    return Ok(RuntimeValue::Sum(RuntimeSumValue {
+                        item: handle.item,
+                        type_name: handle.type_name,
+                        variant_name: handle.variant_name,
+                        fields: Vec::new(),
+                    }));
+                }
+            }
+            Err(EvaluationError::KernelResultLayoutMismatch {
+                kernel: kernel_id,
+                expected,
+                found,
+            })
+        }
+        Err(other) => Err(other),
     }
 }
 
@@ -1965,6 +2011,7 @@ mod tests {
             signal_items_by_handle: BTreeMap::new(),
             runtime_signal_by_item: BTreeMap::new(),
             derived_signals: BTreeMap::new(),
+            linked_recurrence_signals: BTreeMap::new(),
             source_bindings: BTreeMap::new(),
             task_bindings: BTreeMap::from([(instance, binding)]),
         }
@@ -2697,9 +2744,9 @@ sig activeUsers : Signal User =
     }
 
     #[test]
-    fn linked_runtime_rejects_source_backed_body_signals() {
+    fn linked_runtime_links_source_backed_recurrence_signals() {
         let lowered = lower_text(
-            "runtime-startup-source-body-gap.aivi",
+            "runtime-startup-source-body-recurrence.aivi",
             r#"
 fun step:Int value:Int =>
     value
@@ -2717,18 +2764,11 @@ sig gated : Signal Int =
         );
         let assembly = crate::assemble_hir_runtime(lowered.hir.module())
             .expect("runtime assembly should build");
-        let errors = match link_backend_runtime(
+        let _linked = link_backend_runtime(
             assembly,
             &lowered.core,
             std::sync::Arc::new(lowered.backend.clone()),
-        ) {
-            Ok(_) => panic!("source-backed body signals should stay an explicit startup gap"),
-            Err(errors) => errors,
-        };
-        assert!(errors.errors().iter().any(|error| matches!(
-            error,
-            BackendRuntimeLinkError::SourceBackedBodySignalNotYetLinked { item }
-                if *item == item_id(lowered.hir.module(), "gated")
-        )));
+        )
+        .expect("source-backed recurrence signals should now link successfully");
     }
 }
