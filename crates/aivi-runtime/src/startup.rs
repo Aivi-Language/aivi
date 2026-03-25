@@ -1346,19 +1346,19 @@ fn evaluate_kernel_coercing_zero_arity(
 ) -> Result<RuntimeValue, EvaluationError> {
     match evaluator.evaluate_kernel(kernel_id, input_subject, &[], globals) {
         Ok(value) => Ok(value),
-        Err(EvaluationError::KernelResultLayoutMismatch { expected, found }) => {
+        Err(EvaluationError::KernelResultLayoutMismatch { expected, found, .. }) => {
             // If the value is a zero-arity sum constructor callable, apply it to get
             // the actual Sum value.
             if let RuntimeValue::Callable(RuntimeCallable::SumConstructor {
-                handle,
+                ref handle,
                 ref bound_arguments,
             }) = found
             {
                 if handle.field_count == 0 && bound_arguments.is_empty() {
                     return Ok(RuntimeValue::Sum(RuntimeSumValue {
                         item: handle.item,
-                        type_name: handle.type_name,
-                        variant_name: handle.variant_name,
+                        type_name: handle.type_name.clone(),
+                        variant_name: handle.variant_name.clone(),
                         fields: Vec::new(),
                     }));
                 }

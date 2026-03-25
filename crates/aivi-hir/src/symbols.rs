@@ -1,6 +1,8 @@
 use aivi_base::SourceSpan;
 
-use crate::{Item, Module};
+use crate::{
+    DomainMemberKind, Item, Module, TypeId, TypeItemBody, TypeKind,
+};
 
 /// LSP symbol kinds (mirrors the LSP spec SymbolKind enum).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -57,7 +59,7 @@ pub fn extract_symbols(module: &Module) -> Vec<LspSymbol> {
 
     for &id in module.root_items() {
         if let Some(item) = module.items().get(id) {
-            if let Some(sym) = item_to_lsp_symbol(item) {
+            if let Some(sym) = item_to_lsp_symbol(item, module) {
                 symbols.push(sym);
             }
         }
@@ -66,58 +68,203 @@ pub fn extract_symbols(module: &Module) -> Vec<LspSymbol> {
     symbols
 }
 
-fn item_to_lsp_symbol(item: &Item) -> Option<LspSymbol> {
+fn format_type(module: &Module, id: TypeId) -> String {
+    format_type_depth(module, id, 0)
+}
+
+fn format_type_depth(module: &Module, id: TypeId, depth: u8) -> String {
+    if depth > 8 {
+        return "..".to_owned();
+    }
+    let Some(node) = module.types().get(id) else {
+        return "?".to_owned();
+    };
+    match &node.kind {
+        TypeKind::Name(type_ref) => type_ref.path.to_string(),
+        TypeKind::Tuple(ids) => {
+            let parts: Vec<_> = ids
+                .iter()
+                .map(|&id| format_type_depth(module, id, depth + 1))
+                .collect();
+            format!("({})", parts.join(", "))
+        }
+        TypeKind::Record(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{}: {}",
+                        f.label.text(),
+                        format_type_depth(module, f.ty, depth + 1)
+                    )
+                })
+                .collect();
+            format!("{{ {} }}", parts.join(", "))
+        }
+        TypeKind::Arrow { parameter, result } => {
+            let param_str = format_type_depth(module, *parameter, depth + 1);
+            let result_str = format_type_depth(module, *result, depth + 1);
+            format!("{} -> {}", param_str, result_str)
+        }
+        TypeKind::Apply { callee, arguments } => {
+            let callee_str = format_type_depth(module, *callee, depth + 1);
+            let args: Vec<_> = arguments
+                .iter()
+                .map(|&id| format_type_depth(module, id, depth + 1))
+                .collect();
+            format!("{} {}", callee_str, args.join(" "))
+        }
+    }
+}
+
+fn item_to_lsp_symbol(item: &Item, module: &Module) -> Option<LspSymbol> {
     match item {
-        Item::Type(t) => Some(LspSymbol {
-            name: t.name.text().to_owned(),
-            kind: LspSymbolKind::Struct,
-            span: t.header.span,
-            selection_span: t.name.span(),
-            detail: None,
-            children: Vec::new(),
-        }),
+        Item::Type(t) => {
+            let (detail, children) = match &t.body {
+                TypeItemBody::Alias(ty_id) => (Some(format_type(module, *ty_id)), Vec::new()),
+                TypeItemBody::Sum(variants) => {
+                    let children = variants
+                        .iter()
+                        .map(|v| {
+                            let detail = if v.fields.is_empty() {
+                                None
+                            } else {
+                                let parts: Vec<_> = v
+                                    .fields
+                                    .iter()
+                                    .map(|&f| format_type(module, f))
+                                    .collect();
+                                Some(format!("({})", parts.join(", ")))
+                            };
+                            LspSymbol {
+                                name: v.name.text().to_owned(),
+                                kind: LspSymbolKind::EnumMember,
+                                span: v.span,
+                                selection_span: v.name.span(),
+                                detail,
+                                children: Vec::new(),
+                            }
+                        })
+                        .collect();
+                    (None, children)
+                }
+            };
+            Some(LspSymbol {
+                name: t.name.text().to_owned(),
+                kind: LspSymbolKind::Struct,
+                span: t.header.span,
+                selection_span: t.name.span(),
+                detail,
+                children,
+            })
+        }
         Item::Value(v) => Some(LspSymbol {
             name: v.name.text().to_owned(),
             kind: LspSymbolKind::Variable,
             span: v.header.span,
             selection_span: v.name.span(),
-            detail: None,
+            detail: v.annotation.map(|id| format_type(module, id)),
             children: Vec::new(),
         }),
-        Item::Function(f) => Some(LspSymbol {
-            name: f.name.text().to_owned(),
-            kind: LspSymbolKind::Function,
-            span: f.header.span,
-            selection_span: f.name.span(),
-            detail: None,
-            children: Vec::new(),
-        }),
+        Item::Function(f) => {
+            let params_str = if f.parameters.is_empty() {
+                String::new()
+            } else {
+                let parts: Vec<_> = f
+                    .parameters
+                    .iter()
+                    .map(|p| {
+                        let name = module
+                            .bindings()
+                            .get(p.binding)
+                            .map(|b| b.name.text().to_owned())
+                            .unwrap_or_else(|| "_".to_owned());
+                        match p.annotation {
+                            Some(ty_id) => format!("{}: {}", name, format_type(module, ty_id)),
+                            None => name,
+                        }
+                    })
+                    .collect();
+                format!("({})", parts.join(", "))
+            };
+            let return_str = f.annotation.map(|id| format_type(module, id));
+            let detail = match (params_str.is_empty(), return_str) {
+                (true, None) => None,
+                (true, Some(ret)) => Some(ret),
+                (false, None) => Some(params_str),
+                (false, Some(ret)) => Some(format!("{} -> {}", params_str, ret)),
+            };
+            Some(LspSymbol {
+                name: f.name.text().to_owned(),
+                kind: LspSymbolKind::Function,
+                span: f.header.span,
+                selection_span: f.name.span(),
+                detail,
+                children: Vec::new(),
+            })
+        }
         Item::Signal(s) => Some(LspSymbol {
             name: s.name.text().to_owned(),
             kind: LspSymbolKind::Event,
             span: s.header.span,
             selection_span: s.name.span(),
-            detail: None,
+            detail: s.annotation.map(|id| format_type(module, id)),
             children: Vec::new(),
         }),
-        Item::Class(c) => Some(LspSymbol {
-            name: c.name.text().to_owned(),
-            kind: LspSymbolKind::Interface,
-            span: c.header.span,
-            selection_span: c.name.span(),
-            detail: None,
-            children: Vec::new(),
-        }),
-        Item::Domain(d) => Some(LspSymbol {
-            name: d.name.text().to_owned(),
-            kind: LspSymbolKind::Namespace,
-            span: d.header.span,
-            selection_span: d.name.span(),
-            detail: None,
-            children: Vec::new(),
-        }),
+        Item::Class(c) => {
+            let children = c
+                .members
+                .iter()
+                .map(|m| LspSymbol {
+                    name: m.name.text().to_owned(),
+                    kind: LspSymbolKind::Method,
+                    span: m.span,
+                    selection_span: m.name.span(),
+                    detail: Some(format_type(module, m.annotation)),
+                    children: Vec::new(),
+                })
+                .collect();
+            Some(LspSymbol {
+                name: c.name.text().to_owned(),
+                kind: LspSymbolKind::Interface,
+                span: c.header.span,
+                selection_span: c.name.span(),
+                detail: None,
+                children,
+            })
+        }
+        Item::Domain(d) => {
+            let children = d
+                .members
+                .iter()
+                .map(|m| {
+                    let kind = match m.kind {
+                        DomainMemberKind::Method => LspSymbolKind::Method,
+                        DomainMemberKind::Operator => LspSymbolKind::Operator,
+                        DomainMemberKind::Literal => LspSymbolKind::EnumMember,
+                    };
+                    LspSymbol {
+                        name: m.name.text().to_owned(),
+                        kind,
+                        span: m.span,
+                        selection_span: m.name.span(),
+                        detail: Some(format_type(module, m.annotation)),
+                        children: Vec::new(),
+                    }
+                })
+                .collect();
+            Some(LspSymbol {
+                name: d.name.text().to_owned(),
+                kind: LspSymbolKind::Namespace,
+                span: d.header.span,
+                selection_span: d.name.span(),
+                detail: None,
+                children,
+            })
+        }
         Item::Instance(_) | Item::Use(_) | Item::Export(_) | Item::SourceProviderContract(_) => {
             None
         }
     }
 }
+

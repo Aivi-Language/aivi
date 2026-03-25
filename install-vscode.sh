@@ -50,7 +50,17 @@ if [[ -z "$VSIX" ]]; then
 fi
 echo "    package: $VSIX"
 
-# ── 5. Install into VSCode ────────────────────────────────────────────────
+# ── 5. Write workspace settings so VSCode (snap/flatpak) finds the binary ─
+VSCODE_SETTINGS="$REPO_ROOT/.vscode/settings.json"
+mkdir -p "$REPO_ROOT/.vscode"
+cat > "$VSCODE_SETTINGS" <<SETTINGS_EOF
+{
+  "aivi.compiler.path": "$INSTALL_DIR/aivi"
+}
+SETTINGS_EOF
+echo "==> Wrote workspace settings → $VSCODE_SETTINGS"
+
+# ── 6. Install into VSCode ────────────────────────────────────────────────
 echo "==> Installing extension into VSCode..."
 code --install-extension "$VSIX" --force
 echo ""
