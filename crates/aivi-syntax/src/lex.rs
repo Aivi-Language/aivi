@@ -3,6 +3,8 @@ use aivi_base::{Diagnostic, DiagnosticCode, SourceFile, Span};
 const UNEXPECTED_CHARACTER: DiagnosticCode = DiagnosticCode::new("syntax", "unexpected-character");
 const UNTERMINATED_STRING: DiagnosticCode = DiagnosticCode::new("syntax", "unterminated-string");
 const UNTERMINATED_REGEX: DiagnosticCode = DiagnosticCode::new("syntax", "unterminated-regex");
+const INVALID_ESCAPE_SEQUENCE: DiagnosticCode =
+    DiagnosticCode::new("syntax", "invalid-escape-sequence");
 
 /// Token kinds required for the Milestone 1 surface grammar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -284,7 +286,8 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
 
         if bytes[cursor..range.end].starts_with(b"rx\"") {
             let start = cursor;
-            let (end, terminated) = scan_quoted_body(text, bytes, cursor + 2, range.end);
+            let (end, terminated, invalid_escapes) =
+                scan_quoted_body(text, bytes, cursor + 2, range.end);
             cursor = end;
             tokens.push(Token::new(
                 TokenKind::RegexLiteral,
@@ -300,6 +303,24 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
                     .with_primary_label(
                         source.source_span(start..cursor),
                         "expected a closing `\"`",
+                    ),
+                );
+            }
+            for esc_offset in invalid_escapes {
+                let esc_end = text[esc_offset..]
+                    .chars()
+                    .nth(1)
+                    .map(|c| esc_offset + 1 + c.len_utf8())
+                    .unwrap_or(esc_offset + 1);
+                diagnostics.push(
+                    Diagnostic::error(format!(
+                        "invalid escape sequence `\\{}` in regex literal",
+                        &text[esc_offset + 1..esc_end]
+                    ))
+                    .with_code(INVALID_ESCAPE_SEQUENCE)
+                    .with_primary_label(
+                        source.source_span(esc_offset..esc_end),
+                        "unrecognised escape sequence",
                     ),
                 );
             }
@@ -391,7 +412,8 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
 
         if character == '"' {
             let start = cursor;
-            let (end, terminated) = scan_quoted_body(text, bytes, cursor, range.end);
+            let (end, terminated, invalid_escapes) =
+                scan_quoted_body(text, bytes, cursor, range.end);
             cursor = end;
             tokens.push(Token::new(
                 TokenKind::StringLiteral,
@@ -407,6 +429,24 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
                     .with_primary_label(
                         source.source_span(start..cursor),
                         "expected a closing `\"`",
+                    ),
+                );
+            }
+            for esc_offset in invalid_escapes {
+                let esc_end = text[esc_offset..]
+                    .chars()
+                    .nth(1)
+                    .map(|c| esc_offset + 1 + c.len_utf8())
+                    .unwrap_or(esc_offset + 1);
+                diagnostics.push(
+                    Diagnostic::error(format!(
+                        "invalid escape sequence `\\{}` in string literal",
+                        &text[esc_offset + 1..esc_end]
+                    ))
+                    .with_code(INVALID_ESCAPE_SEQUENCE)
+                    .with_primary_label(
+                        source.source_span(esc_offset..esc_end),
+                        "unrecognised escape sequence",
                     ),
                 );
             }
@@ -528,12 +568,22 @@ fn starts_identifier_continue(text: &str, cursor: usize, end: usize) -> bool {
         .unwrap_or(false)
 }
 
-fn scan_quoted_body(text: &str, bytes: &[u8], start: usize, end: usize) -> (usize, bool) {
+/// Scans a quoted string body starting at `start` (which must point at the
+/// opening `"`).  Returns `(end_cursor, terminated, invalid_escape_offsets)`.
+/// `invalid_escape_offsets` contains the byte offset of each `\` that begins
+/// an unrecognised escape sequence.
+fn scan_quoted_body(
+    text: &str,
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+) -> (usize, bool, Vec<usize>) {
     let mut cursor = start;
     let mut terminated = false;
+    let mut invalid_escapes: Vec<usize> = Vec::new();
 
     if cursor >= bytes.len() || bytes[cursor] != b'"' {
-        return (cursor, false);
+        return (cursor, false, invalid_escapes);
     }
 
     cursor += 1;
@@ -544,13 +594,54 @@ fn scan_quoted_body(text: &str, bytes: &[u8], start: usize, end: usize) -> (usiz
             .expect("quoted scan must stay on a UTF-8 boundary");
         match next {
             '\\' => {
+                let backslash_pos = cursor;
                 cursor += 1;
                 if cursor < end {
                     let escaped = text[cursor..]
                         .chars()
                         .next()
                         .expect("escaped codepoint must stay on a UTF-8 boundary");
-                    cursor += escaped.len_utf8();
+                    match escaped {
+                        'n' | 't' | 'r' | '\\' | '"' | '\'' | '0' => {
+                            cursor += 1;
+                        }
+                        'u' => {
+                            // \u{XXXX} unicode escape
+                            cursor += 1;
+                            if cursor < end && bytes[cursor] == b'{' {
+                                cursor += 1;
+                                while cursor < end && bytes[cursor] != b'}' {
+                                    cursor += 1;
+                                }
+                                if cursor < end {
+                                    cursor += 1; // consume `}`
+                                }
+                            } else {
+                                invalid_escapes.push(backslash_pos);
+                            }
+                        }
+                        'x' => {
+                            // \xNN hex escape — consume up to two hex digits
+                            cursor += 1;
+                            let mut hex_digits = 0usize;
+                            while hex_digits < 2
+                                && cursor < end
+                                && bytes[cursor].is_ascii_hexdigit()
+                            {
+                                cursor += 1;
+                                hex_digits += 1;
+                            }
+                            if hex_digits == 0 {
+                                invalid_escapes.push(backslash_pos);
+                            }
+                        }
+                        _ => {
+                            // Unrecognised escape — record position, skip the
+                            // character so we don't stall the lexer.
+                            invalid_escapes.push(backslash_pos);
+                            cursor += escaped.len_utf8();
+                        }
+                    }
                 }
             }
             '"' => {
@@ -563,5 +654,5 @@ fn scan_quoted_body(text: &str, bytes: &[u8], start: usize, end: usize) -> (usiz
         }
     }
 
-    (cursor, terminated)
+    (cursor, terminated, invalid_escapes)
 }

@@ -65,6 +65,10 @@ const INVALID_TEXT_INTERPOLATION: DiagnosticCode =
     DiagnosticCode::new("syntax", "invalid-text-interpolation");
 const UNTERMINATED_TEXT_INTERPOLATION: DiagnosticCode =
     DiagnosticCode::new("syntax", "unterminated-text-interpolation");
+const PARSE_DEPTH_EXCEEDED: DiagnosticCode =
+    DiagnosticCode::new("syntax", "parse-depth-exceeded");
+
+const MAX_PARSE_DEPTH: usize = 256;
 
 /// Parser output retaining the lossless token buffer and recoverable diagnostics.
 #[derive(Clone, Debug)]
@@ -108,6 +112,7 @@ struct Parser<'a> {
     tokens: &'a [Token],
     cursor: usize,
     diagnostics: Vec<Diagnostic>,
+    depth: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -117,7 +122,36 @@ impl<'a> Parser<'a> {
             tokens,
             cursor: 0,
             diagnostics: Vec::new(),
+            depth: 0,
         }
+    }
+
+    /// Attempt to enter a recursive parse frame. Returns `true` if the caller
+    /// may proceed; returns `false` (and emits a diagnostic) when the nesting
+    /// limit has been reached.  The caller **must** call `depth_exit` exactly
+    /// once after a successful `depth_enter`.
+    fn depth_enter(&mut self, cursor: &mut usize) -> bool {
+        if self.depth >= MAX_PARSE_DEPTH {
+            let span = if *cursor < self.tokens.len() {
+                self.source_span_of_token(*cursor)
+            } else if !self.tokens.is_empty() {
+                self.source_span_of_token(self.tokens.len() - 1)
+            } else {
+                self.source.source_span(0..0)
+            };
+            self.diagnostics.push(
+                Diagnostic::error("expression is nested too deeply to parse")
+                    .with_code(PARSE_DEPTH_EXCEEDED)
+                    .with_primary_label(span, "maximum parse depth exceeded here"),
+            );
+            return false;
+        }
+        self.depth += 1;
+        true
+    }
+
+    fn depth_exit(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
     }
 
     fn parse(mut self) -> (Module, Vec<Diagnostic>) {
@@ -1518,16 +1552,25 @@ impl<'a> Parser<'a> {
         end: usize,
         stop: TypeStop,
     ) -> Option<TypeExpr> {
-        let parameter = self.parse_type_application_expr(cursor, end, stop)?;
-        let Some(index) = self.peek_nontrivia(*cursor, end) else {
-            return Some(parameter);
-        };
-        if self.type_should_stop(index, stop) || self.tokens[index].kind() != TokenKind::ThinArrow {
-            return Some(parameter);
+        if !self.depth_enter(cursor) {
+            return None;
         }
-        *cursor = index + 1;
-        let result = self.parse_type_expr(cursor, end, stop)?;
-        Some(self.make_type_arrow(parameter, result))
+        let parameter = self.parse_type_application_expr(cursor, end, stop);
+        let result = parameter.and_then(|parameter| {
+            let Some(index) = self.peek_nontrivia(*cursor, end) else {
+                return Some(parameter);
+            };
+            if self.type_should_stop(index, stop)
+                || self.tokens[index].kind() != TokenKind::ThinArrow
+            {
+                return Some(parameter);
+            }
+            *cursor = index + 1;
+            let result = self.parse_type_expr(cursor, end, stop)?;
+            Some(self.make_type_arrow(parameter, result))
+        });
+        self.depth_exit();
+        result
     }
 
     fn parse_type_application_expr(
@@ -1655,7 +1698,12 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self, cursor: &mut usize, end: usize, stop: ExprStop) -> Option<Expr> {
-        self.parse_pipe_expr(cursor, end, stop)
+        if !self.depth_enter(cursor) {
+            return None;
+        }
+        let result = self.parse_pipe_expr(cursor, end, stop);
+        self.depth_exit();
+        result
     }
 
     fn parse_pipe_expr(&mut self, cursor: &mut usize, end: usize, stop: ExprStop) -> Option<Expr> {
@@ -2239,6 +2287,15 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_markup_node(&mut self, cursor: &mut usize, end: usize) -> Option<MarkupNode> {
+        if !self.depth_enter(cursor) {
+            return None;
+        }
+        let result = self.parse_markup_node_inner(cursor, end);
+        self.depth_exit();
+        result
+    }
+
+    fn parse_markup_node_inner(&mut self, cursor: &mut usize, end: usize) -> Option<MarkupNode> {
         let start = self.consume_kind(cursor, end, TokenKind::Less)?;
         let name = self.parse_identifier(cursor, end)?;
         let case_pattern_attrs = name.text == "case";
@@ -2409,18 +2466,25 @@ impl<'a> Parser<'a> {
         end: usize,
         stop: PatternStop,
     ) -> Option<Pattern> {
-        let mut pattern = self.parse_pattern_atom(cursor, end, stop)?;
-        while let Some(index) = self.peek_nontrivia(*cursor, end) {
-            if self.pattern_should_stop(index, stop) || !self.starts_pattern(index) {
-                break;
-            }
-            if self.tokens[index].line_start() {
-                break;
-            }
-            let argument = self.parse_pattern_atom(cursor, end, stop)?;
-            pattern = self.make_pattern_apply(pattern, argument);
+        if !self.depth_enter(cursor) {
+            return None;
         }
-        Some(pattern)
+        let mut pattern = self.parse_pattern_atom(cursor, end, stop);
+        let result = pattern.take().and_then(|mut p| {
+            while let Some(index) = self.peek_nontrivia(*cursor, end) {
+                if self.pattern_should_stop(index, stop) || !self.starts_pattern(index) {
+                    break;
+                }
+                if self.tokens[index].line_start() {
+                    break;
+                }
+                let argument = self.parse_pattern_atom(cursor, end, stop)?;
+                p = self.make_pattern_apply(p, argument);
+            }
+            Some(p)
+        });
+        self.depth_exit();
+        result
     }
 
     fn parse_pattern_atom(
@@ -2971,6 +3035,7 @@ impl<'a> Parser<'a> {
         self.diagnostics.extend(lexed.diagnostics().iter().cloned());
 
         let mut parser = Parser::new(self.source, lexed.tokens());
+        parser.depth = self.depth;
         let mut cursor = 0usize;
         let expr = parser.parse_expr(&mut cursor, lexed.tokens().len(), ExprStop::default());
         let trailing = parser.next_significant_from(cursor);

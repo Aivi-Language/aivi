@@ -79,7 +79,7 @@ impl Formatter {
             Item::Use(item) => lines.extend(self.format_use_item(item)),
             Item::Export(item) => lines.extend(self.format_export_item(item)),
             Item::Error(_) => {
-                unreachable!("formatter requires a parsed module without error items")
+                lines.push("# <unparseable item>".to_owned());
             }
         }
 
