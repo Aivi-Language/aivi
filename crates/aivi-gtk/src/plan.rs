@@ -86,6 +86,12 @@ impl WidgetPlan {
             return Err(PlanValidationError::MissingRoot(self.root));
         }
 
+        // Build a set of Case node IDs that are directly referenced by a Match
+        // node's `cases` list.  Any Case node NOT in this set is orphaned — it
+        // appears outside a <match> context — which is a lowering error.
+        let mut case_nodes_in_match: std::collections::HashSet<PlanNodeId> =
+            std::collections::HashSet::new();
+
         let mut seen = HashMap::with_capacity(self.nodes.len());
         for (index, node) in self.nodes.iter().enumerate() {
             let plan_id = PlanNodeId::new(index as u32);
@@ -143,6 +149,8 @@ impl WidgetPlan {
                                 found: case_node.kind.tag(),
                             });
                         }
+                        // Record that this Case node is a direct child of a Match node.
+                        case_nodes_in_match.insert(case);
                     }
                 }
                 PlanNodeKind::Case(case) => {
@@ -157,62 +165,80 @@ impl WidgetPlan {
             }
         }
 
-        self.validate_nesting_depth(self.root, 0)?;
-
-        Ok(())
-    }
-
-    fn validate_nesting_depth(
-        &self,
-        node_id: PlanNodeId,
-        depth: usize,
-    ) -> Result<(), PlanValidationError> {
-        if depth > MAX_PLAN_DEPTH {
-            return Err(PlanValidationError::PlanDepthExceeded {
-                node: node_id,
-                depth,
-            });
+        // Check that every Case node appears as a direct child of exactly one Match node.
+        for (index, node) in self.nodes.iter().enumerate() {
+            let plan_id = PlanNodeId::new(index as u32);
+            if matches!(node.kind, PlanNodeKind::Case(_)) && !case_nodes_in_match.contains(&plan_id)
+            {
+                return Err(PlanValidationError::CaseOutsideMatch { node: plan_id });
+            }
         }
-        let Some(node) = self.node(node_id) else {
-            return Ok(());
-        };
-        let children: Vec<PlanNodeId> = match &node.kind {
-            PlanNodeKind::Widget(widget) => {
-                widget.children.iter().map(|op| op.child()).collect()
-            }
-            PlanNodeKind::Group(group) => {
-                group.children.iter().map(|op| op.child()).collect()
-            }
-            PlanNodeKind::Show(show) => {
-                show.children.iter().map(|op| op.child()).collect()
-            }
-            PlanNodeKind::Each(each) => {
-                let mut ids: Vec<PlanNodeId> =
-                    each.item_children.iter().map(|op| op.child()).collect();
-                if let Some(empty) = each.empty_branch {
-                    ids.push(empty);
+
+        // Check that the plan tree does not exceed the maximum nesting depth.
+        // An iterative depth-first traversal is used to avoid recursive function
+        // calls, which could themselves overflow the stack for very deep plans.
+        {
+            let mut depth_stack: Vec<(PlanNodeId, usize)> = vec![(self.root, 0)];
+            while let Some((node_id, depth)) = depth_stack.pop() {
+                if depth > MAX_PLAN_DEPTH {
+                    return Err(PlanValidationError::PlanDepthExceeded {
+                        node: node_id,
+                        depth,
+                    });
                 }
-                ids
+                let Some(node) = self.node(node_id) else {
+                    continue;
+                };
+                let child_depth = depth + 1;
+                match &node.kind {
+                    PlanNodeKind::Widget(widget) => {
+                        for child in widget.children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                    }
+                    PlanNodeKind::Show(show) => {
+                        for child in show.children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                    }
+                    PlanNodeKind::Each(each) => {
+                        for child in each.item_children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                        if let Some(empty) = each.empty_branch {
+                            depth_stack.push((empty, child_depth));
+                        }
+                    }
+                    PlanNodeKind::Empty(empty) => {
+                        for child in empty.children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                    }
+                    PlanNodeKind::Match(match_node) => {
+                        for case in match_node.cases.iter().copied() {
+                            depth_stack.push((case, child_depth));
+                        }
+                    }
+                    PlanNodeKind::Case(case) => {
+                        for child in case.children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                    }
+                    PlanNodeKind::Fragment(fragment) => {
+                        for child in fragment.children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                    }
+                    PlanNodeKind::With(with_node) => {
+                        for child in with_node.children.iter().copied() {
+                            depth_stack.push((child.child(), child_depth));
+                        }
+                    }
+                    PlanNodeKind::Group(_) => {}
+                }
             }
-            PlanNodeKind::Empty(empty) => {
-                empty.children.iter().map(|op| op.child()).collect()
-            }
-            PlanNodeKind::Match(match_node) => {
-                match_node.cases.iter().copied().collect()
-            }
-            PlanNodeKind::Case(case) => {
-                case.children.iter().map(|op| op.child()).collect()
-            }
-            PlanNodeKind::Fragment(fragment) => {
-                fragment.children.iter().map(|op| op.child()).collect()
-            }
-            PlanNodeKind::With(with_node) => {
-                with_node.children.iter().map(|op| op.child()).collect()
-            }
-        };
-        for child in children {
-            self.validate_nesting_depth(child, depth + 1)?;
         }
+
         Ok(())
     }
 
