@@ -24,10 +24,13 @@ use crate::{
     BuiltinAppendCarrier as BackendBuiltinAppendCarrier,
     BuiltinApplicativeCarrier as BackendBuiltinApplicativeCarrier,
     BuiltinApplyCarrier as BackendBuiltinApplyCarrier,
+    BuiltinBifunctorCarrier as BackendBuiltinBifunctorCarrier,
     BuiltinClassMemberIntrinsic as BackendBuiltinClassMemberIntrinsic,
+    BuiltinFilterableCarrier as BackendBuiltinFilterableCarrier,
     BuiltinFoldableCarrier as BackendBuiltinFoldableCarrier,
     BuiltinFunctorCarrier as BackendBuiltinFunctorCarrier,
-    BuiltinOrdSubject as BackendBuiltinOrdSubject, BuiltinTerm, CallingConvention,
+    BuiltinOrdSubject as BackendBuiltinOrdSubject, BuiltinTerm,
+    BuiltinTraversableCarrier as BackendBuiltinTraversableCarrier, CallingConvention,
     CallingConventionKind, DecimalLiteral, DecodeExtraFieldPolicy, DecodeField,
     DecodeFieldRequirement, DecodeMode, DecodePlan, DecodePlanId, DecodeStep, DecodeStepId,
     DecodeStepKind, DecodeSumStrategy, DecodeVariant, DomainDecodeSurface, DomainDecodeSurfaceKind,
@@ -2687,6 +2690,9 @@ fn map_builtin_class_member_intrinsic(
         core::BuiltinClassMemberIntrinsic::Map(carrier) => {
             BackendBuiltinClassMemberIntrinsic::Map(map_builtin_functor_carrier(carrier))
         }
+        core::BuiltinClassMemberIntrinsic::Bimap(carrier) => {
+            BackendBuiltinClassMemberIntrinsic::Bimap(map_builtin_bifunctor_carrier(carrier))
+        }
         core::BuiltinClassMemberIntrinsic::Pure(carrier) => {
             BackendBuiltinClassMemberIntrinsic::Pure(map_builtin_applicative_carrier(carrier))
         }
@@ -2695,6 +2701,16 @@ fn map_builtin_class_member_intrinsic(
         }
         core::BuiltinClassMemberIntrinsic::Reduce(carrier) => {
             BackendBuiltinClassMemberIntrinsic::Reduce(map_builtin_foldable_carrier(carrier))
+        }
+        core::BuiltinClassMemberIntrinsic::Traverse {
+            traversable,
+            applicative,
+        } => BackendBuiltinClassMemberIntrinsic::Traverse {
+            traversable: map_builtin_traversable_carrier(traversable),
+            applicative: map_builtin_applicative_carrier(applicative),
+        },
+        core::BuiltinClassMemberIntrinsic::FilterMap(carrier) => {
+            BackendBuiltinClassMemberIntrinsic::FilterMap(map_builtin_filterable_carrier(carrier))
         }
     }
 }
@@ -2708,6 +2724,15 @@ fn map_builtin_functor_carrier(
         core::BuiltinFunctorCarrier::Result => BackendBuiltinFunctorCarrier::Result,
         core::BuiltinFunctorCarrier::Validation => BackendBuiltinFunctorCarrier::Validation,
         core::BuiltinFunctorCarrier::Signal => BackendBuiltinFunctorCarrier::Signal,
+    }
+}
+
+fn map_builtin_bifunctor_carrier(
+    carrier: core::BuiltinBifunctorCarrier,
+) -> BackendBuiltinBifunctorCarrier {
+    match carrier {
+        core::BuiltinBifunctorCarrier::Result => BackendBuiltinBifunctorCarrier::Result,
+        core::BuiltinBifunctorCarrier::Validation => BackendBuiltinBifunctorCarrier::Validation,
     }
 }
 
@@ -2744,6 +2769,28 @@ fn map_builtin_foldable_carrier(
     }
 }
 
+fn map_builtin_traversable_carrier(
+    carrier: core::BuiltinTraversableCarrier,
+) -> BackendBuiltinTraversableCarrier {
+    match carrier {
+        core::BuiltinTraversableCarrier::List => BackendBuiltinTraversableCarrier::List,
+        core::BuiltinTraversableCarrier::Option => BackendBuiltinTraversableCarrier::Option,
+        core::BuiltinTraversableCarrier::Result => BackendBuiltinTraversableCarrier::Result,
+        core::BuiltinTraversableCarrier::Validation => {
+            BackendBuiltinTraversableCarrier::Validation
+        }
+    }
+}
+
+fn map_builtin_filterable_carrier(
+    carrier: core::BuiltinFilterableCarrier,
+) -> BackendBuiltinFilterableCarrier {
+    match carrier {
+        core::BuiltinFilterableCarrier::List => BackendBuiltinFilterableCarrier::List,
+        core::BuiltinFilterableCarrier::Option => BackendBuiltinFilterableCarrier::Option,
+    }
+}
+
 fn map_builtin_append_carrier(carrier: core::BuiltinAppendCarrier) -> BackendBuiltinAppendCarrier {
     match carrier {
         core::BuiltinAppendCarrier::Text => BackendBuiltinAppendCarrier::Text,
@@ -2754,6 +2801,9 @@ fn map_builtin_append_carrier(carrier: core::BuiltinAppendCarrier) -> BackendBui
 fn map_builtin_ord_subject(subject: core::BuiltinOrdSubject) -> BackendBuiltinOrdSubject {
     match subject {
         core::BuiltinOrdSubject::Int => BackendBuiltinOrdSubject::Int,
+        core::BuiltinOrdSubject::Float => BackendBuiltinOrdSubject::Float,
+        core::BuiltinOrdSubject::Decimal => BackendBuiltinOrdSubject::Decimal,
+        core::BuiltinOrdSubject::BigInt => BackendBuiltinOrdSubject::BigInt,
         core::BuiltinOrdSubject::Bool => BackendBuiltinOrdSubject::Bool,
         core::BuiltinOrdSubject::Text => BackendBuiltinOrdSubject::Text,
         core::BuiltinOrdSubject::Ordering => BackendBuiltinOrdSubject::Ordering,

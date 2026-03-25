@@ -37,7 +37,7 @@ impl std::fmt::Display for RuntimeFloat {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RuntimeDecimal(Decimal);
 
 impl RuntimeDecimal {
@@ -53,6 +53,10 @@ impl RuntimeDecimal {
         bytes.extend_from_slice(&self.0.scale().to_le_bytes());
         bytes.into_boxed_slice()
     }
+
+    pub(crate) fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
 }
 
 impl std::fmt::Display for RuntimeDecimal {
@@ -61,7 +65,7 @@ impl std::fmt::Display for RuntimeDecimal {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RuntimeBigInt(BigInt);
 
 impl RuntimeBigInt {
@@ -83,6 +87,10 @@ impl RuntimeBigInt {
         bytes.extend_from_slice(&(magnitude.len() as u64).to_le_bytes());
         bytes.extend_from_slice(&magnitude);
         bytes.into_boxed_slice()
+    }
+
+    pub(crate) fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
     }
 }
 

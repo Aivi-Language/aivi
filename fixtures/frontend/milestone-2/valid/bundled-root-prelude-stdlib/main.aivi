@@ -1,9 +1,13 @@
 use aivi (
+    Ordering
     Option
     Result
     Validation
     Signal
     Task
+    Less
+    Equal
+    Greater
     Some
     None
     Ok
@@ -20,6 +24,12 @@ use aivi.prelude (
     Eq
     Default
     Functor
+    Ord
+    Semigroup
+    Monoid
+    Bifunctor
+    Traversable
+    Filterable
     Applicative
     Monad
     Foldable
@@ -63,8 +73,20 @@ val firstName: Option Text =
 fun smaller:Bool #left:Int #right:Int =>
     left < right
 
+fun keepSmall:(Option Int) #value:Int =>
+    value < 3
+     T|> Some value
+     F|> None
+
+fun addOne:Int #value:Int =>
+    value + 1
+
+fun punctuate:Text #value:Text =>
+    append value "!"
+
 val leastCount: Int = min smaller 4 2
 val greatestCount: Int = max smaller 4 2
+val explicitLess: Ordering = Less
 
 val leastOfCounts: Int =
     minOf smaller 5 [
@@ -76,6 +98,31 @@ val labels: Text =
     join ", " [
         "Ada",
         "Grace"
+    ]
+
+val orderedCount: Ordering =
+    compare 1 2
+
+val combinedLabel: Text =
+    append "Ada" " Lovelace"
+
+val emptyLabels: Text =
+    empty
+
+val mappedOk: Result Text Int =
+    bimap punctuate addOne (Ok 1)
+
+val traversedCounts: Option (List Int) =
+    traverse keepSmall [
+        1,
+        2
+    ]
+
+val filteredCounts: List Int =
+    filterMap keepSmall [
+        1,
+        3,
+        2
     ]
 
 val sameCount: Bool = chosenCount == 2

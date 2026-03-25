@@ -18,16 +18,17 @@ use aivi_hir::{
 
 use crate::{
     Arena, ArenaOverflow, BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier,
-    BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject,
-    DecodeField, DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, DomainDecodeSurface,
-    DomainDecodeSurfaceKind, Expr, ExprId, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item,
-    ItemId, ItemKind, ItemParameter, MapEntry, Module, NonSourceWakeup, Pattern, PatternBinding,
-    PatternConstructor, PatternKind, Pipe, PipeCaseArm, PipeExpr, PipeOrigin, PipeRecurrence,
-    PipeStage, PipeTruthyFalsyBranch, PipeTruthyFalsyStage, ProjectionBase, RecordExprField,
-    RecordPatternField, RecurrenceGuard, RecurrenceStage, Reference, SignalInfo,
-    SourceArgumentValue, SourceId, SourceInstanceId, SourceNode, SourceOptionBinding,
-    SourceOptionValue, Stage, StageKind, TextLiteral, TextSegment, TruthyFalsyBranch,
-    TruthyFalsyStage, Type,
+    BuiltinBifunctorCarrier, BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier,
+    BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject,
+    BuiltinTraversableCarrier, DecodeField, DecodeProgram, DecodeProgramId, DecodeStep,
+    DecodeStepId, DomainDecodeSurface, DomainDecodeSurfaceKind, Expr, ExprId, FanoutFilter,
+    FanoutJoin, FanoutStage, GateStage, Item, ItemId, ItemKind, ItemParameter, MapEntry, Module,
+    NonSourceWakeup, Pattern, PatternBinding, PatternConstructor, PatternKind, Pipe, PipeCaseArm,
+    PipeExpr, PipeOrigin, PipeRecurrence, PipeStage, PipeTruthyFalsyBranch, PipeTruthyFalsyStage,
+    ProjectionBase, RecordExprField, RecordPatternField, RecurrenceGuard, RecurrenceStage,
+    Reference, SignalInfo, SourceArgumentValue, SourceId, SourceInstanceId, SourceNode,
+    SourceOptionBinding, SourceOptionValue, Stage, StageKind, TextLiteral, TextSegment,
+    TruthyFalsyBranch, TruthyFalsyStage, Type,
     expr::ExprKind,
     validate::{ValidationError, validate_module},
 };
@@ -1573,6 +1574,14 @@ impl<'a> ModuleLowerer<'a> {
                     ));
                 }
             },
+            ("Bifunctor", "bimap", TypeBinding::Constructor(binding)) => {
+                let Some(carrier) = self.builtin_bifunctor_carrier(binding.head()) else {
+                    return Err(unsupported(
+                        "runtime lowering only supports bimap for Result and Validation",
+                    ));
+                };
+                BuiltinClassMemberIntrinsic::Bimap(carrier)
+            },
             ("Applicative", "pure", TypeBinding::Constructor(binding)) => match binding.head() {
                 TypeConstructorHead::Builtin(aivi_hir::BuiltinType::List) => {
                     BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::List)
@@ -1636,6 +1645,31 @@ impl<'a> ModuleLowerer<'a> {
                     ));
                 }
             },
+            ("Traversable", "traverse", TypeBinding::Constructor(binding)) => {
+                let Some(traversable) = self.builtin_traversable_carrier(binding.head()) else {
+                    return Err(unsupported(
+                        "runtime lowering only supports traverse for List, Option, Result, and Validation",
+                    ));
+                };
+                let Some(applicative) = self.builtin_applicative_carrier_from_gate_type(expr_ty)
+                else {
+                    return Err(unsupported(
+                        "runtime lowering only supports traverse results in List, Option, Result, Validation, and Signal applicatives",
+                    ));
+                };
+                BuiltinClassMemberIntrinsic::Traverse {
+                    traversable,
+                    applicative,
+                }
+            },
+            ("Filterable", "filterMap", TypeBinding::Constructor(binding)) => {
+                let Some(carrier) = self.builtin_filterable_carrier(binding.head()) else {
+                    return Err(unsupported(
+                        "runtime lowering only supports filterMap for List and Option",
+                    ));
+                };
+                BuiltinClassMemberIntrinsic::FilterMap(carrier)
+            },
             ("Ord", "compare", _) => {
                 let ordering_item =
                     self.ordering_item_from_gate_type(expr_ty).ok_or_else(|| {
@@ -1645,6 +1679,15 @@ impl<'a> ModuleLowerer<'a> {
                     TypeBinding::Type(aivi_hir::GateType::Primitive(
                         aivi_hir::BuiltinType::Int,
                     )) => BuiltinOrdSubject::Int,
+                    TypeBinding::Type(aivi_hir::GateType::Primitive(
+                        aivi_hir::BuiltinType::Float,
+                    )) => BuiltinOrdSubject::Float,
+                    TypeBinding::Type(aivi_hir::GateType::Primitive(
+                        aivi_hir::BuiltinType::Decimal,
+                    )) => BuiltinOrdSubject::Decimal,
+                    TypeBinding::Type(aivi_hir::GateType::Primitive(
+                        aivi_hir::BuiltinType::BigInt,
+                    )) => BuiltinOrdSubject::BigInt,
                     TypeBinding::Type(aivi_hir::GateType::Primitive(
                         aivi_hir::BuiltinType::Bool,
                     )) => BuiltinOrdSubject::Bool,
@@ -1658,7 +1701,7 @@ impl<'a> ModuleLowerer<'a> {
                     }
                     _ => {
                         return Err(unsupported(
-                            "runtime lowering only supports compare for Int, Bool, Text, and Ordering",
+                            "runtime lowering only supports compare for Int, Float, Decimal, BigInt, Bool, Text, and Ordering",
                         ));
                     }
                 };
@@ -1730,6 +1773,75 @@ impl<'a> ModuleLowerer<'a> {
         }
         match current {
             aivi_hir::GateType::OpaqueItem { item, name, .. } if name == "Ordering" => Some(*item),
+            _ => None,
+        }
+    }
+
+    fn builtin_bifunctor_carrier(
+        &self,
+        head: TypeConstructorHead,
+    ) -> Option<BuiltinBifunctorCarrier> {
+        match head {
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Result) => {
+                Some(BuiltinBifunctorCarrier::Result)
+            }
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Validation) => {
+                Some(BuiltinBifunctorCarrier::Validation)
+            }
+            _ => None,
+        }
+    }
+
+    fn builtin_traversable_carrier(
+        &self,
+        head: TypeConstructorHead,
+    ) -> Option<BuiltinTraversableCarrier> {
+        match head {
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::List) => {
+                Some(BuiltinTraversableCarrier::List)
+            }
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Option) => {
+                Some(BuiltinTraversableCarrier::Option)
+            }
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Result) => {
+                Some(BuiltinTraversableCarrier::Result)
+            }
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Validation) => {
+                Some(BuiltinTraversableCarrier::Validation)
+            }
+            _ => None,
+        }
+    }
+
+    fn builtin_filterable_carrier(
+        &self,
+        head: TypeConstructorHead,
+    ) -> Option<BuiltinFilterableCarrier> {
+        match head {
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::List) => {
+                Some(BuiltinFilterableCarrier::List)
+            }
+            TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Option) => {
+                Some(BuiltinFilterableCarrier::Option)
+            }
+            _ => None,
+        }
+    }
+
+    fn builtin_applicative_carrier_from_gate_type(
+        &self,
+        ty: &aivi_hir::GateType,
+    ) -> Option<BuiltinApplicativeCarrier> {
+        let mut current = ty;
+        while let aivi_hir::GateType::Arrow { result, .. } = current {
+            current = result.as_ref();
+        }
+        match current {
+            aivi_hir::GateType::List(_) => Some(BuiltinApplicativeCarrier::List),
+            aivi_hir::GateType::Option(_) => Some(BuiltinApplicativeCarrier::Option),
+            aivi_hir::GateType::Result { .. } => Some(BuiltinApplicativeCarrier::Result),
+            aivi_hir::GateType::Validation { .. } => Some(BuiltinApplicativeCarrier::Validation),
+            aivi_hir::GateType::Signal(_) => Some(BuiltinApplicativeCarrier::Signal),
             _ => None,
         }
     }
@@ -3199,8 +3311,9 @@ mod tests {
 
     use super::{LoweringError, RuntimeFragmentSpec, lower_module, lower_runtime_fragment};
     use crate::{
-        BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, DecodeStep, GateStage, ItemKind,
-        Reference, StageKind, Type,
+        BuiltinApplicativeCarrier, BuiltinBifunctorCarrier, BuiltinClassMemberIntrinsic,
+        BuiltinFilterableCarrier, BuiltinFoldableCarrier, BuiltinOrdSubject,
+        BuiltinTraversableCarrier, DecodeStep, GateStage, ItemKind, Reference, StageKind, Type,
         validate::{ValidationError, validate_module},
     };
 
@@ -3690,6 +3803,134 @@ val total:Int =
         )) = &core.exprs()[*callee].kind
         else {
             panic!("reduce should lower to the builtin Foldable list intrinsic");
+        };
+    }
+
+    #[test]
+    fn lowers_extended_typeclass_members_into_builtin_intrinsics() {
+        let lowered = lower_text(
+            "typed-core-extended-typeclasses.aivi",
+            r#"
+fun addOne:Int #value:Int =>
+    value + 1
+
+fun keepSmall:(Option Int) #value:Int =>
+    value < 3
+     T|> Some value
+     F|> None
+
+fun punctuate:Text #value:Text =>
+    append value "!"
+
+val okOne:Result Text Int =
+    Ok 1
+
+val ordered:Ordering =
+    compare 1.0 2.0
+
+val mapped:Result Text Int =
+    bimap punctuate addOne okOne
+
+val traversed:Option (List Int) =
+    traverse keepSmall [1, 2]
+
+val filtered:List Int =
+    filterMap keepSmall [1, 3, 2]
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "extended typeclass example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+
+        let ordered = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "ordered")
+            .map(|(id, _)| id)
+            .expect("expected ordered value item");
+        let ordered_body = core.items()[ordered]
+            .body
+            .expect("ordered should carry a lowered body");
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[ordered_body].kind else {
+            panic!("ordered should lower to an apply expression");
+        };
+        assert_eq!(arguments.len(), 2);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Compare {
+                subject: BuiltinOrdSubject::Float,
+                ..
+            },
+        )) = &core.exprs()[*callee].kind
+        else {
+            panic!("compare should lower to the builtin Ord float intrinsic");
+        };
+
+        let mapped = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "mapped")
+            .map(|(id, _)| id)
+            .expect("expected mapped value item");
+        let mapped_body = core.items()[mapped]
+            .body
+            .expect("mapped should carry a lowered body");
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[mapped_body].kind else {
+            panic!("mapped should lower to an apply expression");
+        };
+        assert_eq!(arguments.len(), 3);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Bimap(BuiltinBifunctorCarrier::Result),
+        )) = &core.exprs()[*callee].kind
+        else {
+            panic!("bimap should lower to the builtin Result bifunctor intrinsic");
+        };
+
+        let traversed = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "traversed")
+            .map(|(id, _)| id)
+            .expect("expected traversed value item");
+        let traversed_body = core.items()[traversed]
+            .body
+            .expect("traversed should carry a lowered body");
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[traversed_body].kind
+        else {
+            panic!("traversed should lower to an apply expression");
+        };
+        assert_eq!(arguments.len(), 2);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Traverse {
+                traversable: BuiltinTraversableCarrier::List,
+                applicative: BuiltinApplicativeCarrier::Option,
+            },
+        )) = &core.exprs()[*callee].kind
+        else {
+            panic!("traverse should lower to the builtin list traversable intrinsic");
+        };
+
+        let filtered = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "filtered")
+            .map(|(id, _)| id)
+            .expect("expected filtered value item");
+        let filtered_body = core.items()[filtered]
+            .body
+            .expect("filtered should carry a lowered body");
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[filtered_body].kind else {
+            panic!("filtered should lower to an apply expression");
+        };
+        assert_eq!(arguments.len(), 2);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::FilterMap(BuiltinFilterableCarrier::List),
+        )) = &core.exprs()[*callee].kind
+        else {
+            panic!("filterMap should lower to the builtin list filterable intrinsic");
         };
     }
 

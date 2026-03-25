@@ -2,12 +2,14 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use aivi_backend::{
     BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier,
-    BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, BuiltinFunctorCarrier, CodegenError,
-    DecodeStepKind, DomainDecodeSurfaceKind, EvaluationError, GateStage as BackendGateStage,
-    InlinePipeConstructor, InlinePipePatternKind, InlinePipeStageKind, ItemKind as BackendItemKind,
-    KernelEvaluator, KernelExprKind, LayoutKind, LoweringError, NonSourceWakeupCause,
-    RecurrenceTarget, RuntimeBigInt, RuntimeDecimal, RuntimeFloat, RuntimeSumValue, RuntimeValue,
-    SourceProvider, StageKind as BackendStageKind, ValidationError, compile_program,
+    BuiltinBifunctorCarrier, BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier,
+    BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject,
+    BuiltinTraversableCarrier, CodegenError, DecodeStepKind, DomainDecodeSurfaceKind,
+    EvaluationError, GateStage as BackendGateStage, InlinePipeConstructor,
+    InlinePipePatternKind, InlinePipeStageKind, ItemKind as BackendItemKind, KernelEvaluator,
+    KernelExprKind, LayoutKind, LoweringError, NonSourceWakeupCause, RecurrenceTarget,
+    RuntimeBigInt, RuntimeDecimal, RuntimeFloat, RuntimeSumValue, RuntimeValue, SourceProvider,
+    StageKind as BackendStageKind, ValidationError, compile_program,
     lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::{SourceDatabase, SourceSpan};
@@ -747,6 +749,249 @@ val invalidTotal:Int =
             .evaluate_item(invalid_total, &globals)
             .expect("invalid validation reduce should evaluate"),
         RuntimeValue::Int(10)
+    );
+}
+
+#[test]
+fn runtime_evaluates_extended_builtin_typeclass_members() {
+    let backend = lower_text(
+        "backend-extended-typeclass-members.aivi",
+        r#"
+fun addOne:Int #value:Int =>
+    value + 1
+
+fun keepSmall:(Option Int) #value:Int =>
+    value < 3
+     T|> Some value
+     F|> None
+
+fun punctuate:Text #value:Text =>
+    append value "!"
+
+val okOne:Result Text Int =
+    Ok 1
+
+val errBad:Result Text Int =
+    Err "bad"
+
+val validOne:Validation Text Int =
+    Valid 1
+
+val invalidNo:Validation Text Int =
+    Invalid "no"
+
+val orderedFloat:Ordering =
+    compare 1.0 2.0
+
+val orderedBig:Ordering =
+    compare 1n 2n
+
+val mappedOk:Result Text Int =
+    bimap punctuate addOne okOne
+
+val mappedErr:Result Text Int =
+    bimap punctuate addOne errBad
+
+val mappedValid:Validation Text Int =
+    bimap punctuate addOne validOne
+
+val mappedInvalid:Validation Text Int =
+    bimap punctuate addOne invalidNo
+
+val traversedList:Option (List Int) =
+    traverse keepSmall [1, 2]
+
+val traversedSome:Option (Option Int) =
+    traverse keepSmall (Some 1)
+
+val traversedOk:Option (Result Text Int) =
+    traverse keepSmall okOne
+
+val traversedValid:Option (Validation Text Int) =
+    traverse keepSmall validOne
+
+val filteredList:List Int =
+    filterMap keepSmall [1, 3, 2]
+
+val filteredSome:Option Int =
+    filterMap keepSmall (Some 2)
+
+val filteredMissing:Option Int =
+    filterMap keepSmall (Some 4)
+"#,
+    );
+
+    let ordered_float = find_item(&backend, "orderedFloat");
+    let mapped_ok = find_item(&backend, "mappedOk");
+    let traversed_list = find_item(&backend, "traversedList");
+    let filtered_list = find_item(&backend, "filteredList");
+
+    let ordered_float_kernel = backend.kernels()[backend.items()[ordered_float]
+        .body
+        .expect("orderedFloat should carry a body")]
+    .clone();
+    match &ordered_float_kernel.exprs()[ordered_float_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 2);
+            assert!(matches!(
+                &ordered_float_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Compare {
+                    subject: BuiltinOrdSubject::Float,
+                    ..
+                })
+            ));
+        }
+        other => panic!("expected compare body to lower into an apply tree, found {other:?}"),
+    }
+
+    let mapped_ok_kernel = backend.kernels()[backend.items()[mapped_ok]
+        .body
+        .expect("mappedOk should carry a body")]
+    .clone();
+    match &mapped_ok_kernel.exprs()[mapped_ok_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 3);
+            assert!(matches!(
+                &mapped_ok_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Bimap(
+                    BuiltinBifunctorCarrier::Result
+                ))
+            ));
+        }
+        other => panic!("expected bimap body to lower into an apply tree, found {other:?}"),
+    }
+
+    let traversed_list_kernel = backend.kernels()[backend.items()[traversed_list]
+        .body
+        .expect("traversedList should carry a body")]
+    .clone();
+    match &traversed_list_kernel.exprs()[traversed_list_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 2);
+            assert!(matches!(
+                &traversed_list_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Traverse {
+                    traversable: BuiltinTraversableCarrier::List,
+                    applicative: BuiltinApplicativeCarrier::Option
+                })
+            ));
+        }
+        other => panic!("expected traverse body to lower into an apply tree, found {other:?}"),
+    }
+
+    let filtered_list_kernel = backend.kernels()[backend.items()[filtered_list]
+        .body
+        .expect("filteredList should carry a body")]
+    .clone();
+    match &filtered_list_kernel.exprs()[filtered_list_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 2);
+            assert!(matches!(
+                &filtered_list_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::FilterMap(
+                    BuiltinFilterableCarrier::List
+                ))
+            ));
+        }
+        other => panic!("expected filterMap body to lower into an apply tree, found {other:?}"),
+    }
+
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+    match evaluator
+        .evaluate_item(ordered_float, &globals)
+        .expect("float compare should evaluate")
+    {
+        RuntimeValue::Sum(value) => {
+            assert_eq!(value.type_name.as_ref(), "Ordering");
+            assert_eq!(value.variant_name.as_ref(), "Less");
+        }
+        other => panic!("expected Ordering result, found {other:?}"),
+    }
+    match evaluator
+        .evaluate_item(find_item(&backend, "orderedBig"), &globals)
+        .expect("bigint compare should evaluate")
+    {
+        RuntimeValue::Sum(value) => {
+            assert_eq!(value.type_name.as_ref(), "Ordering");
+            assert_eq!(value.variant_name.as_ref(), "Less");
+        }
+        other => panic!("expected Ordering result, found {other:?}"),
+    }
+    assert_eq!(
+        evaluator
+            .evaluate_item(mapped_ok, &globals)
+            .expect("result bimap should evaluate"),
+        RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(2)))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "mappedErr"), &globals)
+            .expect("err bimap should evaluate"),
+        RuntimeValue::ResultErr(Box::new(RuntimeValue::Text("bad!".into())))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "mappedValid"), &globals)
+            .expect("validation bimap should evaluate"),
+        RuntimeValue::ValidationValid(Box::new(RuntimeValue::Int(2)))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "mappedInvalid"), &globals)
+            .expect("invalid bimap should evaluate"),
+        RuntimeValue::ValidationInvalid(Box::new(RuntimeValue::Text("no!".into())))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(traversed_list, &globals)
+            .expect("list traverse should evaluate"),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::List(vec![
+            RuntimeValue::Int(1),
+            RuntimeValue::Int(2),
+        ])))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "traversedSome"), &globals)
+            .expect("option traverse should evaluate"),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::OptionSome(Box::new(
+            RuntimeValue::Int(1)
+        ))))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "traversedOk"), &globals)
+            .expect("result traverse should evaluate"),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::ResultOk(Box::new(
+            RuntimeValue::Int(1)
+        ))))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "traversedValid"), &globals)
+            .expect("validation traverse should evaluate"),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::ValidationValid(Box::new(
+            RuntimeValue::Int(1)
+        ))))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(filtered_list, &globals)
+            .expect("list filterMap should evaluate"),
+        RuntimeValue::List(vec![RuntimeValue::Int(1), RuntimeValue::Int(2)])
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "filteredSome"), &globals)
+            .expect("option filterMap should evaluate"),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(2)))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "filteredMissing"), &globals)
+            .expect("missing option filterMap should evaluate"),
+        RuntimeValue::OptionNone
     );
 }
 

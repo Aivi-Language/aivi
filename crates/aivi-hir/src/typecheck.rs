@@ -2311,10 +2311,7 @@ impl<'a> TypeChecker<'a> {
                     ty,
                     GateType::Primitive(BuiltinType::Text) | GateType::List(_)
                 ),
-                "Bifunctor" => matches!(
-                    ty,
-                    GateType::Result { .. } | GateType::Validation { .. } | GateType::Task { .. }
-                ),
+                "Bifunctor" => matches!(ty, GateType::Result { .. } | GateType::Validation { .. }),
                 _ => self.has_builtin_class_instance(class_name, ty),
             },
             TypeBinding::Constructor(binding) => match class_name {
@@ -2347,7 +2344,7 @@ impl<'a> TypeChecker<'a> {
                         BuiltinType::Task,
                     ],
                 ),
-                "Foldable" | "Traversable" | "Filterable" => self.matches_builtin_head(
+                "Foldable" | "Traversable" => self.matches_builtin_head(
                     binding,
                     &[
                         BuiltinType::List,
@@ -2356,13 +2353,13 @@ impl<'a> TypeChecker<'a> {
                         BuiltinType::Validation,
                     ],
                 ),
+                "Filterable" => self.matches_builtin_head(
+                    binding,
+                    &[BuiltinType::List, BuiltinType::Option],
+                ),
                 "Bifunctor" => self.matches_builtin_head(
                     binding,
-                    &[
-                        BuiltinType::Result,
-                        BuiltinType::Validation,
-                        BuiltinType::Task,
-                    ],
+                    &[BuiltinType::Result, BuiltinType::Validation],
                 ),
                 _ => false,
             },

@@ -38,8 +38,9 @@ pub use ids::{
 };
 pub use kernel::{
     AbiParameter, AbiResult, BigIntLiteral, BinaryOperator, BuiltinAppendCarrier,
-    BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinClassMemberIntrinsic,
-    BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject, BuiltinTerm,
+    BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,
+    BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier, BuiltinFoldableCarrier,
+    BuiltinFunctorCarrier, BuiltinOrdSubject, BuiltinTerm, BuiltinTraversableCarrier,
     CallingConvention, CallingConventionKind, DecimalLiteral, FloatLiteral, InlinePipeCaseArm,
     InlinePipeConstructor, InlinePipeExpr, InlinePipePattern, InlinePipePatternKind,
     InlinePipeRecordPatternField, InlinePipeStage, InlinePipeStageKind,

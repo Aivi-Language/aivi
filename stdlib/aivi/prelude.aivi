@@ -78,4 +78,4 @@ fun isOk:Bool #value:(Result E A) =>
 fun isErr:Bool #value:(Result E A) =>
     resultIsErr value
 
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Applicative, Monad, Foldable, getOrElse, withDefault, length, head, tailOrEmpty, min, max, minOf, join, concat, isEmpty, nonEmpty, isSome, isNone, isOk, isErr)
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, getOrElse, withDefault, length, head, tailOrEmpty, min, max, minOf, join, concat, isEmpty, nonEmpty, isSome, isNone, isOk, isErr)

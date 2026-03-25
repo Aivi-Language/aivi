@@ -79,7 +79,7 @@ pub fn lower_module_with_resolver(
     LoweringResult::new(lowerer.module, lowerer.diagnostics)
 }
 
-const AMBIENT_PRELUDE_SOURCE: &str = r#"type Ordering = LT | EQ | GT
+const AMBIENT_PRELUDE_SOURCE: &str = r#"type Ordering = Less | Equal | Greater
 
 class Setoid A
     equals : A -> A -> Bool

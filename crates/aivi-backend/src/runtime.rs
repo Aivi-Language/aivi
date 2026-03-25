@@ -7,10 +7,12 @@ use aivi_hir::{DomainMemberHandle, IntrinsicValue, ItemId as HirItemId, SumConst
 
 use crate::{
     BinaryOperator, BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier,
-    BuiltinClassMemberIntrinsic, BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject,
-    BuiltinTerm, EnvSlotId, InlinePipeConstructor, InlinePipePattern, InlinePipePatternKind,
-    InlinePipeStageKind, InlineSubjectId, ItemId, KernelExprId, KernelExprKind, KernelId, LayoutId,
-    LayoutKind, PrimitiveType, Program, ProjectionBase, SubjectRef, UnaryOperator,
+    BuiltinBifunctorCarrier, BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier,
+    BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinOrdSubject, BuiltinTerm,
+    BuiltinTraversableCarrier, EnvSlotId, InlinePipeConstructor, InlinePipePattern,
+    InlinePipePatternKind, InlinePipeStageKind, InlineSubjectId, ItemId, KernelExprId,
+    KernelExprKind, KernelId, LayoutId, LayoutKind, PrimitiveType, Program, ProjectionBase,
+    SubjectRef, UnaryOperator,
     numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat},
 };
 
@@ -1854,6 +1856,19 @@ impl<'a> KernelEvaluator<'a> {
                     kernel_id, expr, intrinsic, carrier, function, subject, globals,
                 )
             }
+            BuiltinClassMemberIntrinsic::Bimap(carrier) => {
+                let [left, right, subject] = expect_arity::<3>(arguments).map_err(|reason| {
+                    EvaluationError::UnsupportedBuiltinClassMember {
+                        kernel: kernel_id,
+                        expr,
+                        intrinsic,
+                        reason,
+                    }
+                })?;
+                self.bimap_builtin_carrier(
+                    kernel_id, expr, intrinsic, carrier, left, right, subject, globals,
+                )
+            }
             BuiltinClassMemberIntrinsic::Pure(carrier) => {
                 let [payload] = expect_arity::<1>(arguments).map_err(|reason| {
                     EvaluationError::UnsupportedBuiltinClassMember {
@@ -1863,17 +1878,7 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                Ok(match carrier {
-                    BuiltinApplicativeCarrier::List => RuntimeValue::List(vec![payload]),
-                    BuiltinApplicativeCarrier::Option => {
-                        RuntimeValue::OptionSome(Box::new(payload))
-                    }
-                    BuiltinApplicativeCarrier::Result => RuntimeValue::ResultOk(Box::new(payload)),
-                    BuiltinApplicativeCarrier::Validation => {
-                        RuntimeValue::ValidationValid(Box::new(payload))
-                    }
-                    BuiltinApplicativeCarrier::Signal => RuntimeValue::Signal(Box::new(payload)),
-                })
+                Ok(pure_applicative_value(carrier, payload))
             }
             BuiltinClassMemberIntrinsic::Apply(carrier) => {
                 let [functions, values] = expect_arity::<2>(arguments).map_err(|reason| {
@@ -1902,6 +1907,42 @@ impl<'a> KernelEvaluator<'a> {
                     kernel_id, expr, intrinsic, carrier, function, initial, subject, globals,
                 )
             }
+            BuiltinClassMemberIntrinsic::Traverse {
+                traversable,
+                applicative,
+            } => {
+                let [function, subject] = expect_arity::<2>(arguments).map_err(|reason| {
+                    EvaluationError::UnsupportedBuiltinClassMember {
+                        kernel: kernel_id,
+                        expr,
+                        intrinsic,
+                        reason,
+                    }
+                })?;
+                self.traverse_builtin_carrier(
+                    kernel_id,
+                    expr,
+                    intrinsic,
+                    traversable,
+                    applicative,
+                    function,
+                    subject,
+                    globals,
+                )
+            }
+            BuiltinClassMemberIntrinsic::FilterMap(carrier) => {
+                let [function, subject] = expect_arity::<2>(arguments).map_err(|reason| {
+                    EvaluationError::UnsupportedBuiltinClassMember {
+                        kernel: kernel_id,
+                        expr,
+                        intrinsic,
+                        reason,
+                    }
+                })?;
+                self.filter_map_builtin_carrier(
+                    kernel_id, expr, intrinsic, carrier, function, subject, globals,
+                )
+            }
         }
     }
 
@@ -1916,6 +1957,18 @@ impl<'a> KernelEvaluator<'a> {
     ) -> Result<RuntimeValue, EvaluationError> {
         let ordering = match (subject, strip_signal(left), strip_signal(right)) {
             (BuiltinOrdSubject::Int, RuntimeValue::Int(left), RuntimeValue::Int(right)) => {
+                left.cmp(&right)
+            }
+            (BuiltinOrdSubject::Float, RuntimeValue::Float(left), RuntimeValue::Float(right)) => {
+                left.partial_cmp(&right)
+                    .expect("runtime floats are finite and always comparable")
+            }
+            (
+                BuiltinOrdSubject::Decimal,
+                RuntimeValue::Decimal(left),
+                RuntimeValue::Decimal(right),
+            ) => left.cmp(&right),
+            (BuiltinOrdSubject::BigInt, RuntimeValue::BigInt(left), RuntimeValue::BigInt(right)) => {
                 left.cmp(&right)
             }
             (BuiltinOrdSubject::Bool, RuntimeValue::Bool(left), RuntimeValue::Bool(right)) => {
@@ -2058,6 +2111,55 @@ impl<'a> KernelEvaluator<'a> {
                     expr,
                     intrinsic,
                     reason: "map received values outside the supported runtime carriers",
+                }),
+            },
+        }
+    }
+
+    fn bimap_builtin_carrier(
+        &mut self,
+        kernel_id: KernelId,
+        expr: KernelExprId,
+        intrinsic: BuiltinClassMemberIntrinsic,
+        carrier: BuiltinBifunctorCarrier,
+        left_function: RuntimeValue,
+        right_function: RuntimeValue,
+        subject: RuntimeValue,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        match carrier {
+            BuiltinBifunctorCarrier::Result => match strip_signal(subject) {
+                RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(Box::new(
+                    self.apply_callable(kernel_id, expr, left_function, vec![*error], globals)?,
+                ))),
+                RuntimeValue::ResultOk(value) => Ok(RuntimeValue::ResultOk(Box::new(
+                    self.apply_callable(kernel_id, expr, right_function, vec![*value], globals)?,
+                ))),
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "bimap received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinBifunctorCarrier::Validation => match strip_signal(subject) {
+                RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(
+                    Box::new(self.apply_callable(
+                        kernel_id,
+                        expr,
+                        left_function,
+                        vec![*error],
+                        globals,
+                    )?),
+                )),
+                RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
+                    self.apply_callable(kernel_id, expr, right_function, vec![*value], globals)?,
+                ))),
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "bimap received values outside the supported runtime carriers",
                 }),
             },
         }
@@ -2259,6 +2361,192 @@ impl<'a> KernelEvaluator<'a> {
                     expr,
                     intrinsic,
                     reason: "reduce received values outside the supported runtime carriers",
+                }),
+            },
+        }
+    }
+
+    fn traverse_builtin_carrier(
+        &mut self,
+        kernel_id: KernelId,
+        expr: KernelExprId,
+        intrinsic: BuiltinClassMemberIntrinsic,
+        traversable: BuiltinTraversableCarrier,
+        applicative: BuiltinApplicativeCarrier,
+        function: RuntimeValue,
+        subject: RuntimeValue,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        match traversable {
+            BuiltinTraversableCarrier::List => match strip_signal(subject) {
+                RuntimeValue::List(values) => {
+                    let mut mapped = Vec::with_capacity(values.len());
+                    for value in values {
+                        mapped.push(self.apply_callable(
+                            kernel_id,
+                            expr,
+                            function.clone(),
+                            vec![value],
+                            globals,
+                        )?);
+                    }
+                    sequence_traverse_results(applicative, mapped).map_err(|reason| {
+                        EvaluationError::UnsupportedBuiltinClassMember {
+                            kernel: kernel_id,
+                            expr,
+                            intrinsic,
+                            reason,
+                        }
+                    })
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "traverse received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinTraversableCarrier::Option => match strip_signal(subject) {
+                RuntimeValue::OptionNone => Ok(pure_applicative_value(
+                    applicative,
+                    RuntimeValue::OptionNone,
+                )),
+                RuntimeValue::OptionSome(value) => {
+                    let mapped =
+                        self.apply_callable(kernel_id, expr, function, vec![*value], globals)?;
+                    wrap_option_in_applicative(applicative, mapped).map_err(|reason| {
+                        EvaluationError::UnsupportedBuiltinClassMember {
+                            kernel: kernel_id,
+                            expr,
+                            intrinsic,
+                            reason,
+                        }
+                    })
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "traverse received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinTraversableCarrier::Result => match strip_signal(subject) {
+                RuntimeValue::ResultErr(error) => Ok(pure_applicative_value(
+                    applicative,
+                    RuntimeValue::ResultErr(error),
+                )),
+                RuntimeValue::ResultOk(value) => {
+                    let mapped =
+                        self.apply_callable(kernel_id, expr, function, vec![*value], globals)?;
+                    wrap_result_ok_in_applicative(applicative, mapped).map_err(|reason| {
+                        EvaluationError::UnsupportedBuiltinClassMember {
+                            kernel: kernel_id,
+                            expr,
+                            intrinsic,
+                            reason,
+                        }
+                    })
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "traverse received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinTraversableCarrier::Validation => match strip_signal(subject) {
+                RuntimeValue::ValidationInvalid(error) => Ok(pure_applicative_value(
+                    applicative,
+                    RuntimeValue::ValidationInvalid(error),
+                )),
+                RuntimeValue::ValidationValid(value) => {
+                    let mapped =
+                        self.apply_callable(kernel_id, expr, function, vec![*value], globals)?;
+                    wrap_validation_valid_in_applicative(applicative, mapped).map_err(|reason| {
+                        EvaluationError::UnsupportedBuiltinClassMember {
+                            kernel: kernel_id,
+                            expr,
+                            intrinsic,
+                            reason,
+                        }
+                    })
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "traverse received values outside the supported runtime carriers",
+                }),
+            },
+        }
+    }
+
+    fn filter_map_builtin_carrier(
+        &mut self,
+        kernel_id: KernelId,
+        expr: KernelExprId,
+        intrinsic: BuiltinClassMemberIntrinsic,
+        carrier: BuiltinFilterableCarrier,
+        function: RuntimeValue,
+        subject: RuntimeValue,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        match carrier {
+            BuiltinFilterableCarrier::List => match strip_signal(subject) {
+                RuntimeValue::List(values) => {
+                    let mut filtered = Vec::new();
+                    for value in values {
+                        match strip_signal(self.apply_callable(
+                            kernel_id,
+                            expr,
+                            function.clone(),
+                            vec![value],
+                            globals,
+                        )?) {
+                            RuntimeValue::OptionNone => {}
+                            RuntimeValue::OptionSome(value) => filtered.push(*value),
+                            _ => {
+                                return Err(EvaluationError::UnsupportedBuiltinClassMember {
+                                    kernel: kernel_id,
+                                    expr,
+                                    intrinsic,
+                                    reason: "filterMap transforms must evaluate to Option values",
+                                });
+                            }
+                        }
+                    }
+                    Ok(RuntimeValue::List(filtered))
+                }
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "filterMap received values outside the supported runtime carriers",
+                }),
+            },
+            BuiltinFilterableCarrier::Option => match strip_signal(subject) {
+                RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
+                RuntimeValue::OptionSome(value) => match strip_signal(self.apply_callable(
+                    kernel_id,
+                    expr,
+                    function,
+                    vec![*value],
+                    globals,
+                )?) {
+                    RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
+                    RuntimeValue::OptionSome(value) => Ok(RuntimeValue::OptionSome(value)),
+                    _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                        kernel: kernel_id,
+                        expr,
+                        intrinsic,
+                        reason: "filterMap transforms must evaluate to Option values",
+                    }),
+                },
+                _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel: kernel_id,
+                    expr,
+                    intrinsic,
+                    reason: "filterMap received values outside the supported runtime carriers",
                 }),
             },
         }
@@ -2523,12 +2811,261 @@ fn builtin_class_member_arity(intrinsic: BuiltinClassMemberIntrinsic) -> usize {
     match intrinsic {
         BuiltinClassMemberIntrinsic::Empty(_) => 0,
         BuiltinClassMemberIntrinsic::Pure(_) => 1,
-        BuiltinClassMemberIntrinsic::Reduce(_) => 3,
+        BuiltinClassMemberIntrinsic::Bimap(_) | BuiltinClassMemberIntrinsic::Reduce(_) => 3,
         BuiltinClassMemberIntrinsic::StructuralEq
         | BuiltinClassMemberIntrinsic::Compare { .. }
         | BuiltinClassMemberIntrinsic::Append(_)
         | BuiltinClassMemberIntrinsic::Map(_)
-        | BuiltinClassMemberIntrinsic::Apply(_) => 2,
+        | BuiltinClassMemberIntrinsic::Apply(_)
+        | BuiltinClassMemberIntrinsic::Traverse { .. }
+        | BuiltinClassMemberIntrinsic::FilterMap(_) => 2,
+    }
+}
+
+fn pure_applicative_value(
+    carrier: BuiltinApplicativeCarrier,
+    payload: RuntimeValue,
+) -> RuntimeValue {
+    match carrier {
+        BuiltinApplicativeCarrier::List => RuntimeValue::List(vec![payload]),
+        BuiltinApplicativeCarrier::Option => RuntimeValue::OptionSome(Box::new(payload)),
+        BuiltinApplicativeCarrier::Result => RuntimeValue::ResultOk(Box::new(payload)),
+        BuiltinApplicativeCarrier::Validation => RuntimeValue::ValidationValid(Box::new(payload)),
+        BuiltinApplicativeCarrier::Signal => RuntimeValue::Signal(Box::new(payload)),
+    }
+}
+
+fn wrap_option_in_applicative(
+    carrier: BuiltinApplicativeCarrier,
+    mapped: RuntimeValue,
+) -> Result<RuntimeValue, &'static str> {
+    match carrier {
+        BuiltinApplicativeCarrier::List => match strip_signal(mapped) {
+            RuntimeValue::List(values) => Ok(RuntimeValue::List(
+                values
+                    .into_iter()
+                    .map(|value| RuntimeValue::OptionSome(Box::new(value)))
+                    .collect(),
+            )),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Option => match strip_signal(mapped) {
+            RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
+            RuntimeValue::OptionSome(value) => {
+                Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::OptionSome(value))))
+            }
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Result => match strip_signal(mapped) {
+            RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(error)),
+            RuntimeValue::ResultOk(value) => Ok(RuntimeValue::ResultOk(Box::new(
+                RuntimeValue::OptionSome(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Validation => match strip_signal(mapped) {
+            RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(error)),
+            RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
+                RuntimeValue::OptionSome(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Signal => match mapped {
+            RuntimeValue::Signal(value) => {
+                Ok(RuntimeValue::Signal(Box::new(RuntimeValue::OptionSome(value))))
+            }
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+    }
+}
+
+fn wrap_result_ok_in_applicative(
+    carrier: BuiltinApplicativeCarrier,
+    mapped: RuntimeValue,
+) -> Result<RuntimeValue, &'static str> {
+    match carrier {
+        BuiltinApplicativeCarrier::List => match strip_signal(mapped) {
+            RuntimeValue::List(values) => Ok(RuntimeValue::List(
+                values
+                    .into_iter()
+                    .map(|value| RuntimeValue::ResultOk(Box::new(value)))
+                    .collect(),
+            )),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Option => match strip_signal(mapped) {
+            RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
+            RuntimeValue::OptionSome(value) => {
+                Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::ResultOk(value))))
+            }
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Result => match strip_signal(mapped) {
+            RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(error)),
+            RuntimeValue::ResultOk(value) => {
+                Ok(RuntimeValue::ResultOk(Box::new(RuntimeValue::ResultOk(value))))
+            }
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Validation => match strip_signal(mapped) {
+            RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(error)),
+            RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
+                RuntimeValue::ResultOk(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Signal => match mapped {
+            RuntimeValue::Signal(value) => {
+                Ok(RuntimeValue::Signal(Box::new(RuntimeValue::ResultOk(value))))
+            }
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+    }
+}
+
+fn wrap_validation_valid_in_applicative(
+    carrier: BuiltinApplicativeCarrier,
+    mapped: RuntimeValue,
+) -> Result<RuntimeValue, &'static str> {
+    match carrier {
+        BuiltinApplicativeCarrier::List => match strip_signal(mapped) {
+            RuntimeValue::List(values) => Ok(RuntimeValue::List(
+                values
+                    .into_iter()
+                    .map(|value| RuntimeValue::ValidationValid(Box::new(value)))
+                    .collect(),
+            )),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Option => match strip_signal(mapped) {
+            RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
+            RuntimeValue::OptionSome(value) => Ok(RuntimeValue::OptionSome(Box::new(
+                RuntimeValue::ValidationValid(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Result => match strip_signal(mapped) {
+            RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(error)),
+            RuntimeValue::ResultOk(value) => Ok(RuntimeValue::ResultOk(Box::new(
+                RuntimeValue::ValidationValid(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Validation => match strip_signal(mapped) {
+            RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(error)),
+            RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
+                RuntimeValue::ValidationValid(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+        BuiltinApplicativeCarrier::Signal => match mapped {
+            RuntimeValue::Signal(value) => Ok(RuntimeValue::Signal(Box::new(
+                RuntimeValue::ValidationValid(value),
+            ))),
+            _ => Err("traverse expected the mapped value to stay in the target applicative"),
+        },
+    }
+}
+
+fn sequence_traverse_results(
+    carrier: BuiltinApplicativeCarrier,
+    mapped: Vec<RuntimeValue>,
+) -> Result<RuntimeValue, &'static str> {
+    match carrier {
+        BuiltinApplicativeCarrier::List => {
+            let mut accumulated = vec![Vec::new()];
+            for value in mapped {
+                let RuntimeValue::List(values) = strip_signal(value) else {
+                    return Err("traverse expected the mapped value to stay in the target applicative");
+                };
+                let mut next = Vec::new();
+                for prefix in &accumulated {
+                    for value in &values {
+                        let mut candidate = prefix.clone();
+                        candidate.push(value.clone());
+                        next.push(candidate);
+                    }
+                }
+                accumulated = next;
+            }
+            Ok(RuntimeValue::List(
+                accumulated.into_iter().map(RuntimeValue::List).collect(),
+            ))
+        }
+        BuiltinApplicativeCarrier::Option => {
+            let mut collected = Vec::with_capacity(mapped.len());
+            for value in mapped {
+                match strip_signal(value) {
+                    RuntimeValue::OptionNone => return Ok(RuntimeValue::OptionNone),
+                    RuntimeValue::OptionSome(value) => collected.push(*value),
+                    _ => {
+                        return Err(
+                            "traverse expected the mapped value to stay in the target applicative",
+                        );
+                    }
+                }
+            }
+            Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::List(collected))))
+        }
+        BuiltinApplicativeCarrier::Result => {
+            let mut collected = Vec::with_capacity(mapped.len());
+            for value in mapped {
+                match strip_signal(value) {
+                    RuntimeValue::ResultErr(error) => return Ok(RuntimeValue::ResultErr(error)),
+                    RuntimeValue::ResultOk(value) => collected.push(*value),
+                    _ => {
+                        return Err(
+                            "traverse expected the mapped value to stay in the target applicative",
+                        );
+                    }
+                }
+            }
+            Ok(RuntimeValue::ResultOk(Box::new(RuntimeValue::List(collected))))
+        }
+        BuiltinApplicativeCarrier::Validation => {
+            let mut collected = Vec::with_capacity(mapped.len());
+            let mut invalid: Option<RuntimeValue> = None;
+            for value in mapped {
+                match strip_signal(value) {
+                    RuntimeValue::ValidationValid(value) => {
+                        if invalid.is_none() {
+                            collected.push(*value);
+                        }
+                    }
+                    RuntimeValue::ValidationInvalid(error) => {
+                        invalid = Some(match invalid {
+                            Some(previous) => append_validation_errors(previous, *error)?,
+                            None => *error,
+                        });
+                    }
+                    _ => {
+                        return Err(
+                            "traverse expected the mapped value to stay in the target applicative",
+                        );
+                    }
+                }
+            }
+            match invalid {
+                Some(error) => Ok(RuntimeValue::ValidationInvalid(Box::new(error))),
+                None => Ok(RuntimeValue::ValidationValid(Box::new(RuntimeValue::List(
+                    collected,
+                )))),
+            }
+        }
+        BuiltinApplicativeCarrier::Signal => {
+            let mut collected = Vec::with_capacity(mapped.len());
+            for value in mapped {
+                match value {
+                    RuntimeValue::Signal(value) => collected.push(*value),
+                    _ => {
+                        return Err(
+                            "traverse expected the mapped value to stay in the target applicative",
+                        );
+                    }
+                }
+            }
+            Ok(RuntimeValue::Signal(Box::new(RuntimeValue::List(collected))))
+        }
     }
 }
 

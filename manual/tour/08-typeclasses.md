@@ -1,18 +1,22 @@
 # Type Classes
 
-Type classes define a shared interface that multiple types can implement.
-They are similar to TypeScript interfaces, but each instance comes with **laws** —
-invariants the implementation must uphold, checked by the compiler.
+Type classes describe shared capabilities that multiple types can implement.
+They let generic code say what operations it needs, and they let the compiler
+resolve the right implementation at typecheck time.
+
+They are similar to interfaces, but they also carry the usual algebraic laws.
+Those laws still matter, but the compiler is not required to prove them for you.
 
 ## Declaring a class
 
 ```text
 class Eq A
     (==) : A -> A -> Bool
+    (!=) : A -> A -> Bool
 ```
 
 This declares a class `Eq` parameterised over a type variable `A`.
-Any type that implements `Eq` must provide `==`.
+Any type that implements `Eq` must provide those members.
 
 ## Writing an instance
 
@@ -20,139 +24,294 @@ Any type that implements `Eq` must provide `==`.
 instance Eq Color
 ```
 
-For closed sum and product types whose fields all have `Eq` instances, the compiler
-**derives** the implementation automatically. You declare the instance header; the
-compiler fills in the body.
+For closed sum and product types whose fields already support structural
+equality, the compiler can derive `Eq` automatically from the instance header.
 
-`Red == Green` now evaluates to `False` and `==` works anywhere `Color` appears.
+## Exported type-class surface
 
-## Built-in classes
+The root `aivi` prelude now exports these type-class names directly:
 
-AIVI's standard library exports these classes from `aivi` (available without import):
+- `Eq`
+- `Default`
+- `Ord`
+- `Semigroup`
+- `Monoid`
+- `Functor`
+- `Bifunctor`
+- `Traversable`
+- `Filterable`
+- `Applicative`
+- `Monad`
+- `Foldable`
 
-### `Eq` — equality
+It also exports the ordering type used by `Ord`:
+
+```text
+type Ordering = Less | Equal | Greater
+```
+
+## Built-in classes and current compiler-backed instances
+
+### `Eq` — structural equality
 
 ```text
 class Eq A
     (==) : A -> A -> Bool
+    (!=) : A -> A -> Bool
 ```
 
-`Int`, `Bool`, `Text`, `List A`, `Option A`, and `Result E A` all have `Eq` instances
-when their type arguments do. Your own closed types get `Eq` for free via derivation.
+`Eq` is the structural equality class. The compiler provides equality for the
+standard built-in shapes and can derive it for your own closed types when their
+fields also support equality.
 
-### `Default` — a sensible zero value
+### `Default` — a fallback value
 
 ```text
 class Default A
     default : A
 ```
 
-Provides a canonical empty/zero value for a type. Useful when you need an initial
-accumulator without an explicit seed.
+`Default` is currently used most visibly by record-field elision.
 
-### `Functor` — mapping over a container
+Today, resolved-HIR default synthesis supports:
+
+- same-module `Default` instances
+- `Option A` as `None` when the instance is imported via `use aivi.defaults (Option)`
+
+### `Ord` — total ordering
+
+```text
+class Eq A => Ord A
+    compare : A -> A -> Ordering
+```
+
+`Ord` refines `Eq` with `compare`.
+The current compiler-backed `compare` lowering supports:
+
+- `Int`
+- `Float`
+- `Decimal`
+- `BigInt`
+- `Bool`
+- `Text`
+- `Ordering`
+
+The result is one of `Less`, `Equal`, or `Greater`.
+
+### `Semigroup` — associative combination
+
+```text
+class Semigroup A
+    append : A -> A -> A
+```
+
+`append` combines two values of the same type.
+The current compiler-backed builtin instances are:
+
+- `Text`
+- `List A`
+
+### `Monoid` — combination with an identity
+
+```text
+class Semigroup A => Monoid A
+    empty : A
+```
+
+`Monoid` adds an identity element on top of `Semigroup`.
+The current compiler-backed builtin instances are:
+
+- `Text`
+- `List A`
+
+### `Functor` — mapping over one-parameter contexts
 
 ```text
 class Functor F
     map : (A -> B) -> F A -> F B
 ```
 
-`Functor` describes types that can be mapped over. `List`, `Option`, `Result E`, and
-`Signal` are all functors. In pipe notation, `*|>` is the `map` for `List`; `T|>` on
-`Option` lifts the function over the `Some` case.
+`Functor` describes contexts that can transform their payload while preserving
+their outer shape.
 
-### `Applicative` — combining independent effects
+The current compiler-backed `map` lowering supports:
+
+- `List`
+- `Option`
+- `Result E`
+- `Validation E`
+- `Signal`
+
+### `Bifunctor` — mapping both sides of a two-parameter context
 
 ```text
-class Applicative F
-    pure  : A -> F A
+class Bifunctor F
+    bimap : (A -> C) -> (B -> D) -> F A B -> F C D
+```
+
+`Bifunctor` lets you transform both type arguments of a two-parameter carrier.
+
+The current compiler-backed `bimap` lowering supports:
+
+- `Result`
+- `Validation`
+
+### `Applicative` — introducing and applying contextual values
+
+The ambient hierarchy models applicative behavior in two steps:
+
+```text
+class Apply F
     apply : F (A -> B) -> F A -> F B
+
+class Apply F => Applicative F
+    pure : A -> F A
 ```
 
-`Applicative` lets you combine multiple independent values in the same context.
-`&|>` in pipe notation is `apply` for `Signal` — it zips two signals and applies a
-function pointwise.
+`Applicative` is the exported class name, and its ambient superclass `Apply`
+supplies `apply`.
 
-### `Monad` — sequencing dependent effects
+The current compiler-backed `pure` and `apply` lowering supports:
 
-```text
-class Monad F
-    flatMap : (A -> F B) -> F A -> F B
-```
+- `List`
+- `Option`
+- `Result E`
+- `Validation E`
+- `Signal`
 
-`Monad` sequences computations where the next step depends on the result of the previous
-one. `Option`, `Result E`, and `Task E` are monads. `flatMap` on `Option` short-circuits
-on `None`; on `Result` it short-circuits on `Err`.
+For `Validation`, applicative accumulation currently expects `Invalid` payloads
+shaped like `NonEmpty` or `NonEmptyList`.
 
 ### `Foldable` — reducing a structure to a value
 
 ```text
 class Foldable F
-    fold : (B -> A -> B) -> B -> F A -> B
+    reduce : (B -> A -> B) -> B -> F A -> B
 ```
 
-`Foldable` describes structures that can be reduced to a single value. `List` is the
-primary instance. The `reduce` function used throughout the stdlib is `fold` on `List`.
+The current surface member is `reduce`, not `fold`.
+
+The current compiler-backed `reduce` lowering supports:
+
+- `List`
+- `Option`
+- `Result E`
+- `Validation E`
+
+### `Traversable` — traversing with an applicative effect
+
+```text
+class (Functor T, Foldable T) => Traversable T
+    traverse : Applicative G => (A -> G B) -> T A -> G (T B)
+```
+
+`Traversable` sequences an applicative effect while rebuilding the original
+shape.
+
+The current compiler-backed `traverse` lowering supports traversing:
+
+- `List`
+- `Option`
+- `Result`
+- `Validation`
+
+and rebuilding into these applicative results:
+
+- `List`
+- `Option`
+- `Result`
+- `Validation`
+- `Signal`
+
+### `Filterable` — map and discard in one pass
+
+```text
+class Functor F => Filterable F
+    filterMap : (A -> Option B) -> F A -> F B
+```
+
+`filterMap` keeps values that map to `Some` and discards values that map to
+`None`.
+
+The current compiler-backed `filterMap` lowering supports:
+
+- `List`
+- `Option`
+
+`Result` and `Validation` are intentionally not treated as builtin
+`Filterable` carriers under this signature.
+
+### `Monad` — sequencing dependent effects
+
+The ambient hierarchy models monadic sequencing like this:
+
+```text
+class Apply M => Chain M
+    chain : (A -> M B) -> M A -> M B
+
+class (Applicative M, Chain M) => Monad M
+    join : M (M A) -> M A
+```
+
+`Monad` remains part of the exported prelude surface.
+In today's implementation, the most complete direct builtin lowering in this
+area is centered on `map`, `apply`, and `pure`, while `Monad` still serves as
+the higher-level abstraction you can constrain against.
 
 ## Using a class constraint in a function
 
-When a function is generic but requires a class capability, declare a constraint with
+When a function is generic but requires a class capability, declare it with
 `with`:
 
 ```text
-fun findDuplicate:(Option A) with Eq A #items:(List A) =>
-    // TODO: add a verified AIVI example here
+fun equals:Bool with Eq A #left:A #right:A =>
+    left == right
 ```
 
-`with Eq A` says: "this function works for any `A`, but only if `A` has an `Eq`
-instance." Multiple constraints are separated by commas:
+Multiple constraints are separated by commas:
 
 ```text
-fun display:Text with Eq A, Display A #value:A =>
-    // TODO: add a verified AIVI example here
+fun resetThenAppend:A with Monoid A, Semigroup A #value:A =>
+    append empty value
 ```
 
-## Higher-kinded types
+## Higher-kinded classes
 
-`Functor`, `Applicative`, `Monad`, and `Foldable` are **higher-kinded** classes — their
-type parameter is itself a type constructor (`F` expects one argument, e.g. `List`,
-`Option`, `Signal`). AIVI supports this through a narrow HKT mechanism:
+`Functor`, `Filterable`, `Foldable`, `Traversable`, `Applicative`, and `Monad`
+range over type constructors rather than ordinary values.
 
 ```text
 class Functor F
     map : (A -> B) -> F A -> F B
 ```
 
-Here `F` stands in for `List`, `Option`, `Result E`, `Signal`, or any other
-single-argument type constructor. A function constrained by `Functor F` works uniformly
-across all of them:
+Here `F` stands for a one-argument constructor such as `List`, `Option`,
+`Result E`, `Validation E`, or `Signal`.
+
+`Bifunctor` is similar, but its carrier takes two type arguments:
 
 ```text
-fun lift:F B with Functor F #transform:(A -> B) #container:(F A) =>
-    // TODO: add a verified AIVI example here
+class Bifunctor F
+    bimap : (A -> C) -> (B -> D) -> F A B -> F C D
 ```
 
-You do not need to interact with HKT mechanics directly for most application code —
-the stdlib functions (`map`, `flatMap`, `fold`) handle it. HKT constraints appear
-when writing generic library functions that must work over multiple container types.
+For the built-in surface today, that means `Result` and `Validation`.
 
 ## Why type classes instead of duck typing?
 
-In a dynamically typed language, you call `.toString()` and hope for the best.
-Type classes make the contract explicit:
+Type classes make generic requirements explicit:
 
-1. The function declares exactly which capabilities it needs (`with Functor F`).
-2. The compiler checks that the type you pass has the required instance.
-3. The instance enforces the laws structurally.
-
-No runtime surprises, no `undefined is not a function`.
+1. A function states the capability it needs, like `with Ord A`.
+2. The compiler checks that an instance exists for the type at that call site.
+3. Dispatch stays static and type-directed instead of becoming a runtime guess.
 
 ## Summary
 
-- `class Name T` declares an interface with required methods.
-- `instance Name Type` provides a concrete implementation; the compiler derives it for closed types.
-- Core classes: `Eq`, `Default`, `Functor`, `Applicative`, `Monad`, `Foldable`.
-- `with ClassName T` on a function declares a constraint.
-- `Functor` / `Applicative` / `Monad` / `Foldable` are higher-kinded — their parameter is a type constructor.
+- `class Name T` declares a capability.
+- `instance Name Type` provides an implementation.
+- The public prelude now surfaces `Ord`, `Semigroup`, `Monoid`, `Bifunctor`, `Traversable`, and `Filterable` alongside the earlier core classes.
+- `Ordering` is exported as `Less | Equal | Greater`.
+- `Foldable` currently exposes `reduce`.
+- Higher-kinded abstractions are part of the surface, but builtin lowering is still narrower than the full ambient hierarchy.
 
 [Next: Domains →](/tour/09-domains)

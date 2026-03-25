@@ -75,9 +75,15 @@ pub enum BuiltinClassMemberIntrinsic {
     Append(BuiltinAppendCarrier),
     Empty(BuiltinAppendCarrier),
     Map(BuiltinFunctorCarrier),
+    Bimap(BuiltinBifunctorCarrier),
     Pure(BuiltinApplicativeCarrier),
     Apply(BuiltinApplyCarrier),
     Reduce(BuiltinFoldableCarrier),
+    Traverse {
+        traversable: BuiltinTraversableCarrier,
+        applicative: BuiltinApplicativeCarrier,
+    },
+    FilterMap(BuiltinFilterableCarrier),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,6 +93,12 @@ pub enum BuiltinFunctorCarrier {
     Result,
     Validation,
     Signal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinBifunctorCarrier {
+    Result,
+    Validation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,6 +128,20 @@ pub enum BuiltinFoldableCarrier {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinTraversableCarrier {
+    List,
+    Option,
+    Result,
+    Validation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinFilterableCarrier {
+    List,
+    Option,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuiltinAppendCarrier {
     Text,
     List,
@@ -124,6 +150,9 @@ pub enum BuiltinAppendCarrier {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BuiltinOrdSubject {
     Int,
+    Float,
+    Decimal,
+    BigInt,
     Bool,
     Text,
     Ordering,
