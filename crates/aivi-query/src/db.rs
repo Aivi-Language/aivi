@@ -176,6 +176,13 @@ impl RootDatabase {
         // A newly discovered file can satisfy previously missing imports or
         // introduce new competing workspace modules, so all cached HIR results
         // must be recomputed against the new workspace shape.
+        //
+        // FIXME: this clears ALL HIR caches even when only one new file was
+        // opened, making incremental compilation impossible for large
+        // workspaces.
+        // TODO: invalidate only the changed file and its transitive reverse
+        // dependents (via `file_deps.transitive_rdeps`) rather than wiping the
+        // entire cache.
         state.hir.clear();
         file
     }

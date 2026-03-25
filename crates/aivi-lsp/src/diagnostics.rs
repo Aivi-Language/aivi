@@ -1,5 +1,8 @@
-use aivi_base::{Diagnostic, LspRange, Severity};
-use tower_lsp::lsp_types::{self as lsp, DiagnosticSeverity, NumberOrString, Position, Range, Url};
+use aivi_base::{Diagnostic, LabelStyle, LspRange, Severity};
+use tower_lsp::lsp_types::{
+    self as lsp, DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString,
+    Position, Range, Url,
+};
 
 /// Convert an aivi_base::LspRange to a tower-lsp Range.
 pub fn lsp_range(r: LspRange) -> Range {
@@ -19,18 +22,23 @@ pub fn lsp_range(r: LspRange) -> Range {
 pub fn collect_lsp_diagnostics(
     db: &aivi_query::RootDatabase,
     file: aivi_query::SourceFile,
-    _uri: &Url,
+    uri: &Url,
 ) -> Vec<lsp::Diagnostic> {
     let analysis = crate::analysis::FileAnalysis::load(db, file);
 
     analysis
         .diagnostics
         .iter()
-        .map(|diagnostic| convert_diagnostic(diagnostic, analysis.source.as_ref()))
+        .map(|diagnostic| convert_diagnostic(diagnostic, analysis.source.as_ref(), db, uri))
         .collect()
 }
 
-fn convert_diagnostic(d: &Diagnostic, source_file: &aivi_base::SourceFile) -> lsp::Diagnostic {
+fn convert_diagnostic(
+    d: &Diagnostic,
+    source_file: &aivi_base::SourceFile,
+    db: &aivi_query::RootDatabase,
+    file_uri: &Url,
+) -> lsp::Diagnostic {
     let severity = match d.severity {
         Severity::Error => DiagnosticSeverity::ERROR,
         Severity::Warning => DiagnosticSeverity::WARNING,
@@ -60,6 +68,45 @@ fn convert_diagnostic(d: &Diagnostic, source_file: &aivi_base::SourceFile) -> ls
 
     let code = d.code.map(|c| NumberOrString::String(c.to_string()));
 
+    // Convert secondary labels to LSP DiagnosticRelatedInformation entries so
+    // editors can navigate to additional context spans referenced by the
+    // diagnostic (e.g. a previous definition site).
+    let related_information: Vec<DiagnosticRelatedInformation> = d
+        .labels
+        .iter()
+        .filter(|l| l.style == LabelStyle::Secondary)
+        .filter_map(|label| {
+            let label_file_id = label.span.file();
+            // Prefer looking up the URI from the database so cross-file
+            // secondary labels resolve to the correct document URI.  Fall back
+            // to the current file's URI when the file cannot be located.
+            let matched_file = db
+                .files()
+                .into_iter()
+                .find(|qf| qf.source(db).id() == label_file_id);
+
+            let label_uri = matched_file
+                .as_ref()
+                .and_then(|qf| Url::from_file_path(qf.path(db)).ok())
+                .unwrap_or_else(|| file_uri.clone());
+
+            // Resolve the label's source file to compute the LSP range.
+            let label_source = matched_file
+                .map(|qf| qf.source(db))
+                .unwrap_or_else(|| std::sync::Arc::new(source_file.clone()));
+
+            let lsp_r = label_source.span_to_lsp_range(label.span.span());
+            let label_range = lsp_range(lsp_r);
+            Some(DiagnosticRelatedInformation {
+                location: Location {
+                    uri: label_uri,
+                    range: label_range,
+                },
+                message: label.message.clone(),
+            })
+        })
+        .collect();
+
     lsp::Diagnostic {
         range,
         severity: Some(severity),
@@ -67,7 +114,11 @@ fn convert_diagnostic(d: &Diagnostic, source_file: &aivi_base::SourceFile) -> ls
         code_description: None,
         source: Some("aivi".to_owned()),
         message: d.message.clone(),
-        related_information: None,
+        related_information: if related_information.is_empty() {
+            None
+        } else {
+            Some(related_information)
+        },
         tags: None,
         data: None,
     }
