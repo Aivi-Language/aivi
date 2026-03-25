@@ -426,6 +426,7 @@ pub struct MarkupNode {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PipeCaseArm {
     pub pattern: Pattern,
+    pub guard: Option<Expr>,
     pub body: Expr,
     pub span: SourceSpan,
 }
