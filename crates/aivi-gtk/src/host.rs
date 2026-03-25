@@ -276,6 +276,7 @@ where
                 window.upcast::<gtk::Widget>()
             }
             GtkConcreteWidgetKind::HeaderBar => gtk::HeaderBar::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::Paned => gtk::Paned::new(Orientation::Horizontal).upcast(),
             GtkConcreteWidgetKind::Box => {
                 gtk::Box::new(Orientation::Vertical, 0).upcast::<gtk::Widget>()
             }
@@ -544,6 +545,16 @@ where
                     .clone()
                     .downcast::<gtk::Box>()
                     .expect("box widget should downcast")
+                    .set_orientation(orientation);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::PanedOrientation) => {
+                let orientation = parse_orientation(value).ok_or_else(|| {
+                    self.invalid_property_value(schema, property, "Vertical or Horizontal")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<gtk::Paned>()
+                    .expect("paned widget should downcast")
                     .set_orientation(orientation);
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::SeparatorOrientation) => {
