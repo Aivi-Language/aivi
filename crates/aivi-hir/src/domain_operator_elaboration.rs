@@ -12,21 +12,19 @@ pub(crate) struct DomainBinaryOperatorMatch {
     pub(crate) result_type: GateType,
 }
 
-/// Errors that can arise when selecting a domain binary operator.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum DomainOperatorBlocker {
-    /// Both the left and right operand types define the operator, making
-    /// selection ambiguous.
-    AmbiguousMatch,
-}
-
+/// Selects the unique domain binary operator implementation for the given operand types.
+///
+/// Returns `Ok(Some(match))` when exactly one candidate matches, `Ok(None)` when no domain
+/// operator is applicable (the caller should fall through to built-in arithmetic), and
+/// `Err(candidates)` when more than one domain provides a matching operator — callers must
+/// emit an [`crate::validate::GateIssue::AmbiguousDomainOperator`] diagnostic and recover.
 pub(crate) fn select_domain_binary_operator(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
     operator: BinaryOperator,
     left: &GateType,
     right: &GateType,
-) -> Result<Option<DomainBinaryOperatorMatch>, DomainOperatorBlocker> {
+) -> Result<Option<DomainBinaryOperatorMatch>, Vec<DomainBinaryOperatorMatch>> {
     if !matches!(
         operator,
         BinaryOperator::Add
@@ -54,7 +52,7 @@ pub(crate) fn select_domain_binary_operator(
     match matches.len() {
         0 => Ok(None),
         1 => Ok(matches.pop()),
-        _ => Err(DomainOperatorBlocker::AmbiguousMatch),
+        _ => Err(matches),
     }
 }
 
@@ -119,7 +117,7 @@ fn match_domain_binary_operator(
     None
 }
 
-fn binary_operator_text(operator: BinaryOperator) -> &'static str {
+pub(crate) fn binary_operator_text(operator: BinaryOperator) -> &'static str {
     match operator {
         BinaryOperator::Add => "+",
         BinaryOperator::Subtract => "-",
@@ -196,7 +194,7 @@ mod tests {
             .ty
             .expect("right operand should infer");
         select_domain_binary_operator(module, &mut typing, operator, &left_ty, &right_ty)
-            .expect("ambiguous domain operator: both left and right operand types define this operator")
+            .expect("domain operator selection should not be ambiguous in test fixtures")
             .expect("expected domain operator match")
     }
 
