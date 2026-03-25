@@ -1859,6 +1859,7 @@ mod tests {
         fn insert_children(
             &mut self,
             parent: &Self::Widget,
+            _group: &'static GtkChildGroupDescriptor,
             index: usize,
             children: &[Self::Widget],
         ) -> Result<(), Self::Error> {
@@ -1877,6 +1878,7 @@ mod tests {
         fn remove_children(
             &mut self,
             parent: &Self::Widget,
+            _group: &'static GtkChildGroupDescriptor,
             index: usize,
             children: &[Self::Widget],
         ) -> Result<(), Self::Error> {
@@ -1894,6 +1896,7 @@ mod tests {
         fn move_children(
             &mut self,
             parent: &Self::Widget,
+            _group: &'static GtkChildGroupDescriptor,
             from: usize,
             count: usize,
             to: usize,

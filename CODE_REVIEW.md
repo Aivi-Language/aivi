@@ -548,14 +548,14 @@
 
 | # | Class | Issue |
 |---|-------|-------|
-| 7 | Unsoundness risk | A closure that references the item it belongs to is treated as a captured variable, making self-recursive closures appear to capture themselves. This is the correct conservative behavior for non-recursive closures, but it is not documented. Self-recursive closures are silently unrepresentable. |
+| 7 | Unsoundness risk | A closure that references the item it belongs to is treated as a captured variable, making self-recursive closures appear to capture themselves. This is the correct conservative behavior for non-recursive closures, but it is not documented. Self-recursive closures are silently unrepresentable. **◎ documented** (a8ddf332) — doc comment added on `Closure::captures` explaining the limitation. |
 | 8 | Missing feature | Dead captures (captured variables never used in the closure body after initial analysis) are not detected. |
 
 **validate.rs**
 
 | # | Class | Issue |
 |---|-------|-------|
-| 9 | Incomplete validation | `ClosureMetadataMismatch` error does not identify *which* field mismatched (owner, kind, root, parameters, ambient_subject). Diagnosis requires re-running the lowering mentally. |
+| 9 | Incomplete validation | `ClosureMetadataMismatch` error does not identify *which* field mismatched (owner, kind, root, parameters, ambient_subject). Diagnosis requires re-running the lowering mentally. **✓ fixed** (a8ddf332) — decomposed into `ClosureMetadataMismatch::{Owner, Kind, Root, ParameterCount, AmbientSubject, Invalid}` sub-variants each carrying `expected`/`found` fields. |
 | 10 | Missing validation | `AmbientSubject` references in the expression body are not checked against the closure's `ambient_subject` type. |
 | 11 | Missing validation | Closure return type is not validated against what the owning stage expects (e.g. a gate true-branch should produce a type consistent with the gate result). |
 

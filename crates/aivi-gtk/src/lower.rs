@@ -2,13 +2,14 @@ use std::{collections::HashMap, error::Error, fmt};
 
 use aivi_hir::{
     BindingId, ControlNode, ControlNodeId, ExprId, ExprKind, MarkupAttribute, MarkupAttributeValue,
-    MarkupNodeId, MarkupNodeKind, Module, NonEmpty, PatternId, TextLiteral, TextSegment,
+    MarkupNodeId, MarkupNodeKind, Module, Name, NamePath, NonEmpty, PatternId, TextLiteral,
+    TextSegment,
 };
 
 use crate::plan::{
     AttributeSite, CaseNode, ChildOp, ChildUpdateMode, EachNode, EmptyNode, EventHookPlan,
-    EventHookStrategy, EventHookTeardown, FragmentNode, MatchNode, PlanNode, PlanNodeId,
-    PlanNodeKind, PropertyPlan, RepeatedChildPolicy, SetterBindingPlan, SetterSource,
+    EventHookStrategy, EventHookTeardown, FragmentNode, GroupNode, MatchNode, PlanNode,
+    PlanNodeId, PlanNodeKind, PropertyPlan, RepeatedChildPolicy, SetterBindingPlan, SetterSource,
     SetterTeardown, SetterUpdateStrategy, ShowMountPolicy, ShowNode, StableNodeId,
     StaticPropertyPlan, StaticPropertyValue, WidgetNode, WidgetPlan, WithNode,
 };
@@ -78,6 +79,29 @@ pub enum LoweringError {
         branch: ControlNodeId,
     },
     InvalidPlan(crate::plan::PlanValidationError),
+    UnexpectedRootChildGroup {
+        group: String,
+        span: aivi_base::SourceSpan,
+    },
+    ChildGroupHasAttributes {
+        group: String,
+        span: aivi_base::SourceSpan,
+    },
+    MisplacedChildGroup {
+        parent: StableNodeId,
+        group: String,
+        span: aivi_base::SourceSpan,
+    },
+    MismatchedChildGroupOwner {
+        parent_widget: String,
+        group: String,
+        span: aivi_base::SourceSpan,
+    },
+    UnknownWidgetChildGroup {
+        widget: String,
+        group: String,
+        span: aivi_base::SourceSpan,
+    },
     UnknownWidget {
         name: String,
         span: aivi_base::SourceSpan,
@@ -112,6 +136,30 @@ impl fmt::Display for LoweringError {
                 "lowered parent {parent:?} references control branch {branch:?} that was not lowered"
             ),
             Self::InvalidPlan(error) => write!(f, "lowered widget plan is invalid: {error}"),
+            Self::UnexpectedRootChildGroup { group, .. } => write!(
+                f,
+                "markup root cannot be a named GTK child-group wrapper `{group}`"
+            ),
+            Self::ChildGroupHasAttributes { group, .. } => write!(
+                f,
+                "GTK child-group wrapper `{group}` cannot carry attributes"
+            ),
+            Self::MisplacedChildGroup { parent, group, .. } => write!(
+                f,
+                "lowered parent {parent:?} cannot contain GTK child-group wrapper `{group}` directly"
+            ),
+            Self::MismatchedChildGroupOwner {
+                parent_widget,
+                group,
+                ..
+            } => write!(
+                f,
+                "GTK child-group wrapper `{group}` must appear directly under `<{parent_widget}>`"
+            ),
+            Self::UnknownWidgetChildGroup { widget, group, .. } => write!(
+                f,
+                "GTK widget `{widget}` does not declare child group `{group}`"
+            ),
             Self::UnknownWidget { name, .. } => {
                 write!(f, "widget `{name}` is not known to the GTK schema registry")
             }
@@ -346,10 +394,23 @@ impl<'module> Lowering<'module> {
             }
         }
 
-        self.markup_nodes
+        let root = self
+            .markup_nodes
             .get(&root)
             .copied()
-            .ok_or(LoweringError::MissingMarkupNode(root))
+            .ok_or(LoweringError::MissingMarkupNode(root))?;
+        if let Some(PlanNode {
+            span,
+            kind: PlanNodeKind::Group(group),
+            ..
+        }) = self.nodes.get(root.index())
+        {
+            return Err(LoweringError::UnexpectedRootChildGroup {
+                group: widget_child_group_label(&group.widget, &group.group),
+                span: *span,
+            });
+        }
+        Ok(root)
     }
 
     fn lower_element(
@@ -359,6 +420,24 @@ impl<'module> Lowering<'module> {
         element: &aivi_hir::MarkupElement,
     ) -> Result<PlanNodeId, LoweringError> {
         let stable_id = StableNodeId::Markup(id);
+        if let Some((widget, group)) = split_widget_child_group(&element.name) {
+            if !element.attributes.is_empty() {
+                return Err(LoweringError::ChildGroupHasAttributes {
+                    group: element.name.to_string(),
+                    span,
+                });
+            }
+            let children = self.child_ops_from_markup(stable_id, None, &element.children)?;
+            return Ok(self.push_node(PlanNode {
+                stable_id,
+                span,
+                kind: PlanNodeKind::Group(GroupNode {
+                    widget,
+                    group,
+                    children,
+                }),
+            }));
+        }
         let widget_name_str = crate::schema::widget_leaf_name(&element.name).to_string();
         if lookup_widget_schema(&element.name).is_none() {
             return Err(LoweringError::UnknownWidget {
@@ -366,7 +445,7 @@ impl<'module> Lowering<'module> {
                 span,
             });
         }
-        let children = self.child_ops_from_markup(stable_id, &element.children)?;
+        let children = self.child_ops_from_markup(stable_id, Some(&element.name), &element.children)?;
         let (properties, event_hooks) =
             self.lower_attributes(stable_id, &element.name, &element.attributes)?;
         Ok(self.push_node(PlanNode {
@@ -400,7 +479,7 @@ impl<'module> Lowering<'module> {
                         .map_or(ShowMountPolicy::UnmountWhenHidden, |decision| {
                             ShowMountPolicy::KeepMounted { decision }
                         }),
-                    children: self.child_ops_from_markup(stable_id, &show.children)?,
+                    children: self.child_ops_from_markup(stable_id, None, &show.children)?,
                 })
             }
             ControlNode::Each(each) => {
@@ -426,12 +505,12 @@ impl<'module> Lowering<'module> {
                     collection: each.collection,
                     binding: each.binding,
                     child_policy,
-                    item_children: self.child_ops_from_markup(stable_id, &each.children)?,
+                    item_children: self.child_ops_from_markup(stable_id, None, &each.children)?,
                     empty_branch,
                 })
             }
             ControlNode::Empty(empty) => PlanNodeKind::Empty(EmptyNode {
-                children: self.child_ops_from_markup(stable_id, &empty.children)?,
+                children: self.child_ops_from_markup(stable_id, None, &empty.children)?,
             }),
             ControlNode::Match(match_node) => {
                 self.require_expr(match_node.scrutinee)?;
@@ -450,11 +529,11 @@ impl<'module> Lowering<'module> {
                 self.require_pattern(case.pattern)?;
                 PlanNodeKind::Case(CaseNode {
                     pattern: case.pattern,
-                    children: self.child_ops_from_markup(stable_id, &case.children)?,
+                    children: self.child_ops_from_markup(stable_id, None, &case.children)?,
                 })
             }
             ControlNode::Fragment(fragment) => PlanNodeKind::Fragment(FragmentNode {
-                children: self.child_ops_from_markup(stable_id, &fragment.children)?,
+                children: self.child_ops_from_markup(stable_id, None, &fragment.children)?,
             }),
             ControlNode::With(with_node) => {
                 self.require_expr(with_node.value)?;
@@ -462,7 +541,7 @@ impl<'module> Lowering<'module> {
                 PlanNodeKind::With(WithNode {
                     value: with_node.value,
                     binding: with_node.binding,
-                    children: self.child_ops_from_markup(stable_id, &with_node.children)?,
+                    children: self.child_ops_from_markup(stable_id, None, &with_node.children)?,
                 })
             }
         };
@@ -542,19 +621,56 @@ impl<'module> Lowering<'module> {
     fn child_ops_from_markup(
         &self,
         parent: StableNodeId,
+        widget: Option<&NamePath>,
         children: &[MarkupNodeId],
     ) -> Result<Vec<ChildOp>, LoweringError> {
         children
             .iter()
             .map(|child| {
-                self.markup_nodes
+                let plan_id = self
+                    .markup_nodes
                     .get(child)
                     .copied()
-                    .map(ChildOp::Append)
                     .ok_or(LoweringError::MissingLoweredMarkupChild {
                         parent,
                         child: *child,
-                    })
+                    })?;
+                if let Some(PlanNode {
+                    span,
+                    kind: PlanNodeKind::Group(group_node),
+                    ..
+                }) = self.nodes.get(plan_id.index())
+                {
+                    let group_label = widget_child_group_label(&group_node.widget, &group_node.group);
+                    let Some(parent_widget) = widget else {
+                        return Err(LoweringError::MisplacedChildGroup {
+                            parent,
+                            group: group_label,
+                            span: *span,
+                        });
+                    };
+                    if &group_node.widget != parent_widget {
+                        return Err(LoweringError::MismatchedChildGroupOwner {
+                            parent_widget: parent_widget.to_string(),
+                            group: group_label,
+                            span: *span,
+                        });
+                    }
+                    let Some(schema) = lookup_widget_schema(parent_widget) else {
+                        return Err(LoweringError::UnknownWidget {
+                            name: crate::schema::widget_leaf_name(parent_widget).to_string(),
+                            span: *span,
+                        });
+                    };
+                    if schema.child_group(group_node.group.text()).is_none() {
+                        return Err(LoweringError::UnknownWidgetChildGroup {
+                            widget: parent_widget.to_string(),
+                            group: group_label,
+                            span: *span,
+                        });
+                    }
+                }
+                Ok(ChildOp::Append(plan_id))
             })
             .collect()
     }
@@ -608,6 +724,23 @@ impl<'module> Lowering<'module> {
         self.nodes.push(node);
         id
     }
+}
+
+fn split_widget_child_group(name: &NamePath) -> Option<(NamePath, Name)> {
+    let mut segments = name.segments().iter().cloned().collect::<Vec<_>>();
+    if segments.len() < 2 {
+        return None;
+    }
+    let group = segments
+        .pop()
+        .expect("paths with at least two segments always have a final child-group segment");
+    let widget =
+        NamePath::from_vec(segments).expect("paths with at least one widget segment remain valid");
+    Some((widget, group))
+}
+
+fn widget_child_group_label(widget: &NamePath, group: &Name) -> String {
+    format!("{}.{}", widget, group.text())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

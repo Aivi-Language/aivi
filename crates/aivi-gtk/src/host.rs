@@ -1180,7 +1180,7 @@ where
         children: &[Self::Widget],
     ) -> Result<(), Self::Error> {
         GtkConcreteHost::<V>::assert_gtk_main_thread();
-        let (schema, parent_widget) = self.mounted_snapshot(parent)?;
+        let (_, parent_widget) = self.mounted_snapshot(parent)?;
         let current_children = self.group_children_snapshot(parent, group)?;
         if index + children.len() > current_children.len() {
             return Err(GtkConcreteHostError::ChildIndexOutOfRange {
@@ -1194,10 +1194,6 @@ where
                 parent: parent.clone(),
             });
         }
-        let child_widgets = children
-            .iter()
-            .map(|child| self.widget_object(child))
-            .collect::<Result<Vec<_>, _>>()?;
         let mut next_children = current_children.clone();
         match group.container {
             crate::GtkChildContainerKind::Single => {
@@ -2167,7 +2163,16 @@ val view =
 
             executor
                 .host_mut()
-                .move_children(&container_handle, 0, 1, 2, &[before[0].clone()])
+                .move_children(
+                    &container_handle,
+                    crate::lookup_widget_schema_by_name("Box")
+                        .and_then(|schema| schema.child_group("children"))
+                        .expect("Box should expose its default children group"),
+                    0,
+                    1,
+                    2,
+                    &[before[0].clone()],
+                )
                 .expect("moving a single mounted child should succeed");
 
             let after = executor

@@ -852,54 +852,70 @@ fn validate_run_plan(sources: &SourceDatabase, bridge: &GtkBridgeGraph) -> Resul
     let mut blockers = Vec::<RunValidationBlocker>::new();
 
     for node in bridge.nodes() {
-        let GtkBridgeNodeKind::Widget(widget) = &node.kind else {
-            continue;
-        };
-        let Some(schema) = lookup_widget_schema(&widget.widget) else {
-            blockers.push(RunValidationBlocker {
-                span: node.span,
-                message: format!(
-                    "`aivi run` does not support GTK widget `{}` yet",
-                    run_widget_name(&widget.widget)
-                ),
-            });
-            continue;
-        };
-        for property in &widget.properties {
-            let (name, span) = match property {
-                RuntimePropertyBinding::Static(property) => {
-                    (property.name.text(), property.site.span)
+        match &node.kind {
+            GtkBridgeNodeKind::Widget(widget) => {
+                let Some(schema) = lookup_widget_schema(&widget.widget) else {
+                    blockers.push(RunValidationBlocker {
+                        span: node.span,
+                        message: format!(
+                            "`aivi run` does not support GTK widget `{}` yet",
+                            run_widget_name(&widget.widget)
+                        ),
+                    });
+                    continue;
+                };
+                for property in &widget.properties {
+                    let (name, span) = match property {
+                        RuntimePropertyBinding::Static(property) => {
+                            (property.name.text(), property.site.span)
+                        }
+                        RuntimePropertyBinding::Setter(binding) => {
+                            (binding.name.text(), binding.site.span)
+                        }
+                    };
+                    if schema.property(name).is_none() {
+                        blockers.push(RunValidationBlocker {
+                            span,
+                            message: format!(
+                                "`aivi run` does not support property `{name}` on GTK widget `{}` yet",
+                                schema.markup_name
+                            ),
+                        });
+                    }
                 }
-                RuntimePropertyBinding::Setter(binding) => (binding.name.text(), binding.site.span),
-            };
-            if schema.property(name).is_none() {
-                blockers.push(RunValidationBlocker {
-                    span,
-                    message: format!(
-                        "`aivi run` does not support property `{name}` on GTK widget `{}` yet",
-                        schema.markup_name
-                    ),
-                });
+                for event in &widget.event_hooks {
+                    if schema.event(event.name.text()).is_none() {
+                        blockers.push(RunValidationBlocker {
+                            span: event.site.span,
+                            message: format!(
+                                "`aivi run` does not support event `{}` on GTK widget `{}` yet",
+                                event.name.text(),
+                                schema.markup_name
+                            ),
+                        });
+                    }
+                }
+                validate_run_widget_children(
+                    node.span,
+                    widget.default_children.roots.len(),
+                    schema,
+                    &mut blockers,
+                );
             }
+            GtkBridgeNodeKind::Group(group) => validate_run_group_children(
+                node.span,
+                group.body.roots.len(),
+                group.descriptor,
+                &mut blockers,
+            ),
+            GtkBridgeNodeKind::Show(_)
+            | GtkBridgeNodeKind::Each(_)
+            | GtkBridgeNodeKind::Empty(_)
+            | GtkBridgeNodeKind::Match(_)
+            | GtkBridgeNodeKind::Case(_)
+            | GtkBridgeNodeKind::Fragment(_)
+            | GtkBridgeNodeKind::With(_) => {}
         }
-        for event in &widget.event_hooks {
-            if schema.event(event.name.text()).is_none() {
-                blockers.push(RunValidationBlocker {
-                    span: event.site.span,
-                    message: format!(
-                        "`aivi run` does not support event `{}` on GTK widget `{}` yet",
-                        event.name.text(),
-                        schema.markup_name
-                    ),
-                });
-            }
-        }
-        validate_run_widget_children(
-            node.span,
-            widget.default_children.roots.len(),
-            schema,
-            &mut blockers,
-        );
     }
 
     let mut root_widgets = collect_run_root_widgets(bridge, bridge.root());
@@ -993,6 +1009,31 @@ fn validate_run_widget_children(
     }
 }
 
+fn validate_run_group_children(
+    span: SourceSpan,
+    child_count: usize,
+    group: &aivi_gtk::GtkChildGroupDescriptor,
+    blockers: &mut Vec<RunValidationBlocker>,
+) {
+    if group.accepts_child_count(child_count) {
+        return;
+    }
+    blockers.push(RunValidationBlocker {
+        span,
+        message: match group.max_children {
+            Some(max_children) => format!(
+                "`aivi run` does not support {child_count} child widget(s) in named group `{}`; this {} group allows at most {max_children}",
+                group.name,
+                group.container.label()
+            ),
+            None => format!(
+                "`aivi run` does not support {child_count} child widget(s) in named group `{}`",
+                group.name
+            ),
+        },
+    });
+}
+
 fn collect_run_root_widgets(
     bridge: &GtkBridgeGraph,
     root: GtkBridgeNodeRef,
@@ -1005,6 +1046,7 @@ fn collect_run_root_widgets(
         };
         match &node.kind {
             GtkBridgeNodeKind::Widget(_) => widgets.push(node_ref),
+            GtkBridgeNodeKind::Group(group) => extend_child_group_roots(&mut worklist, &group.body),
             GtkBridgeNodeKind::Show(show) => extend_child_group_roots(&mut worklist, &show.body),
             GtkBridgeNodeKind::Each(each) => {
                 extend_child_group_roots(&mut worklist, &each.item_template);
@@ -1305,6 +1347,7 @@ fn collect_run_input_specs_from_bridge(
                     }
                 }
             }
+            GtkBridgeNodeKind::Group(_) => {}
             GtkBridgeNodeKind::Show(show) => {
                 inputs.insert(show.when.input, RunInputSpec::Expr(show.when.expr));
                 if let RuntimeShowMountPolicy::KeepMounted { decision } = &show.mount {
@@ -1846,6 +1889,16 @@ fn plan_run_node(
                 )?,
             })
         }
+        GtkBridgeNodeKind::Group(group) => Ok(HydratedRunNode::Fragment {
+            instance: instance.clone(),
+            children: plan_run_child_group(
+                shared,
+                globals,
+                &group.body.roots,
+                instance.path.clone(),
+                env,
+            )?,
+        }),
         GtkBridgeNodeKind::Show(show) => {
             let when = runtime_bool(evaluate_run_input(
                 &shared.inputs,
