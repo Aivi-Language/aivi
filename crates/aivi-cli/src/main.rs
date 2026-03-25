@@ -659,6 +659,17 @@ fn run_hydration_worker_loop(
 #[allow(dead_code)]
 struct TempFile(PathBuf);
 
+#[allow(dead_code)]
+impl TempFile {
+    fn new(path: impl Into<PathBuf>) -> Self {
+        Self(path.into())
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
 impl Drop for TempFile {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.0);
@@ -2821,26 +2832,6 @@ fn build_markup_bundle(
         "build packages the current AIVI runtime, bundled stdlib, and reachable workspace sources into a runnable bundle directory."
     );
     Ok(ExitCode::SUCCESS)
-}
-
-#[allow(dead_code)]
-struct TempFile(std::path::PathBuf);
-
-#[allow(dead_code)]
-impl TempFile {
-    fn new(path: impl Into<std::path::PathBuf>) -> Self {
-        Self(path.into())
-    }
-
-    fn path(&self) -> &std::path::Path {
-        &self.0
-    }
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
 }
 
 fn write_run_bundle(

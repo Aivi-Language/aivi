@@ -79,9 +79,9 @@ impl RuntimeGcHandle {
 ///
 /// # Thread safety
 ///
-/// `MovingRuntimeValueStore` is deliberately not `Send` or `Sync`. The `PhantomData<*mut ()>`
-/// field below opts out of both auto-traits. The store must only be accessed from the single
-/// thread that owns it. No internal synchronization is provided.
+/// `MovingRuntimeValueStore` must only be accessed from a single thread at a time.
+/// All methods MUST be called from the owning thread. No internal synchronization
+/// is provided.
 #[derive(Default)]
 pub struct MovingRuntimeValueStore {
     from_space: RuntimeGcSpace,
@@ -91,24 +91,6 @@ pub struct MovingRuntimeValueStore {
     root_worklist: Vec<RuntimeGcHandle>,
     collections: u64,
     live_roots: usize,
-    /// Opts this type out of `Send` and `Sync`. The GC store must only be accessed from its
-    /// owning thread; there is no internal synchronization on any field.
-    _not_send_sync: PhantomData<*mut ()>,
-}
-
-impl Default for MovingRuntimeValueStore {
-    fn default() -> Self {
-        Self {
-            from_space: RuntimeGcSpace::default(),
-            to_space: RuntimeGcSpace::default(),
-            roots: Vec::new(),
-            free_roots: Vec::new(),
-            root_worklist: Vec::new(),
-            collections: 0,
-            live_roots: 0,
-            _not_send_sync: PhantomData,
-        }
-    }
 }
 
 impl MovingRuntimeValueStore {
@@ -163,9 +145,9 @@ impl MovingRuntimeValueStore {
         slot
     }
 
-    // SAFETY: There is no synchronization on this accessor. `MovingRuntimeValueStore` is neither
-    // `Send` nor `Sync` (see the `_not_send_sync: PhantomData<*mut ()>` field), so the borrow
-    // checker enforces that only one thread can ever hold a reference to the store at a time.
+    // SAFETY: There is no synchronization on this accessor. `MovingRuntimeValueStore` must only
+    // be accessed from the owning thread. The caller is responsible for ensuring external
+    // synchronization if the store is shared across threads.
     // Calling this from multiple threads without external synchronization is undefined behavior
     // and would allow data races on the root-slot vector.
     fn root_slot_mut(&mut self, handle: RuntimeGcHandle) -> &mut RuntimeGcRootSlot {
