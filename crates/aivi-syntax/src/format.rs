@@ -79,7 +79,7 @@ impl Formatter {
             Item::Use(item) => lines.extend(self.format_use_item(item)),
             Item::Export(item) => lines.extend(self.format_export_item(item)),
             Item::Error(_) => {
-                lines.push("// <error: could not format this item>".to_owned());
+                lines.push("# <unparseable item>".to_owned());
             }
         }
 
