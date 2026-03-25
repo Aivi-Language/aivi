@@ -1288,6 +1288,10 @@ pub enum PatternKind {
     Integer(IntegerLiteral),
     Text(TextLiteral),
     Tuple(AtLeastTwo<PatternId>),
+    List {
+        elements: Vec<PatternId>,
+        rest: Option<PatternId>,
+    },
     Record(Vec<RecordPatternField>),
     Constructor {
         callee: TermReference,

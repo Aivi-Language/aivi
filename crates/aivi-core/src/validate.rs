@@ -970,6 +970,14 @@ fn validate_pattern(
                 validate_pattern(element, _module, _work, _errors);
             }
         }
+        PatternKind::List { elements, rest } => {
+            for element in elements {
+                validate_pattern(element, _module, _work, _errors);
+            }
+            if let Some(rest) = rest {
+                validate_pattern(rest, _module, _work, _errors);
+            }
+        }
         PatternKind::Record(fields) => {
             for field in fields {
                 validate_pattern(&field.pattern, _module, _work, _errors);

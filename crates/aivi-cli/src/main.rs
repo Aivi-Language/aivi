@@ -2253,6 +2253,26 @@ fn match_pattern(
             }
             Ok(matches)
         }
+        PatternKind::List { elements, rest } => {
+            let RuntimeValue::List(found) = strip_signal_runtime_value(value.clone()) else {
+                return Ok(false);
+            };
+            if found.len() < elements.len() {
+                return Ok(false);
+            }
+            if rest.is_none() && found.len() != elements.len() {
+                return Ok(false);
+            }
+            let mut matches = true;
+            for (pattern, value) in elements.iter().copied().zip(found.iter()) {
+                matches &= match_pattern(module, pattern, value, bindings)?;
+            }
+            if let Some(rest) = rest {
+                let remaining = RuntimeValue::List(found[elements.len()..].to_vec());
+                matches &= match_pattern(module, *rest, &remaining, bindings)?;
+            }
+            Ok(matches)
+        }
         PatternKind::Record(fields) => {
             let RuntimeValue::Record(found) = strip_signal_runtime_value(value.clone()) else {
                 return Ok(false);

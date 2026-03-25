@@ -1,0 +1,26 @@
+type Summary = {
+    empty: Int,
+    single: Int,
+    many: Int,
+    count: Int
+}
+
+fun listLength:Int #values:(List Int) =>
+    values
+     ||> []             => 0
+     ||> [_head, ...xs] => 1 + listLength xs
+
+fun prefixScore:Int #values:(List Int) =>
+    values
+     ||> []                       => 0
+     ||> [first]                  => first
+     ||> [first, second, ...rest] => first + second + listLength rest
+
+val summary: Summary = {
+    empty: prefixScore [],
+    single: prefixScore [7],
+    many: prefixScore [4, 5, 6],
+    count: listLength [4, 5, 6]
+}
+
+export summary

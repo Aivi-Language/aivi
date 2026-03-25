@@ -1384,6 +1384,14 @@ fn validate_inline_pipe_pattern(
                     work.push(element);
                 }
             }
+            InlinePipePatternKind::List { elements, rest } => {
+                if let Some(rest) = rest {
+                    work.push(rest);
+                }
+                for element in elements.iter().rev() {
+                    work.push(element);
+                }
+            }
             InlinePipePatternKind::Record(fields) => {
                 for InlinePipeRecordPatternField { pattern, .. } in fields.iter().rev() {
                     work.push(pattern);

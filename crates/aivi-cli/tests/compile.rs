@@ -177,6 +177,41 @@ fn compile_accepts_workspace_value_imports() {
 }
 
 #[test]
+fn compile_accepts_list_pattern_fixture() {
+    let output_dir = TempDir::new("compile-list-patterns");
+    let output_path = output_dir.path().join("list-patterns.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(fixture_path("milestone-2/valid/list-patterns/main.aivi"))
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
+    assert!(
+        output.status.success(),
+        "expected list pattern compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata =
+        fs::metadata(&output_path).expect("list pattern compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "list pattern object file should not be empty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("codegen: ok"),
+        "expected codegen success in summary, got stdout: {stdout}"
+    );
+}
+
+#[test]
 fn compile_accepts_catalog_foundation_example() {
     let output_dir = TempDir::new("compile-catalog-foundation");
     let output_path = output_dir.path().join("catalog-foundation.o");

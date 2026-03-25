@@ -276,6 +276,19 @@ impl Validator<'_> {
                         );
                     }
                 }
+                PatternKind::List { elements, rest } => {
+                    for element in elements {
+                        self.require_pattern(
+                            pattern.span,
+                            "pattern",
+                            "list element pattern",
+                            *element,
+                        );
+                    }
+                    if let Some(rest) = rest {
+                        self.require_pattern(pattern.span, "pattern", "list rest pattern", *rest);
+                    }
+                }
                 PatternKind::Record(fields) => {
                     for field in fields {
                         self.check_span("record pattern field", field.span);
@@ -8570,6 +8583,7 @@ impl<'a> GateTypeContext<'a> {
             PatternKind::Integer(_)
             | PatternKind::Text(_)
             | PatternKind::Tuple(_)
+            | PatternKind::List { .. }
             | PatternKind::Record(_) => CasePatternCoverage::None,
         }
     }
@@ -8602,6 +8616,17 @@ impl<'a> GateTypeContext<'a> {
                         .collect::<Vec<_>>();
                     for (element, element_ty) in element_pairs.into_iter().rev() {
                         work.push((*element, element_ty.clone()));
+                    }
+                }
+                PatternKind::List { elements, rest } => {
+                    let GateType::List(element_ty) = &subject_ty else {
+                        continue;
+                    };
+                    for element in elements.into_iter().rev() {
+                        work.push((element, element_ty.as_ref().clone()));
+                    }
+                    if let Some(rest) = rest {
+                        work.push((rest, subject_ty));
                     }
                 }
                 PatternKind::Record(fields) => {

@@ -190,6 +190,26 @@ fn fmt_check_accepts_order_helper_surfaces() {
 }
 
 #[test]
+fn fmt_check_accepts_list_pattern_fixtures() {
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("fmt")
+        .arg("--check")
+        .arg(fixture_path("milestone-2/valid/list-patterns/main.aivi"))
+        .arg(fixture_path(
+            "milestone-2/valid/markup-list-patterns/main.aivi",
+        ))
+        .output()
+        .expect("fmt --check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected list pattern fixtures to already be formatted, stdout was: {}, stderr was: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn fmt_check_accepts_catalog_examples() {
     let mut command = Command::new(env!("CARGO_BIN_EXE_aivi"));
     command.arg("fmt").arg("--check");

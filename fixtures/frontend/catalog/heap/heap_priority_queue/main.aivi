@@ -1,8 +1,3 @@
-use aivi.list (
-    head
-    tailOrEmpty
-)
-
 type Entry = {
     priority: Int,
     label: Text
@@ -39,21 +34,11 @@ fun merge:Heap #left:Heap #right:Heap =>
      ||> (other, Empty)                                               => other
      ||> (Node leftEntry leftChildren, Node rightEntry rightChildren) => mergeNodes leftEntry leftChildren rightEntry rightChildren
 
-fun mergePairRest:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
-    merge (merge first second) (mergePairs (tailOrEmpty remaining))
-
-fun mergePairsWithFirst:Heap #first:Heap #remaining:(List Heap) =>
-    head remaining
-     ||> Some second => mergePairRest first second remaining
-     ||> None        => first
-
-fun mergePairsFromHead:Heap #children:(List Heap) #first:Heap =>
-    mergePairsWithFirst first (tailOrEmpty children)
-
 fun mergePairs:Heap #children:(List Heap) =>
-    head children
-     ||> Some first => mergePairsFromHead children first
-     ||> None       => Empty
+    children
+     ||> []                            => Empty
+     ||> [first]                       => first
+     ||> [first, second, ...remaining] => merge (merge first second) (mergePairs remaining)
 
 fun insert:Heap #heap:Heap #entry:Entry =>
     merge heap (Node entry [])

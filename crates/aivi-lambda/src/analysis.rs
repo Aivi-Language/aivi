@@ -167,6 +167,14 @@ fn extend_scope_with_pattern(scope: &mut BTreeSet<BindingId>, pattern: &core::Pa
                     work.push(element);
                 }
             }
+            PatternKind::List { elements, rest } => {
+                if let Some(rest) = rest {
+                    work.push(rest);
+                }
+                for element in elements.iter().rev() {
+                    work.push(element);
+                }
+            }
             PatternKind::Record(fields) => {
                 for field in fields.iter().rev() {
                     work.push(&field.pattern);

@@ -847,6 +847,23 @@ fn format_pattern(pattern: &Pattern, f: &mut fmt::Formatter<'_>) -> fmt::Result 
             }
             f.write_str(")")
         }
+        PatternKind::List { elements, rest } => {
+            f.write_str("[")?;
+            for (index, element) in elements.iter().enumerate() {
+                if index > 0 {
+                    f.write_str(", ")?;
+                }
+                format_pattern(element, f)?;
+            }
+            if let Some(rest) = rest {
+                if !elements.is_empty() {
+                    f.write_str(", ")?;
+                }
+                f.write_str("...")?;
+                format_pattern(rest, f)?;
+            }
+            f.write_str("]")
+        }
         PatternKind::Record(fields) => {
             f.write_str("{")?;
             for (index, field) in fields.iter().enumerate() {

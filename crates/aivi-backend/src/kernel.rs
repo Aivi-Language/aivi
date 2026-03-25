@@ -549,6 +549,10 @@ pub enum InlinePipePatternKind {
     Integer(IntegerLiteral),
     Text(Box<str>),
     Tuple(Vec<InlinePipePattern>),
+    List {
+        elements: Vec<InlinePipePattern>,
+        rest: Option<Box<InlinePipePattern>>,
+    },
     Record(Vec<InlinePipeRecordPatternField>),
     Constructor {
         constructor: InlinePipeConstructor,

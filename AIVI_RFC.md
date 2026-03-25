@@ -798,6 +798,23 @@ status
  ||> Pending => "pending"
 ```
 
+List patterns are structural and ordered. They match a left-to-right prefix and may bind the
+remaining suffix as another list:
+
+```aivi
+xs
+ ||> []                       => 0
+ ||> [first]                  => first
+ ||> [first, second, ...rest] => first + second + sum rest
+```
+
+Rules:
+
+- `...rest` is list-only and must be the final segment in the pattern
+- fixed positions bind at the element type; `...rest` binds at the full `List A` type
+- the current rollout does not add dedicated list exhaustiveness reasoning; use `_` when an
+  explicit catch-all is required
+
 ### 11.4.1 `T|>` and `F|>` truthy / falsy branching
 
 Surface sugar over `||>`; elaborates deterministically.
@@ -1748,7 +1765,7 @@ This is localized child management, not virtual DOM diffing.
 ```
 
 - `on` is any expression
-- cases use ordinary AIVI patterns
+- cases use ordinary AIVI patterns, including list patterns such as `[first, ...rest]`
 - exhaustiveness follows ordinary match rules where the scrutinee type is locally provable
 - lowering selects and deselects concrete subtrees directly
 
@@ -1794,7 +1811,9 @@ GTK correctness is part of the language runtime contract.
 - sum matches must be exhaustive unless `_` is present
 - boolean matches must cover `True` and `False` unless `_` is present
 - record patterns may be field-subset patterns
+- list patterns may match an exact prefix plus an optional final `...rest`
 - nested constructor patterns are allowed
+- ordered head/rest destructuring is defined for lists only; sets and maps do not use this syntax
 
 ### 18.2 Predicates
 

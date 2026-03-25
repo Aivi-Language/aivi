@@ -1,6 +1,4 @@
 use aivi.list (
-    head
-    tailOrEmpty
     length
     partition
 )
@@ -42,21 +40,11 @@ fun mergeHeap:Heap #left:Heap #right:Heap =>
      ||> (other, Empty)                                               => other
      ||> (Node leftValue leftChildren, Node rightValue rightChildren) => mergeNodes leftValue leftChildren rightValue rightChildren
 
-fun mergePairRest:Heap #first:Heap #second:Heap #remaining:(List Heap) =>
-    mergeHeap (mergeHeap first second) (mergePairs (tailOrEmpty remaining))
-
-fun mergePairsWithFirst:Heap #first:Heap #remaining:(List Heap) =>
-    head remaining
-     ||> Some second => mergePairRest first second remaining
-     ||> None        => first
-
-fun mergePairsFromHead:Heap #children:(List Heap) #first:Heap =>
-    mergePairsWithFirst first (tailOrEmpty children)
-
 fun mergePairs:Heap #children:(List Heap) =>
-    head children
-     ||> Some first => mergePairsFromHead children first
-     ||> None       => Empty
+    children
+     ||> []                            => Empty
+     ||> [first]                       => first
+     ||> [first, second, ...remaining] => mergeHeap (mergeHeap first second) (mergePairs remaining)
 
 fun heapInsert:Heap #heap:Heap #value:Int =>
     mergeHeap heap (Node value [])
@@ -82,12 +70,9 @@ fun insertAfterFirst:(List Int) #value:Int #first:Int #rest:(List Int) =>
      F|> append [first] (insertOrdered value rest)
 
 fun insertOrdered:(List Int) #value:Int #items:(List Int) =>
-    head items
-     ||> Some first => insertOrderedFromHead value items first
-     ||> None       => [value]
-
-fun insertOrderedFromHead:(List Int) #value:Int #items:(List Int) #first:Int =>
-    insertAfterFirst value first (tailOrEmpty items)
+    items
+     ||> []               => [value]
+     ||> [first, ...rest] => insertAfterFirst value first rest
 
 fun insertionSort:(List Int) #items:(List Int) =>
     items
@@ -127,9 +112,9 @@ fun introsortFromPivot:(List Int) #depth:Int #pivot:Int #items:(List Int) =>
      ||> { lower, equal, higher } => appendThree (introsort (depth - 1) lower) equal (introsort (depth - 1) higher)
 
 fun introsortPartition:(List Int) #depth:Int #items:(List Int) =>
-    head items
-     ||> None       => []
-     ||> Some pivot => introsortFromPivot depth pivot items
+    items
+     ||> []            => []
+     ||> [pivot, ..._] => introsortFromPivot depth pivot items
 
 fun introsort:(List Int) #depth:Int #items:(List Int) =>
     length items < 2

@@ -2093,6 +2093,32 @@ impl<'a> ProgramLowerer<'a> {
                         .collect::<Result<Vec<_>, _>>()?,
                 )
             }
+            core::PatternKind::List { elements, rest } => {
+                let element_layout = match &self.program.layouts()[layout].kind {
+                    LayoutKind::List { element } => *element,
+                    _ => return Err(UnsupportedInlinePipePattern { span: pattern.span }),
+                };
+                InlinePipePatternKind::List {
+                    elements: elements
+                        .iter()
+                        .map(|element| {
+                            self.lower_inline_pipe_pattern(
+                                element,
+                                element_layout,
+                                inline_subjects,
+                                locals,
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    rest: rest
+                        .as_deref()
+                        .map(|rest| {
+                            self.lower_inline_pipe_pattern(rest, layout, inline_subjects, locals)
+                                .map(Box::new)
+                        })
+                        .transpose()?,
+                }
+            }
             core::PatternKind::Record(fields) => {
                 let layout_fields = match &self.program.layouts()[layout].kind {
                     LayoutKind::Record(layout_fields) => layout_fields.clone(),

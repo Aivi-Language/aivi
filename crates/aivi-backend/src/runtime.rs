@@ -1486,6 +1486,43 @@ impl<'a> KernelEvaluator<'a> {
                 }
                 Ok(true)
             }
+            InlinePipePatternKind::List { elements, rest } => {
+                let RuntimeValue::List(values) = value else {
+                    return Ok(false);
+                };
+                if values.len() < elements.len() {
+                    return Ok(false);
+                }
+                if rest.is_none() && values.len() != elements.len() {
+                    return Ok(false);
+                }
+                for (pattern, value) in elements.iter().zip(values.iter()) {
+                    if !self.match_inline_pipe_pattern(
+                        kernel_id,
+                        expr_id,
+                        kernel,
+                        pattern,
+                        value,
+                        inline_subjects,
+                    )? {
+                        return Ok(false);
+                    }
+                }
+                if let Some(rest) = rest {
+                    let remaining = RuntimeValue::List(values[elements.len()..].to_vec());
+                    if !self.match_inline_pipe_pattern(
+                        kernel_id,
+                        expr_id,
+                        kernel,
+                        rest,
+                        &remaining,
+                        inline_subjects,
+                    )? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
             InlinePipePatternKind::Record(fields) => {
                 let RuntimeValue::Record(values) = value else {
                     return Ok(false);

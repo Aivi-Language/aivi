@@ -1823,6 +1823,17 @@ impl<'a> GeneralExprElaborator<'a> {
                         work.push((*element, element_ty.clone()));
                     }
                 }
+                crate::PatternKind::List { elements, rest } => {
+                    let GateType::List(element_ty) = &subject_ty else {
+                        continue;
+                    };
+                    for element in elements.into_iter().rev() {
+                        work.push((element, element_ty.as_ref().clone()));
+                    }
+                    if let Some(rest) = rest {
+                        work.push((rest, subject_ty));
+                    }
+                }
                 crate::PatternKind::Record(fields) => {
                     let GateType::Record(subject_fields) = &subject_ty else {
                         continue;

@@ -1285,6 +1285,11 @@ impl Formatter {
                 attribute.name.text,
                 self.format_expr_inline(expr, 0)
             ),
+            Some(MarkupAttributeValue::Pattern(pattern)) => format!(
+                "{}={{{}}}",
+                attribute.name.text,
+                self.format_pattern_inline(pattern, 0)
+            ),
             None => attribute.name.text.clone(),
         }
     }
@@ -1297,6 +1302,9 @@ impl Formatter {
             PatternKind::Text(text) => self.format_text_literal(text),
             PatternKind::Group(inner) => format!("({})", self.format_pattern_inline(inner, 0)),
             PatternKind::Tuple(elements) => self.format_pattern_tuple_inline(elements),
+            PatternKind::List { elements, rest } => {
+                self.format_pattern_list_inline(elements, rest.as_deref())
+            }
             PatternKind::Record(fields) => self.format_pattern_record_inline(fields),
             PatternKind::Apply { callee, arguments } => {
                 let mut rendered = self.format_pattern_inline(callee, PATTERN_APPLY_PREC);
@@ -1333,6 +1341,21 @@ impl Formatter {
                 .map(|element| self.format_pattern_inline(element, 0))
                 .collect(),
         )
+    }
+
+    fn format_pattern_list_inline(&self, elements: &[Pattern], rest: Option<&Pattern>) -> String {
+        if elements.is_empty() && rest.is_none() {
+            return "[]".to_owned();
+        }
+
+        let mut parts = elements
+            .iter()
+            .map(|element| self.format_pattern_inline(element, 0))
+            .collect::<Vec<_>>();
+        if let Some(rest) = rest {
+            parts.push(format!("...{}", self.format_pattern_inline(rest, 0)));
+        }
+        format!("[{}]", parts.join(", "))
     }
 
     fn format_pattern_record_inline(&self, fields: &[RecordPatternField]) -> String {

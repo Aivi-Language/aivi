@@ -400,6 +400,7 @@ pub enum ExprKind {
 pub enum MarkupAttributeValue {
     Text(TextLiteral),
     Expr(Expr),
+    Pattern(Pattern),
 }
 
 /// One markup attribute.
@@ -485,6 +486,10 @@ pub enum PatternKind {
     Text(TextLiteral),
     Group(Box<Pattern>),
     Tuple(Vec<Pattern>),
+    List {
+        elements: Vec<Pattern>,
+        rest: Option<Box<Pattern>>,
+    },
     Record(Vec<RecordPatternField>),
     Apply {
         callee: Box<Pattern>,

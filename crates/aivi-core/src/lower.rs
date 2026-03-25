@@ -1369,6 +1369,19 @@ impl<'a> ModuleLowerer<'a> {
                         .collect(),
                 )
             }
+            aivi_hir::PatternKind::List { elements, rest } => {
+                let subject_element = match subject {
+                    Some(aivi_hir::GateType::List(element)) => Some(element.as_ref()),
+                    _ => None,
+                };
+                PatternKind::List {
+                    elements: elements
+                        .iter()
+                        .map(|element| self.lower_pattern(*element, subject_element))
+                        .collect(),
+                    rest: rest.map(|rest| Box::new(self.lower_pattern(rest, subject))),
+                }
+            }
             aivi_hir::PatternKind::Record(fields) => {
                 let subject_fields = match subject {
                     Some(aivi_hir::GateType::Record(fields)) => Some(fields.as_slice()),

@@ -2188,6 +2188,13 @@ impl<'a> Lowerer<'a> {
                 };
                 PatternKind::Tuple(elements)
             }
+            syn::PatternKind::List { elements, rest } => PatternKind::List {
+                elements: elements
+                    .iter()
+                    .map(|element| self.lower_pattern(element))
+                    .collect(),
+                rest: rest.as_deref().map(|rest| self.lower_pattern(rest)),
+            },
             syn::PatternKind::Record(fields) => PatternKind::Record(
                 fields
                     .iter()
@@ -2277,6 +2284,13 @@ impl<'a> Lowerer<'a> {
                 };
                 PatternKind::Tuple(elements)
             }
+            syn::ExprKind::List(elements) => PatternKind::List {
+                elements: elements
+                    .iter()
+                    .map(|element| self.lower_expr_pattern(element))
+                    .collect(),
+                rest: None,
+            },
             syn::ExprKind::Record(record) => PatternKind::Record(
                 record
                     .fields
@@ -2556,6 +2570,14 @@ impl<'a> Lowerer<'a> {
                     Some(syn::MarkupAttributeValue::Expr(expr)) => {
                         MarkupAttributeValue::Expr(self.lower_expr(expr))
                     }
+                    Some(syn::MarkupAttributeValue::Pattern(_)) => {
+                        self.emit_error(
+                            attribute.span,
+                            "only `<case pattern={...}>` accepts pattern-valued markup attributes",
+                            code("invalid-markup-pattern-attr"),
+                        );
+                        MarkupAttributeValue::Expr(self.placeholder_expr(attribute.span))
+                    }
                     None => MarkupAttributeValue::ImplicitTrue,
                 },
             })
@@ -2709,10 +2731,8 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_case_control(&mut self, node: &syn::MarkupNode) -> CaseControl {
-        let pattern_expr = self.required_markup_attr(node, "pattern");
-        let pattern = pattern_expr
-            .as_ref()
-            .map(|expr| self.lower_expr_pattern(expr))
+        let pattern = self
+            .required_markup_pattern_attr(node, "pattern")
             .unwrap_or_else(|| self.placeholder_pattern(node.span));
         CaseControl {
             span: node.span,
@@ -2805,6 +2825,14 @@ impl<'a> Lowerer<'a> {
                     );
                     Some(self.placeholder_expr(attribute.span))
                 }
+                Some(syn::MarkupAttributeValue::Pattern(_)) => {
+                    self.emit_error(
+                        attribute.span,
+                        format!("attribute `{name}` expects an expression"),
+                        code("invalid-control-attr"),
+                    );
+                    Some(self.placeholder_expr(attribute.span))
+                }
                 None => {
                     self.emit_error(
                         attribute.span,
@@ -2873,6 +2901,18 @@ impl<'a> Lowerer<'a> {
                     })
                 }
             },
+            Some(syn::MarkupAttributeValue::Pattern(_)) => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects a binder name"),
+                    code("invalid-binder-attr"),
+                );
+                self.alloc_binding(Binding {
+                    span: attribute.span,
+                    name: self.make_name("invalid", attribute.span),
+                    kind,
+                })
+            }
             _ => {
                 self.emit_error(
                     attribute.span,
@@ -2911,10 +2951,53 @@ impl<'a> Lowerer<'a> {
                 );
                 None
             }
+            Some(syn::MarkupAttributeValue::Pattern(_)) => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects an expression"),
+                    code("invalid-control-attr"),
+                );
+                None
+            }
             None => {
                 self.emit_error(
                     attribute.span,
                     format!("attribute `{name}` expects an expression"),
+                    code("invalid-control-attr"),
+                );
+                None
+            }
+        }
+    }
+
+    fn required_markup_pattern_attr(
+        &mut self,
+        node: &syn::MarkupNode,
+        name: &str,
+    ) -> Option<PatternId> {
+        let Some(attribute) = self.find_markup_attr(node, name) else {
+            self.emit_error(
+                node.span,
+                format!("markup control node is missing required `{name}` attribute"),
+                code("missing-control-attr"),
+            );
+            return None;
+        };
+        match &attribute.value {
+            Some(syn::MarkupAttributeValue::Pattern(pattern)) => Some(self.lower_pattern(pattern)),
+            Some(syn::MarkupAttributeValue::Expr(expr)) => Some(self.lower_expr_pattern(expr)),
+            Some(syn::MarkupAttributeValue::Text(_)) => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects a pattern"),
+                    code("invalid-control-attr"),
+                );
+                None
+            }
+            None => {
+                self.emit_error(
+                    attribute.span,
+                    format!("attribute `{name}` expects a pattern"),
                     code("invalid-control-attr"),
                 );
                 None
@@ -4139,6 +4222,12 @@ impl<'a> Lowerer<'a> {
                         PatternKind::Tuple(elements) => {
                             work.extend(elements.iter().copied().map(DependencyWork::Pattern));
                         }
+                        PatternKind::List { elements, rest } => {
+                            work.extend(elements.iter().copied().map(DependencyWork::Pattern));
+                            if let Some(rest) = rest {
+                                work.push(DependencyWork::Pattern(*rest));
+                            }
+                        }
                         PatternKind::Record(fields) => {
                             work.extend(
                                 fields
@@ -4617,6 +4706,18 @@ impl<'a> Lowerer<'a> {
                 Pattern {
                     span: pattern.span,
                     kind: PatternKind::Tuple(elements),
+                }
+            }
+            PatternKind::List { elements, rest } => {
+                for element in &elements {
+                    bindings.extend(self.resolve_pattern(*element, namespaces, env));
+                }
+                if let Some(rest) = rest {
+                    bindings.extend(self.resolve_pattern(rest, namespaces, env));
+                }
+                Pattern {
+                    span: pattern.span,
+                    kind: PatternKind::List { elements, rest },
                 }
             }
             PatternKind::Record(fields) => {

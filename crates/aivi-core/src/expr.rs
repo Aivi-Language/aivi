@@ -177,6 +177,10 @@ pub enum PatternKind {
     Integer(IntegerLiteral),
     Text(Box<str>),
     Tuple(Vec<Pattern>),
+    List {
+        elements: Vec<Pattern>,
+        rest: Option<Box<Pattern>>,
+    },
     Record(Vec<RecordPatternField>),
     Constructor {
         callee: PatternConstructor,

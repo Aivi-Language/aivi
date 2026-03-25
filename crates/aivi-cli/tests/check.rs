@@ -78,6 +78,8 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/applicative-clusters/main.aivi",
         "milestone-2/valid/builtin-constructor-inference/main.aivi",
         "milestone-2/valid/case-exhaustiveness/main.aivi",
+        "milestone-2/valid/list-patterns/main.aivi",
+        "milestone-2/valid/markup-list-patterns/main.aivi",
         "milestone-2/valid/markup-control-nodes/main.aivi",
         "milestone-2/valid/class-declarations/main.aivi",
         "milestone-2/valid/instance-declarations/main.aivi",

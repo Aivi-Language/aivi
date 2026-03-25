@@ -1,0 +1,14 @@
+val rendered =
+    <match on={[1, 2, 3]}>
+        <case pattern={[]}>
+            <Label text="empty" />
+        </case>
+        <case pattern={[first]}>
+            <Label text="single {first}" />
+        </case>
+        <case pattern={[first, second, ...rest]}>
+            <Label text="pair {first} {second}" />
+        </case>
+    </match>
+
+export rendered

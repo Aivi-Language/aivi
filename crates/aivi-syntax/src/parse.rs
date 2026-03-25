@@ -2241,6 +2241,7 @@ impl<'a> Parser<'a> {
     fn parse_markup_node(&mut self, cursor: &mut usize, end: usize) -> Option<MarkupNode> {
         let start = self.consume_kind(cursor, end, TokenKind::Less)?;
         let name = self.parse_identifier(cursor, end)?;
+        let case_pattern_attrs = name.text == "case";
         let mut attributes = Vec::new();
 
         loop {
@@ -2261,7 +2262,9 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(TokenKind::Identifier) => {
-                    let Some(attribute) = self.parse_markup_attribute(cursor, end) else {
+                    let Some(attribute) =
+                        self.parse_markup_attribute(cursor, end, case_pattern_attrs)
+                    else {
                         break;
                     };
                     attributes.push(attribute);
@@ -2340,6 +2343,7 @@ impl<'a> Parser<'a> {
         &mut self,
         cursor: &mut usize,
         end: usize,
+        case_pattern_attr: bool,
     ) -> Option<MarkupAttribute> {
         let name = self.parse_identifier(cursor, end)?;
         let attribute_start = name.span.span().start();
@@ -2354,9 +2358,15 @@ impl<'a> Parser<'a> {
                 }
                 Some(TokenKind::LBrace) => {
                     let _ = self.consume_kind(cursor, end, TokenKind::LBrace);
-                    let expr = self.parse_expr(cursor, end, ExprStop::brace_context())?;
+                    let value = if case_pattern_attr && name.text == "pattern" {
+                        self.parse_pattern(cursor, end, PatternStop::brace_context())
+                            .map(MarkupAttributeValue::Pattern)
+                    } else {
+                        self.parse_expr(cursor, end, ExprStop::brace_context())
+                            .map(MarkupAttributeValue::Expr)
+                    }?;
                     let _ = self.consume_kind(cursor, end, TokenKind::RBrace);
-                    Some(MarkupAttributeValue::Expr(expr))
+                    Some(value)
                 }
                 _ => None,
             }
@@ -2366,6 +2376,7 @@ impl<'a> Parser<'a> {
         let attribute_end = match &value {
             Some(MarkupAttributeValue::Text(text)) => text.span.span().end(),
             Some(MarkupAttributeValue::Expr(expr)) => expr.span.span().end(),
+            Some(MarkupAttributeValue::Pattern(pattern)) => pattern.span.span().end(),
             None => name.span.span().end(),
         };
         Some(MarkupAttribute {
@@ -2459,6 +2470,7 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::LParen => self.parse_grouped_pattern(cursor, end),
+            TokenKind::LBracket => self.parse_list_pattern(cursor, end),
             TokenKind::LBrace => self.parse_record_pattern(cursor, end),
             _ => None,
         }
@@ -2539,6 +2551,56 @@ impl<'a> Parser<'a> {
         Some(Pattern {
             span: self.source_span_for_range(start, *cursor),
             kind: PatternKind::Record(fields),
+        })
+    }
+
+    fn parse_list_pattern(&mut self, cursor: &mut usize, end: usize) -> Option<Pattern> {
+        let start = self.consume_kind(cursor, end, TokenKind::LBracket)?;
+        let mut elements = Vec::new();
+        let mut rest = None;
+
+        if self
+            .consume_kind(cursor, end, TokenKind::RBracket)
+            .is_some()
+        {
+            return Some(Pattern {
+                span: self.source_span_for_range(start, *cursor),
+                kind: PatternKind::List {
+                    elements,
+                    rest: None,
+                },
+            });
+        }
+
+        loop {
+            if self
+                .consume_kind(cursor, end, TokenKind::Ellipsis)
+                .is_some()
+            {
+                rest = Some(Box::new(self.parse_pattern(
+                    cursor,
+                    end,
+                    PatternStop::list_context(),
+                )?));
+                let _ = self.consume_kind(cursor, end, TokenKind::Comma);
+                break;
+            }
+
+            let element = self.parse_pattern(cursor, end, PatternStop::list_context())?;
+            elements.push(element);
+            if self.consume_kind(cursor, end, TokenKind::Comma).is_some() {
+                if self.peek_kind(*cursor, end) == Some(TokenKind::RBracket) {
+                    break;
+                }
+                continue;
+            }
+            break;
+        }
+
+        let _ = self.consume_kind(cursor, end, TokenKind::RBracket);
+        Some(Pattern {
+            span: self.source_span_for_range(start, *cursor),
+            kind: PatternKind::List { elements, rest },
         })
     }
 
@@ -2687,6 +2749,7 @@ impl<'a> Parser<'a> {
                 | TokenKind::Integer
                 | TokenKind::StringLiteral
                 | TokenKind::LParen
+                | TokenKind::LBracket
                 | TokenKind::LBrace
         )
     }
@@ -2715,6 +2778,7 @@ impl<'a> Parser<'a> {
             TokenKind::Comma => stop.comma,
             TokenKind::RParen => stop.rparen,
             TokenKind::RBrace => stop.rbrace,
+            TokenKind::RBracket => stop.rbracket,
             TokenKind::Arrow => stop.arrow,
             _ => false,
         }
@@ -3263,6 +3327,7 @@ struct PatternStop {
     comma: bool,
     rparen: bool,
     rbrace: bool,
+    rbracket: bool,
     arrow: bool,
 }
 
@@ -3282,9 +3347,24 @@ impl PatternStop {
         }
     }
 
+    fn list_context() -> Self {
+        Self {
+            comma: true,
+            rbracket: true,
+            ..Self::default()
+        }
+    }
+
     fn record_context() -> Self {
         Self {
             comma: true,
+            rbrace: true,
+            ..Self::default()
+        }
+    }
+
+    fn brace_context() -> Self {
+        Self {
             rbrace: true,
             ..Self::default()
         }
