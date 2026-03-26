@@ -462,7 +462,7 @@ fn collect_gate_pipe(
     let all_stages = pipe.stages.iter().collect::<Vec<_>>();
     PipeSubjectWalker::new(pipe, env, typing).walk(
         typing,
-        |stage_index, stage, current, typing| {
+        |stage_index, stage, current, current_env, typing| {
             // Stop at the recurrence boundary — gate elaboration only covers the
             // non-recurrence prefix of the pipe.
             if recurrence_start_index.is_some_and(|start| stage_index >= start) {
@@ -470,7 +470,8 @@ fn collect_gate_pipe(
             }
             match &stage.kind {
                 PipeStageKind::Gate { expr } => {
-                    let outcome = elaborate_gate_stage(module, *expr, env, current, typing);
+                    let outcome =
+                        elaborate_gate_stage(module, *expr, current_env, current, typing);
                     gate_stages.push(GateStageElaboration {
                         owner,
                         pipe_expr,
@@ -494,7 +495,7 @@ fn collect_gate_pipe(
                         .expect("map stages should expose a fan-out segment");
                     if segment.join_stage().is_some() {
                         let outcome = crate::fanout_elaboration::elaborate_fanout_segment(
-                            module, &segment, current, env, typing,
+                            module, &segment, current, current_env, typing,
                         );
                         let advance = segment
                             .next_stage_index()
@@ -512,13 +513,14 @@ fn collect_gate_pipe(
                     } else {
                         PipeSubjectStepOutcome::Continue {
                             new_subject: current
-                                .and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                                .and_then(|s| typing.infer_fanout_map_stage(*expr, current_env, s)),
                             advance_by: 1,
                         }
                     }
                 }
                 PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                    new_subject: current
+                        .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                     advance_by: 1,
                 },
                 PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
@@ -531,7 +533,7 @@ fn collect_gate_pipe(
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
                     PipeSubjectStepOutcome::Continue {
                         new_subject: current
-                            .and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s)),
+                            .and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s)),
                         advance_by: advance,
                     }
                 }

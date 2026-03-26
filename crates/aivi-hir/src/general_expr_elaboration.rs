@@ -19,6 +19,7 @@ use crate::{
     typecheck::{expression_matches, resolve_class_member_dispatch},
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PolyTypeBindings,
+        extend_pipe_env_with_stage_memos, pipe_stage_expr_env,
         truthy_falsy_pair_stages,
     },
 };
@@ -1289,6 +1290,7 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<GateRuntimePipeExpr, Vec<GeneralExprBlocker>> {
         let head = self.lower_expr(pipe.head, env, ambient, None)?;
         let mut current = head.ty.clone();
+        let mut pipe_env = env.clone();
         let stages = pipe.stages.iter().collect::<Vec<_>>();
         let mut lowered = Vec::with_capacity(stages.len());
         let mut stage_index = 0usize;
@@ -1296,10 +1298,13 @@ impl<'a> GeneralExprElaborator<'a> {
             let stage = stages[stage_index];
             match &stage.kind {
                 PipeStageKind::Transform { expr } => {
-                    let mode = self.typing.infer_transform_stage_mode(*expr, env, &current);
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &current);
+                    let mode = self
+                        .typing
+                        .infer_transform_stage_mode(*expr, &stage_env, &current);
                     let result_subject = self
                         .typing
-                        .infer_transform_stage(*expr, env, &current)
+                        .infer_transform_stage(*expr, &stage_env, &current)
                         .ok_or_else(|| {
                             vec![GeneralExprBlocker::UnknownExprType { span: stage.span }]
                         })?;
@@ -1308,7 +1313,7 @@ impl<'a> GeneralExprElaborator<'a> {
                         .flatten();
                     let body = self.lower_body_expr(
                         *expr,
-                        env,
+                        &stage_env,
                         Some(current.gate_payload()),
                         body_expected.as_ref(),
                     )?;
@@ -1318,30 +1323,38 @@ impl<'a> GeneralExprElaborator<'a> {
                         result_subject: result_subject.clone(),
                         kind: GateRuntimePipeStageKind::Transform { mode, expr: body },
                     });
+                    extend_pipe_env_with_stage_memos(
+                        &mut pipe_env,
+                        stage,
+                        &current,
+                        &result_subject,
+                    );
                     current = result_subject;
                     stage_index += 1;
                 }
                 PipeStageKind::Tap { expr } => {
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &current);
                     let body =
-                        self.lower_body_expr(*expr, env, Some(current.gate_payload()), None)?;
+                        self.lower_body_expr(*expr, &stage_env, Some(current.gate_payload()), None)?;
                     lowered.push(GateRuntimePipeStage {
                         span: stage.span,
                         input_subject: current.gate_payload().clone(),
                         result_subject: current.clone(),
                         kind: GateRuntimePipeStageKind::Tap { expr: body },
                     });
+                    extend_pipe_env_with_stage_memos(&mut pipe_env, stage, &current, &current);
                     stage_index += 1;
                 }
                 PipeStageKind::Gate { expr } => {
                     let predicate = self.lower_body_expr(
                         *expr,
-                        env,
+                        &pipe_env,
                         Some(current.gate_payload()),
                         Some(&GateType::Primitive(crate::BuiltinType::Bool)),
                     )?;
                     let result_subject = self
                         .typing
-                        .infer_gate_stage(*expr, env, &current)
+                        .infer_gate_stage(*expr, &pipe_env, &current)
                         .ok_or_else(|| {
                             vec![GeneralExprBlocker::UnknownExprType { span: stage.span }]
                         })?;
@@ -1375,7 +1388,7 @@ impl<'a> GeneralExprElaborator<'a> {
                         .flatten();
                     let lowered_stage = self.lower_case_stage(
                         &stages[case_start..stage_index],
-                        env,
+                        &pipe_env,
                         &current,
                         stage_expected.as_ref(),
                     )?;
@@ -1396,7 +1409,7 @@ impl<'a> GeneralExprElaborator<'a> {
                         .flatten();
                     let lowered_stage = self.lower_truthy_falsy_stage(
                         &pair,
-                        env,
+                        &pipe_env,
                         &current,
                         stage_expected.as_ref(),
                     )?;
@@ -2462,12 +2475,16 @@ mod tests {
                     stages: crate::NonEmpty::new(
                         crate::PipeStage {
                             span: unit_span(),
+                            subject_memo: None,
+                            result_memo: None,
                             kind: crate::PipeStageKind::Transform {
                                 expr: callable_expr,
                             },
                         },
                         vec![crate::PipeStage {
                             span: unit_span(),
+                            subject_memo: None,
+                            result_memo: None,
                             kind: crate::PipeStageKind::Transform {
                                 expr: replacement_expr,
                             },

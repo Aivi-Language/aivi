@@ -3604,6 +3604,8 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
                     stages: crate::NonEmpty::new(
                         crate::PipeStage {
                             span: unit_span(),
+                            subject_memo: None,
+                            result_memo: None,
                             kind: crate::PipeStageKind::Transform {
                                 expr: wrap_ref_number,
                             },
@@ -3653,6 +3655,8 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
                     stages: crate::NonEmpty::new(
                         crate::PipeStage {
                             span: unit_span(),
+                            subject_memo: None,
+                            result_memo: None,
                             kind: crate::PipeStageKind::Transform {
                                 expr: wrap_ref_label,
                             },

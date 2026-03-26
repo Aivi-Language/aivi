@@ -438,6 +438,8 @@ pub struct PipeCaseArm {
 /// One pipe stage.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PipeStage {
+    pub subject_memo: Option<Identifier>,
+    pub result_memo: Option<Identifier>,
     pub kind: PipeStageKind,
     pub span: SourceSpan,
 }

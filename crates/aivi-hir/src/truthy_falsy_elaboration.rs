@@ -231,17 +231,20 @@ fn collect_truthy_falsy_pipe(
     let all_stages = pipe.stages.iter().collect::<Vec<_>>();
     PipeSubjectWalker::new(pipe, env, typing).walk(
         typing,
-        |stage_index, stage, current, typing| match &stage.kind {
+        |stage_index, stage, current, current_env, typing| match &stage.kind {
             PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
+                new_subject: current
+                    .and_then(|s| typing.infer_gate_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Map { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                new_subject: current
+                    .and_then(|s| typing.infer_fanout_map_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                new_subject: current
+                    .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
@@ -254,7 +257,7 @@ fn collect_truthy_falsy_pipe(
                 let outcome = elaborate_truthy_falsy_pair(
                     &pair,
                     current,
-                    env,
+                    current_env,
                     if pipe_expr == root_expr {
                         root_expected
                     } else {

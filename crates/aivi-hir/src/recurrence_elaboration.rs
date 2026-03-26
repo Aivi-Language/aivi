@@ -825,17 +825,20 @@ fn infer_recurrence_input_subject(
         .collect::<Vec<_>>();
     PipeSubjectWalker::new_with_limit(pipe, env, typing, prefix_stage_count).walk(
         typing,
-        |stage_index, stage, current, typing| match &stage.kind {
+        |stage_index, stage, current, current_env, typing| match &stage.kind {
             PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, env, s)),
+                new_subject: current
+                    .and_then(|s| typing.infer_gate_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Map { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_fanout_map_stage(*expr, env, s)),
+                new_subject: current
+                    .and_then(|s| typing.infer_fanout_map_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, env, s)),
+                new_subject: current
+                    .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
@@ -845,8 +848,8 @@ fn infer_recurrence_input_subject(
                         advance_by: 1,
                     };
                 };
-                let new_subject =
-                    current.and_then(|s| typing.infer_truthy_falsy_pair(&pair, env, s));
+                let new_subject = current
+                    .and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s));
                 let advance = pair.next_index.saturating_sub(stage_index).max(1);
                 PipeSubjectStepOutcome::Continue {
                     new_subject,

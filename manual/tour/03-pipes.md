@@ -152,4 +152,20 @@ sig cursor: Signal Cursor =
      <|@ keep
 ```
 
-There is no `#name` pipe memo syntax in the shipped language. Keep pipe stages to named functions, constructors, literals, projections, and the documented pipe operators.
+## Pipe memos
+
+Plain `|>` and `|` stages can bind a pipe-local name with `#name`.
+
+- Put `#name` before the stage body to capture the incoming subject.
+- Put `#name` after the stage body to capture the result of that stage.
+
+```aivi
+val memoed =
+    20
+     |> #before before + 1 #after
+     |> after + before
+```
+
+`before` is available inside the first stage body and in later stages. `after` is available in later stages after the first transform has run.
+
+Current limit: memos are only shipped on plain `|>` and `|` stages. Do not use them on `?|>`, `||>`, `T|>`, `F|>`, `*|>`, `<|*`, `&|>`, `@|>`, or `<|@`.

@@ -68,6 +68,8 @@ const INVALID_TEXT_INTERPOLATION: DiagnosticCode =
 const UNTERMINATED_TEXT_INTERPOLATION: DiagnosticCode =
     DiagnosticCode::new("syntax", "unterminated-text-interpolation");
 const INVALID_DISCARD_EXPR: DiagnosticCode = DiagnosticCode::new("syntax", "invalid-discard-expr");
+const MISSING_PIPE_MEMO_NAME: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-pipe-memo-name");
 const PARSE_DEPTH_EXCEEDED: DiagnosticCode = DiagnosticCode::new("syntax", "parse-depth-exceeded");
 
 const MAX_PARSE_DEPTH: usize = 256;
@@ -1759,68 +1761,112 @@ impl<'a> Parser<'a> {
                 break;
             }
             *cursor = index + 1;
-            let stage_kind = match kind {
+            let (subject_memo, stage_kind, result_memo) = match kind {
                 TokenKind::PipeTransform => {
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     if cluster_active {
                         cluster_active = false;
-                        PipeStageKind::ClusterFinalizer { expr }
+                        (
+                            subject_memo,
+                            PipeStageKind::ClusterFinalizer { expr },
+                            result_memo,
+                        )
                     } else {
-                        PipeStageKind::Transform { expr }
+                        (
+                            subject_memo,
+                            PipeStageKind::Transform { expr },
+                            result_memo,
+                        )
                     }
                 }
                 TokenKind::PipeGate => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::Gate { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::Gate { expr }, result_memo)
                 }
                 TokenKind::PipeCase => {
                     cluster_active = false;
-                    PipeStageKind::Case(self.parse_pipe_case_arm(cursor, end, stop)?)
+                    (
+                        None,
+                        PipeStageKind::Case(self.parse_pipe_case_arm(cursor, end, stop)?),
+                        None,
+                    )
                 }
                 TokenKind::PipeMap => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::Map { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::Map { expr }, result_memo)
                 }
                 TokenKind::PipeApply => {
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     cluster_active = true;
-                    PipeStageKind::Apply { expr }
+                    (subject_memo, PipeStageKind::Apply { expr }, result_memo)
                 }
                 TokenKind::PipeRecurStart => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::RecurStart { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::RecurStart { expr }, result_memo)
                 }
                 TokenKind::PipeRecurStep => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::RecurStep { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::RecurStep { expr }, result_memo)
                 }
                 TokenKind::PipeTap => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::Tap { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::Tap { expr }, result_memo)
                 }
                 TokenKind::PipeFanIn => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::FanIn { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::FanIn { expr }, result_memo)
                 }
                 TokenKind::TruthyBranch => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::Truthy { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::Truthy { expr }, result_memo)
                 }
                 TokenKind::FalsyBranch => {
                     cluster_active = false;
-                    let expr = self.parse_range_expr(cursor, end, stop.with_pipe_stage())?;
-                    PipeStageKind::Falsy { expr }
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let expr =
+                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::Falsy { expr }, result_memo)
                 }
                 _ => break,
             };
             stages.push(PipeStage {
+                subject_memo,
+                result_memo,
                 span: self.source_span_for_range(index, *cursor),
                 kind: stage_kind,
             });
@@ -1860,6 +1906,26 @@ impl<'a> Parser<'a> {
                 end: Box::new(end_expr),
             },
         })
+    }
+
+    fn parse_optional_pipe_memo(&mut self, cursor: &mut usize, end: usize) -> Option<Identifier> {
+        let Some(hash_index) = self.consume_kind(cursor, end, TokenKind::Hash) else {
+            return None;
+        };
+        match self.parse_identifier(cursor, end) {
+            Some(identifier) => Some(identifier),
+            None => {
+                self.diagnostics.push(
+                    Diagnostic::error("`#` in a pipe stage must be followed by a memo name")
+                        .with_code(MISSING_PIPE_MEMO_NAME)
+                        .with_primary_label(
+                            self.source_span_of_token(hash_index),
+                            "add an identifier such as `#value` here",
+                        ),
+                );
+                None
+            }
+        }
     }
 
     fn parse_binary_expr(
@@ -3034,6 +3100,7 @@ impl<'a> Parser<'a> {
             TokenKind::RBrace => stop.rbrace,
             TokenKind::RBracket => stop.rbracket,
             TokenKind::Arrow => stop.arrow,
+            TokenKind::Hash => stop.hash,
             kind if kind.is_pipe_operator() => stop.pipe_stage,
             _ => false,
         }
@@ -3572,11 +3639,17 @@ struct ExprStop {
     rbracket: bool,
     arrow: bool,
     pipe_stage: bool,
+    hash: bool,
 }
 
 impl ExprStop {
     fn with_pipe_stage(mut self) -> Self {
         self.pipe_stage = true;
+        self
+    }
+
+    fn with_hash(mut self) -> Self {
+        self.hash = true;
         self
     }
 
@@ -4877,6 +4950,54 @@ fun ignore:Int _ =>
         };
         assert_eq!(ignore.parameters.len(), 1);
         assert!(ignore.parameters[0].name.is_none());
+    }
+
+    #[test]
+    fn parser_accepts_pipe_subject_and_result_memos() {
+        let (_, parsed) = load(
+            r#"val memoed =
+    20
+     |> #before before + 1 #after
+     |> after + before
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "expected pipe memos to parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let Item::Value(value) = &parsed.module.items[0] else {
+            panic!("expected memoed value item");
+        };
+        let Some(Expr {
+            kind: ExprKind::Pipe(pipe),
+            ..
+        }) = value.expr_body()
+        else {
+            panic!("expected value body to be a pipe expression");
+        };
+        assert_eq!(pipe.stages.len(), 2);
+        let first = &pipe.stages[0];
+        assert_eq!(
+            first
+                .subject_memo
+                .as_ref()
+                .expect("first stage should preserve subject memo")
+                .text,
+            "before"
+        );
+        assert_eq!(
+            first
+                .result_memo
+                .as_ref()
+                .expect("first stage should preserve result memo")
+                .text,
+            "after"
+        );
+        assert!(pipe.stages[1].subject_memo.is_none());
+        assert!(pipe.stages[1].result_memo.is_none());
     }
 
     #[test]

@@ -159,7 +159,7 @@ impl<T> ResolutionState<T> {
     }
 }
 
-/// Local binding introduced by parameters, patterns, and markup control nodes.
+/// Local binding introduced by parameters, patterns, markup control nodes, and pipe memos.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Binding {
     pub span: SourceSpan,
@@ -174,6 +174,8 @@ pub enum BindingKind {
     Pattern,
     MarkupEach,
     MarkupWith,
+    PipeSubjectMemo,
+    PipeResultMemo,
 }
 
 /// HIR-level type parameter identity.
@@ -1007,7 +1009,18 @@ pub struct PipeExpr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PipeStage {
     pub span: SourceSpan,
+    pub subject_memo: Option<BindingId>,
+    pub result_memo: Option<BindingId>,
     pub kind: PipeStageKind,
+}
+
+impl PipeStage {
+    pub const fn supports_memos(&self) -> bool {
+        matches!(
+            self.kind,
+            PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. }
+        )
+    }
 }
 
 /// Typed runtime semantics for one `|>` transform stage after elaboration.

@@ -1829,6 +1829,8 @@ impl<'a> Lowerer<'a> {
                     );
                     ordinary.push(PipeStage {
                         span: pipe.stages[index].span,
+                        subject_memo: None,
+                        result_memo: None,
                         kind: PipeStageKind::Transform {
                             expr: self.lower_expr(expr),
                         },
@@ -1953,6 +1955,32 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_pipe_stage(&mut self, stage: &syn::PipeStage) -> PipeStage {
+        let supports_memos = matches!(
+            stage.kind,
+            syn::PipeStageKind::Transform { .. } | syn::PipeStageKind::Tap { .. }
+        );
+        let subject_memo = if supports_memos {
+            stage
+                .subject_memo
+                .as_ref()
+                .map(|memo| self.lower_pipe_memo_binding(memo, BindingKind::PipeSubjectMemo))
+        } else {
+            if let Some(memo) = &stage.subject_memo {
+                self.emit_unsupported_pipe_memo(memo.span);
+            }
+            None
+        };
+        let result_memo = if supports_memos {
+            stage
+                .result_memo
+                .as_ref()
+                .map(|memo| self.lower_pipe_memo_binding(memo, BindingKind::PipeResultMemo))
+        } else {
+            if let Some(memo) = &stage.result_memo {
+                self.emit_unsupported_pipe_memo(memo.span);
+            }
+            None
+        };
         let kind = match &stage.kind {
             syn::PipeStageKind::Transform { expr } => PipeStageKind::Transform {
                 expr: self.lower_expr(expr),
@@ -1994,8 +2022,29 @@ impl<'a> Lowerer<'a> {
         };
         PipeStage {
             span: stage.span,
+            subject_memo,
+            result_memo,
             kind,
         }
+    }
+
+    fn lower_pipe_memo_binding(&mut self, memo: &syn::Identifier, kind: BindingKind) -> BindingId {
+        self.alloc_binding(Binding {
+            span: memo.span,
+            name: self.make_name(&memo.text, memo.span),
+            kind,
+        })
+    }
+
+    fn emit_unsupported_pipe_memo(&mut self, span: SourceSpan) {
+        self.diagnostics.push(
+            Diagnostic::error("pipe memo bindings are currently supported only on `|>` and `|` stages")
+                .with_code(code("unsupported-pipe-memo-stage"))
+                .with_primary_label(
+                    span,
+                    "move this memo to a plain transform or tap stage for now",
+                ),
+        );
     }
 
     fn validate_pipe_stages(&mut self, stages: &[syn::PipeStage]) {
@@ -4267,7 +4316,14 @@ impl<'a> Lowerer<'a> {
             }
             ExprKind::Pipe(pipe) => {
                 self.resolve_expr(pipe.head, namespaces, env);
+                let mut pipe_env = env.clone();
                 for stage in pipe.stages.iter() {
+                    let mut stage_env = pipe_env.clone();
+                    if stage.supports_memos()
+                        && let Some(binding) = stage.subject_memo
+                    {
+                        stage_env.push_term_scope(self.binding_scope([binding]));
+                    }
                     match &stage.kind {
                         PipeStageKind::Transform { expr }
                         | PipeStageKind::Gate { expr }
@@ -4279,13 +4335,21 @@ impl<'a> Lowerer<'a> {
                         | PipeStageKind::Falsy { expr }
                         | PipeStageKind::RecurStart { expr }
                         | PipeStageKind::RecurStep { expr } => {
-                            self.resolve_expr(*expr, namespaces, env)
+                            self.resolve_expr(*expr, namespaces, &stage_env)
                         }
                         PipeStageKind::Case { pattern, body } => {
-                            let bindings = self.resolve_pattern(*pattern, namespaces, env);
-                            let mut branch_env = env.clone();
+                            let bindings = self.resolve_pattern(*pattern, namespaces, &stage_env);
+                            let mut branch_env = stage_env.clone();
                             branch_env.push_term_scope(self.binding_scope(bindings));
                             self.resolve_expr(*body, namespaces, &branch_env);
+                        }
+                    }
+                    if stage.supports_memos() {
+                        if let Some(binding) = stage.subject_memo {
+                            pipe_env.push_term_scope(self.binding_scope([binding]));
+                        }
+                        if let Some(binding) = stage.result_memo {
+                            pipe_env.push_term_scope(self.binding_scope([binding]));
                         }
                     }
                 }

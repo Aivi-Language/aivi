@@ -257,7 +257,28 @@ Important:
 
 - `.` is the current-subject placeholder in expressions and pipes.
 - `_` is a wildcard/discard pattern, not the subject placeholder.
-- There is no `#name` pipe memo syntax in the shipped language.
+- Pipe memos use `#name` on plain `|>` and `|` stages only.
+
+### Pipe memos
+
+The shipped parser/HIR currently supports two memo placements on plain transform and tap stages:
+
+- `|> #name expr` names the incoming ambient subject for that stage and all later stages in the same pipe
+- `|> expr #name` names the result flowing out of that stage for all later stages in the same pipe
+
+```aivi
+val memoed = 20 |> #before before + 1 #after |> after + before
+```
+
+In that example:
+
+- `before` is available inside the first stage body and later stages
+- `after` is available in later stages after the first transform completes
+
+Current limit:
+
+- memos are implemented on plain `|>` and `|` stages
+- do not generate memo syntax on `?|>`, `||>`, `T|>`, `F|>`, `*|>`, `<|*`, `&|>`, `@|>`, or `<|@`
 
 ### Operators and precedence
 
@@ -286,8 +307,6 @@ Parser precedence is code-backed:
 
 Pipe algebra is the main control-flow surface.
 
-There is no `#name` pipe memo syntax in the shipped language. Keep pipe stages to named functions, constructors, literals, projections, and the documented pipe operators.
-
 | Operator | Meaning |
 | --- | --- |
 | ` \|>` | ordinary transform |
@@ -308,6 +327,12 @@ There is no `#name` pipe memo syntax in the shipped language. Keep pipe stages t
 order
  |> .shipping
  |> .status
+```
+
+Plain `|>` stages are also where shipped pipe memos live:
+
+```aivi
+20 |> #before before + 1 #after |> after + before
 ```
 
 ### `?|>` gate/filter

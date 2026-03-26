@@ -1153,17 +1153,19 @@ impl Formatter {
                 self.format_pattern_inline(&arm.pattern, 0),
                 self.format_expr_inline(&arm.body, 0)
             ),
-            PipeStageKind::Transform { expr } => self.format_pipe_expr_stage("|>", expr),
-            PipeStageKind::Gate { expr } => self.format_pipe_expr_stage("?|>", expr),
-            PipeStageKind::Map { expr } => self.format_pipe_expr_stage("*|>", expr),
-            PipeStageKind::Apply { expr } => self.format_pipe_expr_stage("&|>", expr),
-            PipeStageKind::ClusterFinalizer { expr } => self.format_pipe_expr_stage("|>", expr),
-            PipeStageKind::RecurStart { expr } => self.format_pipe_expr_stage("@|>", expr),
-            PipeStageKind::RecurStep { expr } => self.format_pipe_expr_stage("<|@", expr),
-            PipeStageKind::Tap { expr } => self.format_pipe_expr_stage("|", expr),
-            PipeStageKind::FanIn { expr } => self.format_pipe_expr_stage("<|*", expr),
-            PipeStageKind::Truthy { expr } => self.format_pipe_expr_stage("T|>", expr),
-            PipeStageKind::Falsy { expr } => self.format_pipe_expr_stage("F|>", expr),
+            PipeStageKind::Transform { expr } => self.format_pipe_expr_stage("|>", stage, expr),
+            PipeStageKind::Gate { expr } => self.format_pipe_expr_stage("?|>", stage, expr),
+            PipeStageKind::Map { expr } => self.format_pipe_expr_stage("*|>", stage, expr),
+            PipeStageKind::Apply { expr } => self.format_pipe_expr_stage("&|>", stage, expr),
+            PipeStageKind::ClusterFinalizer { expr } => {
+                self.format_pipe_expr_stage("|>", stage, expr)
+            }
+            PipeStageKind::RecurStart { expr } => self.format_pipe_expr_stage("@|>", stage, expr),
+            PipeStageKind::RecurStep { expr } => self.format_pipe_expr_stage("<|@", stage, expr),
+            PipeStageKind::Tap { expr } => self.format_pipe_expr_stage("|", stage, expr),
+            PipeStageKind::FanIn { expr } => self.format_pipe_expr_stage("<|*", stage, expr),
+            PipeStageKind::Truthy { expr } => self.format_pipe_expr_stage("T|>", stage, expr),
+            PipeStageKind::Falsy { expr } => self.format_pipe_expr_stage("F|>", stage, expr),
         }
     }
 
@@ -1172,17 +1174,23 @@ impl Formatter {
             PipeStageKind::Case(_) => {
                 todo!("format PipeStageKind::Case as a standalone stage line")
             }
-            PipeStageKind::Transform { expr } => self.format_aligned_pipe_stage("|>", expr),
-            PipeStageKind::Gate { expr } => self.format_aligned_pipe_stage("?|>", expr),
-            PipeStageKind::Map { expr } => self.format_aligned_pipe_stage("*|>", expr),
-            PipeStageKind::Apply { expr } => self.format_aligned_pipe_stage("&|>", expr),
-            PipeStageKind::ClusterFinalizer { expr } => self.format_aligned_pipe_stage("|>", expr),
-            PipeStageKind::RecurStart { expr } => self.format_aligned_pipe_stage("@|>", expr),
-            PipeStageKind::RecurStep { expr } => self.format_aligned_pipe_stage("<|@", expr),
-            PipeStageKind::Tap { expr } => self.format_aligned_pipe_stage("|", expr),
-            PipeStageKind::FanIn { expr } => self.format_aligned_pipe_stage("<|*", expr),
-            PipeStageKind::Truthy { expr } => self.format_aligned_pipe_stage("T|>", expr),
-            PipeStageKind::Falsy { expr } => self.format_aligned_pipe_stage("F|>", expr),
+            PipeStageKind::Transform { expr } => self.format_aligned_pipe_stage("|>", stage, expr),
+            PipeStageKind::Gate { expr } => self.format_aligned_pipe_stage("?|>", stage, expr),
+            PipeStageKind::Map { expr } => self.format_aligned_pipe_stage("*|>", stage, expr),
+            PipeStageKind::Apply { expr } => self.format_aligned_pipe_stage("&|>", stage, expr),
+            PipeStageKind::ClusterFinalizer { expr } => {
+                self.format_aligned_pipe_stage("|>", stage, expr)
+            }
+            PipeStageKind::RecurStart { expr } => {
+                self.format_aligned_pipe_stage("@|>", stage, expr)
+            }
+            PipeStageKind::RecurStep { expr } => {
+                self.format_aligned_pipe_stage("<|@", stage, expr)
+            }
+            PipeStageKind::Tap { expr } => self.format_aligned_pipe_stage("|", stage, expr),
+            PipeStageKind::FanIn { expr } => self.format_aligned_pipe_stage("<|*", stage, expr),
+            PipeStageKind::Truthy { expr } => self.format_aligned_pipe_stage("T|>", stage, expr),
+            PipeStageKind::Falsy { expr } => self.format_aligned_pipe_stage("F|>", stage, expr),
         }
     }
 
@@ -1216,16 +1224,39 @@ impl Formatter {
             .collect()
     }
 
-    fn format_pipe_expr_stage(&self, operator: &str, expr: &Expr) -> String {
-        format!("{operator} {}", self.format_expr_inline(expr, 0))
+    fn format_pipe_expr_stage(&self, operator: &str, stage: &PipeStage, expr: &Expr) -> String {
+        format!(
+            "{operator}{} {}{}",
+            stage
+                .subject_memo
+                .as_ref()
+                .map(|memo| format!(" #{}", memo.text))
+                .unwrap_or_default(),
+            self.format_expr_inline(expr, 0),
+            stage
+                .result_memo
+                .as_ref()
+                .map(|memo| format!(" #{}", memo.text))
+                .unwrap_or_default()
+        )
     }
 
-    fn format_aligned_pipe_stage(&self, operator: &str, expr: &Expr) -> String {
+    fn format_aligned_pipe_stage(&self, operator: &str, stage: &PipeStage, expr: &Expr) -> String {
         format!(
-            "{}{} {}",
+            "{}{}{} {}{}",
             self.pipe_alignment_prefix(operator),
             operator,
-            self.format_expr_inline(expr, 0)
+            stage
+                .subject_memo
+                .as_ref()
+                .map(|memo| format!(" #{}", memo.text))
+                .unwrap_or_default(),
+            self.format_expr_inline(expr, 0),
+            stage
+                .result_memo
+                .as_ref()
+                .map(|memo| format!(" #{}", memo.text))
+                .unwrap_or_default()
         )
     }
 
