@@ -71,7 +71,9 @@ fn compute_signal_metadata(
         let provider = SourceProviderRef::from_path(source.provider.as_ref());
         SourceMetadata {
             custom_contract: resolve_custom_source_contract(module, &provider),
-            lifecycle_dependencies: compute_source_lifecycle_dependencies(module, source, &provider),
+            lifecycle_dependencies: compute_source_lifecycle_dependencies(
+                module, source, &provider,
+            ),
             provider,
             is_reactive: !source_dependencies.is_empty(),
             signal_dependencies: source_dependencies,
@@ -86,15 +88,17 @@ fn compute_source_lifecycle_dependencies(
     provider: &SourceProviderRef,
 ) -> SourceLifecycleDependencies {
     let mut lifecycle = SourceLifecycleDependencies::default();
-    lifecycle.reconfiguration.extend(collect_signal_dependencies(
-        module,
-        source
-            .arguments
-            .iter()
-            .copied()
-            .map(DependencyWork::Expr)
-            .collect(),
-    ));
+    lifecycle
+        .reconfiguration
+        .extend(collect_signal_dependencies(
+            module,
+            source
+                .arguments
+                .iter()
+                .copied()
+                .map(DependencyWork::Expr)
+                .collect(),
+        ));
 
     let Some(options) = source.options else {
         normalize_dependency_list(&mut lifecycle.reconfiguration);
@@ -131,9 +135,7 @@ fn compute_source_lifecycle_dependencies(
             Some(SourceOptionWakeupCause::TriggerSignal) => {
                 lifecycle.explicit_triggers.extend(dependencies)
             }
-            Some(
-                SourceOptionWakeupCause::RetryPolicy | SourceOptionWakeupCause::PollingPolicy,
-            )
+            Some(SourceOptionWakeupCause::RetryPolicy | SourceOptionWakeupCause::PollingPolicy)
             | None => lifecycle.reconfiguration.extend(dependencies),
         }
     }
@@ -347,9 +349,7 @@ fn collect_signal_dependencies(module: &Module, mut work: Vec<DependencyWork>) -
                                 }
                             }
                         }
-                        work.extend(
-                            element.children.iter().copied().map(DependencyWork::Markup),
-                        );
+                        work.extend(element.children.iter().copied().map(DependencyWork::Markup));
                     }
                     MarkupNodeKind::Control(control_id) => {
                         work.push(DependencyWork::Control(*control_id))

@@ -794,10 +794,8 @@ impl EqDeriver {
                     let mut parts = walker.take_tail(2).into_iter();
                     let error = parts.next().expect("missing result error witness");
                     let value = parts.next().expect("missing result value witness");
-                    walker.push_assembled(push_step(
-                        &mut steps,
-                        EqStep::Result { ty, error, value },
-                    ));
+                    walker
+                        .push_assembled(push_step(&mut steps, EqStep::Result { ty, error, value }));
                 }
                 Frame::ExitValidation { ty } => {
                     let mut parts = walker.take_tail(2).into_iter();

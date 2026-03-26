@@ -41,10 +41,10 @@ pub use recurrence::{
     RecurrenceWakeupEvidence, RecurrenceWakeupKind, RecurrenceWakeupPlan, RecurrenceWakeupPlanner,
     SourceRecurrenceWakeupContext, builtin_source_option_wakeup_cause,
 };
-pub use walker::StructuralWalker;
 pub use source_contracts::{
     BuiltinSourceProvider, SourceCancellationPolicy, SourceContract, SourceContractIntrinsicWakeup,
     SourceContractType, SourceLifecycleContract, SourceNominalType, SourceOptionContract,
     SourceOptionWakeupCause, SourceOptionWakeupContract, SourceRecurrenceContract, SourceTypeAtom,
     SourceTypeParameter,
 };
+pub use walker::StructuralWalker;

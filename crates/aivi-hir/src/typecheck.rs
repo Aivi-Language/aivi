@@ -130,7 +130,10 @@ pub struct ResolvedClassMemberDispatch {
 
 impl TypeCheckReport {
     fn new(diagnostics: Vec<Diagnostic>, elisions: Vec<DefaultRecordElision>) -> Self {
-        Self { diagnostics, elisions }
+        Self {
+            diagnostics,
+            elisions,
+        }
     }
 
     pub fn diagnostics(&self) -> &[Diagnostic] {
