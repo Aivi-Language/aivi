@@ -50,4 +50,5 @@ The [VSCode extension](https://github.com/mendrik/aivi2/tree/main/tooling/packag
 provides syntax highlighting and error reporting while you edit.
 
 Use `aivi run` when your entrypoint is GTK markup. Use `aivi execute` when your entrypoint is a
-headless `Task`.
+headless `Task`. Use `aivi mcp` when you want the current app exposed over stdio MCP for launch,
+inspection, UI automation, and controlled source injection.

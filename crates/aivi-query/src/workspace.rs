@@ -98,11 +98,14 @@ impl Workspace {
     }
 }
 
-fn discover_workspace_root(path: &Path) -> PathBuf {
-    let start = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
+/// Deterministic workspace discovery rooted at the closest `aivi.toml` ancestor,
+/// or the provided directory when no manifest exists yet.
+pub fn discover_workspace_root_from_directory(path: &Path) -> PathBuf {
+    let start = if path.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        path.to_path_buf()
+    };
 
     for ancestor in start.ancestors() {
         if ancestor.join("aivi.toml").is_file() {
@@ -110,7 +113,17 @@ fn discover_workspace_root(path: &Path) -> PathBuf {
         }
     }
 
-    start.to_path_buf()
+    start
+}
+
+/// Deterministic workspace discovery rooted at the closest `aivi.toml` ancestor,
+/// or the entry file's parent directory when no manifest exists yet.
+pub fn discover_workspace_root(path: &Path) -> PathBuf {
+    let start = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    discover_workspace_root_from_directory(start)
 }
 
 fn module_name_for_path(root: &Path, path: &Path) -> Option<String> {

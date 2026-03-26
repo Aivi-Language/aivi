@@ -30,6 +30,16 @@ macro_rules! define_handle {
 define_handle!(SignalHandle);
 define_handle!(OwnerHandle);
 
+impl SignalHandle {
+    pub const fn as_input(self) -> InputHandle {
+        InputHandle(self)
+    }
+
+    pub const fn as_derived(self) -> DerivedHandle {
+        DerivedHandle(self)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct InputHandle(SignalHandle);
 
@@ -105,6 +115,20 @@ pub struct SignalGraph {
 impl SignalGraph {
     pub fn builder() -> SignalGraphBuilder {
         SignalGraphBuilder::new()
+    }
+
+    pub fn signals(&self) -> impl ExactSizeIterator<Item = (SignalHandle, &SignalSpec)> {
+        self.signals
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| (SignalHandle::from_raw(index as u32), spec))
+    }
+
+    pub fn owners(&self) -> impl ExactSizeIterator<Item = (OwnerHandle, &OwnerSpec)> {
+        self.owners
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| (OwnerHandle::from_raw(index as u32), spec))
     }
 
     pub fn signal_count(&self) -> usize {

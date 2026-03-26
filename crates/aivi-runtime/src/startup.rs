@@ -90,12 +90,20 @@ impl BackendLinkedRuntime {
         &mut self.runtime
     }
 
+    pub fn signal_graph(&self) -> &crate::SignalGraph {
+        self.runtime.graph()
+    }
+
     pub fn derived_signal(&self, signal: DerivedHandle) -> Option<&LinkedDerivedSignal> {
         self.derived_signals.get(&signal)
     }
 
     pub fn source_binding(&self, instance: SourceInstanceId) -> Option<&LinkedSourceBinding> {
         self.source_bindings.get(&instance)
+    }
+
+    pub fn source_bindings(&self) -> impl ExactSizeIterator<Item = &LinkedSourceBinding> {
+        self.source_bindings.values()
     }
 
     pub fn source_by_owner(&self, owner: hir::ItemId) -> Option<&LinkedSourceBinding> {

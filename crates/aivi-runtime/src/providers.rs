@@ -324,6 +324,14 @@ impl SourceProviderManager {
             .map(ActiveProviderState::provider)
     }
 
+    pub fn has_active_provider(&self, instance: SourceInstanceId) -> bool {
+        self.active.contains_key(&instance)
+    }
+
+    pub fn suspend_active_provider(&mut self, instance: SourceInstanceId) {
+        self.remove_active(instance);
+    }
+
     pub fn publish_mailbox_message(
         &self,
         mailbox: &str,

@@ -1,6 +1,6 @@
 use std::{
     cell::Cell,
-    collections::VecDeque,
+    collections::{BTreeSet, VecDeque},
     error::Error,
     fmt,
     sync::{
@@ -13,10 +13,11 @@ use aivi_backend::DetachedRuntimeValue;
 use glib::MainContext;
 
 use crate::{
-    BackendLinkedRuntime, BackendRuntimeError, DerivedNodeEvaluator, InputHandle,
-    LinkedSourceTickOutcome, OwnerHandle, Publication, PublicationStamp, Scheduler,
-    SchedulerAccessError, SignalHandle, SourceProviderExecutionError, SourceProviderManager,
-    TaskSourceRuntimeError, TickOutcome, WorkerPublicationSender, WorkerSendError,
+    BackendLinkedRuntime, BackendRuntimeError, DerivedNodeEvaluator, EvaluatedSourceConfig,
+    Generation, InputHandle, LinkedSourceBinding, LinkedSourceTickOutcome, OwnerHandle,
+    Publication, PublicationStamp, Scheduler, SchedulerAccessError, SignalGraph, SignalHandle,
+    SourceInstanceId, SourceProviderExecutionError, SourceProviderManager, TaskSourceRuntimeError,
+    TickOutcome, WorkerPublicationSender, WorkerSendError,
 };
 
 /// Drive a scheduler from a GLib main context without letting worker threads mutate scheduler
@@ -321,6 +322,12 @@ pub struct GlibLinkedRuntimeDriver {
     shared: Arc<GlibLinkedRuntimeShared>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GlibLinkedSourceMode {
+    Live,
+    Manual,
+}
+
 impl GlibLinkedRuntimeDriver {
     pub fn new(
         context: MainContext,
@@ -404,6 +411,110 @@ impl GlibLinkedRuntimeDriver {
             .map_err(GlibLinkedRuntimeAccessError::Backend)
     }
 
+    pub fn signal_graph(&self) -> SignalGraph {
+        self.with_state(|state| state.linked.signal_graph().clone())
+    }
+
+    pub fn current_signal_value(
+        &self,
+        signal: SignalHandle,
+    ) -> Result<Option<DetachedRuntimeValue>, GlibLinkedRuntimeAccessError> {
+        self.with_state(|state| {
+            state
+                .linked
+                .runtime()
+                .current_value(signal)
+                .map(|value| value.cloned().map(DetachedRuntimeValue::from_runtime_owned))
+        })
+        .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)
+    }
+
+    pub fn current_generation(
+        &self,
+        input: InputHandle,
+    ) -> Result<Generation, GlibLinkedRuntimeAccessError> {
+        self.with_state(|state| state.linked.runtime().current_generation(input))
+            .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)
+    }
+
+    pub fn source_bindings(&self) -> Vec<LinkedSourceBinding> {
+        self.with_state(|state| state.linked.source_bindings().cloned().collect())
+    }
+
+    pub fn source_binding(&self, instance: SourceInstanceId) -> Option<LinkedSourceBinding> {
+        self.with_state(|state| state.linked.source_binding(instance).cloned())
+    }
+
+    pub fn evaluate_source_config(
+        &self,
+        instance: SourceInstanceId,
+    ) -> Result<EvaluatedSourceConfig, GlibLinkedRuntimeAccessError> {
+        self.with_state(|state| state.linked.evaluate_source_config(instance))
+            .map_err(GlibLinkedRuntimeAccessError::Backend)
+    }
+
+    pub fn is_source_active(&self, instance: SourceInstanceId) -> bool {
+        self.with_state(|state| state.linked.runtime().is_source_active(instance))
+    }
+
+    pub fn has_active_provider(&self, instance: SourceInstanceId) -> bool {
+        self.with_state(|state| state.providers.has_active_provider(instance))
+    }
+
+    pub fn source_mode(&self, instance: SourceInstanceId) -> GlibLinkedSourceMode {
+        self.with_state(|state| {
+            if state.manual_sources.contains(&instance) {
+                GlibLinkedSourceMode::Manual
+            } else {
+                GlibLinkedSourceMode::Live
+            }
+        })
+    }
+
+    pub fn set_source_mode(
+        &self,
+        instance: SourceInstanceId,
+        mode: GlibLinkedSourceMode,
+    ) -> Result<(), GlibLinkedRuntimeAccessError> {
+        self.with_state_mut(|state| {
+            if state.linked.source_binding(instance).is_none() {
+                return Err(GlibLinkedRuntimeAccessError::UnknownSourceInstance { instance });
+            }
+            match mode {
+                GlibLinkedSourceMode::Manual => {
+                    state.manual_sources.insert(instance);
+                }
+                GlibLinkedSourceMode::Live => {
+                    state.manual_sources.remove(&instance);
+                }
+            }
+            state
+                .linked
+                .runtime_mut()
+                .suspend_source(instance)
+                .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
+            state.providers.suspend_active_provider(instance);
+            Ok(())
+        })?;
+        if matches!(mode, GlibLinkedSourceMode::Live) {
+            self.shared.request_tick();
+        }
+        Ok(())
+    }
+
+    pub fn inject_source_value(
+        &self,
+        instance: SourceInstanceId,
+        value: DetachedRuntimeValue,
+    ) -> Result<PublicationStamp, GlibLinkedRuntimeAccessError> {
+        let binding = self
+            .source_binding(instance)
+            .ok_or(GlibLinkedRuntimeAccessError::UnknownSourceInstance { instance })?;
+        let stamp = self.current_stamp(binding.input)?;
+        self.queue_publication_now(Publication::new(stamp, value))?;
+        Ok(stamp)
+    }
+
     pub fn dispatch_window_key_event(&self, name: &str, repeated: bool) {
         self.with_state_mut(|state| {
             state
@@ -472,6 +583,7 @@ impl GlibLinkedRuntimeDriver {
 pub enum GlibLinkedRuntimeAccessError {
     RuntimeAccess(TaskSourceRuntimeError),
     Backend(BackendRuntimeError),
+    UnknownSourceInstance { instance: SourceInstanceId },
 }
 
 impl fmt::Display for GlibLinkedRuntimeAccessError {
@@ -481,6 +593,13 @@ impl fmt::Display for GlibLinkedRuntimeAccessError {
                 write!(f, "GLib linked runtime access failed: {error:?}")
             }
             Self::Backend(error) => write!(f, "GLib linked runtime backend access failed: {error}"),
+            Self::UnknownSourceInstance { instance } => {
+                write!(
+                    f,
+                    "GLib linked runtime does not know source instance {}",
+                    instance.as_raw()
+                )
+            }
         }
     }
 }
@@ -528,6 +647,7 @@ impl GlibLinkedRuntimeShared {
             state: Mutex::new(Some(GlibLinkedRuntimeState {
                 linked,
                 providers,
+                manual_sources: BTreeSet::new(),
                 outcomes: VecDeque::new(),
                 failures: VecDeque::new(),
             })),
@@ -571,7 +691,16 @@ impl GlibLinkedRuntimeShared {
                 .expect("GLib linked runtime state should be present before a tick");
             let should_continue = match state.linked.tick_with_source_lifecycle() {
                 Ok(outcome) => {
-                    if let Err(error) = state.providers.apply_actions(outcome.source_actions()) {
+                    let provider_actions = outcome
+                        .source_actions()
+                        .iter()
+                        .filter(|action| {
+                            matches!(action, crate::LinkedSourceLifecycleAction::Suspend { .. })
+                                || !state.manual_sources.contains(&action.instance())
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if let Err(error) = state.providers.apply_actions(&provider_actions) {
                         state
                             .failures
                             .push_back(GlibLinkedRuntimeFailure::ProviderExecution(error));
@@ -612,6 +741,7 @@ impl GlibLinkedRuntimeShared {
 struct GlibLinkedRuntimeState {
     linked: BackendLinkedRuntime,
     providers: SourceProviderManager,
+    manual_sources: BTreeSet<SourceInstanceId>,
     outcomes: VecDeque<LinkedSourceTickOutcome>,
     failures: VecDeque<GlibLinkedRuntimeFailure>,
 }

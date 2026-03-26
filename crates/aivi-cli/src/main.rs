@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+mod mcp;
+mod run_session;
+
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
@@ -43,7 +46,7 @@ use aivi_hir::{
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_query::{
     RootDatabase, SourceFile as QuerySourceFile, hir_module as query_hir_module,
-    parsed_file as query_parsed_file,
+    parsed_file as query_parsed_file, resolve_v1_entrypoint,
 };
 use aivi_runtime::{
     BackendLinkedRuntime, GlibLinkedRuntimeDriver, HirRuntimeAssembly,
@@ -99,6 +102,10 @@ fn run() -> Result<ExitCode, String> {
 
     if first == OsString::from("lsp") {
         return run_lsp(args);
+    }
+
+    if first == OsString::from("mcp") {
+        return mcp::run_mcp(args);
     }
 
     if first == OsString::from("fmt") {
@@ -228,17 +235,21 @@ fn run_build(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
 }
 
 fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
-    let path = args
-        .next()
-        .map(PathBuf::from)
-        .ok_or_else(|| "expected a path argument after `run`".to_owned())?;
-    if !path.exists() {
-        eprintln!("error: file not found: {}", path.display());
-        std::process::exit(2);
-    }
+    let mut requested_path = None;
     let mut requested_view = None;
 
     while let Some(argument) = args.next() {
+        if argument == OsString::from("--path") {
+            let path = args
+                .next()
+                .map(PathBuf::from)
+                .ok_or_else(|| "expected a path value after `--path` for `run`".to_owned())?;
+            if requested_path.replace(path).is_some() {
+                return Err("run path was provided more than once".to_owned());
+            }
+            continue;
+        }
+
         if argument == OsString::from("--view") {
             let view = args
                 .next()
@@ -252,10 +263,9 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
             continue;
         }
 
-        return Err(format!(
-            "unexpected run argument `{}`",
-            argument.to_string_lossy()
-        ));
+        if requested_path.replace(PathBuf::from(&argument)).is_some() {
+            return Err("run path was provided more than once".to_owned());
+        }
     }
 
     if let Some(view) = &requested_view {
@@ -265,7 +275,20 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
             std::process::exit(2);
         }
     }
+    let cwd = env::current_dir().map_err(|error| {
+        format!("failed to determine current directory for `aivi run`: {error}")
+    })?;
+    let path = resolve_run_entrypoint(&cwd, requested_path.as_deref())?;
     run_markup_file(&path, requested_view.as_deref())
+}
+
+fn resolve_run_entrypoint(
+    current_dir: &Path,
+    explicit_path: Option<&Path>,
+) -> Result<PathBuf, String> {
+    resolve_v1_entrypoint(current_dir, explicit_path)
+        .map(|resolved| resolved.entry_path().to_path_buf())
+        .map_err(|error| format!("failed to resolve entrypoint for `aivi run`: {error}"))
 }
 
 fn run_execute(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
@@ -511,24 +534,6 @@ struct RunHydrationStaticState {
     inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
 }
 
-#[derive(Debug)]
-struct RunHydrationRequest {
-    revision: u64,
-    globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
-}
-
-#[derive(Debug)]
-struct RunHydrationResponse {
-    revision: u64,
-    result: Result<RunHydrationPlan, String>,
-}
-
-struct RunHydrationWorker {
-    request_tx: Option<sync_mpsc::Sender<RunHydrationRequest>>,
-    response_rx: sync_mpsc::Receiver<RunHydrationResponse>,
-    thread: Option<JoinHandle<()>>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RunHydrationPlan {
     root: HydratedRunNode,
@@ -609,89 +614,6 @@ struct ResolvedRunEventHandler {
     signal_item: aivi_hir::ItemId,
     signal_name: Box<str>,
     input: RuntimeInputHandle,
-}
-
-struct RunSession {
-    view_name: Box<str>,
-    event_handlers: BTreeMap<HirExprId, ResolvedRunEventHandler>,
-    executor: GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
-    driver: GlibLinkedRuntimeDriver,
-    hydration_worker: RunHydrationWorker,
-    main_loop: glib::MainLoop,
-    work_scheduled: bool,
-    runtime_error: Option<String>,
-    next_hydration_revision: u64,
-    latest_requested_hydration: Option<u64>,
-    latest_applied_hydration: Option<u64>,
-}
-
-impl RunHydrationWorker {
-    fn new(
-        shared: Arc<RunHydrationStaticState>,
-        notifier: Arc<dyn Fn() + Send + Sync + 'static>,
-    ) -> Self {
-        let (request_tx, request_rx) = sync_mpsc::channel();
-        let (response_tx, response_rx) = sync_mpsc::channel();
-        let thread = thread::spawn(move || {
-            run_hydration_worker_loop(shared, request_rx, response_tx, notifier);
-        });
-        Self {
-            request_tx: Some(request_tx),
-            response_rx,
-            thread: Some(thread),
-        }
-    }
-
-    fn request(
-        &self,
-        revision: u64,
-        globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
-    ) -> Result<(), String> {
-        self.request_tx
-            .as_ref()
-            .ok_or_else(|| "run hydration worker has already shut down".to_owned())?
-            .send(RunHydrationRequest { revision, globals })
-            .map_err(|_| {
-                "run hydration worker stopped before the request could be queued".to_owned()
-            })
-    }
-
-    fn drain_ready(&self) -> Vec<RunHydrationResponse> {
-        self.response_rx.try_iter().collect()
-    }
-}
-
-impl Drop for RunHydrationWorker {
-    fn drop(&mut self) {
-        self.request_tx.take();
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
-    }
-}
-
-fn run_hydration_worker_loop(
-    shared: Arc<RunHydrationStaticState>,
-    request_rx: sync_mpsc::Receiver<RunHydrationRequest>,
-    response_tx: sync_mpsc::Sender<RunHydrationResponse>,
-    notifier: Arc<dyn Fn() + Send + Sync + 'static>,
-) {
-    while let Ok(mut request) = request_rx.recv() {
-        while let Ok(next) = request_rx.try_recv() {
-            request = next;
-        }
-        let result = plan_run_hydration(shared.as_ref(), &request.globals);
-        if response_tx
-            .send(RunHydrationResponse {
-                revision: request.revision,
-                result,
-            })
-            .is_err()
-        {
-            break;
-        }
-        notifier();
-    }
 }
 
 /// RAII wrapper that deletes a temporary file on drop.
@@ -821,6 +743,18 @@ fn check_file(path: &Path) -> Result<ExitCode, String> {
 }
 
 fn run_markup_file(path: &Path, requested_view: Option<&str>) -> Result<ExitCode, String> {
+    run_markup_file_with_launch_config(
+        path,
+        requested_view,
+        run_session::RunLaunchConfig::default(),
+    )
+}
+
+fn run_markup_file_with_launch_config(
+    path: &Path,
+    requested_view: Option<&str>,
+    launch_config: run_session::RunLaunchConfig,
+) -> Result<ExitCode, String> {
     require_file_exists(path)?;
     if let Some(view) = requested_view {
         validate_module_name(view)?;
@@ -851,7 +785,7 @@ fn run_markup_file(path: &Path, requested_view: Option<&str>) -> Result<ExitCode
         }
     };
 
-    launch_run(path, artifact)
+    run_session::launch_run_with_config(path, artifact, launch_config)
 }
 
 struct ExecuteArtifact {
@@ -2075,316 +2009,7 @@ fn compile_run_expr_fragment(
     })
 }
 
-fn launch_run(path: &Path, artifact: RunArtifact) -> Result<ExitCode, String> {
-    gtk::init()
-        .map_err(|error| format!("failed to initialize GTK for {}: {error}", path.display()))?;
-    let RunArtifact {
-        view_name,
-        module,
-        bridge,
-        hydration_inputs,
-        runtime_assembly,
-        core,
-        backend,
-        event_handlers,
-    } = artifact;
-    let linked = link_backend_runtime(runtime_assembly, &core, backend).map_err(|errors| {
-        let mut rendered = String::from("failed to link backend runtime for `aivi run`:\n");
-        for error in errors.errors() {
-            rendered.push_str("- ");
-            rendered.push_str(&error.to_string());
-            rendered.push('\n');
-        }
-        rendered
-    })?;
-
-    let context = glib::MainContext::default();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel::<()>();
-    let update_notifier: Arc<dyn Fn() + Send + Sync + 'static> = {
-        let update_tx = update_tx.clone();
-        Arc::new(move || {
-            let _ = update_tx.send(());
-        })
-    };
-    let driver = GlibLinkedRuntimeDriver::new(
-        context.clone(),
-        linked,
-        SourceProviderManager::new(),
-        Some(update_notifier.clone()),
-    );
-    let main_loop = glib::MainLoop::new(Some(&context), false);
-    let executor =
-        GtkRuntimeExecutor::new(bridge.clone(), GtkConcreteHost::<RunHostValue>::default())
-            .map_err(|error| {
-                format!(
-                    "failed to mount GTK view `{}` from {}: {error}",
-                    view_name,
-                    path.display()
-                )
-            })?;
-    let hydration_worker = RunHydrationWorker::new(
-        Arc::new(RunHydrationStaticState {
-            view_name: view_name.clone(),
-            module,
-            bridge,
-            inputs: hydration_inputs,
-        }),
-        update_notifier,
-    );
-    let session = Rc::new(RefCell::new(RunSession {
-        view_name,
-        event_handlers,
-        executor,
-        driver,
-        hydration_worker,
-        main_loop: main_loop.clone(),
-        work_scheduled: false,
-        runtime_error: None,
-        next_hydration_revision: 0,
-        latest_requested_hydration: None,
-        latest_applied_hydration: None,
-    }));
-    {
-        let weak_session = Rc::downgrade(&session);
-        session
-            .borrow_mut()
-            .executor
-            .host_mut()
-            .set_event_notifier(Some(Rc::new(move || {
-                if let Some(session) = weak_session.upgrade() {
-                    schedule_run_session(&session);
-                }
-            })));
-    }
-    {
-        let weak_session = Rc::downgrade(&session);
-        context.spawn_local(async move {
-            while update_rx.recv().await.is_some() {
-                let Some(session) = weak_session.upgrade() else {
-                    break;
-                };
-                schedule_run_session(&session);
-            }
-        });
-    }
-
-    session.borrow().driver.tick_now();
-    {
-        let mut session = session.borrow_mut();
-        session.process_pending_work().map_err(|error| {
-            format!("failed to start run view `{}`: {error}", session.view_name)
-        })?;
-        if session.latest_requested_hydration.is_none() {
-            session.request_current_hydration().map_err(|error| {
-                format!("failed to start run view `{}`: {error}", session.view_name)
-            })?;
-        }
-    }
-    while {
-        let session = session.borrow();
-        session.latest_applied_hydration.is_none() && session.runtime_error.is_none()
-    } {
-        context.iteration(true);
-    }
-    {
-        let mut session = session.borrow_mut();
-        if let Some(error) = session.runtime_error.take() {
-            return Err(format!(
-                "failed to start run view `{}`: {error}",
-                session.view_name
-            ));
-        }
-    }
-    let root_windows = session.borrow_mut().collect_root_windows()?;
-
-    println!(
-        "running GTK view `{}` from {}",
-        session.borrow().view_name,
-        path.display()
-    );
-
-    let remaining = Rc::new(Cell::new(root_windows.len()));
-    for window in &root_windows {
-        let main_loop = main_loop.clone();
-        let remaining = remaining.clone();
-        window.connect_close_request(move |_| {
-            let next = remaining.get().saturating_sub(1);
-            remaining.set(next);
-            if next == 0 {
-                main_loop.quit();
-            }
-            glib::Propagation::Proceed
-        });
-    }
-    session.borrow().executor.host().present_root_windows();
-    main_loop.run();
-    let mut session = session.borrow_mut();
-    if let Some(error) = session.runtime_error.take() {
-        return Err(error);
-    }
-    Ok(ExitCode::SUCCESS)
-}
-
 type RuntimeBindingEnv = BTreeMap<aivi_hir::BindingId, RuntimeValue>;
-
-impl RunSession {
-    fn request_current_hydration(&mut self) -> Result<(), String> {
-        let globals = self
-            .driver
-            .current_signal_globals()
-            .map_err(|error| format!("{error}"))?;
-        self.next_hydration_revision = self.next_hydration_revision.wrapping_add(1);
-        let revision = self.next_hydration_revision;
-        self.hydration_worker.request(revision, globals)?;
-        self.latest_requested_hydration = Some(revision);
-        Ok(())
-    }
-
-    fn apply_ready_hydrations(&mut self) -> Result<(), String> {
-        let requested = self.latest_requested_hydration;
-        let latest = self
-            .hydration_worker
-            .drain_ready()
-            .into_iter()
-            .filter(|response| requested.map_or(true, |revision| response.revision >= revision))
-            .last();
-        let Some(response) = latest else {
-            return Ok(());
-        };
-        let plan = response.result?;
-        apply_run_hydration_plan(&plan, &mut self.executor)?;
-        self.latest_applied_hydration = Some(response.revision);
-        Ok(())
-    }
-
-    fn process_pending_work(&mut self) -> Result<(), String> {
-        let queued_events = self.executor.host_mut().drain_events();
-        if !queued_events.is_empty() {
-            let mut sink = RunEventSink {
-                driver: &self.driver,
-                handlers: &self.event_handlers,
-            };
-            for event in queued_events {
-                self.executor
-                    .dispatch_event(event.route, event.value, &mut sink)
-                    .map_err(|error| {
-                        format!("failed to dispatch GTK event {}: {error}", event.route)
-                    })?;
-            }
-        }
-        let queued_window_keys = self.executor.host_mut().drain_window_key_events();
-        for event in queued_window_keys {
-            self.driver
-                .dispatch_window_key_event(event.name.as_ref(), event.repeated);
-        }
-        let failures = self.driver.drain_failures();
-        if !failures.is_empty() {
-            let mut rendered = String::from("live runtime failed during `aivi run`:\n");
-            for failure in failures {
-                rendered.push_str("- ");
-                rendered.push_str(&failure.to_string());
-                rendered.push('\n');
-            }
-            return Err(rendered);
-        }
-        if !self.driver.drain_outcomes().is_empty() {
-            self.request_current_hydration()?;
-        }
-        self.apply_ready_hydrations()
-    }
-
-    fn collect_root_windows(&mut self) -> Result<Vec<gtk::Window>, String> {
-        let root_handles = self.executor.root_widgets().map_err(|error| {
-            format!(
-                "failed to collect root widgets for run view `{}`: {error}",
-                self.view_name
-            )
-        })?;
-        if root_handles.is_empty() {
-            return Err(format!(
-                "run view `{}` did not produce any root GTK widgets",
-                self.view_name
-            ));
-        }
-        root_handles
-            .into_iter()
-            .map(|handle| {
-                let widget = self.executor.host().widget(&handle).ok_or_else(|| {
-                    format!(
-                        "run view `{}` lost GTK root widget {:?} before presentation",
-                        self.view_name, handle
-                    )
-                })?;
-                widget.clone().downcast::<gtk::Window>().map_err(|widget| {
-                    format!(
-                        "`aivi run` currently requires top-level `Window` roots; view `{}` produced a root `{}`",
-                        self.view_name,
-                        widget.type_().name()
-                    )
-                })
-            })
-            .collect()
-    }
-}
-
-fn schedule_run_session(session: &Rc<RefCell<RunSession>>) {
-    if session.borrow().work_scheduled {
-        return;
-    }
-    session.borrow_mut().work_scheduled = true;
-    let weak_session = Rc::downgrade(session);
-    glib::idle_add_local_once(move || {
-        let Some(session) = weak_session.upgrade() else {
-            return;
-        };
-        let mut session = session.borrow_mut();
-        session.work_scheduled = false;
-        if session.runtime_error.is_some() {
-            return;
-        }
-        if let Err(error) = session.process_pending_work() {
-            session.runtime_error = Some(error);
-            session.main_loop.quit();
-        }
-    });
-}
-
-struct RunEventSink<'a> {
-    driver: &'a GlibLinkedRuntimeDriver,
-    handlers: &'a BTreeMap<HirExprId, ResolvedRunEventHandler>,
-}
-
-impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
-    type Error = String;
-
-    fn dispatch_event(
-        &mut self,
-        route: &aivi_gtk::GtkEventRoute,
-        value: RunHostValue,
-    ) -> Result<(), Self::Error> {
-        let handler = self.handlers.get(&route.binding.handler).ok_or_else(|| {
-            format!(
-                "missing resolved event handler for expression {} on route {}",
-                route.binding.handler.as_raw(),
-                route.id
-            )
-        })?;
-        let stamp = self
-            .driver
-            .current_stamp(handler.input)
-            .map_err(|error| format!("{error}"))?;
-        self.driver
-            .queue_publication_now(Publication::new(stamp, value.0))
-            .map_err(|error| {
-                format!(
-                    "failed to publish GTK event on route {} into signal `{}` (item {}): {error}",
-                    route.id,
-                    handler.signal_name,
-                    handler.signal_item.as_raw()
-                )
-            })
-    }
-}
 
 fn plan_run_hydration(
     shared: &RunHydrationStaticState,
@@ -3745,10 +3370,10 @@ fn run_lsp(_args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
 
 fn print_usage() {
     eprintln!(
-        "usage:\n  aivi <path>\n  aivi check <path>\n  aivi compile <path> [-o <object>]\n  aivi build <path> -o <bundle> [--view <name>]\n  aivi run <path> [--view <name>]\n  aivi execute <path> [-- args...]\n  aivi lex <path>\n  aivi fmt <path>\n  aivi fmt --stdin\n  aivi fmt --check [path...]\n  aivi lsp"
+        "usage:\n  aivi <path>\n  aivi check <path>\n  aivi compile <path> [-o <object>]\n  aivi build <path> -o <bundle> [--view <name>]\n  aivi run [<path>] [--path <path>] [--view <name>]\n  aivi mcp [--path <path>] [--view <name>]\n  aivi execute <path> [-- args...]\n  aivi lex <path>\n  aivi fmt <path>\n  aivi fmt --stdin\n  aivi fmt --check [path...]\n  aivi lsp"
     );
     eprintln!(
-        "commands:\n  check    Lex, parse, lower, and validate a module through HIR\n  compile  Lower through typed core, typed lambda, backend, and Cranelift codegen\n  build    Package a runnable bundle directory around the live GTK/runtime path\n  run      Launch the current live GTK runtime path\n  execute  Evaluate a top-level `val main : Task ...` without GTK\n  lex      Dump the lossless token stream\n  fmt      Canonically format the supported surface subset\n  lsp      Start the language server"
+        "commands:\n  check    Lex, parse, lower, and validate a module through HIR\n  compile  Lower through typed core, typed lambda, backend, and Cranelift codegen\n  build    Package a runnable bundle directory around the live GTK/runtime path\n  run      Launch the current live GTK runtime path (implicit `<workspace>/main.aivi` when no path is given)\n  mcp      Start the stdio MCP server for launching and inspecting the current app\n  execute  Evaluate a top-level `val main : Task ...` without GTK\n  lex      Dump the lossless token stream\n  fmt      Canonically format the supported surface subset\n  lsp      Start the language server"
     );
     eprintln!(
         "milestone-2 surface items: {:?}",
@@ -3943,6 +3568,49 @@ mod tests {
         );
         let lowered = snapshot.entry_hir();
         prepare_run_artifact(&snapshot.sources, lowered.module(), requested_view)
+    }
+
+    #[test]
+    fn resolve_run_entrypoint_prefers_explicit_path_over_implicit_workspace_main() {
+        let workspace = TempDir::new("run-entry-explicit");
+        workspace.write("aivi.toml", "");
+        let cwd = workspace.path().join("tooling");
+        fs::create_dir_all(&cwd).expect("tooling directory should exist");
+        let explicit = workspace.write("apps/demo.aivi", "val demo = 1\n");
+
+        let resolved = super::resolve_run_entrypoint(&cwd, Some(&explicit))
+            .expect("explicit path should bypass implicit resolution");
+
+        assert_eq!(resolved, explicit);
+    }
+
+    #[test]
+    fn resolve_run_entrypoint_uses_workspace_root_main_when_present() {
+        let workspace = TempDir::new("run-entry-implicit");
+        workspace.write("aivi.toml", "");
+        let expected = workspace.write("main.aivi", "val view = <Window title=\"AIVI\" />\n");
+        let cwd = workspace.path().join("tooling/nested");
+        fs::create_dir_all(&cwd).expect("nested tooling directory should exist");
+
+        let resolved = super::resolve_run_entrypoint(&cwd, None)
+            .expect("implicit resolution should use workspace-root main.aivi");
+
+        assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn resolve_run_entrypoint_reports_missing_implicit_main_with_path_hint() {
+        let workspace = TempDir::new("run-entry-missing");
+        workspace.write("aivi.toml", "");
+        let cwd = workspace.path().join("tooling");
+        fs::create_dir_all(&cwd).expect("tooling directory should exist");
+
+        let error = super::resolve_run_entrypoint(&cwd, None)
+            .expect_err("missing main.aivi should fail without guessing");
+
+        assert!(error.contains("failed to resolve entrypoint for `aivi run`"));
+        assert!(error.contains(&workspace.path().join("main.aivi").display().to_string()));
+        assert!(error.contains("--path <entry-file>"));
     }
 
     fn execute_workspace(

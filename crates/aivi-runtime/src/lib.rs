@@ -20,7 +20,7 @@ pub use effects::{
 };
 pub use glib_adapter::{
     GlibLinkedRuntimeAccessError, GlibLinkedRuntimeDriver, GlibLinkedRuntimeFailure,
-    GlibSchedulerDriver, GlibSchedulerError, GlibWorkerPublicationSender,
+    GlibLinkedSourceMode, GlibSchedulerDriver, GlibSchedulerError, GlibWorkerPublicationSender,
 };
 pub use graph::{
     DerivedHandle, DerivedSpec, GraphBuildError, InputHandle, InputValidationError, OwnerHandle,

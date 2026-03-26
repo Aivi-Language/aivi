@@ -61,6 +61,8 @@ dependencies = [
  "aivi-runtime",
  "aivi-syntax",
  "gtk4",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
 ]
