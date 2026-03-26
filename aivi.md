@@ -257,6 +257,7 @@ Important:
 
 - `.` is the current-subject placeholder in expressions and pipes.
 - `_` is a wildcard/discard pattern, not the subject placeholder.
+- There is no `#name` pipe memo syntax in the shipped language.
 
 ### Operators and precedence
 
@@ -284,6 +285,8 @@ Parser precedence is code-backed:
 ## Pipes and control flow
 
 Pipe algebra is the main control-flow surface.
+
+There is no `#name` pipe memo syntax in the shipped language. Keep pipe stages to named functions, constructors, literals, projections, and the documented pipe operators.
 
 | Operator | Meaning |
 | --- | --- |
@@ -386,27 +389,48 @@ Validated recurrence suffixes have this shape:
 
 `seed ... @|> start ?|> guard ... <|@ step ...`
 
+Read that shape as:
+
+- the value before `@|>` is the one-time seed for the recurrence plan
+- `@|>` runs once to turn that seed into the recurring state
+- each `?|>` guard checks the current state before another step is taken
+- each `<|@` step computes the next state that will be kept for the next wakeup
+
 ```aivi
-type Cursor = {
-    hasNext: Bool
+domain Duration over Int
+    literal sec: Int -> Duration
+
+type PollState = {
+    attempts: Int,
+    keepPolling: Bool
 }
 
-fun keep:Cursor cursor:Cursor =>
-    cursor
+fun beginPoll:PollState initialAttempts:Int =>
+    {
+        attempts: initialAttempts,
+        keepPolling: True
+    }
 
-val initial:Cursor = {
-    hasNext: True
-}
+fun nextPoll:PollState state:PollState =>
+    state.attempts + 1 < 4
+     T|> {
+         attempts: state.attempts + 1,
+         keepPolling: True
+     }
+     F|> {
+         attempts: state.attempts + 1,
+         keepPolling: False
+     }
 
-@recur.timer 1s
-sig cursor : Signal Cursor =
-    initial
-     @|> keep
-     ?|> .hasNext
-     <|@ keep
+@recur.timer 1sec
+sig pollState : Signal PollState =
+    0
+     @|> beginPoll
+     ?|> .keepPolling
+     <|@ nextPoll
 ```
 
-`@recur.timer ...` and `@recur.backoff ...` are the explicit non-source wakeup proofs used by recurrent `Signal` and `Task` declarations.
+`@recur.timer ...` uses a fixed schedule. `@recur.backoff ...` uses the same suffix shape, but the wakeups follow a retry/backoff schedule instead.
 
 ### Tap: `|`
 

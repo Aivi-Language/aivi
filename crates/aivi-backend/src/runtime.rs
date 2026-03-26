@@ -774,10 +774,27 @@ impl fmt::Display for EvaluationError {
 
 impl std::error::Error for EvaluationError {}
 
+/// Cached result of the most recent `evaluate_kernel_raw` call.
+///
+/// Many signal expressions call the same pure kernel with identical arguments many times in a
+/// single evaluation pass.  The snake board renderer, for example, calls `snakeHead game.snake`
+/// once per cell (480 calls) with the exact same snake list every time.  Storing only the
+/// single most-recent result (keyed on kernel + input subject + environment) eliminates the
+/// heap allocations for all but the first such call, while avoiding the memory overhead of a
+/// general memoization table.
+struct LastKernelCall {
+    kernel_id: KernelId,
+    input_subject: Option<RuntimeValue>,
+    environment: Box<[RuntimeValue]>,
+    result: RuntimeValue,
+    result_layout: LayoutId,
+}
+
 pub struct KernelEvaluator<'a> {
     program: &'a Program,
     item_cache: BTreeMap<ItemId, RuntimeValue>,
     item_stack: BTreeSet<ItemId>,
+    last_kernel_call: Option<LastKernelCall>,
 }
 
 impl<'a> KernelEvaluator<'a> {
@@ -786,6 +803,7 @@ impl<'a> KernelEvaluator<'a> {
             program,
             item_cache: BTreeMap::new(),
             item_stack: BTreeSet::new(),
+            last_kernel_call: None,
         }
     }
 
@@ -864,6 +882,15 @@ impl<'a> KernelEvaluator<'a> {
                 });
             }
         }
+        // Check the single-entry call cache before doing any work.
+        if let Some(ref last) = self.last_kernel_call {
+            if last.kernel_id == kernel_id
+                && last.input_subject.as_ref() == input_subject
+                && last.environment.as_ref() == environment
+            {
+                return Ok((last.result.clone(), last.result_layout));
+            }
+        }
         let inline_subjects = vec![None; kernel.inline_subjects.len()];
         let result = self.evaluate_expr(
             kernel_id,
@@ -873,6 +900,13 @@ impl<'a> KernelEvaluator<'a> {
             &inline_subjects,
             globals,
         )?;
+        self.last_kernel_call = Some(LastKernelCall {
+            kernel_id,
+            input_subject: input_subject.cloned(),
+            environment: environment.to_vec().into_boxed_slice(),
+            result: result.clone(),
+            result_layout: kernel.result_layout,
+        });
         Ok((result, kernel.result_layout))
     }
 

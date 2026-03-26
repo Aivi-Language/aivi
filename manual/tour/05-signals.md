@@ -39,27 +39,41 @@ sig counter: Signal Int =
 
 When the scheduler itself drives the next step, use recurrence decorators and recurrence pipes.
 
+Read recurrence pipes like this:
+
+- the value before `@|>` is the seed
+- `@|>` computes the first recurring state
+- `?|>` decides whether to keep stepping
+- `<|@` computes the next recurring state on each wakeup
+
 ```aivi
 domain Duration over Int
-    literal s: Int -> Duration
+    literal sec: Int -> Duration
 
-domain Retry over Int
-    literal x: Int -> Retry
+type PollState = {
+    attempts: Int,
+    keepPolling: Bool
+}
 
-fun step value =>
-    value
+fun beginPoll:PollState initialAttempts:Int =>
+    {
+        attempts: initialAttempts,
+        keepPolling: True
+    }
 
-@recur.timer 5s
-sig polled: Signal Int =
+fun nextPoll:PollState state:PollState =>
+    state.attempts + 1 < 4
+     T|> { attempts: state.attempts + 1, keepPolling: True }
+     F|> { attempts: state.attempts + 1, keepPolling: False }
+
+@recur.timer 1sec
+sig pollState: Signal PollState =
     0
-     @|> step
-     <|@ step
-
-@recur.backoff 3x
-val retried: Task Int Int =
-    0
-     @|> step
-     <|@ step
+     @|> beginPoll
+     ?|> .keepPolling
+     <|@ nextPoll
 ```
+
+`@recur.backoff ...` uses the same recurrence suffix shape, but the wakeups come from a backoff schedule instead of a fixed timer.
 
 Signals are not general-purpose mutable cells. Prefer deriving new signals from existing ones instead of treating them like imperative state variables.

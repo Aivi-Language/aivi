@@ -90,9 +90,13 @@
                 "keyword.declaration.provider.aivi"],
       "settings": { "foreground": "#268bd2" } },
 
-    { "name": "use / export keywords",
-      "scope": ["keyword.control.import.aivi", "keyword.control.export.aivi"],
+    { "name": "use keyword",
+      "scope": "keyword.control.import.aivi",
       "settings": { "foreground": "#268bd2" } },
+
+    { "name": "export keyword",
+      "scope": "keyword.control.export.aivi",
+      "settings": { "foreground": "#6c71c4", "fontStyle": "bold" } },
 
     { "name": "Built-in type keywords (with as of key on pattern value match when if)",
       "scope": "keyword.other.aivi",

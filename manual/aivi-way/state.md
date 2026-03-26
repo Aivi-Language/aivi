@@ -22,23 +22,32 @@ sig counter: Signal Int =
 
 ```aivi
 domain Duration over Int
-    literal s: Int -> Duration
+    literal sec: Int -> Duration
 
-type Cursor = { hasNext: Bool }
-
-fun keep:Cursor cursor:Cursor =>
-    cursor
-
-val initial: Cursor = {
-    hasNext: True
+type PollState = {
+    attempts: Int,
+    keepPolling: Bool
 }
 
-@recur.timer 1s
-sig cursor: Signal Cursor =
-    initial
-     @|> keep
-     ?|> .hasNext
-     <|@ keep
+fun beginPoll:PollState initialAttempts:Int =>
+    {
+        attempts: initialAttempts,
+        keepPolling: True
+    }
+
+fun nextPoll:PollState state:PollState =>
+    state.attempts + 1 < 4
+     T|> { attempts: state.attempts + 1, keepPolling: True }
+     F|> { attempts: state.attempts + 1, keepPolling: False }
+
+@recur.timer 1sec
+sig pollState: Signal PollState =
+    0
+     @|> beginPoll
+     ?|> .keepPolling
+     <|@ nextPoll
 ```
+
+Here the scheduler owns the wakeups. `@|>` turns the seed into state, `?|>` decides whether another tick should advance, and `<|@` computes the next state.
 
 Once you have a state signal, derive more signals from it. Do not treat `sig` as an imperative variable slot.
