@@ -73,8 +73,12 @@ struct RunHydrationCoordinator {
 
 struct RunSessionLifecycle {
     phase: RunSessionPhase,
-    work_scheduled: bool,
     runtime_error: Option<String>,
+}
+
+#[derive(Clone, Default)]
+struct RunSessionScheduleState {
+    work_scheduled: Rc<Cell<bool>>,
 }
 
 struct RunSessionState {
@@ -433,7 +437,6 @@ impl RunSessionLifecycle {
     fn new() -> Self {
         Self {
             phase: RunSessionPhase::Starting,
-            work_scheduled: false,
             runtime_error: None,
         }
     }
@@ -454,23 +457,10 @@ impl RunSessionLifecycle {
 
     fn mark_stopped(&mut self) {
         self.phase = RunSessionPhase::Stopped;
-        self.work_scheduled = false;
     }
 
     fn take_runtime_error(&mut self) -> Option<String> {
         self.runtime_error.take()
-    }
-
-    fn try_schedule_work(&mut self) -> bool {
-        if self.work_scheduled || matches!(self.phase, RunSessionPhase::Stopped) {
-            return false;
-        }
-        self.work_scheduled = true;
-        true
-    }
-
-    fn clear_scheduled_work(&mut self) {
-        self.work_scheduled = false;
     }
 
     fn fail(&mut self, error: String) {
@@ -478,6 +468,16 @@ impl RunSessionLifecycle {
             self.runtime_error = Some(error);
         }
         self.mark_stopped();
+    }
+}
+
+impl RunSessionScheduleState {
+    fn try_schedule(&self) -> bool {
+        !self.work_scheduled.replace(true)
+    }
+
+    fn clear(&self) {
+        self.work_scheduled.set(false);
     }
 }
 
@@ -654,6 +654,7 @@ pub(super) fn start_run_session_with_launch_config(
         request_tx: main_context_requests.sender(),
         notifier: session_notifier.clone(),
     };
+    let schedule_state = RunSessionScheduleState::default();
     let session = Rc::new(RefCell::new(RunSessionState {
         view_name: view_name.clone(),
         event_handlers,
@@ -675,24 +676,26 @@ pub(super) fn start_run_session_with_launch_config(
     }));
     {
         let weak_session = Rc::downgrade(&session);
+        let schedule_state = schedule_state.clone();
         session
             .borrow_mut()
             .executor
             .host_mut()
             .set_event_notifier(Some(Rc::new(move || {
                 if let Some(session) = weak_session.upgrade() {
-                    schedule_run_session(&session);
+                    schedule_run_session(&session, &schedule_state);
                 }
             })));
     }
     {
         let weak_session = Rc::downgrade(&session);
+        let schedule_state = schedule_state.clone();
         context.spawn_local(async move {
             while update_rx.recv().await.is_some() {
                 let Some(session) = weak_session.upgrade() else {
                     break;
                 };
-                schedule_run_session(&session);
+                schedule_run_session(&session, &schedule_state);
             }
         });
     }
@@ -759,17 +762,27 @@ pub(super) fn launch_run_with_config(
     Ok(ExitCode::SUCCESS)
 }
 
-fn schedule_run_session(session: &Rc<RefCell<RunSessionState>>) {
-    if !session.borrow_mut().lifecycle.try_schedule_work() {
+fn schedule_run_session(
+    session: &Rc<RefCell<RunSessionState>>,
+    schedule_state: &RunSessionScheduleState,
+) {
+    if !schedule_state.try_schedule() {
         return;
     }
     let weak_session = Rc::downgrade(session);
+    let schedule_state = schedule_state.clone();
     glib::idle_add_local_once(move || {
+        schedule_state.clear();
         let Some(session) = weak_session.upgrade() else {
             return;
         };
-        let mut session = session.borrow_mut();
-        session.lifecycle.clear_scheduled_work();
+        let mut session = match session.try_borrow_mut() {
+            Ok(session) => session,
+            Err(_) => {
+                schedule_run_session(&session, &schedule_state);
+                return;
+            }
+        };
         if session.lifecycle.has_runtime_error()
             || matches!(session.lifecycle.phase(), RunSessionPhase::Stopped)
         {
@@ -822,6 +835,7 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
 mod tests {
     use super::{
         HydrationRevisionState, MainContextRequestQueue, RunSessionLifecycle, RunSessionPhase,
+        RunSessionScheduleState,
     };
 
     #[test]
@@ -863,12 +877,22 @@ mod tests {
     fn session_lifecycle_keeps_the_first_runtime_error() {
         let mut lifecycle = RunSessionLifecycle::new();
 
-        assert!(lifecycle.try_schedule_work());
         lifecycle.fail("first".to_owned());
         lifecycle.fail("second".to_owned());
 
         assert_eq!(lifecycle.phase(), RunSessionPhase::Stopped);
-        assert!(!lifecycle.try_schedule_work());
         assert_eq!(lifecycle.take_runtime_error().as_deref(), Some("first"));
+    }
+
+    #[test]
+    fn schedule_state_coalesces_until_cleared() {
+        let state = RunSessionScheduleState::default();
+
+        assert!(state.try_schedule());
+        assert!(!state.try_schedule());
+
+        state.clear();
+
+        assert!(state.try_schedule());
     }
 }
