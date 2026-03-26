@@ -23,34 +23,41 @@ sig keyDown : Signal Key
 AIVI manages source lifecycle automatically:
 
 1. When the component that owns the signal is mounted, the source is activated.
-2. Each event from the source drives the signal's recurrence.
-3. When the component is unmounted, the source is torn down.
+2. Each event from the source publishes a new payload into the input signal.
+3. Downstream `scan` or derived signals react to those updates.
+4. When the component is unmounted, the source is torn down.
 
 You never subscribe or unsubscribe manually.
 
-## `@recur.timer` — periodic signals
+## Timer sources
 
-`@recur.timer` drives a recurrent signal at a fixed interval:
+A timer source is just a bodyless input signal that publishes `Unit` at a fixed interval:
 
 ```aivi
-@recur.timer 160ms
+fun stepGame:Game tick:Unit game:Game =>
+    game
+
+@source timer.every 160ms with {
+    immediate: True
+}
+sig tick : Signal Unit
+
 sig game : Signal Game =
-    initialGame
-     @|> stepGame boardSize direction
-     <|@ stepGame boardSize direction
+    tick
+     |> scan initialGame stepGame
 ```
 
-The interval uses the `Duration` domain literal (`ms`, `sec`, `min`). The decorator provides
-the timer wakeups; on each tick the recurrent stages run and produce the next accumulated state.
+The interval uses the `Duration` domain literal (`ms`, `sec`, `min`). `tick` is the raw timer
+stream; `scan` turns those timer events into accumulated state.
 
-Options for `@source timer.every N` (the expanded form of `@recur.timer`):
+Options for `@source timer.every N`:
 
 | Option | Type | Meaning |
 |---|---|---|
 | `immediate` | `Bool` | Fire once on activation before the first tick |
 | `coalesce` | `Bool` | Drop accumulated ticks when the handler is busy |
 
-## `@recur.backoff` — retry with back-off
+## `@recur.backoff` — explicit retry recurrence
 
 `@recur.backoff` drives a `Task E A` recurrence that retries on failure with exponential
 back-off:
@@ -63,7 +70,8 @@ val fetched : Task HttpError User =
      <|@ fetchUser
 ```
 
-The retry count uses the `Retry` domain literal (`x`).
+The retry count uses the `Retry` domain literal (`x`). This is explicit recurrence, not the
+ordinary source-to-state pattern used by `scan`.
 
 ## `window.keyDown` — keyboard events
 
@@ -132,9 +140,9 @@ Spawns a child process and streams its output as `ProcessEvent` values. `stdout`
 
 ## How sources feed signals
 
-1. `@source` / `@recur.timer` declares the external event stream.
-2. The `sig` body with `@|>` / `<|@` describes how each event updates the signal.
-3. Derived signals (`|>` chains) recompute automatically when their dependency changes.
+1. `@source` declares the external event stream and decorates a bodyless `sig`.
+2. `scan` folds those source events into state when the signal needs memory.
+3. Pure derived signals (`|>` chains) recompute automatically when their dependency changes.
 4. Markup binds to signals with `{signalName}` attributes.
 5. GTK widgets re-render when bound signals change.
 
@@ -147,9 +155,9 @@ events and delivers only the latest. Essential for high-frequency timers.
 
 ## Summary
 
-- `@source provider.name config` decorates the next `sig` declaration.
-- `@recur.timer Nms` drives a periodic recurrent signal.
-- `@recur.backoff Nx` drives a retrying `Task`.
+- `@source provider.name ...` decorates the next bodyless `sig` declaration.
+- Use `upstream |> scan seed step` to accumulate source events into signal state.
+- `@recur.backoff Nx` drives an explicit retrying recurrence for `Task`.
 - Sources are activated on mount and torn down on unmount automatically.
 - All source types emit typed values — no raw events reach user code.
 

@@ -943,11 +943,12 @@ Mark explicit recurrent flows for retry, polling, and stream-style pipelines.
 
 Normative rules:
 
-- recurrent pipes are legal only where the compiler can lower them to a built-in runtime node for `Task`, `Signal`, or `@source` helpers
+- recurrent pipes are legal only where the compiler can lower them to a built-in runtime node for `Task` or an explicit scheduler-owned `Signal` recurrence
 - recurrence wakeups must be explicit: timer, backoff, source event, or provider-defined trigger
 - each iteration is scheduled and stack-safe; recurrent pipes must not lower to unbounded direct recursion
 - cancellation or owner teardown disposes the pending recurrence immediately
 - recurrent pipes with no valid runtime lowering target are rejected
+- ordinary source-driven signal state accumulation does not use `@|>` / `<|@`; it uses `scan`
 
 ---
 
@@ -1126,6 +1127,34 @@ Type annotation is mandatory. Input signals participate in the signal dependency
 
 Input signals are the canonical mechanism for routing GTK event payloads into the reactive graph and the publication target for task completions and other runtime-owned boundaries.
 
+When a `sig` is decorated with `@source`, it must remain body-less. The source owns only the raw
+event stream; stateful accumulation over that stream is expressed separately with `scan`.
+
+### 13.2.1 Stateful signal folds with `scan`
+
+```aivi
+sig direction : Signal Direction =
+    keyDown
+     |> scan Right updateDirection
+
+sig game : Signal Game =
+    tick
+     |> scan initialGame stepOnTick
+```
+
+`scan` is the canonical stateful signal combinator.
+
+Normative rules:
+
+- surface form: `upstream |> scan seed step`
+- `upstream` must elaborate to a signal whose payload type is `A`
+- `seed` has state type `S`
+- `step` has type `A -> S -> S`
+- `step` receives the latest upstream payload first and the previous state second
+- the first committed value is `seed`
+- each later update is scheduled only when the upstream signal publishes a new value in the current scheduler tick
+- `scan` is the intended way to accumulate timer, event, source, and completion signals into state
+
 ### 13.3 Applicative meaning of `Signal`
 
 `pure x` creates a constant signal.
@@ -1251,6 +1280,7 @@ sig users : Signal (Result HttpError (List User))
 Rules:
 
 - provider and variant are resolved statically
+- `@source` may decorate only a body-less `sig`
 - positional arguments are provider-defined and typed
 - options are a closed record whose legal fields come from a central provider option catalog
 - unknown options are a compile-time error
@@ -1262,6 +1292,17 @@ Rules:
 - imported option bindings are checked only when the import catalog provides an explicit closed value surface
 
 Reactive source configuration does not make sources dynamic in the type-theoretic sense. Provider kind and dependency graph remain statically known; only runtime configuration values change.
+
+Stateful source handling is expressed by deriving from the raw source signal:
+
+```aivi
+@source timer.every 120
+sig tick : Signal Unit
+
+sig counter : Signal Int =
+    tick
+     |> scan 0 stepTick
+```
 
 ### 14.1.3 Recommended source variants
 

@@ -14,9 +14,9 @@ A counter is the canonical example of local state:
 // TODO: add a verified AIVI example here
 ```
 
-`count` starts at `0`. The increment button drives the recurrence, and `<|@ addOne` produces the
-next local state. Nothing else in the application can see or modify `count` unless you explicitly
-derive another signal from it.
+`count` starts at `0`. A local event signal such as `clicked` publishes the raw button presses,
+and `count = clicked |> scan 0 addOne` produces the next local state. Nothing else in the
+application can see or modify `count` unless you explicitly derive another signal from it.
 
 ## When to use local state
 
@@ -84,7 +84,7 @@ affect a value grows. Local state keeps the update path small and explicit.
 |---|---|---|
 | Scope | One component | Whole program |
 | Lifetime | Component lifetime | Program lifetime |
-| How it updates | Local recurrence and attached sources | Top-level source-driven derivation |
+| How it updates | Local `scan` folds and derived signals | Top-level source-driven derivation |
 | When to use | One component needs it | Multiple views depend on it |
 
 ## Summary

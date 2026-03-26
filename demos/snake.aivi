@@ -243,6 +243,9 @@ fun stepGame:Game size:BoardSize direction:Direction game:Game =>
      ||> GameOver => game
      ||> Running  => stepRunning size direction game
 
+fun stepOnTick:Game tick:Unit game:Game =>
+    stepGame boardSize direction game
+
 fun cellFoodOrEmpty:CellKind game:Game pos:Pixel =>
     pos == game.food
      T|> Food
@@ -336,23 +339,19 @@ fun directionLabel:Text direction:Direction =>
 }
 sig keyDown : Signal Key
 
-@source window.keyDown with {
-    repeat: False,
-    focusOnly: True
-}
 sig direction : Signal Direction =
-    Right
-     @|> updateDirection keyDown
-     <|@ updateDirection keyDown
+    keyDown
+     |> scan Right updateDirection
 
 @source timer.every 160 with {
     immediate: True,
     coalesce: True
 }
+sig tick : Signal Unit
+
 sig game : Signal Game =
-    initialGame
-     @|> stepGame boardSize direction
-     <|@ stepGame boardSize direction
+    tick
+     |> scan initialGame stepOnTick
 
 sig board : Signal GameBoard =
     game

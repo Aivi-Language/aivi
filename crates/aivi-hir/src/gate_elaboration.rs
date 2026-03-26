@@ -11,8 +11,9 @@ use crate::{
     domain_operator_elaboration::select_domain_binary_operator,
     typecheck::resolve_class_member_dispatch,
     validate::{
-        GateExprEnv, GateIssue, GateType, GateTypeContext, PipeSubjectStepOutcome,
-        PipeSubjectWalker, gate_env_for_function, truthy_falsy_pair_stages, walk_expr_tree,
+        GateExprEnv, GateIssue, GateType, GateTypeContext, PipeFunctionSignatureMatch,
+        PipeSubjectStepOutcome, PipeSubjectWalker, gate_env_for_function,
+        truthy_falsy_pair_stages, walk_expr_tree,
     },
 };
 
@@ -715,6 +716,48 @@ fn lower_function_pipe_body_runtime_expr(
     let plan = typing
         .match_pipe_function_signature(expr_id, env, ambient, None)
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: expr.span })?;
+    lower_pipe_function_runtime_expr_from_plan(module, expr.span, plan, env, ambient, typing, purity)
+}
+
+pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
+    module: &Module,
+    span: SourceSpan,
+    callee_expr: ExprId,
+    explicit_arguments: Vec<ExprId>,
+    env: &GateExprEnv,
+    ambient: &GateType,
+    expected_result: Option<&GateType>,
+    typing: &mut GateTypeContext<'_>,
+) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let plan = typing
+        .match_pipe_function_signature_parts(
+            callee_expr,
+            explicit_arguments,
+            env,
+            ambient,
+            expected_result,
+        )
+        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
+    lower_pipe_function_runtime_expr_from_plan(
+        module,
+        span,
+        plan,
+        env,
+        ambient,
+        typing,
+        GateRuntimePurity::AllowSignalReads,
+    )
+}
+
+fn lower_pipe_function_runtime_expr_from_plan(
+    module: &Module,
+    span: SourceSpan,
+    plan: PipeFunctionSignatureMatch,
+    env: &GateExprEnv,
+    ambient: &GateType,
+    typing: &mut GateTypeContext<'_>,
+    purity: GateRuntimePurity,
+) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
     let callee_ty = arrow_type(&plan.parameter_types, plan.result_type.clone());
     let callee = if let ExprKind::Name(reference) = &module.exprs()[plan.callee_expr].kind {
         if matches!(
@@ -728,7 +771,7 @@ fn lower_function_pipe_body_runtime_expr(
                 &plan.parameter_types,
                 Some(&plan.result_type),
             )
-            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: expr.span })?;
+            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
             GateRuntimeExpr {
                 span: module.exprs()[plan.callee_expr].span,
                 ty: callee_ty.clone(),
@@ -788,9 +831,9 @@ fn lower_function_pipe_body_runtime_expr(
             purity,
         )?);
     }
-    arguments.push(GateRuntimeExpr::ambient_subject(expr.span, ambient.clone()));
+    arguments.push(GateRuntimeExpr::ambient_subject(span, ambient.clone()));
     Ok(GateRuntimeExpr::apply(
-        expr.span,
+        span,
         plan.result_type,
         callee,
         arguments,

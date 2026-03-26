@@ -77,7 +77,8 @@ and a pipe-oriented surface syntax rather than an ML-style record syntax.
 - **No `if`/`else`, no loops.** Control flow is pattern matching (`||>`) and recursion.
   This sounds restrictive; in practice it is liberating.
 - **Pipe algebra.** Data flows left-to-right through a family of pipe operators. `|>` transforms,
-  `?|>` gates, `||>` matches, `*|>` maps over lists, `@|>...<|@` folds over time.
+  `?|>` gates, `||>` matches, `*|>` maps over lists, `scan` folds signal events into state, and
+  `@|>...<|@` marks explicit recurrence/cursor flows.
 - **Native compilation.** AIVI compiles to native binaries via Cranelift. No JVM, no V8, no
   interpreted runtime.
 

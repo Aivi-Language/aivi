@@ -759,6 +759,13 @@ impl<'a, V> DependencyValues<'a, V> {
         self.get(index)?.value
     }
 
+    pub fn updated(&self, index: usize) -> bool {
+        let Some(signal) = self.dependencies.get(index).copied() else {
+            return false;
+        };
+        self.pending[signal.index()].is_updated()
+    }
+
     fn resolve(&self, signal: SignalHandle) -> Option<&'a V> {
         match &self.pending[signal.index()] {
             PendingValue::Unchanged => self.committed[signal.index()],
@@ -806,6 +813,10 @@ enum PendingValue<V> {
 impl<V> PendingValue<V> {
     fn is_unchanged(&self) -> bool {
         matches!(self, Self::Unchanged)
+    }
+
+    fn is_updated(&self) -> bool {
+        !self.is_unchanged()
     }
 }
 

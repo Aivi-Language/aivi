@@ -730,6 +730,16 @@ impl Validator<'_> {
                             Some(DecoratorPayload::Source(_))
                         )
                     });
+                    if has_source_decorator && item.body.is_some() {
+                        self.diagnostics.push(
+                            Diagnostic::error("`@source` signals must be bodyless")
+                                .with_code(code("source-signals-must-be-bodyless"))
+                                .with_label(DiagnosticLabel::primary(
+                                    item.header.span,
+                                    "declare the raw source as a bodyless `sig` and derive from it separately",
+                                )),
+                        );
+                    }
                     match (has_source_decorator, item.source_metadata.as_ref()) {
                         (true, Some(metadata)) => {
                             self.check_source_metadata(item.header.span, metadata)
@@ -11501,6 +11511,23 @@ impl<'a> GateTypeContext<'a> {
         expected_result: Option<&GateType>,
     ) -> Option<PipeFunctionSignatureMatch> {
         let (callee_expr, explicit_arguments) = self.flatten_apply_expr(expr_id);
+        self.match_pipe_function_signature_parts(
+            callee_expr,
+            explicit_arguments,
+            env,
+            ambient,
+            expected_result,
+        )
+    }
+
+    pub(crate) fn match_pipe_function_signature_parts(
+        &mut self,
+        callee_expr: ExprId,
+        explicit_arguments: Vec<ExprId>,
+        env: &GateExprEnv,
+        ambient: &GateType,
+        expected_result: Option<&GateType>,
+    ) -> Option<PipeFunctionSignatureMatch> {
         let ExprKind::Name(reference) = &self.module.exprs()[callee_expr].kind else {
             return None;
         };

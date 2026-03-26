@@ -1,11 +1,12 @@
-fun step value =>
+fun step:Int value:Int current:Int =>
     value
 
 provider custom.feed
     wakeup: providerTrigger
 
 @source custom.feed
+sig retryEvents : Signal Int
+
 sig retried : Signal Int =
-    0
-     @|> step
-     <|@ step
+    retryEvents
+     |> scan 0 step

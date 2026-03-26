@@ -1079,6 +1079,11 @@ impl<'a> ModuleLowerer<'a> {
                     pipe_expr: node.pipe_expr,
                 });
             }
+            if let Some(&owner) = self.item_map.get(&node.owner) {
+                if let Some(item) = self.module.items_mut().get_mut(owner) {
+                    item.body = None;
+                }
+            }
         }
     }
 

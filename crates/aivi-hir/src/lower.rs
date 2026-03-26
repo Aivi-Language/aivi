@@ -220,6 +220,9 @@ fun __aivi_list_anyStep:Bool predicate:(A -> Bool) found:Bool item:A =>
 fun __aivi_list_any:Bool predicate:(A -> Bool) items:(List A) =>
     items
      |> reduce (__aivi_list_anyStep predicate) False
+
+fun scan:S seed:S step:(A -> S -> S) input:A =>
+    step input seed
 "#;
 
 const MAX_COMPILE_TIME_RANGE_ELEMENTS: u64 = 4096;
@@ -6610,11 +6613,7 @@ val answer:Int = 42
 
     #[test]
     fn resolved_validation_rejects_recurrence_wakeup_invalid_fixtures() {
-        for path in [
-            "milestone-2/invalid/missing-recurrence-wakeup/main.aivi",
-            "milestone-2/invalid/custom-source-recurrence-missing-wakeup/main.aivi",
-            "milestone-2/invalid/request-recurrence-missing-wakeup/main.aivi",
-        ] {
+        for path in ["milestone-2/invalid/missing-recurrence-wakeup/main.aivi"] {
             let lowered = lower_fixture(path);
             assert!(
                 !lowered.has_errors(),
@@ -6637,28 +6636,63 @@ val answer:Int = 42
     }
 
     #[test]
-    fn resolved_validation_accepts_request_recurrence_with_retry_policy() {
+    fn resolved_validation_rejects_bodyful_source_signals() {
+        for path in [
+            "milestone-2/invalid/custom-source-recurrence-missing-wakeup/main.aivi",
+            "milestone-2/invalid/request-recurrence-missing-wakeup/main.aivi",
+        ] {
+            let lowered = lower_fixture(path);
+            assert!(
+                !lowered.has_errors(),
+                "expected {path} to lower cleanly before source validation, got diagnostics: {:?}",
+                lowered.diagnostics()
+            );
+            let report = lowered
+                .module()
+                .validate(ValidationMode::RequireResolvedNames);
+            assert!(
+                report
+                    .diagnostics()
+                    .iter()
+                    .any(|diagnostic| diagnostic.code
+                        == Some(super::code("source-signals-must-be-bodyless"))),
+                "expected {path} to report source-signals-must-be-bodyless, got diagnostics: {:?}",
+                report.diagnostics()
+            );
+        }
+    }
+
+    #[test]
+    fn resolved_validation_accepts_request_sources_with_retry_policy_and_scan() {
         let lowered = lower_text(
-            "request_recurrence_with_retry.aivi",
+            "request_source_with_retry_and_scan.aivi",
             r#"
+type HttpError =
+  | Timeout
+
+type User = {
+    id: Int
+}
+
 domain Retry over Int
     literal x : Int -> Retry
 
-fun step value =>
-    value
+fun keepCount:Int response:(Result HttpError (List User)) current:Int =>
+    current
 
 @source http.get "/users" with {
     retry: 3x
 }
+sig responses : Signal (Result HttpError (List User))
+
 sig retried : Signal Int =
-    0
-     @|> step
-     <|@ step
+    responses
+     |> scan 0 keepCount
 "#,
         );
         assert!(
             !lowered.has_errors(),
-            "request recurrence with retry should lower cleanly: {:?}",
+            "request source with retry and scan should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = lowered
@@ -6666,7 +6700,7 @@ sig retried : Signal Int =
             .validate(ValidationMode::RequireResolvedNames);
         assert!(
             report.is_ok(),
-            "request recurrence with retry should validate cleanly, got diagnostics: {:?}",
+            "request source with retry and scan should validate cleanly, got diagnostics: {:?}",
             report.diagnostics()
         );
     }
@@ -6709,11 +6743,11 @@ sig tick : Signal Unit
     }
 
     #[test]
-    fn resolved_validation_accepts_custom_recurrence_with_reactive_inputs() {
+    fn resolved_validation_accepts_custom_sources_feeding_scan_signals() {
         let lowered = lower_fixture("milestone-2/valid/custom-source-recurrence-wakeup/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "custom source recurrence fixture should lower cleanly: {:?}",
+            "custom source scan fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = lowered
@@ -6721,15 +6755,15 @@ sig tick : Signal Unit
             .validate(ValidationMode::RequireResolvedNames);
         assert!(
             report.is_ok(),
-            "custom source recurrence with reactive inputs should validate cleanly, got diagnostics: {:?}",
+            "custom source scan fixture should validate cleanly, got diagnostics: {:?}",
             report.diagnostics()
         );
 
-        let updates = find_signal(lowered.module(), "updates");
-        let metadata = updates
+        let update_events = find_signal(lowered.module(), "updateEvents");
+        let metadata = update_events
             .source_metadata
             .as_ref()
-            .expect("custom source recurrence should still carry source metadata");
+            .expect("bodyless custom source signal should still carry source metadata");
         assert_eq!(
             metadata.provider,
             SourceProviderRef::Custom("custom.feed".into())
@@ -6743,9 +6777,15 @@ sig tick : Signal Unit
             "surface lowering should not invent custom provider contract metadata"
         );
         assert_eq!(
-            signal_dependency_names(lowered.module(), updates),
+            signal_dependency_names(lowered.module(), update_events),
             vec!["refresh".to_owned()],
             "custom source metadata should still track provider-independent reactive dependencies"
+        );
+        let updates = find_signal(lowered.module(), "updates");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), updates),
+            vec!["updateEvents".to_owned()],
+            "scan-derived signals should depend on the raw source signal rather than provider inputs"
         );
     }
 
@@ -6946,11 +6986,11 @@ provider custom.feed
             lowered.diagnostics()
         );
 
-        let retried = find_signal(lowered.module(), "retried");
-        let metadata = retried
+        let retry_events = find_signal(lowered.module(), "retryEvents");
+        let metadata = retry_events
             .source_metadata
             .as_ref()
-            .expect("non-reactive custom recurrence should carry source metadata");
+            .expect("provider-defined source signal should carry source metadata");
         assert!(
             !metadata.is_reactive,
             "provider-declared recurrence fixture should stay non-reactive"

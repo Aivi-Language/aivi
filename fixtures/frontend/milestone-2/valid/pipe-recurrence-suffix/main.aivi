@@ -1,11 +1,11 @@
-fun step value =>
-    value
+fun step:Int tick:Unit current:Int =>
+    current + 1
 
 @source timer.every 120 with {
     immediate: True
 }
+sig tick : Signal Unit
+
 sig retried : Signal Int =
-    0
-     @|> step
-     <|@ step
-     <|@ step
+    tick
+     |> scan 0 step

@@ -1420,11 +1420,11 @@ val retried : Task Int Int =
     }
 
     #[test]
-    fn source_backed_signals_with_bodies_keep_separate_source_inputs() {
+    fn bodyless_sources_and_scan_signals_keep_runtime_roles_separate() {
         let lowered = lower_text(
-            "runtime-hir-adapter-source-body.aivi",
+            "runtime-hir-adapter-bodyless-source-scan.aivi",
             r#"
-fun step value =>
+fun step:Int value:Int current:Int =>
     value
 
 sig enabled = True
@@ -1432,37 +1432,47 @@ sig enabled = True
 @source http.get "/users" with {
     activeWhen: enabled
 }
+sig userEvents : Signal Int
+
 sig gated : Signal Int =
-    0
-     @|> step
-     <|@ step
+    userEvents
+     |> scan 0 step
 "#,
         );
         assert!(
             !lowered.has_errors(),
-            "source-body fixture should lower cleanly: {:?}",
+            "bodyless source scan fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
 
         let assembly =
-            assemble_hir_runtime(lowered.module()).expect("source-body fixture should assemble");
+            assemble_hir_runtime(lowered.module()).expect("bodyless source scan fixture should assemble");
+        let user_events_id = item_id(lowered.module(), "userEvents");
         let gated_id = item_id(lowered.module(), "gated");
+        let user_events = assembly
+            .signal(user_events_id)
+            .expect("userEvents signal binding should exist");
         let gated = assembly
             .signal(gated_id)
             .expect("gated signal binding should exist");
         let source = assembly
-            .source_by_owner(gated_id)
-            .expect("gated source binding should exist");
+            .source_by_owner(user_events_id)
+            .expect("userEvents source binding should exist");
 
         let derived = gated
             .derived()
-            .expect("source-backed body signal should still expose a public derived handle");
-        let source_input = gated
-            .source_input
-            .expect("source-backed body signal should keep a dedicated source input handle");
-        assert_ne!(derived.as_signal(), source_input.as_signal());
-        assert_eq!(source.signal, derived.as_signal());
-        assert_eq!(source.input, source_input);
+            .expect("scan-derived signal should expose a public derived handle");
+        assert_eq!(source.signal, user_events.signal());
+        assert_eq!(source.input, user_events.input().expect("raw source signal should stay input-backed"));
+        assert!(
+            gated.source_input.is_none(),
+            "derived scan signals should not allocate their own source input handle"
+        );
+        assert_eq!(
+            gated.dependencies(),
+            &[user_events.signal()],
+            "scan-derived signals should depend on the raw source signal"
+        );
         assert_eq!(
             source.spec.active_when,
             Some(
@@ -1478,6 +1488,11 @@ sig gated : Signal Int =
             .find(|node| node.site.owner == gated_id)
             .expect("gated recurrence handoff should exist");
         assert_eq!(recurrence.owner_signal, Some(derived));
+        assert_eq!(
+            recurrence.plan.wakeup_signal,
+            Some(user_events_id),
+            "scan recurrence handoff should preserve its upstream wakeup signal"
+        );
     }
 
     #[test]

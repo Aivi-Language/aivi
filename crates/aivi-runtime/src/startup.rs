@@ -479,7 +479,7 @@ pub struct LinkedRecurrenceSignal {
     pub item: hir::ItemId,
     pub signal: DerivedHandle,
     pub backend_item: BackendItemId,
-    pub source_input: InputHandle,
+    pub wakeup_dependency_index: usize,
     pub seed_kernel: KernelId,
     pub step_kernels: Box<[KernelId]>,
     pub dependency_items: Box<[BackendItemId]>,
@@ -827,6 +827,9 @@ pub enum BackendRuntimeLinkError {
     SourceBackedBodySignalNotYetLinked {
         item: hir::ItemId,
     },
+    MissingRecurrenceWakeupDependency {
+        item: hir::ItemId,
+    },
     SignalPipelinesNotYetLinked {
         item: hir::ItemId,
         count: usize,
@@ -912,7 +915,11 @@ impl fmt::Display for BackendRuntimeLinkError {
             ),
             Self::SourceBackedBodySignalNotYetLinked { item } => write!(
                 f,
-                "source-backed body signal {item} still crosses the explicit publication-to-body gap"
+                "signal {item} still mixes source publication with a body-backed runtime path"
+            ),
+            Self::MissingRecurrenceWakeupDependency { item } => write!(
+                f,
+                "signal {item} has recurrence lowering but no runtime wakeup dependency"
             ),
             Self::SignalPipelinesNotYetLinked { item, count } => write!(
                 f,
@@ -1378,8 +1385,6 @@ impl LinkedDerivedEvaluator<'_> {
         binding: &LinkedRecurrenceSignal,
         inputs: DependencyValues<'_, RuntimeValue>,
     ) -> Result<Option<RuntimeValue>, BackendRuntimeError> {
-        let dep_count = binding.dependency_items.len();
-
         let mut globals = self.committed_signals.clone();
         for (index, &dep_item) in binding.dependency_items.iter().enumerate() {
             if let Some(value) = inputs.value(index) {
@@ -1387,8 +1392,7 @@ impl LinkedDerivedEvaluator<'_> {
             }
         }
 
-        // The source input is added as the last dependency (after signal deps).
-        let source_fired = inputs.value(dep_count).is_some();
+        let wakeup_fired = inputs.updated(binding.wakeup_dependency_index);
 
         let previous = self.committed_signals.get(&binding.backend_item).cloned();
 
@@ -1410,12 +1414,12 @@ impl LinkedDerivedEvaluator<'_> {
             return Ok(Some(seed_value));
         }
 
-        if !source_fired {
-            // No source firing and already have a value: no update.
+        if !wakeup_fired {
+            // No wakeup firing and already have a value: no update.
             return Ok(None);
         }
 
-        // Source fired: evaluate step kernel with previous value as subject.
+        // Wakeup fired: evaluate step kernel with previous value as subject.
         let prev_value = previous.unwrap();
         let actual_prev = match &prev_value {
             RuntimeValue::Signal(inner) => inner.as_ref(),
@@ -1748,48 +1752,83 @@ impl<'a> LinkBuilder<'a> {
                     });
                 continue;
             };
-            if let Some(source_input) = binding.source_input {
-                if let Some(pipeline_id) = item
-                    .pipelines
+            if let Some(pipeline_id) = item
+                .pipelines
+                .iter()
+                .copied()
+                .find(|&pid| self.backend.pipelines()[pid].recurrence.is_some())
+            {
+                let Some(recurrence_binding) = self
+                    .assembly
+                    .recurrences()
                     .iter()
-                    .copied()
-                    .find(|&pid| self.backend.pipelines()[pid].recurrence.is_some())
-                {
-                    let pipeline = &self.backend.pipelines()[pipeline_id];
-                    let recurrence = pipeline.recurrence.as_ref().unwrap();
-
-                    let seed_kernel = recurrence.seed;
-                    let mut step_kernels = Vec::with_capacity(1 + recurrence.steps.len());
-                    step_kernels.push(recurrence.start.kernel);
-                    step_kernels.extend(recurrence.steps.iter().map(|s| s.kernel));
-                    let step_kernels = step_kernels.into_boxed_slice();
-
-                    let all_kernels: Vec<KernelId> = std::iter::once(seed_kernel)
-                        .chain(step_kernels.iter().copied())
-                        .collect();
-                    let dependency_items =
-                        self.collect_recurrence_signal_items(binding.item, &all_kernels);
-
-                    self.linked_recurrence_signals.insert(
-                        derived,
-                        LinkedRecurrenceSignal {
+                    .find(|recurrence| recurrence.site.owner == binding.item)
+                else {
+                    self.errors
+                        .push(BackendRuntimeLinkError::SignalPipelinesNotYetLinked {
                             item: binding.item,
-                            signal: derived,
-                            backend_item,
-                            source_input,
-                            seed_kernel,
-                            step_kernels,
-                            dependency_items,
-                            pipeline_ids: item
-                                .pipelines
-                                .iter()
-                                .copied()
-                                .collect::<Vec<_>>()
-                                .into_boxed_slice(),
+                            count: item.pipelines.len(),
+                        });
+                    continue;
+                };
+                let Some(wakeup_dependency_index) =
+                    self.recurrence_wakeup_dependency_index(binding, &recurrence_binding.plan)
+                else {
+                    self.errors.push(
+                        BackendRuntimeLinkError::MissingRecurrenceWakeupDependency {
+                            item: binding.item,
                         },
                     );
                     continue;
+                };
+
+                let recurrence = self.backend.pipelines()[pipeline_id]
+                    .recurrence
+                    .as_ref()
+                    .expect("selected recurrence pipeline should carry recurrence metadata");
+                let seed_kernel = recurrence.seed;
+                let mut step_kernels = Vec::with_capacity(1 + recurrence.steps.len());
+                step_kernels.push(recurrence.start.kernel);
+                step_kernels.extend(recurrence.steps.iter().map(|step| step.kernel));
+                let step_kernels = step_kernels.into_boxed_slice();
+                let all_kernels: Vec<KernelId> = std::iter::once(seed_kernel)
+                    .chain(step_kernels.iter().copied())
+                    .collect();
+                let required = self.collect_recurrence_signal_items(binding.item, &all_kernels);
+                let dependency_items = binding
+                    .dependencies()
+                    .iter()
+                    .filter_map(|signal| self.signal_items_by_handle.get(signal).copied())
+                    .collect::<Vec<_>>();
+                if !same_items(&required, &dependency_items) {
+                    self.errors
+                        .push(BackendRuntimeLinkError::SignalRequirementMismatch {
+                            item: binding.item,
+                            declared: dependency_items.clone().into_boxed_slice(),
+                            required,
+                        });
+                    continue;
                 }
+
+                self.linked_recurrence_signals.insert(
+                    derived,
+                    LinkedRecurrenceSignal {
+                        item: binding.item,
+                        signal: derived,
+                        backend_item,
+                        wakeup_dependency_index,
+                        seed_kernel,
+                        step_kernels,
+                        dependency_items: dependency_items.into_boxed_slice(),
+                        pipeline_ids: item
+                            .pipelines
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    },
+                );
+                continue;
             }
             if !item.pipelines.is_empty() && !self.supported_body_backed_signal_pipelines(item) {
                 self.errors
@@ -1858,6 +1897,25 @@ impl<'a> LinkBuilder<'a> {
                 },
             );
         }
+    }
+
+    fn recurrence_wakeup_dependency_index(
+        &self,
+        binding: &crate::hir_adapter::HirSignalBinding,
+        plan: &hir::RecurrenceNodePlan,
+    ) -> Option<usize> {
+        if let Some(wakeup_signal) = plan.wakeup_signal {
+            let wakeup_handle = self.assembly.signal(wakeup_signal)?.signal();
+            return binding
+                .dependencies()
+                .iter()
+                .position(|&signal| signal == wakeup_handle);
+        }
+        let source_input = binding.source_input?;
+        binding
+            .dependencies()
+            .iter()
+            .position(|&signal| signal == source_input.as_signal())
     }
 
     fn runtime_signal_for_backend_item(
@@ -3095,22 +3153,21 @@ val retried : Task Int Int =
     }
 
     #[test]
-    fn linked_runtime_links_source_backed_recurrence_signals() {
+    fn linked_runtime_links_scan_signals() {
         let lowered = lower_text(
-            "runtime-startup-source-body-recurrence.aivi",
+            "runtime-startup-scan-signal.aivi",
             r#"
-fun step:Int value:Int =>
-    value
+fun step:Int tick:Unit current:Int =>
+    current + 1
 
-sig enabled = True
-
-@source http.get "/users" with {
-    activeWhen: enabled
+@source timer.every 120 with {
+    immediate: True
 }
-sig gated : Signal Int =
-    0
-     @|> step
-     <|@ step
+sig tick : Signal Unit
+
+sig counter : Signal Int =
+    tick
+     |> scan 0 step
 "#,
         );
         let assembly = crate::assemble_hir_runtime(lowered.hir.module())
@@ -3120,6 +3177,6 @@ sig gated : Signal Int =
             &lowered.core,
             std::sync::Arc::new(lowered.backend.clone()),
         )
-        .expect("source-backed recurrence signals should now link successfully");
+        .expect("scan signals should now link successfully");
     }
 }

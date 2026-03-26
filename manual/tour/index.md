@@ -13,8 +13,8 @@ Each chapter builds on the previous one. Read them in order on your first pass.
 | [02 · Functions](/tour/02-functions) | `fun`, labeled parameters, calling conventions | Labeled params eliminate positional ambiguity |
 | [03 · Pipes](/tour/03-pipes) | `\|>`, projection shorthand, chaining | Data flows left-to-right |
 | [04 · Pattern Matching](/tour/04-pattern-matching) | `\|\|>`, exhaustiveness, nested patterns | Match shapes, not just values |
-| [05 · Signals](/tour/05-signals) | `sig`, recurrence with `@\|>...<\|@` | Time-varying values |
-| [06 · Sources](/tour/06-sources) | `@source`, `@recur.timer`, lifecycle | Where values come from |
+| [05 · Signals](/tour/05-signals) | `sig`, `scan`, explicit recurrence with `@\|>...<\|@` | Time-varying values |
+| [06 · Sources](/tour/06-sources) | `@source`, bodyless input signals, lifecycle | Where values come from |
 | [07 · Markup](/tour/07-markup) | `<label>`, `<each>`, `<match>` | GTK widgets as AIVI expressions |
 | [08 · Type Classes](/tour/08-typeclasses) | `class`, `instance`, `Eq`, `Ord`, `Traversable`, HKT | Explicit capability constraints |
 | [09 · Domains](/tour/09-domains) | `domain`, `literal`, suffix syntax | Typed refinements of base types |

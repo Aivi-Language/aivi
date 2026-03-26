@@ -1,8 +1,9 @@
 use aivi_base::SourceSpan;
 use aivi_typing::{
     BuiltinSourceWakeupCause, CustomSourceRecurrenceWakeupContext, NonSourceWakeupCause,
-    RecurrencePlan, RecurrencePlanner, RecurrenceTargetEvidence, RecurrenceWakeupPlan,
-    RecurrenceWakeupPlanner, SourceRecurrenceWakeupContext, builtin_source_option_wakeup_cause,
+    RecurrencePlan, RecurrencePlanner, RecurrenceTargetEvidence, RecurrenceWakeupEvidence,
+    RecurrenceWakeupPlan, RecurrenceWakeupPlanner, SourceRecurrenceWakeupContext,
+    builtin_source_option_wakeup_cause,
 };
 
 use crate::{
@@ -11,6 +12,7 @@ use crate::{
     SourceProviderRef,
     gate_elaboration::{
         GateElaborationBlocker, GateRuntimeExpr, GateRuntimeUnsupportedKind,
+        lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads,
         lower_gate_pipe_body_runtime_expr, lower_gate_pipe_body_runtime_expr_allow_signal_reads,
         lower_gate_runtime_expr,
     },
@@ -103,6 +105,7 @@ pub struct RecurrenceNonSourceWakeupBinding {
 pub struct RecurrenceNodePlan {
     pub target: RecurrencePlan,
     pub wakeup: RecurrenceWakeupPlan,
+    pub wakeup_signal: Option<ItemId>,
     pub seed: RecurrenceRuntimeExpr,
     pub start: RecurrenceStagePlan,
     pub guards: Vec<RecurrenceGuardPlan>,
@@ -251,6 +254,14 @@ pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
                         &mut typing,
                         &mut nodes,
                     );
+                    collect_scan_node(
+                        module,
+                        owner,
+                        body,
+                        &GateExprEnv::default(),
+                        &mut typing,
+                        &mut nodes,
+                    );
                 }
             }
             Item::Instance(item) => {
@@ -316,6 +327,202 @@ fn collect_recurrence_nodes(
             outcome,
         });
     });
+}
+
+#[derive(Clone, Copy)]
+struct ScanStage {
+    stage_index: usize,
+    stage_span: SourceSpan,
+    stage_expr: ExprId,
+    seed_expr: ExprId,
+    step_expr: ExprId,
+}
+
+fn collect_scan_node(
+    module: &Module,
+    owner: ItemId,
+    root: ExprId,
+    env: &GateExprEnv,
+    typing: &mut GateTypeContext<'_>,
+    nodes: &mut Vec<RecurrenceNodeElaboration>,
+) {
+    let ExprKind::Pipe(pipe) = &module.exprs()[root].kind else {
+        return;
+    };
+    if matches!(pipe.recurrence_suffix(), Ok(Some(_))) {
+        return;
+    }
+    let Some(scan) = scan_stage(module, pipe) else {
+        return;
+    };
+    nodes.push(RecurrenceNodeElaboration {
+        owner,
+        pipe_expr: root,
+        start_stage_index: scan.stage_index,
+        start_stage_span: scan.stage_span,
+        outcome: elaborate_scan_pipe(module, pipe, &scan, env, typing),
+    });
+}
+
+fn scan_stage(module: &Module, pipe: &PipeExpr) -> Option<ScanStage> {
+    if pipe.stages.len() != 1 {
+        return None;
+    }
+    let stage = pipe.stages.first();
+    let PipeStageKind::Transform { expr } = stage.kind else {
+        return None;
+    };
+    let (seed_expr, step_expr) = parse_scan_expr(module, expr)?;
+    Some(ScanStage {
+        stage_index: 0,
+        stage_span: stage.span,
+        stage_expr: expr,
+        seed_expr,
+        step_expr,
+    })
+}
+
+fn parse_scan_expr(module: &Module, expr_id: ExprId) -> Option<(ExprId, ExprId)> {
+    let (callee_expr, arguments) = flatten_apply_expr(module, expr_id);
+    if arguments.len() != 2 || !is_ambient_scan_name(module, callee_expr) {
+        return None;
+    }
+    Some((arguments[0], arguments[1]))
+}
+
+fn flatten_apply_expr(module: &Module, root: ExprId) -> (ExprId, Vec<ExprId>) {
+    let mut callee = root;
+    let mut segments = Vec::new();
+    while let ExprKind::Apply {
+        callee: next,
+        arguments: next_arguments,
+    } = &module.exprs()[callee].kind
+    {
+        segments.push(next_arguments.iter().copied().collect::<Vec<_>>());
+        callee = *next;
+    }
+    let mut arguments = Vec::new();
+    for segment in segments.into_iter().rev() {
+        arguments.extend(segment);
+    }
+    (callee, arguments)
+}
+
+fn is_ambient_scan_name(module: &Module, expr_id: ExprId) -> bool {
+    let ExprKind::Name(reference) = &module.exprs()[expr_id].kind else {
+        return false;
+    };
+    let crate::ResolutionState::Resolved(crate::TermResolution::Item(item_id)) =
+        reference.resolution.as_ref()
+    else {
+        return false;
+    };
+    module.ambient_items().contains(item_id)
+        && matches!(
+            &module.items()[*item_id],
+            Item::Function(function) if function.name.text() == "scan"
+        )
+}
+
+fn signal_item_reference(module: &Module, expr_id: ExprId) -> Option<ItemId> {
+    let ExprKind::Name(reference) = &module.exprs()[expr_id].kind else {
+        return None;
+    };
+    let crate::ResolutionState::Resolved(crate::TermResolution::Item(item_id)) =
+        reference.resolution.as_ref()
+    else {
+        return None;
+    };
+    matches!(module.items().get(*item_id), Some(Item::Signal(_))).then_some(*item_id)
+}
+
+fn elaborate_scan_pipe(
+    module: &Module,
+    pipe: &PipeExpr,
+    scan: &ScanStage,
+    env: &GateExprEnv,
+    typing: &mut GateTypeContext<'_>,
+) -> RecurrenceNodeOutcome {
+    let target = Some(
+        RecurrencePlanner::plan(Some(RecurrenceTargetEvidence::SignalItemBody))
+            .expect("signal scan nodes should always plan to signal recurrence"),
+    );
+    let wakeup_signal = signal_item_reference(module, pipe.head);
+    let wakeup = wakeup_signal.map(|_| {
+        RecurrenceWakeupPlan::from_evidence(RecurrenceWakeupEvidence::SignalDependency)
+    });
+
+    let mut blockers = Vec::new();
+    if wakeup.is_none() {
+        blockers.push(RecurrenceElaborationBlocker::MissingWakeup);
+    }
+
+    let seed = match lower_gate_runtime_expr(module, scan.seed_expr, env, None, typing) {
+        Ok(expr) => Some(expr),
+        Err(blocker) => {
+            blockers.push(RecurrenceElaborationBlocker::SeedExpressionBlocked(
+                recurrence_runtime_stage_blocker(blocker),
+            ));
+            None
+        }
+    };
+
+    let mut start = None;
+    if let Some(seed) = seed.as_ref() {
+        match lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
+            module,
+            scan.stage_span,
+            scan.step_expr,
+            vec![pipe.head],
+            env,
+            &seed.ty,
+            Some(&seed.ty),
+            typing,
+        ) {
+            Ok(runtime_expr) => {
+                let result_subject = runtime_expr.ty.clone();
+                if !result_subject.same_shape(&seed.ty) {
+                    blockers.push(RecurrenceElaborationBlocker::StepChainDoesNotClose {
+                        expected: seed.ty.clone(),
+                        found: result_subject.clone(),
+                    });
+                }
+                start = Some(RecurrenceStagePlan {
+                    stage_index: scan.stage_index,
+                    stage_span: scan.stage_span,
+                    expr: scan.stage_expr,
+                    input_subject: seed.ty.clone(),
+                    result_subject,
+                    runtime_expr,
+                });
+            }
+            Err(blocker) => blockers.push(RecurrenceElaborationBlocker::StartStage {
+                stage_span: scan.stage_span,
+                blocker: recurrence_runtime_stage_blocker(blocker),
+            }),
+        }
+    }
+
+    if blockers.is_empty() {
+        let start = start.expect("planned scan nodes should have a start");
+        RecurrenceNodeOutcome::Planned(RecurrenceNodePlan {
+            target: target.expect("planned scan nodes should have a target"),
+            wakeup: wakeup.expect("planned scan nodes should have a wakeup"),
+            wakeup_signal,
+            seed: seed.expect("planned scan nodes should have a seed"),
+            start: start.clone(),
+            guards: Vec::new(),
+            steps: vec![start],
+            non_source_wakeup: None,
+        })
+    } else {
+        RecurrenceNodeOutcome::Blocked(BlockedRecurrenceNode {
+            target,
+            wakeup,
+            input_subject: seed.as_ref().map(|expr| expr.ty.clone()),
+            blockers,
+        })
+    }
 }
 
 fn elaborate_recurrence_pipe(
@@ -533,6 +740,7 @@ fn elaborate_recurrence_pipe(
         RecurrenceNodeOutcome::Planned(RecurrenceNodePlan {
             target: target.expect("planned recurrence nodes should have a target"),
             wakeup: wakeup.expect("planned recurrence nodes should have a wakeup"),
+            wakeup_signal: None,
             seed: seed.expect("planned recurrence nodes should have a seed"),
             start: start_plan.expect("planned recurrence nodes should have a start stage"),
             guards: guard_plans,
@@ -830,9 +1038,7 @@ mod tests {
 
     use aivi_base::SourceDatabase;
     use aivi_syntax::parse_module;
-    use aivi_typing::{
-        BuiltinSourceWakeupCause, CustomSourceWakeupCause, RecurrenceTarget, RecurrenceWakeupKind,
-    };
+    use aivi_typing::{RecurrenceTarget, RecurrenceWakeupEvidence, RecurrenceWakeupKind};
 
     use super::{RecurrenceElaborationBlocker, RecurrenceNodeOutcome, elaborate_recurrences};
     use crate::{GateRuntimeExprKind, GateRuntimeProjectionBase, GateType, Item, lower_module};
@@ -954,11 +1160,11 @@ mod tests {
     }
 
     #[test]
-    fn elaborates_builtin_and_custom_source_wakeups() {
+    fn elaborates_scan_signal_wakeups() {
         let lowered = lower_fixture("milestone-2/valid/pipe-recurrence-suffix/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "built-in source recurrence fixture should lower cleanly: {:?}",
+            "timer scan fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = elaborate_recurrences(lowered.module());
@@ -966,27 +1172,34 @@ mod tests {
             .nodes()
             .iter()
             .find(|node| item_name(lowered.module(), node.owner) == "retried")
-            .expect("expected built-in source recurrence node");
+            .expect("expected scan node for retried");
         match &built_in.outcome {
             RecurrenceNodeOutcome::Planned(plan) => {
-                assert_eq!(plan.wakeup.kind(), RecurrenceWakeupKind::Timer);
+                assert_eq!(plan.wakeup.kind(), RecurrenceWakeupKind::SourceEvent);
                 assert!(plan.guards.is_empty());
+                assert!(matches!(
+                    plan.wakeup.evidence(),
+                    RecurrenceWakeupEvidence::SignalDependency
+                ));
                 assert_eq!(
-                    plan.wakeup.evidence().builtin_source_cause(),
-                    Some(BuiltinSourceWakeupCause::ProviderTimer)
+                    item_name(
+                        lowered.module(),
+                        plan.wakeup_signal.expect("scan should preserve its upstream wakeup signal"),
+                    ),
+                    "tick"
                 );
                 assert!(
                     plan.non_source_wakeup.is_none(),
-                    "source-backed wakeups should not invent a non-source witness"
+                    "scan wakeups should not invent a non-source witness"
                 );
             }
-            other => panic!("expected planned built-in source recurrence node, found {other:?}"),
+            other => panic!("expected planned timer scan node, found {other:?}"),
         }
 
         let lowered = lower_fixture("milestone-2/valid/custom-source-recurrence-wakeup/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "custom source recurrence fixture should lower cleanly: {:?}",
+            "custom source scan fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = elaborate_recurrences(lowered.module());
@@ -994,26 +1207,33 @@ mod tests {
             .nodes()
             .iter()
             .find(|node| item_name(lowered.module(), node.owner) == "updates")
-            .expect("expected custom source recurrence node");
+            .expect("expected custom source scan node");
         match &custom.outcome {
             RecurrenceNodeOutcome::Planned(plan) => {
                 assert_eq!(plan.wakeup.kind(), RecurrenceWakeupKind::SourceEvent);
                 assert!(plan.guards.is_empty());
+                assert!(matches!(
+                    plan.wakeup.evidence(),
+                    RecurrenceWakeupEvidence::SignalDependency
+                ));
                 assert_eq!(
-                    plan.wakeup.evidence().custom_source_cause(),
-                    Some(CustomSourceWakeupCause::ReactiveInputs)
+                    item_name(
+                        lowered.module(),
+                        plan.wakeup_signal.expect("scan should preserve its upstream wakeup signal"),
+                    ),
+                    "updateEvents"
                 );
             }
-            other => panic!("expected planned custom source recurrence node, found {other:?}"),
+            other => panic!("expected planned custom source scan node, found {other:?}"),
         }
     }
 
     #[test]
-    fn active_when_source_options_count_as_reactive_wakeups() {
+    fn active_when_bodyless_sources_still_feed_scan_signals() {
         let lowered = lower_text(
-            "recurrence_active_when_wakeup.aivi",
+            "scan_active_when_source.aivi",
             r#"
-fun step value =>
+fun step:Int value:Int current:Int =>
     value
 
 sig enabled = True
@@ -1021,15 +1241,16 @@ sig enabled = True
 @source http.get "/users" with {
     activeWhen: enabled
 }
+sig userEvents : Signal Int
+
 sig gated : Signal Int =
-    0
-     @|> step
-     <|@ step
+    userEvents
+     |> scan 0 step
 "#,
         );
         assert!(
             !lowered.has_errors(),
-            "activeWhen recurrence example should lower cleanly before elaboration: {:?}",
+            "activeWhen scan example should lower cleanly before elaboration: {:?}",
             lowered.diagnostics()
         );
 
@@ -1043,12 +1264,19 @@ sig gated : Signal Int =
             RecurrenceNodeOutcome::Planned(plan) => {
                 assert_eq!(plan.wakeup.kind(), RecurrenceWakeupKind::SourceEvent);
                 assert!(plan.guards.is_empty());
+                assert!(matches!(
+                    plan.wakeup.evidence(),
+                    RecurrenceWakeupEvidence::SignalDependency
+                ));
                 assert_eq!(
-                    plan.wakeup.evidence().builtin_source_cause(),
-                    Some(BuiltinSourceWakeupCause::ReactiveInputs)
+                    item_name(
+                        lowered.module(),
+                        plan.wakeup_signal.expect("scan should preserve its upstream wakeup signal"),
+                    ),
+                    "userEvents"
                 );
             }
-            other => panic!("expected planned activeWhen recurrence node, found {other:?}"),
+            other => panic!("expected planned activeWhen scan node, found {other:?}"),
         }
     }
 

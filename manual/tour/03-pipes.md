@@ -207,8 +207,12 @@ The reducer receives the accumulated value and each element in turn.
 // TODO: add a verified AIVI example here
 ```
 
-The seed is the accumulated state before any events arrive. Wakeups come from the attached
-`@source` / `@recur.*` decorator, not from the expression on the right of `@|>`.
+The seed is the accumulated state before any iterations run. Wakeups come from the attached
+`@source` / `@recur.*` decorator or other explicit recurrence wakeup, not from the expression on
+the right of `@|>`.
+
+For ordinary event-driven signal state, use `upstream |> scan seed step` instead. `@|>` is the
+explicit recurrence/cursor form, not the default way to fold source events.
 
 ## The recur-step pipe `<|@`
 
@@ -271,8 +275,9 @@ independent signals into one derived value without explicit `zip` calls.
 - `_` is the ambient value; `.field` is ambient projection (not `_.field`).
 - `*|>` maps a function over every element of a list.
 - `<|*` collects a `*|>` fan-out back into a single value with a reducer.
-- `seed @|> start` begins a recurrent suffix; wakeups come from the attached `@source` or `@recur.*` decorator.
+- `seed @|> start` begins an explicit recurrent suffix; wakeups come from the attached `@source` or `@recur.*` decorator.
 - `<|@` adds one or more step stages; `?|>` between `@|>` and `<|@` skips the iteration when false.
+- `upstream |> scan seed step` is the usual signal-state fold over source or event updates.
 - `&|>` zips a signal of functions with a signal of values pointwise.
 
 [Next: Pattern Matching →](/tour/04-pattern-matching)

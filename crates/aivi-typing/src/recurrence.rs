@@ -157,6 +157,7 @@ pub enum RecurrenceWakeupEvidence {
     NonSource {
         cause: NonSourceWakeupCause,
     },
+    SignalDependency,
 }
 
 impl RecurrenceWakeupEvidence {
@@ -165,33 +166,36 @@ impl RecurrenceWakeupEvidence {
             Self::BuiltinSource { cause, .. } => cause.kind(),
             Self::CustomSource { cause } => cause.kind(),
             Self::NonSource { cause } => cause.kind(),
+            Self::SignalDependency => RecurrenceWakeupKind::SourceEvent,
         }
     }
 
     pub const fn provider(self) -> Option<BuiltinSourceProvider> {
         match self {
             Self::BuiltinSource { provider, .. } => Some(provider),
-            Self::CustomSource { .. } | Self::NonSource { .. } => None,
+            Self::CustomSource { .. } | Self::NonSource { .. } | Self::SignalDependency => None,
         }
     }
 
     pub const fn builtin_source_cause(self) -> Option<BuiltinSourceWakeupCause> {
         match self {
             Self::BuiltinSource { cause, .. } => Some(cause),
-            Self::CustomSource { .. } | Self::NonSource { .. } => None,
+            Self::CustomSource { .. } | Self::NonSource { .. } | Self::SignalDependency => None,
         }
     }
 
     pub const fn custom_source_cause(self) -> Option<CustomSourceWakeupCause> {
         match self {
-            Self::BuiltinSource { .. } | Self::NonSource { .. } => None,
+            Self::BuiltinSource { .. } | Self::NonSource { .. } | Self::SignalDependency => None,
             Self::CustomSource { cause } => Some(cause),
         }
     }
 
     pub const fn non_source_cause(self) -> Option<NonSourceWakeupCause> {
         match self {
-            Self::BuiltinSource { .. } | Self::CustomSource { .. } => None,
+            Self::BuiltinSource { .. } | Self::CustomSource { .. } | Self::SignalDependency => {
+                None
+            }
             Self::NonSource { cause } => Some(cause),
         }
     }
