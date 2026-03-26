@@ -22,6 +22,7 @@ pub(super) struct RunSessionHarness {
     session: Rc<RefCell<RunSessionState>>,
     control: RunSessionControl,
     root_windows: Vec<gtk::Window>,
+    startup_manual_sources: RefCell<Option<Box<[aivi_runtime::SourceInstanceId]>>>,
 }
 
 #[allow(dead_code)]
@@ -178,10 +179,25 @@ impl RunSessionHarness {
         }
     }
 
-    pub(super) fn present_root_windows(&self) {
+    pub(super) fn present_root_windows(&self) -> Result<(), String> {
         for window in &self.root_windows {
             window.present();
         }
+        let Some(instances) = self.startup_manual_sources.borrow_mut().take() else {
+            return Ok(());
+        };
+        for instance in instances.iter().copied() {
+            self.control
+                .driver()
+                .set_source_mode(instance, aivi_runtime::GlibLinkedSourceMode::Live)
+                .map_err(|error| {
+                    format!(
+                        "failed to release startup timer source {} into live mode: {error}",
+                        instance.as_raw()
+                    )
+                })?;
+        }
+        Ok(())
     }
 
     pub(super) fn run_main_loop(&self) -> Result<(), String> {
@@ -594,6 +610,39 @@ fn run_hydration_worker_loop(
     }
 }
 
+fn hold_startup_timer_sources(
+    driver: &GlibLinkedRuntimeDriver,
+) -> Result<Box<[aivi_runtime::SourceInstanceId]>, String> {
+    let mut instances = Vec::new();
+    for binding in driver.source_bindings() {
+        let config = driver
+            .evaluate_source_config(binding.instance)
+            .map_err(|error| {
+                format!(
+                    "failed to evaluate startup source {}: {error}",
+                    binding.instance.as_raw()
+                )
+            })?;
+        let is_timer = config
+            .provider
+            .builtin_provider()
+            .is_some_and(|provider| matches!(provider.key(), "timer.every" | "timer.after"));
+        if !is_timer {
+            continue;
+        }
+        driver
+            .set_source_mode(binding.instance, aivi_runtime::GlibLinkedSourceMode::Manual)
+            .map_err(|error| {
+                format!(
+                    "failed to hold startup timer source {} in manual mode: {error}",
+                    binding.instance.as_raw()
+                )
+            })?;
+        instances.push(binding.instance);
+    }
+    Ok(instances.into_boxed_slice())
+}
+
 pub(super) fn start_run_session_with_launch_config(
     path: &Path,
     artifact: RunArtifact,
@@ -624,7 +673,7 @@ pub(super) fn start_run_session_with_launch_config(
     })?;
 
     let context = glib::MainContext::default();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel::<()>();
+    let (update_tx, update_rx) = sync_mpsc::channel::<()>();
     let session_notifier: Arc<dyn Fn() + Send + Sync + 'static> = {
         let update_tx = update_tx.clone();
         Arc::new(move || {
@@ -654,6 +703,7 @@ pub(super) fn start_run_session_with_launch_config(
         request_tx: main_context_requests.sender(),
         notifier: session_notifier.clone(),
     };
+    let startup_manual_sources = hold_startup_timer_sources(&driver)?;
     let schedule_state = RunSessionScheduleState::default();
     let session = Rc::new(RefCell::new(RunSessionState {
         view_name: view_name.clone(),
@@ -690,12 +740,18 @@ pub(super) fn start_run_session_with_launch_config(
     {
         let weak_session = Rc::downgrade(&session);
         let schedule_state = schedule_state.clone();
-        context.spawn_local(async move {
-            while update_rx.recv().await.is_some() {
-                let Some(session) = weak_session.upgrade() else {
-                    break;
-                };
-                schedule_run_session(&session, &schedule_state);
+        glib::timeout_add_local(std::time::Duration::from_millis(10), move || {
+            let Some(session) = weak_session.upgrade() else {
+                return glib::ControlFlow::Break;
+            };
+            loop {
+                match update_rx.try_recv() {
+                    Ok(()) => schedule_run_session(&session, &schedule_state),
+                    Err(sync_mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    Err(sync_mpsc::TryRecvError::Disconnected) => {
+                        return glib::ControlFlow::Break;
+                    }
+                }
             }
         });
     }
@@ -740,6 +796,7 @@ pub(super) fn start_run_session_with_launch_config(
         session,
         control,
         root_windows,
+        startup_manual_sources: RefCell::new(Some(startup_manual_sources)),
     })
 }
 
@@ -757,7 +814,7 @@ pub(super) fn launch_run_with_config(
     );
 
     harness.install_quit_on_last_window_close();
-    harness.present_root_windows();
+    harness.present_root_windows()?;
     harness.run_main_loop()?;
     Ok(ExitCode::SUCCESS)
 }
@@ -834,9 +891,158 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        HydrationRevisionState, MainContextRequestQueue, RunSessionLifecycle, RunSessionPhase,
-        RunSessionScheduleState,
+        HydrationRevisionState, MainContextRequestQueue, RunLaunchConfig, RunSessionLifecycle,
+        RunSessionPhase, RunSessionScheduleState, start_run_session_with_launch_config,
     };
+    use aivi_backend::RuntimeValue;
+    use gtk::prelude::*;
+    use std::{
+        env,
+        path::{Path, PathBuf},
+        time::{Duration, Instant},
+    };
+
+    fn repo_path(path: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(path)
+    }
+
+    fn prepare_run_from_path(path: &Path) -> crate::RunArtifact {
+        let snapshot = crate::WorkspaceHirSnapshot::load(path)
+            .expect("workspace snapshot should load for run-session test");
+        assert!(
+            !crate::workspace_syntax_failed(&snapshot, |_, diagnostics| diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)),
+            "run-session test fixture should parse cleanly"
+        );
+        let (hir_failed, validation_failed) = crate::workspace_hir_failed(
+            &snapshot,
+            |_, diagnostics| {
+                diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
+            },
+            |_, diagnostics| {
+                diagnostics
+                    .iter()
+                    .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
+            },
+        );
+        assert!(!hir_failed, "run-session test fixture should lower cleanly");
+        assert!(
+            !validation_failed,
+            "run-session test fixture should validate cleanly"
+        );
+        let lowered = snapshot.entry_hir();
+        crate::prepare_run_artifact(&snapshot.sources, lowered.module(), None)
+            .expect("run-session test fixture should prepare")
+    }
+
+    fn pump_context(context: &gtk::glib::MainContext, duration: Duration) {
+        let deadline = Instant::now() + duration;
+        while Instant::now() < deadline {
+            while context.pending() {
+                context.iteration(false);
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        while context.pending() {
+            context.iteration(false);
+        }
+    }
+
+    fn pump_until(
+        context: &gtk::glib::MainContext,
+        timeout: Duration,
+        mut predicate: impl FnMut() -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            while context.pending() {
+                context.iteration(false);
+            }
+            if predicate() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        while context.pending() {
+            context.iteration(false);
+        }
+        predicate()
+    }
+
+    fn required_signal_item(artifact: &crate::RunArtifact, name: &str) -> aivi_backend::ItemId {
+        artifact
+            .required_signal_globals
+            .iter()
+            .find_map(|(item, current)| (current.as_ref() == name).then_some(*item))
+            .unwrap_or_else(|| panic!("snake demo should expose `{name}` for hydration"))
+    }
+
+    fn text_signal_for(
+        harness: &super::RunSessionHarness,
+        signal_item: aivi_backend::ItemId,
+    ) -> String {
+        harness.with_access(|access| {
+            let globals = access
+                .driver()
+                .current_signal_globals()
+                .expect("signal globals should be readable");
+            let value = globals
+                .get(&signal_item)
+                .expect("required text signal should exist")
+                .as_runtime();
+            match value {
+                RuntimeValue::Text(text) => text.to_string(),
+                RuntimeValue::Signal(inner) => match inner.as_ref() {
+                    RuntimeValue::Text(text) => text.to_string(),
+                    other => panic!("expected text signal payload to be text, found {other:?}"),
+                },
+                other => panic!("expected text signal to be text, found {other:?}"),
+            }
+        })
+    }
+
+    fn board_text_for(
+        harness: &super::RunSessionHarness,
+        board_item: aivi_backend::ItemId,
+    ) -> String {
+        text_signal_for(harness, board_item)
+    }
+
+    fn head_x(board_text: &str) -> usize {
+        let row = board_text
+            .lines()
+            .find(|row| row.contains('@'))
+            .expect("board text should contain a snake head");
+        row.find('@')
+            .expect("board row should expose the snake head column")
+    }
+
+    fn collect_label_texts(widget: &gtk::Widget, labels: &mut Vec<String>) {
+        if let Ok(label) = widget.clone().downcast::<gtk::Label>() {
+            labels.push(label.label().to_string());
+        }
+        let mut child = widget.first_child();
+        while let Some(current) = child {
+            collect_label_texts(&current, labels);
+            child = current.next_sibling();
+        }
+    }
+
+    fn gtk_board_text_for(harness: &super::RunSessionHarness) -> String {
+        let mut labels = Vec::new();
+        for window in harness.root_windows() {
+            collect_label_texts(&window.clone().upcast::<gtk::Widget>(), &mut labels);
+        }
+        labels
+            .into_iter()
+            .find(|text| text.contains('@') && text.contains('\n'))
+            .expect("snake window should expose a board label")
+    }
 
     #[test]
     fn main_context_request_queue_preserves_submission_order() {
@@ -894,5 +1100,184 @@ mod tests {
         state.clear();
 
         assert!(state.try_schedule());
+    }
+
+    #[test]
+    fn startup_manual_sources_take_once() {
+        let sources = std::cell::RefCell::new(Some(
+            vec![
+                aivi_runtime::SourceInstanceId::from_raw(1),
+                aivi_runtime::SourceInstanceId::from_raw(2),
+            ]
+            .into_boxed_slice(),
+        ));
+
+        assert_eq!(
+            sources
+                .borrow_mut()
+                .take()
+                .as_deref()
+                .map(|items: &[aivi_runtime::SourceInstanceId]| items.len()),
+            Some(2_usize)
+        );
+        assert!(sources.borrow_mut().take().is_none());
+    }
+
+    #[test]
+    fn timer_sources_stay_paused_until_windows_present() {
+        let path = repo_path("demos/snake.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let board_item = artifact
+            .required_signal_globals
+            .iter()
+            .find_map(|(item, name)| (name.as_ref() == "boardText").then_some(*item))
+            .expect("snake demo should expose boardText for hydration");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("snake demo should start a paused run session");
+        let context = harness.control().context();
+        let initial_board = board_text_for(&harness, board_item);
+        let initial_head_x = head_x(&initial_board);
+        let initial_hydration = harness.with_access(|access| access.latest_applied_hydration());
+        assert_eq!(
+            initial_head_x, 6,
+            "shifted snake demo should start with runway"
+        );
+
+        pump_context(&context, Duration::from_millis(650));
+        assert_eq!(
+            board_text_for(&harness, board_item),
+            initial_board,
+            "timer-backed board should stay on the initial frame before windows are presented"
+        );
+        assert_eq!(
+            harness.with_access(|access| access.latest_applied_hydration()),
+            initial_hydration,
+            "startup gating should avoid extra hydrations before presentation"
+        );
+
+        harness
+            .present_root_windows()
+            .expect("presenting the run-session window should release startup timers");
+        pump_context(&context, Duration::from_millis(650));
+        let advanced_board = board_text_for(&harness, board_item);
+        assert_eq!(
+            head_x(&advanced_board),
+            initial_head_x + 1,
+            "board should advance by exactly one cell after roughly one timer interval"
+        );
+        assert!(
+            harness.with_access(|access| access.latest_applied_hydration()) > initial_hydration,
+            "hydration should advance after timer release"
+        );
+
+        harness.shutdown();
+    }
+
+    #[test]
+    fn main_loop_run_advances_timer_driven_board_after_presentation() {
+        let path = repo_path("demos/snake.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let board_item = artifact
+            .required_signal_globals
+            .iter()
+            .find_map(|(item, name)| (name.as_ref() == "boardText").then_some(*item))
+            .expect("snake demo should expose boardText for hydration");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("snake demo should start a run session");
+        let initial_board = board_text_for(&harness, board_item);
+        let initial_head_x = head_x(&initial_board);
+        harness
+            .present_root_windows()
+            .expect("presenting the run-session window should release startup timers");
+        let main_loop = harness.session.borrow().main_loop.clone();
+        let quit_loop = main_loop.clone();
+        gtk::glib::timeout_add_local_once(Duration::from_millis(650), move || {
+            quit_loop.quit();
+        });
+        main_loop.run();
+        let advanced_board = board_text_for(&harness, board_item);
+        assert_eq!(
+            head_x(&advanced_board),
+            initial_head_x + 1,
+            "the plain run-session main loop should advance the snake after one timer interval"
+        );
+
+        harness.shutdown();
+    }
+
+    #[test]
+    fn main_loop_run_hydrates_board_label_after_timer_ticks() {
+        let path = repo_path("demos/snake.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("snake demo should start a run session");
+        let initial_board = gtk_board_text_for(&harness);
+        harness
+            .present_root_windows()
+            .expect("presenting the run-session window should release startup timers");
+        let main_loop = harness.session.borrow().main_loop.clone();
+        let quit_loop = main_loop.clone();
+        gtk::glib::timeout_add_local_once(Duration::from_millis(650), move || {
+            quit_loop.quit();
+        });
+        main_loop.run();
+        let advanced_board = gtk_board_text_for(&harness);
+        assert_ne!(
+            advanced_board, initial_board,
+            "plain aivi run should hydrate the GTK board label after timer ticks"
+        );
+
+        harness.shutdown();
+    }
+
+    #[test]
+    fn space_restarts_snake_after_game_over() {
+        let path = repo_path("demos/snake.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let board_item = required_signal_item(&artifact, "boardText");
+        let status_item = required_signal_item(&artifact, "statusLine");
+        let direction_item = required_signal_item(&artifact, "dirLine");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("snake demo should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the run-session window should release startup timers");
+
+        let driver = harness.control().driver();
+        driver.dispatch_window_key_event("ArrowUp", false);
+        assert!(
+            pump_until(&context, Duration::from_secs(3), || {
+                text_signal_for(&harness, status_item) == "Game Over"
+            }),
+            "steering upward should eventually collide with the wall and end the game"
+        );
+        let game_over_board = board_text_for(&harness, board_item);
+        assert_eq!(text_signal_for(&harness, direction_item), "Up");
+
+        driver.dispatch_window_key_event("Space", false);
+        assert!(
+            pump_until(&context, Duration::from_secs(2), || {
+                text_signal_for(&harness, status_item) == "Running"
+            }),
+            "pressing Space after game over should restart the snake on a live timer tick"
+        );
+        let restarted_board = board_text_for(&harness, board_item);
+        assert_eq!(text_signal_for(&harness, direction_item), "Right");
+        assert_eq!(
+            head_x(&restarted_board),
+            6,
+            "restart should return the snake to its initial starting lane"
+        );
+        assert_ne!(
+            restarted_board, game_over_board,
+            "restart should replace the game-over board with a fresh starting board"
+        );
+
+        harness.shutdown();
     }
 }

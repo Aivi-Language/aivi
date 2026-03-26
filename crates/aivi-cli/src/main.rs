@@ -55,7 +55,6 @@ use aivi_runtime::{
 };
 use aivi_syntax::{Formatter, ItemKind, TokenKind, lex_module, parse_module};
 use gtk::{glib, prelude::*};
-use tokio::sync::mpsc;
 
 fn main() -> ExitCode {
     match run() {

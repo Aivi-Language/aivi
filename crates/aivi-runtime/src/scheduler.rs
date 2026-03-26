@@ -9,15 +9,24 @@ use aivi_backend::{CommittedValueStore, InlineCommittedValueStore};
 use crate::graph::{DerivedHandle, InputHandle, OwnerHandle, SignalGraph, SignalHandle};
 
 pub trait DerivedNodeEvaluator<V> {
-    fn evaluate(&mut self, signal: DerivedHandle, inputs: DependencyValues<'_, V>) -> Option<V>;
+    fn evaluate(
+        &mut self,
+        signal: DerivedHandle,
+        inputs: DependencyValues<'_, V>,
+    ) -> DerivedSignalUpdate<V>;
 }
 
-impl<V, F> DerivedNodeEvaluator<V> for F
+impl<V, F, R> DerivedNodeEvaluator<V> for F
 where
-    F: for<'a> FnMut(DerivedHandle, DependencyValues<'a, V>) -> Option<V>,
+    F: for<'a> FnMut(DerivedHandle, DependencyValues<'a, V>) -> R,
+    R: Into<DerivedSignalUpdate<V>>,
 {
-    fn evaluate(&mut self, signal: DerivedHandle, inputs: DependencyValues<'_, V>) -> Option<V> {
-        self(signal, inputs)
+    fn evaluate(
+        &mut self,
+        signal: DerivedHandle,
+        inputs: DependencyValues<'_, V>,
+    ) -> DerivedSignalUpdate<V> {
+        self(signal, inputs).into()
     }
 }
 
@@ -28,12 +37,13 @@ pub trait TryDerivedNodeEvaluator<V> {
         &mut self,
         signal: DerivedHandle,
         inputs: DependencyValues<'_, V>,
-    ) -> Result<Option<V>, Self::Error>;
+    ) -> Result<DerivedSignalUpdate<V>, Self::Error>;
 }
 
-impl<V, E, F> TryDerivedNodeEvaluator<V> for F
+impl<V, E, F, R> TryDerivedNodeEvaluator<V> for F
 where
-    F: for<'a> FnMut(DerivedHandle, DependencyValues<'a, V>) -> Result<Option<V>, E>,
+    F: for<'a> FnMut(DerivedHandle, DependencyValues<'a, V>) -> Result<R, E>,
+    R: Into<DerivedSignalUpdate<V>>,
 {
     type Error = E;
 
@@ -41,8 +51,24 @@ where
         &mut self,
         signal: DerivedHandle,
         inputs: DependencyValues<'_, V>,
-    ) -> Result<Option<V>, Self::Error> {
-        self(signal, inputs)
+    ) -> Result<DerivedSignalUpdate<V>, Self::Error> {
+        self(signal, inputs).map(Into::into)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum DerivedSignalUpdate<V> {
+    Unchanged,
+    Clear,
+    Value(V),
+}
+
+impl<V> From<Option<V>> for DerivedSignalUpdate<V> {
+    fn from(value: Option<V>) -> Self {
+        match value {
+            Some(value) => Self::Value(value),
+            None => Self::Clear,
+        }
     }
 }
 
@@ -388,7 +414,7 @@ where
 
     fn tick_with<E, X>(&mut self, mut evaluate: E) -> Result<TickOutcome, X>
     where
-        E: FnMut(DerivedHandle, DependencyValues<'_, V>) -> Result<Option<V>, X>,
+        E: FnMut(DerivedHandle, DependencyValues<'_, V>) -> Result<DerivedSignalUpdate<V>, X>,
     {
         self.drain_worker_publications();
         let tick = self.next_tick;
@@ -489,8 +515,9 @@ where
                         committed: &committed_values,
                     };
                     pending[signal.index()] = match evaluate(signal, inputs)? {
-                        Some(value) => PendingValue::NextSome(value),
-                        None => PendingValue::NextNone,
+                        DerivedSignalUpdate::Unchanged => PendingValue::Unchanged,
+                        DerivedSignalUpdate::Clear => PendingValue::NextNone,
+                        DerivedSignalUpdate::Value(value) => PendingValue::NextSome(value),
                     };
                 }
             }

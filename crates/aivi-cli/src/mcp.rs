@@ -162,7 +162,7 @@ impl McpHostState {
             prepared.launch_config,
         )?;
         harness.install_quit_on_last_window_close();
-        harness.present_root_windows();
+        harness.present_root_windows()?;
         let view_name = harness.view_name().to_owned();
         self.widget_ids.clear();
         self.next_widget_id = 0;
@@ -383,13 +383,21 @@ impl McpHostState {
 
     fn emit_gtk_event(&mut self, args: EmitGtkEventArgs) -> Result<EventResult, String> {
         let before = self.list_signals(ListSignalsArgs::default())?;
-        let widget = match args.event.as_str() {
-            "window_key" => None,
-            _ => Some(
-                self.find_widget_by_id(&args.widget_id)?
-                    .ok_or_else(|| format!("no live GTK widget matches `{}`", args.widget_id))?,
-            ),
-        };
+        let widget =
+            match args.event.as_str() {
+                "window_key" => None,
+                _ => Some(
+                    self.find_widget_by_id(args.widget_id.as_deref().ok_or_else(|| {
+                        format!("`{}` requires a `widget_id` argument", args.event)
+                    })?)?
+                    .ok_or_else(|| {
+                        format!(
+                            "no live GTK widget matches `{}`",
+                            args.widget_id.as_deref().unwrap_or_default()
+                        )
+                    })?,
+                ),
+            };
         let session = self.require_session()?;
         match args.event.as_str() {
             "click" | "activate" => emit_activate_event(widget.as_ref().expect("widget required"))?,
@@ -1888,7 +1896,7 @@ struct FindWidgetsArgs {
 
 #[derive(Clone, Deserialize)]
 struct EmitGtkEventArgs {
-    widget_id: String,
+    widget_id: Option<String>,
     event: String,
     text: Option<String>,
     active: Option<bool>,
@@ -2020,10 +2028,10 @@ struct EventResult {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfiguredTarget, JsonRpcError, JsonRpcRequest, JsonRpcTransport, MCP_PROTOCOL_VERSION,
-        McpHostController, detect_json_rpc_transport, handle_json_rpc_request, parse_prefixed_u32,
-        parse_prefixed_u64, read_json_rpc_message, resolve_initial_entry_path,
-        runtime_value_from_json, write_json_rpc_message,
+        ConfiguredTarget, EmitGtkEventArgs, JsonRpcError, JsonRpcRequest, JsonRpcTransport,
+        MCP_PROTOCOL_VERSION, McpHostController, detect_json_rpc_transport,
+        handle_json_rpc_request, parse_prefixed_u32, parse_prefixed_u64, read_json_rpc_message,
+        resolve_initial_entry_path, runtime_value_from_json, write_json_rpc_message,
     };
     use aivi_backend::RuntimeValue;
     use serde_json::{Value as JsonValue, json};
@@ -2249,5 +2257,20 @@ mod tests {
             error.message.contains("pass `path`"),
             "tool failure should tell the caller how to bind an app"
         );
+    }
+
+    #[test]
+    fn window_key_event_args_do_not_require_widget_id() {
+        let args: EmitGtkEventArgs = serde_json::from_value(json!({
+            "event": "window_key",
+            "key": "ArrowDown",
+            "repeated": false
+        }))
+        .expect("window_key arguments should deserialize without a widget id");
+
+        assert_eq!(args.event, "window_key");
+        assert_eq!(args.key.as_deref(), Some("ArrowDown"));
+        assert_eq!(args.repeated, Some(false));
+        assert!(args.widget_id.is_none());
     }
 }

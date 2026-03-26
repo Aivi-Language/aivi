@@ -37,10 +37,10 @@ pub use providers::{
     MailboxPublishError, SourceProviderContext, SourceProviderExecutionError, SourceProviderManager,
 };
 pub use scheduler::{
-    DependencyValue, DependencyValues, DerivedNodeEvaluator, DroppedPublication, Generation,
-    Publication, PublicationDropReason, PublicationStamp, Scheduler, SchedulerAccessError,
-    SchedulerMessage, TickOutcome, TryDerivedNodeEvaluator, WorkerPublicationSender,
-    WorkerSendError,
+    DependencyValue, DependencyValues, DerivedNodeEvaluator, DerivedSignalUpdate,
+    DroppedPublication, Generation, Publication, PublicationDropReason, PublicationStamp,
+    Scheduler, SchedulerAccessError, SchedulerMessage, TickOutcome, TryDerivedNodeEvaluator,
+    WorkerPublicationSender, WorkerSendError,
 };
 pub use source_decode::{
     ExternalSourceValue, SourceDecodeError, SourceDecodeProgramSupportError, decode_external,

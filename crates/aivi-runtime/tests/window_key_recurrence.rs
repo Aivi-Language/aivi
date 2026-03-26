@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use aivi_backend::{RuntimeSumValue, RuntimeValue};
+use aivi_backend::{DetachedRuntimeValue, RuntimeSumValue, RuntimeValue};
 use aivi_base::SourceDatabase;
 use aivi_hir::{Item, lower_module as lower_hir_module};
 use aivi_lambda::lower_module as lower_lambda_module;
@@ -150,5 +150,301 @@ sig direction : Signal Direction =
             variant_name: constructor.variant_name.clone(),
             fields: Vec::new(),
         })
+    );
+}
+
+#[test]
+fn window_key_space_restart_is_consumed_after_one_game_over() {
+    let lowered = lower_text(
+        "runtime-window-key-space-restart.aivi",
+        r#"
+use aivi.defaults (Option)
+
+type Key =
+  | Key Text
+
+type Direction =
+  | Left
+  | Right
+
+type Status =
+  | Running
+  | GameOver
+
+type Game = {
+    status: Status,
+    steps: Int
+}
+
+type GameTickState = {
+    game: Game,
+    seenRestartCount: Int
+}
+
+val initialGame:Game = {
+    status: Running,
+    steps: 0
+}
+
+val initialGameTickState:GameTickState = {
+    game: initialGame,
+    seenRestartCount: 0
+}
+
+fun arrowKey:(Option Direction) key:Key =>
+    key
+     ||> Key "ArrowLeft"  => Some Left
+     ||> Key "ArrowRight" => Some Right
+     ||> _                => None
+
+fun filterDirection:Direction current:Direction opt:(Option Direction) =>
+    opt
+     ||> Some dir => dir
+     ||> None     => current
+
+fun updateDirection:Direction key:Key current:Direction =>
+    arrowKey key
+     |> filterDirection current
+
+fun restartKey:Bool key:Key =>
+    key
+     ||> Key "Space" => True
+     ||> _           => False
+
+fun updateDirectionOrRestart:Direction key:Key current:Direction =>
+    restartKey key
+     T|> Right
+     F|> updateDirection key current
+
+fun updateRestartCount:Int key:Key current:Int =>
+    restartKey key
+     T|> current + 1
+     F|> current
+
+fun hasPendingRestart:Bool restartCount:Int seenRestartCount:Int =>
+    restartCount != seenRestartCount
+
+fun stepRunning:Game direction:Direction game:Game =>
+    direction
+     ||> Left  => { status: GameOver, steps: game.steps + 1 }
+     ||> Right => { status: Running, steps: game.steps + 1 }
+
+fun restartGame:Game restart:Bool game:Game =>
+    restart
+     T|> initialGame
+     F|> game
+
+fun stepGame:Game restart:Bool direction:Direction game:Game =>
+    game.status
+     ||> GameOver => restartGame restart game
+     ||> Running  => stepRunning direction game
+
+fun stepTickState:GameTickState restartCount:Int direction:Direction state:GameTickState =>
+    {
+        game: stepGame (hasPendingRestart restartCount state.seenRestartCount) direction state.game,
+        seenRestartCount: restartCount
+    }
+
+fun stepOnTick:GameTickState tick:Int state:GameTickState =>
+    stepTickState restartCount direction state
+
+fun gameValue:Game state:GameTickState =>
+    state.game
+
+fun statusText:Text game:Game =>
+    game.status
+     ||> Running  => "Running"
+     ||> GameOver => "GameOver"
+
+fun stepCount:Int game:Game =>
+    game.steps
+
+provider custom.tick
+    wakeup: providerTrigger
+
+@source custom.tick
+sig tick : Signal Int
+
+@source window.keyDown with {
+    repeat: False
+    focusOnly: True
+}
+sig keyDown : Signal Key
+
+sig direction : Signal Direction =
+    keyDown
+     |> scan Right updateDirectionOrRestart
+
+sig restartCount : Signal Int =
+    keyDown
+     |> scan 0 updateRestartCount
+
+sig gameState : Signal GameTickState =
+    tick
+     |> scan initialGameTickState stepOnTick
+
+sig game : Signal Game =
+    gameState
+     |> gameValue
+
+sig statusLine : Signal Text =
+    game
+     |> statusText
+
+sig steps : Signal Int =
+    game
+     |> stepCount
+"#,
+    );
+    let assembly =
+        assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+    let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend))
+        .expect("startup link should succeed");
+    let first = linked
+        .tick_with_source_lifecycle()
+        .expect("initial source lifecycle tick should succeed");
+    let tick_instance = linked
+        .source_by_owner(item_id(lowered.hir.module(), "tick"))
+        .expect("tick source binding should exist")
+        .instance;
+    let key_instance = linked
+        .source_by_owner(item_id(lowered.hir.module(), "keyDown"))
+        .expect("keyDown source binding should exist")
+        .instance;
+    let mut tick_port = None;
+    let mut providers = SourceProviderManager::new();
+    for action in first.source_actions() {
+        match action {
+            aivi_runtime::LinkedSourceLifecycleAction::Activate { instance, port, .. }
+            | aivi_runtime::LinkedSourceLifecycleAction::Reconfigure { instance, port, .. } => {
+                if *instance == tick_instance {
+                    tick_port = Some(port.clone());
+                }
+            }
+            aivi_runtime::LinkedSourceLifecycleAction::Suspend { .. } => {}
+        }
+        if action.instance() == key_instance {
+            providers
+                .apply_actions(std::slice::from_ref(action))
+                .expect("window key source should activate");
+        }
+    }
+    let tick_port = tick_port.expect("custom tick source should activate");
+    let direction_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "direction"))
+        .expect("direction signal binding should exist")
+        .signal();
+    let status_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "statusLine"))
+        .expect("statusLine signal binding should exist")
+        .signal();
+    let steps_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "steps"))
+        .expect("steps signal binding should exist")
+        .signal();
+    let left = lowered
+        .hir
+        .module()
+        .sum_constructor_handle(item_id(lowered.hir.module(), "Direction"), "Left")
+        .expect("Direction.Left constructor should resolve");
+    let right = lowered
+        .hir
+        .module()
+        .sum_constructor_handle(item_id(lowered.hir.module(), "Direction"), "Right")
+        .expect("Direction.Right constructor should resolve");
+    assert_eq!(
+        linked.runtime().current_value(status_signal).unwrap(),
+        Some(&RuntimeValue::Text("Running".into()))
+    );
+    assert_eq!(
+        linked.runtime().current_value(steps_signal).unwrap(),
+        Some(&RuntimeValue::Int(0))
+    );
+
+    providers.dispatch_window_key_event(WindowKeyEvent {
+        name: "ArrowLeft".into(),
+        repeated: false,
+    });
+    let left_value = spin_until(&mut linked, direction_signal, Duration::from_millis(200))
+        .expect("left key should update direction");
+    assert_eq!(
+        left_value,
+        RuntimeValue::Sum(RuntimeSumValue {
+            item: left.item,
+            type_name: left.type_name.clone(),
+            variant_name: left.variant_name.clone(),
+            fields: Vec::new(),
+        })
+    );
+
+    tick_port
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            1,
+        )))
+        .expect("first tick publication should queue");
+    linked
+        .tick_with_source_lifecycle()
+        .expect("first tick should update the game");
+    assert_eq!(
+        linked.runtime().current_value(status_signal).unwrap(),
+        Some(&RuntimeValue::Text("GameOver".into()))
+    );
+    assert_eq!(
+        linked.runtime().current_value(steps_signal).unwrap(),
+        Some(&RuntimeValue::Int(1))
+    );
+
+    providers.dispatch_window_key_event(WindowKeyEvent {
+        name: "Space".into(),
+        repeated: false,
+    });
+    let right_value = spin_until(&mut linked, direction_signal, Duration::from_millis(200))
+        .expect("space key should reset direction");
+    assert_eq!(
+        right_value,
+        RuntimeValue::Sum(RuntimeSumValue {
+            item: right.item,
+            type_name: right.type_name.clone(),
+            variant_name: right.variant_name.clone(),
+            fields: Vec::new(),
+        })
+    );
+
+    tick_port
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            2,
+        )))
+        .expect("restart tick publication should queue");
+    linked
+        .tick_with_source_lifecycle()
+        .expect("restart tick should reset the game");
+    assert_eq!(
+        linked.runtime().current_value(status_signal).unwrap(),
+        Some(&RuntimeValue::Text("Running".into()))
+    );
+    assert_eq!(
+        linked.runtime().current_value(steps_signal).unwrap(),
+        Some(&RuntimeValue::Int(0))
+    );
+
+    tick_port
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            3,
+        )))
+        .expect("post-restart tick publication should queue");
+    linked
+        .tick_with_source_lifecycle()
+        .expect("post-restart tick should advance normally");
+    assert_eq!(
+        linked.runtime().current_value(status_signal).unwrap(),
+        Some(&RuntimeValue::Text("Running".into()))
+    );
+    assert_eq!(
+        linked.runtime().current_value(steps_signal).unwrap(),
+        Some(&RuntimeValue::Int(1)),
+        "restart requests must be consumed so later deaths do not auto-restart without a new Space press"
     );
 }

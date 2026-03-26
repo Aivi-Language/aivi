@@ -29,6 +29,11 @@ type Game = {
     seed: Int
 }
 
+type GameTickState = {
+    game: Game,
+    seenRestartCount: Int
+}
+
 type CellKind =
   | SnakeHead
   | SnakeBody
@@ -69,14 +74,19 @@ val maxLength:Int = 6
 
 val initialGame:Game = {
     snake: [
-        Pixel 12 10,
-        Pixel 11 10,
-        Pixel 10 10
+        Pixel 6 10,
+        Pixel 5 10,
+        Pixel 4 10
     ],
-    food: Pixel 20 2,
+    food: Pixel 18 2,
     score: 0,
     status: Running,
     seed: 2463534242
+}
+
+val initialGameTickState:GameTickState = {
+    game: initialGame,
+    seenRestartCount: 0
 }
 
 type PixelTakeAcc = {
@@ -154,6 +164,23 @@ fun filterDirection:Direction current:Direction opt:(Option Direction) =>
 fun updateDirection:Direction key:Key current:Direction =>
     arrowKey key
      |> filterDirection current
+
+fun restartKey:Bool key:Key =>
+    key
+     ||> Key " "     => True
+     ||> Key "Space" => True
+     ||> Key "space" => True
+     ||> _           => False
+
+fun updateDirectionOrRestart:Direction key:Key current:Direction =>
+    restartKey key
+     T|> Right
+     F|> updateDirection key current
+
+fun updateRestartCount:Int key:Key current:Int =>
+    restartKey key
+     T|> current + 1
+     F|> current
 
 fun movePixel:Pixel head:Pixel direction:Direction =>
     (head, direction)
@@ -234,17 +261,48 @@ fun applyStep:Game size:BoardSize direction:Direction game:Game ate:Bool =>
         seed: nextSeed game.seed
     }
 
-fun stepRunning:Game size:BoardSize direction:Direction game:Game =>
+fun gameOverState:Game game:Game =>
+    {
+        snake: game.snake,
+        food: game.food,
+        score: game.score,
+        status: GameOver,
+        seed: game.seed
+    }
+
+fun applyRunningStep:Game size:BoardSize direction:Direction game:Game =>
     willEat direction game.food game.snake
      |> applyStep size direction game
 
-fun stepGame:Game size:BoardSize direction:Direction game:Game =>
+fun stepRunning:Game size:BoardSize direction:Direction game:Game =>
+    hasCollision size direction game
+     T|> gameOverState game
+     F|> applyRunningStep size direction game
+
+fun restartGame:Game restart:Bool game:Game =>
+    restart
+     T|> initialGame
+     F|> game
+
+fun hasPendingRestart:Bool restartCount:Int seenRestartCount:Int =>
+    restartCount != seenRestartCount
+
+fun stepGame:Game restart:Bool size:BoardSize direction:Direction game:Game =>
     game.status
-     ||> GameOver => game
+     ||> GameOver => restartGame restart game
      ||> Running  => stepRunning size direction game
 
-fun stepOnTick:Game tick:Unit game:Game =>
-    stepGame boardSize direction game
+fun stepTickState:GameTickState restartCount:Int size:BoardSize direction:Direction state:GameTickState =>
+    {
+        game: stepGame (hasPendingRestart restartCount state.seenRestartCount) size direction state.game,
+        seenRestartCount: restartCount
+    }
+
+fun stepOnTick:GameTickState tick:Unit state:GameTickState =>
+    stepTickState restartCount boardSize direction state
+
+fun gameValue:Game state:GameTickState =>
+    state.game
 
 fun cellFoodOrEmpty:CellKind game:Game pos:Pixel =>
     pos == game.food
@@ -341,17 +399,25 @@ sig keyDown : Signal Key
 
 sig direction : Signal Direction =
     keyDown
-     |> scan Right updateDirection
+     |> scan Right updateDirectionOrRestart
 
-@source timer.every 160 with {
-    immediate: True,
+sig restartCount : Signal Int =
+    keyDown
+     |> scan 0 updateRestartCount
+
+@source timer.every 200 with {
+    immediate: False,
     coalesce: True
 }
 sig tick : Signal Unit
 
-sig game : Signal Game =
+sig gameState : Signal GameTickState =
     tick
-     |> scan initialGame stepOnTick
+     |> scan initialGameTickState stepOnTick
+
+sig game : Signal Game =
+    gameState
+     |> gameValue
 
 sig board : Signal GameBoard =
     game

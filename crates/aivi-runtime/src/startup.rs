@@ -15,9 +15,10 @@ use aivi_core as core;
 use aivi_hir as hir;
 
 use crate::{
-    InputHandle, PublicationPortError, RuntimeSourceProvider, SourceInstanceId,
-    SourceLifecycleActionKind, SourcePublicationPort, TaskCompletionPort, TaskInstanceId,
-    TaskSourceRuntime, TaskSourceRuntimeError, TickOutcome, TryDerivedNodeEvaluator,
+    DerivedSignalUpdate, InputHandle, PublicationPortError, RuntimeSourceProvider,
+    SourceInstanceId, SourceLifecycleActionKind, SourcePublicationPort, TaskCompletionPort,
+    TaskInstanceId, TaskSourceRuntime, TaskSourceRuntimeError, TickOutcome,
+    TryDerivedNodeEvaluator,
     graph::{DerivedHandle, OwnerHandle, SignalHandle},
     hir_adapter::{HirRuntimeAssembly, HirRuntimeInstantiationError},
     scheduler::DependencyValues,
@@ -1292,7 +1293,7 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
         &mut self,
         signal: DerivedHandle,
         inputs: DependencyValues<'_, RuntimeValue>,
-    ) -> Result<Option<RuntimeValue>, Self::Error> {
+    ) -> Result<DerivedSignalUpdate<RuntimeValue>, Self::Error> {
         // Check recurrence signals first.
         if let Some(binding) = self.linked_recurrence_signals.get(&signal) {
             return self.try_evaluate_recurrence(signal, binding, inputs);
@@ -1316,7 +1317,7 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
         globals.remove(&binding.backend_item);
         for (index, dependency) in binding.dependency_items.iter().copied().enumerate() {
             let Some(value) = inputs.value(index) else {
-                return Ok(None);
+                return Ok(DerivedSignalUpdate::Clear);
             };
             globals.insert(dependency, RuntimeValue::Signal(Box::new(value.clone())));
         }
@@ -1359,7 +1360,7 @@ impl LinkedDerivedEvaluator<'_> {
         mut value: RuntimeValue,
         globals: &BTreeMap<BackendItemId, RuntimeValue>,
         evaluator: &mut KernelEvaluator<'_>,
-    ) -> Result<Option<RuntimeValue>, BackendRuntimeError> {
+    ) -> Result<DerivedSignalUpdate<RuntimeValue>, BackendRuntimeError> {
         for &pipeline_id in pipeline_ids {
             let pipeline = &self.backend.pipelines()[pipeline_id];
             for stage in &pipeline.stages {
@@ -1373,7 +1374,7 @@ impl LinkedDerivedEvaluator<'_> {
                             .evaluate_kernel(*predicate, Some(&value), &[], globals)
                             .map_err(|error| self.derived_eval_error(signal, item, error))?;
                         if matches!(pred, RuntimeValue::Bool(false)) && !emits_negative_update {
-                            return Ok(None);
+                            return Ok(DerivedSignalUpdate::Clear);
                         }
                     }
                     BackendStageKind::TruthyFalsy(_) => {
@@ -1390,7 +1391,7 @@ impl LinkedDerivedEvaluator<'_> {
                 }
             }
         }
-        Ok(Some(value))
+        Ok(DerivedSignalUpdate::Value(value))
     }
 
     fn apply_fanout_stage(
@@ -1449,7 +1450,7 @@ impl LinkedDerivedEvaluator<'_> {
         signal: DerivedHandle,
         binding: &LinkedRecurrenceSignal,
         inputs: DependencyValues<'_, RuntimeValue>,
-    ) -> Result<Option<RuntimeValue>, BackendRuntimeError> {
+    ) -> Result<DerivedSignalUpdate<RuntimeValue>, BackendRuntimeError> {
         let mut globals = self.committed_signals.clone();
         for (index, &dep_item) in binding.dependency_items.iter().enumerate() {
             if let Some(value) = inputs.value(index) {
@@ -1476,12 +1477,14 @@ impl LinkedDerivedEvaluator<'_> {
                 item: binding.item,
                 error,
             })?;
-            return Ok(Some(seed_value));
+            return Ok(DerivedSignalUpdate::Value(seed_value));
         }
 
         if !wakeup_fired {
-            // No wakeup firing and already have a value: no update.
-            return Ok(None);
+            // Non-wakeup dependencies (for example a separate direction signal captured
+            // by a scan step) may change between firings. Preserve the last committed
+            // accumulator snapshot until the wakeup dependency actually fires.
+            return Ok(DerivedSignalUpdate::Unchanged);
         }
 
         // Wakeup fired: evaluate step kernel with previous value as subject.
@@ -1501,7 +1504,7 @@ impl LinkedDerivedEvaluator<'_> {
                 })?;
         }
 
-        Ok(Some(result))
+        Ok(DerivedSignalUpdate::Value(result))
     }
 }
 
@@ -3283,6 +3286,133 @@ sig counter : Signal Int =
         assert_eq!(
             linked.runtime().current_value(counter_signal).unwrap(),
             Some(&RuntimeValue::Int(5))
+        );
+    }
+
+    #[test]
+    fn linked_runtime_keeps_recurrence_value_when_only_non_wakeup_dependencies_change() {
+        let lowered = lower_text(
+            "runtime-startup-recurrence-non-wakeup-deps.aivi",
+            r#"
+fun setDirection:Int next:Int current:Int =>
+    next
+
+fun stepGame:Int tick:Int current:Int =>
+    current + direction
+
+provider custom.turn
+    wakeup: providerTrigger
+
+provider custom.tick
+    wakeup: providerTrigger
+
+@source custom.turn
+sig turn : Signal Int
+
+sig direction : Signal Int =
+    turn
+     |> scan 1 setDirection
+
+@source custom.tick
+sig tick : Signal Int
+
+sig game : Signal Int =
+    tick
+     |> scan 0 stepGame
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("recurrence with non-wakeup dependencies should link successfully");
+        let first = linked
+            .tick_with_source_lifecycle()
+            .expect("initial recurrence tick should succeed");
+        assert_eq!(first.source_actions().len(), 2);
+        let turn_instance = linked
+            .source_by_owner(item_id(lowered.hir.module(), "turn"))
+            .expect("turn source binding should exist")
+            .instance;
+        let tick_instance = linked
+            .source_by_owner(item_id(lowered.hir.module(), "tick"))
+            .expect("tick source binding should exist")
+            .instance;
+        let mut turn_port = None;
+        let mut tick_port = None;
+        for action in first.source_actions() {
+            let LinkedSourceLifecycleAction::Activate {
+                instance,
+                port,
+                config: _,
+            } = action
+            else {
+                panic!("initial source lifecycle should only activate providers");
+            };
+            match instance {
+                instance if *instance == turn_instance => {
+                    turn_port = Some(port.clone());
+                }
+                instance if *instance == tick_instance => {
+                    tick_port = Some(port.clone());
+                }
+                _ => {}
+            }
+        }
+        let turn_port = turn_port.expect("turn source should activate");
+        let tick_port = tick_port.expect("tick source should activate");
+        let game_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "game"))
+            .expect("game signal binding should exist")
+            .signal();
+        let direction_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "direction"))
+            .expect("direction signal binding should exist")
+            .signal();
+        assert_eq!(
+            linked.runtime().current_value(game_signal).unwrap(),
+            Some(&RuntimeValue::Int(0))
+        );
+        assert_eq!(
+            linked.runtime().current_value(direction_signal).unwrap(),
+            Some(&RuntimeValue::Int(1))
+        );
+
+        turn_port
+            .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+                5,
+            )))
+            .expect("direction publication should queue");
+        linked
+            .tick_with_source_lifecycle()
+            .expect("direction-only tick should succeed");
+        assert_eq!(
+            linked.runtime().current_value(direction_signal).unwrap(),
+            Some(&RuntimeValue::Int(5))
+        );
+        assert_eq!(
+            linked.runtime().current_value(game_signal).unwrap(),
+            Some(&RuntimeValue::Int(0)),
+            "non-wakeup dependency changes must preserve the current recurrence snapshot"
+        );
+
+        tick_port
+            .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+                1,
+            )))
+            .expect("tick publication should queue");
+        linked
+            .tick_with_source_lifecycle()
+            .expect("tick publication should advance the recurrence");
+        assert_eq!(
+            linked.runtime().current_value(game_signal).unwrap(),
+            Some(&RuntimeValue::Int(5)),
+            "the next wakeup should apply the latest direction"
         );
     }
 }
