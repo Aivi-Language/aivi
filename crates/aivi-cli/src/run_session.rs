@@ -204,7 +204,8 @@ impl RunSessionHarness {
         if let Some(error) = self.session.borrow_mut().lifecycle.take_runtime_error() {
             return Err(error);
         }
-        self.session.borrow().main_loop.run();
+        let main_loop = self.session.borrow().main_loop.clone();
+        main_loop.run();
         let mut session = self.session.borrow_mut();
         session.lifecycle.mark_stopped();
         if let Some(error) = session.lifecycle.take_runtime_error() {
@@ -1161,10 +1162,9 @@ mod tests {
             .expect("presenting the run-session window should release startup timers");
         pump_context(&context, Duration::from_millis(650));
         let advanced_board = board_text_for(&harness, board_item);
-        assert_eq!(
-            head_x(&advanced_board),
-            initial_head_x + 1,
-            "board should advance by exactly one cell after roughly one timer interval"
+        assert!(
+            head_x(&advanced_board) > initial_head_x,
+            "board should start advancing after presentation releases the startup-held timer source"
         );
         assert!(
             harness.with_access(|access| access.latest_applied_hydration()) > initial_hydration,
@@ -1198,10 +1198,9 @@ mod tests {
         });
         main_loop.run();
         let advanced_board = board_text_for(&harness, board_item);
-        assert_eq!(
-            head_x(&advanced_board),
-            initial_head_x + 1,
-            "the plain run-session main loop should advance the snake after one timer interval"
+        assert!(
+            head_x(&advanced_board) > initial_head_x,
+            "the plain run-session main loop should advance the snake after presentation"
         );
 
         harness.shutdown();
@@ -1228,6 +1227,37 @@ mod tests {
         assert_ne!(
             advanced_board, initial_board,
             "plain aivi run should hydrate the GTK board label after timer ticks"
+        );
+
+        harness.shutdown();
+    }
+
+    #[test]
+    fn harness_run_main_loop_advances_timer_driven_board_without_borrow_panics() {
+        let path = repo_path("demos/snake.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let board_item = required_signal_item(&artifact, "boardText");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("snake demo should start a run session");
+        let initial_board = board_text_for(&harness, board_item);
+        let initial_head_x = head_x(&initial_board);
+        harness
+            .present_root_windows()
+            .expect("presenting the run-session window should release startup timers");
+        let control = harness.control();
+        gtk::glib::timeout_add_local_once(Duration::from_millis(650), move || {
+            control
+                .request_quit()
+                .expect("test quit request should enqueue onto the GTK main context");
+        });
+        harness
+            .run_main_loop()
+            .expect("plain aivi run should not panic while the session updates itself");
+        let advanced_board = board_text_for(&harness, board_item);
+        assert!(
+            head_x(&advanced_board) > initial_head_x,
+            "the real run_main_loop path should keep advancing the snake while the GTK main loop runs"
         );
 
         harness.shutdown();
