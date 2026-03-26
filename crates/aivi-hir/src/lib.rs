@@ -89,7 +89,6 @@ pub use ids::{
 };
 pub use lower::lower_module_with_resolver;
 pub use lower::{LoweringResult, lower_module, lower_structure, resolve_imports};
-pub use signal_metadata_elaboration::populate_signal_metadata;
 pub use recurrence_elaboration::{
     BlockedRecurrenceNode, RecurrenceElaborationBlocker, RecurrenceElaborationReport,
     RecurrenceGuardPlan, RecurrenceNodeElaboration, RecurrenceNodeOutcome, RecurrenceNodePlan,
@@ -98,6 +97,7 @@ pub use recurrence_elaboration::{
 };
 pub use resolver::{ImportCycle, ImportModuleResolution, ImportResolver, NullImportResolver};
 pub use sequence::{AtLeastTwo, NonEmpty, SequenceError};
+pub use signal_metadata_elaboration::populate_signal_metadata;
 pub use source_contract_resolution::{
     ResolvedSourceContractType, ResolvedSourceTypeConstructor, SourceContractResolutionError,
     SourceContractResolutionErrorKind, SourceContractTypeResolver,
@@ -121,6 +121,6 @@ pub use typecheck::{
 };
 pub use validate::{
     GateRecordField, GateType, TypeBinding, TypeConstructorBinding, TypeConstructorHead,
-    ValidationMode, ValidationReport, case_pattern_field_types, validate_bindings,
-    validate_module, validate_structure, validate_types,
+    ValidationMode, ValidationReport, case_pattern_field_types, validate_bindings, validate_module,
+    validate_structure, validate_types,
 };

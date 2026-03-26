@@ -80,7 +80,11 @@ impl ValidationReport {
 /// Validates structural integrity: roots, imports, decorators, types, patterns,
 /// expressions, markup/control nodes, clusters, and items.
 pub fn validate_structure(module: &Module, mode: ValidationMode) -> ValidationReport {
-    let mut v = Validator { module, mode, diagnostics: Vec::new() };
+    let mut v = Validator {
+        module,
+        mode,
+        diagnostics: Vec::new(),
+    };
     v.validate_roots();
     v.validate_type_parameters();
     v.validate_imports();
@@ -97,7 +101,11 @@ pub fn validate_structure(module: &Module, mode: ValidationMode) -> ValidationRe
 
 /// Validates binding uniqueness and signal cycle freedom.
 pub fn validate_bindings(module: &Module, mode: ValidationMode) -> ValidationReport {
-    let mut v = Validator { module, mode, diagnostics: Vec::new() };
+    let mut v = Validator {
+        module,
+        mode,
+        diagnostics: Vec::new(),
+    };
     v.validate_bindings();
     v.validate_signal_cycles();
     ValidationReport::new(v.diagnostics)
@@ -106,7 +114,11 @@ pub fn validate_bindings(module: &Module, mode: ValidationMode) -> ValidationRep
 /// Validates the type system: kinds, instances, source contracts, expression
 /// types, constructor arity, and pipe semantics.
 pub fn validate_types(module: &Module, mode: ValidationMode) -> ValidationReport {
-    let mut v = Validator { module, mode, diagnostics: Vec::new() };
+    let mut v = Validator {
+        module,
+        mode,
+        diagnostics: Vec::new(),
+    };
     v.validate_type_kinds();
     v.validate_instance_items();
     v.validate_source_contract_types();
@@ -133,7 +145,6 @@ const REGEX_LITERAL_PREFIX_LEN: usize = 3;
 const REGEX_NEST_LIMIT: u32 = 256;
 
 impl Validator<'_> {
-
     fn validate_roots(&mut self) {
         for item in &self.module.root_items {
             self.require_item(SourceSpan::default(), "module root", "item", *item);

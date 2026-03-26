@@ -6,9 +6,9 @@ use aivi_hir::BindingId;
 
 use crate::{
     Capture, Closure, ClosureId, ClosureKind, FanoutFilter, FanoutJoin, FanoutStage, GateStage,
-    Item, Parameter,
+    Item,
     LoweringError::*,
-    Module, NonSourceWakeup, Pipe, PipeRecurrence, RecurrenceStage, Stage, StageKind,
+    Module, NonSourceWakeup, Parameter, Pipe, PipeRecurrence, RecurrenceStage, Stage, StageKind,
     analysis::{AnalysisError, capture_free_bindings},
     validate::{ValidationError, validate_module},
 };
@@ -193,15 +193,20 @@ impl<'a> ModuleLowerer<'a> {
                 }
             });
 
-            let lowered_id = alloc_or_diag!(self.module.items_mut(), Item {
-                origin: item.origin,
-                span: item.span,
-                name: item.name.clone(),
-                kind: item.kind.clone(),
-                parameters: lambda_params,
-                body,
-                pipes: item.pipes.clone(),
-            }, "items", self.errors);
+            let lowered_id = alloc_or_diag!(
+                self.module.items_mut(),
+                Item {
+                    origin: item.origin,
+                    span: item.span,
+                    name: item.name.clone(),
+                    kind: item.kind.clone(),
+                    parameters: lambda_params,
+                    body,
+                    pipes: item.pipes.clone(),
+                },
+                "items",
+                self.errors
+            );
             debug_assert_eq!(lowered_id, item_id);
         }
     }
@@ -278,14 +283,19 @@ impl<'a> ModuleLowerer<'a> {
                 }
             };
 
-            let lowered_id = alloc_or_diag!(self.module.stages_mut(), Stage {
-                pipe: stage.pipe,
-                index: stage.index,
-                span: stage.span,
-                input_subject: stage.input_subject.clone(),
-                result_subject: stage.result_subject.clone(),
-                kind,
-            }, "stages", self.errors);
+            let lowered_id = alloc_or_diag!(
+                self.module.stages_mut(),
+                Stage {
+                    pipe: stage.pipe,
+                    index: stage.index,
+                    span: stage.span,
+                    input_subject: stage.input_subject.clone(),
+                    result_subject: stage.result_subject.clone(),
+                    kind,
+                },
+                "stages",
+                self.errors
+            );
             debug_assert_eq!(lowered_id, stage_id);
         }
     }
@@ -346,12 +356,17 @@ impl<'a> ModuleLowerer<'a> {
                 })
             });
 
-            let lowered_id = alloc_or_diag!(self.module.pipes_mut(), Pipe {
-                owner: pipe.owner,
-                origin: pipe.origin.clone(),
-                stages: pipe.stages.clone(),
-                recurrence,
-            }, "pipes", self.errors);
+            let lowered_id = alloc_or_diag!(
+                self.module.pipes_mut(),
+                Pipe {
+                    owner: pipe.owner,
+                    origin: pipe.origin.clone(),
+                    stages: pipe.stages.clone(),
+                    recurrence,
+                },
+                "pipes",
+                self.errors
+            );
             debug_assert_eq!(lowered_id, pipe_id);
         }
     }
@@ -500,24 +515,36 @@ impl<'a> ModuleLowerer<'a> {
             }
         }
 
-        let closure_id = alloc_or_diag!(self.module.closures_mut(), Closure {
-            owner,
-            span,
-            kind,
-            ambient_subject,
-            parameters,
-            captures: Vec::new(),
-            root,
-        }, "closures", self.errors, return None);
+        let closure_id = alloc_or_diag!(
+            self.module.closures_mut(),
+            Closure {
+                owner,
+                span,
+                kind,
+                ambient_subject,
+                parameters,
+                captures: Vec::new(),
+                root,
+            },
+            "closures",
+            self.errors,
+            return None
+        );
 
         let mut capture_ids = Vec::with_capacity(captures.len());
         for capture in captures {
-            let capture_id = alloc_or_diag!(self.module.captures_mut(), Capture {
-                closure: closure_id,
-                binding: capture.binding,
-                name: capture.name,
-                ty: capture.ty,
-            }, "captures", self.errors, return None);
+            let capture_id = alloc_or_diag!(
+                self.module.captures_mut(),
+                Capture {
+                    closure: closure_id,
+                    binding: capture.binding,
+                    name: capture.name,
+                    ty: capture.ty,
+                },
+                "captures",
+                self.errors,
+                return None
+            );
             capture_ids.push(capture_id);
         }
         self.module

@@ -24,7 +24,8 @@ pub use glib_adapter::{
 };
 pub use graph::{
     DerivedHandle, DerivedSpec, GraphBuildError, InputHandle, InputValidationError, OwnerHandle,
-    OwnerSpec, SignalGraph, SignalGraphBuilder, SignalHandle, SignalKind, SignalSpec, TopologyBatch,
+    OwnerSpec, SignalGraph, SignalGraphBuilder, SignalHandle, SignalKind, SignalSpec,
+    TopologyBatch,
 };
 pub use hir_adapter::{
     HirGateStageBinding, HirGateStageId, HirOwnerBinding, HirRecurrenceBinding,

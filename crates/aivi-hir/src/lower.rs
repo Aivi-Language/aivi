@@ -19,11 +19,10 @@ use crate::{
     Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionBase,
     RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
     RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, ShowControl, SignalItem,
-    SourceDecorator, SourceProviderContractItem,
-    SourceProviderRef, SuffixedIntegerLiteral, TermReference, TermResolution, TextFragment,
-    TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId, TypeItem, TypeItemBody,
-    TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference, TypeResolution, TypeVariant,
-    UnaryOperator, UseItem, ValueItem, WithControl,
+    SourceDecorator, SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral,
+    TermReference, TermResolution, TextFragment, TextInterpolation, TextLiteral, TextSegment,
+    TypeField, TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId,
+    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {

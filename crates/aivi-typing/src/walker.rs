@@ -52,7 +52,9 @@ impl<F, A> StructuralWalker<F, A> {
     /// # Panics
     /// Panics if the assembly stack is empty.
     pub fn pop_one(&mut self) -> A {
-        self.assembled.pop().expect("walker: assembly stack was empty")
+        self.assembled
+            .pop()
+            .expect("walker: assembly stack was empty")
     }
 
     /// Assert that exactly one item was assembled and return it.

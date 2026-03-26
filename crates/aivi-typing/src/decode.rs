@@ -391,7 +391,8 @@ impl DecodePlanner {
                 }
                 Frame::ExitTuple { ty, arity } => {
                     let elements = walker.take_tail(arity);
-                    walker.push_assembled(push_step(&mut steps, DecodeStep::Tuple { ty, elements }));
+                    walker
+                        .push_assembled(push_step(&mut steps, DecodeStep::Tuple { ty, elements }));
                 }
                 Frame::ExitRecord {
                     ty,

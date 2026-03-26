@@ -6,9 +6,7 @@ use std::{
 
 use aivi_backend::{CommittedValueStore, InlineCommittedValueStore};
 
-use crate::graph::{
-    DerivedHandle, InputHandle, OwnerHandle, SignalGraph, SignalHandle,
-};
+use crate::graph::{DerivedHandle, InputHandle, OwnerHandle, SignalGraph, SignalHandle};
 
 pub trait DerivedNodeEvaluator<V> {
     fn evaluate(&mut self, signal: DerivedHandle, inputs: DependencyValues<'_, V>) -> Option<V>;

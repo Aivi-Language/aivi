@@ -22,8 +22,8 @@ mod validate;
 pub use aivi_core::{Arena, ArenaId, ArenaOverflow};
 pub use aivi_core::{
     DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, DomainDecodeSurface,
-    DomainDecodeSurfaceKind, Expr, ExprId, ItemId, ItemKind, PipeId, PipeOrigin,
-    SignalInfo, SourceId, SourceNode, StageId, TruthyFalsyStage, Type,
+    DomainDecodeSurfaceKind, Expr, ExprId, ItemId, ItemKind, PipeId, PipeOrigin, SignalInfo,
+    SourceId, SourceNode, StageId, TruthyFalsyStage, Type,
 };
 pub use aivi_typing::{NonSourceWakeupCause, RecurrencePlan, RecurrenceWakeupPlan};
 pub use ids::{CaptureId, ClosureId};
