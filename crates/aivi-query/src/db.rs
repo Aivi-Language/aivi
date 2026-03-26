@@ -217,10 +217,7 @@ impl RootDatabase {
                 .files
                 .get(&id)
                 .expect("sorted file id must refer to a stored input");
-            let new_id = sources.add_file(
-                input.path.as_ref().clone(),
-                Arc::clone(&input.text),
-            );
+            let new_id = sources.add_file(input.path.as_ref().clone(), Arc::clone(&input.text));
             debug_assert_eq!(new_id.as_u32(), id);
         }
         sources

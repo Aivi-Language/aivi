@@ -129,7 +129,7 @@ pub enum TextSegment {
     Interpolation(TextInterpolation),
 }
 
-/// Raw text content between interpolation holes, without the surrounding quotes.
+/// Decoded text content between interpolation holes, without the surrounding quotes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFragment {
     pub raw: String,

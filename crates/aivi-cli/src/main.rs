@@ -868,9 +868,12 @@ fn execute_file(path: &Path, program_args: &[String]) -> Result<ExitCode, String
     execute_file_with_context(path, context, &mut stdout, &mut stderr)
 }
 
-fn current_execute_source_context(program_args: &[String]) -> Result<SourceProviderContext, String> {
-    let cwd = env::current_dir()
-        .map_err(|error| format!("failed to determine current directory for `aivi execute`: {error}"))?;
+fn current_execute_source_context(
+    program_args: &[String],
+) -> Result<SourceProviderContext, String> {
+    let cwd = env::current_dir().map_err(|error| {
+        format!("failed to determine current directory for `aivi execute`: {error}")
+    })?;
     let env_vars = env::vars_os()
         .map(|(key, value)| {
             (
@@ -944,9 +947,7 @@ fn prepare_execute_artifact(module: &HirModule) -> Result<ExecuteArtifact, Strin
         rendered
     })?;
     if runtime_assembly.task_by_owner(main_owner).is_none() {
-        return Err(
-            "`aivi execute` requires `val main` to be annotated as `Task ...`".to_owned(),
-        );
+        return Err("`aivi execute` requires `val main` to be annotated as `Task ...`".to_owned());
     }
     Ok(ExecuteArtifact {
         main_owner,
@@ -970,12 +971,8 @@ fn select_execute_main<'a>(module: &'a HirModule) -> Result<&'a ValueItem, Strin
             Item::Signal(item) if item.name.text() == "main" => {
                 found_non_value_kind = Some("signal")
             }
-            Item::Type(item) if item.name.text() == "main" => {
-                found_non_value_kind = Some("type")
-            }
-            Item::Class(item) if item.name.text() == "main" => {
-                found_non_value_kind = Some("class")
-            }
+            Item::Type(item) if item.name.text() == "main" => found_non_value_kind = Some("type"),
+            Item::Class(item) if item.name.text() == "main" => found_non_value_kind = Some("class"),
             Item::Domain(item) if item.name.text() == "main" => {
                 found_non_value_kind = Some("domain")
             }
@@ -1020,12 +1017,14 @@ fn launch_execute(
     })?;
     let mut providers = SourceProviderManager::with_context(context);
     settle_execute_sources(&mut linked, &mut providers)?;
-    let value = linked.evaluate_task_value_by_owner(main_owner).map_err(|error| {
-        format!(
-            "failed to evaluate `main` for `aivi execute` in {}: {error}",
-            path.display()
-        )
-    })?;
+    let value = linked
+        .evaluate_task_value_by_owner(main_owner)
+        .map_err(|error| {
+            format!(
+                "failed to evaluate `main` for `aivi execute` in {}: {error}",
+                path.display()
+            )
+        })?;
     execute_main_task_value(value.into_runtime(), stdout, stderr)
 }
 
@@ -1034,13 +1033,15 @@ fn settle_execute_sources(
     providers: &mut SourceProviderManager,
 ) -> Result<(), String> {
     loop {
-        let outcome = linked
-            .tick_with_source_lifecycle()
-            .map_err(|error| format!("failed to tick linked runtime for `aivi execute`: {error}"))?;
-        let had_source_actions = !outcome.source_actions().is_empty();
-        providers.apply_actions(outcome.source_actions()).map_err(|error| {
-            format!("failed to apply source lifecycle actions for `aivi execute`: {error}")
+        let outcome = linked.tick_with_source_lifecycle().map_err(|error| {
+            format!("failed to tick linked runtime for `aivi execute`: {error}")
         })?;
+        let had_source_actions = !outcome.source_actions().is_empty();
+        providers
+            .apply_actions(outcome.source_actions())
+            .map_err(|error| {
+                format!("failed to apply source lifecycle actions for `aivi execute`: {error}")
+            })?;
         if !had_source_actions && linked.queued_message_count() == 0 {
             return Ok(());
         }
@@ -1070,9 +1071,9 @@ fn execute_runtime_task_plan(
     stderr: &mut impl Write,
 ) -> Result<RuntimeValue, String> {
     match plan {
-        RuntimeTaskPlan::RandomInt { low, high } => Ok(RuntimeValue::Int(
-            sample_random_i64_inclusive(low, high)?,
-        )),
+        RuntimeTaskPlan::RandomInt { low, high } => {
+            Ok(RuntimeValue::Int(sample_random_i64_inclusive(low, high)?))
+        }
         RuntimeTaskPlan::RandomBytes { count } => {
             let count = usize::try_from(count)
                 .map_err(|_| format!("random byte count must be non-negative, found {count}"))?;
@@ -4759,7 +4760,10 @@ val main : Task Text Unit =
                     "XDG_CONFIG_HOME".to_owned(),
                     config.to_string_lossy().into_owned(),
                 ),
-                ("XDG_DATA_HOME".to_owned(), data.to_string_lossy().into_owned()),
+                (
+                    "XDG_DATA_HOME".to_owned(),
+                    data.to_string_lossy().into_owned(),
+                ),
                 (
                     "XDG_CACHE_HOME".to_owned(),
                     cache.to_string_lossy().into_owned(),
@@ -4772,7 +4776,10 @@ val main : Task Text Unit =
         let (code, stdout, stderr) = execute_workspace(&entry, context);
 
         assert_eq!(code, ExitCode::SUCCESS);
-        assert!(stderr.is_empty(), "stderr should stay empty, found {stderr:?}");
+        assert!(
+            stderr.is_empty(),
+            "stderr should stay empty, found {stderr:?}"
+        );
         assert_eq!(
             stdout,
             format!(
@@ -4802,11 +4809,16 @@ val main : Task Text Unit =
 "#,
         );
 
-        let (code, stdout, stderr) =
-            execute_workspace(&entry, SourceProviderContext::new(Vec::new(), workspace.path().to_path_buf(), BTreeMap::new()));
+        let (code, stdout, stderr) = execute_workspace(
+            &entry,
+            SourceProviderContext::new(Vec::new(), workspace.path().to_path_buf(), BTreeMap::new()),
+        );
 
         assert_eq!(code, ExitCode::SUCCESS);
-        assert!(stdout.is_empty(), "stdout should stay empty, found {stdout:?}");
+        assert!(
+            stdout.is_empty(),
+            "stdout should stay empty, found {stdout:?}"
+        );
         assert_eq!(stderr, "problem");
     }
 
@@ -4836,8 +4848,14 @@ val main : Task Text Unit =
         );
 
         assert_eq!(code, ExitCode::SUCCESS);
-        assert!(stdout.is_empty(), "stdout should stay empty, found {stdout:?}");
-        assert!(stderr.is_empty(), "stderr should stay empty, found {stderr:?}");
+        assert!(
+            stdout.is_empty(),
+            "stdout should stay empty, found {stdout:?}"
+        );
+        assert!(
+            stderr.is_empty(),
+            "stderr should stay empty, found {stderr:?}"
+        );
         assert_eq!(
             fs::read_to_string(cwd.join("out.txt")).expect("text task should create output file"),
             "hello from execute"

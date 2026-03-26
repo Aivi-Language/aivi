@@ -1445,8 +1445,8 @@ sig gated : Signal Int =
             lowered.diagnostics()
         );
 
-        let assembly =
-            assemble_hir_runtime(lowered.module()).expect("bodyless source scan fixture should assemble");
+        let assembly = assemble_hir_runtime(lowered.module())
+            .expect("bodyless source scan fixture should assemble");
         let user_events_id = item_id(lowered.module(), "userEvents");
         let gated_id = item_id(lowered.module(), "gated");
         let user_events = assembly
@@ -1463,7 +1463,12 @@ sig gated : Signal Int =
             .derived()
             .expect("scan-derived signal should expose a public derived handle");
         assert_eq!(source.signal, user_events.signal());
-        assert_eq!(source.input, user_events.input().expect("raw source signal should stay input-backed"));
+        assert_eq!(
+            source.input,
+            user_events
+                .input()
+                .expect("raw source signal should stay input-backed")
+        );
         assert!(
             gated.source_input.is_none(),
             "derived scan signals should not allocate their own source input handle"

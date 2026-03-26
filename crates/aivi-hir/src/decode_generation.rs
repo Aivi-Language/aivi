@@ -166,6 +166,7 @@ pub struct DecodeProgramField {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DecodeProgramVariant {
+    pub constructor: Option<crate::SumConstructorHandle>,
     pub name: VariantName,
     pub payload: Option<DecodeProgramStepId>,
 }
@@ -262,17 +263,26 @@ fn generate_source_decode_program(
                 extra_fields: *extra_fields,
             },
             DecodeStep::Sum {
-                variants, strategy, ..
-            } => DecodeProgramStep::Sum {
-                variants: variants
-                    .iter()
-                    .map(|variant| DecodeProgramVariant {
-                        name: variant.name.clone(),
-                        payload: variant.payload.map(program_step_id),
-                    })
-                    .collect(),
-                strategy: *strategy,
-            },
+                ty,
+                variants,
+                strategy,
+                ..
+            } => {
+                let constructor_type_item = plan.sum_binding(*ty).map(|binding| binding.type_item);
+                DecodeProgramStep::Sum {
+                    variants: variants
+                        .iter()
+                        .map(|variant| DecodeProgramVariant {
+                            constructor: constructor_type_item.and_then(|type_item| {
+                                module.sum_constructor_handle(type_item, variant.name.as_str())
+                            }),
+                            name: variant.name.clone(),
+                            payload: variant.payload.map(program_step_id),
+                        })
+                        .collect(),
+                    strategy: *strategy,
+                }
+            }
             DecodeStep::Domain { ty, carrier, .. } => DecodeProgramStep::Domain {
                 carrier: program_step_id(*carrier),
                 surface: surfaces

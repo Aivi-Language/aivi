@@ -12,9 +12,8 @@ use crate::{
     SourceProviderRef,
     gate_elaboration::{
         GateElaborationBlocker, GateRuntimeExpr, GateRuntimeUnsupportedKind,
-        lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads,
         lower_gate_pipe_body_runtime_expr, lower_gate_pipe_body_runtime_expr_allow_signal_reads,
-        lower_gate_runtime_expr,
+        lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads, lower_gate_runtime_expr,
     },
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeSubjectStepOutcome,
@@ -448,9 +447,8 @@ fn elaborate_scan_pipe(
             .expect("signal scan nodes should always plan to signal recurrence"),
     );
     let wakeup_signal = signal_item_reference(module, pipe.head);
-    let wakeup = wakeup_signal.map(|_| {
-        RecurrenceWakeupPlan::from_evidence(RecurrenceWakeupEvidence::SignalDependency)
-    });
+    let wakeup = wakeup_signal
+        .map(|_| RecurrenceWakeupPlan::from_evidence(RecurrenceWakeupEvidence::SignalDependency));
 
     let mut blockers = Vec::new();
     if wakeup.is_none() {
@@ -1184,7 +1182,8 @@ mod tests {
                 assert_eq!(
                     item_name(
                         lowered.module(),
-                        plan.wakeup_signal.expect("scan should preserve its upstream wakeup signal"),
+                        plan.wakeup_signal
+                            .expect("scan should preserve its upstream wakeup signal"),
                     ),
                     "tick"
                 );
@@ -1219,7 +1218,8 @@ mod tests {
                 assert_eq!(
                     item_name(
                         lowered.module(),
-                        plan.wakeup_signal.expect("scan should preserve its upstream wakeup signal"),
+                        plan.wakeup_signal
+                            .expect("scan should preserve its upstream wakeup signal"),
                     ),
                     "updateEvents"
                 );
@@ -1271,7 +1271,8 @@ sig gated : Signal Int =
                 assert_eq!(
                     item_name(
                         lowered.module(),
-                        plan.wakeup_signal.expect("scan should preserve its upstream wakeup signal"),
+                        plan.wakeup_signal
+                            .expect("scan should preserve its upstream wakeup signal"),
                     ),
                     "userEvents"
                 );

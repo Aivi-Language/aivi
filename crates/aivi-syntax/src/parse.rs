@@ -3159,14 +3159,7 @@ impl<'a> Parser<'a> {
                 .expect("text literal scan must stay on a UTF-8 boundary");
             match next {
                 '\\' => {
-                    cursor += 1;
-                    if cursor < body_end {
-                        let escaped = text[cursor..body_end]
-                            .chars()
-                            .next()
-                            .expect("escaped text segment must stay on a UTF-8 boundary");
-                        cursor += escaped.len_utf8();
-                    }
+                    cursor = text_escape_end(text, cursor, body_end);
                 }
                 '{' => {
                     self.push_text_fragment(&mut segments, fragment_start, cursor, false);
@@ -3235,7 +3228,7 @@ impl<'a> Parser<'a> {
         }
         let span = self.source.source_span(start..end);
         segments.push(TextSegment::Text(TextFragment {
-            raw: self.source.slice(span.span()).to_owned(),
+            raw: decode_text_fragment(self.source.slice(span.span())),
             span,
         }));
     }
@@ -3693,6 +3686,119 @@ impl TypeStop {
     }
 }
 
+fn text_escape_end(text: &str, start: usize, end: usize) -> usize {
+    let mut cursor = start + 1;
+    if cursor >= end {
+        return cursor;
+    }
+    let escaped = text[cursor..end]
+        .chars()
+        .next()
+        .expect("escaped text segment must stay on a UTF-8 boundary");
+    cursor += escaped.len_utf8();
+    match escaped {
+        'u' => {
+            let bytes = text.as_bytes();
+            if cursor < end && bytes[cursor] == b'{' {
+                cursor += 1;
+                while cursor < end && bytes[cursor] != b'}' {
+                    cursor += 1;
+                }
+                if cursor < end {
+                    cursor += 1;
+                }
+            }
+            cursor
+        }
+        'x' => {
+            let bytes = text.as_bytes();
+            let mut hex_digits = 0usize;
+            while hex_digits < 2 && cursor < end && bytes[cursor].is_ascii_hexdigit() {
+                cursor += 1;
+                hex_digits += 1;
+            }
+            cursor
+        }
+        _ => cursor,
+    }
+}
+
+fn decode_text_fragment(raw: &str) -> String {
+    let mut decoded = String::with_capacity(raw.len());
+    let mut chars = raw.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            decoded.push(ch);
+            continue;
+        }
+        let Some(escaped) = chars.next() else {
+            decoded.push('\\');
+            break;
+        };
+        match escaped {
+            'n' => decoded.push('\n'),
+            't' => decoded.push('\t'),
+            'r' => decoded.push('\r'),
+            '\\' => decoded.push('\\'),
+            '"' => decoded.push('"'),
+            '\'' => decoded.push('\''),
+            '0' => decoded.push('\0'),
+            '{' => decoded.push('{'),
+            '}' => decoded.push('}'),
+            'u' => {
+                let mut consumed = String::from("\\u");
+                let Some('{') = chars.peek().copied() else {
+                    decoded.push_str(&consumed);
+                    continue;
+                };
+                consumed.push(chars.next().expect("peeked opening brace must exist"));
+                let mut digits = String::new();
+                let mut terminated = false;
+                while let Some(next) = chars.next() {
+                    consumed.push(next);
+                    if next == '}' {
+                        terminated = true;
+                        break;
+                    }
+                    digits.push(next);
+                }
+                match terminated
+                    .then(|| u32::from_str_radix(&digits, 16).ok())
+                    .flatten()
+                    .and_then(char::from_u32)
+                {
+                    Some(ch) => decoded.push(ch),
+                    None => decoded.push_str(&consumed),
+                }
+            }
+            'x' => {
+                let mut consumed = String::from("\\x");
+                let mut digits = String::new();
+                for _ in 0..2 {
+                    let Some(next) = chars.peek().copied() else {
+                        break;
+                    };
+                    if !next.is_ascii_hexdigit() {
+                        break;
+                    }
+                    digits.push(next);
+                    consumed.push(next);
+                    chars.next();
+                }
+                match u8::from_str_radix(&digits, 16).ok() {
+                    Some(value) => decoded.push(char::from(value)),
+                    None => decoded.push_str(&consumed),
+                }
+            }
+            other => {
+                decoded.push('\\');
+                decoded.push(other);
+            }
+        }
+    }
+    decoded
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, path::PathBuf};
@@ -3971,10 +4077,31 @@ export main
                     assert!(matches!(
                         &text.segments[2],
                         TextSegment::Text(fragment)
-                            if fragment.raw == r#", use \{literal\} braces"#
+                            if fragment.raw == ", use {literal} braces"
                     ));
                 }
                 other => panic!("expected interpolated text literal, got {other:?}"),
+            },
+            other => panic!("expected value item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parser_decodes_text_escape_sequences() {
+        let (_, parsed) = load(r#"val board = "top\nbottom \u{41} \x42 \{ok\}""#);
+
+        assert!(!parsed.has_errors());
+        match &parsed.module.items[0] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::Text(text)) => {
+                    assert_eq!(text.segments.len(), 1);
+                    assert!(matches!(
+                        &text.segments[0],
+                        TextSegment::Text(fragment)
+                            if fragment.raw == "top\nbottom A B {ok}"
+                    ));
+                }
+                other => panic!("expected text literal, got {other:?}"),
             },
             other => panic!("expected value item, got {other:?}"),
         }

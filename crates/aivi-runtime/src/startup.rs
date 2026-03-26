@@ -1831,11 +1831,10 @@ impl<'a> LinkBuilder<'a> {
                 let Some(wakeup_dependency_index) =
                     self.recurrence_wakeup_dependency_index(binding, &recurrence_binding.plan)
                 else {
-                    self.errors.push(
-                        BackendRuntimeLinkError::MissingRecurrenceWakeupDependency {
+                    self.errors
+                        .push(BackendRuntimeLinkError::MissingRecurrenceWakeupDependency {
                             item: binding.item,
-                        },
-                    );
+                        });
                     continue;
                 };
 

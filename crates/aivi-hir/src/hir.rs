@@ -876,6 +876,7 @@ pub enum TextSegment {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TextFragment {
+    /// Decoded text content between interpolation holes.
     pub raw: Box<str>,
     pub span: SourceSpan,
 }

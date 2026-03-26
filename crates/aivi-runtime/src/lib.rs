@@ -33,8 +33,7 @@ pub use hir_adapter::{
     HirSignalBindingKind, HirSourceBinding, HirTaskBinding, assemble_hir_runtime,
 };
 pub use providers::{
-    MailboxPublishError, SourceProviderContext, SourceProviderExecutionError,
-    SourceProviderManager,
+    MailboxPublishError, SourceProviderContext, SourceProviderExecutionError, SourceProviderManager,
 };
 pub use scheduler::{
     DependencyValue, DependencyValues, DerivedNodeEvaluator, DroppedPublication, Generation,

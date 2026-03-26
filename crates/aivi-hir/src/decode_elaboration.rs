@@ -63,11 +63,16 @@ pub struct SourceDecodePlan {
     pub schema: DecodeSchema,
     pub structural_types: TypeStore,
     pub domain_bindings: Vec<SourceDecodeDomainBinding>,
+    pub sum_bindings: Vec<SourceDecodeSumBinding>,
 }
 
 impl SourceDecodePlan {
     pub fn domain_binding(&self, ty: StructuralTypeId) -> Option<&SourceDecodeDomainBinding> {
         self.domain_bindings.iter().find(|binding| binding.ty == ty)
+    }
+
+    pub fn sum_binding(&self, ty: StructuralTypeId) -> Option<&SourceDecodeSumBinding> {
+        self.sum_bindings.iter().find(|binding| binding.ty == ty)
     }
 }
 
@@ -76,6 +81,12 @@ pub struct SourceDecodeDomainBinding {
     pub ty: StructuralTypeId,
     pub domain_item: ItemId,
     pub arguments: Vec<StructuralTypeId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceDecodeSumBinding {
+    pub ty: StructuralTypeId,
+    pub type_item: ItemId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -181,6 +192,7 @@ fn elaborate_source_decode_signal(
                     schema,
                     structural_types: lowered.structural_types,
                     domain_bindings: lowered.domain_bindings,
+                    sum_bindings: lowered.sum_bindings,
                 });
             }
             Ok(_) => {}
@@ -307,6 +319,7 @@ struct LoweredDecodeType {
     structural_types: TypeStore,
     subject: StructuralTypeId,
     domain_bindings: Vec<SourceDecodeDomainBinding>,
+    sum_bindings: Vec<SourceDecodeSumBinding>,
 }
 
 pub(crate) struct DecodeTypeLowerer<'a> {
@@ -315,6 +328,7 @@ pub(crate) struct DecodeTypeLowerer<'a> {
     parameters: HashMap<HirTypeParameterId, StructuralTypeParameterId>,
     externals: HashMap<String, ExternalTypeId>,
     domain_bindings: Vec<SourceDecodeDomainBinding>,
+    sum_bindings: Vec<SourceDecodeSumBinding>,
 }
 
 impl<'a> DecodeTypeLowerer<'a> {
@@ -329,6 +343,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             parameters: HashMap::new(),
             externals: HashMap::new(),
             domain_bindings: Vec::new(),
+            sum_bindings: Vec::new(),
         }
     }
 
@@ -360,6 +375,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             structural_types: self.types,
             subject,
             domain_bindings: self.domain_bindings,
+            sum_bindings: self.sum_bindings,
         })
     }
 
@@ -668,14 +684,22 @@ impl<'a> DecodeTypeLowerer<'a> {
                                 self.lower_sum_variant(variant, &item_substitutions, item_stack)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        self.types
+                        let ty = self
+                            .types
                             .sum(Closedness::Closed, variants)
                             .map_err(|error| {
                                 DecodeTypeLoweringError::invalid_shape(
                                     item.header.span,
                                     error.kind().clone(),
                                 )
-                            })
+                            })?;
+                        if self.sum_bindings.iter().all(|binding| binding.ty != ty) {
+                            self.sum_bindings.push(SourceDecodeSumBinding {
+                                ty,
+                                type_item: item_id,
+                            });
+                        }
+                        Ok(ty)
                     }
                 };
                 let popped = item_stack.pop();

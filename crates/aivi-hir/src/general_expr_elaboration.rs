@@ -2830,6 +2830,51 @@ fun appendOne:(List A) items:(List A) item:A =>
     }
 
     #[test]
+    fn elaborates_signal_names_in_direct_function_calls_as_payload_reads() {
+        let lowered = lower_text(
+            "general-expr-signal-name-direct-call.aivi",
+            r#"
+sig direction : Signal Int = 1
+
+fun step:Int value:Int =>
+    value
+
+fun current:Int tick:Unit =>
+    step direction
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "signal-name direct call example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let current = report
+            .items()
+            .iter()
+            .find(|item| item_name(lowered.module(), item.owner) == Some("current"))
+            .expect("expected current elaboration");
+        match &current.outcome {
+            GeneralExprOutcome::Lowered(expr) => match &expr.kind {
+                GateRuntimeExprKind::Apply { arguments, .. } => {
+                    assert_eq!(arguments.len(), 1);
+                    assert_eq!(
+                        arguments[0].ty,
+                        crate::GateType::Primitive(BuiltinType::Int)
+                    );
+                    assert!(matches!(
+                        arguments[0].kind,
+                        GateRuntimeExprKind::Reference(crate::GateRuntimeReference::Item(_))
+                    ));
+                }
+                other => panic!("expected direct apply body, found {other:?}"),
+            },
+            other => panic!("expected lowered function body, found {other:?}"),
+        }
+    }
+
+    #[test]
     fn elaborates_reduce_pipe_bodies_with_generic_step_functions() {
         let lowered = lower_text(
             "general-expr-generic-reduce.aivi",

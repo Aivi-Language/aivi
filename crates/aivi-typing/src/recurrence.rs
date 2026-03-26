@@ -193,9 +193,7 @@ impl RecurrenceWakeupEvidence {
 
     pub const fn non_source_cause(self) -> Option<NonSourceWakeupCause> {
         match self {
-            Self::BuiltinSource { .. } | Self::CustomSource { .. } | Self::SignalDependency => {
-                None
-            }
+            Self::BuiltinSource { .. } | Self::CustomSource { .. } | Self::SignalDependency => None,
             Self::NonSource { cause } => Some(cause),
         }
     }

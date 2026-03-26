@@ -179,6 +179,19 @@ pub(crate) fn expression_matches(
         && checker.diagnostics.is_empty()
 }
 
+fn signal_name_payload_type<'a>(
+    module: &Module,
+    expr_id: ExprId,
+    actual: &'a GateType,
+) -> Option<&'a GateType> {
+    matches!(module.exprs()[expr_id].kind, ExprKind::Name(_))
+        .then_some(actual)
+        .and_then(|actual| match actual {
+            GateType::Signal(payload) => Some(payload.as_ref()),
+            _ => None,
+        })
+}
+
 pub(crate) fn resolve_class_member_dispatch(
     module: &Module,
     reference: &TermReference,
@@ -803,6 +816,7 @@ impl<'a> TypeChecker<'a> {
                 .check_builtin_constructor_name(&reference, expected)
                 .or_else(|| self.check_domain_member_name(&reference, expected))
                 .or_else(|| self.check_class_member_name(&reference, expected))
+                .or_else(|| self.check_signal_payload_name(expr_id, env, expected))
                 .or_else(|| {
                     self.check_unannotated_value_name(&reference, env, expected, value_stack)
                 })
@@ -999,6 +1013,22 @@ impl<'a> TypeChecker<'a> {
         let popped = value_stack.pop();
         debug_assert_eq!(popped, Some(*item_id));
         Some(result)
+    }
+
+    fn check_signal_payload_name(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: &GateType,
+    ) -> Option<bool> {
+        let info = self.typing.infer_expr(expr_id, env, None);
+        if !info.issues.is_empty() {
+            return None;
+        }
+        let actual = info.actual_gate_type().or(info.ty)?;
+        signal_name_payload_type(self.module, expr_id, &actual)
+            .is_some_and(|payload| payload.same_shape(expected))
+            .then_some(true)
     }
 
     fn expected_function_signature(
@@ -1270,7 +1300,7 @@ impl<'a> TypeChecker<'a> {
             argument_types.push(argument_ty);
         }
         let Some((matched_parameters, constraints)) =
-            self.match_function_constraints(&function, &argument_types, expected)
+            self.match_function_constraints(&function, arguments, &argument_types, expected)
         else {
             return None;
         };
@@ -1948,6 +1978,7 @@ impl<'a> TypeChecker<'a> {
     fn match_function_constraints(
         &mut self,
         function: &FunctionItem,
+        arguments: &crate::NonEmpty<ExprId>,
         argument_types: &[GateType],
         expected_result: &GateType,
     ) -> Option<(Vec<GateType>, Vec<ClassConstraintBinding>)> {
@@ -1956,19 +1987,39 @@ impl<'a> TypeChecker<'a> {
         }
         let mut bindings = PolyTypeBindings::new();
         let mut instantiated_parameters = Vec::with_capacity(function.parameters.len());
-        for (parameter, actual) in function.parameters.iter().zip(argument_types.iter()) {
+        for ((parameter, argument_expr), actual) in function
+            .parameters
+            .iter()
+            .zip(arguments.iter())
+            .zip(argument_types.iter())
+        {
             let annotation = parameter.annotation?;
+            let payload = signal_name_payload_type(self.module, *argument_expr, actual);
             if let Some(lowered) = self.typing.lower_annotation(annotation) {
-                if !lowered.same_shape(actual) {
+                if !lowered.same_shape(actual)
+                    && !payload.is_some_and(|payload| lowered.same_shape(payload))
+                {
                     return None;
                 }
                 instantiated_parameters.push(lowered);
                 continue;
             }
-            if !self
+            let mut direct_bindings = bindings.clone();
+            if self
                 .typing
-                .match_poly_hir_type(annotation, actual, &mut bindings)
+                .match_poly_hir_type(annotation, actual, &mut direct_bindings)
             {
+                bindings = direct_bindings;
+            } else if let Some(payload) = payload {
+                let mut payload_bindings = bindings.clone();
+                if !self
+                    .typing
+                    .match_poly_hir_type(annotation, payload, &mut payload_bindings)
+                {
+                    return None;
+                }
+                bindings = payload_bindings;
+            } else {
                 return None;
             }
             instantiated_parameters.push(
@@ -3853,6 +3904,21 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
         assert!(
             report.is_ok(),
             "expected ambient polymorphic helper application to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_allows_signal_names_in_direct_function_calls() {
+        let report = typecheck_text(
+            "signal-name-direct-call.aivi",
+            "sig direction : Signal Int = 1\n\
+             fun step:Int value:Int => value\n\
+             fun current:Int tick:Unit => step direction\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected direct function application to accept a signal payload name, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

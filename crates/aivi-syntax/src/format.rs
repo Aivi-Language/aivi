@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
     DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FunctionParam,
@@ -1333,7 +1335,9 @@ impl Formatter {
         let mut rendered = String::from("\"");
         for segment in &text.segments {
             match segment {
-                TextSegment::Text(fragment) => rendered.push_str(&fragment.raw),
+                TextSegment::Text(fragment) => {
+                    rendered.push_str(&escape_text_fragment(&fragment.raw));
+                }
                 TextSegment::Interpolation(interpolation) => {
                     rendered.push('{');
                     rendered.push_str(&self.format_expr_inline(&interpolation.expr, 0));
@@ -1511,6 +1515,28 @@ impl Formatter {
             TypeExprKind::Name(_) => false,
         }
     }
+}
+
+fn escape_text_fragment(raw: &str) -> String {
+    let mut escaped = String::with_capacity(raw.len());
+    for ch in raw.chars() {
+        match ch {
+            '\n' => escaped.push_str(r"\n"),
+            '\t' => escaped.push_str(r"\t"),
+            '\r' => escaped.push_str(r"\r"),
+            '\0' => escaped.push_str(r"\0"),
+            '\\' => escaped.push_str(r"\\"),
+            '"' => escaped.push_str("\\\""),
+            '{' => escaped.push_str(r"\{"),
+            '}' => escaped.push_str(r"\}"),
+            ch if ch.is_control() => {
+                write!(&mut escaped, r"\u{{{:X}}}", ch as u32)
+                    .expect("writing to a String should not fail");
+            }
+            other => escaped.push(other),
+        }
+    }
+    escaped
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1913,6 +1939,12 @@ val view =
             formatted,
             "val greeting = \"Hello {name}, use \\{literal\\} braces\"\n",
         );
+    }
+
+    #[test]
+    fn formatter_reescapes_text_control_characters() {
+        let formatted = format_text("val board=\"top\\nbottom\"\n");
+        assert_eq!(formatted, "val board = \"top\\nbottom\"\n");
     }
 
     #[test]

@@ -588,9 +588,13 @@ fn decode_step(
                     }
                 }
             };
+            let (item, type_name) = match &variant.constructor {
+                Some(constructor) => (constructor.item, constructor.type_name.clone()),
+                None => (aivi_hir::ItemId::from_raw(0), "<decoded-sum>".into()),
+            };
             Ok(RuntimeValue::Sum(RuntimeSumValue {
-                item: aivi_hir::ItemId::from_raw(0),
-                type_name: "<decoded-sum>".into(),
+                item,
+                type_name,
                 variant_name: variant.name.as_str().into(),
                 fields,
             }))
@@ -723,14 +727,19 @@ fn value_kind(value: &ExternalSourceValue) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use aivi_backend::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat, RuntimeValue};
+    use aivi_backend::{
+        RuntimeBigInt, RuntimeDecimal, RuntimeFloat, RuntimeSumValue, RuntimeValue,
+    };
     use aivi_base::SourceDatabase;
     use aivi_hir::{
         Item, SourceDecodeProgramOutcome, generate_source_decode_programs, lower_module,
     };
     use aivi_syntax::parse_module;
 
-    use super::{SourceDecodeError, decode_external, encode_runtime_json, parse_json_text};
+    use super::{
+        ExternalSourceValue, SourceDecodeError, decode_external, encode_runtime_json,
+        parse_json_text,
+    };
 
     fn lower_text(path: &str, text: &str) -> aivi_hir::LoweringResult {
         let mut sources = SourceDatabase::new();
@@ -759,7 +768,22 @@ mod tests {
         }
     }
 
-    fn decode_program(path: &str, text: &str, signal_name: &str) -> aivi_hir::SourceDecodeProgram {
+    fn item_id(module: &aivi_hir::Module, name: &str) -> aivi_hir::ItemId {
+        module
+            .items()
+            .iter()
+            .find_map(|(item_id, item)| {
+                (item_name(module, item_id) == name).then_some((item_id, item))
+            })
+            .map(|(item_id, _)| item_id)
+            .unwrap_or_else(|| panic!("expected item named `{name}`"))
+    }
+
+    fn lowered_decode_program(
+        path: &str,
+        text: &str,
+        signal_name: &str,
+    ) -> (aivi_hir::LoweringResult, aivi_hir::SourceDecodeProgram) {
         let lowered = lower_text(path, text);
         assert!(
             !lowered.has_errors(),
@@ -772,10 +796,15 @@ mod tests {
             .iter()
             .find(|node| item_name(lowered.module(), node.owner) == signal_name)
             .unwrap_or_else(|| panic!("expected decode program for {signal_name}"));
-        match &node.outcome {
+        let program = match &node.outcome {
             SourceDecodeProgramOutcome::Planned(program) => program.clone(),
             other => panic!("expected planned decode program, found {other:?}"),
-        }
+        };
+        (lowered, program)
+    }
+
+    fn decode_program(path: &str, text: &str, signal_name: &str) -> aivi_hir::SourceDecodeProgram {
+        lowered_decode_program(path, text, signal_name).1
     }
 
     #[test]
@@ -882,6 +911,47 @@ sig bytes : Signal Bytes
         )
         .expect("byte-array JSON should decode");
         assert_eq!(decoded, RuntimeValue::Bytes(Box::new([104, 105, 33])));
+    }
+
+    #[test]
+    fn decodes_same_module_text_wrapper_sums_with_real_constructor_identity() {
+        let (lowered, program) = lowered_decode_program(
+            "source-decode-window-key-wrapper.aivi",
+            r#"
+type Key =
+  | Key Text
+
+@source window.keyDown with {
+    repeat: False
+    focusOnly: True
+}
+sig keyDown : Signal Key
+"#,
+            "keyDown",
+        );
+
+        let decoded = decode_external(
+            &program,
+            &ExternalSourceValue::variant_with_payload(
+                "Key",
+                ExternalSourceValue::Text("ArrowDown".into()),
+            ),
+        )
+        .expect("wrapped key payload should decode");
+
+        let constructor = lowered
+            .module()
+            .sum_constructor_handle(item_id(lowered.module(), "Key"), "Key")
+            .expect("same-module Key constructor should resolve");
+        assert_eq!(
+            decoded,
+            RuntimeValue::Sum(RuntimeSumValue {
+                item: constructor.item,
+                type_name: constructor.type_name.clone(),
+                variant_name: constructor.variant_name.clone(),
+                fields: vec![RuntimeValue::Text("ArrowDown".into())],
+            })
+        );
     }
 
     #[test]

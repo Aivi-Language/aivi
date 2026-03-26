@@ -12,8 +12,8 @@ use crate::{
     typecheck::resolve_class_member_dispatch,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeFunctionSignatureMatch,
-        PipeSubjectStepOutcome, PipeSubjectWalker, gate_env_for_function,
-        truthy_falsy_pair_stages, walk_expr_tree,
+        PipeSubjectStepOutcome, PipeSubjectWalker, gate_env_for_function, truthy_falsy_pair_stages,
+        walk_expr_tree,
     },
 };
 
@@ -716,7 +716,9 @@ fn lower_function_pipe_body_runtime_expr(
     let plan = typing
         .match_pipe_function_signature(expr_id, env, ambient, None)
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: expr.span })?;
-    lower_pipe_function_runtime_expr_from_plan(module, expr.span, plan, env, ambient, typing, purity)
+    lower_pipe_function_runtime_expr_from_plan(
+        module, expr.span, plan, env, ambient, typing, purity,
+    )
 }
 
 pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(

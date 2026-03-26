@@ -27,13 +27,15 @@ pub use arena::{Arena, ArenaId, ArenaOverflow};
 pub use decode_elaboration::{
     BlockedSourceDecodeNode, SourceDecodeDomainBinding, SourceDecodeElaborationBlocker,
     SourceDecodeElaborationReport, SourceDecodeNodeElaboration, SourceDecodeNodeOutcome,
-    SourceDecodePlan, SourceDecodeUnsupportedTypeKind, elaborate_source_decodes,
+    SourceDecodePlan, SourceDecodeSumBinding, SourceDecodeUnsupportedTypeKind,
+    elaborate_source_decodes,
 };
 pub use decode_generation::{
     BlockedSourceDecodeProgram, DecodeProgramField, DecodeProgramStep, DecodeProgramStepId,
-    DomainDecodeSurfaceCandidate, DomainDecodeSurfaceKind, DomainDecodeSurfacePlan,
-    SourceDecodeProgram, SourceDecodeProgramBlocker, SourceDecodeProgramNode,
-    SourceDecodeProgramOutcome, SourceDecodeProgramReport, generate_source_decode_programs,
+    DecodeProgramVariant, DomainDecodeSurfaceCandidate, DomainDecodeSurfaceKind,
+    DomainDecodeSurfacePlan, SourceDecodeProgram, SourceDecodeProgramBlocker,
+    SourceDecodeProgramNode, SourceDecodeProgramOutcome, SourceDecodeProgramReport,
+    generate_source_decode_programs,
 };
 pub use exports::{ExportedName, ExportedNameKind, ExportedNames, exports};
 pub use fanout_elaboration::{

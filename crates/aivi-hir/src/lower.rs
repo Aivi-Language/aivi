@@ -240,6 +240,7 @@ enum DependencyWork {
     Markup(MarkupNodeId),
     Control(ControlNodeId),
     Cluster(crate::ClusterId),
+    Item(ItemId),
 }
 
 #[derive(Clone, Copy)]
@@ -4236,6 +4237,7 @@ impl<'a> Lowerer<'a> {
         let mut seen_markups = HashSet::new();
         let mut seen_controls = HashSet::new();
         let mut seen_clusters = HashSet::new();
+        let mut seen_items = HashSet::new();
 
         while let Some(node) = work.pop() {
             match node {
@@ -4248,8 +4250,14 @@ impl<'a> Lowerer<'a> {
                             if let ResolutionState::Resolved(TermResolution::Item(item_id)) =
                                 reference.resolution
                             {
-                                if matches!(self.module.items()[item_id], Item::Signal(_)) {
-                                    dependencies.insert(item_id);
+                                match &self.module.items()[item_id] {
+                                    Item::Signal(_) => {
+                                        dependencies.insert(item_id);
+                                    }
+                                    Item::Value(_) | Item::Function(_) => {
+                                        work.push(DependencyWork::Item(item_id));
+                                    }
+                                    _ => {}
                                 }
                             }
                         }
@@ -4333,6 +4341,23 @@ impl<'a> Lowerer<'a> {
                             work.push(DependencyWork::Cluster(*cluster_id))
                         }
                         ExprKind::Markup(node_id) => work.push(DependencyWork::Markup(*node_id)),
+                    }
+                }
+                DependencyWork::Item(item_id) => {
+                    if !seen_items.insert(item_id) {
+                        continue;
+                    }
+                    match &self.module.items()[item_id] {
+                        Item::Value(item) => work.push(DependencyWork::Expr(item.body)),
+                        Item::Function(item) => work.push(DependencyWork::Expr(item.body)),
+                        Item::Type(_)
+                        | Item::Signal(_)
+                        | Item::Class(_)
+                        | Item::Domain(_)
+                        | Item::SourceProviderContract(_)
+                        | Item::Instance(_)
+                        | Item::Use(_)
+                        | Item::Export(_) => {}
                     }
                 }
                 DependencyWork::Pattern(pattern_id) => {
@@ -6720,11 +6745,8 @@ val answer:Int = 42
                 .module()
                 .validate(ValidationMode::RequireResolvedNames);
             assert!(
-                report
-                    .diagnostics()
-                    .iter()
-                    .any(|diagnostic| diagnostic.code
-                        == Some(super::code("source-signals-must-be-bodyless"))),
+                report.diagnostics().iter().any(|diagnostic| diagnostic.code
+                    == Some(super::code("source-signals-must-be-bodyless"))),
                 "expected {path} to report source-signals-must-be-bodyless, got diagnostics: {:?}",
                 report.diagnostics()
             );
@@ -7616,6 +7638,29 @@ sig updates : Signal Int
             signal_dependency_names(local_refs.module(), next_refresh),
             vec!["refreshMs".to_owned()],
             "value references must not leak into signal dependency metadata"
+        );
+    }
+
+    #[test]
+    fn tracks_signal_dependencies_through_helper_bodies() {
+        let lowered = lower_text(
+            "signal-helper-dependencies.aivi",
+            "sig direction : Signal Int = 1\n\
+             sig tick : Signal Int = 0\n\
+             fun stepOnTick:Int tick:Int => direction\n\
+             sig game : Signal Int = stepOnTick tick\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "helper-body dependency example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let game = find_signal(lowered.module(), "game");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), game),
+            vec!["direction".to_owned(), "tick".to_owned()],
+            "signal dependency metadata should include signal reads hidden behind helper bodies"
         );
     }
 
