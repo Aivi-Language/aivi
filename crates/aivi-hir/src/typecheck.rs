@@ -522,7 +522,9 @@ impl<'a> TypeChecker<'a> {
             | BinaryOperator::Divide
             | BinaryOperator::Modulo
             | BinaryOperator::GreaterThan
-            | BinaryOperator::LessThan => self.check_numeric_binary_expr(
+            | BinaryOperator::LessThan
+            | BinaryOperator::GreaterThanOrEqual
+            | BinaryOperator::LessThanOrEqual => self.check_numeric_binary_expr(
                 expr_id,
                 left,
                 operator,
@@ -624,7 +626,10 @@ impl<'a> TypeChecker<'a> {
         ) else {
             if matches!(
                 operator,
-                BinaryOperator::GreaterThan | BinaryOperator::LessThan
+                BinaryOperator::GreaterThan
+                    | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThanOrEqual
+                    | BinaryOperator::LessThanOrEqual
             ) && let (Some(left_actual), Some(right_actual)) =
                 (left_actual.as_ref(), right_actual.as_ref())
                 && left_actual.same_shape(right_actual)
@@ -683,7 +688,10 @@ impl<'a> TypeChecker<'a> {
         }
 
         let result_ty = match operator {
-            BinaryOperator::GreaterThan | BinaryOperator::LessThan => {
+            BinaryOperator::GreaterThan
+            | BinaryOperator::LessThan
+            | BinaryOperator::GreaterThanOrEqual
+            | BinaryOperator::LessThanOrEqual => {
                 GateType::Primitive(BuiltinType::Bool)
             }
             BinaryOperator::Add
@@ -2649,6 +2657,8 @@ fn binary_operator_text(operator: BinaryOperator) -> &'static str {
         BinaryOperator::Modulo => "%",
         BinaryOperator::GreaterThan => ">",
         BinaryOperator::LessThan => "<",
+        BinaryOperator::GreaterThanOrEqual => ">=",
+        BinaryOperator::LessThanOrEqual => "<=",
         BinaryOperator::Equals => "==",
         BinaryOperator::NotEquals => "!=",
         BinaryOperator::And => "and",

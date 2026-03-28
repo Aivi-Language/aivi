@@ -1,0 +1,34 @@
+fun not:Bool b:Bool =>
+    b
+     T|> False
+     F|> True
+
+fun xor:Bool a:Bool b:Bool =>
+    a == b
+     T|> False
+     F|> True
+
+fun implies:Bool a:Bool b:Bool =>
+    a
+     T|> b
+     F|> True
+
+fun both:Bool a:Bool b:Bool =>
+    a and b
+
+fun either:Bool a:Bool b:Bool =>
+    a or b
+
+fun neither:Bool a:Bool b:Bool =>
+    not a and not b
+
+fun fromInt:Bool n:Int =>
+    n != 0
+
+export not
+export xor
+export implies
+export both
+export either
+export neither
+export fromInt

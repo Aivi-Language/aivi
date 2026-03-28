@@ -1530,6 +1530,8 @@ impl Formatter {
             BinaryOperator::Subtract => "-",
             BinaryOperator::GreaterThan => ">",
             BinaryOperator::LessThan => "<",
+            BinaryOperator::GreaterThanOrEqual => ">=",
+            BinaryOperator::LessThanOrEqual => "<=",
             BinaryOperator::Equals => "==",
             BinaryOperator::NotEquals => "!=",
             BinaryOperator::And => "and",
@@ -1546,6 +1548,8 @@ impl Formatter {
             BinaryOperator::And => EXPR_AND_PREC,
             BinaryOperator::GreaterThan
             | BinaryOperator::LessThan
+            | BinaryOperator::GreaterThanOrEqual
+            | BinaryOperator::LessThanOrEqual
             | BinaryOperator::Equals
             | BinaryOperator::NotEquals => EXPR_COMPARE_PREC,
             BinaryOperator::Add | BinaryOperator::Subtract => EXPR_ADD_PREC,

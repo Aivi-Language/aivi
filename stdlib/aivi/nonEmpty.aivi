@@ -13,7 +13,7 @@ fun cons:(NonEmptyList A) item:A nel:(NonEmptyList A) =>
 
 fun head:A nel:(NonEmptyList A) =>
     nel
-     ||> MkNEL h _ -> h
+     ||> MkNEL h ignored -> h
 
 fun toList:(List A) nel:(NonEmptyList A) =>
     nel
@@ -23,10 +23,49 @@ fun fromNonEmpty:(NonEmptyList A) ne:(NonEmpty A) =>
     ne
      ||> MkNonEmpty h t -> MkNEL h t
 
+fun lastStep:A prev:A item:A =>
+    item
+
+fun last:A nel:(NonEmptyList A) =>
+    nel
+     ||> MkNEL h t -> (t |> reduce lastStep h)
+
+fun nelLengthStep:Int acc:Int ignored:A =>
+    acc + 1
+
+fun length:Int nel:(NonEmptyList A) =>
+    nel
+     ||> MkNEL ignored t -> (t |> reduce nelLengthStep 1)
+
+fun mapNelStep:(List B) transform:(A -> B) acc:(List B) item:A =>
+    append acc [transform item]
+
+fun mapNel:(NonEmptyList B) transform:(A -> B) nel:(NonEmptyList A) =>
+    nel
+     ||> MkNEL h t -> MkNEL (transform h) (t |> reduce (mapNelStep transform) [])
+
+fun fromListStep:(Option (NonEmptyList A)) acc:(Option (NonEmptyList A)) item:A =>
+    acc
+     ||> None             -> Some (MkNEL item [])
+     ||> Some (MkNEL h t) -> Some (MkNEL h (append t [item]))
+
+fun fromList:(Option (NonEmptyList A)) items:(List A) =>
+    items
+     |> reduce fromListStep None
+
+fun appendNel:(NonEmptyList A) left:(NonEmptyList A) right:(NonEmptyList A) =>
+    left
+     ||> MkNEL h t -> MkNEL h (append t (toList right))
+
 export NonEmpty
 export NonEmptyList
 export singleton
 export cons
 export head
+export last
+export length
 export toList
 export fromNonEmpty
+export mapNel
+export fromList
+export appendNel

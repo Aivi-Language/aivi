@@ -343,6 +343,8 @@ pub enum BinaryOperator {
     Modulo,
     GreaterThan,
     LessThan,
+    GreaterThanOrEqual,
+    LessThanOrEqual,
     Equals,
     NotEquals,
     And,

@@ -5491,6 +5491,8 @@ fn lower_binary_operator(operator: syn::BinaryOperator) -> BinaryOperator {
         syn::BinaryOperator::Modulo => BinaryOperator::Modulo,
         syn::BinaryOperator::GreaterThan => BinaryOperator::GreaterThan,
         syn::BinaryOperator::LessThan => BinaryOperator::LessThan,
+        syn::BinaryOperator::GreaterThanOrEqual => BinaryOperator::GreaterThanOrEqual,
+        syn::BinaryOperator::LessThanOrEqual => BinaryOperator::LessThanOrEqual,
         syn::BinaryOperator::Equals => BinaryOperator::Equals,
         syn::BinaryOperator::NotEquals => BinaryOperator::NotEquals,
         syn::BinaryOperator::And => BinaryOperator::And,

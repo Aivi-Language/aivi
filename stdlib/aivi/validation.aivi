@@ -1,4 +1,4 @@
-use aivi.nonEmpty (NonEmptyList)
+use aivi.nonEmpty (NonEmptyList, appendNel)
 
 type Errors E = NonEmptyList E
 
@@ -37,6 +37,30 @@ fun toOption:(Option A) opt:(Validation E A) =>
      T|> Some
      F|> None
 
+fun map:(Validation E B) transform:(A -> B) opt:(Validation E A) =>
+    opt
+     ||> Invalid e   -> Invalid e
+     ||> Valid item  -> Valid (transform item)
+
+fun andThen:(Validation E B) next:(A -> Validation E B) opt:(Validation E A) =>
+    opt
+     ||> Invalid e   -> Invalid e
+     ||> Valid item  -> next item
+
+fun zipValidation:(Validation (NonEmptyList E) (A, B)) left:(Validation (NonEmptyList E) A) right:(Validation (NonEmptyList E) B) =>
+    left
+     ||> Invalid le -> right
+                       ||> Invalid re -> Invalid (appendNel le re)
+                       ||> Valid _    -> Invalid le
+     ||> Valid a    -> right
+                       ||> Invalid re -> Invalid re
+                       ||> Valid b    -> Valid (a, b)
+
+fun fold:B onInvalid:(E -> B) onValid:(A -> B) opt:(Validation E A) =>
+    opt
+     ||> Invalid e   -> onInvalid e
+     ||> Valid item  -> onValid item
+
 export Errors
 export isValid
 export isInvalid
@@ -45,3 +69,7 @@ export mapErr
 export toResult
 export fromResult
 export toOption
+export map
+export andThen
+export zipValidation
+export fold

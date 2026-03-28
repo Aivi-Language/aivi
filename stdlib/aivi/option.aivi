@@ -47,6 +47,30 @@ fun toResult:(Result E A) error:E opt:(Option A) =>
      T|> okValue
      F|> Err error
 
+fun map:(Option B) transform:(A -> B) opt:(Option A) =>
+    opt
+     ||> Some item -> Some (transform item)
+     ||> None      -> None
+
+fun filter:(Option A) predicate:(A -> Bool) opt:(Option A) =>
+    opt
+     ||> None      -> None
+     ||> Some item -> predicate item
+                      T|> Some item
+                      F|> None
+
+fun zip:(Option (A, B)) left:(Option A) right:(Option B) =>
+    left
+     ||> None   -> None
+     ||> Some a -> right
+                   ||> None   -> None
+                   ||> Some b -> Some (a, b)
+
+fun fromBool:(Option A) item:A b:Bool =>
+    b
+     T|> Some item
+     F|> None
+
 export isSome
 export isNone
 export getOrElse
@@ -55,3 +79,7 @@ export flatMap
 export flatten
 export toList
 export toResult
+export map
+export filter
+export zip
+export fromBool

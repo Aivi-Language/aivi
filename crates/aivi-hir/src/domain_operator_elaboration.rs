@@ -126,6 +126,8 @@ pub(crate) fn binary_operator_text(operator: BinaryOperator) -> &'static str {
         BinaryOperator::Modulo => "%",
         BinaryOperator::GreaterThan => ">",
         BinaryOperator::LessThan => "<",
+        BinaryOperator::GreaterThanOrEqual => ">=",
+        BinaryOperator::LessThanOrEqual => "<=",
         BinaryOperator::Equals => "==",
         BinaryOperator::NotEquals => "!=",
         BinaryOperator::And => "and",

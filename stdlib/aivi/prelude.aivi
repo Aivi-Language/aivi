@@ -1,81 +1,230 @@
 use aivi.option (
-    getOrElse as optionGetOrElse
-    isSome as optionIsSome
-    isNone as optionIsNone
+    getOrElse as optGetOrElse
+    isSome
+    isNone
+    map as optMap
+    filter as optFilter
+    zip as optZip
+    flatMap as optFlatMap
+    toList as optToList
+    toResult as optToResult
+    fromBool as optFromBool
 )
 
 use aivi.result (
-    withDefault as resultWithDefault
-    isOk as resultIsOk
-    isErr as resultIsErr
+    withDefault
+    isOk
+    isErr
+    map as resMap
+    mapBoth as resMapBoth
+    mapErr as resMapErr
+    fold as resFold
+    flatMap as resFlatMap
+    fromOption as resFromOption
+    toOption as resToOption
 )
 
 use aivi.list (
-    length as listLength
-    head as listHead
-    tailOrEmpty as listTailOrEmpty
-    isEmpty as listIsEmpty
-    nonEmpty as listNonEmpty
+    length
+    head
+    last
+    tailOrEmpty
+    isEmpty
+    nonEmpty
+    map as listMap
+    filter as listFilter
+    flatten
+    concat as listConcat
+    flatMap as listFlatMap
+    reverse
+    take
+    drop
+    takeWhile
+    dropWhile
+    contains
+    indexOf
+    sum
+    product
+    maximum
+    minimum
+    intersperse
+    zip
+    zipWith
+    unzip
+    unique
+    sortBy
+    any
+    all
+    count
+    find
+    findMap
+    partition
 )
 
 use aivi.order (
-    min as orderMin
-    max as orderMax
-    minOf as orderMinOf
+    min
+    max
+    minOf
+    maxOf
+    clamp as clampBy
+    reversed as reverseOrder
+    comparing
 )
 
 use aivi.text (
-    join as textJoin
+    join
     concat as textConcat
     isEmpty as textIsEmpty
+    nonEmpty as textNonEmpty
+    surround
 )
 
+use aivi.math (
+    abs
+    negate
+    sign
+    isEven
+    isOdd
+    square
+    clamp
+    between
+    divides
+)
+
+use aivi.bool (
+    not
+    xor
+    implies
+    fromInt as boolFromInt
+)
+
+use aivi.pair (
+    fst
+    snd
+    swap
+    mapFst
+    mapSnd
+    mapBoth as mapPair
+    duplicate
+)
+
+// Option helpers 
+
 fun getOrElse:A fallback:A opt:(Option A) =>
-    optionGetOrElse fallback opt
+    optGetOrElse fallback opt
 
-fun withDefault:A fallback:A opt:(Result E A) =>
-    resultWithDefault fallback opt
+fun mapOption:(Option B) transform:(A -> B) opt:(Option A) =>
+    optMap transform opt
 
-fun length:Int items:(List A) =>
-    listLength items
+fun filterOption:(Option A) predicate:(A -> Bool) opt:(Option A) =>
+    optFilter predicate opt
 
-fun head:(Option A) items:(List A) =>
-    listHead items
+fun flatMapOption:(Option B) next:(A -> Option B) opt:(Option A) =>
+    optFlatMap next opt
 
-fun tailOrEmpty:(List A) items:(List A) =>
-    listTailOrEmpty items
+fun zipOptions:(Option (A, B)) left:(Option A) right:(Option B) =>
+    optZip left right
 
-fun min:A compare:(A -> A -> Bool) left:A right:A =>
-    orderMin compare left right
+fun fromBool:(Option A) item:A b:Bool =>
+    optFromBool item b
 
-fun max:A compare:(A -> A -> Bool) left:A right:A =>
-    orderMax compare left right
+// Result helpers 
 
-fun minOf:A compare:(A -> A -> Bool) first:A rest:(List A) =>
-    orderMinOf compare first rest
+fun mapResult:(Result E B) transform:(A -> B) opt:(Result E A) =>
+    resMap transform opt
 
-fun join:Text separator:Text parts:(List Text) =>
-    textJoin separator parts
+fun foldResult:B onErr:(E -> B) onOk:(A -> B) opt:(Result E A) =>
+    resFold onErr onOk opt
 
-fun concat:Text parts:(List Text) =>
-    textConcat parts
+fun flatMapResult:(Result E B) next:(A -> Result E B) opt:(Result E A) =>
+    resFlatMap next opt
 
-fun isEmpty:Bool items:(List A) =>
-    listIsEmpty items
+// Exports 
 
-fun nonEmpty:Bool items:(List A) =>
-    listNonEmpty items
+export isSome
+export isNone
+export getOrElse
+export mapOption
+export filterOption
+export flatMapOption
+export zipOptions
+export fromBool
 
-fun isSome:Bool opt:(Option A) =>
-    optionIsSome opt
+export withDefault
+export isOk
+export isErr
+export mapResult
+export foldResult
+export flatMapResult
 
-fun isNone:Bool opt:(Option A) =>
-    optionIsNone opt
+export length
+export head
+export last
+export tailOrEmpty
+export isEmpty
+export nonEmpty
+export listMap
+export listFilter
+export flatten
+export listConcat
+export listFlatMap
+export reverse
+export take
+export drop
+export takeWhile
+export dropWhile
+export contains
+export indexOf
+export sum
+export product
+export maximum
+export minimum
+export intersperse
+export zip
+export zipWith
+export unzip
+export unique
+export sortBy
+export any
+export all
+export count
+export find
+export findMap
+export partition
 
-fun isOk:Bool opt:(Result E A) =>
-    resultIsOk opt
+export min
+export max
+export minOf
+export maxOf
+export clampBy
+export reverseOrder
+export comparing
 
-fun isErr:Bool opt:(Result E A) =>
-    resultIsErr opt
+export join
+export textConcat
+export textIsEmpty
+export textNonEmpty
+export surround
 
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, getOrElse, withDefault, length, head, tailOrEmpty, min, max, minOf, join, concat, isEmpty, nonEmpty, isSome, isNone, isOk, isErr)
+export abs
+export negate
+export sign
+export isEven
+export isOdd
+export square
+export clamp
+export between
+export divides
+
+export not
+export xor
+export implies
+export boolFromInt
+
+export fst
+export snd
+export swap
+export mapFst
+export mapSnd
+export mapPair
+export duplicate
