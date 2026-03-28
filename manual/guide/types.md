@@ -25,9 +25,9 @@ type User = {
     email: Text
 }
 
-value bestScore: Score = 42
+value bestScore:Score = 42
 
-value ada: User = {
+value ada:User = {
     id: 1,
     name: "Ada",
     email: "ada@example.com"
@@ -43,7 +43,7 @@ type User = {
     email: Text
 }
 
-fun userName: Text user:User =>
+fun userName:Text user:User =>
     user.name
 
 value shownName =
@@ -96,12 +96,11 @@ data LoadState =
   | Loaded Text
   | Failed Text
 
-fun loadLabel: Text state:LoadState =>
-    state
-     ||> NotAsked      -> "idle"
-     ||> Loading       -> "loading"
-     ||> Loaded name   -> "ready {name}"
-     ||> Failed reason -> "failed {reason}"
+fun loadLabel:Text state:LoadState => state
+  ||> NotAsked      -> "idle"
+  ||> Loading       -> "loading"
+  ||> Loaded name   -> "ready {name}"
+  ||> Failed reason -> "failed {reason}"
 
 value currentLabel = loadLabel (Loaded "Grace")
 ```
@@ -152,12 +151,12 @@ value emptyNumbers: List Int = []
 Tuples hold a fixed number of values, often with different types:
 
 ```aivi
-value pair: (Int, Text) = (
+value pair:(Int, Text) = (
     1,
     "one"
 )
 
-value triple: (Bool, Int, Text) = (
+value triple:(Bool, Int, Text) = (
     True,
     0,
     "zero"
@@ -167,9 +166,8 @@ value triple: (Bool, Int, Text) = (
 You usually unpack tuples with pattern matching:
 
 ```aivi
-fun firstInt: Int pair:(Int, Int) =>
-    pair
-     ||> (first, _) -> first
+fun firstInt:Int pair:(Int, Int) => pair
+  ||> (first, _) -> first
 
 value firstValue =
     firstInt (
@@ -183,9 +181,9 @@ value firstValue =
 Interpolation lets typed values appear inside text literals:
 
 ```aivi
-value name: Text = "Ada"
-value score: Int = 42
-value message: Text = "Hello, {name}! Your score is {score}."
+value name:Text = "Ada"
+value score:Int = 42
+value message:Text = "Hello, {name}! Your score is {score}."
 ```
 
 ## Summary

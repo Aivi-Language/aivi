@@ -703,9 +703,7 @@ impl<'a> TypeChecker<'a> {
             BinaryOperator::GreaterThan
             | BinaryOperator::LessThan
             | BinaryOperator::GreaterThanOrEqual
-            | BinaryOperator::LessThanOrEqual => {
-                GateType::Primitive(BuiltinType::Bool)
-            }
+            | BinaryOperator::LessThanOrEqual => GateType::Primitive(BuiltinType::Bool),
             BinaryOperator::Add
             | BinaryOperator::Subtract
             | BinaryOperator::Multiply
@@ -2102,7 +2100,7 @@ impl<'a> TypeChecker<'a> {
                 } else {
                     Err(format!(
                         "open type parameter `{name}` does not have a compiler-derived `Eq` \
-                         instance in v1; add `(Eq {name}) =>` to the function annotation to \
+                         instance in v1; add `(Eq {name}) ->` to the function annotation to \
                          require it"
                     ))
                 }
@@ -3173,7 +3171,7 @@ mod tests {
     fn typecheck_accepts_function_signature_constraints_at_call_sites() {
         let report = typecheck_text(
             "function-signature-constraints.aivi",
-            "fun same:Eq A => Bool x:A => True\n\
+            "fun same:Eq A -> Bool x:A => True\n\
              value sameText:Bool = same \"Ada\"\n",
         );
         assert!(

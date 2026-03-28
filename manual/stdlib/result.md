@@ -3,7 +3,21 @@
 Utilities for working with `Result E A` — a value that is either a success (`Ok`) or a failure (`Err`). All functions are pure and can be freely composed with pipes.
 
 ```aivi
-use aivi.result (isOk, isErr, mapErr, withDefault, orElse, flatMap, flatten, toOption, toList, map, mapBoth, fold, fromOption)
+use aivi.result (
+    isOk
+    isErr
+    mapErr
+    withDefault
+    orElse
+    flatMap
+    flatten
+    toOption
+    toList
+    map
+    mapBoth
+    fold
+    fromOption
+)
 ```
 
 ---
@@ -17,7 +31,7 @@ Returns `True` if the result is `Ok`.
 ```aivi
 use aivi.result (isOk)
 
-fun succeeded:Bool result:(Result Text Int) =>
+fun succeeded:Bool result: (Result Text Int) =>
     isOk result
 ```
 
@@ -32,7 +46,7 @@ Returns `True` if the result is `Err`.
 ```aivi
 use aivi.result (isErr)
 
-fun failed:Bool result:(Result Text Int) =>
+fun failed:Bool result: (Result Text Int) =>
     isErr result
 ```
 
@@ -50,8 +64,8 @@ use aivi.result (mapErr)
 fun toCode:Int message:Text =>
     42
 
-fun withErrorCode:(Result Int Int) r:(Result Text Int) =>
-    r |> mapErr toCode
+fun withErrorCode: (Result Int Int) r: (Result Text Int) => r
+  |> mapErr toCode
 ```
 
 ---
@@ -65,7 +79,7 @@ Extracts the value from `Ok`, or returns the fallback if `Err`.
 ```aivi
 use aivi.result (withDefault)
 
-fun safeScore:Int result:(Result Text Int) =>
+fun safeScore:Int result: (Result Text Int) =>
     withDefault 0 result
 ```
 
@@ -80,8 +94,8 @@ Returns the result unchanged if it is `Ok`, otherwise returns the fallback resul
 ```aivi
 use aivi.result (orElse)
 
-fun withFallback:(Result Text Int) primary:(Result Text Int) secondary:(Result Text Int) =>
-    primary |> orElse secondary
+fun withFallback: (Result Text Int) primary: (Result Text Int) secondary: (Result Text Int) => primary
+  |> orElse secondary
 ```
 
 ---
@@ -95,13 +109,10 @@ Chains a `Result`-returning function over an `Ok` value. Propagates `Err` withou
 ```aivi
 use aivi.result (flatMap)
 
-fun ensurePositive:(Result Text Int) n:Int =>
-    n
-     ||> _ if n > 0 -> Ok n
-     ||> _          -> Err "must be positive"
+fun ensurePositive: (Result Text Int) n:Int =>
 
-fun validateCount:(Result Text Int) result:(Result Text Int) =>
-    result |> flatMap ensurePositive
+fun validateCount: (Result Text Int) result: (Result Text Int) => result
+  |> flatMap ensurePositive
 ```
 
 ---
@@ -115,7 +126,7 @@ Removes one layer of nesting from a `Result E (Result E A)`.
 ```aivi
 use aivi.result (flatten)
 
-fun unwrapNested:(Result Text Int) r:(Result Text (Result Text Int)) =>
+fun unwrapNested: (Result Text Int) r: (Result Text (Result Text Int)) =>
     flatten r
 ```
 
@@ -130,7 +141,7 @@ Converts a `Result` to an `Option`, discarding the error. `Ok value` becomes `So
 ```aivi
 use aivi.result (toOption)
 
-fun justValue:(Option Int) result:(Result Text Int) =>
+fun justValue: (Option Int) result: (Result Text Int) =>
     toOption result
 ```
 
@@ -145,7 +156,7 @@ Converts `Ok value` to a one-element list, or `Err` to an empty list.
 ```aivi
 use aivi.result (toList)
 
-fun resultItems:(List Int) result:(Result Text Int) =>
+fun resultItems: (List Int) result: (Result Text Int) =>
     toList result
 ```
 
@@ -163,8 +174,8 @@ use aivi.result (map)
 fun double:Int n:Int =>
     n * 2
 
-fun doubleResult:(Result Text Int) result:(Result Text Int) =>
-    result |> map double
+fun doubleResult: (Result Text Int) result: (Result Text Int) => result
+  |> map double
 ```
 
 ---
@@ -184,7 +195,7 @@ fun toCode:Int message:Text =>
 fun double:Int n:Int =>
     n * 2
 
-fun normalise:(Result Int Int) result:(Result Text Int) =>
+fun normalise: (Result Int Int) result: (Result Text Int) =>
     mapBoth toCode double result
 ```
 
@@ -205,7 +216,7 @@ fun zero:Int _:Text =>
 fun identity:Int n:Int =>
     n
 
-fun resultToInt:Int result:(Result Text Int) =>
+fun resultToInt:Int result: (Result Text Int) =>
     fold zero identity result
 ```
 
@@ -220,6 +231,6 @@ Converts an `Option` to a `Result`. `Some value` becomes `Ok value`; `None` beco
 ```aivi
 use aivi.result (fromOption)
 
-fun requireAge:(Result Text Int) opt:(Option Int) =>
+fun requireAge: (Result Text Int) opt: (Option Int) =>
     fromOption "Age is required" opt
 ```

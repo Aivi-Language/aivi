@@ -3,9 +3,23 @@
 Disjoint union type for values that can be one of two alternatives. By convention `Left` holds an error or secondary value and `Right` holds the primary or success value.
 
 ```aivi
-use aivi.core.either (Either, mapRight, mapLeft, mapBoth, fold, isLeft, isRight,
-                      fromLeft, fromRight, swap, toOption, fromOption,
-                      rightFromResult, rightFromOption, partitionEithers)
+use aivi.core.either (
+    Either
+    mapRight
+    mapLeft
+    mapBoth
+    fold
+    isLeft
+    isRight
+    fromLeft
+    fromRight
+    swap
+    toOption
+    fromOption
+    rightFromResult
+    rightFromOption
+    partitionEithers
+)
 ```
 
 ---
@@ -23,10 +37,9 @@ A value of type `Either L R` is either a `Left L` or a `Right R`. Use `||>` to b
 ```aivi
 use aivi.core.either (Either)
 
-fun describeResult:Text result:(Either Text Int) =>
-    result
-     ||> Left msg  -> "Error: {msg}"
-     ||> Right n   -> "Got {n}"
+fun describeResult:Text result: (Either Text Int) => result
+  ||> Left msg -> "Error: {msg}"
+  ||> Right n  -> "Got {n}"
 ```
 
 ---
@@ -40,10 +53,13 @@ mapRight : (R -> R2) -> Either L R -> Either L R2
 ```
 
 ```aivi
-use aivi.core.either (Either, mapRight)
+use aivi.core.either (
+    Either
+    mapRight
+)
 
-fun doubleRight:Either Text Int result:(Either Text Int) =>
-    mapRight (fun n:Int x:Int => x * 2) result
+fun doubleRight: Either Text Int result: (Either Text Int) =>
+    mapRight (fun n)
 ```
 
 ---
@@ -57,10 +73,13 @@ mapLeft : (L -> L2) -> Either L R -> Either L2 R
 ```
 
 ```aivi
-use aivi.core.either (Either, mapLeft)
+use aivi.core.either (
+    Either
+    mapLeft
+)
 
-fun wrapError:(Either Text Int) result:(Either Int Int) =>
-    mapLeft (fun msg:Text code:Int => "Error code: {code}") result
+fun wrapError: (Either Text Int) result: (Either Int Int) =>
+    mapLeft (fun msg)
 ```
 
 ---
@@ -74,11 +93,16 @@ mapBoth : (L -> L2) -> (R -> R2) -> Either L R -> Either L2 R2
 ```
 
 ```aivi
-use aivi.core.either (Either, mapBoth)
+use aivi.core.either (
+    Either
+    mapBoth
+)
+
 use aivi.math (negate)
+
 use aivi.text (surround)
 
-fun transformBoth:(Either Text Int) e:(Either Text Int) =>
+fun transformBoth: (Either Text Int) e: (Either Text Int) =>
     mapBoth (surround "[" "]") negate e
 ```
 
@@ -93,10 +117,13 @@ fold : (L -> C) -> (R -> C) -> Either L R -> C
 ```
 
 ```aivi
-use aivi.core.either (Either, fold)
+use aivi.core.either (
+    Either
+    fold
+)
 
-fun toLength:Int e:(Either Text Text) =>
-    fold (fun n:Int s:Text => 0 - 1) (fun n:Int s:Text => 1) e
+fun toLength:Int e: (Either Text Text) =>
+    fold (fun n)
 ```
 
 ---
@@ -111,9 +138,13 @@ isRight : Either L R -> Bool
 ```
 
 ```aivi
-use aivi.core.either (Either, isLeft, isRight)
+use aivi.core.either (
+    Either
+    isLeft
+    isRight
+)
 
-fun hasError:Bool e:(Either Text Int) =>
+fun hasError:Bool e: (Either Text Int) =>
     isLeft e
 ```
 
@@ -129,9 +160,12 @@ fromRight : R -> Either L R -> R
 ```
 
 ```aivi
-use aivi.core.either (Either, fromRight)
+use aivi.core.either (
+    Either
+    fromRight
+)
 
-fun getValueOrZero:Int e:(Either Text Int) =>
+fun getValueOrZero:Int e: (Either Text Int) =>
     fromRight 0 e
 ```
 
@@ -146,9 +180,12 @@ swap : Either L R -> Either R L
 ```
 
 ```aivi
-use aivi.core.either (Either, swap)
+use aivi.core.either (
+    Either
+    swap
+)
 
-fun flipEither:(Either Int Text) e:(Either Text Int) =>
+fun flipEither: (Either Int Text) e: (Either Text Int) =>
     swap e
 ```
 
@@ -163,9 +200,12 @@ toOption : Either L R -> Option R
 ```
 
 ```aivi
-use aivi.core.either (Either, toOption)
+use aivi.core.either (
+    Either
+    toOption
+)
 
-fun rightOrNone:(Option Int) e:(Either Text Int) =>
+fun rightOrNone: (Option Int) e: (Either Text Int) =>
     toOption e
 ```
 
@@ -180,9 +220,12 @@ fromOption : L -> Option R -> Either L R
 ```
 
 ```aivi
-use aivi.core.either (Either, fromOption)
+use aivi.core.either (
+    Either
+    fromOption
+)
 
-fun optToEither:(Either Text Int) opt:(Option Int) =>
+fun optToEither: (Either Text Int) opt: (Option Int) =>
     fromOption "missing" opt
 ```
 
@@ -197,8 +240,11 @@ partitionEithers : List (Either L R) -> { lefts: List L, rights: List R }
 ```
 
 ```aivi
-use aivi.core.either (Either, partitionEithers)
+use aivi.core.either (
+    Either
+    partitionEithers
+)
 
-fun splitResults:(List Text) items:(List (Either Text Int)) =>
+fun splitResults: (List Text) items: (List (Either Text Int)) =>
     (partitionEithers items).lefts
 ```

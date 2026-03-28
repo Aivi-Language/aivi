@@ -3,7 +3,15 @@
 Utilities for ordering and comparison. All functions are parameterised by a **comparator** — a function `compare:(A -> A -> Bool)` that returns `True` when the first argument should come before the second (i.e. is "less than").
 
 ```aivi
-use aivi.order (min, max, minOf, maxOf, clamp, reversed, comparing)
+use aivi.order (
+    min
+    max
+    minOf
+    maxOf
+    clamp
+    reversed
+    comparing
+)
 ```
 
 A comparator for integers in ascending order looks like this:
@@ -65,7 +73,7 @@ use aivi.order (minOf)
 fun byInt:Bool a:Int b:Int =>
     a < b
 
-fun smallest:Int first:Int rest:(List Int) =>
+fun smallest:Int first:Int rest: (List Int) =>
     minOf byInt first rest
 ```
 
@@ -83,7 +91,7 @@ use aivi.order (maxOf)
 fun byInt:Bool a:Int b:Int =>
     a < b
 
-fun largest:Int first:Int rest:(List Int) =>
+fun largest:Int first:Int rest: (List Int) =>
     maxOf byInt first rest
 ```
 
@@ -136,13 +144,16 @@ Lifts a comparator on `B` to a comparator on `A` by first projecting each value 
 ```aivi
 use aivi.order (comparing)
 
-type Person = { name: Text, age: Int }
+type Person = {
+    name: Text,
+    age: Int
+}
 
 fun byInt:Bool a:Int b:Int =>
     a < b
 
 fun youngerFirst:Bool p1:Person p2:Person =>
-    comparing .age byInt p1 p2
+    comparing.age byInt p1 p2
 ```
 
 The `.age` shorthand projects a `Person` to its `age` field. You can pass `youngerFirst` anywhere a `(Person -> Person -> Bool)` comparator is expected — for example as the `compare` argument to `minOf` or `clamp`.

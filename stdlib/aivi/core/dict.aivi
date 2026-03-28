@@ -19,10 +19,10 @@ fun singleton: (Dict K V) k:K v:V =>
         entries: [{ key: k, value: v }]
     }
 
-fun matchesKey: Eq K => Bool k:K entry: (DictEntry K V) =>
+fun matchesKey: Eq K -> Bool k:K entry: (DictEntry K V) =>
     entry.key == k
 
-fun notMatchesKey: Eq K => Bool k:K entry: (DictEntry K V) => entry.key == k
+fun notMatchesKey: Eq K -> Bool k:K entry: (DictEntry K V) => entry.key == k
   T|> False
   F|> True
 

@@ -15,7 +15,7 @@ This declares a reactive value named `count`.
 Signals are often defined from earlier signals with pipes:
 
 ```aivi
-fun double: Int n:Int =>
+fun double:Int n:Int =>
     n * 2
 
 signal count = 21
@@ -50,7 +50,7 @@ type User = {
 
 type Session = { user: User }
 
-value seed: User = {
+value seed:User = {
     active: True,
     email: "ada@example.com"
 }

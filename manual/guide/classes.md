@@ -6,7 +6,7 @@ Classes are AIVI's typeclass-style abstraction mechanism. A class describes a se
 
 ```aivi
 class Eq A
-    (==): A -> A -> Bool
+    (==):A -> A -> Bool
 ```
 
 This says that any type used with `Eq` must support equality.
@@ -15,7 +15,7 @@ You can declare ordinary named methods too:
 
 ```aivi
 class Display A
-    display: A -> Text
+    display:A -> Text
 ```
 
 ## Superclass declarations
@@ -28,12 +28,10 @@ class Functor F
     map: (A -> B) -> F A -> F B
 
 class Applicative F
-    with Functor F
     pure: A -> F A
     ap: F (A -> B) -> F A -> F B
 
 class Monad M
-    with Applicative M
     bind: M A -> (A -> M B) -> M B
 ```
 
@@ -41,8 +39,6 @@ Multiple superclasses are listed as separate `with` lines:
 
 ```aivi
 class Traversable F
-    with Functor F
-    with Foldable F
     traverse: Applicative G => (A -> G B) -> F A -> G (F B)
 ```
 
@@ -52,7 +48,6 @@ Use `require` inside the class body to constrain a type parameter. This document
 
 ```aivi
 class Container F
-    require Eq A
     contains: A -> F A -> Bool
 ```
 
@@ -73,7 +68,7 @@ Instances provide the implementation for a concrete type:
 
 ```aivi
 class Eq A
-    (==): A -> A -> Bool
+    (==):A -> A -> Bool
 
 data Blob =
   | Blob Bytes
@@ -91,7 +86,7 @@ A class can expose named operations instead of operators:
 
 ```aivi
 class Compare A
-    same: A -> A -> Bool
+    same:A -> A -> Bool
 
 data Label =
   | Label Text
@@ -132,4 +127,4 @@ Classes let generic code talk about capability instead of one hard-coded type. T
 | `with Functor F` | Declare a superclass in the class body |
 | `require Eq A` | Constrain a class type parameter |
 | `instance Eq Blob` | Implement a class for one concrete type |
-| `Eq K => Bool` | Require `K` to have `Eq` in a function annotation |
+| `Eq K -> Bool` | Require `K` to have `Eq` in a function annotation |

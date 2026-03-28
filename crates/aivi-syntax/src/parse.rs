@@ -3,18 +3,17 @@ use aivi_base::{Diagnostic, DiagnosticCode, Severity, SourceFile, SourceSpan, Sp
 use crate::{
     cst::{
         BigIntLiteral, BinaryOperator, ClassBody, ClassMember, ClassMemberName, ClassRequireDecl,
-        ClassWithDecl, DecimalLiteral,
-        Decorator, DecoratorArguments, DecoratorPayload, DomainBody, DomainItem, DomainMember,
-        DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind, FloatLiteral, FunctionParam,
-        Identifier, InstanceBody, InstanceItem, InstanceMember, IntegerLiteral, Item, ItemBase,
-        MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module,
-        NamedItem, NamedItemBody, OperatorName, Pattern, PatternKind, PipeCaseArm, PipeExpr,
-        PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-        RecordPatternField, RegexLiteral, SourceDecorator, SourceProviderContractBody,
-        SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
-        SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
-        TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody, TypeExpr,
-        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
+        ClassWithDecl, DecimalLiteral, Decorator, DecoratorArguments, DecoratorPayload, DomainBody,
+        DomainItem, DomainMember, DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind,
+        FloatLiteral, FunctionParam, Identifier, InstanceBody, InstanceItem, InstanceMember,
+        IntegerLiteral, Item, ItemBase, MapExpr, MapExprEntry, MarkupAttribute,
+        MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName, Pattern,
+        PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath,
+        QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral, SourceDecorator,
+        SourceProviderContractBody, SourceProviderContractFieldValue, SourceProviderContractItem,
+        SourceProviderContractMember, SourceProviderContractSchemaMember, SuffixedIntegerLiteral,
+        TextFragment, TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody,
+        TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
@@ -239,42 +238,30 @@ impl<'a> Parser<'a> {
             TokenKind::DataKw => {
                 Item::Data(self.parse_type_item(base, keyword_index, end, "data declaration"))
             }
-            TokenKind::FunKw => {
-                Item::Fun(self.parse_fun_item(base, keyword_index, end))
-            }
-            TokenKind::ValueKw => {
-                Item::Value(self.parse_value_item(base, keyword_index, end))
-            }
+            TokenKind::FunKw => Item::Fun(self.parse_fun_item(base, keyword_index, end)),
+            TokenKind::ValueKw => Item::Value(self.parse_value_item(base, keyword_index, end)),
             TokenKind::SignalKw => {
                 Item::Signal(self.parse_signal_item(base, keyword_index, end, "signal declaration"))
             }
-            TokenKind::SourceKw => {
-                Item::Source(self.parse_source_item(base, keyword_index, end))
-            }
-            TokenKind::ResultDeclKw => {
-                Item::ResultDecl(self.parse_value_item_with_eq(
-                    base,
-                    keyword_index,
-                    end,
-                    "result declaration",
-                ))
-            }
-            TokenKind::ViewKw => {
-                Item::View(self.parse_value_item_with_eq(
-                    base,
-                    keyword_index,
-                    end,
-                    "view declaration",
-                ))
-            }
-            TokenKind::AdapterKw => {
-                Item::Adapter(self.parse_value_item_with_eq(
-                    base,
-                    keyword_index,
-                    end,
-                    "adapter declaration",
-                ))
-            }
+            TokenKind::SourceKw => Item::Source(self.parse_source_item(base, keyword_index, end)),
+            TokenKind::ResultDeclKw => Item::ResultDecl(self.parse_value_item_with_eq(
+                base,
+                keyword_index,
+                end,
+                "result declaration",
+            )),
+            TokenKind::ViewKw => Item::View(self.parse_value_item_with_eq(
+                base,
+                keyword_index,
+                end,
+                "view declaration",
+            )),
+            TokenKind::AdapterKw => Item::Adapter(self.parse_value_item_with_eq(
+                base,
+                keyword_index,
+                end,
+                "adapter declaration",
+            )),
             TokenKind::ClassKw => Item::Class(self.parse_class_item(base, keyword_index, end)),
             TokenKind::InstanceKw => {
                 Item::Instance(self.parse_instance_item(base, keyword_index, end))
@@ -516,15 +503,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a `value` declaration: constant form only, uses `=`.
-    fn parse_value_item(
-        &mut self,
-        base: ItemBase,
-        keyword_index: usize,
-        end: usize,
-    ) -> NamedItem {
+    fn parse_value_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> NamedItem {
         let mut cursor = keyword_index + 1;
-        let name =
-            self.parse_named_item_name(keyword_index, &mut cursor, end, "value declaration");
+        let name = self.parse_named_item_name(keyword_index, &mut cursor, end, "value declaration");
         let (constraints, annotation) = self.parse_function_signature_annotation(&mut cursor, end);
 
         let body = if self
@@ -561,15 +542,9 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a `fun` declaration: function form with parameters, uses `=>`.
-    fn parse_fun_item(
-        &mut self,
-        base: ItemBase,
-        keyword_index: usize,
-        end: usize,
-    ) -> NamedItem {
+    fn parse_fun_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> NamedItem {
         let mut cursor = keyword_index + 1;
-        let name =
-            self.parse_named_item_name(keyword_index, &mut cursor, end, "fun declaration");
+        let name = self.parse_named_item_name(keyword_index, &mut cursor, end, "fun declaration");
         let (constraints, annotation) = self.parse_function_signature_annotation(&mut cursor, end);
 
         let mut parameters = Vec::new();
@@ -658,12 +633,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a `source` declaration — same surface shape as `signal` with optional type + `=` body.
-    fn parse_source_item(
-        &mut self,
-        base: ItemBase,
-        keyword_index: usize,
-        end: usize,
-    ) -> NamedItem {
+    fn parse_source_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> NamedItem {
         self.parse_signal_item(base, keyword_index, end, "source declaration")
     }
 
@@ -758,11 +728,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_class_with_decl(
-        &mut self,
-        cursor: &mut usize,
-        end: usize,
-    ) -> Option<ClassWithDecl> {
+    fn parse_class_with_decl(&mut self, cursor: &mut usize, end: usize) -> Option<ClassWithDecl> {
         let start = *cursor;
         let with_index = self.peek_nontrivia(*cursor, end)?;
         // Consume the `with` soft-keyword.
@@ -1594,7 +1560,10 @@ impl<'a> Parser<'a> {
     ) -> (Vec<TypeExpr>, Option<TypeExpr>) {
         let checkpoint = *cursor;
         if let Some(constraints) = self.parse_constraint_list(cursor, end)
-            && self.consume_kind(cursor, end, TokenKind::Arrow).is_some()
+            && constraints.iter().all(Self::is_constraint_expr)
+            && self
+                .consume_kind(cursor, end, TokenKind::ThinArrow)
+                .is_some()
         {
             return (
                 constraints,
@@ -1625,8 +1594,23 @@ impl<'a> Parser<'a> {
         Some(vec![self.parse_type_expr(
             cursor,
             end,
-            TypeStop::default(),
+            TypeStop::constraint_attempt(),
         )?])
+    }
+
+    /// Returns `true` when `expr` looks like a class constraint — i.e. a type
+    /// application whose callee is a multi-character identifier.  Single-letter
+    /// identifiers are type variables by convention in AIVI and therefore not
+    /// valid class names.  Parenthesised constraint tuples are handled by the
+    /// caller and do not reach this predicate.
+    fn is_constraint_expr(expr: &TypeExpr) -> bool {
+        match &expr.kind {
+            TypeExprKind::Apply { callee, .. } => match &callee.kind {
+                TypeExprKind::Name(name) => name.text.len() > 1,
+                _ => false,
+            },
+            _ => false,
+        }
     }
 
     fn parse_optional_constraint_prefix(
@@ -1636,7 +1620,10 @@ impl<'a> Parser<'a> {
     ) -> Vec<TypeExpr> {
         let checkpoint = *cursor;
         if let Some(constraints) = self.parse_constraint_list(cursor, end)
-            && self.consume_kind(cursor, end, TokenKind::Arrow).is_some()
+            && constraints.iter().all(Self::is_constraint_expr)
+            && self
+                .consume_kind(cursor, end, TokenKind::ThinArrow)
+                .is_some()
         {
             return constraints;
         }
@@ -1669,7 +1656,10 @@ impl<'a> Parser<'a> {
     ) -> (Vec<TypeExpr>, Option<Identifier>, Vec<Identifier>) {
         let checkpoint = *cursor;
         if let Some(constraints) = self.parse_constraint_list(cursor, end)
-            && self.consume_kind(cursor, end, TokenKind::Arrow).is_some()
+            && constraints.iter().all(Self::is_constraint_expr)
+            && self
+                .consume_kind(cursor, end, TokenKind::ThinArrow)
+                .is_some()
         {
             let name = self.parse_named_item_name(keyword_index, cursor, end, "class declaration");
             let type_parameters = self.parse_type_parameters_same_line(cursor, end);
@@ -1963,11 +1953,7 @@ impl<'a> Parser<'a> {
                             result_memo,
                         )
                     } else {
-                        (
-                            subject_memo,
-                            PipeStageKind::Transform { expr },
-                            result_memo,
-                        )
+                        (subject_memo, PipeStageKind::Transform { expr }, result_memo)
                     }
                 }
                 TokenKind::PipeGate => {
@@ -2008,7 +1994,11 @@ impl<'a> Parser<'a> {
                     let expr =
                         self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
-                    (subject_memo, PipeStageKind::RecurStart { expr }, result_memo)
+                    (
+                        subject_memo,
+                        PipeStageKind::RecurStart { expr },
+                        result_memo,
+                    )
                 }
                 TokenKind::PipeRecurStep => {
                     cluster_active = false;
@@ -2076,7 +2066,11 @@ impl<'a> Parser<'a> {
                     let step =
                         self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
-                    (subject_memo, PipeStageKind::Accumulate { seed, step }, result_memo)
+                    (
+                        subject_memo,
+                        PipeStageKind::Accumulate { seed, step },
+                        result_memo,
+                    )
                 }
                 TokenKind::PipeDiff => {
                     cluster_active = false;
@@ -3196,8 +3190,7 @@ impl<'a> Parser<'a> {
     fn starts_function_param(&self, start: usize, end: usize) -> bool {
         self.peek_nontrivia(start, end).is_some_and(|index| {
             let kind = self.tokens[index].kind();
-            !self.tokens[index].line_start()
-                && (kind == TokenKind::Identifier || kind.is_keyword())
+            !self.tokens[index].line_start() && (kind == TokenKind::Identifier || kind.is_keyword())
         })
     }
 
@@ -3412,6 +3405,7 @@ impl<'a> Parser<'a> {
             TokenKind::Comma => stop.comma,
             TokenKind::RParen => stop.rparen,
             TokenKind::RBrace => stop.rbrace,
+            TokenKind::ThinArrow => stop.thin_arrow,
             _ => false,
         }
     }
@@ -4027,6 +4021,7 @@ struct TypeStop {
     comma: bool,
     rparen: bool,
     rbrace: bool,
+    thin_arrow: bool,
 }
 
 impl TypeStop {
@@ -4042,6 +4037,13 @@ impl TypeStop {
         Self {
             comma: true,
             rbrace: true,
+            ..Self::default()
+        }
+    }
+
+    fn constraint_attempt() -> Self {
+        Self {
+            thin_arrow: true,
             ..Self::default()
         }
     }
@@ -4765,10 +4767,10 @@ instance Eq Blob
         let (_, parsed) = load(
             r#"class Functor F
     map : (A -> B) -> F A -> F B
-class (Functor F, Foldable F) => Traversable F
-    traverse : Applicative G => (A -> G B) -> F A -> G (F B)
-fun same:Eq A => Bool v:A => v == v
-instance Eq A => Eq (Option A)
+class (Functor F, Foldable F) -> Traversable F
+    traverse : Applicative G -> (A -> G B) -> F A -> G (F B)
+fun same:Eq A -> Bool v:A => v == v
+instance Eq A -> Eq (Option A)
     (==) left right = True
 "#,
         );

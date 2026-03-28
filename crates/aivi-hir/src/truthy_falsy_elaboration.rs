@@ -233,8 +233,7 @@ fn collect_truthy_falsy_pipe(
         typing,
         |stage_index, stage, current, current_env, typing| match &stage.kind {
             PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current
-                    .and_then(|s| typing.infer_gate_stage(*expr, current_env, s)),
+                new_subject: current.and_then(|s| typing.infer_gate_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Map { expr } => PipeSubjectStepOutcome::Continue {
@@ -243,8 +242,7 @@ fn collect_truthy_falsy_pipe(
                 advance_by: 1,
             },
             PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                new_subject: current
-                    .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
+                new_subject: current.and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                 advance_by: 1,
             },
             PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {

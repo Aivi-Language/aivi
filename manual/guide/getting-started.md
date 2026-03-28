@@ -15,7 +15,7 @@ It is designed around a few strong rules:
 This is a complete, valid AIVI module:
 
 ```aivi
-fun formatGreeting: Text name:Text =>
+fun formatGreeting:Text name:Text =>
     "Hello, {name}!"
 
 value greeting = formatGreeting "Ada"
@@ -31,7 +31,7 @@ It already shows the two most common top-level forms:
 Signals represent values that participate in the reactive graph:
 
 ```aivi
-fun double: Int n:Int =>
+fun double:Int n:Int =>
     n * 2
 
 signal count = 21

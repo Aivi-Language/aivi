@@ -8,7 +8,15 @@ No I/O is performed.
 ## Import
 
 ```aivi
-use aivi.desktop.xdg (dataHome, configHome, cacheHome, stateHome, runtimeDir, dataDirs, configDirs)
+use aivi.desktop.xdg (
+    dataHome
+    configHome
+    cacheHome
+    stateHome
+    runtimeDir
+    dataDirs
+    configDirs
+)
 ```
 
 ## Overview
@@ -37,6 +45,7 @@ Default: `$HOME/.local/share`
 
 ```aivi
 use aivi.desktop.xdg (dataHome)
+
 use aivi.path (join)
 
 value appDataDir = join dataHome "myapp"
@@ -54,6 +63,7 @@ Default: `$HOME/.config`
 
 ```aivi
 use aivi.desktop.xdg (configHome)
+
 use aivi.path (join)
 
 value appConfigDir = join configHome "myapp"
@@ -71,6 +81,7 @@ Default: `$HOME/.cache`
 
 ```aivi
 use aivi.desktop.xdg (cacheHome)
+
 use aivi.path (join)
 
 value appCacheDir = join cacheHome "myapp"
@@ -88,6 +99,7 @@ Default: `$HOME/.local/state`
 
 ```aivi
 use aivi.desktop.xdg (stateHome)
+
 use aivi.path (join)
 
 value appStateDir = join stateHome "myapp"
@@ -106,6 +118,7 @@ always set (typically `/run/user/1000`).
 
 ```aivi
 use aivi.desktop.xdg (runtimeDir)
+
 use aivi.option (withDefault)
 
 value socketBase = withDefault "/tmp" runtimeDir
@@ -122,9 +135,12 @@ Ordered search path for system-wide data directories.
 Default: `["/usr/local/share", "/usr/share"]`
 
 ```aivi
-use aivi.desktop.xdg (dataDirs, dataHome)
+use aivi.desktop.xdg (
+    dataDirs
+    dataHome
+)
 
-value allDataDirs = [dataHome] <> dataDirs
+value allDataDirs
 ```
 
 ### configDirs
@@ -138,15 +154,20 @@ Ordered search path for system-wide configuration directories.
 Default: `["/etc/xdg"]`
 
 ```aivi
-use aivi.desktop.xdg (configDirs, configHome)
+use aivi.desktop.xdg (
+    configDirs
+    configHome
+)
 
-value allConfigDirs = [configHome] <> configDirs
+value allConfigDirs
 ```
 
 ## Error type
 
 ```aivi
-type XdgError = XdgHomeUnset | XdgRuntimeDirUnavailable
+type XdgError =
+  | XdgHomeUnset
+  | XdgRuntimeDirUnavailable
 ```
 
 `XdgError` covers the two situations where an XDG path cannot be resolved:
@@ -157,24 +178,32 @@ type XdgError = XdgHomeUnset | XdgRuntimeDirUnavailable
 ## Example — build standard app directories
 
 ```aivi
-use aivi.desktop.xdg (dataHome, configHome, cacheHome)
+use aivi.desktop.xdg (
+    dataHome
+    configHome
+    cacheHome
+)
+
 use aivi.path (join)
 
-value dataDir   = join dataHome   "com.example.MyApp"
+value dataDir = join dataHome "com.example.MyApp"
 value configDir = join configHome "com.example.MyApp"
-value cacheDir  = join cacheHome  "com.example.MyApp"
+value cacheDir = join cacheHome "com.example.MyApp"
 ```
 
 ## Example — find a data file across the search path
 
 ```aivi
-use aivi.desktop.xdg (dataDirs, dataHome)
+use aivi.desktop.xdg (
+    dataDirs
+    dataHome
+)
+
 use aivi.path (join)
+
 use aivi.fs (exists)
+
 use aivi.list (filter)
 
-fun findDataFile name =
-  ([dataHome] <> dataDirs)
-  |> map (dir => join dir name)
-  |> filter exists
+fun findDataFile name =>
 ```

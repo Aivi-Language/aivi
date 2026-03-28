@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod manual_snippets;
 mod mcp;
 mod run_session;
 
@@ -105,6 +106,10 @@ fn run() -> Result<ExitCode, String> {
 
     if first == OsString::from("mcp") {
         return mcp::run_mcp(args);
+    }
+
+    if first == OsString::from("manual-snippets") {
+        return manual_snippets::run(args);
     }
 
     if first == OsString::from("fmt") {
@@ -880,7 +885,9 @@ fn prepare_execute_artifact(module: &HirModule) -> Result<ExecuteArtifact, Strin
         rendered
     })?;
     if runtime_assembly.task_by_owner(main_owner).is_none() {
-        return Err("`aivi execute` requires `value main` to be annotated as `Task ...`".to_owned());
+        return Err(
+            "`aivi execute` requires `value main` to be annotated as `Task ...`".to_owned(),
+        );
     }
     Ok(ExecuteArtifact {
         main_owner,
@@ -1100,8 +1107,8 @@ fn execute_runtime_task_plan(
             Ok(RuntimeValue::Bool(valid))
         }
         RuntimeTaskPlan::JsonGet { json, key } => {
-            let parsed: serde_json::Value = serde_json::from_str(&*json)
-                .map_err(|e| format!("json.get: invalid JSON: {e}"))?;
+            let parsed: serde_json::Value =
+                serde_json::from_str(&*json).map_err(|e| format!("json.get: invalid JSON: {e}"))?;
             Ok(parsed
                 .get(key.as_ref())
                 .map(|v| {
@@ -1111,8 +1118,8 @@ fn execute_runtime_task_plan(
                 .unwrap_or(RuntimeValue::OptionNone))
         }
         RuntimeTaskPlan::JsonAt { json, index } => {
-            let parsed: serde_json::Value = serde_json::from_str(&*json)
-                .map_err(|e| format!("json.at: invalid JSON: {e}"))?;
+            let parsed: serde_json::Value =
+                serde_json::from_str(&*json).map_err(|e| format!("json.at: invalid JSON: {e}"))?;
             Ok(usize::try_from(index)
                 .ok()
                 .and_then(|i| parsed.get(i))
@@ -3513,10 +3520,10 @@ fn run_lsp(_args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
 
 fn print_usage() {
     eprintln!(
-        "usage:\n  aivi <path>\n  aivi check <path>\n  aivi compile <path> [-o <object>]\n  aivi build <path> -o <bundle> [--view <name>]\n  aivi run [<path>] [--path <path>] [--view <name>]\n  aivi mcp [--path <path>] [--view <name>]\n  aivi execute <path> [-- args...]\n  aivi lex <path>\n  aivi fmt <path>\n  aivi fmt --stdin\n  aivi fmt --check [path...]\n  aivi lsp"
+        "usage:\n  aivi <path>\n  aivi check <path>\n  aivi compile <path> [-o <object>]\n  aivi build <path> -o <bundle> [--view <name>]\n  aivi run [<path>] [--path <path>] [--view <name>]\n  aivi mcp [--path <path>] [--view <name>]\n  aivi execute <path> [-- args...]\n  aivi lex <path>\n  aivi fmt <path>\n  aivi fmt --stdin\n  aivi fmt --check [path...]\n  aivi manual-snippets [--root <manual-dir>] [--todo <report.json>] [--write]\n  aivi lsp"
     );
     eprintln!(
-        "commands:\n  check    Lex, parse, lower, and validate a module through HIR\n  compile  Lower through typed core, typed lambda, backend, and Cranelift codegen\n  build    Package a runnable bundle directory around the live GTK/runtime path\n  run      Launch the current live GTK runtime path (implicit `<workspace>/main.aivi` when no path is given)\n  mcp      Start the stdio MCP server for launching and inspecting the current app\n  execute  Evaluate a top-level `value main : Task ...` without GTK\n  lex      Dump the lossless token stream\n  fmt      Canonically format the supported surface subset\n  lsp      Start the language server"
+        "commands:\n  check            Lex, parse, lower, and validate a module through HIR\n  compile          Lower through typed core, typed lambda, backend, and Cranelift codegen\n  build            Package a runnable bundle directory around the live GTK/runtime path\n  run              Launch the current live GTK runtime path (implicit `<workspace>/main.aivi` when no path is given)\n  mcp              Start the stdio MCP server for launching and inspecting the current app\n  execute          Evaluate a top-level `value main : Task ...` without GTK\n  lex              Dump the lossless token stream\n  fmt              Canonically format the supported surface subset\n  manual-snippets  Scan fenced ```aivi blocks in markdown, format them, and emit a TODO report\n  lsp              Start the language server"
     );
     eprintln!(
         "milestone-2 surface items: {:?}",

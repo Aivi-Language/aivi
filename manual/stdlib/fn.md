@@ -3,7 +3,17 @@
 Higher-order function combinators. This module provides building blocks for working with functions as first-class values — composing, flipping, and applying them in pipelines.
 
 ```aivi
-use aivi.core.fn (identity, const, flip, compose, andThen, always, on, applyTo, applyTwice)
+use aivi.core.fn (
+    identity
+    const
+    flip
+    compose
+    andThen
+    always
+    on
+    applyTo
+    applyTwice
+)
 ```
 
 ---
@@ -36,7 +46,6 @@ const : A -> B -> A
 ```aivi
 use aivi.core.fn (const)
 
-// Always return 42 regardless of input
 fun alwaysForty:Int ignored:Text =>
     const 42 ignored
 ```
@@ -53,9 +62,9 @@ flip : (A -> B -> C) -> B -> A -> C
 
 ```aivi
 use aivi.core.fn (flip)
+
 use aivi.math (clamp)
 
-// clamp expects (low, high, n); flipped version swaps low and high
 fun clampFlipped:Int high:Int low:Int n:Int =>
     flip clamp high low n
 ```
@@ -72,9 +81,12 @@ compose : (B -> C) -> (A -> B) -> A -> C
 
 ```aivi
 use aivi.core.fn (compose)
-use aivi.math (negate, abs)
 
-// Negate after taking absolute value
+use aivi.math (
+    negate
+    abs
+)
+
 fun negAbs:Int n:Int =>
     compose negate abs n
 ```
@@ -91,9 +103,12 @@ andThen : (A -> B) -> (B -> C) -> A -> C
 
 ```aivi
 use aivi.core.fn (andThen)
-use aivi.math (abs, negate)
 
-// Absolute value, then negate: result is always <= 0
+use aivi.math (
+    abs
+    negate
+)
+
 fun absNeg:Int n:Int =>
     andThen abs negate n
 ```
@@ -127,11 +142,11 @@ on : (B -> B -> C) -> (A -> B) -> A -> A -> C
 
 ```aivi
 use aivi.core.fn (on)
+
 use aivi.math (abs)
 
-// Compare absolute values
 fun absCompare:Bool x:Int y:Int =>
-    on (fun same:Bool a:Int b:Int => a == b) abs x y
+    on (fun same)
 ```
 
 ---
@@ -146,6 +161,7 @@ applyTo : A -> (A -> B) -> B
 
 ```aivi
 use aivi.core.fn (applyTo)
+
 use aivi.math (abs)
 
 fun applyAbs:Int n:Int =>
@@ -164,9 +180,9 @@ applyTwice : (A -> A) -> A -> A
 
 ```aivi
 use aivi.core.fn (applyTwice)
+
 use aivi.math (square)
 
-// Apply square twice: n^4
 fun fourthPower:Int n:Int =>
     applyTwice square n
 ```

@@ -5468,8 +5468,8 @@ impl Validator<'_> {
                             advance_by: 1,
                         };
                     };
-                    let new_subject = current
-                        .and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s));
+                    let new_subject =
+                        current.and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s));
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
                     PipeSubjectStepOutcome::Continue {
                         new_subject,
@@ -5573,8 +5573,8 @@ impl Validator<'_> {
                             advance_by: 1,
                         };
                     };
-                    let new_subject = current
-                        .and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s));
+                    let new_subject =
+                        current.and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s));
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
                     PipeSubjectStepOutcome::Continue {
                         new_subject,
@@ -5630,12 +5630,14 @@ impl Validator<'_> {
             if !is_root {
                 if let ExprKind::Pipe(_) = &expr.kind {
                     self.diagnostics.push(
-                        Diagnostic::error("pipe expression cannot be nested inside another expression")
-                            .with_code(code("nested-pipe"))
-                            .with_primary_label(
-                                expr.span,
-                                "move this pipe into a separate named declaration",
-                            ),
+                        Diagnostic::error(
+                            "pipe expression cannot be nested inside another expression",
+                        )
+                        .with_code(code("nested-pipe"))
+                        .with_primary_label(
+                            expr.span,
+                            "move this pipe into a separate named declaration",
+                        ),
                     );
                 }
             }
@@ -5674,8 +5676,9 @@ impl Validator<'_> {
                             advance_by: 1,
                         };
                     };
-                    let new_subject = current
-                        .and_then(|s| self.validate_truthy_falsy_pair(&pair, current_env, s, typing));
+                    let new_subject = current.and_then(|s| {
+                        self.validate_truthy_falsy_pair(&pair, current_env, s, typing)
+                    });
                     let advance = pair.next_index.saturating_sub(stage_index).max(1);
                     PipeSubjectStepOutcome::Continue {
                         new_subject,
@@ -9729,22 +9732,18 @@ impl<'a> GateTypeContext<'a> {
             | IntrinsicValue::FloatCeil
             | IntrinsicValue::FloatRound
             | IntrinsicValue::FloatSqrt
-            | IntrinsicValue::FloatAbs => arrow(
-                primitive(BuiltinType::Float),
-                primitive(BuiltinType::Float),
-            ),
-            IntrinsicValue::FloatToInt => arrow(
-                primitive(BuiltinType::Float),
-                primitive(BuiltinType::Int),
-            ),
-            IntrinsicValue::FloatFromInt => arrow(
-                primitive(BuiltinType::Int),
-                primitive(BuiltinType::Float),
-            ),
-            IntrinsicValue::FloatToText => arrow(
-                primitive(BuiltinType::Float),
-                primitive(BuiltinType::Text),
-            ),
+            | IntrinsicValue::FloatAbs => {
+                arrow(primitive(BuiltinType::Float), primitive(BuiltinType::Float))
+            }
+            IntrinsicValue::FloatToInt => {
+                arrow(primitive(BuiltinType::Float), primitive(BuiltinType::Int))
+            }
+            IntrinsicValue::FloatFromInt => {
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Float))
+            }
+            IntrinsicValue::FloatToText => {
+                arrow(primitive(BuiltinType::Float), primitive(BuiltinType::Text))
+            }
             IntrinsicValue::FloatParseText => arrow(
                 primitive(BuiltinType::Text),
                 GateType::Option(Box::new(primitive(BuiltinType::Float))),
@@ -9804,23 +9803,17 @@ impl<'a> GateTypeContext<'a> {
             ),
             IntrinsicValue::PathJoin => arrow(
                 primitive(BuiltinType::Text),
-                arrow(
-                    primitive(BuiltinType::Text),
-                    primitive(BuiltinType::Text),
-                ),
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
             ),
-            IntrinsicValue::PathIsAbsolute => arrow(
-                primitive(BuiltinType::Text),
-                primitive(BuiltinType::Bool),
-            ),
-            IntrinsicValue::PathNormalize => arrow(
-                primitive(BuiltinType::Text),
-                primitive(BuiltinType::Text),
-            ),
-            IntrinsicValue::BytesLength => arrow(
-                primitive(BuiltinType::Bytes),
-                primitive(BuiltinType::Int),
-            ),
+            IntrinsicValue::PathIsAbsolute => {
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Bool))
+            }
+            IntrinsicValue::PathNormalize => {
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text))
+            }
+            IntrinsicValue::BytesLength => {
+                arrow(primitive(BuiltinType::Bytes), primitive(BuiltinType::Int))
+            }
             IntrinsicValue::BytesGet => arrow(
                 primitive(BuiltinType::Int),
                 arrow(
@@ -9832,33 +9825,23 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::Int),
                 arrow(
                     primitive(BuiltinType::Int),
-                    arrow(
-                        primitive(BuiltinType::Bytes),
-                        primitive(BuiltinType::Bytes),
-                    ),
+                    arrow(primitive(BuiltinType::Bytes), primitive(BuiltinType::Bytes)),
                 ),
             ),
             IntrinsicValue::BytesAppend => arrow(
                 primitive(BuiltinType::Bytes),
-                arrow(
-                    primitive(BuiltinType::Bytes),
-                    primitive(BuiltinType::Bytes),
-                ),
+                arrow(primitive(BuiltinType::Bytes), primitive(BuiltinType::Bytes)),
             ),
-            IntrinsicValue::BytesFromText => arrow(
-                primitive(BuiltinType::Text),
-                primitive(BuiltinType::Bytes),
-            ),
+            IntrinsicValue::BytesFromText => {
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Bytes))
+            }
             IntrinsicValue::BytesToText => arrow(
                 primitive(BuiltinType::Bytes),
                 GateType::Option(Box::new(primitive(BuiltinType::Text))),
             ),
             IntrinsicValue::BytesRepeat => arrow(
                 primitive(BuiltinType::Int),
-                arrow(
-                    primitive(BuiltinType::Int),
-                    primitive(BuiltinType::Bytes),
-                ),
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Bytes)),
             ),
             IntrinsicValue::BytesEmpty => primitive(BuiltinType::Bytes),
             IntrinsicValue::JsonValidate => arrow(
@@ -9907,12 +9890,8 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::XdgRuntimeDir => {
                 GateType::Option(Box::new(primitive(BuiltinType::Text)))
             }
-            IntrinsicValue::XdgDataDirs => {
-                GateType::List(Box::new(primitive(BuiltinType::Text)))
-            }
-            IntrinsicValue::XdgConfigDirs => {
-                GateType::List(Box::new(primitive(BuiltinType::Text)))
-            }
+            IntrinsicValue::XdgDataDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
+            IntrinsicValue::XdgConfigDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
         }
     }
 
@@ -10165,10 +10144,7 @@ impl<'a> GateTypeContext<'a> {
     /// Matching is done by NAME ("Eq") rather than by resolved class item, so that
     /// the constraint works even when the `Eq` class is not explicitly imported in
     /// the current module (e.g. it may be a builtin or not yet defined in user stdlib).
-    pub(crate) fn eq_constrained_parameters(
-        &self,
-        context: &[TypeId],
-    ) -> HashSet<TypeParameterId> {
+    pub(crate) fn eq_constrained_parameters(&self, context: &[TypeId]) -> HashSet<TypeParameterId> {
         let mut result = HashSet::new();
         for &constraint in context {
             if let Some(param_id) = self.extract_eq_constrained_parameter(constraint) {
@@ -10198,9 +10174,7 @@ impl<'a> GateTypeContext<'a> {
                         matches!(&self.module.items()[*item_id], Item::Class(c) if c.name.text() == "Eq")
                     }
                     // Unresolved but spelled "Eq" — accept as an Eq constraint annotation.
-                    ResolutionState::Unresolved => {
-                        reference.path.segments().last().text() == "Eq"
-                    }
+                    ResolutionState::Unresolved => reference.path.segments().last().text() == "Eq",
                     _ => false,
                 }
             }
@@ -10210,9 +10184,7 @@ impl<'a> GateTypeContext<'a> {
             return None;
         }
         // The single argument must resolve to a type parameter.
-        if let TypeKind::Name(ref reference) =
-            self.module.types()[*arguments.first()].kind
-        {
+        if let TypeKind::Name(ref reference) = self.module.types()[*arguments.first()].kind {
             if let ResolutionState::Resolved(TypeResolution::TypeParameter(param_id)) =
                 reference.resolution.as_ref()
             {

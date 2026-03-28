@@ -9,7 +9,10 @@ The AIVI standard library provides foundational types, classes, and functions. A
 The result of a comparison:
 
 ```aivi
-type Ordering = Less | Equal | Greater
+type Ordering =
+  | Less
+  | Equal
+  | Greater
 ```
 
 ### `Option A`
@@ -17,9 +20,7 @@ type Ordering = Less | Equal | Greater
 A value that may or may not be present:
 
 ```aivi
-type Option A =
-  | None
-  | Some A
+type Option A = None | Some A
 ```
 
 | Constructor | Meaning |
@@ -32,9 +33,7 @@ type Option A =
 Either a success or a failure:
 
 ```aivi
-type Result E A =
-  | Err E
-  | Ok A
+type Result E A = Err E | Ok A
 ```
 
 | Constructor | Meaning |
@@ -65,7 +64,16 @@ A deferred computation that either produces `A` or fails with `E`.
 ## `aivi.option` — Option Utilities
 
 ```aivi
-use aivi.option (isSome, isNone, getOrElse, orElse, flatMap, flatten, toList, toResult)
+use aivi.option (
+    isSome
+    isNone
+    getOrElse
+    orElse
+    flatMap
+    flatten
+    toList
+    toResult
+)
 ```
 
 | Function | Signature | Description |
@@ -84,7 +92,7 @@ Example:
 ```aivi
 use aivi.option (getOrElse)
 
-fun displayName: Text opt: Option Text =>
+fun displayName:Text opt: Option Text =>
     getOrElse "Anonymous" opt
 ```
 
@@ -93,7 +101,17 @@ fun displayName: Text opt: Option Text =>
 ## `aivi.result` — Result Utilities
 
 ```aivi
-use aivi.result (isOk, isErr, mapErr, withDefault, orElse, flatMap, flatten, toOption, toList)
+use aivi.result (
+    isOk
+    isErr
+    mapErr
+    withDefault
+    orElse
+    flatMap
+    flatten
+    toOption
+    toList
+)
 ```
 
 | Function | Signature | Description |
@@ -113,7 +131,7 @@ Example:
 ```aivi
 use aivi.result (withDefault)
 
-fun safeScore: Int result: Result Text Int =>
+fun safeScore:Int result: Result Text Int =>
     withDefault 0 result
 ```
 
@@ -122,7 +140,22 @@ fun safeScore: Int result: Result Text Int =>
 ## `aivi.list` — List Utilities
 
 ```aivi
-use aivi.list (length, head, tail, tailOrEmpty, last, isEmpty, nonEmpty, any, all, count, find, findMap, zip, partition)
+use aivi.list (
+    length
+    head
+    tail
+    tailOrEmpty
+    last
+    isEmpty
+    nonEmpty
+    any
+    all
+    count
+    find
+    findMap
+    zip
+    partition
+)
 ```
 
 List operations use the built-in `reduce` and `append` functions (available everywhere).
@@ -158,9 +191,7 @@ List operations use the built-in `reduce` and `append` functions (available ever
 Example — sum a list:
 
 ```aivi
-fun sumList: Int numbers: List Int =>
-    numbers
-     |> reduce (\total n => total + n) 0
+fun sumList:Int numbers: List Int =>
 ```
 
 Example — collect names from a list of users:
@@ -168,9 +199,12 @@ Example — collect names from a list of users:
 ```aivi
 use aivi.list (find)
 
-type User = { id: Int, name: Text }
+type User = {
+    id: Int,
+    name: Text
+}
 
-fun findById: Option User id: Int users: List User =>
+fun findById: Option User id:Int users: List User =>
     find (.id == id) users
 ```
 
@@ -179,7 +213,13 @@ fun findById: Option User id: Int users: List User =>
 ## `aivi.text` — Text Utilities
 
 ```aivi
-use aivi.text (isEmpty, nonEmpty, join, concat, surround)
+use aivi.text (
+    isEmpty
+    nonEmpty
+    join
+    concat
+    surround
+)
 ```
 
 | Function | Signature | Description |
@@ -195,7 +235,7 @@ Example:
 ```aivi
 use aivi.text (join)
 
-fun csvLine: Text fields: List Text =>
+fun csvLine:Text fields: List Text =>
     join "," fields
 ```
 
@@ -204,14 +244,17 @@ fun csvLine: Text fields: List Text =>
 ## `aivi.path` — File Paths
 
 ```aivi
-use aivi.path (Path, PathError)
+use aivi.path (
+    Path
+    PathError
+)
 ```
 
 ```aivi
 domain Path over Text
     parse: Text -> Result PathError Path
-    (/): Path -> Text -> Path
-    unwrap: Path -> Text
+    (/):Path -> Text -> Path
+    unwrap:Path -> Text
 ```
 
 Example:
@@ -219,7 +262,7 @@ Example:
 ```aivi
 use aivi.path (Path)
 
-value configPath: Path = root "/etc" / "myapp" / "config.toml"
+value configPath:Path = root "/etc" / "myapp" / "config.toml"
 ```
 
 ---
@@ -227,7 +270,13 @@ value configPath: Path = root "/etc" / "myapp" / "config.toml"
 ## `aivi.fs` — File System Events
 
 ```aivi
-use aivi.fs (FsError, FsEvent, Created, Changed, Deleted)
+use aivi.fs (
+    FsError
+    FsEvent
+    Created
+    Changed
+    Deleted
+)
 ```
 
 ```aivi
@@ -258,7 +307,14 @@ signal fileEvents: Signal FsEvent
 ## `aivi.http` — HTTP Client
 
 ```aivi
-use aivi.http (HttpError, HttpHeaders, HttpResponse, DecodeMode, Strict, Permissive)
+use aivi.http (
+    HttpError
+    HttpHeaders
+    HttpResponse
+    DecodeMode
+    Strict
+    Permissive
+)
 ```
 
 ```aivi
@@ -267,18 +323,26 @@ type HttpError =
   | DecodeFailure Text
   | RequestFailure Text
 
-type DecodeMode = Strict | Permissive
+type DecodeMode =
+  | Strict
+  | Permissive
 
 domain Retry over Int
-    literal times: Int -> Retry
+    literal times:Int -> Retry
 ```
 
 Use with `@source http.get`:
 
 ```aivi
-use aivi.http (HttpError, Strict)
+use aivi.http (
+    HttpError
+    Strict
+)
 
-type User = { id: Int, name: Text }
+type User = {
+    id: Int,
+    name: Text
+}
 
 @source http.get "https://api.example.com/users" with {
     decode: Strict,
@@ -293,7 +357,13 @@ signal users: Signal (Result HttpError (List User))
 ## `aivi.nonEmpty` — Non-Empty Lists
 
 ```aivi
-use aivi.nonEmpty (NonEmptyList, singleton, cons, head, toList)
+use aivi.nonEmpty (
+    NonEmptyList
+    singleton
+    cons
+    head
+    toList
+)
 ```
 
 | Function | Signature | Description |
@@ -308,7 +378,10 @@ use aivi.nonEmpty (NonEmptyList, singleton, cons, head, toList)
 ## `aivi.timer`
 
 ```aivi
-use aivi.timer (TimerTick, TimerReady)
+use aivi.timer (
+    TimerTick
+    TimerReady
+)
 ```
 
 Used with `@source timer.every`. The signal type is `Signal Unit`.

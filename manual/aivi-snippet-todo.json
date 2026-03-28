@@ -1,0 +1,2767 @@
+{
+  "root": "manual",
+  "scanned_files": 36,
+  "scanned_blocks": 397,
+  "rewritten_blocks": 324,
+  "unresolved_fragments": 101,
+  "entries": [
+    {
+      "markdown_path": "manual/guide/classes.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 27,
+      "end_line": 37,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_3.aivi:2:22\n  |\n 2 |     map: (A -> B) -> F A -> F B\n  |                      ^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_3.aivi:5:16\n  |\n 5 |     pure: A -> F A\n  |                ^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_3.aivi:6:9\n  |\n 6 |     ap: F (A -> B) -> F A -> F B\n  |         ^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_3.aivi:9:11\n  |\n 9 |     bind: M A -> (A -> M B) -> M B\n  |           ^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "class Functor F\n    map: (A -> B) -> F A -> F B\n\nclass Applicative F\n    pure: A -> F A\n    ap: F (A -> B) -> F A -> F B\n\nclass Monad M\n    bind: M A -> (A -> M B) -> M B\n"
+    },
+    {
+      "markdown_path": "manual/guide/classes.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 54,
+      "end_line": 56,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_5.aivi:2:20\n  |\n 2 |     contains: A -> F A -> Bool\n  |                    ^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "class Container F\n    contains: A -> F A -> Bool\n"
+    },
+    {
+      "markdown_path": "manual/guide/classes.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 108,
+      "end_line": 109,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Bool`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Bool`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_9.aivi:1:25\n  |\n 1 | fun matchesKey: Eq K => Bool k:K pair:{ key: K, value: V } =>\n  |                         ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `k`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `k`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_9.aivi:1:30\n  |\n 1 | fun matchesKey: Eq K => Bool k:K pair:{ key: K, value: V } =>\n  |                              ^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::trailing-declaration-body-token",
+          "message": "fun declaration body must contain exactly one expression",
+          "rendered": "error[syntax::trailing-declaration-body-token]: fun declaration body must contain exactly one expression\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_9.aivi:1:31\n  |\n 1 | fun matchesKey: Eq K => Bool k:K pair:{ key: K, value: V } =>\n  |                               ^\n  = this token is outside the declaration body"
+        }
+      ],
+      "suggested_snippet": "fun matchesKey: Eq K => Bool k:K pair:{ key: K, value: V } =>\n    pair.key == k\n"
+    },
+    {
+      "markdown_path": "manual/guide/classes.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 115,
+      "end_line": 116,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Bool`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Bool`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_10.aivi:1:32\n  |\n 1 | fun bothEqual: (Eq A, Eq B) => Bool a1:A a2:A b1:B b2:B =>\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `a1`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `a1`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_10.aivi:1:37\n  |\n 1 | fun bothEqual: (Eq A, Eq B) => Bool a1:A a2:A b1:B b2:B =>\n  |                                     ^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::trailing-declaration-body-token",
+          "message": "fun declaration body must contain exactly one expression",
+          "rendered": "error[syntax::trailing-declaration-body-token]: fun declaration body must contain exactly one expression\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/guide/classes/block_10.aivi:1:39\n  |\n 1 | fun bothEqual: (Eq A, Eq B) => Bool a1:A a2:A b1:B b2:B =>\n  |                                       ^\n  = this token is outside the declaration body"
+        }
+      ],
+      "suggested_snippet": "fun bothEqual: (Eq A, Eq B) => Bool a1:A a2:A b1:B b2:B =>\n    a1 == a2 and b1 == b2\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 42,
+      "end_line": 50,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_3.aivi:3:1\n  |\n 3 | fun describeLifecycle state =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_3.aivi:3:1\n  |\n 3 | fun describeLifecycle state =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_3.aivi:3:1\n  |\n 3 | fun describeLifecycle state =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (AppLifecycle)\n\nfun describeLifecycle state =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 66,
+      "end_line": 72,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_5.aivi:3:1\n  |\n 3 | fun handleSave result =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_5.aivi:3:1\n  |\n 3 | fun handleSave result =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_5.aivi:3:1\n  |\n 3 | fun handleSave result =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (AppActionResult)\n\nfun handleSave result =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 92,
+      "end_line": 95,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.option` does not export `none`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.option` does not export `none`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_7.aivi:3:18\n  |\n 3 | use aivi.option (none)\n  |                  ^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_7.aivi:3:1\n  |\n 3 | use aivi.option (none)\n  | ----------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `label`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `label`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_7.aivi:5:26\n  |\n 5 | value newFileCommand = { label }\n  |                          ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (AppCommand)\n\nuse aivi.option (none)\n\nvalue newFileCommand = { label }\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 115,
+      "end_line": 117,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `canUndo`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `canUndo`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_9.aivi:4:5\n  |\n 4 |     canUndo\n  |     ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (UndoState)\n\nvalue emptyUndoState = {\n    canUndo\n}\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 131,
+      "end_line": 135,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `NotificationLevel`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `NotificationLevel`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_11.aivi:2:12\n  |\n 2 |     level: NotificationLevel,\n  |            ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "type AppNotification = {\n    level: NotificationLevel,\n    title: Text,\n    body: Option Text\n}\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 141,
+      "end_line": 148,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.option` does not export `none`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.option` does not export `none`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_12.aivi:6:18\n  |\n 6 | use aivi.option (none)\n  |                  ^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_12.aivi:6:1\n  |\n 6 | use aivi.option (none)\n  | ----------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `level`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `level`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_12.aivi:9:5\n  |\n 9 |     level\n  |     ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (\n    AppNotification\n    NotificationLevel\n)\n\nuse aivi.option (none)\n\nvalue savedNotification = {\n    level\n}\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 154,
+      "end_line": 161,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 5,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_13.aivi:5:1\n  |\n 5 | fun isRunning state =>\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `AppLifecycle`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `AppLifecycle`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_13.aivi:3:40\n  |\n 3 | signal lifecycle:AppLifecycle = source AppLifecycle.Starting\n  |                                        ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_13.aivi:5:1\n  |\n 5 | fun isRunning state =>\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `source`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `source`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_13.aivi:3:33\n  |\n 3 | signal lifecycle:AppLifecycle = source AppLifecycle.Starting\n  |                                 ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_13.aivi:5:1\n  |\n 5 | fun isRunning state =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (AppLifecycle)\n\nsignal lifecycle:AppLifecycle = source AppLifecycle.Starting\n\nfun isRunning state =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/app.md",
+      "block_index": 14,
+      "fence_info": "aivi",
+      "start_line": 167,
+      "end_line": 170,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_14.aivi:3:1\n  |\n 3 | fun undoButtonSensitive undoState =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_14.aivi:3:1\n  |\n 3 | fun undoButtonSensitive undoState =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/app/block_14.aivi:3:1\n  |\n 3 | fun undoButtonSensitive undoState =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.app.lifecycle (UndoState)\n\nfun undoButtonSensitive undoState =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/bytes.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 119,
+      "end_line": 126,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `headerBytes`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `headerBytes`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/bytes/block_11.aivi:15:9\n  |\n15 |     let headerBytes\n  |         ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `let`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `let`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/bytes/block_11.aivi:15:5\n  |\n15 |     let headerBytes\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.bytes (\n    fromText\n    toText\n    length\n    slice\n    append\n)\n\nuse aivi.fs (\n    readBytes\n    writeBytes\n)\n\nfun prependHeader: Task Text Unit path:Text header:Text =>\n    let headerBytes\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/dict.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 41,
+      "end_line": 43,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Dict`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Dict`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_3.aivi:3:18\n  |\n 3 | value greeting: (Dict Text Text) = singleton \"hello\" \"world\"\n  |                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.dict (singleton)\n\nvalue greeting: (Dict Text Text) = singleton \"hello\" \"world\"\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/dict.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 76,
+      "end_line": 79,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_5.aivi:7:17\n  |\n 7 |     insertWith (fun total)\n  |                 ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `total`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `total`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_5.aivi:7:21\n  |\n 7 |     insertWith (fun total)\n  |                     ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.dict (\n    Dict\n    insertWith\n)\n\nfun addScore: (Dict Text Int) key:Text n:Int d: (Dict Text Int) =>\n    insertWith (fun total)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/dict.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 219,
+      "end_line": 222,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_13.aivi:12:45\n  |\n12 | value doubled: (Dict Text Int) = mapValues (fun n)\n  |                                             ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `n`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `n`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_13.aivi:12:49\n  |\n12 | value doubled: (Dict Text Int) = mapValues (fun n)\n  |                                                 ^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.dict (\n    Dict\n    insert\n    mapValues\n)\n\nvalue d: (Dict Text Int) =\n    insert \"pts\" 5 {\n        entries: []\n    }\n\nvalue doubled: (Dict Text Int) = mapValues (fun n)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/dict.md",
+      "block_index": 14,
+      "fence_info": "aivi",
+      "start_line": 236,
+      "end_line": 242,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `b`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `b`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_14.aivi:11:53\n  |\n11 | value highOnly: (Dict Text Int) = filterValues (fun b)\n  |                                                     ^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_14.aivi:11:49\n  |\n11 | value highOnly: (Dict Text Int) = filterValues (fun b)\n  |                                                 ^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.dict (\n    Dict\n    insert\n    filterValues\n)\n\nvalue d: (Dict Text Int) = { entries: [] }\n |> insert \"low\" 3\n |> insert \"high\" 99\n\nvalue highOnly: (Dict Text Int) = filterValues (fun b)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/dict.md",
+      "block_index": 15,
+      "fence_info": "aivi",
+      "start_line": 256,
+      "end_line": 260,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_15.aivi:17:44\n  |\n17 | value merged: (Dict Text Int) = mergeWith (fun sum)\n  |                                            ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `sum`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `sum`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/dict/block_15.aivi:17:48\n  |\n17 | value merged: (Dict Text Int) = mergeWith (fun sum)\n  |                                                ^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.dict (\n    Dict\n    insert\n    mergeWith\n)\n\nvalue left: (Dict Text Int) =\n    insert \"a\" 1 {\n        entries: []\n    }\n\nvalue right: (Dict Text Int) =\n    insert \"a\" 10 {\n        entries: []\n    }\n\nvalue merged: (Dict Text Int) = mergeWith (fun sum)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 1,
+      "fence_info": "aivi",
+      "start_line": 6,
+      "end_line": 8,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.core.either` does not export `fromOption`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.core.either` does not export `fromOption`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_1.aivi:13:5\n  |\n13 |     fromOption\n  |     ^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_1.aivi:1:1\n  |\n 1 | use aivi.core.either (\n  | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.core.either` does not export `rightFromOption`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.core.either` does not export `rightFromOption`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_1.aivi:15:5\n  |\n15 |     rightFromOption\n  |     ^^^^^^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_1.aivi:1:1\n  |\n 1 | use aivi.core.either (\n  | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.core.either` does not export `rightFromResult`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.core.either` does not export `rightFromResult`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_1.aivi:14:5\n  |\n14 |     rightFromResult\n  |     ^^^^^^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_1.aivi:1:1\n  |\n 1 | use aivi.core.either (\n  | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n  | note: declared by this `use` item"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (\n    Either\n    mapRight\n    mapLeft\n    mapBoth\n    fold\n    isLeft\n    isRight\n    fromLeft\n    fromRight\n    swap\n    toOption\n    fromOption\n    rightFromResult\n    rightFromOption\n    partitionEithers\n)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 2,
+      "fence_info": "aivi",
+      "start_line": 24,
+      "end_line": 29,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Left`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Left`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_2.aivi:4:7\n  |\n 4 |   ||> Left msg -> \"Error: {msg}\"\n  |       ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Right`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Right`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_2.aivi:5:7\n  |\n 5 |   ||> Right n  -> \"Got {n}\"\n  |       ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (Either)\n\nfun describeResult:Text result: (Either Text Int) => result\n  ||> Left msg -> \"Error: {msg}\"\n  ||> Right n  -> \"Got {n}\"\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 43,
+      "end_line": 46,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_3.aivi:7:15\n  |\n 7 |     mapRight (fun n)\n  |               ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `n`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `n`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_3.aivi:7:19\n  |\n 7 |     mapRight (fun n)\n  |                   ^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (\n    Either\n    mapRight\n)\n\nfun doubleRight: Either Text Int result: (Either Text Int) =>\n    mapRight (fun n)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 60,
+      "end_line": 63,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_4.aivi:7:14\n  |\n 7 |     mapLeft (fun msg)\n  |              ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `msg`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `msg`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_4.aivi:7:18\n  |\n 7 |     mapLeft (fun msg)\n  |                  ^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (\n    Either\n    mapLeft\n)\n\nfun wrapError: (Either Text Int) result: (Either Int Int) =>\n    mapLeft (fun msg)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 96,
+      "end_line": 99,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_6.aivi:7:11\n  |\n 7 |     fold (fun n)\n  |           ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `n`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `n`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_6.aivi:7:15\n  |\n 7 |     fold (fun n)\n  |               ^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (\n    Either\n    fold\n)\n\nfun toLength:Int e: (Either Text Text) =>\n    fold (fun n)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 183,
+      "end_line": 186,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.core.either` does not export `fromOption`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.core.either` does not export `fromOption`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_11.aivi:3:5\n  |\n 3 |     fromOption\n  |     ^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_11.aivi:1:1\n  |\n 1 | use aivi.core.either (\n  | --------------------------------------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fromOption`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fromOption`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_11.aivi:7:5\n  |\n 7 |     fromOption \"missing\" opt\n  |     ^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (\n    Either\n    fromOption\n)\n\nfun optToEither: (Either Text Int) opt: (Option Int) =>\n    fromOption \"missing\" opt\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/either.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 200,
+      "end_line": 203,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-projection",
+          "message": "projection `.lefts` cannot be applied to `unknown subject`",
+          "rendered": "error[hir::invalid-projection]: projection `.lefts` cannot be applied to `unknown subject`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/either/block_12.aivi:7:30\n  |\n 7 |     (partitionEithers items).lefts\n  |                              ^^^^^\n  = this projection target does not support field access"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.either (\n    Either\n    partitionEithers\n)\n\nfun splitResults: (List Text) items: (List (Either Text Int)) =>\n    (partitionEithers items).lefts\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/float.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 180,
+      "end_line": 187,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-truthy-falsy-pair",
+          "message": "`T|>` and `F|>` must appear as one adjacent pair within a pipe spine",
+          "rendered": "error[hir::invalid-truthy-falsy-pair]: `T|>` and `F|>` must appear as one adjacent pair within a pipe spine\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/float/block_11.aivi:7:3\n  |\n 7 |   T|> \"positive\"\n  |   ^^^^^^^^^^^^^^\n  = this truthy/falsy shorthand run is not a single adjacent pair\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/float/block_11.aivi:8:3\n  |\n 8 |   F|> isNegative n\n  |   ----------------\n  |   note: paired truthy/falsy stage involved here\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/float/block_11.aivi:9:3\n  |\n 9 |   T|> \"negative\"\n  |   --------------\n  |   note: paired truthy/falsy stage involved here"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.float (\n    isPositive\n    isNegative\n)\n\nfun signum:Text n:Float => isPositive n\n  T|> \"positive\"\n  F|> isNegative n\n  T|> \"negative\"\n  F|> \"zero\"\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/float.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 201,
+      "end_line": 204,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-binary-operator",
+          "message": "operator `+` expects matching numeric operands, found an unresolved expression and an unresolved expression",
+          "rendered": "error[hir::invalid-binary-operator]: operator `+` expects matching numeric operands, found an unresolved expression and an unresolved expression\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/float/block_12.aivi:4:5\n  |\n 4 |     square dx + square dy\n  |     ^^^^^^^^^^^^^^^^^^^^^\n  = both operands must resolve to the same numeric type here"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.float (square)\n\nfun distanceSquared:Float dx:Float dy:Float =>\n    square dx + square dy\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/float.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 219,
+      "end_line": 225,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-name",
+          "message": "function parameter is missing a name",
+          "rendered": "error[hir::missing-name]: function parameter is missing a name\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/float/block_13.aivi:6:31\n  |\n 6 | fun halfCircleInRadians:Float _:Unit =>\n  |                               ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::missing-name",
+          "message": "function parameter is missing a name",
+          "rendered": "error[hir::missing-name]: function parameter is missing a name\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/float/block_13.aivi:9:31\n  |\n 9 | fun rightAngleInDegrees:Float _:Unit =>\n  |                               ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.float (\n    toRadians\n    toDegrees\n)\n\nfun halfCircleInRadians:Float _:Unit =>\n    toRadians 180.0\n\nfun rightAngleInDegrees:Float _:Unit =>\n    toDegrees 1.5707963267948966\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/fn.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 112,
+      "end_line": 115,
+      "formatting_changed": false,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-name",
+          "message": "function parameter is missing a name",
+          "rendered": "error[hir::missing-name]: function parameter is missing a name\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fn/block_7.aivi:3:22\n  |\n 3 | fun constantZero:Int _:Text =>\n  |                      ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `_`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `_`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fn/block_7.aivi:4:14\n  |\n 4 |     always 0 _\n  |              ^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::invalid-discard-expr",
+          "message": "the discard `_` is only valid in binder and pattern positions",
+          "rendered": "error[syntax::invalid-discard-expr]: the discard `_` is only valid in binder and pattern positions\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fn/block_7.aivi:4:14\n  |\n 4 |     always 0 _\n  |              ^\n  = use `.` for the current subject placeholder"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.fn (always)\n\nfun constantZero:Int _:Text =>\n    always 0 _\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/fn.md",
+      "block_index": 8,
+      "fence_info": "aivi",
+      "start_line": 129,
+      "end_line": 134,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fun`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fun`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fn/block_8.aivi:6:9\n  |\n 6 |     on (fun same)\n  |         ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `same`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `same`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fn/block_8.aivi:6:13\n  |\n 6 |     on (fun same)\n  |             ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.fn (on)\n\nuse aivi.math (abs)\n\nfun absCompare:Bool x:Int y:Int =>\n    on (fun same)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/fs.md",
+      "block_index": 15,
+      "fence_info": "aivi",
+      "start_line": 177,
+      "end_line": 187,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `let`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `let`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fs/block_15.aivi:19:5\n  |\n19 |     let path\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `path`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `path`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/fs/block_15.aivi:19:9\n  |\n19 |     let path\n  |         ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.fs (\n    readText\n    writeText\n    exists\n    createDirAll\n)\n\nuse aivi.path (join)\n\ntype Config = {\n    theme: Text,\n    fontSize: Int\n}\n\nfun defaultConfig:Text =>\n    \"\\{ \\\"theme\\\": \\\"dark\\\", \\\"fontSize\\\": 14 \\}\"\n\nfun ensureConfigFile: Task Text Unit configDir:Text =>\n    let path\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/index.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 161,
+      "end_line": 163,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_10.aivi:1:1\n  |\n 1 | fun sumList:Int numbers: List Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_10.aivi:1:1\n  |\n 1 | fun sumList:Int numbers: List Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_10.aivi:1:1\n  |\n 1 | fun sumList:Int numbers: List Int =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "fun sumList:Int numbers: List Int =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/index.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 169,
+      "end_line": 174,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-projection",
+          "message": "projection `.id` cannot be applied to `unknown subject`",
+          "rendered": "error[hir::invalid-projection]: projection `.id` cannot be applied to `unknown subject`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_11.aivi:9:12\n  |\n 9 |     find (.id == id) users\n  |            ^^\n  = this projection target does not support field access"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (find)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\nfun findById: Option User id:Int users: List User =>\n    find (.id == id) users\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/index.md",
+      "block_index": 15,
+      "fence_info": "aivi",
+      "start_line": 211,
+      "end_line": 214,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `PathError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `PathError`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_15.aivi:2:27\n  |\n 2 |     parse: Text -> Result PathError Path\n  |                           ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "domain Path over Text\n    parse: Text -> Result PathError Path\n    (/):Path -> Text -> Path\n    unwrap:Path -> Text\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/index.md",
+      "block_index": 16,
+      "fence_info": "aivi",
+      "start_line": 220,
+      "end_line": 222,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `root`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `root`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_16.aivi:3:25\n  |\n 3 | value configPath:Path = root \"/etc\" / \"myapp\" / \"config.toml\"\n  |                         ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.path (Path)\n\nvalue configPath:Path = root \"/etc\" / \"myapp\" / \"config.toml\"\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/index.md",
+      "block_index": 19,
+      "fence_info": "aivi",
+      "start_line": 250,
+      "end_line": 253,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Changed`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Changed`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_19.aivi:2:23\n  |\n 2 |     events: [Created, Changed, Deleted]\n  |                       ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Created`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Created`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_19.aivi:2:14\n  |\n 2 |     events: [Created, Changed, Deleted]\n  |              ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `Deleted`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Deleted`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_19.aivi:2:32\n  |\n 2 |     events: [Created, Changed, Deleted]\n  |                                ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `FsEvent`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `FsEvent`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_19.aivi:4:27\n  |\n 4 | signal fileEvents: Signal FsEvent\n  |                           ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source fs.watch \"/tmp/data.txt\" with {\n    events: [Created, Changed, Deleted]\n}\nsignal fileEvents: Signal FsEvent\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/index.md",
+      "block_index": 22,
+      "fence_info": "aivi",
+      "start_line": 279,
+      "end_line": 288,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-literal-suffix",
+          "message": "unknown literal suffix `sec`",
+          "rendered": "error[hir::unknown-literal-suffix]: unknown literal suffix `sec`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_22.aivi:14:16\n  |\n14 |     timeout: 10sec\n  |                ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-literal-suffix",
+          "message": "unknown literal suffix `times`",
+          "rendered": "error[hir::unknown-literal-suffix]: unknown literal suffix `times`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/index/block_22.aivi:13:13\n  |\n13 |     retry: 2times,\n  |             ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.http (\n    HttpError\n    Strict\n)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\n@source http.get \"https://api.example.com/users\" with {\n    decode: Strict,\n    retry: 2times,\n    timeout: 10sec\n}\nsignal users: Signal (Result HttpError (List User))\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 2,
+      "fence_info": "aivi",
+      "start_line": 38,
+      "end_line": 41,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_2.aivi:3:1\n  |\n 3 | fun checkJson json =>\n  | ^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_2.aivi:3:1\n  |\n 3 | fun checkJson json =>\n  | ^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_2.aivi:3:1\n  |\n 3 | fun checkJson json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (validate)\n\nfun checkJson json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 55,
+      "end_line": 60,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_3.aivi:3:1\n  |\n 3 | fun getName json =>\n  | ^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_3.aivi:3:1\n  |\n 3 | fun getName json =>\n  | ^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_3.aivi:3:1\n  |\n 3 | fun getName json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (get)\n\nfun getName json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 73,
+      "end_line": 78,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_4.aivi:3:1\n  |\n 3 | fun firstItem json =>\n  | ^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_4.aivi:3:1\n  |\n 3 | fun firstItem json =>\n  | ^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_4.aivi:3:1\n  |\n 3 | fun firstItem json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (at)\n\nfun firstItem json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 91,
+      "end_line": 95,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_5.aivi:3:1\n  |\n 3 | fun objectKeys json =>\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_5.aivi:3:1\n  |\n 3 | fun objectKeys json =>\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_5.aivi:3:1\n  |\n 3 | fun objectKeys json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (keys)\n\nfun objectKeys json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 107,
+      "end_line": 110,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_6.aivi:3:1\n  |\n 3 | fun format json =>\n  | ^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_6.aivi:3:1\n  |\n 3 | fun format json =>\n  | ^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_6.aivi:3:1\n  |\n 3 | fun format json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (pretty)\n\nfun format json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 122,
+      "end_line": 125,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_7.aivi:3:1\n  |\n 3 | fun compact json =>\n  | ^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_7.aivi:3:1\n  |\n 3 | fun compact json =>\n  | ^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_7.aivi:3:1\n  |\n 3 | fun compact json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (minify)\n\nfun compact json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 140,
+      "end_line": 145,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_9.aivi:8:1\n  |\n 8 | fun extractName json =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.option` does not export `withDefault`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.option` does not export `withDefault`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_9.aivi:6:18\n  |\n 6 | use aivi.option (withDefault)\n  |                  ^^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_9.aivi:6:1\n  |\n 6 | use aivi.option (withDefault)\n  | -----------------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_9.aivi:8:1\n  |\n 8 | fun extractName json =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_9.aivi:8:1\n  |\n 8 | fun extractName json =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (\n    get\n    keys\n)\n\nuse aivi.option (withDefault)\n\nfun extractName json =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/json.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 153,
+      "end_line": 163,
+      "formatting_changed": true,
+      "syntax_problem_count": 2,
+      "lsp_problem_count": 7,
+      "compiler_problem_count": 5,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:10:1\n  |\n10 | fun storeJson raw =>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:8:1\n  |\n 8 | fun minifyIfValid raw isValid =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-import-module",
+          "message": "unknown import module `aivi.core`",
+          "rendered": "error[hir::unknown-import-module]: unknown import module `aivi.core`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:6:16\n  |\n 6 | use aivi.core (Task)\n  |                ^^^^\n  = this workspace does not contain the imported module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:6:1\n  |\n 6 | use aivi.core (Task)\n  | --------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:10:1\n  |\n10 | fun storeJson raw =>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:8:1\n  |\n 8 | fun minifyIfValid raw isValid =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:10:1\n  |\n10 | fun storeJson raw =>\n  | ^^^\n  = expected a body expression after `=>`"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/json/block_10.aivi:8:1\n  |\n 8 | fun minifyIfValid raw isValid =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.data.json (\n    minify\n    validate\n)\n\nuse aivi.core (Task)\n\nfun minifyIfValid raw isValid =>\n\nfun storeJson raw =>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 194,
+      "end_line": 199,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_10.aivi:6:1\n  |\n 6 | value result: List Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_10.aivi:6:1\n  |\n 6 | value result: List Int\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_10.aivi:6:1\n  |\n 6 | value result: List Int\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (filter)\n\nfun isPositive:Bool n:Int =>\n    n > 0\n\nvalue result: List Int\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 20,
+      "fence_info": "aivi",
+      "start_line": 383,
+      "end_line": 388,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_20.aivi:6:1\n  |\n 6 | value result:Bool\n  | ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_20.aivi:6:1\n  |\n 6 | value result:Bool\n  | ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_20.aivi:6:1\n  |\n 6 | value result:Bool\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (any)\n\nfun isNegative:Bool n:Int =>\n    n < 0\n\nvalue result:Bool\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 21,
+      "fence_info": "aivi",
+      "start_line": 402,
+      "end_line": 408,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_21.aivi:13:1\n  |\n13 | value someNeg:Bool\n  | ^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_21.aivi:13:1\n  |\n13 | value someNeg:Bool\n  | ^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_21.aivi:13:1\n  |\n13 | value someNeg:Bool\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (all)\n\nfun isPositive:Bool n:Int =>\n    n > 0\n\nvalue allPositive:Bool =\n    all isPositive [\n        1,\n        2,\n        3\n    ]\n\nvalue someNeg:Bool\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 22,
+      "fence_info": "aivi",
+      "start_line": 422,
+      "end_line": 427,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_22.aivi:6:1\n  |\n 6 | value n:Int\n  | ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_22.aivi:6:1\n  |\n 6 | value n:Int\n  | ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_22.aivi:6:1\n  |\n 6 | value n:Int\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (count)\n\nfun isPositive:Bool n:Int =>\n    n > 0\n\nvalue n:Int\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 24,
+      "fence_info": "aivi",
+      "start_line": 463,
+      "end_line": 470,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_24.aivi:7:1\n  |\n 7 | value result: Option Int\n  | ^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_24.aivi:7:1\n  |\n 7 | value result: Option Int\n  | ^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_24.aivi:7:1\n  |\n 7 | value result: Option Int\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (findMap)\n\nfun asPositive: Option Int n:Int => n > 0\n  T|> Some n\n  F|> None\n\nvalue result: Option Int\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 34,
+      "fence_info": "aivi",
+      "start_line": 652,
+      "end_line": 660,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_34.aivi:6:1\n  |\n 6 | value groups: Partition Int\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_34.aivi:6:1\n  |\n 6 | value groups: Partition Int\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Partition`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Partition`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_34.aivi:6:15\n  |\n 6 | value groups: Partition Int\n  |               ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_34.aivi:6:1\n  |\n 6 | value groups: Partition Int\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (partition)\n\nfun isPositive:Bool n:Int =>\n    n > 0\n\nvalue groups: Partition Int\nvalue positive: List Int = groups.matched\nvalue negative: List Int = groups.unmatched\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/list.md",
+      "block_index": 37,
+      "fence_info": "aivi",
+      "start_line": 719,
+      "end_line": 726,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `UnzipState`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `UnzipState`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/list/block_37.aivi:9:15\n  |\n 9 | value result: UnzipState Text Int = unzip pairs\n  |               ^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.list (unzip)\n\nvalue pairs: List (Text, Int) = [\n    (\"Alice\", 95),\n    (\"Bob\", 87),\n    (\"Carol\", 92)\n]\n\nvalue result: UnzipState Text Int = unzip pairs\nvalue names: List Text = result.lefts\nvalue scores: List Int = result.rights\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/math.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 71,
+      "end_line": 74,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `filter`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `filter`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/math/block_5.aivi:4:5\n  |\n 4 |     filter isEven numbers\n  |     ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.math (isEven)\n\nfun evensOnly: List Int numbers: List Int =>\n    filter isEven numbers\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/math.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 88,
+      "end_line": 91,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `filter`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `filter`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/math/block_6.aivi:4:5\n  |\n 4 |     filter isOdd numbers\n  |     ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.math (isOdd)\n\nfun oddsOnly: List Int numbers: List Int =>\n    filter isOdd numbers\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 1,
+      "fence_info": "aivi",
+      "start_line": 6,
+      "end_line": 6,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.nonEmpty` does not export `fromNonEmpty`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.nonEmpty` does not export `fromNonEmpty`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_1.aivi:10:5\n  |\n10 |     fromNonEmpty\n  |     ^^^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_1.aivi:1:1\n  |\n 1 | use aivi.nonEmpty (\n  | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------\n  | note: declared by this `use` item"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    NonEmpty\n    NonEmptyList\n    singleton\n    cons\n    head\n    last\n    length\n    toList\n    fromNonEmpty\n    mapNel\n    fromList\n    appendNel\n)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 44,
+      "end_line": 47,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_4.aivi:3:15\n  |\n 3 | fun wrapOne: (NonEmptyList Text) label:Text =>\n  |               ^^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (singleton)\n\nfun wrapOne: (NonEmptyList Text) label:Text =>\n    singleton label\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 59,
+      "end_line": 62,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_5.aivi:6:17\n  |\n 6 | fun buildList: (NonEmptyList Int) first:Int second:Int =>\n  |                 ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    singleton\n    cons\n)\n\nfun buildList: (NonEmptyList Int) first:Int second:Int =>\n    cons first (singleton second)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 74,
+      "end_line": 77,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_6.aivi:6:25\n  |\n 6 | fun firstOf:(Int) nel: (NonEmptyList Int) =>\n  |                         ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    head\n    singleton\n)\n\nfun firstOf:(Int) nel: (NonEmptyList Int) =>\n    head nel\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 89,
+      "end_line": 92,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_7.aivi:6:25\n  |\n 6 | fun finalItem:Int nel: (NonEmptyList Int) =>\n  |                         ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    last\n    singleton\n)\n\nfun finalItem:Int nel: (NonEmptyList Int) =>\n    last nel\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 8,
+      "fence_info": "aivi",
+      "start_line": 104,
+      "end_line": 107,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_8.aivi:7:26\n  |\n 7 | fun countItems:Int nel: (NonEmptyList Int) =>\n  |                          ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    length\n    singleton\n    cons\n)\n\nfun countItems:Int nel: (NonEmptyList Int) =>\n    length nel\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 119,
+      "end_line": 122,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_9.aivi:6:37\n  |\n 6 | fun asRegularList: (List Int) nel: (NonEmptyList Int) =>\n  |                                     ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    toList\n    singleton\n)\n\nfun asRegularList: (List Int) nel: (NonEmptyList Int) =>\n    toList nel\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 134,
+      "end_line": 137,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.nonEmpty` does not export `fromNonEmpty`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.nonEmpty` does not export `fromNonEmpty`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_10.aivi:1:20\n  |\n 1 | use aivi.nonEmpty (fromNonEmpty)\n  |                    ^^^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_10.aivi:1:1\n  |\n 1 | use aivi.nonEmpty (fromNonEmpty)\n  | --------------------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fromNonEmpty`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fromNonEmpty`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_10.aivi:4:5\n  |\n 4 |     fromNonEmpty ne\n  |     ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (fromNonEmpty)\n\nfun toNEL: (NonEmptyList Text) ne: (NonEmpty Text) =>\n    fromNonEmpty ne\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 149,
+      "end_line": 155,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_11.aivi:6:17\n  |\n 6 | fun doubleAll: (NonEmptyList Int) nel: (NonEmptyList Int) =>\n  |                 ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_11.aivi:6:41\n  |\n 6 | fun doubleAll: (NonEmptyList Int) nel: (NonEmptyList Int) =>\n  |                                         ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (mapNel)\n\nfun double:Int n:Int =>\n    n * 2\n\nfun doubleAll: (NonEmptyList Int) nel: (NonEmptyList Int) =>\n    mapNel double nel\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 167,
+      "end_line": 170,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_12.aivi:3:28\n  |\n 3 | fun safeFromList: (Option (NonEmptyList Int)) items: (List Int) =>\n  |                            ^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (fromList)\n\nfun safeFromList: (Option (NonEmptyList Int)) items: (List Int) =>\n    fromList items\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/nonEmpty.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 184,
+      "end_line": 187,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_13.aivi:6:21\n  |\n 6 | fun combineErrors: (NonEmptyList Text) a: (NonEmptyList Text) b: (NonEmptyList Text) =>\n  |                     ^^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_13.aivi:6:44\n  |\n 6 | fun combineErrors: (NonEmptyList Text) a: (NonEmptyList Text) b: (NonEmptyList Text) =>\n  |                                            ^^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-type-application",
+          "message": "type application is over-saturated",
+          "rendered": "error[hir::invalid-type-application]: type application is over-saturated\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/nonEmpty/block_13.aivi:6:67\n  |\n 6 | fun combineErrors: (NonEmptyList Text) a: (NonEmptyList Text) b: (NonEmptyList Text) =>\n  |                                                                   ^^^^^^^^^^^^^^^^^\n  = this application already has kind `Type` and cannot take another type argument"
+        }
+      ],
+      "suggested_snippet": "use aivi.nonEmpty (\n    appendNel\n    singleton\n)\n\nfun combineErrors: (NonEmptyList Text) a: (NonEmptyList Text) b: (NonEmptyList Text) =>\n    appendNel a b\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/option.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 78,
+      "end_line": 86,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/option/block_6.aivi:3:1\n  |\n 3 | fun parsePositive: (Option Int) n:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/option/block_6.aivi:3:1\n  |\n 3 | fun parsePositive: (Option Int) n:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/option/block_6.aivi:3:1\n  |\n 3 | fun parsePositive: (Option Int) n:Int =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.option (flatMap)\n\nfun parsePositive: (Option Int) n:Int =>\n\nfun parseAndFilter: (Option Int) opt: (Option Int) => opt\n  |> flatMap parsePositive\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/order.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 137,
+      "end_line": 145,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-projection",
+          "message": "projection `.age` cannot be applied to `Bool`",
+          "rendered": "error[hir::invalid-projection]: projection `.age` cannot be applied to `Bool`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/order/block_9.aivi:12:15\n  |\n12 |     comparing.age byInt p1 p2\n  |               ^^^\n  = this projection target does not support field access"
+        }
+      ],
+      "suggested_snippet": "use aivi.order (comparing)\n\ntype Person = {\n    name: Text,\n    age: Int\n}\n\nfun byInt:Bool a:Int b:Int =>\n    a < b\n\nfun youngerFirst:Bool p1:Person p2:Person =>\n    comparing.age byInt p1 p2\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/path.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 22,
+      "end_line": 22,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Path`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Path`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/path/block_3.aivi:2:11\n  |\n 2 |     path: Path,\n  |           ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "type FileRef = {\n    path: Path,\n    label: Text\n}\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/path.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 122,
+      "end_line": 135,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `base`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `base`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/path/block_12.aivi:15:9\n  |\n15 |     let base\n  |         ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `let`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `let`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/path/block_12.aivi:15:5\n  |\n15 |     let base\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `let`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `let`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/path/block_12.aivi:18:5\n  |\n18 |     let path\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `path`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `path`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/path/block_12.aivi:18:9\n  |\n18 |     let path\n  |         ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.path (\n    join\n    parent\n    stem\n    extension\n    isAbsolute\n)\n\nuse aivi.fs (\n    readText\n    writeText\n)\n\nfun backupPath:Text originalPath:Text =>\n    let base\n\nfun safeReadConfig: Task Text Text configDir:Text =>\n    let path\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 56,
+      "end_line": 57,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_4.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_4.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 65,
+      "end_line": 66,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_5.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_5.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 74,
+      "end_line": 76,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_6.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_6.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 84,
+      "end_line": 85,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_7.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_7.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 8,
+      "fence_info": "aivi",
+      "start_line": 97,
+      "end_line": 99,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_8.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_8.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 107,
+      "end_line": 108,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_9.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_9.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 116,
+      "end_line": 118,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_10.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_10.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 126,
+      "end_line": 127,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_11.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_11.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/range.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 135,
+      "end_line": 143,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 5,
+      "compiler_problem_count": 5,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `divide`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `divide`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_12.aivi:18:6\n  |\n18 |   |> divide (toFloat viewport.total)\n  |      ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `filter`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `filter`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_12.aivi:14:6\n  |\n14 |   |> filter (contains viewport.visible)\n  |      ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `toFloat`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `toFloat`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_12.aivi:17:6\n  |\n17 |   |> toFloat\n  |      ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `toFloat`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `toFloat`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_12.aivi:18:14\n  |\n18 |   |> divide (toFloat viewport.total)\n  |              ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `RangeInt`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `RangeInt`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/range/block_12.aivi:9:14\n  |\n 9 |     visible: RangeInt,\n  |              ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.range (\n    make\n    contains\n    clampTo\n    length\n)\n\ntype Viewport = {\n    visible: RangeInt,\n    total: Int\n}\n\nfun visibleRows: (List Int) viewport:Viewport rows: (List Int) => rows\n  |> filter (contains viewport.visible)\n\nfun scrollProgress:Float viewport:Viewport => viewport.visible.start\n  |> toFloat\n  |> divide (toFloat viewport.total)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/result.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 96,
+      "end_line": 104,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/result/block_7.aivi:3:1\n  |\n 3 | fun ensurePositive: (Result Text Int) n:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/result/block_7.aivi:3:1\n  |\n 3 | fun ensurePositive: (Result Text Int) n:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/result/block_7.aivi:3:1\n  |\n 3 | fun ensurePositive: (Result Text Int) n:Int =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.result (flatMap)\n\nfun ensurePositive: (Result Text Int) n:Int =>\n\nfun validateCount: (Result Text Int) result: (Result Text Int) => result\n  |> flatMap ensurePositive\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/result.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 200,
+      "end_line": 209,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-name",
+          "message": "function parameter is missing a name",
+          "rendered": "error[hir::missing-name]: function parameter is missing a name\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/result/block_13.aivi:3:14\n  |\n 3 | fun zero:Int _:Text =>\n  |              ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.result (fold)\n\nfun zero:Int _:Text =>\n    0\n\nfun identity:Int n:Int =>\n    n\n\nfun resultToInt:Int result: (Result Text Int) =>\n    fold zero identity result\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 42,
+      "end_line": 42,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_3.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_3.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 50,
+      "end_line": 50,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_4.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_4.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 60,
+      "end_line": 61,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_5.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_5.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 67,
+      "end_line": 69,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_6.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_6.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 75,
+      "end_line": 75,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_7.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_7.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 8,
+      "fence_info": "aivi",
+      "start_line": 83,
+      "end_line": 83,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_8.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_8.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 95,
+      "end_line": 95,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_9.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_9.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 103,
+      "end_line": 103,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_10.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_10.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 115,
+      "end_line": 116,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_11.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_11.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 124,
+      "end_line": 125,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_12.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_12.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 133,
+      "end_line": 134,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_13.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_13.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 14,
+      "fence_info": "aivi",
+      "start_line": 142,
+      "end_line": 143,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::error-item",
+          "message": "error recovery item cannot enter Milestone 2 HIR",
+          "rendered": "error[hir::error-item]: error recovery item cannot enter Milestone 2 HIR\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_14.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::unexpected-top-level-token",
+          "message": "expected a top-level declaration",
+          "rendered": "error[syntax::unexpected-top-level-token]: expected a top-level declaration\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_14.aivi:1:1\n  |\n 1 | # <unparseable item>\n  | ^\n  = expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here"
+        }
+      ],
+      "suggested_snippet": "# <unparseable item>\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/set.md",
+      "block_index": 15,
+      "fence_info": "aivi",
+      "start_line": 151,
+      "end_line": 159,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `let`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `let`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_15.aivi:16:5\n  |\n16 |     let tagSet\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `tagSet`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `tagSet`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/set/block_15.aivi:16:9\n  |\n16 |     let tagSet\n  |         ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.core.set (\n    Set\n    fromList\n    member\n    union\n    difference\n    toList\n)\n\ntype TagFilter = {\n    required: Set Text,\n    excluded: Set Text\n}\n\nfun matchesTags:Bool filter:TagFilter tags: (List Text) =>\n    let tagSet\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/text.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 39,
+      "end_line": 42,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `filter`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `filter`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/text/block_3.aivi:4:5\n  |\n 4 |     filter nonEmpty labels\n  |     ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.text (nonEmpty)\n\nfun filterLabels: List Text labels: List Text =>\n    filter nonEmpty labels\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/validation.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 158,
+      "end_line": 166,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_11.aivi:3:1\n  |\n 3 | fun ensurePositive: (Validation Text Int) n:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_11.aivi:3:1\n  |\n 3 | fun ensurePositive: (Validation Text Int) n:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_11.aivi:3:1\n  |\n 3 | fun ensurePositive: (Validation Text Int) n:Int =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.validation (andThen)\n\nfun ensurePositive: (Validation Text Int) n:Int =>\n\nfun validateCount: (Validation Text Int) v: (Validation Text Int) => v\n  |> andThen ensurePositive\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/validation.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 178,
+      "end_line": 194,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_12.aivi:13:1\n  |\n13 | fun validateAge: (Validation (NonEmptyList FieldError) Int) age:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_12.aivi:13:1\n  |\n13 | fun validateAge: (Validation (NonEmptyList FieldError) Int) age:Int =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_12.aivi:13:1\n  |\n13 | fun validateAge: (Validation (NonEmptyList FieldError) Int) age:Int =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.validation (zipValidation)\n\nuse aivi.nonEmpty (singleton)\n\ntype FieldError =\n  | EmptyName\n  | InvalidAge\n\nfun validateName: (Validation (NonEmptyList FieldError) Text) name:Text => name\n  ||> \"\" -> Invalid (singleton EmptyName)\n  ||> _  -> Valid name\n\nfun validateAge: (Validation (NonEmptyList FieldError) Int) age:Int =>\n\nfun validateForm: (Validation (NonEmptyList FieldError) (Text, Int)) name:Text age:Int =>\n    zipValidation (validateName name) (validateAge age)\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/validation.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 208,
+      "end_line": 217,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `length`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `length`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/validation/block_13.aivi:4:5\n  |\n 4 |     length errors\n  |     ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.validation (fold)\n\nfun countErrors:Int errors: (NonEmptyList Text) =>\n    length errors\n\nfun identity:Int n:Int =>\n    n\n\nfun scoreOrErrorCount:Int v: (Validation (NonEmptyList Text) Int) =>\n    fold countErrors identity v\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/xdg.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 108,
+      "end_line": 111,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-imported-name",
+          "message": "module `aivi.option` does not export `withDefault`",
+          "rendered": "error[hir::unknown-imported-name]: module `aivi.option` does not export `withDefault`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_6.aivi:3:18\n  |\n 3 | use aivi.option (withDefault)\n  |                  ^^^^^^^^^^^\n  = this imported name is not exported by the target module\n  ::: /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_6.aivi:3:1\n  |\n 3 | use aivi.option (withDefault)\n  | -----------------------------\n  | note: declared by this `use` item"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `withDefault`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `withDefault`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_6.aivi:5:20\n  |\n 5 | value socketBase = withDefault \"/tmp\" runtimeDir\n  |                    ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.desktop.xdg (runtimeDir)\n\nuse aivi.option (withDefault)\n\nvalue socketBase = withDefault \"/tmp\" runtimeDir\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/xdg.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 125,
+      "end_line": 127,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_7.aivi:6:1\n  |\n 6 | value allDataDirs\n  | ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_7.aivi:6:1\n  |\n 6 | value allDataDirs\n  | ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_7.aivi:6:1\n  |\n 6 | value allDataDirs\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.desktop.xdg (\n    dataDirs\n    dataHome\n)\n\nvalue allDataDirs\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/xdg.md",
+      "block_index": 8,
+      "fence_info": "aivi",
+      "start_line": 141,
+      "end_line": 143,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-value-body",
+          "message": "value declaration is missing a body",
+          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_8.aivi:6:1\n  |\n 6 | value allConfigDirs\n  | ^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_8.aivi:6:1\n  |\n 6 | value allConfigDirs\n  | ^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "value declaration is missing its body",
+          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_8.aivi:6:1\n  |\n 6 | value allConfigDirs\n  | ^^^^^\n  = expected `=` followed by an expression"
+        }
+      ],
+      "suggested_snippet": "use aivi.desktop.xdg (\n    configDirs\n    configHome\n)\n\nvalue allConfigDirs\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/xdg.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 171,
+      "end_line": 179,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-function-body",
+          "message": "function declaration is missing a body",
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_11.aivi:12:1\n  |\n12 | fun findDataFile name =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_11.aivi:12:1\n  |\n12 | fun findDataFile name =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::missing-declaration-body",
+          "message": "fun declaration is missing its body after `=>`",
+          "rendered": "error[syntax::missing-declaration-body]: fun declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi2/stdlib/manual_snippets/stdlib/xdg/block_11.aivi:12:1\n  |\n12 | fun findDataFile name =>\n  | ^^^\n  = expected a body expression after `=>`"
+        }
+      ],
+      "suggested_snippet": "use aivi.desktop.xdg (\n    dataDirs\n    dataHome\n)\n\nuse aivi.path (join)\n\nuse aivi.fs (exists)\n\nuse aivi.list (filter)\n\nfun findDataFile name =>\n"
+    }
+  ]
+}

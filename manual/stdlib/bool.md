@@ -3,7 +3,15 @@
 Boolean utilities for AIVI. These functions complement the built-in `and`, `or`, and bool branching operators with named combinators for common logical patterns.
 
 ```aivi
-use aivi.bool (not, xor, implies, both, either, neither, fromInt)
+use aivi.bool (
+    not
+    xor
+    implies
+    both
+    either
+    neither
+    fromInt
+)
 ```
 
 ---

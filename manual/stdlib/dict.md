@@ -5,9 +5,25 @@ Association map keyed by any `Eq` type. `Dict K V` is an ordered association map
 The empty dict is written as the record literal `{ entries: [] }`.
 
 ```aivi
-use aivi.core.dict (Dict, singleton, insert, insertWith, get, getWithDefault,
-                    member, remove, size, keys, values, toList, fromList,
-                    mapValues, filterValues, mergeWith, union)
+use aivi.core.dict (
+    Dict
+    singleton
+    insert
+    insertWith
+    get
+    getWithDefault
+    member
+    remove
+    size
+    keys
+    values
+    toList
+    fromList
+    mapValues
+    filterValues
+    mergeWith
+    union
+)
 ```
 
 ---
@@ -24,7 +40,9 @@ A `Dict K V` is a record with a single field `entries` holding an association li
 ```aivi
 use aivi.core.dict (Dict)
 
-value emptyScores:(Dict Text Int) = { entries: [] }
+value emptyScores: (Dict Text Int) = {
+    entries: []
+}
 ```
 
 ---
@@ -40,7 +58,7 @@ singleton : K -> V -> Dict K V
 ```aivi
 use aivi.core.dict (singleton)
 
-value greeting:(Dict Text Text) = singleton "hello" "world"
+value greeting: (Dict Text Text) = singleton "hello" "world"
 ```
 
 ---
@@ -54,12 +72,14 @@ insert : K -> V -> Dict K V -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert)
+use aivi.core.dict (
+    Dict
+    insert
+)
 
-value scores:(Dict Text Int) =
-    { entries: [] }
-     |> insert "alice" 100
-     |> insert "bob" 85
+value scores: (Dict Text Int) = { entries: [] }
+ |> insert "alice" 100
+ |> insert "bob" 85
 ```
 
 ---
@@ -73,10 +93,13 @@ insertWith : (V -> V -> V) -> K -> V -> Dict K V -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insertWith)
+use aivi.core.dict (
+    Dict
+    insertWith
+)
 
-fun addScore:(Dict Text Int) key:Text n:Int d:(Dict Text Int) =>
-    insertWith (fun total:Int old:Int new:Int => old + new) key n d
+fun addScore: (Dict Text Int) key:Text n:Int d: (Dict Text Int) =>
+    insertWith (fun total)
 ```
 
 ---
@@ -90,10 +113,18 @@ get : K -> Dict K V -> Option V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, get)
+use aivi.core.dict (
+    Dict
+    insert
+    get
+)
 
-value d:(Dict Text Int) = insert "x" 42 { entries: [] }
-value found:(Option Int) = get "x" d
+value d: (Dict Text Int) =
+    insert "x" 42 {
+        entries: []
+    }
+
+value found: (Option Int) = get "x" d
 ```
 
 ---
@@ -107,9 +138,17 @@ getWithDefault : V -> K -> Dict K V -> V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, getWithDefault)
+use aivi.core.dict (
+    Dict
+    insert
+    getWithDefault
+)
 
-value d:(Dict Text Int) = insert "level" 5 { entries: [] }
+value d: (Dict Text Int) =
+    insert "level" 5 {
+        entries: []
+    }
+
 value level:Int = getWithDefault 1 "level" d
 ```
 
@@ -124,9 +163,17 @@ member : K -> Dict K V -> Bool
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, member)
+use aivi.core.dict (
+    Dict
+    insert
+    member
+)
 
-value d:(Dict Text Int) = insert "exists" 1 { entries: [] }
+value d: (Dict Text Int) =
+    insert "exists" 1 {
+        entries: []
+    }
+
 value hasIt:Bool = member "exists" d
 ```
 
@@ -141,10 +188,18 @@ remove : K -> Dict K V -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, remove)
+use aivi.core.dict (
+    Dict
+    insert
+    remove
+)
 
-value d:(Dict Text Int) = insert "temp" 0 { entries: [] }
-value cleaned:(Dict Text Int) = remove "temp" d
+value d: (Dict Text Int) =
+    insert "temp" 0 {
+        entries: []
+    }
+
+value cleaned: (Dict Text Int) = remove "temp" d
 ```
 
 ---
@@ -158,12 +213,16 @@ size : Dict K V -> Int
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, size)
+use aivi.core.dict (
+    Dict
+    insert
+    size
+)
 
-value d:(Dict Text Int) =
-    { entries: [] }
-     |> insert "a" 1
-     |> insert "b" 2
+value d: (Dict Text Int) = { entries: [] }
+ |> insert "a" 1
+ |> insert "b" 2
+
 value count:Int = size d
 ```
 
@@ -179,11 +238,20 @@ values : Dict K V -> List V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, keys, values)
+use aivi.core.dict (
+    Dict
+    insert
+    keys
+    values
+)
 
-value d:(Dict Text Int) = insert "score" 99 { entries: [] }
-value ks:(List Text) = keys d
-value vs:(List Int)  = values d
+value d: (Dict Text Int) =
+    insert "score" 99 {
+        entries: []
+    }
+
+value ks: (List Text) = keys d
+value vs: (List Int) = values d
 ```
 
 ---
@@ -198,11 +266,19 @@ fromList : List (K, V) -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, fromList, toList)
+use aivi.core.dict (
+    Dict
+    fromList
+    toList
+)
 
-value pairs:(List (Text, Int)) = [("a", 1), ("b", 2)]
-value d:(Dict Text Int) = fromList pairs
-value back:(List (Text, Int)) = toList d
+value pairs: (List (Text, Int)) = [
+    ("a", 1),
+    ("b", 2)
+]
+
+value d: (Dict Text Int) = fromList pairs
+value back: (List (Text, Int)) = toList d
 ```
 
 ---
@@ -216,10 +292,18 @@ mapValues : (V1 -> V2) -> Dict K V1 -> Dict K V2
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, mapValues)
+use aivi.core.dict (
+    Dict
+    insert
+    mapValues
+)
 
-value d:(Dict Text Int) = insert "pts" 5 { entries: [] }
-value doubled:(Dict Text Int) = mapValues (fun n:Int x:Int => x * 2) d
+value d: (Dict Text Int) =
+    insert "pts" 5 {
+        entries: []
+    }
+
+value doubled: (Dict Text Int) = mapValues (fun n)
 ```
 
 ---
@@ -233,13 +317,17 @@ filterValues : (V -> Bool) -> Dict K V -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, filterValues)
+use aivi.core.dict (
+    Dict
+    insert
+    filterValues
+)
 
-value d:(Dict Text Int) =
-    { entries: [] }
-     |> insert "low" 3
-     |> insert "high" 99
-value highOnly:(Dict Text Int) = filterValues (fun b:Bool n:Int => n > 10) d
+value d: (Dict Text Int) = { entries: [] }
+ |> insert "low" 3
+ |> insert "high" 99
+
+value highOnly: (Dict Text Int) = filterValues (fun b)
 ```
 
 ---
@@ -253,11 +341,23 @@ mergeWith : (V -> V -> V) -> Dict K V -> Dict K V -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, mergeWith)
+use aivi.core.dict (
+    Dict
+    insert
+    mergeWith
+)
 
-value left:(Dict Text Int) = insert "a" 1 { entries: [] }
-value right:(Dict Text Int) = insert "a" 10 { entries: [] }
-value merged:(Dict Text Int) = mergeWith (fun sum:Int x:Int y:Int => x + y) left right
+value left: (Dict Text Int) =
+    insert "a" 1 {
+        entries: []
+    }
+
+value right: (Dict Text Int) =
+    insert "a" 10 {
+        entries: []
+    }
+
+value merged: (Dict Text Int) = mergeWith (fun sum)
 ```
 
 ---
@@ -271,9 +371,21 @@ union : Dict K V -> Dict K V -> Dict K V
 ```
 
 ```aivi
-use aivi.core.dict (Dict, insert, union)
+use aivi.core.dict (
+    Dict
+    insert
+    union
+)
 
-value defaults:(Dict Text Int) = insert "timeout" 30 { entries: [] }
-value overrides:(Dict Text Int) = insert "timeout" 60 { entries: [] }
-value config:(Dict Text Int) = union defaults overrides
+value defaults: (Dict Text Int) =
+    insert "timeout" 30 {
+        entries: []
+    }
+
+value overrides: (Dict Text Int) =
+    insert "timeout" 60 {
+        entries: []
+    }
+
+value config: (Dict Text Int) = union defaults overrides
 ```

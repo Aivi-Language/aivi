@@ -715,10 +715,7 @@ impl fmt::Display for EvaluationError {
                 value,
                 reason,
                 ..
-            } => write!(
-                f,
-                "kernel {kernel} intrinsic `{value}` failed: {reason}"
-            ),
+            } => write!(f, "kernel {kernel} intrinsic `{value}` failed: {reason}"),
             Self::UnsupportedDomainMemberCall { kernel, handle, .. } => write!(
                 f,
                 "kernel {kernel} cannot execute domain member {}.{} in the current backend runtime slice",
@@ -2909,7 +2906,9 @@ impl<'a> KernelEvaluator<'a> {
                     RuntimeFloat::new(lv.to_f64() + rv.to_f64())
                         .map(RuntimeValue::Float)
                         .ok_or(EvaluationError::InvalidBinaryArithmetic {
-                            kernel: kernel_id, expr, operator,
+                            kernel: kernel_id,
+                            expr,
+                            operator,
                             left: RuntimeValue::Float(*lv),
                             right: RuntimeValue::Float(*rv),
                             reason: "float addition result is not finite",
@@ -2941,7 +2940,9 @@ impl<'a> KernelEvaluator<'a> {
                     RuntimeFloat::new(lv.to_f64() - rv.to_f64())
                         .map(RuntimeValue::Float)
                         .ok_or(EvaluationError::InvalidBinaryArithmetic {
-                            kernel: kernel_id, expr, operator,
+                            kernel: kernel_id,
+                            expr,
+                            operator,
                             left: RuntimeValue::Float(*lv),
                             right: RuntimeValue::Float(*rv),
                             reason: "float subtraction result is not finite",
@@ -2973,7 +2974,9 @@ impl<'a> KernelEvaluator<'a> {
                     RuntimeFloat::new(lv.to_f64() * rv.to_f64())
                         .map(RuntimeValue::Float)
                         .ok_or(EvaluationError::InvalidBinaryArithmetic {
-                            kernel: kernel_id, expr, operator,
+                            kernel: kernel_id,
+                            expr,
+                            operator,
                             left: RuntimeValue::Float(*lv),
                             right: RuntimeValue::Float(*rv),
                             reason: "float multiplication result is not finite",
@@ -3009,7 +3012,9 @@ impl<'a> KernelEvaluator<'a> {
                     RuntimeFloat::new(lf.to_f64() / rf.to_f64())
                         .map(RuntimeValue::Float)
                         .ok_or(EvaluationError::InvalidBinaryArithmetic {
-                            kernel: kernel_id, expr, operator,
+                            kernel: kernel_id,
+                            expr,
+                            operator,
                             left: RuntimeValue::Float(*lf),
                             right: RuntimeValue::Float(*rf),
                             reason: "float division result is not finite",
@@ -3544,16 +3549,12 @@ fn evaluate_intrinsic_value(
                 path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
             }))
         }
-        (IntrinsicValue::FsReadDir, [path]) => {
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::FsReadDir {
-                path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
-            }))
-        }
-        (IntrinsicValue::FsExists, [path]) => {
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::FsExists {
-                path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
-            }))
-        }
+        (IntrinsicValue::FsReadDir, [path]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::FsReadDir {
+            path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
+        })),
+        (IntrinsicValue::FsExists, [path]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::FsExists {
+            path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
+        })),
         (IntrinsicValue::FsReadBytes, [path]) => {
             Ok(RuntimeValue::Task(RuntimeTaskPlan::FsReadBytes {
                 path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
@@ -3565,12 +3566,10 @@ fn evaluate_intrinsic_value(
                 to: expect_intrinsic_text(kernel, expr, value, 1, to)?,
             }))
         }
-        (IntrinsicValue::FsCopy, [from, to]) => {
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::FsCopy {
-                from: expect_intrinsic_text(kernel, expr, value, 0, from)?,
-                to: expect_intrinsic_text(kernel, expr, value, 1, to)?,
-            }))
-        }
+        (IntrinsicValue::FsCopy, [from, to]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::FsCopy {
+            from: expect_intrinsic_text(kernel, expr, value, 0, from)?,
+            to: expect_intrinsic_text(kernel, expr, value, 1, to)?,
+        })),
         (IntrinsicValue::FsDeleteDir, [path]) => {
             Ok(RuntimeValue::Task(RuntimeTaskPlan::FsDeleteDir {
                 path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
@@ -3627,7 +3626,9 @@ fn evaluate_intrinsic_value(
             for component in std::path::Path::new(&*p).components() {
                 match component {
                     std::path::Component::CurDir => {}
-                    std::path::Component::ParentDir => { components.pop(); }
+                    std::path::Component::ParentDir => {
+                        components.pop();
+                    }
                     other => {
                         if let Some(s) = other.as_os_str().to_str() {
                             components.push(s);
@@ -3687,17 +3688,25 @@ fn evaluate_intrinsic_value(
         }
         (IntrinsicValue::JsonValidate, [json]) => {
             let text = expect_intrinsic_text(kernel, expr, value, 0, json)?;
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonValidate { json: text }))
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonValidate {
+                json: text,
+            }))
         }
         (IntrinsicValue::JsonGet, [json, key]) => {
             let j = expect_intrinsic_text(kernel, expr, value, 0, json)?;
             let k = expect_intrinsic_text(kernel, expr, value, 1, key)?;
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonGet { json: j, key: k }))
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonGet {
+                json: j,
+                key: k,
+            }))
         }
         (IntrinsicValue::JsonAt, [json, index]) => {
             let j = expect_intrinsic_text(kernel, expr, value, 0, json)?;
             let i = expect_intrinsic_i64(kernel, expr, value, 1, index)?;
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonAt { json: j, index: i }))
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonAt {
+                json: j,
+                index: i,
+            }))
         }
         (IntrinsicValue::JsonKeys, [json]) => {
             let text = expect_intrinsic_text(kernel, expr, value, 0, json)?;
@@ -3705,11 +3714,15 @@ fn evaluate_intrinsic_value(
         }
         (IntrinsicValue::JsonPretty, [json]) => {
             let text = expect_intrinsic_text(kernel, expr, value, 0, json)?;
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonPretty { json: text }))
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonPretty {
+                json: text,
+            }))
         }
         (IntrinsicValue::JsonMinify, [json]) => {
             let text = expect_intrinsic_text(kernel, expr, value, 0, json)?;
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonMinify { json: text }))
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonMinify {
+                json: text,
+            }))
         }
         (IntrinsicValue::XdgDataHome, []) => {
             let path = xdg_dir("XDG_DATA_HOME", ".local/share");
@@ -3727,17 +3740,12 @@ fn evaluate_intrinsic_value(
             let path = xdg_dir("XDG_STATE_HOME", ".local/state");
             Ok(RuntimeValue::Text(path.into()))
         }
-        (IntrinsicValue::XdgRuntimeDir, []) => {
-            Ok(std::env::var("XDG_RUNTIME_DIR")
-                .ok()
-                .map(|s| RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(s.into()))))
-                .unwrap_or(RuntimeValue::OptionNone))
-        }
+        (IntrinsicValue::XdgRuntimeDir, []) => Ok(std::env::var("XDG_RUNTIME_DIR")
+            .ok()
+            .map(|s| RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(s.into()))))
+            .unwrap_or(RuntimeValue::OptionNone)),
         (IntrinsicValue::XdgDataDirs, []) => {
-            let dirs = xdg_search_dirs(
-                "XDG_DATA_DIRS",
-                &["/usr/local/share", "/usr/share"],
-            );
+            let dirs = xdg_search_dirs("XDG_DATA_DIRS", &["/usr/local/share", "/usr/share"]);
             Ok(RuntimeValue::List(dirs))
         }
         (IntrinsicValue::XdgConfigDirs, []) => {

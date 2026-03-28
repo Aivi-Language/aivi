@@ -3,7 +3,20 @@
 Types and utilities for non-empty lists — collections that are **guaranteed to have at least one element**. This guarantee is enforced at the type level, making `head` and `last` always safe without returning `Option`.
 
 ```aivi
-use aivi.nonEmpty (NonEmpty, NonEmptyList, singleton, cons, head, last, length, toList, fromNonEmpty, mapNel, fromList, appendNel)
+use aivi.nonEmpty (
+    NonEmpty
+    NonEmptyList
+    singleton
+    cons
+    head
+    last
+    length
+    toList
+    fromNonEmpty
+    mapNel
+    fromList
+    appendNel
+)
 ```
 
 ---
@@ -43,7 +56,7 @@ Creates a `NonEmptyList` with exactly one element.
 ```aivi
 use aivi.nonEmpty (singleton)
 
-fun wrapOne:(NonEmptyList Text) label:Text =>
+fun wrapOne: (NonEmptyList Text) label:Text =>
     singleton label
 ```
 
@@ -56,9 +69,12 @@ Prepends an element to a `NonEmptyList`.
 **Type:** `item:A -> nel:(NonEmptyList A) -> NonEmptyList A`
 
 ```aivi
-use aivi.nonEmpty (singleton, cons)
+use aivi.nonEmpty (
+    singleton
+    cons
+)
 
-fun buildList:(NonEmptyList Int) first:Int second:Int =>
+fun buildList: (NonEmptyList Int) first:Int second:Int =>
     cons first (singleton second)
 ```
 
@@ -71,9 +87,12 @@ Returns the first element of a `NonEmptyList`. Always safe — no `Option` requi
 **Type:** `nel:(NonEmptyList A) -> A`
 
 ```aivi
-use aivi.nonEmpty (head, singleton)
+use aivi.nonEmpty (
+    head
+    singleton
+)
 
-fun firstOf:(Int) nel:(NonEmptyList Int) =>
+fun firstOf:(Int) nel: (NonEmptyList Int) =>
     head nel
 ```
 
@@ -86,9 +105,12 @@ Returns the last element of a `NonEmptyList`. Always safe — no `Option` requir
 **Type:** `nel:(NonEmptyList A) -> A`
 
 ```aivi
-use aivi.nonEmpty (last, singleton)
+use aivi.nonEmpty (
+    last
+    singleton
+)
 
-fun finalItem:Int nel:(NonEmptyList Int) =>
+fun finalItem:Int nel: (NonEmptyList Int) =>
     last nel
 ```
 
@@ -101,9 +123,13 @@ Returns the number of elements in the list.
 **Type:** `nel:(NonEmptyList A) -> Int`
 
 ```aivi
-use aivi.nonEmpty (length, singleton, cons)
+use aivi.nonEmpty (
+    length
+    singleton
+    cons
+)
 
-fun countItems:Int nel:(NonEmptyList Int) =>
+fun countItems:Int nel: (NonEmptyList Int) =>
     length nel
 ```
 
@@ -116,9 +142,12 @@ Converts a `NonEmptyList` to a regular `List`.
 **Type:** `nel:(NonEmptyList A) -> List A`
 
 ```aivi
-use aivi.nonEmpty (toList, singleton)
+use aivi.nonEmpty (
+    toList
+    singleton
+)
 
-fun asRegularList:(List Int) nel:(NonEmptyList Int) =>
+fun asRegularList: (List Int) nel: (NonEmptyList Int) =>
     toList nel
 ```
 
@@ -133,7 +162,7 @@ Converts a `NonEmpty A` to a `NonEmptyList A`.
 ```aivi
 use aivi.nonEmpty (fromNonEmpty)
 
-fun toNEL:(NonEmptyList Text) ne:(NonEmpty Text) =>
+fun toNEL: (NonEmptyList Text) ne: (NonEmpty Text) =>
     fromNonEmpty ne
 ```
 
@@ -151,7 +180,7 @@ use aivi.nonEmpty (mapNel)
 fun double:Int n:Int =>
     n * 2
 
-fun doubleAll:(NonEmptyList Int) nel:(NonEmptyList Int) =>
+fun doubleAll: (NonEmptyList Int) nel: (NonEmptyList Int) =>
     mapNel double nel
 ```
 
@@ -166,7 +195,7 @@ Attempts to convert a regular `List` to a `NonEmptyList`. Returns `None` if the 
 ```aivi
 use aivi.nonEmpty (fromList)
 
-fun safeFromList:(Option (NonEmptyList Int)) items:(List Int) =>
+fun safeFromList: (Option (NonEmptyList Int)) items: (List Int) =>
     fromList items
 ```
 
@@ -181,9 +210,12 @@ Concatenates two `NonEmptyList`s into one. The result is always non-empty.
 **Type:** `left:(NonEmptyList A) -> right:(NonEmptyList A) -> NonEmptyList A`
 
 ```aivi
-use aivi.nonEmpty (appendNel, singleton)
+use aivi.nonEmpty (
+    appendNel
+    singleton
+)
 
-fun combineErrors:(NonEmptyList Text) a:(NonEmptyList Text) b:(NonEmptyList Text) =>
+fun combineErrors: (NonEmptyList Text) a: (NonEmptyList Text) b: (NonEmptyList Text) =>
     appendNel a b
 ```
 

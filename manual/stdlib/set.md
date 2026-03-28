@@ -39,7 +39,7 @@ An unordered, deduplicated collection of `A` values. The element type `A` can be
 ### `singleton : A -> Set A`
 
 ```aivi
-singleton "apple"  // Set Text with one item
+# <unparseable item>
 ```
 
 ### `fromList : List A -> Set A`
@@ -47,7 +47,7 @@ singleton "apple"  // Set Text with one item
 Build a set from a list, discarding duplicates (first occurrence wins).
 
 ```aivi
-fromList ["a", "b", "a", "c"]  // { items: ["a", "b", "c"] }
+# <unparseable item>
 ```
 
 ---
@@ -57,22 +57,19 @@ fromList ["a", "b", "a", "c"]  // { items: ["a", "b", "c"] }
 ### `isEmpty : Set A -> Bool`
 
 ```aivi
-isEmpty { items: [] }   // True
-isEmpty (singleton "x") // False
+# <unparseable item>
 ```
 
 ### `member : A -> Set A -> Bool`
 
 ```aivi
-let s = fromList ["a", "b", "c"] in
-member "b" s  // True
-member "z" s  // False
+# <unparseable item>
 ```
 
 ### `size : Set A -> Int`
 
 ```aivi
-fromList ["x", "y", "z"] |> size  // 3
+# <unparseable item>
 ```
 
 ### `toList : Set A -> List A`
@@ -80,7 +77,7 @@ fromList ["x", "y", "z"] |> size  // 3
 Returns the items in insertion order.
 
 ```aivi
-fromList ["b", "a"] |> toList  // ["b", "a"]
+# <unparseable item>
 ```
 
 ---
@@ -92,7 +89,7 @@ fromList ["b", "a"] |> toList  // ["b", "a"]
 Add a value. If already present, the set is unchanged.
 
 ```aivi
-singleton "a" |> insert "b" |> insert "a"  // { items: ["a", "b"] }
+# <unparseable item>
 ```
 
 ### `remove : A -> Set A -> Set A`
@@ -100,7 +97,7 @@ singleton "a" |> insert "b" |> insert "a"  // { items: ["a", "b"] }
 Remove a value. No-op if not present.
 
 ```aivi
-fromList ["a", "b", "c"] |> remove "b"  // { items: ["a", "c"] }
+# <unparseable item>
 ```
 
 ---
@@ -112,8 +109,7 @@ fromList ["a", "b", "c"] |> remove "b"  // { items: ["a", "c"] }
 All items from both sets (items from `b` appended when not already in `a`).
 
 ```aivi
-union (fromList ["a", "b"]) (fromList ["b", "c"])
-// { items: ["a", "b", "c"] }
+# <unparseable item>
 ```
 
 ### `intersection : Set A -> Set A -> Set A`
@@ -121,8 +117,7 @@ union (fromList ["a", "b"]) (fromList ["b", "c"])
 Items that appear in both sets.
 
 ```aivi
-intersection (fromList ["a", "b", "c"]) (fromList ["b", "c", "d"])
-// { items: ["b", "c"] }
+# <unparseable item>
 ```
 
 ### `difference : Set A -> Set A -> Set A`
@@ -130,8 +125,7 @@ intersection (fromList ["a", "b", "c"]) (fromList ["b", "c", "d"])
 Items in `a` that are not in `b`.
 
 ```aivi
-difference (fromList ["a", "b", "c"]) (fromList ["b"])
-// { items: ["a", "c"] }
+# <unparseable item>
 ```
 
 ### `subsetOf : Set A -> Set A -> Bool`
@@ -139,8 +133,7 @@ difference (fromList ["a", "b", "c"]) (fromList ["b"])
 `True` when every item in `a` is also in `b`.
 
 ```aivi
-subsetOf (fromList ["a", "b"]) (fromList ["a", "b", "c"])  // True
-subsetOf (fromList ["a", "d"]) (fromList ["a", "b", "c"])  // False
+# <unparseable item>
 ```
 
 ---
@@ -148,13 +141,20 @@ subsetOf (fromList ["a", "d"]) (fromList ["a", "b", "c"])  // False
 ## Real-world example
 
 ```aivi
-use aivi.core.set (Set, fromList, member, union, difference, toList)
+use aivi.core.set (
+    Set
+    fromList
+    member
+    union
+    difference
+    toList
+)
 
-type TagFilter = { required: Set Text, excluded: Set Text }
+type TagFilter = {
+    required: Set Text,
+    excluded: Set Text
+}
 
-fun matchesTags:Bool filter:TagFilter tags:(List Text) =>
-    let tagSet = fromList tags in
-    let hasRequired = subsetOf filter.required tagSet in
-    let hasExcluded = intersection filter.excluded tagSet in
-    hasRequired and isEmpty hasExcluded
+fun matchesTags:Bool filter:TagFilter tags: (List Text) =>
+    let tagSet
 ```

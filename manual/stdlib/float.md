@@ -5,14 +5,41 @@ IEEE 754 double-precision floating-point helpers. The built-in `Float` type supp
 The low-level math intrinsics (`floor`, `ceil`, `round`, `sqrt`, `abs`, `toInt`, `fromInt`, `toText`, `parseText`) are available via the compiler catalog:
 
 ```aivi
-use aivi.core.float (floor, ceil, round, sqrt, abs, toInt, fromInt, toText, parseText)
+use aivi.core.float (
+    floor
+    ceil
+    round
+    sqrt
+    abs
+    toInt
+    fromInt
+    toText
+    parseText
+)
 ```
 
 Pure helpers are imported the same way:
 
 ```aivi
-use aivi.core.float (pi, e, tau, negate, absHelper, max, min, clamp, lerp, sign,
-                     between, isZero, isPositive, isNegative, square, toRadians, toDegrees)
+use aivi.core.float (
+    pi
+    e
+    tau
+    negate
+    absHelper
+    max
+    min
+    clamp
+    lerp
+    sign
+    between
+    isZero
+    isPositive
+    isNegative
+    square
+    toRadians
+    toDegrees
+)
 ```
 
 ---
@@ -26,7 +53,10 @@ use aivi.core.float (pi, e, tau, negate, absHelper, max, min, clamp, lerp, sign,
 | `tau` | `6.283185307179586`    | τ = 2π — full circle in radians |
 
 ```aivi
-use aivi.core.float (pi, tau)
+use aivi.core.float (
+    pi
+    tau
+)
 
 fun circleArea:Float radius:Float =>
     pi * radius * radius
@@ -54,7 +84,12 @@ These are handled by the compiler directly. Import them from `aivi.core.float`.
 | `parseText` | `Text -> Option Float`| Parse text as float; `None` if invalid |
 
 ```aivi
-use aivi.core.float (sqrt, toInt, fromInt, abs)
+use aivi.core.float (
+    sqrt
+    toInt
+    fromInt
+    abs
+)
 
 fun hypotenuse:Float a:Float b:Float =>
     sqrt (a * a + b * b)
@@ -92,7 +127,10 @@ min : Float -> Float -> Float
 ```
 
 ```aivi
-use aivi.core.float (max, min)
+use aivi.core.float (
+    max
+    min
+)
 
 fun boundedProgress:Float progress:Float =>
     min 1.0 (max 0.0 progress)
@@ -177,14 +215,16 @@ isNegative : Float -> Bool
 ```
 
 ```aivi
-use aivi.core.float (isPositive, isNegative)
+use aivi.core.float (
+    isPositive
+    isNegative
+)
 
-fun signum:Text n:Float =>
-    isPositive n
-     T|> "positive"
-     F|> isNegative n
-          T|> "negative"
-          F|> "zero"
+fun signum:Text n:Float => isPositive n
+  T|> "positive"
+  F|> isNegative n
+  T|> "negative"
+  F|> "zero"
 ```
 
 ---
@@ -216,11 +256,14 @@ toDegrees : Float -> Float
 ```
 
 ```aivi
-use aivi.core.float (toRadians, toDegrees)
+use aivi.core.float (
+    toRadians
+    toDegrees
+)
 
-fun halfCircleInRadians:Float _ :Unit =>
+fun halfCircleInRadians:Float _:Unit =>
     toRadians 180.0
 
-fun rightAngleInDegrees:Float _ :Unit =>
+fun rightAngleInDegrees:Float _:Unit =>
     toDegrees 1.5707963267948966
 ```

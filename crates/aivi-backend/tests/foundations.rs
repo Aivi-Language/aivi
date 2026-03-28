@@ -331,7 +331,10 @@ value bracketed:List Int = [1..3]
 
 #[test]
 fn division_by_zero_reports_backend_evaluation_error() {
-    let backend = lower_text("backend-division-by-zero.aivi", "value broken:Int = 1 / 0\n");
+    let backend = lower_text(
+        "backend-division-by-zero.aivi",
+        "value broken:Int = 1 / 0\n",
+    );
 
     let mut evaluator = KernelEvaluator::new(&backend);
     assert!(matches!(

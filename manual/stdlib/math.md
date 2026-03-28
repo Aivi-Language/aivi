@@ -3,7 +3,17 @@
 Integer arithmetic utilities. Provides common numeric helpers including absolute value, sign detection, parity tests, clamping, and divisibility.
 
 ```aivi
-use aivi.math (abs, negate, sign, isEven, isOdd, square, clamp, between, divides)
+use aivi.math (
+    abs
+    negate
+    sign
+    isEven
+    isOdd
+    square
+    clamp
+    between
+    divides
+)
 ```
 
 ---
@@ -70,7 +80,7 @@ isEven : Int -> Bool
 ```aivi
 use aivi.math (isEven)
 
-fun evensOnly:List Int numbers:List Int =>
+fun evensOnly: List Int numbers: List Int =>
     filter isEven numbers
 ```
 
@@ -87,7 +97,7 @@ isOdd : Int -> Bool
 ```aivi
 use aivi.math (isOdd)
 
-fun oddsOnly:List Int numbers:List Int =>
+fun oddsOnly: List Int numbers: List Int =>
     filter isOdd numbers
 ```
 

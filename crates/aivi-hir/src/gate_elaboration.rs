@@ -470,8 +470,7 @@ fn collect_gate_pipe(
             }
             match &stage.kind {
                 PipeStageKind::Gate { expr } => {
-                    let outcome =
-                        elaborate_gate_stage(module, *expr, current_env, current, typing);
+                    let outcome = elaborate_gate_stage(module, *expr, current_env, current, typing);
                     gate_stages.push(GateStageElaboration {
                         owner,
                         pipe_expr,
@@ -495,7 +494,11 @@ fn collect_gate_pipe(
                         .expect("map stages should expose a fan-out segment");
                     if segment.join_stage().is_some() {
                         let outcome = crate::fanout_elaboration::elaborate_fanout_segment(
-                            module, &segment, current, current_env, typing,
+                            module,
+                            &segment,
+                            current,
+                            current_env,
+                            typing,
                         );
                         let advance = segment
                             .next_stage_index()

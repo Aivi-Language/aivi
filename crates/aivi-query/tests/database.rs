@@ -120,7 +120,11 @@ fn parsed_and_hir_queries_reuse_cached_snapshots_until_text_changes() {
 #[test]
 fn formatting_and_diagnostics_follow_the_current_file_revision() {
     let db = RootDatabase::new();
-    let file = SourceFile::new(&db, PathBuf::from("main.aivi"), "value answer=42".to_owned());
+    let file = SourceFile::new(
+        &db,
+        PathBuf::from("main.aivi"),
+        "value answer=42".to_owned(),
+    );
 
     let original = file.text(&db);
     let formatted = format_file(&db, file).expect("known files should format");

@@ -19,8 +19,7 @@ use crate::{
     typecheck::{expression_matches, resolve_class_member_dispatch},
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PolyTypeBindings,
-        extend_pipe_env_with_stage_memos, pipe_stage_expr_env,
-        truthy_falsy_pair_stages,
+        extend_pipe_env_with_stage_memos, pipe_stage_expr_env, truthy_falsy_pair_stages,
     },
 };
 
@@ -1337,8 +1336,12 @@ impl<'a> GeneralExprElaborator<'a> {
                 }
                 PipeStageKind::Tap { expr } => {
                     let stage_env = pipe_stage_expr_env(&pipe_env, stage, &current);
-                    let body =
-                        self.lower_body_expr(*expr, &stage_env, Some(current.gate_payload()), None)?;
+                    let body = self.lower_body_expr(
+                        *expr,
+                        &stage_env,
+                        Some(current.gate_payload()),
+                        None,
+                    )?;
                     lowered.push(GateRuntimePipeStage {
                         span: stage.span,
                         input_subject: current.gate_payload().clone(),
@@ -1359,8 +1362,8 @@ impl<'a> GeneralExprElaborator<'a> {
                         .typing
                         .infer_gate_stage(*expr, &pipe_env, &current)
                         .ok_or_else(|| {
-                            vec![GeneralExprBlocker::UnknownExprType { span: stage.span }]
-                        })?;
+                        vec![GeneralExprBlocker::UnknownExprType { span: stage.span }]
+                    })?;
                     let plan = GatePlanner::plan(self.typing.gate_carrier(&current));
                     if matches!(mode, PipeLoweringMode::PrefixBeforeSchedulerBoundary)
                         && current.is_signal()
@@ -2672,7 +2675,10 @@ mod tests {
 
     #[test]
     fn blocks_regex_literals_in_general_expr_bodies() {
-        let lowered = lower_text("general-expr-blocked-regex.aivi", "value pattern = rx\"a+\"");
+        let lowered = lower_text(
+            "general-expr-blocked-regex.aivi",
+            "value pattern = rx\"a+\"",
+        );
         assert!(
             !lowered.has_errors(),
             "regex general-expression fixture should lower to HIR: {:?}",

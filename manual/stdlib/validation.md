@@ -3,7 +3,20 @@
 Utilities for working with `Validation E A` — like `Result`, but designed to **accumulate** multiple errors rather than stopping at the first. The key function is `zipValidation`, which combines two validations and collects errors from both sides.
 
 ```aivi
-use aivi.validation (Errors, isValid, isInvalid, getOrElse, mapErr, toResult, fromResult, toOption, map, andThen, zipValidation, fold)
+use aivi.validation (
+    Errors
+    isValid
+    isInvalid
+    getOrElse
+    mapErr
+    toResult
+    fromResult
+    toOption
+    map
+    andThen
+    zipValidation
+    fold
+)
 ```
 
 ---
@@ -13,7 +26,8 @@ use aivi.validation (Errors, isValid, isInvalid, getOrElse, mapErr, toResult, fr
 A type alias for a non-empty list of errors. Used as the error carrier in `zipValidation`.
 
 ```aivi
-type Errors E = NonEmptyList E
+type Errors E =
+  | NonEmptyList E
 ```
 
 `Errors E` guarantees at least one error is present when a validation fails. Import `NonEmptyList` from `aivi.nonEmpty` to construct values of this type.
@@ -29,7 +43,7 @@ Returns `True` if the validation holds a value.
 ```aivi
 use aivi.validation (isValid)
 
-fun passed:Bool v:(Validation Text Int) =>
+fun passed:Bool v: (Validation Text Int) =>
     isValid v
 ```
 
@@ -44,7 +58,7 @@ Returns `True` if the validation has failed.
 ```aivi
 use aivi.validation (isInvalid)
 
-fun rejected:Bool v:(Validation Text Int) =>
+fun rejected:Bool v: (Validation Text Int) =>
     isInvalid v
 ```
 
@@ -59,7 +73,7 @@ Extracts the value from `Valid`, or returns the fallback if `Invalid`.
 ```aivi
 use aivi.validation (getOrElse)
 
-fun safeValue:Int v:(Validation Text Int) =>
+fun safeValue:Int v: (Validation Text Int) =>
     getOrElse 0 v
 ```
 
@@ -77,8 +91,8 @@ use aivi.validation (mapErr)
 fun toCode:Int message:Text =>
     42
 
-fun withErrorCode:(Validation Int Int) v:(Validation Text Int) =>
-    v |> mapErr toCode
+fun withErrorCode: (Validation Int Int) v: (Validation Text Int) => v
+  |> mapErr toCode
 ```
 
 ---
@@ -92,7 +106,7 @@ Converts a `Validation` to a `Result`. `Valid value` becomes `Ok value`; `Invali
 ```aivi
 use aivi.validation (toResult)
 
-fun asResult:(Result Text Int) v:(Validation Text Int) =>
+fun asResult: (Result Text Int) v: (Validation Text Int) =>
     toResult v
 ```
 
@@ -107,7 +121,7 @@ Converts a `Result` to a `Validation`. `Ok value` becomes `Valid value`; `Err er
 ```aivi
 use aivi.validation (fromResult)
 
-fun asValidation:(Validation Text Int) r:(Result Text Int) =>
+fun asValidation: (Validation Text Int) r: (Result Text Int) =>
     fromResult r
 ```
 
@@ -122,7 +136,7 @@ Converts a `Validation` to an `Option`, discarding any errors. `Valid value` bec
 ```aivi
 use aivi.validation (toOption)
 
-fun justValue:(Option Int) v:(Validation Text Int) =>
+fun justValue: (Option Int) v: (Validation Text Int) =>
     toOption v
 ```
 
@@ -140,8 +154,8 @@ use aivi.validation (map)
 fun double:Int n:Int =>
     n * 2
 
-fun doubleValid:(Validation Text Int) v:(Validation Text Int) =>
-    v |> map double
+fun doubleValid: (Validation Text Int) v: (Validation Text Int) => v
+  |> map double
 ```
 
 ---
@@ -157,13 +171,10 @@ Unlike `zipValidation`, `andThen` stops at the first failure and does not accumu
 ```aivi
 use aivi.validation (andThen)
 
-fun ensurePositive:(Validation Text Int) n:Int =>
-    n
-     ||> _ if n > 0 -> Valid n
-     ||> _          -> Invalid "must be positive"
+fun ensurePositive: (Validation Text Int) n:Int =>
 
-fun validateCount:(Validation Text Int) v:(Validation Text Int) =>
-    v |> andThen ensurePositive
+fun validateCount: (Validation Text Int) v: (Validation Text Int) => v
+  |> andThen ensurePositive
 ```
 
 ---
@@ -176,21 +187,20 @@ Combines two validations into one that holds a tuple of both values. If either o
 
 ```aivi
 use aivi.validation (zipValidation)
+
 use aivi.nonEmpty (singleton)
 
-type FieldError = EmptyName | InvalidAge
+type FieldError =
+  | EmptyName
+  | InvalidAge
 
-fun validateName:(Validation (NonEmptyList FieldError) Text) name:Text =>
-    name
-     ||> "" -> Invalid (singleton EmptyName)
-     ||> _  -> Valid name
+fun validateName: (Validation (NonEmptyList FieldError) Text) name:Text => name
+  ||> "" -> Invalid (singleton EmptyName)
+  ||> _  -> Valid name
 
-fun validateAge:(Validation (NonEmptyList FieldError) Int) age:Int =>
-    age
-     ||> _ if age < 0 -> Invalid (singleton InvalidAge)
-     ||> _            -> Valid age
+fun validateAge: (Validation (NonEmptyList FieldError) Int) age:Int =>
 
-fun validateForm:(Validation (NonEmptyList FieldError) (Text, Int)) name:Text age:Int =>
+fun validateForm: (Validation (NonEmptyList FieldError) (Text, Int)) name:Text age:Int =>
     zipValidation (validateName name) (validateAge age)
 ```
 
@@ -207,12 +217,12 @@ Collapses a `Validation` to a single value by applying `onValid` to `Valid` or `
 ```aivi
 use aivi.validation (fold)
 
-fun countErrors:Int errors:(NonEmptyList Text) =>
+fun countErrors:Int errors: (NonEmptyList Text) =>
     length errors
 
 fun identity:Int n:Int =>
     n
 
-fun scoreOrErrorCount:Int v:(Validation (NonEmptyList Text) Int) =>
+fun scoreOrErrorCount:Int v: (Validation (NonEmptyList Text) Int) =>
     fold countErrors identity v
 ```

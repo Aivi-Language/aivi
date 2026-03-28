@@ -63,127 +63,151 @@ These types are always available and can be imported from `aivi.prelude`:
 ## Option Functions
 
 ```aivi
-use aivi.prelude (getOrElse, isSome, isNone, mapOption, filterOption)
+use aivi.prelude (
+    getOrElse
+    isSome
+    isNone
+    mapOption
+    filterOption
+)
 
 value name: Option Text = Some "Ada"
-
-value displayName: Text = getOrElse "guest" name
-// "Ada"
-
-value hasName: Bool = isSome name
-// True
+value displayName:Text = getOrElse "guest" name
+value hasName:Bool = isSome name
 ```
 
 ## Result Functions
 
 ```aivi
-use aivi.prelude (withDefault, isOk, isErr)
+use aivi.prelude (
+    withDefault
+    isOk
+    isErr
+)
 
 value age: Result Text Int = Ok 30
-
-value ageValue: Int = withDefault 0 age
-// 30
-
-value succeeded: Bool = isOk age
-// True
+value ageValue:Int = withDefault 0 age
+value succeeded:Bool = isOk age
 ```
 
 ## List Functions
 
 ```aivi
-use aivi.prelude (length, head, isEmpty, nonEmpty, reverse, take)
+use aivi.prelude (
+    length
+    head
+    isEmpty
+    nonEmpty
+    reverse
+    take
+)
 
-value items: List Text = ["Ada", "Grace", "Hedy"]
+value items: List Text = [
+    "Ada",
+    "Grace",
+    "Hedy"
+]
 
-value count: Int = length items
-// 3
-
+value count:Int = length items
 value first: Option Text = head items
-// Some "Ada"
-
-value empty: Bool = isEmpty []
-// True
+value empty:Bool = isEmpty []
 ```
 
 ## Order Functions
 
 ```aivi
-use aivi.prelude (min, max, minOf)
+use aivi.prelude (
+    min
+    max
+    minOf
+)
 
 fun earlier:Bool a:Int b:Int =>
     a < b
 
-value smallest: Int = min earlier 5 3
-// 3
+value smallest:Int = min earlier 5 3
+value greatest:Int = max earlier 5 3
 
-value greatest: Int = max earlier 5 3
-// 5
-
-value leastOf: Int = minOf earlier 10 [7, 4, 9]
-// 4
+value leastOf:Int =
+    minOf earlier 10 [
+        7,
+        4,
+        9
+    ]
 ```
 
 ## Text Functions
 
 ```aivi
-use aivi.prelude (join, concat, surround)
+use aivi.prelude (
+    join
+    concat
+    surround
+)
 
-value csv: Text = join ", " ["Ada", "Grace", "Hedy"]
-// "Ada, Grace, Hedy"
+value csv:Text =
+    join ", " [
+        "Ada",
+        "Grace",
+        "Hedy"
+    ]
 
-value combined: Text = concat ["Hello", " ", "World"]
-// "Hello World"
+value combined:Text =
+    concat [
+        "Hello",
+        " ",
+        "World"
+    ]
 
-value wrapped: Text = surround "(" ")" "AIVI"
-// "(AIVI)"
+value wrapped:Text = surround "(" ")" "AIVI"
 ```
 
 ## Math Functions
 
 ```aivi
-use aivi.prelude (abs, negate, isEven, clamp, between)
+use aivi.prelude (
+    abs
+    negate
+    isEven
+    clamp
+    between
+)
 
-value absolute: Int = abs -5
-// 5
-
-value flipped: Int = negate 7
-// -7
-
-value even: Bool = isEven 4
-// True
-
-value clamped: Int = clamp 0 100 150
-// 100
-
-value inRange: Bool = between 1 10 5
-// True
+value absolute:Int = abs - 5
+value flipped:Int = negate 7
+value even:Bool = isEven 4
+value clamped:Int = clamp 0 100 150
+value inRange:Bool = between 1 10 5
 ```
 
 ## Bool Functions
 
 ```aivi
-use aivi.prelude (not, xor, implies)
+use aivi.prelude (
+    not
+    xor
+    implies
+)
 
-value inverted: Bool = not True
-// False
-
-value exclusive: Bool = xor True False
-// True
+value inverted:Bool = not True
+value exclusive:Bool = xor True False
 ```
 
 ## Pair Functions
 
 ```aivi
-use aivi.prelude (fst, snd, swap)
+use aivi.prelude (
+    fst
+    snd
+    swap
+)
 
-value pair: (Int, Text) = (42, "hello")
+value pair:(Int, Text) = (
+    42,
+    "hello"
+)
 
-value first: Int = fst pair
-// 42
-
-value second: Text = snd pair
-// "hello"
-
-value swapped: (Text, Int) = swap pair
-// ("hello", 42)
+value first:Int = fst pair
+value second:Text = snd pair
+value swapped:(Text, Int) = swap pair
 ```

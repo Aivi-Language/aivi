@@ -3,7 +3,20 @@
 Utilities for working with `Option A` — a value that may or may not be present. All functions are pure and can be freely composed with pipes.
 
 ```aivi
-use aivi.option (isSome, isNone, getOrElse, orElse, flatMap, flatten, toList, toResult, map, filter, zip, fromBool)
+use aivi.option (
+    isSome
+    isNone
+    getOrElse
+    orElse
+    flatMap
+    flatten
+    toList
+    toResult
+    map
+    filter
+    zip
+    fromBool
+)
 ```
 
 ---
@@ -17,7 +30,7 @@ Returns `True` if the option holds a value.
 ```aivi
 use aivi.option (isSome)
 
-fun hasValue:Bool opt:(Option Int) =>
+fun hasValue:Bool opt: (Option Int) =>
     isSome opt
 ```
 
@@ -32,7 +45,7 @@ Returns `True` if the option is empty.
 ```aivi
 use aivi.option (isNone)
 
-fun isMissing:Bool opt:(Option Text) =>
+fun isMissing:Bool opt: (Option Text) =>
     isNone opt
 ```
 
@@ -47,7 +60,7 @@ Extracts the value from `Some`, or returns the fallback if `None`.
 ```aivi
 use aivi.option (getOrElse)
 
-fun displayName:Text opt:(Option Text) =>
+fun displayName:Text opt: (Option Text) =>
     getOrElse "Anonymous" opt
 ```
 
@@ -62,8 +75,8 @@ Returns the option unchanged if it is `Some`, otherwise returns the fallback opt
 ```aivi
 use aivi.option (orElse)
 
-fun firstAvailable:(Option Text) primary:(Option Text) secondary:(Option Text) =>
-    primary |> orElse secondary
+fun firstAvailable: (Option Text) primary: (Option Text) secondary: (Option Text) => primary
+  |> orElse secondary
 ```
 
 ---
@@ -77,13 +90,10 @@ Chains an `Option`-returning function over a `Some` value. Returns `None` when t
 ```aivi
 use aivi.option (flatMap)
 
-fun parsePositive:(Option Int) n:Int =>
-    n
-     ||> _ if n > 0 -> Some n
-     ||> _          -> None
+fun parsePositive: (Option Int) n:Int =>
 
-fun parseAndFilter:(Option Int) opt:(Option Int) =>
-    opt |> flatMap parsePositive
+fun parseAndFilter: (Option Int) opt: (Option Int) => opt
+  |> flatMap parsePositive
 ```
 
 ---
@@ -97,7 +107,7 @@ Removes one layer of nesting from an `Option (Option A)`.
 ```aivi
 use aivi.option (flatten)
 
-fun unwrapNested:(Option Int) opt:(Option (Option Int)) =>
+fun unwrapNested: (Option Int) opt: (Option (Option Int)) =>
     flatten opt
 ```
 
@@ -112,7 +122,7 @@ Converts `Some value` to a one-element list, or `None` to an empty list.
 ```aivi
 use aivi.option (toList)
 
-fun optionItems:(List Int) opt:(Option Int) =>
+fun optionItems: (List Int) opt: (Option Int) =>
     toList opt
 ```
 
@@ -127,7 +137,7 @@ Converts an `Option` to a `Result`. `Some value` becomes `Ok value`; `None` beco
 ```aivi
 use aivi.option (toResult)
 
-fun requireName:(Result Text Text) opt:(Option Text) =>
+fun requireName: (Result Text Text) opt: (Option Text) =>
     toResult "Name is required" opt
 ```
 
@@ -145,8 +155,8 @@ use aivi.option (map)
 fun double:Int n:Int =>
     n * 2
 
-fun doubleOpt:(Option Int) opt:(Option Int) =>
-    opt |> map double
+fun doubleOpt: (Option Int) opt: (Option Int) => opt
+  |> map double
 ```
 
 ---
@@ -163,8 +173,8 @@ use aivi.option (filter)
 fun isPositive:Bool n:Int =>
     n > 0
 
-fun keepPositive:(Option Int) opt:(Option Int) =>
-    opt |> filter isPositive
+fun keepPositive: (Option Int) opt: (Option Int) => opt
+  |> filter isPositive
 ```
 
 ---
@@ -178,7 +188,7 @@ Pairs two options together. Produces `Some (a, b)` only when both inputs are `So
 ```aivi
 use aivi.option (zip)
 
-fun pairIfBoth:(Option (Int, Text)) count:(Option Int) label:(Option Text) =>
+fun pairIfBoth: (Option (Int, Text)) count: (Option Int) label: (Option Text) =>
     zip count label
 ```
 
@@ -193,6 +203,6 @@ Wraps `item` in `Some` when `b` is `True`, or returns `None` when `b` is `False`
 ```aivi
 use aivi.option (fromBool)
 
-fun whenEnabled:(Option Text) enabled:Bool label:Text =>
+fun whenEnabled: (Option Text) enabled:Bool label:Text =>
     fromBool label enabled
 ```

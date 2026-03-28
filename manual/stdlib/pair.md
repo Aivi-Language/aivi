@@ -3,7 +3,17 @@
 Utilities for working with two-element tuples. Pairs are written `(A, B)` and are the primary way to group two values of potentially different types.
 
 ```aivi
-use aivi.pair (fst, snd, swap, mapFst, mapSnd, mapBoth, fromPair, toPair, duplicate)
+use aivi.pair (
+    fst
+    snd
+    swap
+    mapFst
+    mapSnd
+    mapBoth
+    fromPair
+    toPair
+    duplicate
+)
 ```
 
 ---
@@ -69,6 +79,7 @@ mapFst : (A -> C) -> (A, B) -> (C, B)
 
 ```aivi
 use aivi.pair (mapFst)
+
 use aivi.math (square)
 
 fun squareFst:(Int, Text) pair:(Int, Text) =>
@@ -87,6 +98,7 @@ mapSnd : (B -> C) -> (A, B) -> (A, C)
 
 ```aivi
 use aivi.pair (mapSnd)
+
 use aivi.math (abs)
 
 fun absValue:(Text, Int) entry:(Text, Int) =>
@@ -105,7 +117,11 @@ mapBoth : (A -> C) -> (B -> D) -> (A, B) -> (C, D)
 
 ```aivi
 use aivi.pair (mapBoth)
-use aivi.math (abs, negate)
+
+use aivi.math (
+    abs
+    negate
+)
 
 fun normalizePair:(Int, Int) pair:(Int, Int) =>
     mapBoth abs negate pair

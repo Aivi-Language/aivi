@@ -5,7 +5,16 @@ Filesystem operations for reading, writing, and managing files and directories. 
 Import what you need:
 
 ```aivi
-use aivi.fs (readText, writeText, readDir, exists, rename, copy, deleteFile, deleteDir)
+use aivi.fs (
+    readText
+    writeText
+    readDir
+    exists
+    rename
+    copy
+    deleteFile
+    deleteDir
+)
 ```
 
 ---
@@ -47,7 +56,7 @@ Read a file as UTF-8 text.
 ```aivi
 use aivi.fs (readText)
 
-fun loadConfig:Task Text Text path:Text =>
+fun loadConfig: Task Text Text path:Text =>
     readText path
 ```
 
@@ -58,7 +67,7 @@ Read a file as raw bytes.
 ```aivi
 use aivi.fs (readBytes)
 
-fun loadIcon:Task Text Bytes path:Text =>
+fun loadIcon: Task Text Bytes path:Text =>
     readBytes path
 ```
 
@@ -69,7 +78,7 @@ List the names of entries in a directory (filenames only, not full paths).
 ```aivi
 use aivi.fs (readDir)
 
-fun listFiles:Task Text (List Text) dir:Text =>
+fun listFiles: Task Text (List Text) dir:Text =>
     readDir dir
 ```
 
@@ -80,7 +89,7 @@ Return `True` if the path exists (file or directory).
 ```aivi
 use aivi.fs (exists)
 
-fun checkCachePresent:Task Text Bool cacheDir:Text =>
+fun checkCachePresent: Task Text Bool cacheDir:Text =>
     exists cacheDir
 ```
 
@@ -95,7 +104,7 @@ Write UTF-8 text to a file, creating it if necessary.
 ```aivi
 use aivi.fs (writeText)
 
-fun saveConfig:Task Text Unit path:Text content:Text =>
+fun saveConfig: Task Text Unit path:Text content:Text =>
     writeText path content
 ```
 
@@ -106,7 +115,7 @@ Write raw bytes to a file.
 ```aivi
 use aivi.fs (writeBytes)
 
-fun saveThumbnail:Task Text Unit path:Text data:Bytes =>
+fun saveThumbnail: Task Text Unit path:Text data:Bytes =>
     writeBytes path data
 ```
 
@@ -117,7 +126,7 @@ Create a directory and any missing parent directories (equivalent to `mkdir -p`)
 ```aivi
 use aivi.fs (createDirAll)
 
-fun ensureCacheDir:Task Text Unit dir:Text =>
+fun ensureCacheDir: Task Text Unit dir:Text =>
     createDirAll dir
 ```
 
@@ -132,7 +141,7 @@ Rename (or move) a file or directory.
 ```aivi
 use aivi.fs (rename)
 
-fun moveFile:Task Text Unit from:Text to:Text =>
+fun moveFile: Task Text Unit from:Text to:Text =>
     rename from to
 ```
 
@@ -143,7 +152,7 @@ Copy a file. The destination directory must already exist.
 ```aivi
 use aivi.fs (copy)
 
-fun backupFile:Task Text Unit src:Text dest:Text =>
+fun backupFile: Task Text Unit src:Text dest:Text =>
     copy src dest
 ```
 
@@ -154,7 +163,7 @@ Delete a single file.
 ```aivi
 use aivi.fs (deleteFile)
 
-fun removeTempFile:Task Text Unit path:Text =>
+fun removeTempFile: Task Text Unit path:Text =>
     deleteFile path
 ```
 
@@ -165,7 +174,7 @@ Recursively delete a directory and all its contents (equivalent to `rm -rf`).
 ```aivi
 use aivi.fs (deleteDir)
 
-fun cleanCache:Task Text Unit cacheDir:Text =>
+fun cleanCache: Task Text Unit cacheDir:Text =>
     deleteDir cacheDir
 ```
 
@@ -174,17 +183,25 @@ fun cleanCache:Task Text Unit cacheDir:Text =>
 ## Real-world example
 
 ```aivi
-use aivi.fs (readText, writeText, exists, createDirAll)
+use aivi.fs (
+    readText
+    writeText
+    exists
+    createDirAll
+)
+
 use aivi.path (join)
 
-type Config = { theme: Text, fontSize: Int }
+type Config = {
+    theme: Text,
+    fontSize: Int
+}
 
 fun defaultConfig:Text =>
-    "{ \"theme\": \"dark\", \"fontSize\": 14 }"
+    "\{ \"theme\": \"dark\", \"fontSize\": 14 \}"
 
-fun ensureConfigFile:Task Text Unit configDir:Text =>
-    let path = join configDir "config.json" in
-    exists path
+fun ensureConfigFile: Task Text Unit configDir:Text =>
+    let path
 ```
 
 ::: tip

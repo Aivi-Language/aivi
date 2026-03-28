@@ -132,7 +132,7 @@ class Functor F
 class Contravariant F
     contramap : (B -> A) -> F A -> F B
 
-class Functor F => Filterable F
+class Functor F -> Filterable F
     filterMap : (A -> Option B) -> F A -> F B
 
 class Eq A
@@ -142,17 +142,17 @@ class Eq A
 class Default A
     default : A
 
-class Eq A => Ord A
+class Eq A -> Ord A
     compare : A -> A -> Ordering
 
-class Semigroupoid C => Category C
+class Semigroupoid C -> Category C
     id : C A A
 
-class Semigroup A => Monoid A
+class Semigroup A -> Monoid A
     empty : A
 
-class (Functor T, Foldable T) => Traversable T
-    traverse : Applicative G => (A -> G B) -> T A -> G (T B)
+class (Functor T, Foldable T) -> Traversable T
+    traverse : Applicative G -> (A -> G B) -> T A -> G (T B)
 
 class Profunctor P
     dimap : (A2 -> A1) -> (B1 -> B2) -> P A1 B1 -> P A2 B2
@@ -160,37 +160,37 @@ class Profunctor P
 class Bifunctor F
     bimap : (A -> C) -> (B -> D) -> F A B -> F C D
 
-class Monoid A => Group A
+class Monoid A -> Group A
     invert : A -> A
 
-class Functor F => Alt F
+class Functor F -> Alt F
     alt : F A -> F A -> F A
 
-class Functor F => Apply F
+class Functor F -> Apply F
     apply : F (A -> B) -> F A -> F B
 
-class Functor W => Extend W
+class Functor W -> Extend W
     extend : (W A -> B) -> W A -> W B
 
-class Alt F => Plus F
+class Alt F -> Plus F
     zero : F A
 
-class Apply F => Applicative F
+class Apply F -> Applicative F
     pure : A -> F A
 
-class Apply M => Chain M
+class Apply M -> Chain M
     chain : (A -> M B) -> M A -> M B
 
-class Extend W => Comonad W
+class Extend W -> Comonad W
     extract : W A -> A
 
-class (Applicative F, Plus F) => Alternative F
+class (Applicative F, Plus F) -> Alternative F
     guard : Bool -> F Unit
 
-class (Applicative M, Chain M) => Monad M
+class (Applicative M, Chain M) -> Monad M
     join : M (M A) -> M A
 
-class Monad M => ChainRec M
+class Monad M -> ChainRec M
     chainRec : (A -> M (Result A B)) -> A -> M B
 
 type __AiviListTailState A = {
@@ -2072,12 +2072,14 @@ impl<'a> Lowerer<'a> {
 
     fn emit_unsupported_pipe_memo(&mut self, span: SourceSpan) {
         self.diagnostics.push(
-            Diagnostic::error("pipe memo bindings are currently supported only on `|>` and `|` stages")
-                .with_code(code("unsupported-pipe-memo-stage"))
-                .with_primary_label(
-                    span,
-                    "move this memo to a plain transform or tap stage for now",
-                ),
+            Diagnostic::error(
+                "pipe memo bindings are currently supported only on `|>` and `|` stages",
+            )
+            .with_code(code("unsupported-pipe-memo-stage"))
+            .with_primary_label(
+                span,
+                "move this memo to a plain transform or tap stage for now",
+            ),
         );
     }
 

@@ -566,15 +566,15 @@ Constraint syntax shared across class heads, members, functions, and instance he
 class Functor F
     map : (A -> B) -> F A -> F B
 
-class Functor F => Applicative F
+class Functor F -> Applicative F
     pure  : A -> F A
     apply : F (A -> B) -> F A -> F B
 
-class (Eq A, Show A) => Example A
+class (Eq A, Show A) -> Example A
     render : A -> Text
 ```
 
-`Constraint => ...` attaches a single constraint; `(C1, C2) => ...` attaches multiple.
+`Constraint -> ...` attaches a single constraint; `(C1, C2) -> ...` attaches multiple.
 
 ### 7.1 Resolution rules
 

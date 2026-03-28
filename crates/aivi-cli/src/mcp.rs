@@ -949,7 +949,10 @@ fn handle_tool_call(
                 .call(move |host| host.publish_source_value(args))
                 .map_err(JsonRpcError::tool_failure)?;
             tool_success(
-                format!("Published a new value into {} in {}µs", result.source.id, result.time_us),
+                format!(
+                    "Published a new value into {} in {}µs",
+                    result.source.id, result.time_us
+                ),
                 json!({
                     "source": result.source,
                     "changedSignals": result.changed_signals,

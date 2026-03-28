@@ -5,7 +5,7 @@ use aivi.list (
 
 type Set A = { items: List A }
 
-fun notEq: Eq A => Bool x:A y:A => x == y
+fun notEq: Eq A -> Bool x:A y:A => x == y
   T|> False
   F|> True
 

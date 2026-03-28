@@ -9,7 +9,14 @@ compose operations without needing a dedicated `Json` type.
 ## Import
 
 ```aivi
-use aivi.data.json (validate, get, at, keys, pretty, minify)
+use aivi.data.json (
+    validate
+    get
+    at
+    keys
+    pretty
+    minify
+)
 ```
 
 ## Overview
@@ -37,8 +44,7 @@ Returns `True` if the text is valid JSON, `False` otherwise. Never fails — inv
 ```aivi
 use aivi.data.json (validate)
 
-fun checkJson json =
-  validate json
+fun checkJson json =>
 ```
 
 ### get
@@ -54,10 +60,7 @@ Fails the task when the input is not valid JSON.
 ```aivi
 use aivi.data.json (get)
 
-fun getName json =
-  get json "name"
-// None  -- key absent
-// Some "\"Alice\""  -- string values include their JSON quotes
+fun getName json =>
 ```
 
 ### at
@@ -72,10 +75,7 @@ Fails the task when the input is not valid JSON.
 ```aivi
 use aivi.data.json (at)
 
-fun firstItem json =
-  at json 0
-// None  -- empty array
-// Some "42"  -- numeric values are plain text
+fun firstItem json =>
 ```
 
 ### keys
@@ -90,9 +90,7 @@ Fails the task when the input is not valid JSON.
 ```aivi
 use aivi.data.json (keys)
 
-fun objectKeys json =
-  keys json
-// ["name", "age", "active"]
+fun objectKeys json =>
 ```
 
 ### pretty
@@ -106,8 +104,7 @@ Re-format JSON with two-space indentation. Fails the task when the input is not 
 ```aivi
 use aivi.data.json (pretty)
 
-fun format json =
-  pretty json
+fun format json =>
 ```
 
 ### minify
@@ -121,14 +118,17 @@ Remove all insignificant whitespace from JSON. Fails the task when the input is 
 ```aivi
 use aivi.data.json (minify)
 
-fun compact json =
-  minify json
+fun compact json =>
 ```
 
 ## Error type
 
 ```aivi
-type JsonError = InvalidJson | MissingKey | IndexOutOfBounds | WrongType
+type JsonError =
+  | InvalidJson
+  | MissingKey
+  | IndexOutOfBounds
+  | WrongType
 ```
 
 `JsonError` represents the four logical failure modes when working with JSON data.
@@ -137,12 +137,14 @@ Task failures carry a descriptive `Text` error message (the `Text` in `Task Text
 ## Example — decode a simple object
 
 ```aivi
-use aivi.data.json (get, keys)
+use aivi.data.json (
+    get
+    keys
+)
+
 use aivi.option (withDefault)
 
-fun extractName json =
-  get json "name"
-  |> map (withDefault "unknown")
+fun extractName json =>
 ```
 
 ## Example — normalise before storage
@@ -150,15 +152,14 @@ fun extractName json =
 Extract each step into a named function so no pipes are nested.
 
 ```aivi
-use aivi.data.json (minify, validate)
+use aivi.data.json (
+    minify
+    validate
+)
+
 use aivi.core (Task)
 
-fun minifyIfValid raw isValid =
-  isValid
-  ||> True  -> minify raw
-  ||> False -> Task.fail "invalid JSON input"
+fun minifyIfValid raw isValid =>
 
-fun storeJson raw =
-  validate raw
-  |> andThen (minifyIfValid raw)
+fun storeJson raw =>
 ```

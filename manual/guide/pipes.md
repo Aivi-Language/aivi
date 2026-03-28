@@ -7,10 +7,10 @@ Pipes are the main way to express flow in AIVI. Instead of deeply nested calls, 
 `|>` sends the value on the left into the function on the right:
 
 ```aivi
-fun double: Int n:Int =>
+fun double:Int n:Int =>
     n * 2
 
-fun addOne: Int n:Int =>
+fun addOne:Int n:Int =>
     n + 1
 
 value result =
@@ -26,7 +26,7 @@ That reads in execution order: start with `5`, then double it, then add one.
 The piped value becomes the last argument:
 
 ```aivi
-fun multiply: Int factor:Int n:Int =>
+fun multiply:Int factor:Int n:Int =>
     factor * n
 
 value scaled =
@@ -46,11 +46,10 @@ data Status =
   | Published
   | Archived
 
-fun statusLabel: Text status:Status =>
-    status
-     ||> Draft     -> "draft"
-     ||> Published -> "published"
-     ||> Archived  -> "archived"
+fun statusLabel:Text status:Status => status
+  ||> Draft     -> "draft"
+  ||> Published -> "published"
+  ||> Archived  -> "archived"
 
 value currentLabel = statusLabel Published
 ```
@@ -60,10 +59,9 @@ value currentLabel = statusLabel Published
 For `Bool`, the dedicated true/false pipes are shorter than a full match:
 
 ```aivi
-fun availabilityLabel: Text ready:Bool =>
-    ready
-     T|> "ready"
-     F|> "waiting"
+fun availabilityLabel:Text ready:Bool => ready
+  T|> "ready"
+  F|> "waiting"
 
 value shownAvailability = availabilityLabel True
 ```
@@ -79,7 +77,7 @@ type User = {
     email: Text
 }
 
-value seed: User = {
+value seed:User = {
     active: True,
     age: 32,
     email: "ada@example.com"
@@ -121,12 +119,11 @@ signal scoreDelta =
 Pipes must stay on the top-level expression spine. If you need a pipe inside another expression, pull it out into a named helper:
 
 ```aivi
-fun normalizeTitle: Text title:Text =>
-    title
-     ||> "Inbox" -> "priority"
-     ||> _       -> title
+fun normalizeTitle:Text title:Text => title
+  ||> "Inbox" -> "priority"
+  ||> _       -> title
 
-fun displayTitle: Text title:Text =>
+fun displayTitle:Text title:Text =>
     normalizeTitle title
 ```
 

@@ -3,7 +3,13 @@
 Utilities for working with `Text` values: emptiness checks, joining lists of strings, and wrapping text with a prefix and suffix.
 
 ```aivi
-use aivi.text (isEmpty, nonEmpty, join, concat, surround)
+use aivi.text (
+    isEmpty
+    nonEmpty
+    join
+    concat
+    surround
+)
 ```
 
 ---
@@ -19,10 +25,9 @@ isEmpty : Text -> Bool
 ```aivi
 use aivi.text (isEmpty)
 
-fun showPlaceholder:Text label:Text =>
-    isEmpty label
-     T|> "Untitled"
-     F|> label
+fun showPlaceholder:Text label:Text => isEmpty label
+  T|> "Untitled"
+  F|> label
 ```
 
 ---
@@ -38,7 +43,7 @@ nonEmpty : Text -> Bool
 ```aivi
 use aivi.text (nonEmpty)
 
-fun filterLabels:List Text labels:List Text =>
+fun filterLabels: List Text labels: List Text =>
     filter nonEmpty labels
 ```
 
@@ -55,7 +60,7 @@ join : Text -> List Text -> Text
 ```aivi
 use aivi.text (join)
 
-fun csvLine:Text fields:List Text =>
+fun csvLine:Text fields: List Text =>
     join "," fields
 ```
 
@@ -72,7 +77,7 @@ concat : List Text -> Text
 ```aivi
 use aivi.text (concat)
 
-fun buildPath:Text segments:List Text =>
+fun buildPath:Text segments: List Text =>
     concat segments
 ```
 

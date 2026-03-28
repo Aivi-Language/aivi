@@ -59,10 +59,10 @@ data Map K V =
   | EmptyMap
 
 domain Duration over Int
-    literal sec: Int -> Duration
+    literal sec:Int -> Duration
 
 domain Retry over Int
-    literal times: Int -> Retry
+    literal times:Int -> Retry
 
 value authHeaders: Map Text Text = EmptyMap
 
@@ -133,12 +133,12 @@ data Mode =
   | Stream
 
 domain Duration over Int
-    literal ms: Int -> Duration
+    literal ms:Int -> Duration
 
 provider custom.feed
-    argument path: Text
-    option timeout: Duration
-    option mode: Mode
+    argument path:Text
+    option timeout:Duration
+    option mode:Mode
     wakeup: providerTrigger
 
 @source custom.feed "/tmp/demo.txt" with {

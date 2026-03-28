@@ -3,7 +3,14 @@
 The `aivi.list` module provides a comprehensive set of functions for working with lists. Lists in AIVI are ordered, immutable sequences of values. All operations return new lists — no mutation ever occurs.
 
 ```aivi
-use aivi.list (isEmpty, length, map, filter, find, sortBy, ...)
+use aivi.list (
+    isEmpty
+    length
+    map
+    filter
+    find
+    sortBy
+)
 ```
 
 Two built-in functions underpin all list work and are available everywhere without importing:
@@ -30,13 +37,17 @@ isEmpty : (List A) -> Bool
 ```aivi
 use aivi.list (isEmpty)
 
-fun describe : Text items : List Int =>
-    isEmpty items
-     T|> "empty list"
-     F|> "has elements"
+fun describe:Text items: List Int => isEmpty items
+  T|> "empty list"
+  F|> "has elements"
 
-value result : Text = describe []        // "empty list"
-value result2 : Text = describe [1, 2]   // "has elements"
+value result:Text = describe []
+
+value result2:Text =
+    describe [
+        1,
+        2
+    ]
 ```
 
 ---
@@ -52,12 +63,14 @@ nonEmpty : (List A) -> Bool
 ```aivi
 use aivi.list (nonEmpty)
 
-fun describeList : Text items : List Int =>
-    nonEmpty items
-     T|> "has elements"
-     F|> "empty"
+fun describeList:Text items: List Int => nonEmpty items
+  T|> "has elements"
+  F|> "empty"
 
-value result : Text = describeList [42]   // "has elements"
+value result:Text =
+    describeList [
+        42
+    ]
 ```
 
 ---
@@ -73,7 +86,12 @@ length : (List A) -> Int
 ```aivi
 use aivi.list (length)
 
-value n : Int = length [10, 20, 30]   // 3
+value n:Int =
+    length [
+        10,
+        20,
+        30
+    ]
 ```
 
 ---
@@ -89,13 +107,18 @@ head : (List A) -> Option A
 ```aivi
 use aivi.list (head)
 
-fun firstOrZero : Int items : List Int =>
-    head items
-     ||> None      -> 0
-     ||> Some n    -> n
+fun firstOrZero:Int items: List Int => head items
+  ||> None   -> 0
+  ||> Some n -> n
 
-value result : Int = firstOrZero [5, 10, 15]   // 5
-value fallback : Int = firstOrZero []           // 0
+value result:Int =
+    firstOrZero [
+        5,
+        10,
+        15
+    ]
+
+value fallback:Int = firstOrZero []
 ```
 
 ---
@@ -111,12 +134,16 @@ tail : (List A) -> Option (List A)
 ```aivi
 use aivi.list (tail)
 
-fun restOrEmpty : List Int items : List Int =>
-    tail items
-     ||> None           -> []
-     ||> Some remaining -> remaining
+fun restOrEmpty: List Int items: List Int => tail items
+  ||> None           -> []
+  ||> Some remaining -> remaining
 
-value result : List Int = restOrEmpty [1, 2, 3]   // [2, 3]
+value result: List Int =
+    restOrEmpty [
+        1,
+        2,
+        3
+    ]
 ```
 
 ---
@@ -132,8 +159,14 @@ tailOrEmpty : (List A) -> List A
 ```aivi
 use aivi.list (tailOrEmpty)
 
-value rest : List Int = tailOrEmpty [1, 2, 3]   // [2, 3]
-value none : List Int = tailOrEmpty []           // []
+value rest: List Int =
+    tailOrEmpty [
+        1,
+        2,
+        3
+    ]
+
+value none: List Int = tailOrEmpty []
 ```
 
 ---
@@ -149,12 +182,16 @@ last : (List A) -> Option A
 ```aivi
 use aivi.list (last)
 
-fun finalScore : Int scores : List Int =>
-    last scores
-     ||> None      -> 0
-     ||> Some n    -> n
+fun finalScore:Int scores: List Int => last scores
+  ||> None   -> 0
+  ||> Some n -> n
 
-value result : Int = finalScore [80, 90, 95]   // 95
+value result:Int =
+    finalScore [
+        80,
+        90,
+        95
+    ]
 ```
 
 ---
@@ -174,10 +211,11 @@ map : (A -> B) -> (List A) -> List B
 ```aivi
 use aivi.list (map)
 
-fun double : Int n : Int =>
+fun double:Int n:Int =>
     n * 2
 
-value result : List Int = [1, 2, 3] |> map double   // [2, 4, 6]
+value result: List Int = [1, 2, 3]
+ |> map double
 ```
 
 ---
@@ -193,10 +231,10 @@ filter : (A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (filter)
 
-fun isPositive : Bool n : Int =>
+fun isPositive:Bool n:Int =>
     n > 0
 
-value result : List Int = [-1, 2, -3, 4] |> filter isPositive   // [2, 4]
+value result: List Int
 ```
 
 ---
@@ -212,9 +250,13 @@ flatten : (List (List A)) -> List A
 ```aivi
 use aivi.list (flatten)
 
-value nested : List (List Int) = [[1, 2], [3, 4], [5]]
+value nested: List (List Int) = [
+    [1, 2],
+    [3, 4],
+    [5]
+]
 
-value flat : List Int = flatten nested   // [1, 2, 3, 4, 5]
+value flat: List Int = flatten nested
 ```
 
 ---
@@ -230,9 +272,12 @@ concat : (List (List A)) -> List A
 ```aivi
 use aivi.list (concat)
 
-value lines : List (List Text) = [["hello", "world"], ["foo", "bar"]]
+value lines: List (List Text) = [
+    ["hello", "world"],
+    ["foo", "bar"]
+]
 
-value all : List Text = concat lines   // ["hello", "world", "foo", "bar"]
+value all: List Text = concat lines
 ```
 
 ---
@@ -248,10 +293,11 @@ flatMap : (A -> List B) -> (List A) -> List B
 ```aivi
 use aivi.list (flatMap)
 
-fun twice : List Int n : Int =>
+fun twice: List Int n:Int =>
     [n, n]
 
-value result : List Int = [1, 2, 3] |> flatMap twice   // [1, 1, 2, 2, 3, 3]
+value result: List Int = [1, 2, 3]
+ |> flatMap twice
 ```
 
 ---
@@ -267,9 +313,15 @@ reverse : (List A) -> List A
 ```aivi
 use aivi.list (reverse)
 
-value original : List Int = [1, 2, 3, 4, 5]
+value original: List Int = [
+    1,
+    2,
+    3,
+    4,
+    5
+]
 
-value reversed : List Int = reverse original   // [5, 4, 3, 2, 1]
+value reversed: List Int = reverse original
 ```
 
 ---
@@ -285,9 +337,15 @@ take : Int -> (List A) -> List A
 ```aivi
 use aivi.list (take)
 
-value items : List Int = [10, 20, 30, 40, 50]
+value items: List Int = [
+    10,
+    20,
+    30,
+    40,
+    50
+]
 
-value first3 : List Int = take 3 items   // [10, 20, 30]
+value first3: List Int = take 3 items
 ```
 
 ---
@@ -303,9 +361,15 @@ drop : Int -> (List A) -> List A
 ```aivi
 use aivi.list (drop)
 
-value items : List Int = [10, 20, 30, 40, 50]
+value items: List Int = [
+    10,
+    20,
+    30,
+    40,
+    50
+]
 
-value after2 : List Int = drop 2 items   // [30, 40, 50]
+value after2: List Int = drop 2 items
 ```
 
 ---
@@ -321,10 +385,11 @@ takeWhile : (A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (takeWhile)
 
-fun isSmall : Bool n : Int =>
+fun isSmall:Bool n:Int =>
     n < 10
 
-value result : List Int = [2, 5, 8, 11, 3] |> takeWhile isSmall   // [2, 5, 8]
+value result: List Int = [2, 5, 8, 11, 3]
+ |> takeWhile isSmall
 ```
 
 ---
@@ -340,10 +405,11 @@ dropWhile : (A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (dropWhile)
 
-fun isSmall : Bool n : Int =>
+fun isSmall:Bool n:Int =>
     n < 10
 
-value result : List Int = [2, 5, 8, 11, 3] |> dropWhile isSmall   // [11, 3]
+value result: List Int = [2, 5, 8, 11, 3]
+ |> dropWhile isSmall
 ```
 
 ---
@@ -359,10 +425,13 @@ intersperse : A -> (List A) -> List A
 ```aivi
 use aivi.list (intersperse)
 
-value words : List Text = ["one", "two", "three"]
+value words: List Text = [
+    "one",
+    "two",
+    "three"
+]
 
-value spaced : List Text = intersperse ", " words
-// ["one", ", ", "two", ", ", "three"]
+value spaced: List Text = intersperse ", " words
 ```
 
 ---
@@ -382,10 +451,10 @@ any : (A -> Bool) -> (List A) -> Bool
 ```aivi
 use aivi.list (any)
 
-fun isNegative : Bool n : Int =>
+fun isNegative:Bool n:Int =>
     n < 0
 
-value result : Bool = any isNegative [1, -2, 3]   // True
+value result:Bool
 ```
 
 ---
@@ -401,11 +470,17 @@ all : (A -> Bool) -> (List A) -> Bool
 ```aivi
 use aivi.list (all)
 
-fun isPositive : Bool n : Int =>
+fun isPositive:Bool n:Int =>
     n > 0
 
-value allPositive : Bool = all isPositive [1, 2, 3]    // True
-value someNeg : Bool = all isPositive [1, -2, 3]       // False
+value allPositive:Bool =
+    all isPositive [
+        1,
+        2,
+        3
+    ]
+
+value someNeg:Bool
 ```
 
 ---
@@ -421,10 +496,10 @@ count : (A -> Bool) -> (List A) -> Int
 ```aivi
 use aivi.list (count)
 
-fun isPositive : Bool n : Int =>
+fun isPositive:Bool n:Int =>
     n > 0
 
-value n : Int = count isPositive [-1, 2, 3, -4, 5]   // 3
+value n:Int
 ```
 
 ---
@@ -440,12 +515,15 @@ find : (A -> Bool) -> (List A) -> Option A
 ```aivi
 use aivi.list (find)
 
-type User = { id: Int, name: Text }
+type User = {
+    id: Int,
+    name: Text
+}
 
-fun hasId : Bool target : Int user : User =>
+fun hasId:Bool target:Int user:User =>
     user.id == target
 
-fun findUser : Option User id : Int users : List User =>
+fun findUser: Option User id:Int users: List User =>
     find (hasId id) users
 ```
 
@@ -462,12 +540,11 @@ findMap : (A -> Option B) -> (List A) -> Option B
 ```aivi
 use aivi.list (findMap)
 
-fun asPositive : Option Int n : Int =>
-    n > 0
-     T|> Some n
-     F|> None
+fun asPositive: Option Int n:Int => n > 0
+  T|> Some n
+  F|> None
 
-value result : Option Int = findMap asPositive [-3, -1, 4, 7]   // Some 4
+value result: Option Int
 ```
 
 ---
@@ -483,11 +560,24 @@ contains : (A -> A -> Bool) -> A -> (List A) -> Bool
 ```aivi
 use aivi.list (contains)
 
-fun intEq : Bool a : Int b : Int =>
+fun intEq:Bool a:Int b:Int =>
     a == b
 
-value found : Bool = contains intEq 3 [1, 2, 3, 4, 5]   // True
-value missing : Bool = contains intEq 9 [1, 2, 3]        // False
+value found:Bool =
+    contains intEq 3 [
+        1,
+        2,
+        3,
+        4,
+        5
+    ]
+
+value missing:Bool =
+    contains intEq 9 [
+        1,
+        2,
+        3
+    ]
 ```
 
 ---
@@ -503,10 +593,16 @@ indexOf : (A -> Bool) -> (List A) -> Option Int
 ```aivi
 use aivi.list (indexOf)
 
-fun isThirty : Bool n : Int =>
+fun isThirty:Bool n:Int =>
     n == 30
 
-value idx : Option Int = indexOf isThirty [10, 20, 30, 40]   // Some 2
+value idx: Option Int =
+    indexOf isThirty [
+        10,
+        20,
+        30,
+        40
+    ]
 ```
 
 ---
@@ -526,7 +622,14 @@ sum : (List Int) -> Int
 ```aivi
 use aivi.list (sum)
 
-value total : Int = sum [1, 2, 3, 4, 5]   // 15
+value total:Int =
+    sum [
+        1,
+        2,
+        3,
+        4,
+        5
+    ]
 ```
 
 ---
@@ -542,7 +645,14 @@ product : (List Int) -> Int
 ```aivi
 use aivi.list (product)
 
-value result : Int = product [1, 2, 3, 4, 5]   // 120
+value result:Int =
+    product [
+        1,
+        2,
+        3,
+        4,
+        5
+    ]
 ```
 
 ---
@@ -558,10 +668,20 @@ maximum : (A -> A -> Bool) -> (List A) -> Option A
 ```aivi
 use aivi.list (maximum)
 
-fun isLess : Bool a : Int b : Int =>
+fun isLess:Bool a:Int b:Int =>
     a < b
 
-value highest : Option Int = maximum isLess [3, 1, 4, 1, 5, 9, 2, 6]   // Some 9
+value highest: Option Int =
+    maximum isLess [
+        3,
+        1,
+        4,
+        1,
+        5,
+        9,
+        2,
+        6
+    ]
 ```
 
 ---
@@ -577,10 +697,20 @@ minimum : (A -> A -> Bool) -> (List A) -> Option A
 ```aivi
 use aivi.list (minimum)
 
-fun isLess : Bool a : Int b : Int =>
+fun isLess:Bool a:Int b:Int =>
     a < b
 
-value lowest : Option Int = minimum isLess [3, 1, 4, 1, 5, 9, 2, 6]   // Some 1
+value lowest: Option Int =
+    minimum isLess [
+        3,
+        1,
+        4,
+        1,
+        5,
+        9,
+        2,
+        6
+    ]
 ```
 
 ---
@@ -600,10 +730,18 @@ unique : (A -> A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (unique)
 
-fun intEq : Bool a : Int b : Int =>
+fun intEq:Bool a:Int b:Int =>
     a == b
 
-value deduped : List Int = unique intEq [1, 2, 1, 3, 2, 4]   // [1, 2, 3, 4]
+value deduped: List Int =
+    unique intEq [
+        1,
+        2,
+        1,
+        3,
+        2,
+        4
+    ]
 ```
 
 ---
@@ -619,10 +757,18 @@ sortBy : (A -> A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (sortBy)
 
-fun intLt : Bool a : Int b : Int =>
+fun intLt:Bool a:Int b:Int =>
     a < b
 
-value sorted : List Int = sortBy intLt [3, 1, 4, 1, 5, 9]   // [1, 1, 3, 4, 5, 9]
+value sorted: List Int =
+    sortBy intLt [
+        3,
+        1,
+        4,
+        1,
+        5,
+        9
+    ]
 ```
 
 For descending order, reverse the comparison:
@@ -630,10 +776,18 @@ For descending order, reverse the comparison:
 ```aivi
 use aivi.list (sortBy)
 
-fun intGt : Bool a : Int b : Int =>
+fun intGt:Bool a:Int b:Int =>
     a > b
 
-value descending : List Int = sortBy intGt [3, 1, 4, 1, 5, 9]   // [9, 5, 4, 3, 1, 1]
+value descending: List Int =
+    sortBy intGt [
+        3,
+        1,
+        4,
+        1,
+        5,
+        9
+    ]
 ```
 
 ---
@@ -651,13 +805,12 @@ partition : (A -> Bool) -> (List A) -> Partition A
 ```aivi
 use aivi.list (partition)
 
-fun isPositive : Bool n : Int =>
+fun isPositive:Bool n:Int =>
     n > 0
 
-value groups : Partition Int = partition isPositive [-1, 2, -3, 4, -5, 6]
-
-value positive : List Int = groups.matched     // [2, 4, 6]
-value negative : List Int = groups.unmatched   // [-1, -3, -5]
+value groups: Partition Int
+value positive: List Int = groups.matched
+value negative: List Int = groups.unmatched
 ```
 
 ---
@@ -677,11 +830,19 @@ zip : (List A) -> (List B) -> List (A, B)
 ```aivi
 use aivi.list (zip)
 
-value names : List Text = ["Alice", "Bob", "Carol"]
-value scores : List Int = [95, 87, 92]
+value names: List Text = [
+    "Alice",
+    "Bob",
+    "Carol"
+]
 
-value pairs : List (Text, Int) = zip names scores
-// [("Alice", 95), ("Bob", 87), ("Carol", 92)]
+value scores: List Int = [
+    95,
+    87,
+    92
+]
+
+value pairs: List (Text, Int) = zip names scores
 ```
 
 ---
@@ -697,10 +858,15 @@ zipWith : (A -> B -> C) -> (List A) -> (List B) -> List C
 ```aivi
 use aivi.list (zipWith)
 
-fun add : Int a : Int b : Int =>
+fun add:Int a:Int b:Int =>
     a + b
 
-value sums : List Int = zipWith add [1, 2, 3] [10, 20, 30]   // [11, 22, 33]
+value sums: List Int =
+    zipWith add [1, 2, 3] [
+        10,
+        20,
+        30
+    ]
 ```
 
 ---
@@ -718,10 +884,13 @@ unzip : (List (A, B)) -> UnzipState A B
 ```aivi
 use aivi.list (unzip)
 
-value pairs : List (Text, Int) = [("Alice", 95), ("Bob", 87), ("Carol", 92)]
+value pairs: List (Text, Int) = [
+    ("Alice", 95),
+    ("Bob", 87),
+    ("Carol", 92)
+]
 
-value result : UnzipState Text Int = unzip pairs
-
-value names : List Text = result.lefts    // ["Alice", "Bob", "Carol"]
-value scores : List Int = result.rights   // [95, 87, 92]
+value result: UnzipState Text Int = unzip pairs
+value names: List Text = result.lefts
+value scores: List Int = result.rights
 ```

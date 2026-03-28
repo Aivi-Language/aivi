@@ -38,14 +38,13 @@ data Direction =
   | Left
   | Right
 
-fun opposite: Direction direction:Direction =>
-    direction
-     ||> Up    -> Down
-     ||> Down  -> Up
-     ||> Left  -> Right
-     ||> Right -> Left
+fun opposite:Direction direction:Direction => direction
+  ||> Up    -> Down
+  ||> Down  -> Up
+  ||> Left  -> Right
+  ||> Right -> Left
 
-value startDirection: Direction = Right
+value startDirection:Direction = Right
 
 export (Direction, opposite, startDirection)
 ```
@@ -58,7 +57,7 @@ use aivi.network (
     socket
 )
 
-fun joinProviders: Text left:Text right:Text =>
+fun joinProviders:Text left:Text right:Text =>
     "{left}/{right}"
 
 value primaryProvider = http

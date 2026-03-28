@@ -3,7 +3,16 @@
 Byte sequence operations. All functions are runtime intrinsics — import them directly:
 
 ```aivi
-use aivi.core.bytes (empty, length, get, slice, append, fromText, toText, repeat)
+use aivi.core.bytes (
+    empty
+    length
+    get
+    slice
+    append
+    fromText
+    toText
+    repeat
+)
 ```
 
 ---
@@ -34,9 +43,10 @@ Returned when `toText` fails because the byte sequence is not valid UTF-8.
 The empty byte sequence.
 
 ```aivi
-use aivi.core.bytes (empty, length)
-
-length empty  // 0
+use aivi.core.bytes (
+    empty
+    length
+)
 ```
 
 ### `length : Bytes -> Int`
@@ -44,9 +54,10 @@ length empty  // 0
 Number of bytes in the sequence.
 
 ```aivi
-use aivi.core.bytes (fromText, length)
-
-fromText "hello" |> length  // 5
+use aivi.core.bytes (
+    fromText
+    length
+)
 ```
 
 ### `get : Int -> Bytes -> Option Int`
@@ -54,10 +65,10 @@ fromText "hello" |> length  // 5
 Return the byte at a zero-based index as an `Option Int` (0–255). Returns `None` when the index is out of bounds.
 
 ```aivi
-use aivi.core.bytes (fromText, get)
-
-fromText "ABC" |> get 0  // Some 65
-fromText "ABC" |> get 10 // None
+use aivi.core.bytes (
+    fromText
+    get
+)
 ```
 
 ### `slice : Int -> Int -> Bytes -> Bytes`
@@ -65,9 +76,10 @@ fromText "ABC" |> get 10 // None
 Return the sub-sequence from index `from` (inclusive) to `to` (exclusive). Out-of-range indices are clamped.
 
 ```aivi
-use aivi.core.bytes (fromText, slice)
-
-fromText "hello world" |> slice 6 11  // bytes for "world"
+use aivi.core.bytes (
+    fromText
+    slice
+)
 ```
 
 ### `append : Bytes -> Bytes -> Bytes`
@@ -75,9 +87,10 @@ fromText "hello world" |> slice 6 11  // bytes for "world"
 Concatenate two byte sequences.
 
 ```aivi
-use aivi.core.bytes (fromText, append)
-
-append (fromText "foo") (fromText "bar")  // bytes for "foobar"
+use aivi.core.bytes (
+    fromText
+    append
+)
 ```
 
 ### `fromText : Text -> Bytes`
@@ -85,9 +98,10 @@ append (fromText "foo") (fromText "bar")  // bytes for "foobar"
 UTF-8 encode a `Text` value into `Bytes`.
 
 ```aivi
-use aivi.core.bytes (fromText, length)
-
-fromText "café" |> length  // 5 (the é is 2 bytes in UTF-8)
+use aivi.core.bytes (
+    fromText
+    length
+)
 ```
 
 ### `toText : Bytes -> Option Text`
@@ -95,9 +109,10 @@ fromText "café" |> length  // 5 (the é is 2 bytes in UTF-8)
 UTF-8 decode `Bytes` into a `Text`. Returns `None` when the bytes are not valid UTF-8.
 
 ```aivi
-use aivi.core.bytes (fromText, toText)
-
-fromText "hello" |> toText  // Some "hello"
+use aivi.core.bytes (
+    fromText
+    toText
+)
 ```
 
 ### `repeat : Int -> Int -> Bytes`
@@ -106,9 +121,6 @@ Create a byte sequence of `count` copies of a single byte value (0–255).
 
 ```aivi
 use aivi.core.bytes (repeat)
-
-repeat 0 4   // four zero bytes: [0, 0, 0, 0]
-repeat 255 2 // [255, 255]
 ```
 
 ---
@@ -116,14 +128,21 @@ repeat 255 2 // [255, 255]
 ## Real-world example
 
 ```aivi
-use aivi.core.bytes (fromText, toText, length, slice, append)
-use aivi.fs (readBytes, writeBytes)
+use aivi.core.bytes (
+    fromText
+    toText
+    length
+    slice
+    append
+)
 
-fun prependHeader:Task Text Unit path:Text header:Text =>
-    let headerBytes = fromText header in
-    readBytes path
-     |> map (append headerBytes)
-     |> andThen (writeBytes path)
+use aivi.fs (
+    readBytes
+    writeBytes
+)
+
+fun prependHeader: Task Text Unit path:Text header:Text =>
+    let headerBytes
 ```
 
 ::: tip
