@@ -220,7 +220,7 @@ class Eq A
 
 value answer = 42
 
-value add:Int x:Int y:Int =>
+fun add:Int x:Int y:Int =>
     x + y
 
 signal counter = 0
@@ -238,6 +238,7 @@ Top-level forms:
 - `class`
 - `instance`
 - `value`
+- `fun`
 - `signal`
 - `source`
 - `result`
@@ -248,37 +249,37 @@ Top-level forms:
 - `provider`
 - decorators via `@name`
 
-### 5.0.1 Unified `value` declaration
+### 5.0.1 `value` and `fun` declarations
 
-`value` is the single keyword for all pure top-level bindings, replacing the former separate `val` and `fun` keywords.
+`value` and `fun` are separate keywords for pure top-level bindings.
 
-No-params form (constant binding), uses `=`:
+`value` — constant declarations only (no parameters), uses `=`:
 
 ```aivi
 value answer = 42
 value greeting = "hello"
 ```
 
-Params form (function binding), uses `=>`:
+`fun` — function declarations (with parameters), uses `=>`:
 
 ```aivi
-value add:Int x:Int y:Int =>
+fun add:Int x:Int y:Int =>
     x + y
 
-value greet:Text name:Text =>
+fun greet:Text name:Text =>
     "Hello, {name}"
 ```
 
 `value` is a **contextual keyword**: it is also a valid identifier and parameter name. The following is valid AIVI — the parameter is named `value`:
 
 ```aivi
-value absolute:Int value:Int =>
+fun absolute:Int value:Int =>
     value < 0
      T|> 0 - value
      F|> value
 ```
 
-The parser disambiguates by position: `value` at the start of a top-level form is a keyword; `value` as a subsequent token after the function name is a parameter.
+The parser disambiguates by position: `value` or `fun` at the start of a top-level form is a keyword; `value` as a subsequent token after the function name is a parameter.
 
 ### 5.0.2 `data` — ADT declarations
 
@@ -784,7 +785,7 @@ Shorthand is allowed in record patterns:
 
 ```aivi
 game
- ||> { snake, food, status, score } => score
+ ||> { snake, food, status, score } -> score
 ```
 
 Shorthand is legal only when:
@@ -914,8 +915,8 @@ Pattern matching over the current subject.
 
 ```aivi
 status
- ||> Paid    => "paid"
- ||> Pending => "pending"
+ ||> Paid    -> "paid"
+ ||> Pending -> "pending"
 ```
 
 List patterns are structural and ordered. They match a left-to-right prefix and may bind the
@@ -923,9 +924,9 @@ remaining suffix as another list:
 
 ```aivi
 xs
- ||> []                       => 0
- ||> [first]                  => first
- ||> [first, second, ...rest] => first + second + sum rest
+ ||> []                       -> 0
+ ||> [first]                  -> first
+ ||> [first, second, ...rest] -> first + second + sum rest
 ```
 
 Rules:
@@ -951,8 +952,8 @@ elaborates to:
 
 ```aivi
 ready
- ||> True  => start
- ||> False => wait
+ ||> True  -> start
+ ||> False -> wait
 ```
 
 `Option`:
@@ -967,8 +968,8 @@ elaborates to:
 
 ```aivi
 maybeUser
- ||> Some a => greet a
- ||> None   => showLogin
+ ||> Some a -> greet a
+ ||> None   -> showLogin
 ```
 
 `Result`:
@@ -983,8 +984,8 @@ elaborates to:
 
 ```aivi
 loaded
- ||> Ok a  => render a
- ||> Err e => showError e
+ ||> Ok a  -> render a
+ ||> Err e -> showError e
 ```
 
 Canonical truthy / falsy constructor pairs:
@@ -2371,7 +2372,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - parser ✓
 - CST (lossless for formatting and diagnostics) ✓
 - formatter (canonical pipe, arrow, cluster alignment) ✓
-- syntax for `type`, `data`, `class`, `instance`, `value`, `signal`, `source`, `result`, `view`, `adapter`, `use`, `export`, `provider`, markup, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
+- syntax for `type`, `data`, `class`, `instance`, `value`, `fun`, `signal`, `source`, `result`, `view`, `adapter`, `use`, `export`, `provider`, markup, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
 - line/block/doc comment lexing (`//`, `/* */`, `/** **/`) and trivia retention ✓
 - regex literal lexing plus HIR validation ✓
 - compact suffix literal lexing (`250ms`) ✓
