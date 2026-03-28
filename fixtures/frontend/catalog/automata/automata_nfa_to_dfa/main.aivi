@@ -48,10 +48,13 @@ fun collectNames:(List Text) labels:(List Text) state:NfaState =>
         stateName state
     ]
 
+fun collectSubsetNames:(List Text) subset:(List NfaState) =>
+    subset |> reduce collectNames []
+
 fun subsetLabel:Text subset:(List NfaState) =>
     length subset == 0
      T|> "empty"
-     F|> join "," (subset |> reduce collectNames [])
+     F|> join "," (collectSubsetNames subset)
 
 fun containsState:Bool candidate:NfaState subset:(List NfaState) =>
     subset

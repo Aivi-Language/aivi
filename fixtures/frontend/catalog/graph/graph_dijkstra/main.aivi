@@ -174,10 +174,13 @@ fun relaxEdge:Distances current:Node currentDistance:Distance distances:Distance
      T|> relaxTarget distances edge.to (plusDistance currentDistance edge.weight)
      F|> distances
 
+fun relaxedDistances:Distances graph:WeightedGraph node:Node distances:Distances =>
+    graph.edges
+     |> reduce (relaxEdge node (distanceOf distances node)) distances
+
 fun visitNode:DijkstraState graph:WeightedGraph state:DijkstraState node:Node =>
     {
-        distances: graph.edges
-         |> reduce (relaxEdge node (distanceOf state.distances node)) state.distances,
+        distances: relaxedDistances graph node state.distances,
         visited: setVisited state.visited node True,
         order: append state.order [node]
     }

@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "AIVI",
+  "name": "aivi",
+  "displayName": "AIVI",
   "scopeName": "source.aivi",
   "fileTypes": [".aivi"],
   "patterns": [
@@ -152,7 +153,16 @@
           }
         },
         {
-          "comment": "fun name",
+          "comment": "data Name — ADT declaration",
+          "match": "\\b(data)\\s+([A-Z][a-zA-Z0-9_]*)((?:\\s+[a-z][a-zA-Z0-9_]*)*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.data.aivi" },
+            "2": { "name": "entity.name.type.aivi" },
+            "3": { "name": "variable.parameter.type.aivi" }
+          }
+        },
+        {
+          "comment": "fun name — function declaration",
           "match": "\\b(fun)\\s+([a-z_][a-zA-Z0-9_]*)",
           "captures": {
             "1": { "name": "keyword.declaration.fun.aivi" },
@@ -160,19 +170,51 @@
           }
         },
         {
-          "comment": "val name",
-          "match": "\\b(val)\\s+([a-z_][a-zA-Z0-9_]*)",
+          "comment": "value name — constant declaration",
+          "match": "\\b(value)\\s+([a-z_][a-zA-Z0-9_]*)",
           "captures": {
-            "1": { "name": "keyword.declaration.val.aivi" },
+            "1": { "name": "keyword.declaration.value.aivi" },
             "2": { "name": "entity.name.variable.aivi" }
           }
         },
         {
-          "comment": "sig name",
-          "match": "\\b(sig)\\s+([a-z_][a-zA-Z0-9_]*)",
+          "comment": "signal name — reactive signal declaration",
+          "match": "\\b(signal)\\s+([a-z_][a-zA-Z0-9_]*)",
           "captures": {
-            "1": { "name": "keyword.declaration.sig.aivi" },
+            "1": { "name": "keyword.declaration.signal.aivi" },
             "2": { "name": "entity.name.variable.signal.aivi" }
+          }
+        },
+        {
+          "comment": "source name — source-backed signal declaration",
+          "match": "\\b(source)\\s+([a-z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.source.aivi" },
+            "2": { "name": "entity.name.variable.source.aivi" }
+          }
+        },
+        {
+          "comment": "result name — graph-assembly result",
+          "match": "\\b(result)\\s+([a-z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.result.aivi" },
+            "2": { "name": "entity.name.variable.aivi" }
+          }
+        },
+        {
+          "comment": "view name — markup view declaration",
+          "match": "\\b(view)\\s+([A-Z][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.view.aivi" },
+            "2": { "name": "entity.name.type.aivi" }
+          }
+        },
+        {
+          "comment": "adapter name — adapter declaration",
+          "match": "\\b(adapter)\\s+([a-z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.adapter.aivi" },
+            "2": { "name": "entity.name.function.aivi" }
           }
         },
         {
@@ -467,7 +509,7 @@
     },
 
     "builtin-keyword": {
-      "match": "\\b(with|as|of|key|on|pattern|value|if|then|else|let|in|match|when)\\b",
+      "match": "\\b(with|as|of|key|on|pattern|and|or|not|if|then|else|let|in|match|when)\\b",
       "name": "keyword.other.aivi"
     }
   }

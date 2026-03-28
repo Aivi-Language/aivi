@@ -31,10 +31,15 @@ fun screenLabel:Text screen:Screen =>
      ||> Ready title   -> title
      ||> Failed reason -> reason
 
+fun titleLabel:Text title:Text =>
+    title == "Inbox"
+    T|> "priority"
+    F|> title
+
 fun nestedScreenLabel:Text screen:Screen =>
     screen
      ||> Loading       -> "loading"
-     ||> Ready title   -> (title == "Inbox" T|> "priority" F|> title)
+     ||> Ready title   -> titleLabel title
      ||> Failed reason -> reason
 
 value screenView =

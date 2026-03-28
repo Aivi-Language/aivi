@@ -250,6 +250,7 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/custom-source-provider-argument-type-mismatch/main.aivi",
         "milestone-2/invalid/custom-source-provider-unsupported-schema-type/main.aivi",
         "milestone-2/invalid/non-exhaustive-match-control/main.aivi",
+        "milestone-2/invalid/nested-pipe-expression/main.aivi",
     ] {
         let path = fixture_path(relative);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))

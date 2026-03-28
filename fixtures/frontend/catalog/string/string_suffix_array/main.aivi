@@ -54,10 +54,13 @@ fun collectLabels:(List Text) labels:(List Text) suffix:Suffix =>
         suffixLabel suffix
     ]
 
+fun collectAllLabels:(List Text) items:(List Suffix) =>
+    items |> reduce collectLabels []
+
 fun describeOrder:Text items:(List Suffix) =>
     length items == 0
      T|> "empty"
-     F|> join " < " (items |> reduce collectLabels [])
+     F|> join " < " (collectAllLabels items)
 
 fun firstLabel:Text items:(List Suffix) =>
     viewSuffixes items

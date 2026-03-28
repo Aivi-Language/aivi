@@ -152,22 +152,27 @@ fun decrementOutgoing:Incoming current:Phase incoming:Incoming edge:Dependency =
      T|> decrementIncoming incoming edge.to
      F|> incoming
 
+fun computeInitialIncoming:Incoming graph:DependencyGraph =>
+    graph.edges |> reduce countIncoming zeroIncoming
+
 fun initialState:KahnState graph:DependencyGraph =>
     replenish graph {
-        incoming: graph.edges
-         |> reduce countIncoming zeroIncoming,
+        incoming: computeInitialIncoming graph,
         queued: [],
         emitted: initialEmitted,
         order: []
     }
 
+fun decrementedIncoming:Incoming graph:DependencyGraph state:KahnState current:Phase =>
+    graph.edges |> reduce (decrementOutgoing current) state.incoming
+
+fun remainingQueued:(List Phase) state:KahnState =>
+    state.queued |> tail |> getOrElse []
+
 fun emitReady:KahnState graph:DependencyGraph state:KahnState current:Phase =>
     replenish graph {
-        incoming: graph.edges
-         |> reduce (decrementOutgoing current) state.incoming,
-        queued: state.queued
-         |> tail
-         |> getOrElse [],
+        incoming: decrementedIncoming graph state current,
+        queued: remainingQueued state,
         emitted: setEmitted state.emitted current True,
         order: append state.order [current]
     }
@@ -178,13 +183,16 @@ fun consume:KahnState graph:DependencyGraph state:KahnState tick:Phase =>
      ||> Some current -> emitReady graph state current
      ||> None         -> state
 
+fun hasCycle:Bool graph:DependencyGraph state:KahnState =>
+    length state.order == length graph.nodes
+     T|> False
+     F|> True
+
 fun summarize:ToposortSummary graph:DependencyGraph state:KahnState =>
     {
         order: orderLabel state.order,
         emittedCount: length state.order,
-        hasCycle: length state.order == length graph.nodes
-         T|> False
-         F|> True
+        hasCycle: hasCycle graph state
     }
 
 value dagGraph: DependencyGraph = {

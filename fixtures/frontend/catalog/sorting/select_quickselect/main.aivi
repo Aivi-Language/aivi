@@ -54,10 +54,19 @@ fun chooseRank:(Option Int) rank:Int lower:(List Int) equal:(List Int) higher:(L
      T|> quickselect rank lower
      F|> chooseUpper rank lower equal higher
 
+fun selectFromClassified:(Option Int) rank:Int classified:{ lower: (List Int), equal: (List Int), higher: (List Int) } =>
+    classified
+     ||> { lower, equal, higher } -> chooseRank rank lower equal higher
+
+fun classifyAndSelect:(Option Int) rank:Int items:(List Int) pivot:Int =>
+    items
+     |> classify pivot
+     |> selectFromClassified rank
+
 fun quickselect:(Option Int) rank:Int items:(List Int) =>
     head items
      ||> None       -> None
-     ||> Some pivot -> (items |> classify pivot ||> { lower, equal, higher } -> chooseRank rank lower equal higher)
+     ||> Some pivot -> classifyAndSelect rank items pivot
 
 value sample: List Int = [
     7,

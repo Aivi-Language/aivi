@@ -33,11 +33,11 @@ fun insert: TextSet v:Text s:TextSet =>
      T|> s
      F|> { items: append s.items [v] }
 
+fun filteredItems: (List Text) pred:(Text -> Bool) s:TextSet =>
+    s.items |> filter pred
+
 fun remove: TextSet v:Text s:TextSet =>
-    {
-        items: s.items
-         |> filter (notEq v)
-    }
+    { items: filteredItems (notEq v) s }
 
 fun size: Int s:TextSet =>
     s.items
@@ -63,22 +63,22 @@ fun union: TextSet a:TextSet b:TextSet =>
 fun keepIfMember: Bool s:TextSet v:Text =>
     member v s
 
+fun intersectionItems: (List Text) a:TextSet b:TextSet =>
+    a.items |> filter (keepIfMember b)
+
 fun intersection: TextSet a:TextSet b:TextSet =>
-    {
-        items: a.items
-         |> filter (keepIfMember b)
-    }
+    { items: intersectionItems a b }
 
 fun keepIfNotMember: Bool s:TextSet v:Text =>
     member v s
      T|> False
      F|> True
 
+fun differenceItems: (List Text) a:TextSet b:TextSet =>
+    a.items |> filter (keepIfNotMember b)
+
 fun difference: TextSet a:TextSet b:TextSet =>
-    {
-        items: a.items
-         |> filter (keepIfNotMember b)
-    }
+    { items: differenceItems a b }
 
 fun subsetOf: Bool a:TextSet b:TextSet =>
     a.items

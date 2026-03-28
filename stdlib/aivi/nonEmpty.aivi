@@ -26,23 +26,32 @@ fun fromNonEmpty:(NonEmptyList A) ne:(NonEmpty A) =>
 fun lastStep:A prev:A item:A =>
     item
 
+fun lastOfTail:A h:A t:(List A) =>
+    t |> reduce lastStep h
+
 fun last:A nel:(NonEmptyList A) =>
     nel
-     ||> MkNEL h t -> (t |> reduce lastStep h)
+     ||> MkNEL h t -> lastOfTail h t
 
 fun nelLengthStep:Int acc:Int ignored:A =>
     acc + 1
 
+fun tailLength:Int t:(List A) =>
+    t |> reduce nelLengthStep 1
+
 fun length:Int nel:(NonEmptyList A) =>
     nel
-     ||> MkNEL ignored t -> (t |> reduce nelLengthStep 1)
+     ||> MkNEL ignored t -> tailLength t
 
 fun mapNelStep:(List B) transform:(A -> B) acc:(List B) item:A =>
     append acc [transform item]
 
+fun mappedTail:(List B) transform:(A -> B) t:(List A) =>
+    t |> reduce (mapNelStep transform) []
+
 fun mapNel:(NonEmptyList B) transform:(A -> B) nel:(NonEmptyList A) =>
     nel
-     ||> MkNEL h t -> MkNEL (transform h) (t |> reduce (mapNelStep transform) [])
+     ||> MkNEL h t -> MkNEL (transform h) (mappedTail transform t)
 
 fun fromListStep:(Option (NonEmptyList A)) acc:(Option (NonEmptyList A)) item:A =>
     acc

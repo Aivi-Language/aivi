@@ -147,14 +147,18 @@ fun extractName json =
 
 ## Example — normalise before storage
 
+Extract each step into a named function so no pipes are nested.
+
 ```aivi
 use aivi.data.json (minify, validate)
+use aivi.core (Task)
+
+fun minifyIfValid raw isValid =
+  isValid
+  ||> True  -> minify raw
+  ||> False -> Task.fail "invalid JSON input"
 
 fun storeJson raw =
   validate raw
-  |> andThen (result =>
-      result
-      ||> True -> minify raw
-      ||> False -> Task.fail "invalid JSON input"
-  )
+  |> andThen (minifyIfValid raw)
 ```

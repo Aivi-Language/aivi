@@ -43,9 +43,14 @@ value rendered: Text =
      T|> .name
      F|> .message
 
+value loadedText: Text =
+    loaded
+     ||> Ok user -> user.name
+     ||> Err loadFail -> loadFail.message
+
 value nestedRendered: Text =
     ready
-     T|> (loaded ||> Ok user -> user.name ||> Err loadFail -> loadFail.message)
+     T|> loadedText
      F|> wait
 
 value submitted: Validation FormError User =

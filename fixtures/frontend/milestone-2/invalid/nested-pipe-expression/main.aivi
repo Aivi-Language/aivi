@@ -1,0 +1,8 @@
+fun processValue x =
+  x |> negate |> double
+  |> double
+
+// The pipe inside the function argument below is invalid — pipes cannot
+// be nested.  The inner body must be extracted into a named declaration.
+fun run =
+  call (processValue 1 |> negate)

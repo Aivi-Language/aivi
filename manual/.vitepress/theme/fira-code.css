@@ -1,0 +1,33 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Fira Code with ligatures for all code blocks and inline code
+───────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --vp-font-family-mono: 'Fira Code', 'Fira Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
+}
+
+/* Code blocks */
+.vp-doc pre,
+.vp-doc pre code,
+.vp-doc div[class*='language-'] code {
+  font-family: var(--vp-font-family-mono);
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: 'liga' 1, 'calt' 1, 'ss01' 1, 'ss03' 1, 'ss05' 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Inline code */
+.vp-doc :not(pre) > code {
+  font-family: var(--vp-font-family-mono);
+  font-variant-ligatures: common-ligatures;
+  font-feature-settings: 'liga' 1, 'calt' 1;
+}
+
+/* Sidebar and nav code */
+.VPSidebar code,
+.VPNav code {
+  font-family: var(--vp-font-family-mono);
+  font-feature-settings: 'liga' 1, 'calt' 1;
+}

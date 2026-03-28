@@ -69,7 +69,7 @@ fun member:Bool k:Text d:(Dict V) =>
 
 // Remove a key (no-op when absent)
 fun remove:(Dict V) k:Text d:(Dict V) =>
-    { entries: d.entries |> filter (notMatchesKey k) }
+    { entries: filterOldKey k d }
 
 // Number of entries
 fun size:Int d:(Dict V) =>
@@ -108,15 +108,21 @@ fun fromList:(Dict V) items:(List (Text, V)) =>
 fun mapEntryValue:(DictEntry V2) f:(V1 -> V2) entry:(DictEntry V1) =>
     { key: entry.key, value: f entry.value }
 
+fun mappedEntries:(List (DictEntry V2)) f:(V1 -> V2) d:(Dict V1) =>
+    d.entries |> map (mapEntryValue f)
+
 fun mapValues:(Dict V2) f:(V1 -> V2) d:(Dict V1) =>
-    { entries: d.entries |> map (mapEntryValue f) }
+    { entries: mappedEntries f d }
 
 // Keep only entries whose value satisfies predicate
 fun entryMatchesPredicate:Bool predicate:(V -> Bool) entry:(DictEntry V) =>
     predicate entry.value
 
+fun filteredValueEntries:(List (DictEntry V)) predicate:(V -> Bool) d:(Dict V) =>
+    d.entries |> filter (entryMatchesPredicate predicate)
+
 fun filterValues:(Dict V) predicate:(V -> Bool) d:(Dict V) =>
-    { entries: d.entries |> filter (entryMatchesPredicate predicate) }
+    { entries: filteredValueEntries predicate d }
 
 // Merge two dicts; combine is called when both contain the same key
 fun mergeStep:(Dict V) combine:(V -> V -> V) acc:(Dict V) entry:(DictEntry V) =>

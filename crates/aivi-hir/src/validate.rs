@@ -4093,6 +4093,7 @@ impl Validator<'_> {
                     self.validate_gate_expr_tree(item.body, &env, &mut typing);
                     self.validate_truthy_falsy_expr_tree(item.body, &env, &mut typing);
                     self.validate_case_exhaustiveness_expr_tree(item.body, &env, &mut typing);
+                    self.validate_no_nested_pipes(item.body);
                     self.validate_recurrence_expr_tree(
                         item.body,
                         target,
@@ -4112,6 +4113,7 @@ impl Validator<'_> {
                     self.validate_gate_expr_tree(item.body, &env, &mut typing);
                     self.validate_truthy_falsy_expr_tree(item.body, &env, &mut typing);
                     self.validate_case_exhaustiveness_expr_tree(item.body, &env, &mut typing);
+                    self.validate_no_nested_pipes(item.body);
                     self.validate_recurrence_expr_tree(
                         item.body,
                         target,
@@ -4128,6 +4130,7 @@ impl Validator<'_> {
                         self.validate_gate_expr_tree(body, &env, &mut typing);
                         self.validate_truthy_falsy_expr_tree(body, &env, &mut typing);
                         self.validate_case_exhaustiveness_expr_tree(body, &env, &mut typing);
+                        self.validate_no_nested_pipes(body);
                         self.validate_recurrence_expr_tree(
                             body,
                             Some(RecurrenceTargetHint::Evidence(
@@ -4149,6 +4152,7 @@ impl Validator<'_> {
                         self.validate_gate_expr_tree(member.body, &env, &mut typing);
                         self.validate_truthy_falsy_expr_tree(member.body, &env, &mut typing);
                         self.validate_case_exhaustiveness_expr_tree(member.body, &env, &mut typing);
+                        self.validate_no_nested_pipes(member.body);
                         self.validate_recurrence_expr_tree(
                             member.body,
                             target,
@@ -5595,6 +5599,31 @@ impl Validator<'_> {
         walk_expr_tree(module, root, |_, expr, _| {
             if let ExprKind::Pipe(pipe) = &expr.kind {
                 self.validate_truthy_falsy_pipe(pipe, env, typing);
+            }
+        });
+    }
+
+    /// Reject pipe expressions that appear nested inside another expression.
+    ///
+    /// # Invariant
+    /// A pipe expression may only appear as the direct body of a top-level declaration
+    /// (`fun`, `value`, `signal`, `source`, `view`, `result`).  Placing a pipe inside
+    /// a function argument, list literal, record field, or any other sub-expression is
+    /// forbidden: pipes must be written as separate named declarations.
+    fn validate_no_nested_pipes(&mut self, root: ExprId) {
+        let module = self.module;
+        walk_expr_tree(module, root, |_, expr, is_root| {
+            if !is_root {
+                if let ExprKind::Pipe(_) = &expr.kind {
+                    self.diagnostics.push(
+                        Diagnostic::error("pipe expression cannot be nested inside another expression")
+                            .with_code(code("nested-pipe"))
+                            .with_primary_label(
+                                expr.span,
+                                "move this pipe into a separate named declaration",
+                            ),
+                    );
+                }
             }
         });
     }
