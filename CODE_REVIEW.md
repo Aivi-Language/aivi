@@ -379,13 +379,13 @@
 | # | Class | Issue |
 |---|-------|-------|
 | 10 | Incomplete feature | Custom sum types are not recognized as truthy/falsy carriers. Only `Bool`, `Option`, `Result`, and `Validation` are supported. |
-| 11 | Missing edge case | Nested `T|>...F|>` pairs are not validated for correctness. |
+| 11 | Missing edge case | Nested `T\|>...F\|>` pairs are not validated for correctness. |
 
 **recurrence_elaboration.rs**
 
 | # | Class | Issue |
 |---|-------|-------|
-| 12 | Missing edge case | Recursive recurrence (a recurrence step body that itself contains `@|>`) is not detected and not blocked. |
+| 12 | Missing edge case | Recursive recurrence (a recurrence step body that itself contains `@\|>`) is not detected and not blocked. |
 | 13 | Missing edge case | Step chain closure uses `same_shape()` which does not account for domain wrapping changes. A domain-wrapped type and its carrier type may compare as "same shape" erroneously. |
 | 14 | Missing feature | Recurrence on `Task` types is not handled. |
 

@@ -259,6 +259,20 @@ pub enum IntrinsicValue {
     FsWriteBytes,
     FsCreateDirAll,
     FsDeleteFile,
+    // Float math
+    FloatFloor,
+    FloatCeil,
+    FloatRound,
+    FloatSqrt,
+    FloatAbs,
+    FloatToInt,
+    FloatFromInt,
+    FloatToText,
+    FloatParseText,
+    // FS reads
+    FsReadText,
+    FsReadDir,
+    FsExists,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -272,6 +286,18 @@ impl fmt::Display for IntrinsicValue {
             Self::FsWriteBytes => f.write_str("aivi.fs.writeBytes"),
             Self::FsCreateDirAll => f.write_str("aivi.fs.createDirAll"),
             Self::FsDeleteFile => f.write_str("aivi.fs.deleteFile"),
+            Self::FloatFloor => f.write_str("aivi.core.float.floor"),
+            Self::FloatCeil => f.write_str("aivi.core.float.ceil"),
+            Self::FloatRound => f.write_str("aivi.core.float.round"),
+            Self::FloatSqrt => f.write_str("aivi.core.float.sqrt"),
+            Self::FloatAbs => f.write_str("aivi.core.float.abs"),
+            Self::FloatToInt => f.write_str("aivi.core.float.toInt"),
+            Self::FloatFromInt => f.write_str("aivi.core.float.fromInt"),
+            Self::FloatToText => f.write_str("aivi.core.float.toText"),
+            Self::FloatParseText => f.write_str("aivi.core.float.parseText"),
+            Self::FsReadText => f.write_str("aivi.fs.readText"),
+            Self::FsReadDir => f.write_str("aivi.fs.readDir"),
+            Self::FsExists => f.write_str("aivi.fs.exists"),
         }
     }
 }

@@ -1050,6 +1050,31 @@ fn execute_runtime_task_plan(
                 .map_err(|error| format!("failed to delete {}: {error}", path))?;
             Ok(RuntimeValue::Unit)
         }
+        RuntimeTaskPlan::FsReadText { path } => {
+            let text = fs::read_to_string(Path::new(path.as_ref()))
+                .map_err(|error| format!("failed to read {}: {error}", path))?;
+            Ok(RuntimeValue::Text(text.into()))
+        }
+        RuntimeTaskPlan::FsReadDir { path } => {
+            let entries = fs::read_dir(Path::new(path.as_ref()))
+                .map_err(|error| format!("failed to read directory {}: {error}", path))?;
+            let names: Result<Vec<RuntimeValue>, String> = entries
+                .map(|entry| {
+                    entry
+                        .map_err(|e| format!("failed to read directory entry: {e}"))
+                        .and_then(|e| {
+                            e.file_name()
+                                .into_string()
+                                .map(|s| RuntimeValue::Text(s.into()))
+                                .map_err(|_| "directory entry name is not valid UTF-8".into())
+                        })
+                })
+                .collect();
+            Ok(RuntimeValue::List(names?))
+        }
+        RuntimeTaskPlan::FsExists { path } => {
+            Ok(RuntimeValue::Bool(Path::new(path.as_ref()).exists()))
+        }
     }
 }
 

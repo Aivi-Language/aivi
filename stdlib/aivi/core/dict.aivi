@@ -1,0 +1,151 @@
+// aivi.core.dict: text-keyed dictionary
+//
+// Dict V is a text-keyed association map backed by an ordered
+// association list. All operations are O(n). For performance-critical
+// paths, keep dicts small or prefer index-backed structures.
+
+use aivi.list (filter, find, map, length)
+
+// Record types — no wrapping constructor, so field access works directly.
+type DictEntry V = {
+    key: Text,
+    value: V
+}
+
+type Dict V = {
+    entries: List (DictEntry V)
+}
+
+fun singleton:(Dict V) k:Text v:V =>
+    { entries: [{ key: k, value: v }] }
+
+// True when the entry's key equals k
+fun matchesKey:Bool k:Text entry:(DictEntry V) =>
+    entry.key == k
+
+// True when the entry's key differs from k
+fun notMatchesKey:Bool k:Text entry:(DictEntry V) =>
+    entry.key == k
+     T|> False
+     F|> True
+
+// Internal: list of entries with k removed
+fun filterOldKey:(List (DictEntry V)) k:Text d:(Dict V) =>
+    d.entries |> filter (notMatchesKey k)
+
+// Insert (or replace) the key/value pair in d
+fun insert:(Dict V) k:Text v:V d:(Dict V) =>
+    { entries: append [{ key: k, value: v }] (filterOldKey k d) }
+
+// Insert combining with existing value using merge when key already present
+fun insertWith:(Dict V) merge:(V -> V -> V) k:Text v:V d:(Dict V) =>
+    d.entries
+     |> find (matchesKey k)
+     ||> None ->
+        { entries: append d.entries [{ key: k, value: v }] }
+     ||> Some existing ->
+        insert k (merge existing.value v) d
+
+// Lookup a key; returns None when absent
+fun get:(Option V) k:Text d:(Dict V) =>
+    d.entries
+     |> find (matchesKey k)
+     ||> None -> None
+     ||> Some entry -> Some entry.value
+
+// Lookup with a fallback default
+fun getWithDefault:V default:V k:Text d:(Dict V) =>
+    d.entries
+     |> find (matchesKey k)
+     ||> None -> default
+     ||> Some entry -> entry.value
+
+// True when the key exists in d
+fun member:Bool k:Text d:(Dict V) =>
+    d.entries
+     |> find (matchesKey k)
+     ||> Some _ -> True
+     ||> None   -> False
+
+// Remove a key (no-op when absent)
+fun remove:(Dict V) k:Text d:(Dict V) =>
+    { entries: d.entries |> filter (notMatchesKey k) }
+
+// Number of entries
+fun size:Int d:(Dict V) =>
+    d.entries |> length
+
+// All keys in insertion order
+fun extractKey:Text entry:(DictEntry V) =>
+    entry.key
+
+fun keys:(List Text) d:(Dict V) =>
+    d.entries |> map extractKey
+
+// All values in insertion order
+fun extractValue:V entry:(DictEntry V) =>
+    entry.value
+
+fun values:(List V) d:(Dict V) =>
+    d.entries |> map extractValue
+
+// Convert to a list of (key, value) pairs
+fun toPair:((Text, V)) entry:(DictEntry V) =>
+    (entry.key, entry.value)
+
+fun toList:(List (Text, V)) d:(Dict V) =>
+    d.entries |> map toPair
+
+// Build a Dict from a list of (key, value) pairs
+fun insertPair:(Dict V) acc:(Dict V) pair:(Text, V) =>
+    pair
+     ||> (k, v) -> insert k v acc
+
+fun fromList:(Dict V) items:(List (Text, V)) =>
+    items |> reduce insertPair { entries: [] }
+
+// Apply f to every value, preserving keys
+fun mapEntryValue:(DictEntry V2) f:(V1 -> V2) entry:(DictEntry V1) =>
+    { key: entry.key, value: f entry.value }
+
+fun mapValues:(Dict V2) f:(V1 -> V2) d:(Dict V1) =>
+    { entries: d.entries |> map (mapEntryValue f) }
+
+// Keep only entries whose value satisfies predicate
+fun entryMatchesPredicate:Bool predicate:(V -> Bool) entry:(DictEntry V) =>
+    predicate entry.value
+
+fun filterValues:(Dict V) predicate:(V -> Bool) d:(Dict V) =>
+    { entries: d.entries |> filter (entryMatchesPredicate predicate) }
+
+// Merge two dicts; combine is called when both contain the same key
+fun mergeStep:(Dict V) combine:(V -> V -> V) acc:(Dict V) entry:(DictEntry V) =>
+    insertWith combine entry.key entry.value acc
+
+fun mergeWith:(Dict V) combine:(V -> V -> V) left:(Dict V) right:(Dict V) =>
+    right.entries |> reduce (mergeStep combine) left
+
+// Union: right-biased (right wins on key conflict)
+fun insertEntry:(Dict V) acc:(Dict V) entry:(DictEntry V) =>
+    insert entry.key entry.value acc
+
+fun union:(Dict V) left:(Dict V) right:(Dict V) =>
+    right.entries |> reduce insertEntry left
+
+export Dict
+export singleton
+export insert
+export insertWith
+export get
+export getWithDefault
+export member
+export remove
+export size
+export keys
+export values
+export toList
+export fromList
+export mapValues
+export filterValues
+export mergeWith
+export union

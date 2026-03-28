@@ -5757,6 +5757,101 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 ),
             ),
         )),
+        // Float math intrinsics
+        ("aivi.core.float", "floor") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatFloor,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "ceil") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatCeil,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "round") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatRound,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "sqrt") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatSqrt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "abs") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatAbs,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "toInt") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatToInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Int),
+            ),
+        )),
+        ("aivi.core.float", "fromInt") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatFromInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "toText") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatToText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.core.float", "parseText") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatParseText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                option_import_type(primitive_import_type(BuiltinType::Float)),
+            ),
+        )),
+        // Extended FS intrinsics
+        ("aivi.fs", "readText") => Some(intrinsic_import_value(
+            IntrinsicValue::FsReadText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Text),
+                ),
+            ),
+        )),
+        ("aivi.fs", "readDir") => Some(intrinsic_import_value(
+            IntrinsicValue::FsReadDir,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    list_import_type(primitive_import_type(BuiltinType::Text)),
+                ),
+            ),
+        )),
+        ("aivi.fs", "exists") => Some(intrinsic_import_value(
+            IntrinsicValue::FsExists,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
         _ => None,
     }
 }
@@ -5781,6 +5876,14 @@ fn task_import_type(error: ImportValueType, value: ImportValueType) -> ImportVal
         error: Box::new(error),
         value: Box::new(value),
     }
+}
+
+fn option_import_type(element: ImportValueType) -> ImportValueType {
+    ImportValueType::Option(Box::new(element))
+}
+
+fn list_import_type(element: ImportValueType) -> ImportValueType {
+    ImportValueType::List(Box::new(element))
 }
 
 fn surface_exprs_equal(left: &syn::Expr, right: &syn::Expr) -> bool {

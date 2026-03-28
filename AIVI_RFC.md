@@ -2772,3 +2772,114 @@ Performance passes start only after typed-core validation. First-wave scope:
 - scheduler frontier deduplication
 
 HIR, typechecking, and typed core remain proof and diagnostic layers rather than speculative performance layers. Every performance pass must satisfy the benchmark gate policy in §23.
+
+## 29. Platform standard library
+
+The AIVI standard library is organized into two tiers.
+
+**Tier 1 — Foundation** (`aivi.*`): pure language utilities that work in all contexts. These ship with the bundled runtime and require no host platform capabilities.
+
+**Tier 2 — Core** (`aivi.core.*`): extended purely functional helpers that build on Tier 1 with no additional runtime dependencies.
+
+### 29.1 Bundled foundation modules
+
+| Module | Purpose |
+|---|---|
+| `aivi.bool` | Boolean predicates and combinators |
+| `aivi.list` | List operations (filter, map, reduce, etc.) |
+| `aivi.math` | Integer arithmetic helpers |
+| `aivi.nonEmpty` | Non-empty list type `NonEmptyList A` |
+| `aivi.option` | `Option A` combinators |
+| `aivi.order` | `Ordering` type and comparison helpers |
+| `aivi.pair` | Pair/tuple utilities |
+| `aivi.result` | `Result E A` combinators |
+| `aivi.text` | Text join, concat, and interpolation helpers |
+| `aivi.validation` | `Validation E A` for error accumulation |
+| `aivi.prelude` | Re-exports the most-used symbols from all foundation modules |
+
+### 29.2 Core extension modules (`aivi.core`)
+
+These modules live under `stdlib/aivi/core/` and are pure AIVI — no runtime intrinsics except where noted.
+
+#### `aivi.core.fn`
+
+Higher-order function combinators. Exports: `identity`, `const`, `flip`, `compose`, `andThen`, `always`, `on`, `applyTo`, `applyTwice`.
+
+```aivi
+use aivi.core.fn (identity, compose, andThen, applyTwice)
+```
+
+#### `aivi.core.either`
+
+Disjoint union type. `Either L R` is `Left L | Right R`.
+
+```
+type Either L R = Left L | Right R
+```
+
+Exports: `Either`, `Left`, `Right`, `isLeft`, `isRight`, `fromLeft`, `fromRight`, `mapLeft`, `mapRight`, `mapBoth`, `fold`, `swap`, `toOption`, `toResult`, `fromResult`, `partitionEithers`.
+
+`partitionEithers` returns a `(List L, List R)` tuple splitting a list of `Either` values by case.
+
+#### `aivi.core.float`
+
+IEEE 754 double-precision helpers. Pure helpers are `negate`, `absHelper`, `max`, `min`, `clamp`, `lerp`, `sign`, `between`, and predicates. Constants: `pi`, `e`, `tau`.
+
+Compiler-resolved intrinsics (imported from the same module): `floor`, `ceil`, `round`, `sqrt`, `abs`, `toInt`, `fromInt`, `toText`, `parseText`.
+
+```aivi
+use aivi.core.float (pi, clamp, lerp, sqrt, toInt)
+```
+
+#### `aivi.core.dict`
+
+Text-keyed association dictionary. `Dict V = { entries: List (DictEntry V) }`. All operations are O(n) over the entry list. The empty dict is the literal `{ entries: [] }`.
+
+```aivi
+use aivi.core.dict (Dict, singleton, insert, get, member, remove, fromList, toList,
+                    mapValues, filterValues, mergeWith, union)
+```
+
+Exports: `Dict`, `singleton`, `insert`, `insertWith`, `get`, `getWithDefault`, `member`, `remove`, `size`, `keys`, `values`, `toList`, `fromList`, `mapValues`, `filterValues`, `mergeWith`, `union`.
+
+### 29.3 Float runtime intrinsics
+
+The following `IntrinsicValue` variants were added to the HIR and backend to support `Float` operations at runtime. All operate on `RuntimeFloat` (a non-NaN, non-infinite `f64` wrapper):
+
+| Intrinsic | Type |
+|---|---|
+| `FloatFloor` | `Float -> Float` |
+| `FloatCeil` | `Float -> Float` |
+| `FloatRound` | `Float -> Float` |
+| `FloatSqrt` | `Float -> Float` |
+| `FloatAbs` | `Float -> Float` |
+| `FloatToInt` | `Float -> Int` |
+| `FloatFromInt` | `Int -> Float` |
+| `FloatToText` | `Float -> Text` |
+| `FloatParseText` | `Text -> Option Float` |
+
+Float binary operations (`+`, `-`, `*`, `/`, `<`, `>`, `<=`, `>=`) were added to the runtime binary operator dispatch alongside the existing integer paths.
+
+### 29.4 Filesystem intrinsics
+
+Added `IntrinsicValue` variants and `RuntimeTaskPlan` entries for basic filesystem I/O:
+
+| Intrinsic | Type |
+|---|---|
+| `FsReadText` | `Text -> Task FsError Text` |
+| `FsReadDir` | `Text -> Task FsError (List Text)` |
+| `FsExists` | `Text -> Task FsError Bool` |
+
+### 29.5 AIVI syntax constraints
+
+The following constraints apply when writing `.aivi` files. Violating any of them produces a parse or HIR error:
+
+- **Comments**: `//` line comments only. No `--`, no block comments in surface AIVI.
+- **No scientific notation** in float literals. Use decimal notation: `3.14`, not `3.14e0`.
+- **No prefix minus** on literals. Write `0 - n` or use `negate`.
+- **Boolean operators**: `and` and `or` keywords, not `&&`/`||`.
+- **No inline lambdas** in expressions. All functions must be named top-level declarations.
+- **Record literals** must fit on a single line. Multi-line record expressions are not supported.
+- **Nested `T|>/F|>`** must use helper functions. `T|>` and `F|>` must be an adjacent pair in the same pipe spine — nesting them requires extracting the inner branch into a named helper.
+- **`value` declarations** are monomorphic. Type variables in a `value` annotation (`value x:(Dict V)`) are rejected. Use a concrete type or promote the definition to a `fun` with a `Unit` parameter.
+- **Parameterized `type` aliases** are supported: `type Dict V = { entries: List (DictEntry V) }`.

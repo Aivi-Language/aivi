@@ -230,7 +230,7 @@ fun isVertical: Bool dir: Direction =>
 
 | Operator | Purpose |
 |---|---|
-| `||>` | Case-split / pattern match |
-| `T|>` | True branch of a boolean |
-| `F|>` | False branch of a boolean |
-| `?|>` | Guard — filter to `Option` |
+| `\|\|>` | Case-split / pattern match |
+| `T\|>` | True branch of a boolean |
+| `F\|>` | False branch of a boolean |
+| `?\|>` | Guard — filter to `Option` |

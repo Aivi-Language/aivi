@@ -1,0 +1,41 @@
+// aivi.core.fn: higher-order function combinators
+//
+// Provides identity, constant, flip, composition, and other
+// fundamental combinators for working with functions as values.
+
+fun identity:A x:A =>
+    x
+
+fun const:A x:A ignored:B =>
+    x
+
+fun flip:C f:(A -> B -> C) b:B a:A =>
+    f a b
+
+fun compose:C f:(B -> C) g:(A -> B) x:A =>
+    f (g x)
+
+fun andThen:C f:(A -> B) g:(B -> C) x:A =>
+    g (f x)
+
+fun always:A x:A ignored:B =>
+    x
+
+fun on:C combine:(B -> B -> C) transform:(A -> B) x:A y:A =>
+    combine (transform x) (transform y)
+
+fun applyTo:B arg:A f:(A -> B) =>
+    f arg
+
+fun applyTwice:A f:(A -> A) x:A =>
+    f (f x)
+
+export identity
+export const
+export flip
+export compose
+export andThen
+export always
+export on
+export applyTo
+export applyTwice

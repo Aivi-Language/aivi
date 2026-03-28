@@ -1,0 +1,244 @@
+use aivi.core.fn (
+    identity
+    const
+    flip
+    compose
+    andThen
+    always
+    on
+    applyTo
+    applyTwice
+)
+
+use aivi.core.either (
+    Either
+    Left
+    Right
+    isLeft
+    isRight
+    fromLeft
+    fromRight
+    mapLeft
+    mapRight
+    mapBoth
+    fold
+    swap
+    toOption
+    toResult
+    fromResult
+    partitionEithers
+)
+
+use aivi.core.float (
+    pi
+    e
+    tau
+    negate
+    absHelper
+    max
+    min
+    clamp
+    lerp
+    sign
+    between
+    isZero
+    isPositive
+    isNegative
+    square
+    toRadians
+    toDegrees
+)
+
+use aivi.core.dict (
+    Dict
+    singleton
+    insert
+    insertWith
+    get
+    getWithDefault
+    member
+    remove
+    size
+    keys
+    values
+    toList
+    fromList
+    mapValues
+    filterValues
+    mergeWith
+    union
+)
+
+use aivi.math (abs, negate as negateInt)
+use aivi.list (length)
+
+// ============================================================
+// aivi.core.fn
+// ============================================================
+
+value fnIdentity: Int = identity 42
+value fnConst: Int = const 7 "ignored"
+value fnFlip: Int = flip const "ignored" 99
+value fnCompose: Int = compose negateInt abs (0 - 5)
+value fnAndThen: Int = andThen abs negateInt (0 - 3)
+value fnAlways: Int = always 100 True
+value fnApplyTo: Int = applyTo 4 abs
+value fnApplyTwice: Int = applyTwice negateInt 10
+
+// ============================================================
+// aivi.core.either
+// ============================================================
+
+value eitherLeft:(Either Text Int) = Left "error"
+value eitherRight:(Either Text Int) = Right 42
+value eitherIsLeft: Bool = isLeft eitherLeft
+value eitherIsRight: Bool = isRight eitherRight
+value eitherNotLeft: Bool = isLeft eitherRight
+value eitherFromLeft:(Option Text) = fromLeft eitherLeft
+value eitherFromRight:(Option Int) = fromRight eitherRight
+value eitherFromLeftOnRight:(Option Text) = fromLeft eitherRight
+value eitherFromRightOnLeft:(Option Int) = fromRight eitherLeft
+
+fun addExcl:Text s:Text => "{s}!"
+fun doubleInt:Int n:Int => n * 2
+
+value eitherMapRight:(Either Text Int) = mapRight doubleInt eitherRight
+value eitherMapLeft:(Either Text Int) = mapLeft addExcl eitherLeft
+value eitherSwap:(Either Int Text) = swap eitherLeft
+value eitherToOption:(Option Int) = toOption eitherRight
+value eitherToOptionLeft:(Option Int) = toOption eitherLeft
+value eitherToResult:(Result Text Int) = toResult eitherRight
+
+value resultOk:(Result Text Int) = Ok 99
+value resultErr:(Result Text Int) = Err "bad"
+value eitherFromResultOk:(Either Text Int) = fromResult resultOk
+value eitherFromResultErr:(Either Text Int) = fromResult resultErr
+
+value eitherList:(List (Either Text Int)) = [Left "a", Right 1, Left "b", Right 2]
+value partitioned:((List Text, List Int)) = partitionEithers eitherList
+
+// ============================================================
+// aivi.core.float
+// ============================================================
+
+value floatPi: Float = pi
+value floatE: Float = e
+value floatTau: Float = tau
+value floatNegate: Float = negate 3.5
+value floatAbsHelper: Float = absHelper (0.0 - 4.2)
+value floatMax: Float = max 2.5 7.1
+value floatMin: Float = min 2.5 7.1
+value floatClampLow: Float = clamp 0.0 1.0 (0.0 - 0.5)
+value floatClampHigh: Float = clamp 0.0 1.0 1.5
+value floatClampMid: Float = clamp 0.0 1.0 0.5
+value floatLerp: Float = lerp 0.0 10.0 0.5
+value floatSignNeg: Float = sign (0.0 - 3.0)
+value floatSignPos: Float = sign 5.0
+value floatSignZero: Float = sign 0.0
+value floatBetweenYes: Bool = between 0.0 1.0 0.5
+value floatBetweenNo: Bool = between 0.0 1.0 2.0
+value floatIsZero: Bool = isZero 0.0
+value floatIsPositive: Bool = isPositive 1.0
+value floatIsNegative: Bool = isNegative (0.0 - 1.0)
+value floatSquare: Float = square 3.0
+value floatToRad: Float = toRadians 180.0
+value floatToDeg: Float = toDegrees pi
+
+// ============================================================
+// aivi.core.dict
+// ============================================================
+
+value dictSingle:(Dict Int) = singleton "a" 1
+value dictInsert:(Dict Int) = insert "b" 2 dictSingle
+value dictGet:(Option Int) = get "a" dictSingle
+value dictGetMissing:(Option Int) = get "z" dictSingle
+value dictGetDefault: Int = getWithDefault 0 "z" dictSingle
+value dictGetDefaultFound: Int = getWithDefault 0 "a" dictSingle
+value dictMemberYes: Bool = member "a" dictSingle
+value dictMemberNo: Bool = member "z" dictSingle
+value dictRemove:(Dict Int) = remove "a" dictSingle
+value dictRemovedSize: Int = size (remove "a" dictSingle)
+value dictSize: Int = size dictInsert
+value dictKeys:(List Text) = keys dictSingle
+value dictValues:(List Int) = values dictSingle
+
+value dictPairs:(List (Text, Int)) = [("x", 10), ("y", 20)]
+value dictFromList:(Dict Int) = fromList dictPairs
+value dictToList:(List (Text, Int)) = toList dictFromList
+
+fun doubleVal:Int n:Int => n * 2
+fun isAboveZero:Bool n:Int => n > 0
+fun isAboveFive:Bool n:Int => n > 5
+fun sumValues:Int x:Int y:Int => x + y
+
+value dictMapped:(Dict Int) = mapValues doubleVal dictSingle
+value dictFiltered:(Dict Int) = filterValues isAboveZero dictSingle
+value dictFiltered0:(Dict Int) = filterValues isAboveFive dictSingle
+
+value dictLeft:(Dict Int) = insert "a" 1 { entries: [] }
+value dictRight:(Dict Int) = insert "a" 10 { entries: [] }
+value dictMerged:(Dict Int) = mergeWith sumValues dictLeft dictRight
+value dictUnion:(Dict Int) = union dictLeft dictRight
+
+export fnIdentity
+export fnConst
+export fnFlip
+export fnCompose
+export fnAndThen
+export fnAlways
+export fnApplyTo
+export fnApplyTwice
+export eitherIsLeft
+export eitherIsRight
+export eitherNotLeft
+export eitherFromLeft
+export eitherFromRight
+export eitherFromLeftOnRight
+export eitherFromRightOnLeft
+export eitherMapRight
+export eitherMapLeft
+export eitherSwap
+export eitherToOption
+export eitherToOptionLeft
+export eitherToResult
+export eitherFromResultOk
+export eitherFromResultErr
+export partitioned
+export floatPi
+export floatE
+export floatTau
+export floatNegate
+export floatAbsHelper
+export floatMax
+export floatMin
+export floatClampLow
+export floatClampHigh
+export floatClampMid
+export floatLerp
+export floatSignNeg
+export floatSignPos
+export floatSignZero
+export floatBetweenYes
+export floatBetweenNo
+export floatIsZero
+export floatIsPositive
+export floatIsNegative
+export floatSquare
+export floatToRad
+export floatToDeg
+export dictGet
+export dictGetMissing
+export dictGetDefault
+export dictGetDefaultFound
+export dictMemberYes
+export dictMemberNo
+export dictSize
+export dictRemovedSize
+export dictKeys
+export dictValues
+export dictToList
+export dictMapped
+export dictFiltered
+export dictFiltered0
+export dictMerged
+export dictUnion

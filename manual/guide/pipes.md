@@ -235,13 +235,11 @@ type User = {
     email: Text
 }
 
-fun formatUser: Text user: User =>
-    "({user.age}) {user.email}"
+fun formatUser: Text user: User => "({user.age}) {user.email}"
 
-signal activeUserText: Signal (Option Text) =
-    userSignal
-     ?|> (.active and .age > 18)
-     *|> formatUser
+signal activeUserText: Signal (Option Text) = userSignal
+  ?|> (.active and .age > 18)
+  *|> formatUser
 ```
 
 This reads: "take `userSignal`, keep only active adults, then format each one."
@@ -250,7 +248,7 @@ This reads: "take `userSignal`, keep only active adults, then format each one."
 
 | Operator | Name | Description |
 |---|---|---|
-| `\|>` | Apply | `value \|> f` → `f value` |
+| ` \|>` | Apply | `value \|> f` → `f value` |
 | `*\|>` | Map | Apply inside a container or signal |
 | `!\|>` | Validate | Apply a `Result`-returning function |
 | `?\|>` | Guard | Keep value only if predicate holds |

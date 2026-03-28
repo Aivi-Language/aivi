@@ -9682,6 +9682,45 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::Text),
                 task(primitive(BuiltinType::Text), primitive(BuiltinType::Unit)),
             ),
+            IntrinsicValue::FloatFloor
+            | IntrinsicValue::FloatCeil
+            | IntrinsicValue::FloatRound
+            | IntrinsicValue::FloatSqrt
+            | IntrinsicValue::FloatAbs => arrow(
+                primitive(BuiltinType::Float),
+                primitive(BuiltinType::Float),
+            ),
+            IntrinsicValue::FloatToInt => arrow(
+                primitive(BuiltinType::Float),
+                primitive(BuiltinType::Int),
+            ),
+            IntrinsicValue::FloatFromInt => arrow(
+                primitive(BuiltinType::Int),
+                primitive(BuiltinType::Float),
+            ),
+            IntrinsicValue::FloatToText => arrow(
+                primitive(BuiltinType::Float),
+                primitive(BuiltinType::Text),
+            ),
+            IntrinsicValue::FloatParseText => arrow(
+                primitive(BuiltinType::Text),
+                GateType::Option(Box::new(primitive(BuiltinType::Float))),
+            ),
+            IntrinsicValue::FsReadText => arrow(
+                primitive(BuiltinType::Text),
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+            ),
+            IntrinsicValue::FsReadDir => arrow(
+                primitive(BuiltinType::Text),
+                task(
+                    primitive(BuiltinType::Text),
+                    GateType::List(Box::new(primitive(BuiltinType::Text))),
+                ),
+            ),
+            IntrinsicValue::FsExists => arrow(
+                primitive(BuiltinType::Text),
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Bool)),
+            ),
         }
     }
 

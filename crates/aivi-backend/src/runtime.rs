@@ -65,6 +65,9 @@ pub enum RuntimeTaskPlan {
     FsWriteBytes { path: Box<str>, bytes: Box<[u8]> },
     FsCreateDirAll { path: Box<str> },
     FsDeleteFile { path: Box<str> },
+    FsReadText { path: Box<str> },
+    FsReadDir { path: Box<str> },
+    FsExists { path: Box<str> },
 }
 
 impl fmt::Display for RuntimeTaskPlan {
@@ -78,6 +81,9 @@ impl fmt::Display for RuntimeTaskPlan {
             Self::FsWriteBytes { path, .. } => write!(f, "writeBytes({path})"),
             Self::FsCreateDirAll { path } => write!(f, "createDirAll({path})"),
             Self::FsDeleteFile { path } => write!(f, "deleteFile({path})"),
+            Self::FsReadText { path } => write!(f, "readText({path})"),
+            Self::FsReadDir { path } => write!(f, "readDir({path})"),
+            Self::FsExists { path } => write!(f, "exists({path})"),
         }
     }
 }
@@ -501,6 +507,12 @@ pub enum EvaluationError {
         index: usize,
         found: RuntimeValue,
     },
+    IntrinsicFailed {
+        kernel: KernelId,
+        expr: KernelExprId,
+        value: IntrinsicValue,
+        reason: &'static str,
+    },
     UnsupportedDomainMemberCall {
         kernel: KernelId,
         expr: KernelExprId,
@@ -677,6 +689,15 @@ impl fmt::Display for EvaluationError {
                 f,
                 "kernel {kernel} received invalid argument {} for intrinsic `{value}`: `{found}`",
                 index + 1
+            ),
+            Self::IntrinsicFailed {
+                kernel,
+                value,
+                reason,
+                ..
+            } => write!(
+                f,
+                "kernel {kernel} intrinsic `{value}` failed: {reason}"
             ),
             Self::UnsupportedDomainMemberCall { kernel, handle, .. } => write!(
                 f,
@@ -2864,6 +2885,16 @@ impl<'a> KernelEvaluator<'a> {
                         right: RuntimeValue::Int(*right),
                         reason: "signed addition overflow",
                     }),
+                (RuntimeValue::Float(lv), RuntimeValue::Float(rv)) => {
+                    RuntimeFloat::new(lv.to_f64() + rv.to_f64())
+                        .map(RuntimeValue::Float)
+                        .ok_or(EvaluationError::InvalidBinaryArithmetic {
+                            kernel: kernel_id, expr, operator,
+                            left: RuntimeValue::Float(*lv),
+                            right: RuntimeValue::Float(*rv),
+                            reason: "float addition result is not finite",
+                        })
+                }
                 _ => apply_i64_like_binary(
                     kernel_id,
                     expr,
@@ -2886,6 +2917,16 @@ impl<'a> KernelEvaluator<'a> {
                         right: RuntimeValue::Int(*right),
                         reason: "signed subtraction overflow",
                     }),
+                (RuntimeValue::Float(lv), RuntimeValue::Float(rv)) => {
+                    RuntimeFloat::new(lv.to_f64() - rv.to_f64())
+                        .map(RuntimeValue::Float)
+                        .ok_or(EvaluationError::InvalidBinaryArithmetic {
+                            kernel: kernel_id, expr, operator,
+                            left: RuntimeValue::Float(*lv),
+                            right: RuntimeValue::Float(*rv),
+                            reason: "float subtraction result is not finite",
+                        })
+                }
                 _ => apply_i64_like_binary(
                     kernel_id,
                     expr,
@@ -2908,6 +2949,16 @@ impl<'a> KernelEvaluator<'a> {
                         right: RuntimeValue::Int(*right),
                         reason: "signed multiplication overflow",
                     }),
+                (RuntimeValue::Float(lv), RuntimeValue::Float(rv)) => {
+                    RuntimeFloat::new(lv.to_f64() * rv.to_f64())
+                        .map(RuntimeValue::Float)
+                        .ok_or(EvaluationError::InvalidBinaryArithmetic {
+                            kernel: kernel_id, expr, operator,
+                            left: RuntimeValue::Float(*lv),
+                            right: RuntimeValue::Float(*rv),
+                            reason: "float multiplication result is not finite",
+                        })
+                }
                 _ => apply_i64_like_binary(
                     kernel_id,
                     expr,
@@ -2934,6 +2985,16 @@ impl<'a> KernelEvaluator<'a> {
                             "signed division overflow"
                         },
                     }),
+                (RuntimeValue::Float(lf), RuntimeValue::Float(rf)) => {
+                    RuntimeFloat::new(lf.to_f64() / rf.to_f64())
+                        .map(RuntimeValue::Float)
+                        .ok_or(EvaluationError::InvalidBinaryArithmetic {
+                            kernel: kernel_id, expr, operator,
+                            left: RuntimeValue::Float(*lf),
+                            right: RuntimeValue::Float(*rf),
+                            reason: "float division result is not finite",
+                        })
+                }
                 _ => {
                     let Some((left_int, right_int, preserved_suffix)) =
                         coerce_i64_like_operands(&left, &right)
@@ -3012,6 +3073,9 @@ impl<'a> KernelEvaluator<'a> {
                 (RuntimeValue::Int(left), RuntimeValue::Int(right)) => {
                     Ok(RuntimeValue::Bool(left > right))
                 }
+                (RuntimeValue::Float(left), RuntimeValue::Float(right)) => {
+                    Ok(RuntimeValue::Bool(left.to_f64() > right.to_f64()))
+                }
                 _ => apply_i64_like_comparison(
                     kernel_id,
                     expr,
@@ -3024,6 +3088,9 @@ impl<'a> KernelEvaluator<'a> {
             BinaryOperator::LessThan => match (&left, &right) {
                 (RuntimeValue::Int(left), RuntimeValue::Int(right)) => {
                     Ok(RuntimeValue::Bool(left < right))
+                }
+                (RuntimeValue::Float(left), RuntimeValue::Float(right)) => {
+                    Ok(RuntimeValue::Bool(left.to_f64() < right.to_f64()))
                 }
                 _ => apply_i64_like_comparison(
                     kernel_id,
@@ -3038,6 +3105,9 @@ impl<'a> KernelEvaluator<'a> {
                 (RuntimeValue::Int(left), RuntimeValue::Int(right)) => {
                     Ok(RuntimeValue::Bool(left >= right))
                 }
+                (RuntimeValue::Float(left), RuntimeValue::Float(right)) => {
+                    Ok(RuntimeValue::Bool(left.to_f64() >= right.to_f64()))
+                }
                 _ => apply_i64_like_comparison(
                     kernel_id,
                     expr,
@@ -3050,6 +3120,9 @@ impl<'a> KernelEvaluator<'a> {
             BinaryOperator::LessThanOrEqual => match (&left, &right) {
                 (RuntimeValue::Int(left), RuntimeValue::Int(right)) => {
                     Ok(RuntimeValue::Bool(left <= right))
+                }
+                (RuntimeValue::Float(left), RuntimeValue::Float(right)) => {
+                    Ok(RuntimeValue::Bool(left.to_f64() <= right.to_f64()))
                 }
                 _ => apply_i64_like_comparison(
                     kernel_id,
@@ -3237,6 +3310,18 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::FsWriteBytes => 2,
         IntrinsicValue::FsCreateDirAll => 1,
         IntrinsicValue::FsDeleteFile => 1,
+        IntrinsicValue::FloatFloor
+        | IntrinsicValue::FloatCeil
+        | IntrinsicValue::FloatRound
+        | IntrinsicValue::FloatSqrt
+        | IntrinsicValue::FloatAbs
+        | IntrinsicValue::FloatToInt
+        | IntrinsicValue::FloatFromInt
+        | IntrinsicValue::FloatToText
+        | IntrinsicValue::FloatParseText => 1,
+        IntrinsicValue::FsReadText => 1,
+        IntrinsicValue::FsReadDir => 1,
+        IntrinsicValue::FsExists => 1,
     }
 }
 
@@ -3287,6 +3372,105 @@ fn evaluate_intrinsic_value(
         }
         (IntrinsicValue::FsDeleteFile, [path]) => {
             Ok(RuntimeValue::Task(RuntimeTaskPlan::FsDeleteFile {
+                path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
+            }))
+        }
+        // Float math intrinsics — pure functions, return directly
+        (IntrinsicValue::FloatFloor, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.floor())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatFloor,
+                    reason: "floor result is not finite".into(),
+                })
+        }
+        (IntrinsicValue::FloatCeil, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.ceil())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatCeil,
+                    reason: "ceil result is not finite".into(),
+                })
+        }
+        (IntrinsicValue::FloatRound, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.round())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatRound,
+                    reason: "round result is not finite".into(),
+                })
+        }
+        (IntrinsicValue::FloatSqrt, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.sqrt())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatSqrt,
+                    reason: "sqrt of negative number",
+                })
+        }
+        (IntrinsicValue::FloatAbs, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.abs())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatAbs,
+                    reason: "abs result is not finite".into(),
+                })
+        }
+        (IntrinsicValue::FloatToInt, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::Int(f as i64))
+        }
+        (IntrinsicValue::FloatFromInt, [n]) => {
+            let i = expect_intrinsic_i64(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(i as f64)
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatFromInt,
+                    reason: "int-to-float result is not finite".into(),
+                })
+        }
+        (IntrinsicValue::FloatToText, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::Text(f.to_string().into()))
+        }
+        (IntrinsicValue::FloatParseText, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            let result = s.parse::<f64>().ok().and_then(RuntimeFloat::new);
+            match result {
+                Some(f) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Float(f)))),
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        // FS read intrinsics
+        (IntrinsicValue::FsReadText, [path]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::FsReadText {
+                path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
+            }))
+        }
+        (IntrinsicValue::FsReadDir, [path]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::FsReadDir {
+                path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
+            }))
+        }
+        (IntrinsicValue::FsExists, [path]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::FsExists {
                 path: expect_intrinsic_text(kernel, expr, value, 0, path)?,
             }))
         }
@@ -3611,6 +3795,25 @@ fn expect_intrinsic_bytes(
 ) -> Result<Box<[u8]>, EvaluationError> {
     match strip_signal(argument.clone()) {
         RuntimeValue::Bytes(found) => Ok(found),
+        found => Err(EvaluationError::InvalidIntrinsicArgument {
+            kernel,
+            expr,
+            value,
+            index,
+            found: found.clone(),
+        }),
+    }
+}
+
+fn expect_intrinsic_float(
+    kernel: KernelId,
+    expr: KernelExprId,
+    value: IntrinsicValue,
+    index: usize,
+    argument: &RuntimeValue,
+) -> Result<f64, EvaluationError> {
+    match strip_signal(argument.clone()) {
+        RuntimeValue::Float(found) => Ok(found.to_f64()),
         found => Err(EvaluationError::InvalidIntrinsicArgument {
             kernel,
             expr,

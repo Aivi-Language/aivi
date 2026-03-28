@@ -45,7 +45,16 @@ export default defineConfig({
         items: [
           { text: 'Standard Library', link: '/stdlib/' },
           {
-            text: 'Modules',
+            text: 'Core Modules',
+            items: [
+              { text: 'aivi.core.fn', link: '/stdlib/fn' },
+              { text: 'aivi.core.either', link: '/stdlib/either' },
+              { text: 'aivi.core.float', link: '/stdlib/float' },
+              { text: 'aivi.core.dict', link: '/stdlib/dict' },
+            ],
+          },
+          {
+            text: 'Foundation Modules',
             items: [
               { text: 'aivi.bool', link: '/stdlib/bool' },
               { text: 'aivi.list', link: '/stdlib/list' },
