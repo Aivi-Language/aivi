@@ -85,6 +85,18 @@ export default defineConfig({
               { text: 'aivi.data.json', link: '/stdlib/json' },
             ],
           },
+          {
+            text: 'Desktop',
+            items: [
+              { text: 'aivi.desktop.xdg', link: '/stdlib/xdg' },
+            ],
+          },
+          {
+            text: 'App Framework',
+            items: [
+              { text: 'aivi.app', link: '/stdlib/app' },
+            ],
+          },
         ],
       },
     ],

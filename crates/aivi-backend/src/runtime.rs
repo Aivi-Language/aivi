@@ -3367,6 +3367,41 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::JsonKeys => 1,
         IntrinsicValue::JsonPretty => 1,
         IntrinsicValue::JsonMinify => 1,
+        IntrinsicValue::XdgDataHome => 0,
+        IntrinsicValue::XdgConfigHome => 0,
+        IntrinsicValue::XdgCacheHome => 0,
+        IntrinsicValue::XdgStateHome => 0,
+        IntrinsicValue::XdgRuntimeDir => 0,
+        IntrinsicValue::XdgDataDirs => 0,
+        IntrinsicValue::XdgConfigDirs => 0,
+    }
+}
+
+/// Return an XDG base directory: use the env var if set and non-empty, otherwise `$HOME/fallback`.
+fn xdg_dir(env_var: &str, fallback: &str) -> String {
+    if let Ok(val) = std::env::var(env_var) {
+        if !val.is_empty() {
+            return val;
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_owned());
+    format!("{home}/{fallback}")
+}
+
+/// Return a colon-separated XDG search path as a list. Falls back to `defaults` when the env var
+/// is absent or empty.
+fn xdg_search_dirs(env_var: &str, defaults: &[&str]) -> Vec<RuntimeValue> {
+    let raw = std::env::var(env_var).unwrap_or_default();
+    if raw.is_empty() {
+        defaults
+            .iter()
+            .map(|s| RuntimeValue::Text((*s).into()))
+            .collect()
+    } else {
+        raw.split(':')
+            .filter(|s| !s.is_empty())
+            .map(|s| RuntimeValue::Text(s.into()))
+            .collect()
     }
 }
 
@@ -3675,6 +3710,39 @@ fn evaluate_intrinsic_value(
         (IntrinsicValue::JsonMinify, [json]) => {
             let text = expect_intrinsic_text(kernel, expr, value, 0, json)?;
             Ok(RuntimeValue::Task(RuntimeTaskPlan::JsonMinify { json: text }))
+        }
+        (IntrinsicValue::XdgDataHome, []) => {
+            let path = xdg_dir("XDG_DATA_HOME", ".local/share");
+            Ok(RuntimeValue::Text(path.into()))
+        }
+        (IntrinsicValue::XdgConfigHome, []) => {
+            let path = xdg_dir("XDG_CONFIG_HOME", ".config");
+            Ok(RuntimeValue::Text(path.into()))
+        }
+        (IntrinsicValue::XdgCacheHome, []) => {
+            let path = xdg_dir("XDG_CACHE_HOME", ".cache");
+            Ok(RuntimeValue::Text(path.into()))
+        }
+        (IntrinsicValue::XdgStateHome, []) => {
+            let path = xdg_dir("XDG_STATE_HOME", ".local/state");
+            Ok(RuntimeValue::Text(path.into()))
+        }
+        (IntrinsicValue::XdgRuntimeDir, []) => {
+            Ok(std::env::var("XDG_RUNTIME_DIR")
+                .ok()
+                .map(|s| RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(s.into()))))
+                .unwrap_or(RuntimeValue::OptionNone))
+        }
+        (IntrinsicValue::XdgDataDirs, []) => {
+            let dirs = xdg_search_dirs(
+                "XDG_DATA_DIRS",
+                &["/usr/local/share", "/usr/share"],
+            );
+            Ok(RuntimeValue::List(dirs))
+        }
+        (IntrinsicValue::XdgConfigDirs, []) => {
+            let dirs = xdg_search_dirs("XDG_CONFIG_DIRS", &["/etc/xdg"]);
+            Ok(RuntimeValue::List(dirs))
         }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
     }

@@ -302,6 +302,14 @@ pub enum IntrinsicValue {
     JsonKeys,
     JsonPretty,
     JsonMinify,
+    // XDG base directory intrinsics (pure/synchronous — read env vars with fallbacks)
+    XdgDataHome,
+    XdgConfigHome,
+    XdgCacheHome,
+    XdgStateHome,
+    XdgRuntimeDir,
+    XdgDataDirs,
+    XdgConfigDirs,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -352,6 +360,13 @@ impl fmt::Display for IntrinsicValue {
             Self::JsonKeys => f.write_str("aivi.data.json.keys"),
             Self::JsonPretty => f.write_str("aivi.data.json.pretty"),
             Self::JsonMinify => f.write_str("aivi.data.json.minify"),
+            Self::XdgDataHome => f.write_str("aivi.desktop.xdg.dataHome"),
+            Self::XdgConfigHome => f.write_str("aivi.desktop.xdg.configHome"),
+            Self::XdgCacheHome => f.write_str("aivi.desktop.xdg.cacheHome"),
+            Self::XdgStateHome => f.write_str("aivi.desktop.xdg.stateHome"),
+            Self::XdgRuntimeDir => f.write_str("aivi.desktop.xdg.runtimeDir"),
+            Self::XdgDataDirs => f.write_str("aivi.desktop.xdg.dataDirs"),
+            Self::XdgConfigDirs => f.write_str("aivi.desktop.xdg.configDirs"),
         }
     }
 }

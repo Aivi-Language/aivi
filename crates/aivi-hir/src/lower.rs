@@ -6087,6 +6087,35 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 ),
             ),
         )),
+        // XDG base directory intrinsics — synchronous, no I/O cost beyond env-var reads
+        ("aivi.desktop.xdg", "dataHome") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgDataHome,
+            primitive_import_type(BuiltinType::Text),
+        )),
+        ("aivi.desktop.xdg", "configHome") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgConfigHome,
+            primitive_import_type(BuiltinType::Text),
+        )),
+        ("aivi.desktop.xdg", "cacheHome") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgCacheHome,
+            primitive_import_type(BuiltinType::Text),
+        )),
+        ("aivi.desktop.xdg", "stateHome") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgStateHome,
+            primitive_import_type(BuiltinType::Text),
+        )),
+        ("aivi.desktop.xdg", "runtimeDir") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgRuntimeDir,
+            option_import_type(primitive_import_type(BuiltinType::Text)),
+        )),
+        ("aivi.desktop.xdg", "dataDirs") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgDataDirs,
+            list_import_type(primitive_import_type(BuiltinType::Text)),
+        )),
+        ("aivi.desktop.xdg", "configDirs") => Some(intrinsic_import_value(
+            IntrinsicValue::XdgConfigDirs,
+            list_import_type(primitive_import_type(BuiltinType::Text)),
+        )),
         _ => None,
     }
 }

@@ -9857,6 +9857,19 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::Text),
                 task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
             ),
+            IntrinsicValue::XdgDataHome => primitive(BuiltinType::Text),
+            IntrinsicValue::XdgConfigHome => primitive(BuiltinType::Text),
+            IntrinsicValue::XdgCacheHome => primitive(BuiltinType::Text),
+            IntrinsicValue::XdgStateHome => primitive(BuiltinType::Text),
+            IntrinsicValue::XdgRuntimeDir => {
+                GateType::Option(Box::new(primitive(BuiltinType::Text)))
+            }
+            IntrinsicValue::XdgDataDirs => {
+                GateType::List(Box::new(primitive(BuiltinType::Text)))
+            }
+            IntrinsicValue::XdgConfigDirs => {
+                GateType::List(Box::new(primitive(BuiltinType::Text)))
+            }
         }
     }
 

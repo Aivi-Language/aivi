@@ -1,0 +1,25 @@
+// Application lifecycle state for AIVI apps.
+type AppLifecycle =
+  | Starting
+  | Running
+  | Suspended
+  | Stopping
+  | Stopped
+
+// Result of an app action or command.
+type AppActionResult A =
+  | ActionOk A
+  | ActionFailed Text
+  | ActionCancelled
+
+// An application command that carries a label and a description.
+type AppCommand = { label : Text, description : Text, shortcut : Option Text }
+
+// Undo/redo history state.
+type UndoState = { canUndo : Bool, canRedo : Bool, depth : Int }
+
+// Application notification level.
+type NotificationLevel = Info | Warning | Error | Success
+
+// A notification issued by the app.
+type AppNotification = { level : NotificationLevel, title : Text, body : Option Text }
