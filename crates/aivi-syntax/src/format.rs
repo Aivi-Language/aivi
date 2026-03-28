@@ -285,6 +285,20 @@ impl Formatter {
         };
 
         let mut lines = vec![header];
+        for with_decl in &body.with_decls {
+            lines.push(format!(
+                "{}with {}",
+                spaces(INDENT_WIDTH),
+                self.format_type_inline(&with_decl.superclass, 0)
+            ));
+        }
+        for require_decl in &body.require_decls {
+            lines.push(format!(
+                "{}require {}",
+                spaces(INDENT_WIDTH),
+                self.format_type_inline(&require_decl.constraint, 0)
+            ));
+        }
         for member in &body.members {
             lines.extend(self.format_class_member(member));
         }
@@ -2015,6 +2029,22 @@ value view =
                 "\n",
                 "instance Eq Blob\n",
                 "    (==) left right = same left right\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_preserves_class_with_and_require_declarations() {
+        let formatted = format_text(
+            "class Applicative F\n    with Functor F\n    require Eq A\n    pureInt:F Int\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "class Applicative F\n",
+                "    with Functor F\n",
+                "    require Eq A\n",
+                "    pureInt: F Int\n",
             )
         );
     }

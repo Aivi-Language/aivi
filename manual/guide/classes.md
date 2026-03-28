@@ -23,22 +23,26 @@ class Display A
 Use `with` inside the class body to declare that your class extends another class.
 Any instance of the derived class must also provide an instance of each superclass.
 
-```
-class Functor F
-    map: (A -> B) -> F A -> F B
+```aivi
+class Named A
+    name:A -> Text
 
-class Applicative F
-    pure: A -> F A
-    ap: F (A -> B) -> F A -> F B
+class Displayed A
+    with Named A
+    display:A -> Text
 
-class Monad M
-    bind: M A -> (A -> M B) -> M B
+class Logged A
+    with Displayed A
+    logLine:A -> Text
 ```
+
 Multiple superclasses are listed as separate `with` lines:
 
 ```aivi
-class Traversable F
-    traverse: Applicative G
+class CacheKey A
+    with Eq A
+    with Default A
+    canonical:A -> A
 ```
 
 ## Parameter constraints
@@ -46,8 +50,9 @@ class Traversable F
 Use `require` inside the class body to constrain a type parameter. This documents that any type substituted for that parameter must satisfy the given class.
 
 ```
-class Container F
-    contains: A -> F A -> Bool
+class Container A
+    require Eq A
+    contains: A -> List A -> Bool
 ```
 
 ## Using class-backed operators
