@@ -10,7 +10,7 @@ Pipes are the primary way to compose data transformations in AIVI. Instead of de
 fun double: Int n: Int => n * 2
 fun addOne: Int n: Int => n + 1
 
-value result = 5 |> double |> addOne   -- 11
+value result = 5 |> double |> addOne   // 11
 ```
 
 This is equivalent to `addOne (double 5)`, but reads in the order of execution.
@@ -33,7 +33,7 @@ fun multiply: Int factor: Int n: Int => factor * n
 
 value result =
     5
-     |> multiply 3   -- multiply 3 5 = 15
+     |> multiply 3   // multiply 3 5 = 15
 ```
 
 ## Map `*|>`
@@ -217,10 +217,10 @@ Pipes are **left-associative** and have lower precedence than arithmetic and fun
 Within the pipe operators themselves, they all have the same precedence and associate left-to-right:
 
 ```aivi
--- This:
+// This:
 a &|> b |> f
 
--- Is the same as:
+// Is the same as:
 (a &|> b) |> f
 ```
 

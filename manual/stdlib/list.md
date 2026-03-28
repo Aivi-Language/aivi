@@ -35,8 +35,8 @@ fun describe : Text items : List Int =>
      T|> "empty list"
      F|> "has elements"
 
-value result : Text = describe []        -- "empty list"
-value result2 : Text = describe [1, 2]   -- "has elements"
+value result : Text = describe []        // "empty list"
+value result2 : Text = describe [1, 2]   // "has elements"
 ```
 
 ---
@@ -57,7 +57,7 @@ fun describeList : Text items : List Int =>
      T|> "has elements"
      F|> "empty"
 
-value result : Text = describeList [42]   -- "has elements"
+value result : Text = describeList [42]   // "has elements"
 ```
 
 ---
@@ -73,7 +73,7 @@ length : (List A) -> Int
 ```aivi
 use aivi.list (length)
 
-value n : Int = length [10, 20, 30]   -- 3
+value n : Int = length [10, 20, 30]   // 3
 ```
 
 ---
@@ -94,8 +94,8 @@ fun firstOrZero : Int items : List Int =>
      ||> None      -> 0
      ||> Some n    -> n
 
-value result : Int = firstOrZero [5, 10, 15]   -- 5
-value fallback : Int = firstOrZero []           -- 0
+value result : Int = firstOrZero [5, 10, 15]   // 5
+value fallback : Int = firstOrZero []           // 0
 ```
 
 ---
@@ -116,7 +116,7 @@ fun restOrEmpty : List Int items : List Int =>
      ||> None           -> []
      ||> Some remaining -> remaining
 
-value result : List Int = restOrEmpty [1, 2, 3]   -- [2, 3]
+value result : List Int = restOrEmpty [1, 2, 3]   // [2, 3]
 ```
 
 ---
@@ -132,8 +132,8 @@ tailOrEmpty : (List A) -> List A
 ```aivi
 use aivi.list (tailOrEmpty)
 
-value rest : List Int = tailOrEmpty [1, 2, 3]   -- [2, 3]
-value none : List Int = tailOrEmpty []           -- []
+value rest : List Int = tailOrEmpty [1, 2, 3]   // [2, 3]
+value none : List Int = tailOrEmpty []           // []
 ```
 
 ---
@@ -154,7 +154,7 @@ fun finalScore : Int scores : List Int =>
      ||> None      -> 0
      ||> Some n    -> n
 
-value result : Int = finalScore [80, 90, 95]   -- 95
+value result : Int = finalScore [80, 90, 95]   // 95
 ```
 
 ---
@@ -177,7 +177,7 @@ use aivi.list (map)
 fun double : Int n : Int =>
     n * 2
 
-value result : List Int = [1, 2, 3] |> map double   -- [2, 4, 6]
+value result : List Int = [1, 2, 3] |> map double   // [2, 4, 6]
 ```
 
 ---
@@ -196,7 +196,7 @@ use aivi.list (filter)
 fun isPositive : Bool n : Int =>
     n > 0
 
-value result : List Int = [-1, 2, -3, 4] |> filter isPositive   -- [2, 4]
+value result : List Int = [-1, 2, -3, 4] |> filter isPositive   // [2, 4]
 ```
 
 ---
@@ -214,7 +214,7 @@ use aivi.list (flatten)
 
 value nested : List (List Int) = [[1, 2], [3, 4], [5]]
 
-value flat : List Int = flatten nested   -- [1, 2, 3, 4, 5]
+value flat : List Int = flatten nested   // [1, 2, 3, 4, 5]
 ```
 
 ---
@@ -232,7 +232,7 @@ use aivi.list (concat)
 
 value lines : List (List Text) = [["hello", "world"], ["foo", "bar"]]
 
-value all : List Text = concat lines   -- ["hello", "world", "foo", "bar"]
+value all : List Text = concat lines   // ["hello", "world", "foo", "bar"]
 ```
 
 ---
@@ -251,7 +251,7 @@ use aivi.list (flatMap)
 fun twice : List Int n : Int =>
     [n, n]
 
-value result : List Int = [1, 2, 3] |> flatMap twice   -- [1, 1, 2, 2, 3, 3]
+value result : List Int = [1, 2, 3] |> flatMap twice   // [1, 1, 2, 2, 3, 3]
 ```
 
 ---
@@ -269,7 +269,7 @@ use aivi.list (reverse)
 
 value original : List Int = [1, 2, 3, 4, 5]
 
-value reversed : List Int = reverse original   -- [5, 4, 3, 2, 1]
+value reversed : List Int = reverse original   // [5, 4, 3, 2, 1]
 ```
 
 ---
@@ -287,7 +287,7 @@ use aivi.list (take)
 
 value items : List Int = [10, 20, 30, 40, 50]
 
-value first3 : List Int = take 3 items   -- [10, 20, 30]
+value first3 : List Int = take 3 items   // [10, 20, 30]
 ```
 
 ---
@@ -305,7 +305,7 @@ use aivi.list (drop)
 
 value items : List Int = [10, 20, 30, 40, 50]
 
-value after2 : List Int = drop 2 items   -- [30, 40, 50]
+value after2 : List Int = drop 2 items   // [30, 40, 50]
 ```
 
 ---
@@ -324,7 +324,7 @@ use aivi.list (takeWhile)
 fun isSmall : Bool n : Int =>
     n < 10
 
-value result : List Int = [2, 5, 8, 11, 3] |> takeWhile isSmall   -- [2, 5, 8]
+value result : List Int = [2, 5, 8, 11, 3] |> takeWhile isSmall   // [2, 5, 8]
 ```
 
 ---
@@ -343,7 +343,7 @@ use aivi.list (dropWhile)
 fun isSmall : Bool n : Int =>
     n < 10
 
-value result : List Int = [2, 5, 8, 11, 3] |> dropWhile isSmall   -- [11, 3]
+value result : List Int = [2, 5, 8, 11, 3] |> dropWhile isSmall   // [11, 3]
 ```
 
 ---
@@ -362,7 +362,7 @@ use aivi.list (intersperse)
 value words : List Text = ["one", "two", "three"]
 
 value spaced : List Text = intersperse ", " words
--- ["one", ", ", "two", ", ", "three"]
+// ["one", ", ", "two", ", ", "three"]
 ```
 
 ---
@@ -385,7 +385,7 @@ use aivi.list (any)
 fun isNegative : Bool n : Int =>
     n < 0
 
-value result : Bool = any isNegative [1, -2, 3]   -- True
+value result : Bool = any isNegative [1, -2, 3]   // True
 ```
 
 ---
@@ -404,8 +404,8 @@ use aivi.list (all)
 fun isPositive : Bool n : Int =>
     n > 0
 
-value allPositive : Bool = all isPositive [1, 2, 3]    -- True
-value someNeg : Bool = all isPositive [1, -2, 3]       -- False
+value allPositive : Bool = all isPositive [1, 2, 3]    // True
+value someNeg : Bool = all isPositive [1, -2, 3]       // False
 ```
 
 ---
@@ -424,7 +424,7 @@ use aivi.list (count)
 fun isPositive : Bool n : Int =>
     n > 0
 
-value n : Int = count isPositive [-1, 2, 3, -4, 5]   -- 3
+value n : Int = count isPositive [-1, 2, 3, -4, 5]   // 3
 ```
 
 ---
@@ -467,7 +467,7 @@ fun asPositive : Option Int n : Int =>
      T|> Some n
      F|> None
 
-value result : Option Int = findMap asPositive [-3, -1, 4, 7]   -- Some 4
+value result : Option Int = findMap asPositive [-3, -1, 4, 7]   // Some 4
 ```
 
 ---
@@ -486,8 +486,8 @@ use aivi.list (contains)
 fun intEq : Bool a : Int b : Int =>
     a == b
 
-value found : Bool = contains intEq 3 [1, 2, 3, 4, 5]   -- True
-value missing : Bool = contains intEq 9 [1, 2, 3]        -- False
+value found : Bool = contains intEq 3 [1, 2, 3, 4, 5]   // True
+value missing : Bool = contains intEq 9 [1, 2, 3]        // False
 ```
 
 ---
@@ -506,7 +506,7 @@ use aivi.list (indexOf)
 fun isThirty : Bool n : Int =>
     n == 30
 
-value idx : Option Int = indexOf isThirty [10, 20, 30, 40]   -- Some 2
+value idx : Option Int = indexOf isThirty [10, 20, 30, 40]   // Some 2
 ```
 
 ---
@@ -526,7 +526,7 @@ sum : (List Int) -> Int
 ```aivi
 use aivi.list (sum)
 
-value total : Int = sum [1, 2, 3, 4, 5]   -- 15
+value total : Int = sum [1, 2, 3, 4, 5]   // 15
 ```
 
 ---
@@ -542,7 +542,7 @@ product : (List Int) -> Int
 ```aivi
 use aivi.list (product)
 
-value result : Int = product [1, 2, 3, 4, 5]   -- 120
+value result : Int = product [1, 2, 3, 4, 5]   // 120
 ```
 
 ---
@@ -561,7 +561,7 @@ use aivi.list (maximum)
 fun isLess : Bool a : Int b : Int =>
     a < b
 
-value highest : Option Int = maximum isLess [3, 1, 4, 1, 5, 9, 2, 6]   -- Some 9
+value highest : Option Int = maximum isLess [3, 1, 4, 1, 5, 9, 2, 6]   // Some 9
 ```
 
 ---
@@ -580,7 +580,7 @@ use aivi.list (minimum)
 fun isLess : Bool a : Int b : Int =>
     a < b
 
-value lowest : Option Int = minimum isLess [3, 1, 4, 1, 5, 9, 2, 6]   -- Some 1
+value lowest : Option Int = minimum isLess [3, 1, 4, 1, 5, 9, 2, 6]   // Some 1
 ```
 
 ---
@@ -603,7 +603,7 @@ use aivi.list (unique)
 fun intEq : Bool a : Int b : Int =>
     a == b
 
-value deduped : List Int = unique intEq [1, 2, 1, 3, 2, 4]   -- [1, 2, 3, 4]
+value deduped : List Int = unique intEq [1, 2, 1, 3, 2, 4]   // [1, 2, 3, 4]
 ```
 
 ---
@@ -622,7 +622,7 @@ use aivi.list (sortBy)
 fun intLt : Bool a : Int b : Int =>
     a < b
 
-value sorted : List Int = sortBy intLt [3, 1, 4, 1, 5, 9]   -- [1, 1, 3, 4, 5, 9]
+value sorted : List Int = sortBy intLt [3, 1, 4, 1, 5, 9]   // [1, 1, 3, 4, 5, 9]
 ```
 
 For descending order, reverse the comparison:
@@ -633,7 +633,7 @@ use aivi.list (sortBy)
 fun intGt : Bool a : Int b : Int =>
     a > b
 
-value descending : List Int = sortBy intGt [3, 1, 4, 1, 5, 9]   -- [9, 5, 4, 3, 1, 1]
+value descending : List Int = sortBy intGt [3, 1, 4, 1, 5, 9]   // [9, 5, 4, 3, 1, 1]
 ```
 
 ---
@@ -656,8 +656,8 @@ fun isPositive : Bool n : Int =>
 
 value groups : Partition Int = partition isPositive [-1, 2, -3, 4, -5, 6]
 
-value positive : List Int = groups.matched     -- [2, 4, 6]
-value negative : List Int = groups.unmatched   -- [-1, -3, -5]
+value positive : List Int = groups.matched     // [2, 4, 6]
+value negative : List Int = groups.unmatched   // [-1, -3, -5]
 ```
 
 ---
@@ -681,7 +681,7 @@ value names : List Text = ["Alice", "Bob", "Carol"]
 value scores : List Int = [95, 87, 92]
 
 value pairs : List (Text, Int) = zip names scores
--- [("Alice", 95), ("Bob", 87), ("Carol", 92)]
+// [("Alice", 95), ("Bob", 87), ("Carol", 92)]
 ```
 
 ---
@@ -700,7 +700,7 @@ use aivi.list (zipWith)
 fun add : Int a : Int b : Int =>
     a + b
 
-value sums : List Int = zipWith add [1, 2, 3] [10, 20, 30]   -- [11, 22, 33]
+value sums : List Int = zipWith add [1, 2, 3] [10, 20, 30]   // [11, 22, 33]
 ```
 
 ---
@@ -722,6 +722,6 @@ value pairs : List (Text, Int) = [("Alice", 95), ("Bob", 87), ("Carol", 92)]
 
 value result : UnzipState Text Int = unzip pairs
 
-value names : List Text = result.lefts    -- ["Alice", "Bob", "Carol"]
-value scores : List Int = result.rights   -- [95, 87, 92]
+value names : List Text = result.lefts    // ["Alice", "Bob", "Carol"]
+value scores : List Int = result.rights   // [95, 87, 92]
 ```

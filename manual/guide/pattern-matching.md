@@ -197,12 +197,12 @@ signal adultUsers: Signal (Option User) =
 Pattern matches must cover every possible case. The compiler will reject incomplete matches:
 
 ```aivi
--- This will NOT compile if Direction has four constructors:
+// This will NOT compile if Direction has four constructors:
 fun label: Text dir: Direction =>
     dir
      ||> Up   -> "up"
      ||> Down -> "down"
-     -- Left and Right are missing!
+     // Left and Right are missing!
 ```
 
 Use a wildcard `_` to cover remaining cases when you don't need to distinguish them:

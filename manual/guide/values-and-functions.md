@@ -66,7 +66,7 @@ Parameters are separated by spaces — no commas, no parentheses:
 ```aivi
 fun clamp: Int low: Int high: Int value: Int =>
     value
-     T|> low   -- if value < low
+     T|> low   // if value < low
      F|> value
 ```
 
@@ -139,7 +139,7 @@ Functions are called by juxtaposition — put the function name first, then its 
 fun area: Int w: Int h: Int =>
     w * h
 
-value roomArea = area 5 8   -- result: 40
+value roomArea = area 5 8   // result: 40
 ```
 
 When passing a complex expression as an argument, wrap it in parentheses:
@@ -156,8 +156,8 @@ Functions can be partially applied. Supplying fewer arguments than required retu
 fun multiply: Int a: Int b: Int =>
     a * b
 
-value double = multiply 2     -- a function Int -> Int
-value ten    = double 5       -- 10
+value double = multiply 2     // a function Int -> Int
+value ten    = double 5       // 10
 ```
 
 This is especially useful with pipes:

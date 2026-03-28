@@ -107,8 +107,8 @@ value email = "ada@example.com"
 
 value user: User = {
     id: 1,
-    name,       -- same as name: name
-    email       -- same as email: email
+    name,       // same as name: name
+    email       // same as email: email
 }
 ```
 
@@ -141,7 +141,7 @@ type Result E A =
   | Err E
   | Ok A
 
-type List A = ...   -- built-in
+type List A = ...   // built-in
 ```
 
 Use them by supplying the type argument:
@@ -224,7 +224,7 @@ value empty: List Int = []
 Ranges create a list of consecutive integers:
 
 ```aivi
-value indices = [0..9]    -- [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+value indices = [0..9]    // [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 ```
 
 Use `append` to build lists:

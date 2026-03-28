@@ -27,8 +27,8 @@ domain Retry over Int
 With these declarations, you can write:
 
 ```aivi
-value timeout = 5s      -- Duration with value 5
-value retries = 3x      -- Retry with value 3
+value timeout = 5s      // Duration with value 5
+value retries = 3x      // Retry with value 3
 ```
 
 The suffix is a zero-cost conversion — it just changes how the compiler categorises the value.
@@ -90,7 +90,7 @@ This prevents operations like "get the first element" from needing to return `Op
 
 ```aivi
 fun firstItem: A xs: NonEmpty A =>
-    head xs    -- always safe, no Option needed
+    head xs    // always safe, no Option needed
 ```
 
 ## Summary
