@@ -41,9 +41,9 @@ Return the directory containing this path. Returns `None` for a root or empty pa
 ```aivi
 use aivi.path (parent)
 
-parent "/home/user/docs/notes.txt"   -- Some "/home/user/docs"
-parent "/home"                        -- Some "/"
-parent "/"                            -- None
+parent "/home/user/docs/notes.txt"   // Some "/home/user/docs"
+parent "/home"                        // Some "/"
+parent "/"                            // None
 ```
 
 ### `filename : Text -> Option Text`
@@ -53,8 +53,8 @@ Return the final path component, including its extension. Returns `None` for a r
 ```aivi
 use aivi.path (filename)
 
-filename "/home/user/notes.txt"  -- Some "notes.txt"
-filename "/home/user/"           -- None
+filename "/home/user/notes.txt"  // Some "notes.txt"
+filename "/home/user/"           // None
 ```
 
 ### `stem : Text -> Option Text`
@@ -64,8 +64,8 @@ Return the final path component without its extension.
 ```aivi
 use aivi.path (stem)
 
-stem "/home/user/notes.txt"  -- Some "notes"
-stem "/home/user/archive"    -- Some "archive"
+stem "/home/user/notes.txt"  // Some "notes"
+stem "/home/user/archive"    // Some "archive"
 ```
 
 ### `extension : Text -> Option Text`
@@ -75,9 +75,9 @@ Return the extension (characters after the last dot in the filename).
 ```aivi
 use aivi.path (extension)
 
-extension "/home/user/photo.jpg"   -- Some "jpg"
-extension "/home/user/Makefile"    -- None
-extension "/home/user/archive.tar.gz" -- Some "gz"
+extension "/home/user/photo.jpg"   // Some "jpg"
+extension "/home/user/Makefile"    // None
+extension "/home/user/archive.tar.gz" // Some "gz"
 ```
 
 ### `join : Text -> Text -> Text`
@@ -87,8 +87,8 @@ Append a segment to a base path. If the segment is absolute it replaces the base
 ```aivi
 use aivi.path (join)
 
-join "/home/user" "docs"          -- "/home/user/docs"
-join "/home/user/docs" "notes.txt" -- "/home/user/docs/notes.txt"
+join "/home/user" "docs"          // "/home/user/docs"
+join "/home/user/docs" "notes.txt" // "/home/user/docs/notes.txt"
 ```
 
 ### `isAbsolute : Text -> Bool`
@@ -98,8 +98,8 @@ Return `True` when the path begins with `/`.
 ```aivi
 use aivi.path (isAbsolute)
 
-isAbsolute "/home/user"   -- True
-isAbsolute "relative/path" -- False
+isAbsolute "/home/user"   // True
+isAbsolute "relative/path" // False
 ```
 
 ### `normalize : Text -> Text`
@@ -109,9 +109,9 @@ Resolve `.` (current directory) and `..` (parent directory) segments lexically, 
 ```aivi
 use aivi.path (normalize)
 
-normalize "/home/user/docs/../photos"   -- "/home/user/photos"
-normalize "/home/user/./notes.txt"      -- "/home/user/notes.txt"
-normalize "/a/b/../../c"                -- "/c"
+normalize "/home/user/docs/../photos"   // "/home/user/photos"
+normalize "/home/user/./notes.txt"      // "/home/user/notes.txt"
+normalize "/a/b/../../c"                // "/c"
 ```
 
 ---
