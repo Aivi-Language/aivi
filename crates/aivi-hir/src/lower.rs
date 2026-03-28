@@ -5951,6 +5951,75 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 primitive_import_type(BuiltinType::Text),
             ),
         )),
+        // Bytes intrinsics — synchronous operations on the Bytes type
+        ("aivi.core.bytes", "length") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesLength,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Bytes),
+                primitive_import_type(BuiltinType::Int),
+            ),
+        )),
+        ("aivi.core.bytes", "get") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesGet,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Bytes),
+                    option_import_type(primitive_import_type(BuiltinType::Int)),
+                ),
+            ),
+        )),
+        ("aivi.core.bytes", "slice") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesSlice,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Bytes),
+                        primitive_import_type(BuiltinType::Bytes),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.core.bytes", "append") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesAppend,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Bytes),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Bytes),
+                    primitive_import_type(BuiltinType::Bytes),
+                ),
+            ),
+        )),
+        ("aivi.core.bytes", "fromText") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesFromText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Bytes),
+            ),
+        )),
+        ("aivi.core.bytes", "toText") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesToText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Bytes),
+                option_import_type(primitive_import_type(BuiltinType::Text)),
+            ),
+        )),
+        ("aivi.core.bytes", "repeat") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesRepeat,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::Bytes),
+                ),
+            ),
+        )),
+        ("aivi.core.bytes", "empty") => Some(intrinsic_import_value(
+            IntrinsicValue::BytesEmpty,
+            primitive_import_type(BuiltinType::Bytes),
+        )),
         _ => None,
     }
 }

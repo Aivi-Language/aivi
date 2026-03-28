@@ -1,0 +1,4 @@
+type BytesDecodeError =
+  | InvalidUtf8
+
+export (BytesDecodeError, InvalidUtf8)

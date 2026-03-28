@@ -52,6 +52,7 @@ export default defineConfig({
               { text: 'aivi.core.float', link: '/stdlib/float' },
               { text: 'aivi.core.dict', link: '/stdlib/dict' },
               { text: 'aivi.core.range', link: '/stdlib/range' },
+              { text: 'aivi.core.bytes', link: '/stdlib/bytes' },
             ],
           },
           {

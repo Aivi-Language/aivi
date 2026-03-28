@@ -9774,6 +9774,50 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::Text),
                 primitive(BuiltinType::Text),
             ),
+            IntrinsicValue::BytesLength => arrow(
+                primitive(BuiltinType::Bytes),
+                primitive(BuiltinType::Int),
+            ),
+            IntrinsicValue::BytesGet => arrow(
+                primitive(BuiltinType::Int),
+                arrow(
+                    primitive(BuiltinType::Bytes),
+                    GateType::Option(Box::new(primitive(BuiltinType::Int))),
+                ),
+            ),
+            IntrinsicValue::BytesSlice => arrow(
+                primitive(BuiltinType::Int),
+                arrow(
+                    primitive(BuiltinType::Int),
+                    arrow(
+                        primitive(BuiltinType::Bytes),
+                        primitive(BuiltinType::Bytes),
+                    ),
+                ),
+            ),
+            IntrinsicValue::BytesAppend => arrow(
+                primitive(BuiltinType::Bytes),
+                arrow(
+                    primitive(BuiltinType::Bytes),
+                    primitive(BuiltinType::Bytes),
+                ),
+            ),
+            IntrinsicValue::BytesFromText => arrow(
+                primitive(BuiltinType::Text),
+                primitive(BuiltinType::Bytes),
+            ),
+            IntrinsicValue::BytesToText => arrow(
+                primitive(BuiltinType::Bytes),
+                GateType::Option(Box::new(primitive(BuiltinType::Text))),
+            ),
+            IntrinsicValue::BytesRepeat => arrow(
+                primitive(BuiltinType::Int),
+                arrow(
+                    primitive(BuiltinType::Int),
+                    primitive(BuiltinType::Bytes),
+                ),
+            ),
+            IntrinsicValue::BytesEmpty => primitive(BuiltinType::Bytes),
         }
     }
 

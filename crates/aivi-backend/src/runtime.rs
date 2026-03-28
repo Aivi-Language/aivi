@@ -3341,6 +3341,14 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::PathJoin => 2,
         IntrinsicValue::PathIsAbsolute => 1,
         IntrinsicValue::PathNormalize => 1,
+        IntrinsicValue::BytesLength => 1,
+        IntrinsicValue::BytesGet => 2,
+        IntrinsicValue::BytesSlice => 3,
+        IntrinsicValue::BytesAppend => 2,
+        IntrinsicValue::BytesFromText => 1,
+        IntrinsicValue::BytesToText => 1,
+        IntrinsicValue::BytesRepeat => 2,
+        IntrinsicValue::BytesEmpty => 0,
     }
 }
 
@@ -3575,6 +3583,54 @@ fn evaluate_intrinsic_value(
                 }
             }
             Ok(RuntimeValue::Text(components.join("/").into()))
+        }
+        (IntrinsicValue::BytesEmpty, []) => Ok(RuntimeValue::Bytes(Box::new([]))),
+        (IntrinsicValue::BytesLength, [b]) => {
+            let bytes = expect_intrinsic_bytes(kernel, expr, value, 0, b)?;
+            Ok(RuntimeValue::Int(bytes.len() as i64))
+        }
+        (IntrinsicValue::BytesGet, [idx, b]) => {
+            let i = expect_intrinsic_i64(kernel, expr, value, 0, idx)?;
+            let bytes = expect_intrinsic_bytes(kernel, expr, value, 1, b)?;
+            Ok(usize::try_from(i)
+                .ok()
+                .and_then(|i| bytes.get(i))
+                .map(|&byte| RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(byte as i64))))
+                .unwrap_or(RuntimeValue::OptionNone))
+        }
+        (IntrinsicValue::BytesSlice, [from, to, b]) => {
+            let start = expect_intrinsic_i64(kernel, expr, value, 0, from)?;
+            let end = expect_intrinsic_i64(kernel, expr, value, 1, to)?;
+            let bytes = expect_intrinsic_bytes(kernel, expr, value, 2, b)?;
+            let start = (start as usize).min(bytes.len());
+            let end = (end as usize).min(bytes.len());
+            let end = end.max(start);
+            Ok(RuntimeValue::Bytes(bytes[start..end].into()))
+        }
+        (IntrinsicValue::BytesAppend, [a, b]) => {
+            let left = expect_intrinsic_bytes(kernel, expr, value, 0, a)?;
+            let right = expect_intrinsic_bytes(kernel, expr, value, 1, b)?;
+            let mut combined = left.to_vec();
+            combined.extend_from_slice(&*right);
+            Ok(RuntimeValue::Bytes(combined.into()))
+        }
+        (IntrinsicValue::BytesFromText, [t]) => {
+            let text = expect_intrinsic_text(kernel, expr, value, 0, t)?;
+            Ok(RuntimeValue::Bytes(text.as_bytes().into()))
+        }
+        (IntrinsicValue::BytesToText, [b]) => {
+            let bytes = expect_intrinsic_bytes(kernel, expr, value, 0, b)?;
+            Ok(std::str::from_utf8(&*bytes)
+                .ok()
+                .map(|s| RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(s.into()))))
+                .unwrap_or(RuntimeValue::OptionNone))
+        }
+        (IntrinsicValue::BytesRepeat, [byte_val, count]) => {
+            let b = expect_intrinsic_i64(kernel, expr, value, 0, byte_val)?;
+            let n = expect_intrinsic_i64(kernel, expr, value, 1, count)?;
+            let byte = (b.clamp(0, 255)) as u8;
+            let n = (n.max(0)) as usize;
+            Ok(RuntimeValue::Bytes(vec![byte; n].into()))
         }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
     }

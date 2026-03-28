@@ -286,6 +286,15 @@ pub enum IntrinsicValue {
     PathJoin,
     PathIsAbsolute,
     PathNormalize,
+    // Bytes operations (pure/synchronous)
+    BytesLength,
+    BytesGet,
+    BytesSlice,
+    BytesAppend,
+    BytesFromText,
+    BytesToText,
+    BytesRepeat,
+    BytesEmpty,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -322,6 +331,14 @@ impl fmt::Display for IntrinsicValue {
             Self::PathJoin => f.write_str("aivi.path.join"),
             Self::PathIsAbsolute => f.write_str("aivi.path.isAbsolute"),
             Self::PathNormalize => f.write_str("aivi.path.normalize"),
+            Self::BytesLength => f.write_str("aivi.core.bytes.length"),
+            Self::BytesGet => f.write_str("aivi.core.bytes.get"),
+            Self::BytesSlice => f.write_str("aivi.core.bytes.slice"),
+            Self::BytesAppend => f.write_str("aivi.core.bytes.append"),
+            Self::BytesFromText => f.write_str("aivi.core.bytes.fromText"),
+            Self::BytesToText => f.write_str("aivi.core.bytes.toText"),
+            Self::BytesRepeat => f.write_str("aivi.core.bytes.repeat"),
+            Self::BytesEmpty => f.write_str("aivi.core.bytes.empty"),
         }
     }
 }
