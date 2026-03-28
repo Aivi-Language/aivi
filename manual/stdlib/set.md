@@ -39,7 +39,12 @@ An unordered, deduplicated collection of `A` values. The element type `A` can be
 ### `singleton : A -> Set A`
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    Set
+    singleton
+)
+
+value tags: (Set Text) = singleton "urgent"
 ```
 
 ### `fromList : List A -> Set A`
@@ -47,7 +52,17 @@ An unordered, deduplicated collection of `A` values. The element type `A` can be
 Build a set from a list, discarding duplicates (first occurrence wins).
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    Set
+    fromList
+)
+
+value tags: (Set Text) =
+    fromList [
+        "urgent",
+        "work",
+        "urgent"
+    ]
 ```
 
 ---
@@ -57,19 +72,47 @@ Build a set from a list, discarding duplicates (first occurrence wins).
 ### `isEmpty : Set A -> Bool`
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    isEmpty
+)
+
+value noTags:Bool = isEmpty (fromList [])
 ```
 
 ### `member : A -> Set A -> Bool`
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    member
+)
+
+value hasWork:Bool =
+    member "work" (
+        fromList [
+            "home",
+            "work"
+        ]
+    )
 ```
 
 ### `size : Set A -> Int`
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    size
+)
+
+value tagCount:Int =
+    size (
+        fromList [
+            "a",
+            "b",
+            "a"
+        ]
+    )
 ```
 
 ### `toList : Set A -> List A`
@@ -77,7 +120,19 @@ Build a set from a list, discarding duplicates (first occurrence wins).
 Returns the items in insertion order.
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    toList
+)
+
+value items: (List Text) =
+    toList (
+        fromList [
+            "a",
+            "b",
+            "a"
+        ]
+    )
 ```
 
 ---
@@ -89,7 +144,17 @@ Returns the items in insertion order.
 Add a value. If already present, the set is unchanged.
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    insert
+)
+
+value tags: (Set Text) =
+    insert "work" (
+        fromList [
+            "home"
+        ]
+    )
 ```
 
 ### `remove : A -> Set A -> Set A`
@@ -97,7 +162,18 @@ Add a value. If already present, the set is unchanged.
 Remove a value. No-op if not present.
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    remove
+)
+
+value tags: (Set Text) =
+    remove "home" (
+        fromList [
+            "home",
+            "work"
+        ]
+    )
 ```
 
 ---
@@ -109,7 +185,18 @@ Remove a value. No-op if not present.
 All items from both sets (items from `b` appended when not already in `a`).
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    union
+)
+
+value merged: (Set Text) =
+    union (fromList ["a"]) (
+        fromList [
+            "b",
+            "a"
+        ]
+    )
 ```
 
 ### `intersection : Set A -> Set A -> Set A`
@@ -117,7 +204,18 @@ All items from both sets (items from `b` appended when not already in `a`).
 Items that appear in both sets.
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    intersection
+)
+
+value shared: (Set Text) =
+    intersection (fromList ["a", "b"]) (
+        fromList [
+            "b",
+            "c"
+        ]
+    )
 ```
 
 ### `difference : Set A -> Set A -> Set A`
@@ -125,7 +223,17 @@ Items that appear in both sets.
 Items in `a` that are not in `b`.
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    difference
+)
+
+value remaining: (Set Text) =
+    difference (fromList ["a", "b"]) (
+        fromList [
+            "b"
+        ]
+    )
 ```
 
 ### `subsetOf : Set A -> Set A -> Bool`
@@ -133,7 +241,18 @@ Items in `a` that are not in `b`.
 `True` when every item in `a` is also in `b`.
 
 ```aivi
-# <unparseable item>
+use aivi.core.set (
+    fromList
+    subsetOf
+)
+
+value isSubset:Bool =
+    subsetOf (fromList ["a"]) (
+        fromList [
+            "a",
+            "b"
+        ]
+    )
 ```
 
 ---
@@ -144,10 +263,9 @@ Items in `a` that are not in `b`.
 use aivi.core.set (
     Set
     fromList
-    member
-    union
+    isEmpty
     difference
-    toList
+    intersection
 )
 
 type TagFilter = {
@@ -155,6 +273,9 @@ type TagFilter = {
     excluded: Set Text
 }
 
+fun matchesTagSet:Bool filter:TagFilter tagSet: (Set Text) => filter
+  ||> { required, excluded } -> isEmpty (difference required tagSet) and isEmpty (intersection excluded tagSet)
+
 fun matchesTags:Bool filter:TagFilter tags: (List Text) =>
-    let tagSet
+    matchesTagSet filter (fromList tags)
 ```

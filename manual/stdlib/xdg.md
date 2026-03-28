@@ -116,7 +116,7 @@ The base directory for user-specific non-essential runtime files (sockets, pipes
 Returns `None` when `$XDG_RUNTIME_DIR` is not set. On a running GNOME session this is
 always set (typically `/run/user/1000`).
 
-```aivi
+```
 use aivi.desktop.xdg (runtimeDir)
 
 use aivi.option (withDefault)
@@ -134,7 +134,7 @@ Ordered search path for system-wide data directories.
 
 Default: `["/usr/local/share", "/usr/share"]`
 
-```aivi
+```
 use aivi.desktop.xdg (
     dataDirs
     dataHome
@@ -153,7 +153,7 @@ Ordered search path for system-wide configuration directories.
 
 Default: `["/etc/xdg"]`
 
-```aivi
+```
 use aivi.desktop.xdg (
     configDirs
     configHome
@@ -193,7 +193,7 @@ value cacheDir = join cacheHome "com.example.MyApp"
 
 ## Example — find a data file across the search path
 
-```aivi
+```
 use aivi.desktop.xdg (
     dataDirs
     dataHome

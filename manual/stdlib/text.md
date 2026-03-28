@@ -25,12 +25,9 @@ isEmpty : Text -> Bool
 ```aivi
 use aivi.text (isEmpty)
 
-fun placeholderFor:Text isBlank:Bool label:Text => isBlank
+fun showPlaceholder:Text label:Text => isEmpty label
   T|> "Untitled"
   F|> label
-
-fun showPlaceholder:Text label:Text =>
-    placeholderFor (isEmpty label) label
 ```
 
 ---
@@ -44,6 +41,8 @@ nonEmpty : Text -> Bool
 ```
 
 ```aivi
+use aivi.list (filter)
+
 use aivi.text (nonEmpty)
 
 fun filterLabels: List Text labels: List Text =>

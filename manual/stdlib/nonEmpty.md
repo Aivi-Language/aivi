@@ -12,7 +12,6 @@ use aivi.nonEmpty (
     last
     length
     toList
-    fromNonEmpty
     mapNel
     fromList
     appendNel
@@ -30,7 +29,7 @@ type NonEmpty A =
   | MkNonEmpty A (List A)
 ```
 
-`NonEmpty A` is the generic non-empty container. Use `fromNonEmpty` to convert it to a `NonEmptyList A`.
+`NonEmpty A` is the generic non-empty container. Use `singleton`, `cons`, or `fromList` when you need to build a `NonEmptyList A`.
 
 ---
 
@@ -54,7 +53,10 @@ Creates a `NonEmptyList` with exactly one element.
 **Type:** `item:A -> NonEmptyList A`
 
 ```aivi
-use aivi.nonEmpty (singleton)
+use aivi.nonEmpty (
+    NonEmptyList
+    singleton
+)
 
 fun wrapOne: (NonEmptyList Text) label:Text =>
     singleton label
@@ -70,6 +72,7 @@ Prepends an element to a `NonEmptyList`.
 
 ```aivi
 use aivi.nonEmpty (
+    NonEmptyList
     singleton
     cons
 )
@@ -88,11 +91,12 @@ Returns the first element of a `NonEmptyList`. Always safe — no `Option` requi
 
 ```aivi
 use aivi.nonEmpty (
+    NonEmptyList
     head
     singleton
 )
 
-fun firstOf:(Int) nel: (NonEmptyList Int) =>
+fun firstOf:Int nel: (NonEmptyList Int) =>
     head nel
 ```
 
@@ -106,6 +110,7 @@ Returns the last element of a `NonEmptyList`. Always safe — no `Option` requir
 
 ```aivi
 use aivi.nonEmpty (
+    NonEmptyList
     last
     singleton
 )
@@ -124,6 +129,7 @@ Returns the number of elements in the list.
 
 ```aivi
 use aivi.nonEmpty (
+    NonEmptyList
     length
     singleton
     cons
@@ -143,6 +149,7 @@ Converts a `NonEmptyList` to a regular `List`.
 
 ```aivi
 use aivi.nonEmpty (
+    NonEmptyList
     toList
     singleton
 )
@@ -153,17 +160,17 @@ fun asRegularList: (List Int) nel: (NonEmptyList Int) =>
 
 ---
 
-## fromNonEmpty
+## NonEmpty conversion
 
-Converts a `NonEmpty A` to a `NonEmptyList A`.
+There is currently no exported `fromNonEmpty` helper. Build a `NonEmptyList A` directly with `singleton`, `cons`, or `fromList`.
 
-**Type:** `ne:(NonEmpty A) -> NonEmptyList A`
+**Related constructors:** `singleton`, `cons`, `fromList`
 
-```aivi
-use aivi.nonEmpty (fromNonEmpty)
-
-fun toNEL: (NonEmptyList Text) ne: (NonEmpty Text) =>
-    fromNonEmpty ne
+```
+use aivi.nonEmpty (
+    singleton
+    fromList
+)
 ```
 
 ---
@@ -175,7 +182,10 @@ Applies a function to every element, producing a new `NonEmptyList`. The non-emp
 **Type:** `transform:(A -> B) -> nel:(NonEmptyList A) -> NonEmptyList B`
 
 ```aivi
-use aivi.nonEmpty (mapNel)
+use aivi.nonEmpty (
+    NonEmptyList
+    mapNel
+)
 
 fun double:Int n:Int =>
     n * 2
@@ -193,7 +203,10 @@ Attempts to convert a regular `List` to a `NonEmptyList`. Returns `None` if the 
 **Type:** `items:(List A) -> Option (NonEmptyList A)`
 
 ```aivi
-use aivi.nonEmpty (fromList)
+use aivi.nonEmpty (
+    NonEmptyList
+    fromList
+)
 
 fun safeFromList: (Option (NonEmptyList Int)) items: (List Int) =>
     fromList items
@@ -211,6 +224,7 @@ Concatenates two `NonEmptyList`s into one. The result is always non-empty.
 
 ```aivi
 use aivi.nonEmpty (
+    NonEmptyList
     appendNel
     singleton
 )

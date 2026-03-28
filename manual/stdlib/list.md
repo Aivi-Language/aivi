@@ -228,13 +228,13 @@ Returns only the elements that satisfy a predicate.
 filter : (A -> Bool) -> (List A) -> List A
 ```
 
-```aivi
+```
 use aivi.list (filter)
 
 fun isPositive:Bool n:Int =>
     n > 0
 
-value result: List Int
+value result
 ```
 
 ---
@@ -448,13 +448,13 @@ Returns `True` if at least one element satisfies the predicate.
 any : (A -> Bool) -> (List A) -> Bool
 ```
 
-```aivi
+```
 use aivi.list (any)
 
 fun isNegative:Bool n:Int =>
     n < 0
 
-value result:Bool
+value result
 ```
 
 ---
@@ -467,7 +467,7 @@ Returns `True` if every element satisfies the predicate.
 all : (A -> Bool) -> (List A) -> Bool
 ```
 
-```aivi
+```
 use aivi.list (all)
 
 fun isPositive:Bool n:Int =>
@@ -480,7 +480,7 @@ value allPositive:Bool =
         3
     ]
 
-value someNeg:Bool
+value someNeg
 ```
 
 ---
@@ -493,13 +493,13 @@ Returns the number of elements that satisfy the predicate.
 count : (A -> Bool) -> (List A) -> Int
 ```
 
-```aivi
+```
 use aivi.list (count)
 
 fun isPositive:Bool n:Int =>
     n > 0
 
-value n:Int
+value n
 ```
 
 ---
@@ -537,14 +537,14 @@ Applies a function to each element in order and returns the first `Some` result,
 findMap : (A -> Option B) -> (List A) -> Option B
 ```
 
-```aivi
+```
 use aivi.list (findMap)
 
-fun asPositive: Option Int n:Int => n > 0
+fun asPositive: (Option Int) n:Int => n > 0
   T|> Some n
   F|> None
 
-value result: Option Int
+value result
 ```
 
 ---
@@ -802,15 +802,18 @@ partition : (A -> Bool) -> (List A) -> Partition A
 
 `Partition A` is a record `{ matched: List A, unmatched: List A }`.
 
-```aivi
-use aivi.list (partition)
+```
+use aivi.list (
+    Partition
+    partition
+)
 
 fun isPositive:Bool n:Int =>
     n > 0
 
-value groups: Partition Int
-value positive: List Int = groups.matched
-value negative: List Int = groups.unmatched
+value groups
+value positive: (List Int) = groups.matched
+value negative: (List Int) = groups.unmatched
 ```
 
 ---
@@ -882,7 +885,16 @@ unzip : (List (A, B)) -> UnzipState A B
 `UnzipState A B` is a record `{ lefts: List A, rights: List B }`.
 
 ```aivi
-use aivi.list (unzip)
+use aivi.list (
+    UnzipState
+    unzip
+)
+
+fun takeLefts: (List Text) state: (UnzipState Text Int) => state
+  ||> { lefts, rights } -> lefts
+
+fun takeRights: (List Int) state: (UnzipState Text Int) => state
+  ||> { lefts, rights } -> rights
 
 value pairs: List (Text, Int) = [
     ("Alice", 95),
@@ -890,7 +902,7 @@ value pairs: List (Text, Int) = [
     ("Carol", 92)
 ]
 
-value result: UnzipState Text Int = unzip pairs
-value names: List Text = result.lefts
-value scores: List Int = result.rights
+value result: (UnzipState Text Int) = unzip pairs
+value names: (List Text) = takeLefts result
+value scores: (List Int) = takeRights result
 ```

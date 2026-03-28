@@ -43,7 +43,14 @@ these states as the OS or user triggers lifecycle events:
 | `Stopped`   | App has exited all active work                   |
 
 ```aivi
-use aivi.app.lifecycle (AppLifecycle)
+use aivi.app.lifecycle (
+    AppLifecycle
+    Starting
+    Running
+    Suspended
+    Stopping
+    Stopped
+)
 
 fun describeLifecycle:Text state:AppLifecycle => state
   ||> Starting  -> "starting"
@@ -66,7 +73,12 @@ The outcome of any app action or command. Use this instead of `Result` when an a
 can also be cancelled by the user (e.g. a file dialog dismissed without selecting a file).
 
 ```aivi
-use aivi.app.lifecycle (AppActionResult)
+use aivi.app.lifecycle (
+    AppActionResult
+    ActionOk
+    ActionFailed
+    ActionCancelled
+)
 
 fun handleSave:Text result: (AppActionResult Text) => result
   ||> ActionOk v      -> "saved: {v}"
@@ -154,6 +166,7 @@ A structured in-app notification (toast, banner, or status bar message).
 use aivi.app.lifecycle (
     AppNotification
     NotificationLevel
+    NoteInfo
 )
 
 value savedNotification:AppNotification = {
@@ -165,7 +178,7 @@ value savedNotification:AppNotification = {
 
 ## Example — tracking app lifecycle in a signal
 
-```aivi
+```
 use aivi.app.lifecycle (AppLifecycle)
 
 signal lifecycle:AppLifecycle = source Starting
@@ -180,6 +193,6 @@ fun isRunning:Bool state:AppLifecycle => state
 ```aivi
 use aivi.app.lifecycle (UndoState)
 
-fun undoButtonSensitive:Bool undoState:UndoState =>
-    undoState.canUndo
+fun undoButtonSensitive:Bool undoState:UndoState => undoState
+  ||> { canUndo, canRedo, depth } -> canUndo
 ```

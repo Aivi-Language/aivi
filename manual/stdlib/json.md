@@ -41,7 +41,7 @@ validate : Text -> Task Text Bool
 Returns `True` if the text is valid JSON, `False` otherwise. Never fails — invalid text yields
 `False`, not a task error.
 
-```aivi
+```
 use aivi.data.json (validate)
 
 fun checkJson json =>
@@ -57,7 +57,7 @@ Retrieve an object field by key. The result is the field value serialised back t
 so nested objects and arrays are preserved as `Text`. Returns `None` when the key is absent.
 Fails the task when the input is not valid JSON.
 
-```aivi
+```
 use aivi.data.json (get)
 
 fun getName json =>
@@ -72,7 +72,7 @@ at : Text -> Int -> Task Text (Option Text)
 Retrieve an array element by zero-based index. Returns `None` when the index is out of bounds.
 Fails the task when the input is not valid JSON.
 
-```aivi
+```
 use aivi.data.json (at)
 
 fun firstItem json =>
@@ -87,7 +87,7 @@ keys : Text -> Task Text (List Text)
 Return the keys of a JSON object in insertion order. Returns an empty list for non-objects.
 Fails the task when the input is not valid JSON.
 
-```aivi
+```
 use aivi.data.json (keys)
 
 fun objectKeys json =>
@@ -101,7 +101,7 @@ pretty : Text -> Task Text Text
 
 Re-format JSON with two-space indentation. Fails the task when the input is not valid JSON.
 
-```aivi
+```
 use aivi.data.json (pretty)
 
 fun format json =>
@@ -115,7 +115,7 @@ minify : Text -> Task Text Text
 
 Remove all insignificant whitespace from JSON. Fails the task when the input is not valid JSON.
 
-```aivi
+```
 use aivi.data.json (minify)
 
 fun compact json =>
@@ -136,7 +136,7 @@ Task failures carry a descriptive `Text` error message (the `Text` in `Task Text
 
 ## Example — decode a simple object
 
-```aivi
+```
 use aivi.data.json (
     get
     keys
@@ -151,7 +151,7 @@ fun extractName json =>
 
 Extract each step into a named function so no pipes are nested.
 
-```aivi
+```
 use aivi.data.json (
     minify
     validate

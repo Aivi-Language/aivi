@@ -191,7 +191,10 @@ List operations use the built-in `reduce` and `append` functions (available ever
 Example — sum a list:
 
 ```aivi
+use aivi.list (sum)
+
 fun sumList:Int numbers: List Int =>
+    sum numbers
 ```
 
 Example — collect names from a list of users:
@@ -204,8 +207,11 @@ type User = {
     name: Text
 }
 
-fun findById: Option User id:Int users: List User =>
-    find (.id == id) users
+fun hasId:Bool id:Int user:User =>
+    user.id == id
+
+fun findById: (Option User) id:Int users: (List User) =>
+    find (hasId id) users
 ```
 
 ---
@@ -250,7 +256,7 @@ use aivi.path (
 )
 ```
 
-```aivi
+```
 domain Path over Text
     parse: Text -> Result PathError Path
     (/):Path -> Text -> Path
@@ -259,7 +265,7 @@ domain Path over Text
 
 Example:
 
-```aivi
+```
 use aivi.path (Path)
 
 value configPath:Path = root "/etc" / "myapp" / "config.toml"
@@ -295,7 +301,7 @@ type FsEvent =
 
 Use with `@source fs.watch`:
 
-```aivi
+```
 @source fs.watch "/tmp/data.txt" with {
     events: [Created, Changed, Deleted]
 }
@@ -333,7 +339,7 @@ domain Retry over Int
 
 Use with `@source http.get`:
 
-```aivi
+```
 use aivi.http (
     HttpError
     Strict

@@ -56,7 +56,12 @@ value r = make 1 10
 Returns `True` when `start > end`.
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    isEmpty
+    make
+)
+
+value none:Bool = isEmpty (make 3 1)
 ```
 
 ### `contains : RangeInt -> Int -> Bool`
@@ -64,7 +69,12 @@ Returns `True` when `start > end`.
 Returns `True` when `n` is within the range (inclusive on both ends).
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    contains
+    make
+)
+
+value hasFive:Bool = contains (make 1 10) 5
 ```
 
 ### `length : RangeInt -> Int`
@@ -72,7 +82,12 @@ Returns `True` when `n` is within the range (inclusive on both ends).
 Returns the number of integers in the range. Empty ranges have length `0`.
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    length
+    make
+)
+
+value count:Int = length (make 4 7)
 ```
 
 ### `startOf : RangeInt -> Int` / `endOf : RangeInt -> Int`
@@ -80,7 +95,14 @@ Returns the number of integers in the range. Empty ranges have length `0`.
 Extract the start or end bound.
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    startOf
+    endOf
+    make
+)
+
+value start:Int = startOf (make 4 7)
+value finish:Int = endOf (make 4 7)
 ```
 
 ---
@@ -92,7 +114,12 @@ Extract the start or end bound.
 Clamp a value to the range boundaries.
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    clampTo
+    make
+)
+
+value clamped:Int = clampTo (make 1 10) 15
 ```
 
 ### `shift : Int -> RangeInt -> RangeInt`
@@ -100,7 +127,13 @@ Clamp a value to the range boundaries.
 Translate the entire range by a delta.
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    RangeInt
+    shift
+    make
+)
+
+value shifted:RangeInt = shift 3 (make 1 5)
 ```
 
 ### `overlaps : RangeInt -> RangeInt -> Bool`
@@ -108,7 +141,12 @@ Translate the entire range by a delta.
 Returns `True` when two ranges share at least one integer. Empty ranges never overlap.
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    make
+    overlaps
+)
+
+value sharesValues:Bool = overlaps (make 1 5) (make 4 8)
 ```
 
 ### `intersect : RangeInt -> RangeInt -> RangeInt`
@@ -116,7 +154,13 @@ Returns `True` when two ranges share at least one integer. Empty ranges never ov
 Returns the intersection of two ranges. If the ranges do not overlap the result is an empty range (`start > end`).
 
 ```aivi
-# <unparseable item>
+use aivi.core.range (
+    RangeInt
+    intersect
+    make
+)
+
+value shared:RangeInt = intersect (make 1 5) (make 4 8)
 ```
 
 ---
@@ -125,8 +169,7 @@ Returns the intersection of two ranges. If the ranges do not overlap the result 
 
 ```aivi
 use aivi.core.range (
-    make
-    contains
+    RangeInt
     clampTo
     length
 )
@@ -136,10 +179,12 @@ type Viewport = {
     total: Int
 }
 
-fun visibleRows: (List Int) viewport:Viewport rows: (List Int) => rows
-  |> filter (contains viewport.visible)
+fun visibleRange:RangeInt viewport:Viewport => viewport
+  ||> { visible, total } -> visible
 
-fun scrollProgress:Float viewport:Viewport => viewport.visible.start
-  |> toFloat
-  |> divide (toFloat viewport.total)
+fun visibleCount:Int viewport:Viewport =>
+    length (visibleRange viewport)
+
+fun clampSelection:Int viewport:Viewport row:Int =>
+    clampTo (visibleRange viewport) row
 ```
