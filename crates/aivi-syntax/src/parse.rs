@@ -1561,7 +1561,8 @@ impl<'a> Parser<'a> {
 
     fn parse_function_param(&mut self, cursor: &mut usize, end: usize) -> Option<FunctionParam> {
         let name_index = self.peek_nontrivia(*cursor, end)?;
-        if self.tokens[name_index].kind() != TokenKind::Identifier {
+        let kind = self.tokens[name_index].kind();
+        if kind != TokenKind::Identifier && !kind.is_keyword() {
             return None;
         }
         *cursor = name_index + 1;
@@ -2221,6 +2222,14 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Record(record),
             }),
             TokenKind::Less => self.parse_markup_expr(cursor, end),
+            kind if kind.is_keyword() => {
+                *cursor = index + 1;
+                let name = self.identifier_from_token(index);
+                Some(Expr {
+                    span: name.span,
+                    kind: ExprKind::Name(name),
+                })
+            }
             _ => None,
         }
     }
@@ -2757,6 +2766,15 @@ impl<'a> Parser<'a> {
                     })
                 }
             }
+            // Keywords can be used as binding variable names in patterns (contextual keyword).
+            kind if kind.is_keyword() => {
+                *cursor = index + 1;
+                let identifier = self.identifier_from_token(index);
+                Some(Pattern {
+                    span: identifier.span,
+                    kind: PatternKind::Name(identifier),
+                })
+            }
             TokenKind::Integer => {
                 *cursor = index + 1;
                 let span = self.source_span_of_token(index);
@@ -3032,21 +3050,23 @@ impl<'a> Parser<'a> {
     }
 
     fn starts_expr(&self, index: usize) -> bool {
-        matches!(
-            self.tokens[index].kind(),
-            TokenKind::Identifier
-                | TokenKind::Integer
-                | TokenKind::Float
-                | TokenKind::Decimal
-                | TokenKind::BigInt
-                | TokenKind::StringLiteral
-                | TokenKind::RegexLiteral
-                | TokenKind::Dot
-                | TokenKind::LParen
-                | TokenKind::LBracket
-                | TokenKind::LBrace
-                | TokenKind::Less
-        )
+        let kind = self.tokens[index].kind();
+        kind.is_keyword()
+            || matches!(
+                kind,
+                TokenKind::Identifier
+                    | TokenKind::Integer
+                    | TokenKind::Float
+                    | TokenKind::Decimal
+                    | TokenKind::BigInt
+                    | TokenKind::StringLiteral
+                    | TokenKind::RegexLiteral
+                    | TokenKind::Dot
+                    | TokenKind::LParen
+                    | TokenKind::LBracket
+                    | TokenKind::LBrace
+                    | TokenKind::Less
+            )
     }
 
     fn starts_function_param(&self, start: usize, end: usize) -> bool {
@@ -3189,15 +3209,16 @@ impl<'a> Parser<'a> {
     }
 
     fn starts_pattern(&self, index: usize) -> bool {
+        let kind = self.tokens[index].kind();
         matches!(
-            self.tokens[index].kind(),
+            kind,
             TokenKind::Identifier
                 | TokenKind::Integer
                 | TokenKind::StringLiteral
                 | TokenKind::LParen
                 | TokenKind::LBracket
                 | TokenKind::LBrace
-        )
+        ) || kind.is_keyword()
     }
 
     fn starts_type_atom(&self, index: usize) -> bool {
@@ -3628,7 +3649,7 @@ impl<'a> Parser<'a> {
             let token = self.tokens[index];
             if !token.kind().is_trivia() && token.line_start() && depth == 0 {
                 match token.kind() {
-                    kind if kind.is_top_level_keyword() => {
+                    kind if kind.is_top_level_keyword() && self.is_at_column_zero(index) => {
                         return DecoratorSearch {
                             keyword: Some(index),
                             offending: None,
@@ -3660,6 +3681,20 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Returns true when `index` token is at column 0 (no leading indentation on its line).
+    /// This distinguishes top-level declarations from identically-named keywords used as
+    /// variable references in indented expression bodies.
+    fn is_at_column_zero(&self, index: usize) -> bool {
+        let start = self.tokens[index].span().start().as_usize();
+        if start == 0 {
+            return true;
+        }
+        let text = self.source.text().as_bytes();
+        // The token is at column 0 iff the immediately preceding byte is a newline.
+        // Any whitespace (spaces/tabs) before the token means it is indented.
+        matches!(text[start - 1], b'\n' | b'\r')
+    }
+
     fn find_next_item_start(&self, from: usize) -> Option<usize> {
         let mut depth = 0usize;
         for index in from..self.tokens.len() {
@@ -3668,6 +3703,7 @@ impl<'a> Parser<'a> {
                 && token.line_start()
                 && depth == 0
                 && (token.kind() == TokenKind::At || token.kind().is_top_level_keyword())
+                && self.is_at_column_zero(index)
             {
                 return Some(index);
             }

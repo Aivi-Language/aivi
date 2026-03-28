@@ -24,55 +24,55 @@ type LisSummary = {
     note: Text
 }
 
-value keepOpenPile:Placement x:Int piles:(List Pile) pile:Pile =>
+value keepOpenPile:Placement value:Int piles:(List Pile) pile:Pile =>
     {
-        x,
+        value,
         placed: False,
         piles: append piles [pile]
     }
 
-value replaceOpenPile:Placement x:Int piles:(List Pile) pile:Pile =>
+value replaceOpenPile:Placement value:Int piles:(List Pile) pile:Pile =>
     {
-        x,
+        value,
         placed: True,
         piles: append piles [
             {
-                top: x,
-                cards: append pile.cards [x]
+                top: value,
+                cards: append pile.cards [value]
             }
         ]
     }
 
-value placeAvailable:Placement x:Int piles:(List Pile) pile:Pile =>
-    pile.top < x
-     T|> keepOpenPile x piles pile
-     F|> replaceOpenPile x piles pile
+value placeAvailable:Placement value:Int piles:(List Pile) pile:Pile =>
+    pile.top < value
+     T|> keepOpenPile value piles pile
+     F|> replaceOpenPile value piles pile
 
-value stepPlacement:Placement x:Int placed:Bool piles:(List Pile) pile:Pile =>
+value stepPlacement:Placement value:Int placed:Bool piles:(List Pile) pile:Pile =>
     placed
-     T|> { x, placed: True, piles: append piles [pile] }
-     F|> placeAvailable x piles pile
+     T|> { value, placed: True, piles: append piles [pile] }
+     F|> placeAvailable value piles pile
 
 value placeStep:Placement state:Placement pile:Pile =>
     state
-     ||> { x, placed, piles } => stepPlacement x placed piles pile
+     ||> { value, placed, piles } => stepPlacement value placed piles pile
 
-value finishPlaced:(List Pile) x:Int placed:Bool piles:(List Pile) =>
+value finishPlaced:(List Pile) value:Int placed:Bool piles:(List Pile) =>
     placed
      T|> piles
-     F|> append piles [{ top: x, cards: [x] }]
+     F|> append piles [{ top: value, cards: [value] }]
 
 value finishPlacement:(List Pile) state:Placement =>
     state
-     ||> { x, placed, piles } => finishPlaced x placed piles
+     ||> { value, placed, piles } => finishPlaced value placed piles
 
-value placeCard:(List Pile) x:Int piles:(List Pile) =>
+value placeCard:(List Pile) value:Int piles:(List Pile) =>
     piles
-     |> reduce placeStep { x, placed: False, piles: [] }
+     |> reduce placeStep { value, placed: False, piles: [] }
      |> finishPlacement
 
-value patienceStep:(List Pile) piles:(List Pile) x:Int =>
-    placeCard x piles
+value patienceStep:(List Pile) piles:(List Pile) value:Int =>
+    placeCard value piles
 
 value appendTopText:(List Text) parts:(List Text) pile:Pile =>
     append parts ["{pile.top}"]

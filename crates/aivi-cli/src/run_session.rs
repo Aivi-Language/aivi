@@ -215,7 +215,14 @@ impl RunSessionHarness {
     }
 
     pub(super) fn shutdown(&self) {
-        self.with_access(|access| access.quit());
+        // Stop the driver before quitting: suspends all source providers and
+        // prevents any further ticks from being queued on the GLib context.
+        // This ensures the context is clean for subsequent tests or sessions
+        // that share the same GLib main context.
+        self.with_access(|access| {
+            access.driver().stop();
+            access.quit();
+        });
         for window in &self.root_windows {
             window.close();
         }

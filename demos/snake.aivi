@@ -393,15 +393,14 @@ value directionLabel:Text direction:Direction =>
     repeat: False,
     focusOnly: True
 }
-signal keyDown : Signal Key
+signal keyDown: Signal Key
 
-signal direction : Signal Direction =
+signal direction: Signal Direction =
     keyDown
      |> scan Right updateDirectionOrRestart
 
-signal restartCount : Signal Int =
-    keyDown
-     |> scan 0 updateRestartCount
+signal restartCount: Signal Int = keyDown
+    |> scan 0 updateRestartCount
 
 @source timer.every 200 with {
     immediate: False,

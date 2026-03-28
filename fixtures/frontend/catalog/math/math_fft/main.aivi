@@ -34,8 +34,8 @@ type FftCatalog = {
     coverage: Text
 }
 
-value realSample:Complex x:Int =>
-    { real: x, imag: 0 }
+value realSample:Complex value:Int =>
+    { real: value, imag: 0 }
 
 value realSignal4:Signal4 x0:Int x1:Int x2:Int x3:Int =>
     {
@@ -57,16 +57,16 @@ value subComplex:Complex left:Complex right:Complex =>
         imag: left.imag - right.imag
     }
 
-value conjugate:Complex x:Complex =>
+value conjugate:Complex value:Complex =>
     {
-        real: x.real,
-        imag: 0 - x.imag
+        real: value.real,
+        imag: 0 - value.imag
     }
 
-value quarterTurn:Complex x:Complex =>
+value quarterTurn:Complex value:Complex =>
     {
-        real: x.imag,
-        imag: 0 - x.real
+        real: value.imag,
+        imag: 0 - value.real
     }
 
 value twoPoint:(Complex, Complex) left:Complex right:Complex =>
@@ -86,13 +86,13 @@ value combineSpectrum:Spectrum4 even:(Complex, Complex) odd:(Complex, Complex) =
 value fft4:Spectrum4 signal:Signal4 =>
     combineSpectrum (twoPoint signal.x0 signal.x2) (twoPoint signal.x1 signal.x3)
 
-value absolute:Int x:Int =>
-    x < 0
-     T|> 0 - x
-     F|> x
+value absolute:Int value:Int =>
+    value < 0
+     T|> 0 - value
+     F|> value
 
-value magnitude1:Int x:Complex =>
-    absolute x.real + absolute x.imag
+value magnitude1:Int value:Complex =>
+    absolute value.real + absolute value.imag
 
 value spectrumMagnitude:Int spectrum:Spectrum4 =>
     magnitude1 spectrum.k0 + magnitude1 spectrum.k1 + magnitude1 spectrum.k2 + magnitude1 spectrum.k3

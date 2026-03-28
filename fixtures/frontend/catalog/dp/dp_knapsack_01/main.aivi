@@ -52,7 +52,7 @@ value planAt:Plan capacity:Int row:(List Cell) =>
 
 value extendPlan:Plan item:KnapsackItem base:Plan =>
     base
-     ||> { total, picked } => { total: total + item.x, picked: append picked [item.label] }
+     ||> { total, picked } => { total: total + item.value, picked: append picked [item.label] }
 
 value includePlan:Plan item:KnapsackItem previous:(List Cell) capacity:Int =>
     capacity < item.weight

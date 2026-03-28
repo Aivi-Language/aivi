@@ -135,16 +135,16 @@ type UsersResponse = HttpResponse (List User)
 type UsersTask     = HttpTask (List User)
 
 @source http.get "https://api.example.com/users"
-sig users: Signal UsersResponse
+signal users: Signal UsersResponse
 
 @source timer.every 120 with {
   immediate: True
   coalesce: True
 }
-sig tick: Signal TimerTick
+signal tick: Signal TimerTick
 
 @source timer.after 1000
-sig ready: Signal TimerReady
+signal ready: Signal TimerReady
 
 value timeoutError: HttpError = Timeout
 
@@ -253,28 +253,28 @@ value writeTextTask: Task Text Unit = writeText "/tmp/aivi-boundary/out.txt" "ok
 value deleteTask: Task Text Unit = deleteFile "/tmp/aivi-boundary/out.txt"
 
 @source process.args
-sig cliArgs: Signal (List Text)
+signal cliArgs: Signal (List Text)
 
 @source process.cwd
-sig cliCwd: Signal Text
+signal cliCwd: Signal Text
 
 @source env.get "ACCESS_TOKEN"
-sig cliToken: Signal (Option Text)
+signal cliToken: Signal (Option Text)
 
 @source stdio.read
-sig stdinText: Signal Text
+signal stdinText: Signal Text
 
 @source path.home
-sig homeDir: Signal Text
+signal homeDir: Signal Text
 
 @source path.configHome
-sig configHomeDir: Signal Text
+signal configHomeDir: Signal Text
 
 @source path.dataHome
-sig dataHomeDir: Signal Text
+signal dataHomeDir: Signal Text
 
 @source path.cacheHome
-sig cacheHomeDir: Signal Text
+signal cacheHomeDir: Signal Text
 
 @source path.tempDir
-sig tempDir: Signal Text
+signal tempDir: Signal Text

@@ -441,6 +441,29 @@ impl GlibLinkedRuntimeDriver {
         self.with_state(|state| state.linked.source_bindings().cloned().collect())
     }
 
+    /// Stop this driver permanently: prevent any further ticks from being
+    /// scheduled, and suspend every active source provider so that background
+    /// worker threads are stopped and their GLib-context callbacks are removed.
+    ///
+    /// This must be called during session teardown (before the GLib main loop
+    /// exits) so that the GLib context is clean for the next session, which is
+    /// critical in test environments where multiple sessions share a single
+    /// GLib main context.
+    pub fn stop(&self) {
+        self.shared.stopped.store(true, Ordering::Release);
+        let instances: Vec<SourceInstanceId> = self
+            .source_bindings()
+            .into_iter()
+            .map(|b| b.instance)
+            .collect();
+        self.with_state_mut(|state| {
+            for instance in instances {
+                let _ = state.linked.runtime_mut().suspend_source(instance);
+                state.providers.suspend_active_provider(instance);
+            }
+        });
+    }
+
     pub fn source_binding(&self, instance: SourceInstanceId) -> Option<LinkedSourceBinding> {
         self.with_state(|state| state.linked.source_binding(instance).cloned())
     }
@@ -632,6 +655,11 @@ struct GlibLinkedRuntimeShared {
     /// lifecycle evaluation run, then store the updated state back afterward.
     state: Mutex<Option<GlibLinkedRuntimeState>>,
     tick_enqueued: AtomicBool,
+    /// Set to `true` by `stop()` to prevent any further ticks from being
+    /// scheduled or executed.  Already-queued async tasks check this flag at
+    /// entry and return immediately, so that background-thread publications
+    /// that arrived just before `stop()` do not process under a dead session.
+    stopped: AtomicBool,
     notifier: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
 }
 
@@ -652,6 +680,7 @@ impl GlibLinkedRuntimeShared {
                 failures: VecDeque::new(),
             })),
             tick_enqueued: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
             notifier,
         }
     }
@@ -662,6 +691,9 @@ impl GlibLinkedRuntimeShared {
     }
 
     fn request_tick(self: &Arc<Self>) {
+        if self.stopped.load(Ordering::Acquire) {
+            return;
+        }
         if self.tick_enqueued.swap(true, Ordering::AcqRel) {
             return;
         }
@@ -679,6 +711,9 @@ impl GlibLinkedRuntimeShared {
     }
 
     fn drive_pending_ticks(&self) {
+        if self.stopped.load(Ordering::Acquire) {
+            return;
+        }
         let _guard = TickExecutionGuard::enter();
         let mut notify = false;
         loop {
