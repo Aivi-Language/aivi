@@ -39,7 +39,8 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::DomainKw
         | TokenKind::ProviderKw
         | TokenKind::UseKw
-        | TokenKind::ExportKw => Some(IDX_KEYWORD),
+        | TokenKind::ExportKw
+        | TokenKind::PatchKw => Some(IDX_KEYWORD),
 
         // Identifiers — emitted as variable; callers relying on type info
         // should use the HIR-backed `document_symbol` instead.
@@ -68,6 +69,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::Arrow
         | TokenKind::ThinArrow
         | TokenKind::LeftArrow
+        | TokenKind::ColonEquals
         | TokenKind::PipeTransform
         | TokenKind::PipeGate
         | TokenKind::PipeCase
@@ -77,6 +79,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::PipeRecurStep
         | TokenKind::PipeTap
         | TokenKind::PipeFanIn
+        | TokenKind::PatchApply
         | TokenKind::TruthyBranch
         | TokenKind::FalsyBranch
         | TokenKind::PipeValidate
@@ -164,4 +167,17 @@ pub async fn semantic_tokens_full(
         result_id: None,
         data: result,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{IDX_KEYWORD, IDX_OPERATOR, token_type_index};
+    use aivi_syntax::TokenKind;
+
+    #[test]
+    fn classifies_patch_surface_tokens() {
+        assert_eq!(token_type_index(TokenKind::PatchKw), Some(IDX_KEYWORD));
+        assert_eq!(token_type_index(TokenKind::PatchApply), Some(IDX_OPERATOR));
+        assert_eq!(token_type_index(TokenKind::ColonEquals), Some(IDX_OPERATOR));
+    }
 }

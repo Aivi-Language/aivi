@@ -16,7 +16,8 @@ use crate::{
     InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemId, ItemKind,
     LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue,
     MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl, MockDecorator, Module,
-    Name, NamePath, Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind,
+    Name, NamePath, PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector,
+    PatchSelectorSegment, Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind,
     ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
     RecordRowRename, RecordRowTransform, RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind,
     RegexLiteral, ResolutionState, ShowControl, SignalItem, SourceDecorator,
@@ -1892,6 +1893,21 @@ impl<'a> Lowerer<'a> {
                 })
             }
             syn::ExprKind::ResultBlock(block) => self.lower_result_block_expr(block),
+            syn::ExprKind::PatchApply { target, patch } => {
+                let target = self.lower_expr(target);
+                let patch = self.lower_patch_block(patch);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::PatchApply { target, patch },
+                })
+            }
+            syn::ExprKind::PatchLiteral(patch) => {
+                let patch = self.lower_patch_block(patch);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::PatchLiteral(patch),
+                })
+            }
             syn::ExprKind::Pipe(pipe) => self.lower_pipe_expr(pipe),
             syn::ExprKind::Markup(markup) => {
                 let markup = self.lower_markup_node(markup, MarkupPlacement::Renderable);
@@ -1902,6 +1918,63 @@ impl<'a> Lowerer<'a> {
                     kind: ExprKind::Markup(markup),
                 })
             }
+        }
+    }
+
+    fn lower_patch_block(&mut self, patch: &syn::PatchBlock) -> PatchBlock {
+        PatchBlock {
+            entries: patch
+                .entries
+                .iter()
+                .map(|entry| PatchEntry {
+                    span: entry.span,
+                    selector: self.lower_patch_selector(&entry.selector),
+                    instruction: self.lower_patch_instruction(&entry.instruction),
+                })
+                .collect(),
+        }
+    }
+
+    fn lower_patch_selector(&mut self, selector: &syn::PatchSelector) -> PatchSelector {
+        PatchSelector {
+            span: selector.span,
+            segments: selector
+                .segments
+                .iter()
+                .map(|segment| match segment {
+                    syn::PatchSelectorSegment::Named { name, dotted, span } => {
+                        PatchSelectorSegment::Named {
+                            name: self.make_name(&name.text, name.span),
+                            dotted: *dotted,
+                            span: *span,
+                        }
+                    }
+                    syn::PatchSelectorSegment::BracketTraverse { span } => {
+                        PatchSelectorSegment::BracketTraverse { span: *span }
+                    }
+                    syn::PatchSelectorSegment::BracketExpr { expr, span } => {
+                        PatchSelectorSegment::BracketExpr {
+                            expr: self.lower_expr(expr),
+                            span: *span,
+                        }
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    fn lower_patch_instruction(&mut self, instruction: &syn::PatchInstruction) -> PatchInstruction {
+        PatchInstruction {
+            span: instruction.span,
+            kind: match &instruction.kind {
+                syn::PatchInstructionKind::Replace(expr) => {
+                    PatchInstructionKind::Replace(self.lower_expr(expr))
+                }
+                syn::PatchInstructionKind::Store(expr) => {
+                    PatchInstructionKind::Store(self.lower_expr(expr))
+                }
+                syn::PatchInstructionKind::Remove => PatchInstructionKind::Remove,
+            },
         }
     }
 
@@ -4295,6 +4368,56 @@ impl<'a> Lowerer<'a> {
                             ambient_allowed,
                         });
                     }
+                    ExprKind::PatchApply { target, patch } => {
+                        for entry in patch.entries.iter().rev() {
+                            match entry.instruction.kind {
+                                crate::PatchInstructionKind::Replace(expr)
+                                | crate::PatchInstructionKind::Store(expr) => {
+                                    work.push(AmbientProjectionWork::Expr {
+                                        expr,
+                                        ambient_allowed,
+                                    });
+                                }
+                                crate::PatchInstructionKind::Remove => {}
+                            }
+                            for segment in entry.selector.segments.iter().rev() {
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                {
+                                    work.push(AmbientProjectionWork::Expr {
+                                        expr: *expr,
+                                        ambient_allowed,
+                                    });
+                                }
+                            }
+                        }
+                        work.push(AmbientProjectionWork::Expr {
+                            expr: *target,
+                            ambient_allowed,
+                        });
+                    }
+                    ExprKind::PatchLiteral(patch) => {
+                        for entry in patch.entries.iter().rev() {
+                            match entry.instruction.kind {
+                                crate::PatchInstructionKind::Replace(expr)
+                                | crate::PatchInstructionKind::Store(expr) => {
+                                    work.push(AmbientProjectionWork::Expr {
+                                        expr,
+                                        ambient_allowed,
+                                    });
+                                }
+                                crate::PatchInstructionKind::Remove => {}
+                            }
+                            for segment in entry.selector.segments.iter().rev() {
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                {
+                                    work.push(AmbientProjectionWork::Expr {
+                                        expr: *expr,
+                                        ambient_allowed,
+                                    });
+                                }
+                            }
+                        }
+                    }
                     ExprKind::Pipe(pipe) => {
                         for stage in pipe.stages.iter().rev() {
                             match &stage.kind {
@@ -4844,6 +4967,47 @@ impl<'a> Lowerer<'a> {
                         operator,
                         right,
                     },
+                }
+            }
+            ExprKind::PatchApply { target, patch } => {
+                self.resolve_expr(target, namespaces, env);
+                for entry in &patch.entries {
+                    for segment in &entry.selector.segments {
+                        if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                            self.resolve_expr(*expr, namespaces, env);
+                        }
+                    }
+                    match entry.instruction.kind {
+                        crate::PatchInstructionKind::Replace(expr)
+                        | crate::PatchInstructionKind::Store(expr) => {
+                            self.resolve_expr(expr, namespaces, env);
+                        }
+                        crate::PatchInstructionKind::Remove => {}
+                    }
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::PatchApply { target, patch },
+                }
+            }
+            ExprKind::PatchLiteral(patch) => {
+                for entry in &patch.entries {
+                    for segment in &entry.selector.segments {
+                        if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                            self.resolve_expr(*expr, namespaces, env);
+                        }
+                    }
+                    match entry.instruction.kind {
+                        crate::PatchInstructionKind::Replace(expr)
+                        | crate::PatchInstructionKind::Store(expr) => {
+                            self.resolve_expr(expr, namespaces, env);
+                        }
+                        crate::PatchInstructionKind::Remove => {}
+                    }
+                }
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::PatchLiteral(patch),
                 }
             }
             ExprKind::Pipe(pipe) => {

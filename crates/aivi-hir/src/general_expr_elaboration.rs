@@ -1011,6 +1011,12 @@ impl<'a> GeneralExprElaborator<'a> {
                     kind: GateRuntimeUnsupportedKind::Markup,
                 }]);
             }
+            ExprKind::PatchApply { .. } | ExprKind::PatchLiteral(_) => {
+                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                    span: expr.span,
+                    kind: GateRuntimeUnsupportedKind::PatchExpr,
+                }]);
+            }
             _ => {}
         }
         let ty = self.expr_type(expr_id, env, ambient, expected)?;
@@ -1196,7 +1202,10 @@ impl<'a> GeneralExprElaborator<'a> {
                 Some(&ty),
                 PipeLoweringMode::Full,
             )?),
-            ExprKind::Regex(_) | ExprKind::Markup(_) => {
+            ExprKind::Regex(_)
+            | ExprKind::Markup(_)
+            | ExprKind::PatchApply { .. }
+            | ExprKind::PatchLiteral(_) => {
                 unreachable!("unsupported runtime forms should be returned before type inference")
             }
             ExprKind::Cluster(cluster) => {
