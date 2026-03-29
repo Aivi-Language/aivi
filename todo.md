@@ -1,8 +1,5 @@
 # Outstanding implementation gaps
 
-- Eq constraints are collected but still do not go through a dedicated solver pass.
-  - Evidence: `crates/aivi-hir/src/typecheck.rs` explicitly warns that collected `Eq` constraints can otherwise remain unsolved.
-
 - Higher-kinded user-authored class and instance support is still only partial end to end.
   - Evidence: ambient prelude declarations exist, but public `aivi check` still rejects examples like `instance Applicative Option` and class members shaped like `F Int`.
 
