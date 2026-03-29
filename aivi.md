@@ -93,6 +93,28 @@ State Transitions
 
 .done never reverts within the same epoch.
 
+------------------------------------------------------------
+Reactive Update Clauses
+------------------------------------------------------------
+
+Reactive updates attach event-driven commits to an existing signal:
+
+- `when <guard> => <target> <- <expr>`
+
+Rules:
+- target signal must already be declared
+- guard is an ordinary expression and must type-check as `Bool`
+- body is an ordinary expression with no ambient subject
+- guard and body participate in ordinary signal dependency extraction
+- guard and body must not read the target signal they overwrite
+- reactive updates participate in ordinary signal cycle detection
+- if the guard is false, the target keeps its previous committed value
+- if multiple clauses for the same target fire in one epoch, later clauses win by source order
+- clause evaluation observes the epoch's stable upstream snapshot
+- signals with declaration bodies seed their initial committed value before reactive clause commits are applied
+
+Reactive updates are evaluated transactionally with other signal work in dependency order.
+
 ============================================================
 4. Types and Failure Model (Normative)
 ============================================================
@@ -131,6 +153,17 @@ Ambient:
 Examples:
 . + 1
 .lastname
+
+Reactive update clause:
+when <guard> => <target> <- <expr>
+
+Rules:
+- `when` is a top-level reactive update surface, not a declaration keyword
+- `<guard>` is an ordinary expression and must type-check as `Bool`
+- `<target>` must resolve to a previously declared local signal
+- `<expr>` is an ordinary expression with no ambient subject
+- `when` is not pipe syntax
+- `when` is not `result { ... }` binding syntax
 
 ============================================================
 6. Operators and Precedence (Normative)
@@ -277,11 +310,17 @@ Rules:
 13. Results (Normative)
 ============================================================
 
-result defines graph assembly.
+`result { ... }` is a sequential `Result` block.
 
-- fields are nodes
-- dependencies define execution
-- no implicit ordering
+Rules:
+- each `<-` binding must produce `Result E A`
+- bindings execute in declaration order
+- the first `Err` short-circuits the block
+- bound `Ok` payloads remain in scope for later bindings and the tail expression
+- the final expression is wrapped in `Ok`
+- if the tail is omitted, the last bound name is returned
+
+`result` is an expression form. It is not a dependency-graph declaration surface.
 
 ============================================================
 14. Non-Normative Notes
