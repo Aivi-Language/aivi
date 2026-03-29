@@ -1068,6 +1068,11 @@ pub enum ExprKind {
         operator: BinaryOperator,
         right: ExprId,
     },
+    PatchApply {
+        target: ExprId,
+        patch: PatchBlock,
+    },
+    PatchLiteral(PatchBlock),
     Pipe(PipeExpr),
     Cluster(ClusterId),
     Markup(MarkupNodeId),
@@ -1088,6 +1093,53 @@ pub struct MapExprEntry {
     pub span: SourceSpan,
     pub key: ExprId,
     pub value: ExprId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchBlock {
+    pub entries: Vec<PatchEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchEntry {
+    pub span: SourceSpan,
+    pub selector: PatchSelector,
+    pub instruction: PatchInstruction,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchSelector {
+    pub segments: Vec<PatchSelectorSegment>,
+    pub span: SourceSpan,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatchSelectorSegment {
+    Named {
+        name: Name,
+        dotted: bool,
+        span: SourceSpan,
+    },
+    BracketTraverse {
+        span: SourceSpan,
+    },
+    BracketExpr {
+        expr: ExprId,
+        span: SourceSpan,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchInstruction {
+    pub kind: PatchInstructionKind,
+    pub span: SourceSpan,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatchInstructionKind {
+    Replace(ExprId),
+    Store(ExprId),
+    Remove,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

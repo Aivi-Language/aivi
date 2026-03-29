@@ -469,6 +469,11 @@ impl Validator<'_> {
                     self.require_expr(expr.span, "expression", "binary left operand", *left);
                     self.require_expr(expr.span, "expression", "binary right operand", *right);
                 }
+                ExprKind::PatchApply { target, patch } => {
+                    self.require_expr(expr.span, "expression", "patch target", *target);
+                    self.validate_patch_block(expr.span, patch);
+                }
+                ExprKind::PatchLiteral(patch) => self.validate_patch_block(expr.span, patch),
                 ExprKind::Pipe(pipe) => {
                     self.require_expr(expr.span, "expression", "pipe head", pipe.head);
                     for stage in pipe.stages.iter() {
@@ -525,6 +530,41 @@ impl Validator<'_> {
                 }
                 ExprKind::Markup(node) => {
                     self.require_markup_node(expr.span, "expression", "markup node", *node);
+                }
+            }
+        }
+    }
+
+    fn validate_patch_block(&mut self, owner_span: SourceSpan, patch: &crate::PatchBlock) {
+        for entry in &patch.entries {
+            self.check_span("patch entry", entry.span);
+            self.check_span("patch selector", entry.selector.span);
+            for segment in &entry.selector.segments {
+                match segment {
+                    crate::PatchSelectorSegment::Named { name, span, .. } => {
+                        self.check_span("patch selector segment", *span);
+                        self.check_name(name);
+                    }
+                    crate::PatchSelectorSegment::BracketTraverse { span } => {
+                        self.check_span("patch selector segment", *span);
+                    }
+                    crate::PatchSelectorSegment::BracketExpr { expr, span } => {
+                        self.check_span("patch selector segment", *span);
+                        self.require_expr(*span, "patch selector", "bracket expression", *expr);
+                    }
+                }
+            }
+            self.check_span("patch instruction", entry.instruction.span);
+            match entry.instruction.kind {
+                crate::PatchInstructionKind::Replace(expr)
+                | crate::PatchInstructionKind::Store(expr) => self.require_expr(
+                    entry.instruction.span,
+                    "patch instruction",
+                    "instruction expression",
+                    expr,
+                ),
+                crate::PatchInstructionKind::Remove => {
+                    let _ = owner_span;
                 }
             }
         }
@@ -4846,6 +4886,58 @@ impl Validator<'_> {
                                 env: env.clone(),
                             });
                             work.push(CaseExhaustivenessWork::Expr { expr: left, env });
+                        }
+                        ExprKind::PatchApply { target, patch } => {
+                            work.push(CaseExhaustivenessWork::Expr {
+                                expr: target,
+                                env: env.clone(),
+                            });
+                            for entry in patch.entries.into_iter().rev() {
+                                match entry.instruction.kind {
+                                    crate::PatchInstructionKind::Replace(expr)
+                                    | crate::PatchInstructionKind::Store(expr) => {
+                                        work.push(CaseExhaustivenessWork::Expr {
+                                            expr,
+                                            env: env.clone(),
+                                        });
+                                    }
+                                    crate::PatchInstructionKind::Remove => {}
+                                }
+                                for segment in entry.selector.segments.into_iter().rev() {
+                                    if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                        segment
+                                    {
+                                        work.push(CaseExhaustivenessWork::Expr {
+                                            expr,
+                                            env: env.clone(),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        ExprKind::PatchLiteral(patch) => {
+                            for entry in patch.entries.into_iter().rev() {
+                                match entry.instruction.kind {
+                                    crate::PatchInstructionKind::Replace(expr)
+                                    | crate::PatchInstructionKind::Store(expr) => {
+                                        work.push(CaseExhaustivenessWork::Expr {
+                                            expr,
+                                            env: env.clone(),
+                                        });
+                                    }
+                                    crate::PatchInstructionKind::Remove => {}
+                                }
+                                for segment in entry.selector.segments.into_iter().rev() {
+                                    if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                        segment
+                                    {
+                                        work.push(CaseExhaustivenessWork::Expr {
+                                            expr,
+                                            env: env.clone(),
+                                        });
+                                    }
+                                }
+                            }
                         }
                         ExprKind::Pipe(pipe) => {
                             work.push(CaseExhaustivenessWork::Expr {
@@ -10554,7 +10646,12 @@ impl<'a> GateTypeContext<'a> {
                 GateType::Option(Box::new(primitive(BuiltinType::Text)))
             }
             IntrinsicValue::XdgDataDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
-            IntrinsicValue::XdgConfigDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
+            IntrinsicValue::XdgConfigDirs => {
+                GateType::List(Box::new(primitive(BuiltinType::Text)))
+            }
+            IntrinsicValue::TupleConstructor { arity } => {
+                panic!("tuple constructor intrinsic typing is not implemented for arity {arity}")
+            }
         }
     }
 
@@ -12180,6 +12277,46 @@ impl<'a> GateTypeContext<'a> {
             }
             ExprKind::Pipe(pipe) => self.infer_pipe_expr(&pipe, env),
             ExprKind::Cluster(cluster) => self.infer_cluster_expr(cluster, env),
+            ExprKind::PatchApply { target, patch } => {
+                let mut info = self.infer_expr(target, env, ambient);
+                info.actual = info
+                    .actual
+                    .clone()
+                    .or_else(|| info.ty.as_ref().map(SourceOptionActualType::from_gate_type));
+                for entry in &patch.entries {
+                    for segment in &entry.selector.segments {
+                        if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                            info.merge(self.infer_expr(*expr, env, ambient));
+                        }
+                    }
+                    match entry.instruction.kind {
+                        crate::PatchInstructionKind::Replace(expr)
+                        | crate::PatchInstructionKind::Store(expr) => {
+                            info.merge(self.infer_expr(expr, env, ambient));
+                        }
+                        crate::PatchInstructionKind::Remove => {}
+                    }
+                }
+                info
+            }
+            ExprKind::PatchLiteral(patch) => {
+                let mut info = GateExprInfo::default();
+                for entry in &patch.entries {
+                    for segment in &entry.selector.segments {
+                        if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                            info.merge(self.infer_expr(*expr, env, ambient));
+                        }
+                    }
+                    match entry.instruction.kind {
+                        crate::PatchInstructionKind::Replace(expr)
+                        | crate::PatchInstructionKind::Store(expr) => {
+                            info.merge(self.infer_expr(expr, env, ambient));
+                        }
+                        crate::PatchInstructionKind::Remove => {}
+                    }
+                }
+                info
+            }
             ExprKind::Markup(_) => GateExprInfo::default(),
         };
         self.finalize_expr_info(info)
@@ -15025,6 +15162,56 @@ pub(crate) fn walk_expr_tree(
                             expr: left,
                             is_root: false,
                         });
+                    }
+                    ExprKind::PatchApply { target, patch } => {
+                        for entry in patch.entries.iter().rev() {
+                            match entry.instruction.kind {
+                                crate::PatchInstructionKind::Replace(expr)
+                                | crate::PatchInstructionKind::Store(expr) => {
+                                    work.push(ExprWalkWork::Expr {
+                                        expr,
+                                        is_root: false,
+                                    });
+                                }
+                                crate::PatchInstructionKind::Remove => {}
+                            }
+                            for segment in entry.selector.segments.iter().rev() {
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                {
+                                    work.push(ExprWalkWork::Expr {
+                                        expr: *expr,
+                                        is_root: false,
+                                    });
+                                }
+                            }
+                        }
+                        work.push(ExprWalkWork::Expr {
+                            expr: target,
+                            is_root: false,
+                        });
+                    }
+                    ExprKind::PatchLiteral(patch) => {
+                        for entry in patch.entries.iter().rev() {
+                            match entry.instruction.kind {
+                                crate::PatchInstructionKind::Replace(expr)
+                                | crate::PatchInstructionKind::Store(expr) => {
+                                    work.push(ExprWalkWork::Expr {
+                                        expr,
+                                        is_root: false,
+                                    });
+                                }
+                                crate::PatchInstructionKind::Remove => {}
+                            }
+                            for segment in entry.selector.segments.iter().rev() {
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                {
+                                    work.push(ExprWalkWork::Expr {
+                                        expr: *expr,
+                                        is_root: false,
+                                    });
+                                }
+                            }
+                        }
                     }
                     ExprKind::Pipe(pipe) => {
                         for stage in pipe.stages.iter().rev() {

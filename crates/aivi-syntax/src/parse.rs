@@ -7,14 +7,15 @@ use crate::{
         DomainItem, DomainMember, DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind,
         FloatLiteral, FunctionParam, Identifier, InstanceBody, InstanceItem, InstanceMember,
         IntegerLiteral, Item, ItemBase, MapExpr, MapExprEntry, MarkupAttribute,
-        MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName, Pattern,
-        PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath,
-        QualifiedName, RecordExpr, RecordField, RecordPatternField, RegexLiteral, ResultBinding,
-        ResultBlockExpr, SourceDecorator, SourceProviderContractBody,
-        SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
-        SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
-        TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody, TypeExpr,
-        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
+        MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName,
+        PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector,
+        PatchSelectorSegment, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage,
+        PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
+        RecordPatternField, RegexLiteral, ResultBinding, ResultBlockExpr, SourceDecorator,
+        SourceProviderContractBody, SourceProviderContractFieldValue, SourceProviderContractItem,
+        SourceProviderContractMember, SourceProviderContractSchemaMember, SuffixedIntegerLiteral,
+        TextFragment, TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody,
+        TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
@@ -1497,9 +1498,7 @@ impl<'a> Parser<'a> {
         let checkpoint = *cursor;
         if let Some(constraints) = self.parse_constraint_list(cursor, end)
             && constraints.iter().all(Self::is_constraint_expr)
-            && self
-                .consume_kind(cursor, end, TokenKind::ThinArrow)
-                .is_some()
+            && self.consume_constraint_separator(cursor, end)
         {
             return (
                 constraints,
@@ -1557,9 +1556,7 @@ impl<'a> Parser<'a> {
         let checkpoint = *cursor;
         if let Some(constraints) = self.parse_constraint_list(cursor, end)
             && constraints.iter().all(Self::is_constraint_expr)
-            && self
-                .consume_kind(cursor, end, TokenKind::ThinArrow)
-                .is_some()
+            && self.consume_constraint_separator(cursor, end)
         {
             return constraints;
         }
@@ -1856,9 +1853,38 @@ impl<'a> Parser<'a> {
         if !self.depth_enter(cursor) {
             return None;
         }
-        let result = self.parse_pipe_expr(cursor, end, stop);
+        let result = self.parse_patch_apply_expr(cursor, end, stop);
         self.depth_exit();
         result
+    }
+
+    fn parse_patch_apply_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+    ) -> Option<Expr> {
+        let mut expr = self.parse_pipe_expr(cursor, end, stop)?;
+        loop {
+            let Some(index) = self.peek_nontrivia(*cursor, end) else {
+                break;
+            };
+            if self.expr_should_stop(index, stop) || self.tokens[index].kind() != TokenKind::PatchApply
+            {
+                break;
+            }
+            *cursor = index + 1;
+            let patch = self.parse_patch_block(cursor, end)?;
+            let span = self.join_spans(expr.span, patch.span);
+            expr = Expr {
+                span,
+                kind: ExprKind::PatchApply {
+                    target: Box::new(expr),
+                    patch,
+                },
+            };
+        }
+        Some(expr)
     }
 
     fn parse_pipe_expr(&mut self, cursor: &mut usize, end: usize, stop: ExprStop) -> Option<Expr> {
@@ -2248,6 +2274,7 @@ impl<'a> Parser<'a> {
         }
 
         match self.tokens[index].kind() {
+            TokenKind::PatchKw => self.parse_patch_literal_expr(cursor, end),
             TokenKind::Identifier => {
                 if self.is_identifier_text(index, "result")
                     && self
@@ -2337,6 +2364,141 @@ impl<'a> Parser<'a> {
             }
             _ => None,
         }
+    }
+
+    fn parse_patch_literal_expr(&mut self, cursor: &mut usize, end: usize) -> Option<Expr> {
+        let start = self.consume_kind(cursor, end, TokenKind::PatchKw)?;
+        let patch = self.parse_patch_block(cursor, end)?;
+        Some(Expr {
+            span: self.source_span_for_range(start, *cursor),
+            kind: ExprKind::PatchLiteral(patch),
+        })
+    }
+
+    fn parse_patch_block(&mut self, cursor: &mut usize, end: usize) -> Option<PatchBlock> {
+        let start = self.consume_kind(cursor, end, TokenKind::LBrace)?;
+        let mut entries = Vec::new();
+        loop {
+            if self.consume_kind(cursor, end, TokenKind::RBrace).is_some() {
+                break;
+            }
+            let selector = self.parse_patch_selector(cursor, end)?;
+            let _ = self.consume_kind(cursor, end, TokenKind::Colon)?;
+            let instruction = self.parse_patch_instruction(cursor, end)?;
+            let span = self.join_spans(selector.span, instruction.span);
+            entries.push(PatchEntry {
+                selector,
+                instruction,
+                span,
+            });
+            if self.consume_kind(cursor, end, TokenKind::Comma).is_some() {
+                continue;
+            }
+            if let Some(index) = self.peek_nontrivia(*cursor, end) {
+                if self.tokens[index].kind() == TokenKind::RBrace {
+                    let _ = self.consume_kind(cursor, end, TokenKind::RBrace);
+                    break;
+                }
+                if self.tokens[index].line_start() && self.token_starts_patch_selector(index) {
+                    continue;
+                }
+            }
+            break;
+        }
+
+        Some(PatchBlock {
+            entries,
+            span: self.source_span_for_range(start, *cursor),
+        })
+    }
+
+    fn parse_patch_selector(&mut self, cursor: &mut usize, end: usize) -> Option<PatchSelector> {
+        let start_index = self.peek_nontrivia(*cursor, end)?;
+        let mut segments = Vec::new();
+        loop {
+            if let Some(start) = self.consume_kind(cursor, end, TokenKind::Dot) {
+                let name = self.parse_identifier(cursor, end)?;
+                let span = self.source_span_for_range(start, *cursor);
+                segments.push(PatchSelectorSegment::Named {
+                    name,
+                    dotted: true,
+                    span,
+                });
+                continue;
+            }
+            if self.peek_kind(*cursor, end) == Some(TokenKind::LBracket) {
+                segments.push(self.parse_patch_bracket_selector(cursor, end)?);
+                continue;
+            }
+            if segments.is_empty() {
+                if let Some(name) = self.parse_identifier(cursor, end) {
+                    let span = name.span;
+                    segments.push(PatchSelectorSegment::Named {
+                        name,
+                        dotted: false,
+                        span,
+                    });
+                    continue;
+                }
+            }
+            break;
+        }
+        if segments.is_empty() {
+            return None;
+        }
+        let end_span = patch_selector_segment_span(segments.last().expect("non-empty segments"));
+        Some(PatchSelector {
+            segments,
+            span: SourceSpan::new(
+                self.source.id(),
+                Span::new(self.tokens[start_index].span().start(), end_span.span().end()),
+            ),
+        })
+    }
+
+    fn parse_patch_bracket_selector(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+    ) -> Option<PatchSelectorSegment> {
+        let start = self.consume_kind(cursor, end, TokenKind::LBracket)?;
+        if self.consume_kind(cursor, end, TokenKind::Star).is_some() {
+            let close = self.consume_kind(cursor, end, TokenKind::RBracket)?;
+            return Some(PatchSelectorSegment::BracketTraverse {
+                span: self.source_span_for_range(start, close + 1),
+            });
+        }
+        let expr = self.parse_expr(cursor, end, ExprStop::list_context())?;
+        let _ = self.consume_kind(cursor, end, TokenKind::RBracket)?;
+        Some(PatchSelectorSegment::BracketExpr {
+            span: self.source_span_for_range(start, *cursor),
+            expr: Box::new(expr),
+        })
+    }
+
+    fn parse_patch_instruction(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+    ) -> Option<PatchInstruction> {
+        if let Some(start) = self.consume_kind(cursor, end, TokenKind::ColonEquals) {
+            let expr = self.parse_expr(cursor, end, ExprStop::patch_entry_context())?;
+            return Some(PatchInstruction {
+                span: self.source_span_for_range(start, *cursor),
+                kind: PatchInstructionKind::Store(Box::new(expr)),
+            });
+        }
+        if let Some(start) = self.consume_kind(cursor, end, TokenKind::Minus) {
+            return Some(PatchInstruction {
+                span: self.source_span_of_token(start),
+                kind: PatchInstructionKind::Remove,
+            });
+        }
+        let expr = self.parse_expr(cursor, end, ExprStop::patch_entry_context())?;
+        Some(PatchInstruction {
+            span: expr.span,
+            kind: PatchInstructionKind::Replace(Box::new(expr)),
+        })
     }
 
     fn parse_result_block_expr(&mut self, cursor: &mut usize, end: usize) -> Option<Expr> {
@@ -3565,6 +3727,12 @@ impl<'a> Parser<'a> {
     }
 
     fn expr_should_stop(&self, index: usize, stop: ExprStop) -> bool {
+        if stop.patch_entry
+            && self.tokens[index].line_start()
+            && self.token_starts_patch_selector(index)
+        {
+            return true;
+        }
         match self.tokens[index].kind() {
             TokenKind::Comma => stop.comma,
             TokenKind::RParen => stop.rparen,
@@ -3575,6 +3743,18 @@ impl<'a> Parser<'a> {
             kind if kind.is_pipe_operator() => stop.pipe_stage,
             _ => false,
         }
+    }
+
+    fn token_starts_patch_selector(&self, index: usize) -> bool {
+        matches!(
+            self.tokens[index].kind(),
+            TokenKind::Dot | TokenKind::LBracket | TokenKind::Identifier
+        ) || self.tokens[index].kind().is_keyword()
+    }
+
+    fn consume_constraint_separator(&self, cursor: &mut usize, end: usize) -> bool {
+        self.consume_kind(cursor, end, TokenKind::Arrow).is_some()
+            || self.consume_kind(cursor, end, TokenKind::ThinArrow).is_some()
     }
 
     fn negative_numeric_literal_token(&self, minus_index: usize, end: usize) -> Option<usize> {
@@ -3658,6 +3838,7 @@ impl<'a> Parser<'a> {
             TokenKind::Comma => stop.comma,
             TokenKind::RParen => stop.rparen,
             TokenKind::RBrace => stop.rbrace,
+            TokenKind::Arrow => stop.arrow,
             TokenKind::ThinArrow => stop.thin_arrow,
             _ => false,
         }
@@ -4175,6 +4356,7 @@ struct ExprStop {
     arrow: bool,
     pipe_stage: bool,
     hash: bool,
+    patch_entry: bool,
 }
 
 impl ExprStop {
@@ -4217,6 +4399,23 @@ impl ExprStop {
             rbrace: true,
             ..Self::default()
         }
+    }
+
+    fn patch_entry_context() -> Self {
+        Self {
+            comma: true,
+            rbrace: true,
+            patch_entry: true,
+            ..Self::default()
+        }
+    }
+}
+
+fn patch_selector_segment_span(segment: &PatchSelectorSegment) -> SourceSpan {
+    match segment {
+        PatchSelectorSegment::Named { span, .. }
+        | PatchSelectorSegment::BracketTraverse { span }
+        | PatchSelectorSegment::BracketExpr { span, .. } => *span,
     }
 }
 
@@ -4274,6 +4473,7 @@ struct TypeStop {
     comma: bool,
     rparen: bool,
     rbrace: bool,
+    arrow: bool,
     thin_arrow: bool,
 }
 
@@ -4296,6 +4496,7 @@ impl TypeStop {
 
     fn constraint_attempt() -> Self {
         Self {
+            arrow: true,
             thin_arrow: true,
             ..Self::default()
         }
@@ -5139,6 +5340,32 @@ instance Eq A -> Eq (Option A)
             panic!("expected constrained instance item");
         };
         assert_eq!(instance.context.len(), 1);
+    }
+
+    #[test]
+    fn parser_tracks_constraint_prefixes_on_class_members() {
+        let (_, parsed) = load(
+            r#"class Functor F
+    map:Applicative G=>(A -> G B) -> F A -> G (F B)
+"#,
+        );
+        assert!(
+            !parsed.has_errors(),
+            "expected constrained class member to parse cleanly, got diagnostics: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let Item::Class(class_item) = &parsed.module.items[0] else {
+            panic!("expected class item");
+        };
+        let body = class_item.class_body().expect("class item should have a body");
+        assert_eq!(body.members.len(), 1);
+        assert_eq!(body.members[0].constraints.len(), 1);
+        assert!(
+            body.members[0].annotation.is_some(),
+            "expected class member annotation, got {:?}",
+            body.members[0]
+        );
     }
 
     #[test]

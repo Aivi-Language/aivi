@@ -1093,6 +1093,38 @@ Restrictions:
 - `<|*` is legal only immediately after a `*|>` segment
 - the join function is explicit; no implicit flattening or default join
 
+### 11.5.2 Structural patches
+
+Structural patches update immutable values with explicit selector paths.
+
+```aivi
+updated = target <| {
+    .profile.name: "Grace"
+    .items[.active].price: 3
+}
+
+promote : User -> User
+promote = patch {
+    .isAdmin: True
+}
+```
+
+Current checked slice:
+
+- record field selectors use dot-prefixed segments such as `.profile.name`
+- list selectors support `[*]` traversal and `[predicate]` filtering with the current element as ambient subject
+- map selectors support `[*]` value traversal, `[key-expr]` direct key selection, and `[predicate]` entry filtering with ambient `.key` / `.value`
+- constructor focus selectors currently continue through built-in `Some` / `Ok` / `Err` / `Valid` / `Invalid` and same-module constructors with exactly one payload field
+- plain instructions replace the selected value, or transform it when the expression has type `A -> A`
+- `:=` stores a function value as data instead of applying it
+
+Current limitation:
+
+- structural removal syntax (`.field: -`) parses and typechecks to an explicit blocker, but result-type-changing patch elaboration is not wired through the executable slice yet
+- general-expression and gate lowering still report patch expressions as unsupported runtime forms
+- same-module constructor focus is intentionally narrow: multi-field constructor payloads are not yet patch-focusable
+- map predicate projections must use the normalized dot-prefixed form (`.key`, `.value`); bare selector names are not part of this slice
+
 ### 11.6 `|` tap
 
 Observes the subject without changing it.
@@ -2440,6 +2472,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - `instance` blocks with same-module class resolution ✓
 - provider declarations (`provider qualified.name`) ✓
 - input signal declarations (body-less annotated `signal`) ✓
+- structural patch surface (`<|`, `patch { ... }`, `:=`, selector paths) ✓
 - module-aware expression typechecker in `aivi-hir` ✓
 
 ### Milestone 3 — Kinds and core typing — **COMPLETE**
@@ -2454,6 +2487,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - truthy/falsy branch handoff (`T|>`, `F|>`) including one-layer `Signal` lift ✓
 - case exhaustiveness checks for known closed sums ✓
 - bidirectional record/collection/projection shape checking ✓
+- structural patch typechecking for records, lists, maps, and single-payload constructor focus **PARTIAL**
 
 ### Milestone 4 — Pipe normalization — **COMPLETE**
 
@@ -2464,6 +2498,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - fan-out (`*|>` / `<|*`) typed handoff ✓
 - source lifecycle handoff ✓
 - diagnostics for illegal unfinished clusters ✓
+- patch expressions still block executable general-expression / gate lowering **PARTIAL**
 
 ### Milestone 5 — Reactive core and scheduler — **COMPLETE**
 

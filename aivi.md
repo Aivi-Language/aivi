@@ -165,6 +165,36 @@ Example:
 a &|> b |> f  ==  (a &|> b) |> f
 
 ============================================================
+6.5 Structural Patches (Current checked slice)
+============================================================
+
+Structural patches update immutable values with selector paths.
+
+```aivi
+value user2 = user <| {
+    .profile.name: "Grace"
+    .items[.active].price: 3
+}
+
+value promote:(User -> User) = patch {
+    .isAdmin: True
+}
+```
+
+Current checked forms:
+
+- dot-prefixed field selectors such as `.profile.name`
+- list traversal and predicates: `[*]`, `[.active]`
+- map key and predicate selectors: `["id-1"]`, `[.key == "id-1"]`
+- function-as-data with `:=`
+- constructor focus through `Some`, `Ok`, `Err`, `Valid`, `Invalid`, and same-module constructors with one payload field
+
+Current limitations:
+
+- `.field: -` is parsed but still rejected later because result-type-changing removal lowering is not implemented yet
+- patch expressions are not yet executable in the current runtime lowering slice
+
+============================================================
 7. Pipes (Normative)
 ============================================================
 
