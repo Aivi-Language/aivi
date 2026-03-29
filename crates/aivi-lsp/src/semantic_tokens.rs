@@ -41,9 +41,8 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::UseKw
         | TokenKind::ExportKw => Some(IDX_KEYWORD),
 
-        // Identifiers — emitted as variable; callers relying on type info
-        // should use the HIR-backed `document_symbol` instead.
-        TokenKind::Identifier => Some(IDX_VARIABLE),
+        // Soft keywords first; other identifiers remain variables.
+        TokenKind::Identifier => None,
 
         // Literals
         TokenKind::StringLiteral | TokenKind::RegexLiteral => Some(IDX_STRING),
@@ -123,7 +122,7 @@ pub async fn semantic_tokens_full(
     let mut prev_char: u32 = 0;
 
     for token in lexed.tokens() {
-        let Some(type_index) = token_type_index(token.kind()) else {
+        let Some(type_index) = soft_or_hard_token_type_index(*token, source) else {
             continue;
         };
 
@@ -164,4 +163,12 @@ pub async fn semantic_tokens_full(
         result_id: None,
         data: result,
     }))
+}
+
+fn soft_or_hard_token_type_index(token: aivi_syntax::Token, source: &aivi_base::SourceFile) -> Option<u32> {
+    match token.kind() {
+        TokenKind::Identifier if token.text(source) == "when" => Some(IDX_KEYWORD),
+        TokenKind::Identifier => Some(IDX_VARIABLE),
+        kind => token_type_index(kind),
+    }
 }

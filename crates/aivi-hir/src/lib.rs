@@ -75,9 +75,9 @@ pub use hir::{
     MatchControl, MockDecorator, Module, ModuleArenas, Name, NameError, NamePath, NamePathError,
     Pattern, PatternKind, PipeExpr, PipeFanoutSegment, PipeRecurrenceShapeError,
     PipeRecurrenceSuffix, PipeStage, PipeStageKind, PipeTransformMode, ProjectionBase, RecordExpr,
-    RecordExprField, RecordFieldSurface, RecordPatternField, RecurrenceWakeupDecorator,
-    RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, RootItemError, ShowControl,
-    SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
+    RecordExprField, RecordFieldSurface, RecordPatternField, ReactiveUpdateClause,
+    RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState,
+    RootItemError, ShowControl, SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
     SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, SumConstructorHandle,
     TermReference, TermResolution, TestDecorator, TextFragment, TextInterpolation, TextLiteral,
     TextSegment, TupleConstructorArity, TypeField, TypeItem, TypeItemBody, TypeKind, TypeNode,
@@ -98,7 +98,10 @@ pub use recurrence_elaboration::{
 };
 pub use resolver::{ImportCycle, ImportModuleResolution, ImportResolver, NullImportResolver};
 pub use sequence::{AtLeastTwo, NonEmpty, SequenceError};
-pub use signal_metadata_elaboration::populate_signal_metadata;
+pub use signal_metadata_elaboration::{
+    collect_signal_dependencies_for_expr, collect_signal_dependencies_for_exprs,
+    populate_signal_metadata,
+};
 pub use source_contract_resolution::{
     ResolvedSourceContractType, ResolvedSourceTypeConstructor, SourceContractResolutionError,
     SourceContractResolutionErrorKind, SourceContractTypeResolver,

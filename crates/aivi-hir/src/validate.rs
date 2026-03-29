@@ -39,6 +39,7 @@ use crate::{
         ResolvedSourceContractType, ResolvedSourceTypeConstructor,
         SourceContractResolutionErrorKind, SourceContractTypeResolver,
     },
+    signal_metadata_elaboration::expr_signal_dependencies,
     typecheck::{TypeConstraint, expression_matches, typecheck_module},
 };
 
@@ -817,7 +818,13 @@ impl Validator<'_> {
                     if let Some(body) = item.body {
                         self.require_expr(item.header.span, "signal item", "body", body);
                     }
+                    for update in &item.reactive_updates {
+                        self.check_span("reactive update clause", update.span);
+                        self.require_expr(update.span, "reactive update clause", "guard", update.guard);
+                        self.require_expr(update.span, "reactive update clause", "body", update.body);
+                    }
                     self.check_signal_dependencies(item.header.span, &item.signal_dependencies);
+                    self.validate_reactive_update_dependencies(item_id, item);
                     let has_source_decorator = item.header.decorators.iter().any(|decorator_id| {
                         matches!(
                             self.module
@@ -7893,6 +7900,45 @@ impl Validator<'_> {
         }
     }
 
+    fn validate_reactive_update_dependencies(&mut self, item_id: ItemId, item: &SignalItem) {
+        if self.mode != ValidationMode::RequireResolvedNames {
+            return;
+        }
+        let target_name = item.name.text();
+        for update in &item.reactive_updates {
+            if expr_signal_dependencies(self.module, [update.guard]).contains(&item_id) {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "reactive update guard for `{target_name}` cannot read the target signal itself"
+                    ))
+                    .with_code(code("reactive-update-self-reference"))
+                    .with_label(DiagnosticLabel::primary(
+                        self.module.exprs()[update.guard].span,
+                        "guards must not create feedback through the signal they update",
+                    ))
+                    .with_note(
+                        "use an explicit recurrence form instead when feedback is intentional",
+                    ),
+                );
+            }
+            if expr_signal_dependencies(self.module, [update.body]).contains(&item_id) {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "reactive update body for `{target_name}` cannot read the target signal itself"
+                    ))
+                    .with_code(code("reactive-update-self-reference"))
+                    .with_label(DiagnosticLabel::primary(
+                        self.module.exprs()[update.body].span,
+                        "reactive update bodies must not depend on the current value they overwrite",
+                    ))
+                    .with_note(
+                        "use an explicit recurrence form instead when feedback is intentional",
+                    ),
+                );
+            }
+        }
+    }
+
     fn check_type_reference(&mut self, reference: &TypeReference) {
         self.check_name_path(&reference.path);
         self.check_resolution(
@@ -10343,6 +10389,17 @@ impl<'a> GateTypeContext<'a> {
             GateType::Primitive(builtin)
         }
 
+        fn synthetic_type_parameter(index: usize) -> GateType {
+            GateType::TypeParameter {
+                parameter: TypeParameterId::from_raw(
+                    u32::MAX
+                        .checked_sub(index as u32)
+                        .expect("intrinsic synthetic type parameter index must fit in u32"),
+                ),
+                name: format!("T{}", index + 1),
+            }
+        }
+
         fn arrow(parameter: GateType, result: GateType) -> GateType {
             GateType::Arrow {
                 parameter: Box::new(parameter),
@@ -10358,6 +10415,14 @@ impl<'a> GateTypeContext<'a> {
         }
 
         match value {
+            IntrinsicValue::TupleConstructor { arity } => {
+                let elements: Vec<_> = (0..arity).map(synthetic_type_parameter).collect();
+                let mut ty = GateType::Tuple(elements.clone());
+                for element in elements.into_iter().rev() {
+                    ty = arrow(element, ty);
+                }
+                ty
+            }
             IntrinsicValue::RandomBytes => arrow(
                 primitive(BuiltinType::Int),
                 task(primitive(BuiltinType::Text), primitive(BuiltinType::Bytes)),
@@ -15289,6 +15354,47 @@ mod tests {
     }
 
     #[test]
+    fn validate_reactive_update_rejects_self_references() {
+        let report = validate_resolved_text(
+            "reactive-update-self-reference.aivi",
+            "signal total : Signal Int\n\
+             signal ready : Signal Bool\n\
+             when total > 0 => total <- total + 1\n\
+             when ready => total <- total + 2\n",
+        );
+        let self_reference_count = report
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "reactive-update-self-reference"))
+            })
+            .count();
+        assert_eq!(
+            self_reference_count, 3,
+            "expected reactive update guard/body self-references to be diagnosed explicitly, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn validate_reactive_update_cycles_participate_in_signal_cycle_detection() {
+        let report = validate_resolved_text(
+            "reactive-update-cycle.aivi",
+            "signal left : Signal Bool\n\
+             signal right : Signal Bool\n\
+             when right => left <- right\n\
+             when left => right <- left\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "circular-signal-dependency"))
+            }),
+            "expected reactive update dependencies to participate in cycle detection, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
     fn gate_typing_infers_map_and_set_literals() {
         let mut sources = SourceDatabase::new();
         let file_id = sources.add_file(
@@ -15876,6 +15982,19 @@ value resultLabel =
         }
     }
 
+    fn intrinsic_expr(module: &mut Module, value: IntrinsicValue, text: &str) -> crate::ExprId {
+        let path = NamePath::from_vec(vec![name(text)]).expect("intrinsic path should stay valid");
+        module
+            .alloc_expr(Expr {
+                span: unit_span(),
+                kind: ExprKind::Name(TermReference::resolved(
+                    path,
+                    TermResolution::IntrinsicValue(value),
+                )),
+            })
+            .expect("intrinsic expression allocation should fit")
+    }
+
     fn item_expr(module: &mut Module, item: crate::ItemId, text: &str) -> crate::ExprId {
         let path = NamePath::from_vec(vec![name(text)]).expect("item path should stay valid");
         module
@@ -15919,6 +16038,46 @@ value resultLabel =
                 .iter()
                 .any(|diagnostic| diagnostic.message.contains("missing expression 99"))
         );
+    }
+
+    #[test]
+    fn gate_typing_tracks_tuple_constructor_intrinsic_root_shape() {
+        let mut module = Module::new(FileId::new(0));
+        let tuple_ctor_expr = intrinsic_expr(
+            &mut module,
+            IntrinsicValue::TupleConstructor { arity: 2 },
+            "aivi.core.tuple.ctor2",
+        );
+
+        let mut typing = GateTypeContext::new(&module);
+
+        let tuple_ctor_info = typing.infer_expr(tuple_ctor_expr, &GateExprEnv::default(), None);
+        let tuple_ctor_ty = tuple_ctor_info
+            .ty
+            .clone()
+            .expect("tuple constructor root should have a type");
+        let GateType::Arrow {
+            parameter: first,
+            result,
+        } = tuple_ctor_ty
+        else {
+            panic!("expected tuple constructor root to be curried");
+        };
+        let GateType::Arrow {
+            parameter: second,
+            result,
+        } = *result
+        else {
+            panic!("expected tuple constructor root to take two arguments");
+        };
+        let GateType::Tuple(elements) = *result else {
+            panic!("expected tuple constructor root to return a tuple");
+        };
+        assert_eq!(elements.len(), 2);
+        assert!(matches!(first.as_ref(), GateType::TypeParameter { .. }));
+        assert!(matches!(second.as_ref(), GateType::TypeParameter { .. }));
+        assert!(elements[0].same_shape(first.as_ref()));
+        assert!(elements[1].same_shape(second.as_ref()));
     }
 
     #[test]

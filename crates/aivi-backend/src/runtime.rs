@@ -3367,6 +3367,7 @@ fn runtime_class_member_value(intrinsic: BuiltinClassMemberIntrinsic) -> Runtime
 
 fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
     match value {
+        IntrinsicValue::TupleConstructor { arity } => arity,
         IntrinsicValue::RandomBytes => 1,
         IntrinsicValue::RandomInt => 2,
         IntrinsicValue::StdoutWrite => 1,
@@ -3456,6 +3457,11 @@ fn evaluate_intrinsic_value(
     value: IntrinsicValue,
     arguments: Vec<RuntimeValue>,
 ) -> Result<RuntimeValue, EvaluationError> {
+    if let IntrinsicValue::TupleConstructor { arity } = value {
+        debug_assert_eq!(arguments.len(), arity);
+        return Ok(RuntimeValue::Tuple(arguments));
+    }
+
     match (value, arguments.as_slice()) {
         (IntrinsicValue::RandomBytes, [count]) => {
             Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomBytes {
@@ -4746,11 +4752,12 @@ fn matches_non_empty_runtime(value: &RuntimeSumValue) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use aivi_hir::{ItemId as HirItemId, SumConstructorHandle};
+    use aivi_hir::{IntrinsicValue, ItemId as HirItemId, SumConstructorHandle};
 
     use super::{
         DetachedRuntimeValue, RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue,
-        RuntimeValue, append_validation_errors, structural_eq,
+        RuntimeValue, append_validation_errors, evaluate_intrinsic_value, intrinsic_value_arity,
+        structural_eq,
     };
     use crate::{KernelExprId, KernelId};
 
@@ -4825,6 +4832,27 @@ mod tests {
         });
 
         assert_eq!(value.display_text(), "Pair(1, ok)");
+    }
+
+    #[test]
+    fn tuple_constructor_intrinsic_uses_declared_arity() {
+        assert_eq!(intrinsic_value_arity(IntrinsicValue::TupleConstructor { arity: 3 }), 3);
+    }
+
+    #[test]
+    fn tuple_constructor_intrinsic_evaluates_to_runtime_tuple() {
+        let value = evaluate_intrinsic_value(
+            KernelId::from_raw(0),
+            KernelExprId::from_raw(0),
+            IntrinsicValue::TupleConstructor { arity: 2 },
+            vec![RuntimeValue::Int(1), RuntimeValue::Text("ok".into())],
+        )
+        .expect("tuple constructor intrinsic should evaluate");
+
+        assert_eq!(
+            value,
+            RuntimeValue::Tuple(vec![RuntimeValue::Int(1), RuntimeValue::Text("ok".into())])
+        );
     }
 
     #[test]
