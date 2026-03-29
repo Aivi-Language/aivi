@@ -3131,28 +3131,50 @@ impl<'a> Lowerer<'a> {
                 })
             }
             syn::TypeExprKind::Record(fields) => {
-                let fields = fields
-                    .iter()
-                    .map(|field| TypeField {
+                let mut seen_fields =
+                    HashMap::<String, SourceSpan>::with_capacity(fields.len());
+                let mut lowered_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    if let Some(previous_span) =
+                        seen_fields.insert(field.label.text.clone(), field.label.span)
+                    {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "duplicate field `{}` in record type",
+                                field.label.text
+                            ))
+                            .with_code(code("duplicate-record-field"))
+                            .with_primary_label(
+                                field.label.span,
+                                "this field label repeats an earlier record type entry",
+                            )
+                            .with_secondary_label(
+                                previous_span,
+                                "previous field with the same label here",
+                            ),
+                        );
+                    }
+                    let field_ty = field
+                        .ty
+                        .as_ref()
+                        .map(|field_ty| self.lower_type_expr(field_ty))
+                        .unwrap_or_else(|| {
+                            self.emit_error(
+                                field.span,
+                                "record type field is missing a type",
+                                code("missing-record-field-type"),
+                            );
+                            self.placeholder_type(field.span)
+                        });
+                    lowered_fields.push(TypeField {
                         span: field.span,
                         label: self.make_name(&field.label.text, field.label.span),
-                        ty: field
-                            .ty
-                            .as_ref()
-                            .map(|ty| self.lower_type_expr(ty))
-                            .unwrap_or_else(|| {
-                                self.emit_error(
-                                    field.span,
-                                    "record type field is missing a type",
-                                    code("missing-record-field-type"),
-                                );
-                                self.placeholder_type(field.span)
-                            }),
-                    })
-                    .collect();
+                        ty: field_ty,
+                    });
+                }
                 self.alloc_type(TypeNode {
                     span: ty.span,
-                    kind: TypeKind::Record(fields),
+                    kind: TypeKind::Record(lowered_fields),
                 })
             }
             syn::TypeExprKind::Arrow { parameter, result } => {

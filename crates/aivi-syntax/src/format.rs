@@ -1586,9 +1586,11 @@ impl Formatter {
 
     fn format_pipe_stage_line(&self, stage: &PipeStage) -> String {
         match &stage.kind {
-            PipeStageKind::Case(_) => {
-                todo!("format PipeStageKind::Case as a standalone stage line")
-            }
+            PipeStageKind::Case(arm) => format!(
+                " ||> {} -> {}",
+                self.format_pattern_inline(&arm.pattern, 0),
+                self.format_expr_inline(&arm.body, 0)
+            ),
             PipeStageKind::Transform { expr } => self.format_aligned_pipe_stage("|>", stage, expr),
             PipeStageKind::Gate { expr } => self.format_aligned_pipe_stage("?|>", stage, expr),
             PipeStageKind::Map { expr } => self.format_aligned_pipe_stage("*|>", stage, expr),

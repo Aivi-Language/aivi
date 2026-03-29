@@ -1105,9 +1105,12 @@ pub enum HirRuntimeAdapterError {
         source_span: SourceSpan,
         blockers: Box<[hir::SourceDecodeProgramBlocker]>,
     },
-    UnsupportedSourceProvider {
+    MissingSourceProvider {
         owner: hir::ItemId,
-        provider: hir::SourceProviderRef,
+    },
+    InvalidSourceProviderShape {
+        owner: hir::ItemId,
+        key: Box<str>,
     },
     UnknownSignalDependency {
         owner: hir::ItemId,
@@ -1193,9 +1196,13 @@ impl fmt::Display for HirRuntimeAdapterError {
                 f,
                 "source decode program for owner {owner} is blocked: {blockers:?}"
             ),
-            Self::UnsupportedSourceProvider { owner, provider } => write!(
+            Self::MissingSourceProvider { owner } => write!(
                 f,
-                "source owner {owner} uses a provider the runtime adapter cannot lower yet: {provider:?}"
+                "source owner {owner} has no provider: the @source decorator is missing a provider path"
+            ),
+            Self::InvalidSourceProviderShape { owner, key } => write!(
+                f,
+                "source owner {owner} has an invalid provider path shape: {key:?} is not a valid provider identifier"
             ),
             Self::UnknownSignalDependency { owner, dependency } => write!(
                 f,
@@ -1356,10 +1363,15 @@ fn adapt_source_provider(
     match provider {
         hir::SourceProviderRef::Builtin(provider) => Ok(RuntimeSourceProvider::builtin(*provider)),
         hir::SourceProviderRef::Custom(key) => Ok(RuntimeSourceProvider::custom(key.clone())),
-        other => Err(HirRuntimeAdapterError::UnsupportedSourceProvider {
-            owner,
-            provider: other.clone(),
-        }),
+        hir::SourceProviderRef::Missing => {
+            Err(HirRuntimeAdapterError::MissingSourceProvider { owner })
+        }
+        hir::SourceProviderRef::InvalidShape(key) => {
+            Err(HirRuntimeAdapterError::InvalidSourceProviderShape {
+                owner,
+                key: key.clone(),
+            })
+        }
     }
 }
 

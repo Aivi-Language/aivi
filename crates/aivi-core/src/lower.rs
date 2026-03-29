@@ -774,6 +774,23 @@ impl<'a> ModuleLowerer<'a> {
     fn build(mut self) -> Result<Module, LoweringErrors> {
         self.seed_items()?;
         self.lower_general_exprs();
+        // Guard: all items must have complete elaboration before any subsequent lowering
+        // step is allowed to run. Continuing with missing bodies would let gate, fanout,
+        // recurrence, and source passes silently process items whose body is None, producing
+        // spurious downstream errors that obscure the root cause.
+        // Note: BlockedGeneralExpr errors from lower_general_exprs are tolerated here —
+        // they reflect type-check failures on individual expressions, not missing elaboration
+        // for an item as a whole. The gate/fanout/recurrence passes handle them downstream.
+        let has_completeness_errors = self.errors.iter().any(|e| {
+            matches!(
+                e,
+                LoweringError::MissingGeneralExprElaboration { .. }
+                    | LoweringError::MissingInstanceMemberElaboration { .. }
+            )
+        });
+        if has_completeness_errors {
+            return Err(LoweringErrors::new(self.errors));
+        }
         self.seed_signal_dependencies();
         self.lower_gate_stages();
         self.lower_truthy_falsy_stages();
@@ -3338,6 +3355,17 @@ impl<'a> RuntimeFragmentLowerer<'a> {
     }
 
     fn build(mut self) -> Result<LoweredRuntimeFragment, LoweringErrors> {
+        // Guard: reject incomplete elaboration before walking dependencies.
+        let has_completeness_errors = self.lowerer.errors.iter().any(|e| {
+            matches!(
+                e,
+                LoweringError::MissingGeneralExprElaboration { .. }
+                    | LoweringError::MissingInstanceMemberElaboration { .. }
+            )
+        });
+        if has_completeness_errors {
+            return Err(LoweringErrors::new(self.lowerer.errors));
+        }
         let dependencies = referenced_hir_dependencies(&self.fragment.body);
         for dependency in dependencies.items {
             self.ensure_hir_item_lowered(dependency);
