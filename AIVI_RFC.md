@@ -2,7 +2,7 @@
 
 ## Draft v1.0 — implementation-facing resolved pass
 
-> Status: normative working draft with implementation choices merged. Milestones 1–8 (surface through backend) are substantially complete. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
+> Status: normative working draft with implementation choices merged. Working: surface parsing, name resolution, HIR, type/kind checking, constraint resolution, closed-ADT and record lowering, `Eq`/`Functor`/`Applicative` class and instance checking, Cranelift AOT codegen, GTK/libadwaita widget bridge, signal graph scheduling, source provider catalog (HTTP, fs, timer, D-Bus, process), and CLI execute/fmt/check. Known open gaps: HKT end-to-end through Cranelift, `Monad`/`Chain` lowering, `when` runtime wiring, `&|>` typed-core lowering. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
 
 ---
 
@@ -664,7 +664,6 @@ fun same : Eq A -> Bool v:A =>
 
 instance Eq A -> Eq (Option A)
     (==) left right = True
-    (!=) left right = False
 ```
 
 Parser-accurate rules:
@@ -757,8 +756,9 @@ No `Foldable Task` or `Foldable Signal` instance in v1.
 ```aivi
 class Eq A
     (==) : A -> A -> Bool
-    (!=) : A -> A -> Bool
 ```
+
+`x != y` is syntactic sugar that desugars to `not (x == y)`. `(!=)` is not a member of the `Eq` class and has no independent dictionary slot.
 
 `Eq` uses the ordinary class/instance resolution rules in §7.1. Compiler-derived and builtin evidence covers the executable surface; user-authored `Eq` instances beyond same-module explicit evidence remain deferred.
 
@@ -983,6 +983,7 @@ Core operators:
 - `<|@` recurrence step
 - ` | ` tap
 - `<|*` fan-out join
+- `<|` structural patch application
 
 Ordinary expression precedence (tighter to looser):
 
@@ -993,8 +994,9 @@ Ordinary expression precedence (tighter to looser):
 5. binary `>`, `<`, `>=`, `<=`, `==`, `!=`
 6. `and`
 7. `or`
+8. `<|` patch application (right-associative; binds loosest of all ordinary-expression operators)
 
-Operators at the same binary precedence associate left-to-right. Prefix `not` applies to its following ordinary expression before binary reassociation.
+Operators at the same binary precedence associate left-to-right unless otherwise stated. Prefix `not` applies to its following ordinary expression before binary reassociation. `<|` is right-associative: `a <| p1 <| p2` applies `p2` first, then `p1`.
 
 Pipe operators are **not** part of the binary table. A pipe spine starts from one ordinary expression head, then consumes pipe stages left-to-right. Each stage payload is parsed as an ordinary expression until the next pipe operator boundary.
 
@@ -1178,6 +1180,31 @@ Restrictions:
 
 Structural patches update immutable values with explicit selector paths.
 
+#### Grammar
+
+```
+patch-expr    ::= target <| patch-literal
+               |  patch { patch-entry* }
+
+patch-literal ::= { patch-entry* }
+
+patch-entry   ::= selector ":" patch-value
+               |  selector ":" "-"          -- field removal
+
+patch-value   ::= expr                      -- replace selected value, or transform when expr : A -> A
+               |  ":=" expr                 -- store a function value as data (no application)
+
+selector      ::= selector-step ("." selector-step | "[" selector-index "]")*
+selector-step ::= IDENT | "." IDENT          -- bare IDENT is shorthand for .IDENT at root depth
+selector-index ::= "*" | expr | predicate-expr
+```
+
+The `patch { ... }` form produces a reusable patch function of type `A -> A`. The `target <| { ... }` form applies a patch literal directly to `target`.
+
+Root-level selectors may omit the leading dot: `name` and `.name` are identical at the patch root. Nested selectors must use explicit dots: `profile.name`, not `profilename`.
+
+#### Examples
+
 ```aivi
 updated = target <| {
     profile.name: "Grace"
@@ -1190,7 +1217,7 @@ promote = patch {
 }
 ```
 
-Current checked slice:
+#### Normative rules
 
 - record field selectors may omit the leading dot at the patch root, e.g. `profile.name` or `.profile.name`
 - list selectors support `[*]` traversal and `[predicate]` filtering with the current element as ambient subject
@@ -1199,12 +1226,20 @@ Current checked slice:
 - plain instructions replace the selected value, or transform it when the expression has type `A -> A`
 - `:=` stores a function value as data instead of applying it
 
-Current limitation:
+#### Field removal (`field: -`)
 
-- structural removal syntax (`field: -`, or `.field: -`) parses and typechecks to an explicit blocker, but result-type-changing patch elaboration is not wired through the executable slice yet
+`field: -` removes the named field from the result type. This is a **structural type change**: the result has a strictly narrower record type than the input. The compiler rejects this form with a type error whenever:
+
+- the target record type does not declare the field (field does not exist), or
+- the result type at the use-site still requires the removed field to be present.
+
+There is no silent pass-through: a `field: -` entry that cannot be statically resolved to a valid type-shrinking step is a **compile error**, not a no-op.
+
+Current limitations:
+
 - general-expression and gate lowering still report patch expressions as unsupported runtime forms
 - same-module constructor focus is intentionally narrow: multi-field constructor payloads are not yet patch-focusable
-- map predicate projections must use the normalized dot-prefixed form (`.key`, `.value`); bare selector names are not part of this slice
+- map predicate projections must use the normalized dot-prefixed form (`.key`, `.value`); bare selector names inside map predicates are not part of this slice
 
 ### 11.6 `|` tap
 
@@ -2242,14 +2277,15 @@ Predicates may use:
 - ambient projections such as `.age > 18`
 - `.` for the current subject
 - `and`, `or`, `not`
-- `==` / `!=` when an `Eq` instance is available for the operand type
+- `==` when an `Eq` instance is available for the operand type
+- `!=` as syntactic sugar for `not (x == y)`
 
 ```aivi
 users |> filter (.active and .age > 18)
 xs    |> takeWhile (. < 10)
 ```
 
-`x == y` desugars to `(==) x y`. `x != y` desugars to `not (x == y)` and does not introduce a separate class member.
+`x == y` desugars to `(==) x y`. `x != y` desugars to `not (x == y)`; `(!=)` is not a class member and introduces no separate dictionary slot.
 
 ---
 
@@ -2789,7 +2825,9 @@ aivi execute src/cli.aivi -- --model gpt-5.4 prompt.txt
 ```
 
 `aivi execute` selects the top-level `value main`. The binding must be annotated as `Task E A`;
-`signal main` and non-task values are rejected.
+`signal main` and non-task values are rejected. `main` must appear in the module's public export
+list; a top-level `main` that is not exported is not a valid entrypoint and `aivi execute` will
+reject it with a diagnostic.
 
 The command links the compiled runtime stack without GTK, settles any startup source activity,
 evaluates `main`, and executes the resulting host task plan directly in the CLI process.
@@ -3075,16 +3113,18 @@ Added `IntrinsicValue` variants and `RuntimeTaskPlan` entries for basic filesyst
 | `FsReadDir` | `Text -> Task FsError (List Text)` |
 | `FsExists` | `Text -> Task FsError Bool` |
 
-### 29.5 AIVI syntax constraints
+### 29.5 AIVI stdlib authoring conventions
 
-The following constraints apply when writing `.aivi` files. Violating any of them produces a parse or HIR error:
+The following are genuine authoring conventions for `.aivi` files. Violations of the hard parse/HIR rules produce errors; the rest are style conventions enforced by the formatter.
 
-- **Comments**: `//` line comments only. No `--`, no block comments in surface AIVI.
+Hard parse and HIR rules:
+
+- **Comments**: `//` line comments and `/* ... */` block comments are both supported everywhere in surface AIVI. `--` is not a valid comment syntax.
 - **No scientific notation** in float literals. Use decimal notation: `3.14`, not `3.14e0`.
-- **No prefix minus** on literals. Write `0 - n` or use `negate`.
+- **Prefix minus** on numeric literals is valid: `-3`, `-1.5`. The unary minus is also spelled `negate` for clarity in pipe contexts.
 - **Boolean operators**: `and` and `or` keywords, not `&&`/`||`.
 - **No inline lambdas** in expressions. All functions must be named top-level declarations.
-- **Record literals** must fit on a single line. Multi-line record expressions are not supported.
+- **Record literals** may span multiple lines. The parser accepts newline-separated fields inside `{ }` with the same indentation-aware rules as other block syntax.
 - **Nested `T|>/F|>`** must use helper functions. `T|>` and `F|>` must be an adjacent pair in the same pipe spine — nesting them requires extracting the inner branch into a named helper.
 - **`value` declarations** are monomorphic. Type variables in a `value` annotation (`value x:(Dict V)`) are rejected. Use a concrete type or promote the definition to a `fun` with a `Unit` parameter.
 - **Parameterized `type` aliases** are supported: `type Dict V = { entries: List (DictEntry V) }`.
@@ -3130,7 +3170,7 @@ Synchronous, pure path-string intrinsics (no I/O, no `Task`). All catalog entrie
 
 `PathNormalize` resolves `.` and `..` lexically without filesystem I/O.
 
-The `aivi.path` module exports `Path = Text` (a type alias for documentation clarity) and the `PathError` ADT:
+The `aivi.path` module exports `Path` as a distinct domain type (not an alias for `Text`). `Path` is not interchangeable with `Text` without explicit conversion; use `PathFromText` to construct a `Path` from a `Text` value and `PathToText` to extract the underlying text. The `PathError` ADT is:
 
 ```aivi
 type PathError =
@@ -3162,12 +3202,12 @@ type BytesDecodeError = InvalidUtf8 | UnexpectedEnd
 
 ### 29.10 `aivi.data.json`
 
-JSON intrinsics backed by `serde_json` in the CLI runtime. All operations are async (`Task Text A`).
+JSON intrinsics backed by `serde_json` in the CLI runtime. Most operations are async (`Task Text A`); `JsonValidate` is a pure synchronous predicate (`Text -> Bool`) with no `Task` wrapper.
 Catalog module: `aivi.data.json`.
 
 | Intrinsic | Type | Description |
 |---|---|---|
-| `JsonValidate` | `Text -> Task Text Bool` | Returns `True` for valid JSON; never fails |
+| `JsonValidate` | `Text -> Bool` | Pure synchronous predicate; returns `True` for valid JSON, `False` otherwise |
 | `JsonGet` | `Text -> Text -> Task Text (Option Text)` | Get object field; result is JSON text |
 | `JsonAt` | `Text -> Int -> Task Text (Option Text)` | Get array element; result is JSON text |
 | `JsonKeys` | `Text -> Task Text (List Text)` | Object keys in insertion order |

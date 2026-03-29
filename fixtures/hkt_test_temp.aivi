@@ -1,0 +1,6 @@
+instance Functor Option
+    map f fa = Some 1
+
+instance Applicative Option
+    pure a = Some a
+    apply ff fa = Some 1

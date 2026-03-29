@@ -1,12 +1,13 @@
 use aivi.defaults (Option)
 
-type Key = Key Text
+type Key =
+  | Key Text
 
 type Direction =
   | Up
   | Down
   | Left
-  | Right 
+  | Right
 
 type Orientation =
   | Vertical
@@ -14,7 +15,8 @@ type Orientation =
 
 type Status = Running | GameOver
 
-type Pixel =  Pixel Int Int
+type Pixel =
+  | Pixel Int Int
 
 type BoardSize = {
     width: Int,
@@ -66,7 +68,10 @@ value boardSize:BoardSize = {
     height: 20
 }
 
-value boardColumnIndices = [0..23]
+value boardColumnIndices = [
+    0..23
+]
+
 value boardRowIndices = [0..19]
 value maxLength = 50
 
@@ -102,90 +107,75 @@ type BodyCheckState = {
     found: Bool
 }
 
-fun takePixelStep:PixelTakeAcc acc:PixelTakeAcc item:Pixel =>
-    acc.n > 0
-     T|> { n: acc.n - 1, items: append acc.items [item] }
-     F|> acc
+fun takePixelStep:PixelTakeAcc acc:PixelTakeAcc item:Pixel => acc.n > 0
+  T|> { n: acc.n - 1, items: append acc.items [item] }
+  F|> acc
 
-fun takePixels:(List Pixel) n:Int xs:(List Pixel) =>
-    xs
-     |> reduce takePixelStep { n, items: [] }
-     |> .items
+fun takePixels: (List Pixel) n:Int xs: (List Pixel) => xs
+  |> reduce takePixelStep { n, items: [] }
+  |> .items
 
-fun pixelHeadStep:PixelHeadState state:PixelHeadState item:Pixel =>
-    state.found
-     T|> state
-     F|> { found: True, value: item }
+fun pixelHeadStep:PixelHeadState state:PixelHeadState item:Pixel => state.found
+  T|> state
+  F|> { found: True, value: item }
 
 fun pixelLengthStep:Int total:Int item:Pixel =>
     total + 1
 
-fun bodyCheckItem:BodyCheckState target:Pixel skippedHead:Bool item:Pixel =>
-    skippedHead
-     T|> { skippedHead: True, found: pixelIs target item }
-     F|> { skippedHead: True, found: False }
+fun bodyCheckItem:BodyCheckState target:Pixel skippedHead:Bool item:Pixel => skippedHead
+  T|> { skippedHead: True, found: pixelIs target item }
+  F|> { skippedHead: True, found: False }
 
-fun bodyCheckStep:BodyCheckState target:Pixel state:BodyCheckState item:Pixel =>
-    state.found
-     T|> state
-     F|> bodyCheckItem target state.skippedHead item
+fun bodyCheckStep:BodyCheckState target:Pixel state:BodyCheckState item:Pixel => state.found
+  T|> state
+  F|> bodyCheckItem target state.skippedHead item
 
-fun pixelLength:Int snake:(List Pixel) =>
-    snake
-     |> reduce pixelLengthStep 0
+fun pixelLength:Int snake: (List Pixel) => snake
+  |> reduce pixelLengthStep 0
 
-fun arrowKey:(Option Direction) key:Key =>
-    key
-     ||> Key "ArrowUp"    -> Some Up
-     ||> Key "ArrowDown"  -> Some Down
-     ||> Key "ArrowLeft"  -> Some Left
-     ||> Key "ArrowRight" -> Some Right
-     ||> _                -> None
+fun arrowKey: (Option Direction) key:Key => key
+  ||> Key "ArrowUp"    -> Some Up
+  ||> Key "ArrowDown"  -> Some Down
+  ||> Key "ArrowLeft"  -> Some Left
+  ||> Key "ArrowRight" -> Some Right
+  ||> _                -> None
 
-fun isOpposite:Bool a:Direction b:Direction =>
-    b
-     ||> Up    -> a == Down
-     ||> Down  -> a == Up
-     ||> Left  -> a == Right
-     ||> Right -> a == Left
+fun isOpposite:Bool a:Direction b:Direction => b
+  ||> Up    -> a == Down
+  ||> Down  -> a == Up
+  ||> Left  -> a == Right
+  ||> Right -> a == Left
 
-fun guardDirection:Direction candidate:Direction current:Direction =>
-    isOpposite candidate current
-     T|> current
-     F|> candidate
+fun guardDirection:Direction candidate:Direction current:Direction => isOpposite candidate current
+  T|> current
+  F|> candidate
 
-fun filterDirection:Direction current:Direction opt:(Option Direction) =>
-    opt
-     ||> Some dir -> guardDirection dir current
-     ||> None     -> current
+fun filterDirection:Direction current:Direction opt: (Option Direction) => opt
+  ||> Some dir -> guardDirection dir current
+  ||> None     -> current
 
-fun updateDirection:Direction key:Key current:Direction =>
-    arrowKey key
-     |> filterDirection current 
+fun updateDirection:Direction key:Key current:Direction => arrowKey key
+  |> filterDirection current
 
-fun restartKey:Bool key:Key =>  
-    key
-     ||> Key " "     -> True
-     ||> Key "Space" -> True
-     ||> Key "space" -> True
-     ||> _           -> False
+fun restartKey:Bool key:Key => key
+  ||> Key " "     -> True
+  ||> Key "Space" -> True
+  ||> Key "space" -> True
+  ||> _           -> False
 
-fun updateDirectionOrRestart:Direction key:Key current:Direction =>
-    restartKey key
-     T|> Right
-     F|> updateDirection key current
+fun updateDirectionOrRestart:Direction key:Key current:Direction => restartKey key
+  T|> Right
+  F|> updateDirection key current
 
-fun updateRestartCount:Int key:Key current:Int =>
-    restartKey key
-     T|> current + 1
-     F|> current
+fun updateRestartCount:Int key:Key current:Int => restartKey key
+  T|> current + 1
+  F|> current
 
-fun movePixel:Pixel head:Pixel direction:Direction =>
-    (head, direction)
-     ||> (Pixel px py, Up)    -> Pixel px (py - 1)
-     ||> (Pixel px py, Down)  -> Pixel px (py + 1)
-     ||> (Pixel px py, Left)  -> Pixel (px - 1) py
-     ||> (Pixel px py, Right) -> Pixel (px + 1) py
+fun movePixel:Pixel head:Pixel direction:Direction => (head, direction)
+  ||> (Pixel px py, Up)    -> Pixel px (py - 1)
+  ||> (Pixel px py, Down)  -> Pixel px (py + 1)
+  ||> (Pixel px py, Left)  -> Pixel (px - 1) py
+  ||> (Pixel px py, Right) -> Pixel (px + 1) py
 
 fun nextHead:Pixel direction:Direction head:Pixel =>
     movePixel head direction
@@ -196,59 +186,50 @@ fun nextSeed:Int seed:Int =>
 fun spawnAt:Pixel size:BoardSize seed:Int =>
     Pixel (seed % (size.width - 2) + 1) (nextSeed seed % (size.height - 2) + 1)
 
-fun snakeHead:Pixel snake:(List Pixel) =>
-    snake
-     |> reduce pixelHeadStep { found: False, value: Pixel 0 0 }
-     |> .value
+fun snakeHead:Pixel snake: (List Pixel) => snake
+  |> reduce pixelHeadStep { found: False, value: Pixel 0 0 }
+  |> .value
 
-fun movedHead:Pixel direction:Direction snake:(List Pixel) =>
+fun movedHead:Pixel direction:Direction snake: (List Pixel) =>
     nextHead direction (snakeHead snake)
 
 fun pixelIs:Bool target:Pixel p:Pixel =>
     p == target
 
-fun occupiesBody:Bool snake:(List Pixel) p:Pixel =>
-    snake
-     |> reduce (bodyCheckStep p) { skippedHead: False, found: False }
-     |> .found
+fun occupiesBody:Bool snake: (List Pixel) p:Pixel => snake
+  |> reduce (bodyCheckStep p) { skippedHead: False, found: False }
+  |> .found
 
-fun willEat:Bool direction:Direction food:Pixel snake:(List Pixel) =>
+fun willEat:Bool direction:Direction food:Pixel snake: (List Pixel) =>
     movedHead direction snake == food
 
-fun growSnake:(List Pixel) direction:Direction snake:(List Pixel) =>
-    append [movedHead direction snake] snake
-     |> takePixels maxLength
+fun growSnake: (List Pixel) direction:Direction snake: (List Pixel) => append [movedHead direction snake] snake
+  |> takePixels maxLength
 
-fun moveSnake:(List Pixel) direction:Direction snake:(List Pixel) =>
-    append [movedHead direction snake] snake
-     |> takePixels (pixelLength snake)
+fun moveSnake: (List Pixel) direction:Direction snake: (List Pixel) => append [movedHead direction snake] snake
+  |> takePixels (pixelLength snake)
 
-fun advanceSnake:(List Pixel) direction:Direction ate:Bool snake:(List Pixel) =>
-    ate
-     T|> growSnake direction snake
-     F|> moveSnake direction snake
+fun advanceSnake: (List Pixel) direction:Direction ate:Bool snake: (List Pixel) => ate
+  T|> growSnake direction snake
+  F|> moveSnake direction snake
 
-fun hitsWall:Bool size:BoardSize p:Pixel =>
-    p
-     ||> Pixel px py -> px < 0 or px > size.width - 1 or py < 0 or py > size.height - 1
+fun hitsWall:Bool size:BoardSize p:Pixel => p
+  ||> Pixel px py -> px < 0 or px > size.width - 1 or py < 0 or py > size.height - 1
 
 fun hasCollision:Bool size:BoardSize direction:Direction game:Game =>
     hitsWall size (movedHead direction game.snake) or occupiesBody game.snake (movedHead direction game.snake)
 
-fun nextStatusFor:Status size:BoardSize direction:Direction game:Game =>
-    hasCollision size direction game
-     T|> GameOver
-     F|> Running
+fun nextStatusFor:Status size:BoardSize direction:Direction game:Game => hasCollision size direction game
+  T|> GameOver
+  F|> Running
 
-fun nextScore:Int ate:Bool score:Int =>
-    ate
-     T|> score + 1
-     F|> score
+fun nextScore:Int ate:Bool score:Int => ate
+  T|> score + 1
+  F|> score
 
-fun nextFood:Pixel ate:Bool food:Pixel size:BoardSize seed:Int =>
-    ate
-     T|> spawnAt size seed
-     F|> food
+fun nextFood:Pixel ate:Bool food:Pixel size:BoardSize seed:Int => ate
+  T|> spawnAt size seed
+  F|> food
 
 fun applyStep:Game size:BoardSize direction:Direction game:Game ate:Bool =>
     {
@@ -268,27 +249,23 @@ fun gameOverState:Game game:Game =>
         seed: game.seed
     }
 
-fun applyRunningStep:Game size:BoardSize direction:Direction game:Game =>
-    willEat direction game.food game.snake
-     |> applyStep size direction game
+fun applyRunningStep:Game size:BoardSize direction:Direction game:Game => willEat direction game.food game.snake
+  |> applyStep size direction game
 
-fun stepRunning:Game size:BoardSize direction:Direction game:Game =>
-    hasCollision size direction game
-     T|> gameOverState game
-     F|> applyRunningStep size direction game
+fun stepRunning:Game size:BoardSize direction:Direction game:Game => hasCollision size direction game
+  T|> gameOverState game
+  F|> applyRunningStep size direction game
 
-fun restartGame:Game restart:Bool game:Game =>
-    restart
-     T|> initialGame
-     F|> game
+fun restartGame:Game restart:Bool game:Game => restart
+  T|> initialGame
+  F|> game
 
 fun hasPendingRestart:Bool restartCount:Int seenRestartCount:Int =>
     restartCount != seenRestartCount
 
-fun stepGame:Game restart:Bool size:BoardSize direction:Direction game:Game =>
-    game.status
-     ||> GameOver -> restartGame restart game
-     ||> Running  -> stepRunning size direction game
+fun stepGame:Game restart:Bool size:BoardSize direction:Direction game:Game => game.status
+  ||> GameOver -> restartGame restart game
+  ||> Running  -> stepRunning size direction game
 
 fun stepTickState:GameTickState restartCount:Int size:BoardSize direction:Direction state:GameTickState =>
     {
@@ -302,20 +279,17 @@ fun stepOnTick:GameTickState tick:Unit state:GameTickState =>
 fun gameValue:Game state:GameTickState =>
     state.game
 
-fun cellFoodOrEmpty:CellKind game:Game pos:Pixel =>
-    pos == game.food
-     T|> Food
-     F|> Empty
+fun cellFoodOrEmpty:CellKind game:Game pos:Pixel => pos == game.food
+  T|> Food
+  F|> Empty
 
-fun cellBodyOrContent:CellKind game:Game pos:Pixel =>
-    occupiesBody game.snake pos
-     T|> SnakeBody
-     F|> cellFoodOrEmpty game pos
+fun cellBodyOrContent:CellKind game:Game pos:Pixel => occupiesBody game.snake pos
+  T|> SnakeBody
+  F|> cellFoodOrEmpty game pos
 
-fun cellAt:CellKind game:Game pos:Pixel =>
-    pos == snakeHead game.snake
-     T|> SnakeHead
-     F|> cellBodyOrContent game pos
+fun cellAt:CellKind game:Game pos:Pixel => pos == snakeHead game.snake
+  T|> SnakeHead
+  F|> cellBodyOrContent game pos
 
 fun makeCell:BoardCell game:Game row:Int col:Int =>
     {
@@ -323,12 +297,13 @@ fun makeCell:BoardCell game:Game row:Int col:Int =>
         kind: cellAt game (Pixel col row)
     }
 
-fun buildRowCellsStep:(List BoardCell) game:Game row:Int acc:(List BoardCell) col:Int =>
-    append acc [makeCell game row col]
+fun buildRowCellsStep: (List BoardCell) game:Game row:Int acc: (List BoardCell) col:Int =>
+    append acc [
+        makeCell game row col
+    ]
 
-fun rowCells:(List BoardCell) size:BoardSize game:Game row:Int =>
-    boardColumnIndices
-     |> reduce (buildRowCellsStep game row) []
+fun rowCells: (List BoardCell) size:BoardSize game:Game row:Int => boardColumnIndices
+  |> reduce (buildRowCellsStep game row) []
 
 fun makeRow:BoardRow size:BoardSize game:Game row:Int =>
     {
@@ -336,12 +311,13 @@ fun makeRow:BoardRow size:BoardSize game:Game row:Int =>
         cells: rowCells size game row
     }
 
-fun buildBoardRowsStep:(List BoardRow) size:BoardSize game:Game acc:(List BoardRow) row:Int =>
-    append acc [makeRow size game row]
+fun buildBoardRowsStep: (List BoardRow) size:BoardSize game:Game acc: (List BoardRow) row:Int =>
+    append acc [
+        makeRow size game row
+    ]
 
-fun buildBoardRows:(List BoardRow) size:BoardSize game:Game =>
-    boardRowIndices
-     |> reduce (buildBoardRowsStep size game) []
+fun buildBoardRows: (List BoardRow) size:BoardSize game:Game => boardRowIndices
+  |> reduce (buildBoardRowsStep size game) []
 
 fun toBoard:GameBoard size:BoardSize game:Game =>
     {
@@ -350,44 +326,38 @@ fun toBoard:GameBoard size:BoardSize game:Game =>
         rows: buildBoardRows size game
     }
 
-fun cellGlyph:Text kind:CellKind =>
-    kind
-     ||> SnakeHead -> "@"
-     ||> SnakeBody -> "o"
-     ||> Food      -> "*"
-     ||> Empty     -> "."
+fun cellGlyph:Text kind:CellKind => kind
+  ||> SnakeHead -> "@"
+  ||> SnakeBody -> "o"
+  ||> Food      -> "*"
+  ||> Empty     -> "."
 
 fun boardRowTextStep:Text text:Text cell:BoardCell =>
     "{text}{cellGlyph cell.kind}"
 
-fun boardRowText:Text row:BoardRow =>
-    row.cells
-     |> reduce boardRowTextStep ""
+fun boardRowText:Text row:BoardRow => row.cells
+  |> reduce boardRowTextStep ""
 
-fun boardTextStep:BoardTextState state:BoardTextState row:BoardRow =>
-    state.first
-     T|> { first: False, value: boardRowText row }
-     F|> { first: False, value: "{state.value}\n{boardRowText row}" }
+fun boardTextStep:BoardTextState state:BoardTextState row:BoardRow => state.first
+  T|> { first: False, value: boardRowText row }
+  F|> { first: False, value: "{state.value}\n{boardRowText row}" }
 
-fun boardTextFor:Text board:GameBoard =>
-    board.rows
-     |> reduce boardTextStep { first: True, value: "" }
-     |> .value
+fun boardTextFor:Text board:GameBoard => board.rows
+  |> reduce boardTextStep { first: True, value: "" }
+  |> .value
 
 fun scoreLineFor:Text game:Game =>
     "Score: {game.score}"
 
-fun statusLineFor:Text game:Game =>
-    game.status
-     ||> Running  -> "Running"
-     ||> GameOver -> "Game Over"
+fun statusLineFor:Text game:Game => game.status
+  ||> Running  -> "Running"
+  ||> GameOver -> "Game Over"
 
-fun directionLabel:Text direction:Direction =>
-    direction
-     ||> Up    -> "Up"
-     ||> Down  -> "Down"
-     ||> Left  -> "Left"
-     ||> Right -> "Right"
+fun directionLabel:Text direction:Direction => direction
+  ||> Up    -> "Up"
+  ||> Down  -> "Down"
+  ||> Left  -> "Left"
+  ||> Right -> "Right"
 
 @source window.keyDown with {
     repeat: False,
@@ -395,46 +365,38 @@ fun directionLabel:Text direction:Direction =>
 }
 signal keyDown: Signal Key
 
-signal direction: Signal Direction =
-    keyDown
-     |> scan Right updateDirectionOrRestart
+signal direction: Signal Direction = keyDown
+  |> scan Right updateDirectionOrRestart
 
 signal restartCount: Signal Int = keyDown
-    |> scan 0 updateRestartCount
+  |> scan 0 updateRestartCount
 
 @source timer.every 200 with {
     immediate: False,
     coalesce: True
 }
-signal tick : Signal Unit
+signal tick: Signal Unit
 
-signal gameState : Signal GameTickState =
-    tick
-     |> scan initialGameTickState stepOnTick
+signal gameState: Signal GameTickState = tick
+  |> scan initialGameTickState stepOnTick
 
-signal game : Signal Game =
-    gameState
-     |> gameValue
+signal game: Signal Game = gameState
+  |> gameValue
 
-signal board : Signal GameBoard =
-    game
-     |> toBoard boardSize
+signal board: Signal GameBoard = game
+  |> toBoard boardSize
 
-signal boardText : Signal Text =
-    board
-     |> boardTextFor
+signal boardText: Signal Text = board
+  |> boardTextFor
 
-signal scoreLine : Signal Text =
-    game
-     |> scoreLineFor
+signal scoreLine: Signal Text = game
+  |> scoreLineFor
 
-signal statusLine : Signal Text =
-    game
-     |> statusLineFor
+signal statusLine: Signal Text = game
+  |> statusLineFor
 
-signal dirLine : Signal Text =
-    direction
-     |> directionLabel
+signal dirLine: Signal Text = direction
+  |> directionLabel
 
 value main =
     <Window title="AIVI Snake">

@@ -17,4 +17,10 @@ export default defineConfig({
     target: "node18",
     emptyOutDir: true,
   },
+  resolve: {
+    // Prevent Vite from using the "browser" field in package.json,
+    // which remaps vscode-languageclient/node to the browser bundle.
+    mainFields: ["module", "main"],
+    conditions: ["node"],
+  },
 });
