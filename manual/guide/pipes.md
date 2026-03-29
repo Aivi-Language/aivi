@@ -81,6 +81,13 @@ fun statusLabel:Text status:Status => status
 value currentLabel = statusLabel Published
 ```
 
+Inside pipe stages, `.` names the ambient subject. `_` is only a discard pattern or discard
+binder; it never means “the current subject”.
+
+Today `||>` supports patterns only. Case-stage guard syntax is not implemented end to end yet,
+so the current workaround is to match the shape first and then compute a `Bool` in the arm body
+or a helper, branching with `T|>` / `F|>` if needed.
+
 ## Boolean branches with `T|>` and `F|>`
 
 For `Bool`, the dedicated true/false pipes are shorter than a full match:
@@ -157,7 +164,7 @@ The current parser/compiler also accept these pipe-stage forms:
 | `@\|>` | Explicit recurrence start |
 | `<\|@` | Explicit recurrence step |
 
-Some of these advanced stages still have narrower validation/runtime coverage than the core `|>`, `||>`, `?|>`, `T|>`, `F|>`, `~|>`, and `-|>` forms. In particular, `+|>` is still not a stable end-to-end checked surface even though parser/HIR support exists.
+Some of these advanced stages still have narrower validation/runtime coverage than the core `|>`, `||>`, `?|>`, `T|>`, `F|>`, `~|>`, and `-|>` forms. In particular, `+|>` now lowers through the recurrence path for signal accumulation, while more exotic applicative/validation combinations still have the narrower executable slice documented in the RFC.
 
 ## One important rule: no nested pipes
 

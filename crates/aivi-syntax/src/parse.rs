@@ -2034,10 +2034,12 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeAccumulate => {
                     // `signal +|> seed (state input => next)`
                     // The seed expression comes first, then the step function expression.
+                    // Parse the seed with atomic-expression boundaries so an adjacent step name
+                    // does not get swallowed as an application (`+|> 0 step`).
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let seed =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_atomic_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let step =
                         self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
@@ -2541,10 +2543,7 @@ impl<'a> Parser<'a> {
                 let Some(next) = self.peek_nontrivia(index + 1, close_brace) else {
                     return close_brace;
                 };
-                if self
-                    .result_block_binding_start(next, close_brace)
-                    .is_some()
-                {
+                if self.result_block_binding_start(next, close_brace).is_some() {
                     return next;
                 }
                 if !self.tokens[next].kind().is_pipe_operator() {

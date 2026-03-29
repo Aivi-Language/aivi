@@ -1520,7 +1520,7 @@ signal userEvents : Signal Int
 
 signal gated : Signal Int =
     userEvents
-     |> scan 0 step
+     +|> 0 step
 "#,
         );
         assert!(
@@ -1589,23 +1589,11 @@ signal gated : Signal Int =
         let lowered = lower_text(
             "runtime-hir-adapter-dbus.aivi",
             r#"
-type DbusValue =
-  | DbusString Text
-  | DbusInt Int
-  | DbusBool Bool
-  | DbusList (List DbusValue)
-  | DbusStruct (List DbusValue)
-  | DbusVariant DbusValue
-
-type DbusSignal = {
-    path: Text,
-    interface: Text,
-    member: Text,
-    body: List DbusValue
+@source dbus.signal "/org/aivi/Test" with {
+    interface: "org.aivi.Test"
+    member: "Ping"
 }
-
-@source dbus.signal "/org/aivi/Test" "org.aivi.Test" "Ping"
-signal inbound : Signal DbusSignal
+signal inbound : Signal Text
 "#,
         );
         assert!(

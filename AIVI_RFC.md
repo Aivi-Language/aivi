@@ -709,7 +709,8 @@ Same-module instance members lower as hidden callable items per `(instance, memb
 - `List` implements builtin `Functor`, `Apply`, `Applicative`, `Foldable`, `Traversable`, and `Filterable`
 - `Validation E` implements builtin `Functor`, `Bifunctor`, `Apply`, `Applicative`, `Foldable`, and `Traversable`
 - `Signal` implements builtin `Functor`, `Apply`, and `Applicative`
-- `Task E` has builtin executable `Applicative` support today; broader checker-level `Functor` / `Apply` / `Chain` / `Monad` matching is not yet runtime-backed
+- `Task E` has builtin executable `Applicative` support today; broader checker-level `Functor` / `Apply` / `Chain` / `Monad` matching is still not runtime-backed
+- `List`, `Option`, and `Result E` have builtin executable `Chain` / `Monad` member lowering for `chain` and `join`
 - `Eq` is compiler-provided for the structural cases in §7.3
 - current `Default` evidence is narrower than general imported instance resolution: builtin `Option` defaulting comes from `use aivi.defaults (Option)`, `Text` / `Int` / `Bool` omission can use `use aivi.defaults (defaultText, defaultInt, defaultBool)`, and other cases are still limited to same-module `Default` instances
 
@@ -930,6 +931,7 @@ Within a pipe:
 - `.` — entire current subject
 - `.field` — projects from the current subject
 - `.field.subfield` — chains projection
+- `_` — discard symbol only; it never denotes the ambient subject
 - `.field` is illegal where no ambient subject exists
 
 ---
@@ -1010,6 +1012,11 @@ Restrictions:
 
 Pattern matching over the current subject.
 
+The current checked rollout supports pattern arms only. Case-stage guard syntax is not
+implemented end to end yet; express extra conditions by matching first, then computing a
+`Bool` in the arm body or a helper and branching with the existing `T|>`, `F|>`, or `?|>`
+surfaces as appropriate.
+
 ```aivi
 status
  ||> Paid    -> "paid"
@@ -1057,7 +1064,7 @@ ready
 
 ```aivi
 maybeUser
- T|> greet _
+ T|> greet .
  F|> showLogin
 ```
 
@@ -1073,9 +1080,11 @@ maybeUser
 
 ```aivi
 loaded
- T|> render _
- F|> showError _
+ T|> render .
+ F|> showError .
 ```
+
+
 
 elaborates to:
 
@@ -1098,7 +1107,7 @@ Rules:
 
 - `T|>` and `F|>` may appear only as an adjacent pair within one pipe spine
 - the subject type must have a known canonical truthy / falsy pair
-- `_` is rebound to the matched payload inside `T|>` or `F|>` when the constructor has exactly one payload
+- `.` is rebound to the matched payload inside `T|>` or `F|>` when the constructor has exactly one payload
 - zero-payload cases (`True`, `False`, `None`) do not introduce a branch payload
 - non-canonical inner carriers under `Signal` are rejected
 - use `||>` when named binding, nested patterns, or more than two constructors are required
@@ -1205,24 +1214,24 @@ Rules:
 
 ### 11.10 `+|>` accumulate
 
-`+|>` is the intended accumulate pipe surface, but it is not currently usable end to end in checked programs. Parser/HIR hooks exist, while the working checked accumulation surface still uses the ambient `scan` helper.
+`+|>` is the checked accumulate pipe surface for one-stage signal recurrence. It lowers through the same scheduler-owned recurrence path that also accepts the ambient `scan` helper spelling.
 
 ```aivi
 signal counter : Signal Int =
     tick
-     |> scan 0 step
+     +|> 0 step
 
 fun step:Int tick:Unit current:Int =>
     current + 1
 ```
 
-Intended form: `signal +|> seed (state input => next)`
+Checked form: `signalSource +|> seed step`
 
-- parser/HIR currently recognize `+|>` stages
-- the end-to-end checked path still relies on `|> scan seed step`
-- `+|>` should not be treated as a stable executable surface until the lowering/runtime path is finished
+- `+|>` lowers to the scheduler-owned recurrence node used for stateful signal accumulation
+- the helper spelling `|> scan seed step` remains accepted and lowers to the same executable path
+- the step function must have shape `input -> state -> state`
 
-The shorthand forms described in older drafts are likewise incomplete today.
+The shorthand binder forms described in older drafts are still not implemented.
 
 ### 11.11 `-|>` diff
 
@@ -1299,7 +1308,7 @@ ClusterTail        ::= "&|>" Expr
 Finalizer          ::= " |>" Expr
 ```
 
-`ApplicativeCluster` is a surface form only. It does not survive into backend-facing IR. In the current implementation it is modeled and checked in HIR, but general typed-core lowering for executable expressions is still incomplete.
+`ApplicativeCluster` is a surface form only. It does not survive into backend-facing IR; executable lowering desugars it to builtin `pure`/`apply` chains, using an implicit tuple-constructor intrinsic when no explicit finalizer is provided.
 
 ## 12.4 Typing rule
 
@@ -1420,16 +1429,16 @@ Type annotation is mandatory. Input signals participate in the signal dependency
 
 Input signals are the canonical mechanism for routing GTK event payloads into the reactive graph and the publication target for task completions and other runtime-owned boundaries.
 
-When a `signal` has no body, the source owns only the raw event stream; stateful accumulation over that stream is currently expressed separately using helper surfaces such as `scan` while `+|>` remains incomplete.
+When a `signal` has no body, the source owns only the raw event stream; stateful accumulation over that stream can then be expressed by deriving another signal with `+|>` (or the equivalent `scan` helper spelling).
 
 ### 13.2.1 Stateful signal accumulation with `+|>`
 
-`+|>` is the intended accumulate pipe for building stateful signals, but it is not yet the stable checked surface.
+`+|>` is the checked accumulate pipe for building stateful signals.
 
 ```aivi
 signal counter : Signal Int =
     tick
-     |> scan 0 step
+     +|> 0 step
 
 fun step:Int tick:Unit current:Int =>
     current + 1
@@ -1437,10 +1446,10 @@ fun step:Int tick:Unit current:Int =>
 
 Normative rules:
 
-- intended future surface form: `signal +|> seed (state input => next)`
-- current checked fixtures still use `|> scan seed step`
-- parser/HIR support for `+|>` exists, but end-to-end user programs still fail before a stable lowering/runtime path is reached
-- stateful accumulation over timer, event, source, and completion signals is therefore still described most truthfully by the working `scan` helper path
+- current checked form: `signalSource +|> seed step`
+- the helper spelling `|> scan seed step` remains accepted and lowers identically
+- the step function must have shape `input -> state -> state`
+- stateful accumulation over timer, event, source, and completion signals uses the same scheduler-owned recurrence node regardless of whether the source spelling was `+|>` or `scan`
 
 The shorthand accumulation forms from older drafts are not current executable surface.
 
@@ -1715,7 +1724,13 @@ Recommended window-event options: `capture : Bool`, `repeat : Bool`, `focusOnly 
 
 #### D-Bus
 
-Built-in `dbus.*` source providers are not implemented in the current provider catalog. Older draft examples in this area are therefore deferred rather than current executable surface.
+Built-in `dbus.*` source providers are now available in the runtime/provider catalog with the current executable surface:
+
+- `dbus.ownName "<well.known.Name>"` with optional `bus : Text`, `address : Text`, and `flags : List BusNameFlag`
+- `dbus.signal "<object-path>"` with `interface : Text`, `member : Text`, and optional `bus : Text` / `address : Text`
+- `dbus.method "<well.known.Name>"` with `path : Text`, `interface : Text`, `member : Text`, and optional `bus : Text` / `address : Text`
+
+Current end-to-end lowering supports `dbus.ownName` into `BusNameState` / `Text`, and `dbus.signal` / `dbus.method` into record outputs whose header fields are `Text` and whose `body` is currently carried as `Text`. Recursive `DbusValue`-shaped source decoding remains deferred.
 
 ### 14.1.4 Decode and delivery modes
 
@@ -2141,13 +2156,13 @@ GTK correctness is part of the language runtime contract.
 Predicates may use:
 
 - ambient projections such as `.age > 18`
-- `_` for the current subject
+- `.` for the current subject
 - `and`, `or`, `not`
 - `==` / `!=` when an `Eq` instance is available for the operand type
 
 ```aivi
 users |> filter (.active and .age > 18)
-xs    |> takeWhile (_ < 10)
+xs    |> takeWhile (. < 10)
 ```
 
 `x == y` desugars to `(==) x y`. `x != y` desugars to `not (x == y)` and does not introduce a separate class member.
@@ -2819,7 +2834,13 @@ Rules:
 - `dbus.signal`: `@source` for inbound signal subscription
 - `dbus.method`: `@source` for fire-and-forget inbound method dispatch with immediate Unit reply semantics on the wire
 
-Methods returning non-Unit values to the caller are deferred.
+Current executable lowering covers:
+
+- `dbus.ownName` with `bus`, `address`, and `flags`
+- `dbus.signal` with `interface`, `member`, `bus`, and `address`
+- `dbus.method` with `path`, `interface`, `member`, `bus`, and `address`
+
+Methods returning non-Unit values to the caller are deferred. Recursive `DbusValue` source decoding is also still deferred, so the currently supported message body carrier is `Text`.
 
 ### 28.4 Local-first sync architecture
 

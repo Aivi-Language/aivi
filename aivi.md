@@ -126,7 +126,8 @@ Lambda:
 x => expr
 
 Ambient:
-. is lambda shorthand
+- `.` is the ambient subject shorthand inside pipe-stage bodies
+- `_` is a discard symbol only
 
 Examples:
 . + 1
@@ -192,14 +193,14 @@ Intended form:
 signal +|> seed (state input => next)
 
 Current status:
-- parser/HIR hooks for +|> exist
-- end-to-end checked programs still use the ambient scan helper instead
+- one-stage signal accumulation lowers through the same scheduler-owned recurrence path as `scan`
+- `scan seed step` remains a supported helper spelling for the same executable shape
 
 Working checked shape today:
 
 signal derived =
     source
-     |> scan seed step
+     +|> seed step
 
 ============================================================
 9. Source Model (Normative)
@@ -288,7 +289,7 @@ result defines graph assembly.
 ============================================================
 
 - Signals behave like reactive graph nodes
-- scan is the working checked state-accumulation surface; +|> remains an intended surface
+- `+|>` is the checked state-accumulation surface for signal recurrence; `scan` remains an equivalent helper spelling
 - Domains act like typeclasses
 - Sources unify async + caching + scheduling
 

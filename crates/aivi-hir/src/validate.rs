@@ -10483,26 +10483,8 @@ impl<'a> GateTypeContext<'a> {
         }
 
         match value {
-            IntrinsicValue::TupleConstructor { arity } => {
-                let tuple = GateType::Tuple(
-                    (0..arity)
-                        .map(|index| {
-                            GateType::TypeParameter {
-                                parameter: TypeParameterId::from_raw(index as u32),
-                                name: format!("__tuple_ctor_{arity}_{index}"),
-                            }
-                        })
-                        .collect(),
-                );
-                (0..arity).rev().fold(tuple, |result, index| {
-                    arrow(
-                        GateType::TypeParameter {
-                            parameter: TypeParameterId::from_raw(index as u32),
-                            name: format!("__tuple_ctor_{arity}_{index}"),
-                        },
-                        result,
-                    )
-                })
+            IntrinsicValue::TupleConstructor { .. } => {
+                unreachable!("tuple constructor intrinsics should lower before gate typing")
             }
             IntrinsicValue::RandomBytes => arrow(
                 primitive(BuiltinType::Int),
@@ -12843,6 +12825,19 @@ impl<'a> GateTypeContext<'a> {
         Some((instantiated_parameters, result))
     }
 
+    fn function_signature(&self, ty: &GateType, arity: usize) -> Option<(Vec<GateType>, GateType)> {
+        let mut parameters = Vec::with_capacity(arity);
+        let mut current = ty;
+        for _ in 0..arity {
+            let GateType::Arrow { parameter, result } = current else {
+                return None;
+            };
+            parameters.push(parameter.as_ref().clone());
+            current = result.as_ref();
+        }
+        Some((parameters, current.clone()))
+    }
+
     fn flatten_apply_expr(&self, expr_id: ExprId) -> (ExprId, Vec<ExprId>) {
         let mut callee = expr_id;
         let mut segments = Vec::new();
@@ -13382,6 +13377,64 @@ impl<'a> GateTypeContext<'a> {
         self.finalize_expr_info(info)
     }
 
+    fn infer_accumulate_stage_info(
+        &mut self,
+        seed_expr: ExprId,
+        step_expr: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let mut info = GateExprInfo::default();
+        let GateType::Signal(input_payload) = subject else {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: self.module.exprs()[step_expr].span,
+                stage: "+|>",
+                expected: "Signal _".to_owned(),
+                actual: subject.to_string(),
+            });
+            return self.finalize_expr_info(info);
+        };
+
+        let seed_info = self.infer_expr(seed_expr, env, None);
+        let seed_ty = seed_info.ty.clone();
+        info.merge(seed_info);
+        let Some(seed_ty) = seed_ty else {
+            return self.finalize_expr_info(info);
+        };
+
+        let step_info = self.infer_expr(step_expr, env, Some(input_payload.as_ref()));
+        let step_ty = step_info.actual_gate_type().or(step_info.ty.clone());
+        info.merge(step_info);
+        let Some(step_ty) = step_ty else {
+            return self.finalize_expr_info(info);
+        };
+
+        let Some((parameters, result_ty)) = self.function_signature(&step_ty, 2) else {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: self.module.exprs()[step_expr].span,
+                stage: "+|>",
+                expected: format!("{} -> {} -> {}", input_payload.as_ref(), seed_ty, seed_ty),
+                actual: step_ty.to_string(),
+            });
+            return self.finalize_expr_info(info);
+        };
+        if !parameters[0].same_shape(input_payload.as_ref())
+            || !parameters[1].same_shape(&seed_ty)
+            || !result_ty.same_shape(&seed_ty)
+        {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: self.module.exprs()[step_expr].span,
+                stage: "+|>",
+                expected: format!("{} -> {} -> {}", input_payload.as_ref(), seed_ty, seed_ty),
+                actual: step_ty.to_string(),
+            });
+            return self.finalize_expr_info(info);
+        }
+
+        info.ty = Some(GateType::Signal(Box::new(seed_ty)));
+        self.finalize_expr_info(info)
+    }
+
     pub(crate) fn infer_truthy_falsy_branch(
         &mut self,
         expr_id: ExprId,
@@ -13887,13 +13940,16 @@ impl<'a> GateTypeContext<'a> {
                         &subject,
                     )
                 }
+                PipeStageKind::Accumulate { seed, step } => {
+                    stage_index += 1;
+                    self.infer_accumulate_stage_info(*seed, *step, &pipe_env, &subject)
+                }
                 PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
                 | PipeStageKind::RecurStep { .. }
                 | PipeStageKind::Validate { .. }
                 | PipeStageKind::Previous { .. }
-                | PipeStageKind::Diff { .. }
-                | PipeStageKind::Accumulate { .. } => {
+                | PipeStageKind::Diff { .. } => {
                     stage_index += 1;
                     GateExprInfo::default()
                 }

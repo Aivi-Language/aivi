@@ -2305,6 +2305,19 @@ value view =
     }
 
     #[test]
+    fn formatter_preserves_result_blocks() {
+        let input = concat!(
+            "value total =\n",
+            "    result {\n",
+            "        left <- Ok 20\n",
+            "        right <- Ok 22\n",
+            "        left + right\n",
+            "    }\n",
+        );
+        assert_eq!(format_text(input), input);
+    }
+
+    #[test]
     fn formatter_spaces_applied_and_constrained_annotations() {
         let formatted = format_text(
             "fun wrap:Result Text Int value:(Result Text Int)=>value\nvalue active:Signal Bool=True\nclass Functor F\n    map:Applicative G=>(A -> G B) -> F A -> G (F B)\n",
