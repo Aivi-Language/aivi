@@ -141,7 +141,6 @@ value leastOf:Int =
 ```aivi
 use aivi.prelude (
     join
-    concat
     surround
 )
 
@@ -153,7 +152,7 @@ value csv:Text =
     ]
 
 value combined:Text =
-    concat [
+    join "" [
         "Hello",
         " ",
         "World"

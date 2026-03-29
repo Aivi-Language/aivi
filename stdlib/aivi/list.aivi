@@ -150,9 +150,6 @@ fun flattenStep: (List A) acc: (List A) inner: (List A) =>
 fun flatten: (List A) xss: (List (List A)) => xss
   |> reduce flattenStep []
 
-fun concat: (List A) xss: (List (List A)) =>
-    flatten xss
-
 fun flatMapStep: (List B) transform: (A -> List B) acc: (List B) item:A =>
     append acc (transform item)
 
@@ -372,7 +369,6 @@ export last
 export map
 export filter
 export flatten
-export concat
 export flatMap
 export reverse
 export take

@@ -55,7 +55,6 @@ use aivi.result (
 
 use aivi.text (
     join
-    concat
     surround
     isEmpty as textIsEmpty
     nonEmpty as textNonEmpty
@@ -145,7 +144,7 @@ value greeting:Text =
     ]
 
 value combined:Text =
-    concat [
+    join "" [
         "a",
         "i",
         "v",

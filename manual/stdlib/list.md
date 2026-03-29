@@ -259,26 +259,6 @@ value nested: List (List Int) = [
 value flat: List Int = flatten nested
 ```
 
----
-
-### concat
-
-An alias for `flatten`. Joins a list of lists into one.
-
-```
-concat : (List (List A)) -> List A
-```
-
-```aivi
-use aivi.list (concat)
-
-value lines: List (List Text) = [
-    ["hello", "world"],
-    ["foo", "bar"]
-]
-
-value all: List Text = concat lines
-```
 
 ---
 

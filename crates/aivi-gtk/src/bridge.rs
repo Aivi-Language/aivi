@@ -28,8 +28,8 @@ const INVALID_WIDGET_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescrip
 ///
 /// This layer keeps the contract intentionally narrow and explicit:
 ///
-/// - widget nodes expose their schema-declared default child group; widgets with richer multi-slot
-///   child schemas still need future markup syntax before they can be addressed,
+/// - widget nodes expose only their schema-declared default child group, while explicit dotted
+///   child-group wrappers lower to separate group nodes for multi-slot widgets,
 /// - control nodes lower to concrete body/case/empty groups instead of opaque child metadata, and
 /// - localized child edits stay explicit so keyed collection updates cannot regress into VDOM-style
 ///   diffing.

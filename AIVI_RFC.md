@@ -2595,7 +2595,7 @@ The selected root must be a `Window`. The CLI does not auto-wrap arbitrary widge
 
 The current cataloged widget/runtime slice includes `Window`, `HeaderBar`, `Paned`, `Box`, `ScrolledWindow`, `Frame`, `Viewport`, `Label`, `Button`, `Entry`, `Switch`, `CheckButton`, `ToggleButton`, `Image`, `Spinner`, `ProgressBar`, `Revealer`, and `Separator`. `Entry.onChange` publishes `Text`, `Switch.onToggle` publishes `Bool`, and JSON-backed source payloads may now decode `Float`, `Decimal`, `BigInt`, and `Bytes` through explicit contracts.
 
-Widgets with a single default child group still accept ordinary unnamed children. Widgets with richer slot layouts now use explicit dotted child-group wrappers, for example:
+Widgets with a single default child group still accept ordinary unnamed children. Widgets with multiple child groups now require explicit dotted child-group wrappers, for example:
 
 ```aivi
 <Paned>
@@ -2618,7 +2618,7 @@ Widgets with a single default child group still accept ordinary unnamed children
 </Paned>
 ```
 
-`HeaderBar.titleWidget` remains the default unnamed child group for backward compatibility. `Paned` requires explicit `start` / `end` child-group wrappers because it has no unnamed default slot.
+`HeaderBar` and `Paned` require explicit child-group wrappers because multi-slot widgets have no unnamed default slot.
 
 Exits 0 on clean application close, 1 on startup/compilation error.
 
@@ -2833,7 +2833,7 @@ The AIVI standard library is organized into two tiers.
 | `aivi.order` | `Ordering` type and comparison helpers |
 | `aivi.pair` | Pair/tuple utilities |
 | `aivi.result` | `Result E A` combinators |
-| `aivi.text` | Text join, concat, and interpolation helpers |
+| `aivi.text` | Text join and interpolation helpers |
 | `aivi.validation` | `Validation E A` for error accumulation |
 | `aivi.prelude` | Re-exports the most-used symbols from all foundation modules |
 

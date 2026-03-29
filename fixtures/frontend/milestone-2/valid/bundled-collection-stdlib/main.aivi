@@ -42,7 +42,6 @@ use aivi.text (
     isEmpty as textIsEmpty
     nonEmpty as textNonEmpty
     join
-    concat
     surround
 )
 
@@ -132,7 +131,7 @@ value joinedNames:Text =
     ]
 
 value mergedText:Text =
-    concat [
+    join "" [
         "a",
         "ivi"
     ]

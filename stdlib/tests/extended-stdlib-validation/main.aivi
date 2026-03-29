@@ -36,7 +36,6 @@ use aivi.text (
     isEmpty
     nonEmpty
     join
-    concat
     surround
 )
 
@@ -180,8 +179,8 @@ value joinedText:Text =
         "c"
     ]
 
-value concatText:Text =
-    concat [
+value compactText:Text =
+    join "" [
         "hello",
         " ",
         "world"
@@ -334,15 +333,15 @@ value defaultErr:Int = withDefault 0 errResult
 value mappedResult: Result Text Int = resultMap double okResult
 
 fun prefixErr:Text msg:Text =>
-    concat ["error: ", msg]
+    join "" ["error: ", msg]
 
 value mappedErrResult: Result Text Int = resultMapErr prefixErr errResult
 
 fun onOk:Text n:Int =>
-    concat ["value: ", ""]
+    join "" ["value: ", ""]
 
 fun onErr:Text msg:Text =>
-    concat ["error: ", msg]
+    join "" ["error: ", msg]
 
 value foldedOk:Text = resultFold onErr onOk okResult
 value foldedErr:Text = resultFold onErr onOk errResult

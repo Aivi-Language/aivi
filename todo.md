@@ -9,9 +9,6 @@
 - Runtime source lowering is still partial for some provider shapes.
   - Evidence: `crates/aivi-runtime/src/hir_adapter.rs` still emits `source owner {owner} uses a provider the runtime adapter cannot lower yet: {provider:?}` for unsupported providers.
 
-- Alias cleanup decisions are still open in a few places where the implementation exposes two surfaces for one concept.
-  - Evidence: `aivi.list.concat` delegates to `flatten`, `aivi.text.concat` delegates to `join ""`, and `HeaderBar.titleWidget` still keeps an unnamed backward-compatible child slot.
-
 - Eq constraints are collected but still do not go through a dedicated solver pass.
   - Evidence: `crates/aivi-hir/src/typecheck.rs` explicitly warns that collected `Eq` constraints can otherwise remain unsolved.
 

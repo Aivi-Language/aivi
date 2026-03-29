@@ -12,9 +12,18 @@ fn stdlib_path(relative: &str) -> PathBuf {
 #[test]
 fn test_command_accepts_stdlib_validation_files() {
     for (relative, summary) in [
-        ("aivi/text.aivi", "test result: ok. 3 passed; 0 failed; 3 total"),
-        ("aivi/math.aivi", "test result: ok. 2 passed; 0 failed; 2 total"),
-        ("aivi/bool.aivi", "test result: ok. 2 passed; 0 failed; 2 total"),
+        (
+            "aivi/text.aivi",
+            "test result: ok. 3 passed; 0 failed; 3 total",
+        ),
+        (
+            "aivi/math.aivi",
+            "test result: ok. 2 passed; 0 failed; 2 total",
+        ),
+        (
+            "aivi/bool.aivi",
+            "test result: ok. 2 passed; 0 failed; 2 total",
+        ),
         (
             "aivi/defaults.aivi",
             "test result: ok. 3 passed; 0 failed; 3 total",

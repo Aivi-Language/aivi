@@ -563,7 +563,7 @@ const HEADER_BAR_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         HEADER_BAR_SHOW_TITLE_BUTTONS_PROPERTY,
     ],
     events: &[],
-    default_child_group_override: Some(&HEADER_BAR_TITLE_WIDGET_CHILD_GROUP),
+    default_child_group_override: None,
     child_groups: &[
         HEADER_BAR_START_CHILD_GROUP,
         HEADER_BAR_END_CHILD_GROUP,
@@ -1154,13 +1154,15 @@ mod tests {
 
         let header_bar =
             lookup_widget_schema_by_name("HeaderBar").expect("HeaderBar schema should exist");
-        assert!(matches!(
+        assert_eq!(
             header_bar.default_child_group(),
-            GtkDefaultChildGroup::One(group)
-                if group.name == "titleWidget"
-                    && group.container == GtkChildContainerKind::Single
-                    && group.accepts_child_count(1)
-                    && !group.accepts_child_count(2)
-        ));
+            GtkDefaultChildGroup::Ambiguous
+        );
+        let title_widget = header_bar
+            .child_group("titleWidget")
+            .expect("HeaderBar should expose an explicit titleWidget group");
+        assert_eq!(title_widget.container, GtkChildContainerKind::Single);
+        assert!(title_widget.accepts_child_count(1));
+        assert!(!title_widget.accepts_child_count(2));
     }
 }

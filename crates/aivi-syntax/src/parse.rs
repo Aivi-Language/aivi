@@ -2203,17 +2203,29 @@ impl<'a> Parser<'a> {
         stop: ExprStop,
     ) -> Option<Expr> {
         let minus_index = self.peek_nontrivia(*cursor, end)?;
-        if self.expr_should_stop(minus_index, stop) || self.tokens[minus_index].kind() != TokenKind::Minus
+        if self.expr_should_stop(minus_index, stop)
+            || self.tokens[minus_index].kind() != TokenKind::Minus
         {
             return None;
         }
         let literal_index = self.negative_numeric_literal_token(minus_index, end)?;
         *cursor = literal_index + 1;
         match self.tokens[literal_index].kind() {
-            TokenKind::Integer => Some(self.parse_integer_expr_with_sign(Some(minus_index), literal_index, cursor, end)),
-            TokenKind::Float => Some(self.parse_float_expr_with_sign(Some(minus_index), literal_index)),
-            TokenKind::Decimal => Some(self.parse_decimal_expr_with_sign(Some(minus_index), literal_index)),
-            TokenKind::BigInt => Some(self.parse_bigint_expr_with_sign(Some(minus_index), literal_index)),
+            TokenKind::Integer => Some(self.parse_integer_expr_with_sign(
+                Some(minus_index),
+                literal_index,
+                cursor,
+                end,
+            )),
+            TokenKind::Float => {
+                Some(self.parse_float_expr_with_sign(Some(minus_index), literal_index))
+            }
+            TokenKind::Decimal => {
+                Some(self.parse_decimal_expr_with_sign(Some(minus_index), literal_index))
+            }
+            TokenKind::BigInt => {
+                Some(self.parse_bigint_expr_with_sign(Some(minus_index), literal_index))
+            }
             _ => None,
         }
     }
@@ -3168,7 +3180,9 @@ impl<'a> Parser<'a> {
     fn starts_expr(&self, index: usize) -> bool {
         let kind = self.tokens[index].kind();
         if kind == TokenKind::Minus {
-            return self.negative_numeric_literal_token(index, self.tokens.len()).is_some();
+            return self
+                .negative_numeric_literal_token(index, self.tokens.len())
+                .is_some();
         }
         kind.is_keyword()
             || matches!(
@@ -3329,7 +3343,9 @@ impl<'a> Parser<'a> {
     fn starts_pattern(&self, index: usize) -> bool {
         let kind = self.tokens[index].kind();
         if kind == TokenKind::Minus {
-            return self.negative_integer_literal_token(index, self.tokens.len()).is_some();
+            return self
+                .negative_integer_literal_token(index, self.tokens.len())
+                .is_some();
         }
         matches!(
             kind,
@@ -4487,7 +4503,10 @@ export main
             "source ticks : Signal Int\nview main = 0\nresult bundle = 0\nadapter glue = 0\ndata Flag = On | Off\n",
         );
 
-        assert!(parsed.has_errors(), "removed alias declarations should stay invalid");
+        assert!(
+            parsed.has_errors(),
+            "removed alias declarations should stay invalid"
+        );
     }
 
     #[test]
@@ -5109,10 +5128,18 @@ instance Eq A -> Eq (Option A)
         expect_suffixed(&parsed.module.items[6], "-250", "ms");
         match &parsed.module.items[7] {
             Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
-                Some(ExprKind::Binary { operator, left, right }) => {
+                Some(ExprKind::Binary {
+                    operator,
+                    left,
+                    right,
+                }) => {
                     assert_eq!(*operator, BinaryOperator::Subtract);
-                    assert!(matches!(left.kind, ExprKind::Integer(ref literal) if literal.raw == "4"));
-                    assert!(matches!(right.kind, ExprKind::Integer(ref literal) if literal.raw == "3"));
+                    assert!(
+                        matches!(left.kind, ExprKind::Integer(ref literal) if literal.raw == "4")
+                    );
+                    assert!(
+                        matches!(right.kind, ExprKind::Integer(ref literal) if literal.raw == "3")
+                    );
                 }
                 other => panic!("expected subtraction expression, got {other:?}"),
             },
@@ -5124,14 +5151,16 @@ instance Eq A -> Eq (Option A)
     fn parser_rejects_spaced_negative_literal_prefixes() {
         let (_, parsed) = load("value badInt = - 3\nvalue badFloat = - 3.4\n");
 
-        assert!(parsed.has_errors(), "spaced negative literals should stay invalid");
+        assert!(
+            parsed.has_errors(),
+            "spaced negative literals should stay invalid"
+        );
     }
 
     #[test]
     fn parser_accepts_negative_integer_patterns() {
-        let (_, parsed) = load(
-            "fun isNegativeOne:Bool value:Int => value\n  ||> -1 -> True\n  ||> _ -> False\n",
-        );
+        let (_, parsed) =
+            load("fun isNegativeOne:Bool value:Int => value\n  ||> -1 -> True\n  ||> _ -> False\n");
 
         assert!(
             !parsed.has_errors(),
@@ -5141,10 +5170,7 @@ instance Eq A -> Eq (Option A)
         let Item::Fun(item) = &parsed.module.items[0] else {
             panic!("expected a function item");
         };
-        let ExprKind::Pipe(pipe) = &item
-            .expr_body()
-            .expect("function should carry a body")
-            .kind
+        let ExprKind::Pipe(pipe) = &item.expr_body().expect("function should carry a body").kind
         else {
             panic!("expected the function body to remain a pipe");
         };

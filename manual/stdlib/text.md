@@ -7,7 +7,6 @@ use aivi.text (
     isEmpty
     nonEmpty
     join
-    concat
     surround
 )
 ```
@@ -53,7 +52,7 @@ fun filterLabels: List Text labels: List Text =>
 
 ## join
 
-Joins a list of `Text` values into a single string, inserting the given separator between each element.
+Joins a list of `Text` values into a single string, inserting the given separator between each element. Use `join "" parts` when you want concatenation with no separator.
 
 ```
 join : Text -> List Text -> Text
@@ -66,22 +65,6 @@ fun csvLine:Text fields: List Text =>
     join "," fields
 ```
 
----
-
-## concat
-
-Concatenates a list of `Text` values with no separator. Equivalent to `join ""`.
-
-```
-concat : List Text -> Text
-```
-
-```aivi
-use aivi.text (concat)
-
-fun buildPath:Text segments: List Text =>
-    concat segments
-```
 
 ---
 

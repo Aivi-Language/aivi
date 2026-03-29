@@ -29,20 +29,15 @@ use crate::{
     },
 };
 
-// TODO: `MailboxHub` currently never shrinks `subscribers` unless a subscriber disconnects or is
-// explicitly unsubscribed. If sources are activated and suspended repeatedly, the inner `Vec` for
-// each mailbox key can grow unboundedly. Future work should either use weak references so that
-// dead subscribers are collected automatically on the next `publish` call, or expose an explicit
-// `remove` / `unsubscribe` operation that callers invoke when a source is deactivated.
+/// Scheduler-owned mailbox routing table.
+///
+/// Each mailbox stores only the subscribers that are currently live. The inner
+/// map key is the stable subscriber id handed back to the source manager so
+/// suspend/reconfigure teardown can remove the exact mailbox worker it started.
 #[derive(Default)]
 struct MailboxHub {
     next_id: u64,
-    subscribers: BTreeMap<Box<str>, Vec<MailboxSubscriber>>,
-}
-
-struct MailboxSubscriber {
-    id: u64,
-    sender: SyncSender<Box<str>>,
+    subscribers: BTreeMap<Box<str>, BTreeMap<u64, SyncSender<Box<str>>>>,
 }
 
 impl MailboxHub {
@@ -53,39 +48,53 @@ impl MailboxHub {
             .checked_add(1)
             .expect("mailbox subscriber ids should not overflow");
         let (sender, receiver) = mpsc::sync_channel(buffer.max(1));
-        self.subscribers
+        let replaced = self
+            .subscribers
             .entry(mailbox.into())
             .or_default()
-            .push(MailboxSubscriber { id, sender });
+            .insert(id, sender);
+        debug_assert!(
+            replaced.is_none(),
+            "mailbox subscriber ids must stay unique within a hub"
+        );
         (id, receiver)
     }
 
     fn unsubscribe(&mut self, mailbox: &str, id: u64) {
-        let Some(subscribers) = self.subscribers.get_mut(mailbox) else {
-            return;
+        let should_remove = {
+            let Some(subscribers) = self.subscribers.get_mut(mailbox) else {
+                return;
+            };
+            subscribers.remove(&id);
+            subscribers.is_empty()
         };
-        subscribers.retain(|subscriber| subscriber.id != id);
-        if subscribers.is_empty() {
+        if should_remove {
             self.subscribers.remove(mailbox);
         }
     }
 
     fn publish(&mut self, mailbox: &str, message: &str) -> Result<(), MailboxPublishError> {
-        let Some(subscribers) = self.subscribers.get_mut(mailbox) else {
-            return Ok(());
-        };
-        let mut full = false;
-        subscribers.retain(
-            |subscriber| match subscriber.sender.try_send(message.into()) {
-                Ok(()) => true,
-                Err(TrySendError::Disconnected(_)) => false,
-                Err(TrySendError::Full(_)) => {
-                    full = true;
-                    true
+        let (full, should_remove) = {
+            let Some(subscribers) = self.subscribers.get_mut(mailbox) else {
+                return Ok(());
+            };
+            let mut full = false;
+            let mut disconnected = Vec::new();
+            for (&id, sender) in subscribers.iter() {
+                match sender.try_send(message.into()) {
+                    Ok(()) => {}
+                    Err(TrySendError::Disconnected(_)) => disconnected.push(id),
+                    Err(TrySendError::Full(_)) => {
+                        full = true;
+                    }
                 }
-            },
-        );
-        if subscribers.is_empty() {
+            }
+            for id in disconnected {
+                subscribers.remove(&id);
+            }
+            (full, subscribers.is_empty())
+        };
+        if should_remove {
             self.subscribers.remove(mailbox);
         }
         if full {
@@ -3541,6 +3550,56 @@ signal job : Signal (Result MailboxError Text)
         assert!(
             spin_until(&mut linked, signal, Duration::from_millis(150)).is_none(),
             "suspended mailbox sources should stop receiving messages"
+        );
+    }
+
+    #[test]
+    fn mailbox_hub_prunes_disconnected_subscribers() {
+        let mut hub = MailboxHub::default();
+        let (_subscriber_id, receiver) = hub.subscribe("jobs", 1);
+        drop(receiver);
+
+        hub.publish("jobs", "hello")
+            .expect("publishing to a disconnected mailbox subscriber should not fail");
+
+        assert!(
+            !hub.subscribers.contains_key("jobs"),
+            "publishing should clear mailbox entries whose subscribers disconnected"
+        );
+    }
+
+    #[test]
+    fn mailbox_hub_tracks_only_live_subscriber_ids() {
+        let mut hub = MailboxHub::default();
+        let (stable_id, stable_receiver) = hub.subscribe("jobs", 1);
+
+        for _ in 0..32 {
+            let (transient_id, transient_receiver) = hub.subscribe("jobs", 1);
+            hub.unsubscribe("jobs", transient_id);
+            drop(transient_receiver);
+        }
+
+        let subscriber_ids = hub
+            .subscribers
+            .get("jobs")
+            .expect("mailbox should still have the stable subscriber")
+            .keys()
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            subscriber_ids,
+            vec![stable_id],
+            "mailbox storage should retain only live subscriber ids after churn"
+        );
+
+        hub.publish("jobs", "later")
+            .expect("publishing to the surviving subscriber should succeed");
+        assert_eq!(
+            stable_receiver
+                .recv_timeout(Duration::from_millis(50))
+                .expect("surviving subscriber should still receive messages")
+                .as_ref(),
+            "later"
         );
     }
 

@@ -65,6 +65,7 @@ pub use program::{
 };
 pub use runtime::{
     DetachedRuntimeValue, EvaluationError, KernelEvaluator, RuntimeCallable, RuntimeConstructor,
-    RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeTaskPlan, RuntimeValue,
+    RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeTaskPlan,
+    RuntimeValue,
 };
 pub use validate::{ValidationError, ValidationErrors, validate_program};

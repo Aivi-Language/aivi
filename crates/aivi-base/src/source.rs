@@ -286,14 +286,7 @@ impl SourceFile {
     ///
     /// Returns `None` if `pos.line` is beyond the last line of the file, or if
     /// `pos.character` exceeds the UTF-16 length of the addressed line.  Callers
-    /// that previously relied on silent clamping must be updated to handle the
-    /// `None` case.
-    ///
-    /// # External call sites
-    ///
-    /// TODO: update callers in `aivi-lsp` (completion.rs, definition.rs, hover.rs)
-    /// to handle the new `Option` return value instead of assuming the position is
-    /// always valid.
+    /// that previously relied on silent clamping must handle the `None` case.
     pub fn lsp_position_to_offset(&self, pos: LspPosition) -> Option<ByteIndex> {
         let line_idx = pos.line as usize;
         if line_idx >= self.line_starts.len() {

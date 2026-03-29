@@ -4802,7 +4802,9 @@ value view =
             <Frame label="Controls">
                 <Box>
                     <HeaderBar showTitleButtons={showButtons}>
-                        <Label text="Profile" />
+                        <HeaderBar.titleWidget>
+                            <Label text="Profile" />
+                        </HeaderBar.titleWidget>
                     </HeaderBar>
                     <Separator orientation="Horizontal" />
                     <Switch active={isEnabled} onToggle={toggled} />
@@ -5010,6 +5012,25 @@ value view =
         assert!(error.contains("ScrolledWindow"));
         assert!(error.contains("group `content`"));
         assert!(error.contains("allows at most 1"));
+    }
+
+    #[test]
+    fn prepare_run_rejects_unnamed_header_bar_children() {
+        let error = prepare_run_from_text(
+            "header-bar-unnamed-child.aivi",
+            r#"
+value view =
+    <Window title="Host">
+        <HeaderBar>
+            <Label text="Profile" />
+        </HeaderBar>
+    </Window>
+"#,
+            None,
+        )
+        .expect_err("multi-slot header bars should require explicit child-group wrappers");
+        assert!(error.contains("cannot place unnamed children under `HeaderBar`"));
+        assert!(error.contains("multiple child groups"));
     }
 
     #[test]

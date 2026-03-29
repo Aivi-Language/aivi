@@ -223,7 +223,6 @@ use aivi.text (
     isEmpty
     nonEmpty
     join
-    concat
     surround
 )
 ```
@@ -232,8 +231,7 @@ use aivi.text (
 |---|---|---|
 | `isEmpty` | `Text -> Bool` | `True` if the string is `""` |
 | `nonEmpty` | `Text -> Bool` | `True` if the string is not `""` |
-| `join` | `Text -> List Text -> Text` | Join parts with a separator |
-| `concat` | `List Text -> Text` | Concatenate without separator |
+| `join` | `Text -> List Text -> Text` | Join parts with a separator (`""` concatenates) |
 | `surround` | `Text -> Text -> Text -> Text` | Wrap with prefix and suffix |
 
 Example:

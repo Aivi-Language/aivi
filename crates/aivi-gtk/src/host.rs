@@ -2084,7 +2084,9 @@ value view =
             <Frame label="Controls">
                 <Box>
                     <HeaderBar showTitleButtons={showButtons}>
-                        <Label text="Profile" />
+                        <HeaderBar.titleWidget>
+                            <Label text="Profile" />
+                        </HeaderBar.titleWidget>
                     </HeaderBar>
                     <Separator orientation="Horizontal" />
                     <Switch active={isEnabled} onToggle={toggled} />

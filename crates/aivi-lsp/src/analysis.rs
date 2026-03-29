@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use aivi_base::ByteIndex;
+use aivi_base::{ByteIndex, LspPosition};
 use aivi_hir::LspSymbol;
 
 /// Query-backed per-file analysis snapshot used by editor features.
@@ -18,6 +18,11 @@ impl FileAnalysis {
             diagnostics: hir.diagnostics_arc(),
             symbols: hir.symbols_arc(),
         }
+    }
+
+    pub fn tightest_symbol_at_lsp_position(&self, position: LspPosition) -> Option<&LspSymbol> {
+        let cursor = self.source.lsp_position_to_offset(position)?;
+        self.tightest_symbol_at_offset(cursor)
     }
 
     pub fn tightest_symbol_at_offset(&self, cursor: ByteIndex) -> Option<&LspSymbol> {
@@ -50,7 +55,7 @@ mod tests {
     use super::FileAnalysis;
     use std::sync::Arc;
 
-    use aivi_base::{ByteIndex, FileId, SourceSpan, Span};
+    use aivi_base::{ByteIndex, FileId, LspPosition, SourceSpan, Span};
     use aivi_hir::{LspSymbol, LspSymbolKind};
 
     fn symbol(name: &str, span: std::ops::Range<usize>, children: Vec<LspSymbol>) -> LspSymbol {
@@ -65,17 +70,28 @@ mod tests {
         }
     }
 
+    fn analysis(text: &str, symbols: Vec<LspSymbol>) -> FileAnalysis {
+        FileAnalysis {
+            source: Arc::new(aivi_base::SourceFile::new(
+                FileId::new(0),
+                "test.aivi",
+                text,
+            )),
+            diagnostics: Arc::<[aivi_base::Diagnostic]>::from(Vec::new()),
+            symbols: Arc::<[LspSymbol]>::from(symbols),
+        }
+    }
+
     #[test]
     fn prefers_the_tightest_nested_symbol() {
-        let analysis = FileAnalysis {
-            source: Arc::new(aivi_base::SourceFile::new(FileId::new(0), "test.aivi", "")),
-            diagnostics: Arc::<[aivi_base::Diagnostic]>::from(Vec::new()),
-            symbols: Arc::<[LspSymbol]>::from(vec![symbol(
+        let analysis = analysis(
+            "",
+            vec![symbol(
                 "outer",
                 0..12,
                 vec![symbol("inner", 3..7, Vec::new())],
-            )]),
-        };
+            )],
+        );
 
         let selected = analysis
             .tightest_symbol_at_offset(ByteIndex::new(4))
@@ -83,5 +99,40 @@ mod tests {
 
         assert_eq!(selected.name, "inner");
         assert_eq!(selected.kind, LspSymbolKind::Function);
+    }
+
+    #[test]
+    fn maps_valid_lsp_positions_before_selecting_symbols() {
+        let analysis = analysis(
+            "value answer = 42\n",
+            vec![symbol("answer", 0..16, Vec::new())],
+        );
+
+        let selected = analysis
+            .tightest_symbol_at_lsp_position(LspPosition {
+                line: 0,
+                character: 7,
+            })
+            .expect("a symbol should be found at a valid LSP position");
+
+        assert_eq!(selected.name, "answer");
+    }
+
+    #[test]
+    fn rejects_invalid_lsp_columns() {
+        let analysis = analysis(
+            "value answer = 42\n",
+            vec![symbol("answer", 0..16, Vec::new())],
+        );
+
+        assert!(
+            analysis
+                .tightest_symbol_at_lsp_position(LspPosition {
+                    line: 0,
+                    character: 99,
+                })
+                .is_none(),
+            "out-of-range UTF-16 columns should not be silently clamped",
+        );
     }
 }

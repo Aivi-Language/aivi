@@ -28,6 +28,42 @@ pub struct RuntimeMapEntry {
     pub value: RuntimeValue,
 }
 
+/// Ordered runtime map storage.
+///
+/// Runtime maps preserve source entry order even though structural matching
+/// still uses linear scans. Keeping a dedicated wrapper localises future
+/// indexing or canonical-order changes without leaking raw `Vec` usage across
+/// the runtime surface.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RuntimeMap(Vec<RuntimeMapEntry>);
+
+impl RuntimeMap {
+    pub fn from_entries(entries: Vec<RuntimeMapEntry>) -> Self {
+        Self(entries)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, RuntimeMapEntry> {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a RuntimeMap {
+    type Item = &'a RuntimeMapEntry;
+    type IntoIter = std::slice::Iter<'a, RuntimeMapEntry>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeSumValue {
     /// The HIR item that defines this sum type.
@@ -154,12 +190,10 @@ pub enum RuntimeValue {
     Bytes(Box<[u8]>),
     Tuple(Vec<RuntimeValue>),
     List(Vec<RuntimeValue>),
-    // TODO: upgrade to BTreeMap for O(log n) lookup instead of O(n) linear scan.
-    // This is blocked on `RuntimeValue` not implementing `Ord`: `RuntimeValue::Float` wraps
-    // `RuntimeFloat(f64)`, and `f64` does not implement `Ord` because of NaN. Until a total
-    // ordering is defined for all runtime value variants (e.g. by canonicalising NaN or
-    // excluding float keys), the map representation must remain a `Vec`.
-    Map(Vec<RuntimeMapEntry>),
+    // Runtime maps intentionally preserve source entry order. The dedicated
+    // wrapper keeps that invariant explicit while lookup remains linear until
+    // the runtime defines a total key ordering for all `RuntimeValue` variants.
+    Map(RuntimeMap),
     Set(Vec<RuntimeValue>),
     Record(Vec<RuntimeRecordField>),
     Sum(RuntimeSumValue),
@@ -393,7 +427,7 @@ fn push_delimited_values<'a>(
     stack.push(DisplayFrame::StaticText(open));
 }
 
-fn push_map_entries<'a>(stack: &mut Vec<DisplayFrame<'a>>, entries: &'a [RuntimeMapEntry]) {
+fn push_map_entries<'a>(stack: &mut Vec<DisplayFrame<'a>>, entries: &'a RuntimeMap) {
     stack.push(DisplayFrame::StaticText("}"));
     for (index, entry) in entries.iter().enumerate().rev() {
         stack.push(DisplayFrame::Value(&entry.value));
@@ -1351,7 +1385,7 @@ impl<'a> KernelEvaluator<'a> {
                             value: pair[1].clone(),
                         })
                         .collect();
-                    values.push(RuntimeValue::Map(entries));
+                    values.push(RuntimeValue::Map(RuntimeMap::from_entries(entries)));
                 }
                 Task::BuildRecord { labels } => {
                     let len = labels.len();
@@ -4477,8 +4511,8 @@ fn unordered_runtime_values_eq(
 fn unordered_runtime_map_eq(
     kernel: KernelId,
     expr: KernelExprId,
-    left: &[RuntimeMapEntry],
-    right: &[RuntimeMapEntry],
+    left: &RuntimeMap,
+    right: &RuntimeMap,
 ) -> Result<bool, EvaluationError> {
     if left.len() != right.len() {
         return Ok(false);
@@ -4715,8 +4749,8 @@ mod tests {
     use aivi_hir::{ItemId as HirItemId, SumConstructorHandle};
 
     use super::{
-        DetachedRuntimeValue, RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue, RuntimeValue,
-        append_validation_errors, structural_eq,
+        DetachedRuntimeValue, RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeSumValue,
+        RuntimeValue, append_validation_errors, structural_eq,
     };
     use crate::{KernelExprId, KernelId};
 
@@ -4734,10 +4768,10 @@ mod tests {
             },
             RuntimeRecordField {
                 label: "metadata".into(),
-                value: RuntimeValue::Map(vec![RuntimeMapEntry {
+                value: RuntimeValue::Map(RuntimeMap::from_entries(vec![RuntimeMapEntry {
                     key: RuntimeValue::Text("attempts".into()),
                     value: RuntimeValue::List(vec![RuntimeValue::Int(2), RuntimeValue::Int(3)]),
-                }]),
+                }])),
             },
         ]);
 
@@ -4749,6 +4783,23 @@ mod tests {
             format!("{value}"),
             "{status: Some Ok (1, ok), metadata: {attempts: [2, 3]}}"
         );
+    }
+
+    #[test]
+    fn display_preserves_runtime_map_entry_order() {
+        let value = RuntimeValue::Map(RuntimeMap::from_entries(vec![
+            RuntimeMapEntry {
+                key: RuntimeValue::Text("zeta".into()),
+                value: RuntimeValue::Int(1),
+            },
+            RuntimeMapEntry {
+                key: RuntimeValue::Text("alpha".into()),
+                value: RuntimeValue::Int(2),
+            },
+        ]));
+
+        assert_eq!(value.display_text(), "{zeta: 1, alpha: 2}");
+        assert_eq!(format!("{value}"), "{zeta: 1, alpha: 2}");
     }
 
     #[test]
@@ -4806,7 +4857,7 @@ mod tests {
             .expect("bytes should compare structurally")
         );
 
-        let left_map = RuntimeValue::Map(vec![
+        let left_map = RuntimeValue::Map(RuntimeMap::from_entries(vec![
             RuntimeMapEntry {
                 key: RuntimeValue::Text("left".into()),
                 value: RuntimeValue::Int(1),
@@ -4815,8 +4866,8 @@ mod tests {
                 key: RuntimeValue::Text("right".into()),
                 value: RuntimeValue::List(vec![RuntimeValue::Int(2), RuntimeValue::Int(3)]),
             },
-        ]);
-        let right_map = RuntimeValue::Map(vec![
+        ]));
+        let right_map = RuntimeValue::Map(RuntimeMap::from_entries(vec![
             RuntimeMapEntry {
                 key: RuntimeValue::Text("right".into()),
                 value: RuntimeValue::List(vec![RuntimeValue::Int(2), RuntimeValue::Int(3)]),
@@ -4825,7 +4876,7 @@ mod tests {
                 key: RuntimeValue::Text("left".into()),
                 value: RuntimeValue::Int(1),
             },
-        ]);
+        ]));
         assert!(
             structural_eq(kernel, expr, &left_map, &right_map)
                 .expect("maps should compare structurally regardless of insertion order")
@@ -4921,7 +4972,7 @@ mod tests {
             .expect("bytes equality should be supported")
         );
 
-        let left_map = RuntimeValue::Map(vec![
+        let left_map = RuntimeValue::Map(RuntimeMap::from_entries(vec![
             RuntimeMapEntry {
                 key: RuntimeValue::Text("first".into()),
                 value: RuntimeValue::Int(1),
@@ -4933,8 +4984,8 @@ mod tests {
                     RuntimeValue::Bool(false),
                 ]),
             },
-        ]);
-        let right_map = RuntimeValue::Map(vec![
+        ]));
+        let right_map = RuntimeValue::Map(RuntimeMap::from_entries(vec![
             RuntimeMapEntry {
                 key: RuntimeValue::Text("second".into()),
                 value: RuntimeValue::List(vec![
@@ -4946,7 +4997,7 @@ mod tests {
                 key: RuntimeValue::Text("first".into()),
                 value: RuntimeValue::Int(1),
             },
-        ]);
+        ]));
         assert!(
             structural_eq(kernel, expr, &left_map, &right_map)
                 .expect("map equality should be order-independent")

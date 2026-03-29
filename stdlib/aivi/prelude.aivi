@@ -34,7 +34,6 @@ use aivi.list (
     map as listMap
     filter as listFilter
     flatten as listFlatten
-    concat as listConcat
     flatMap as listFlatMap
     reverse as listReverse
     take as listTake
@@ -73,7 +72,6 @@ use aivi.order (
 
 use aivi.text (
     join as textJoin
-    concat as textConcat
     isEmpty as textIsEmpty
     nonEmpty as textNonEmpty
     surround as textSurround
@@ -213,9 +211,6 @@ fun comparing:(A -> A -> Bool) extract:(A -> B) compare:(B -> B -> Bool) left:A 
 fun join:Text separator:Text parts: (List Text) =>
     textJoin separator parts
 
-fun concat:Text parts: (List Text) =>
-    textConcat parts
-
 fun textIsEmpty:Bool t:Text =>
     textIsEmpty t
 
@@ -285,4 +280,4 @@ fun mapPair:(C, D) f:(A -> C) g:(B -> D) pair:(A, B) =>
 fun duplicate:(A, A) item:A =>
     pairDuplicate item
 
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, last, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, take, drop, sum, contains, any, all, find, min, max, minOf, maxOf, comparing, join, concat, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, last, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, take, drop, sum, contains, any, all, find, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)

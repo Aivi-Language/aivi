@@ -20,9 +20,6 @@ fun join:Text separator:Text parts: (List Text) => parts
   |> reduce (joinStep separator) { first: True, value: "" }
   |> finishJoin
 
-fun concat:Text parts: (List Text) =>
-    join "" parts
-
 fun surround:Text prefix:Text suffix:Text opt:Text =>
     "{prefix}{opt}{suffix}"
 
@@ -47,6 +44,5 @@ value surrounded_text_is_non_empty: Task Text Bool =
 export isEmpty
 export nonEmpty
 export join
-export concat
 export surround
 export withDefault
