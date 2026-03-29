@@ -29,7 +29,7 @@ use aivi_backend::{
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
 use aivi_core::{
     IncludedItems, RuntimeFragmentSpec, lower_module_with_items as lower_core_module_with_items,
-    lower_runtime_fragment, lower_runtime_module_with_items,
+    lower_runtime_fragment, lower_runtime_module_with_items, runtime_fragment_included_items,
     validate_module as validate_core_module,
 };
 use aivi_gtk::{
@@ -40,11 +40,10 @@ use aivi_gtk::{
     lower_widget_bridge,
 };
 use aivi_hir::{
-    BuiltinTerm, BuiltinType, DecoratorPayload, ExprId as HirExprId, ExprKind,
+    BuiltinTerm, BuiltinType, DecoratorPayload, ExprId as HirExprId, ExprKind, GeneralExprOutcome,
     GeneralExprParameter, Item, ItemId as HirItemId, Module as HirModule,
     PatternId as HirPatternId, PatternKind, TermResolution, TypeKind, TypeResolution,
-    ValidationMode, ValueItem, collect_markup_runtime_expr_sites,
-    elaborate_runtime_expr_with_env,
+    ValidationMode, ValueItem, collect_markup_runtime_expr_sites, elaborate_runtime_expr_with_env,
 };
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_query::{
@@ -815,9 +814,10 @@ fn run_markup_file_with_launch_config(
 #[derive(Debug)]
 struct ExecuteArtifact {
     task_owner: HirItemId,
-    runtime_assembly: HirRuntimeAssembly,
-    core: aivi_core::Module,
+    runtime_assembly: Option<HirRuntimeAssembly>,
+    core: Option<aivi_core::Module>,
     backend: Arc<BackendProgram>,
+    backend_item: Option<BackendItemId>,
 }
 
 struct TestTaskOutcome {
@@ -890,7 +890,7 @@ fn test_file_with_context(
             "`aivi test`",
             &format!("test `{}`", test.name),
         ) {
-            Ok(value) => value.into_runtime(),
+            Ok(value) => value,
             Err(message) => {
                 failed += 1;
                 write_output_line(stderr, &format!("fail {}: {message}", test.location))?;
@@ -985,12 +985,6 @@ fn production_item_ids(module: &HirModule) -> IncludedItems {
         .collect()
 }
 
-fn selected_test_item_ids(module: &HirModule, test_item: HirItemId) -> IncludedItems {
-    let mut included = production_item_ids(module);
-    included.insert(test_item);
-    included
-}
-
 #[derive(Clone)]
 struct DiscoveredWorkspaceTest {
     file: QuerySourceFile,
@@ -1079,16 +1073,19 @@ fn prepare_execute_artifact(module: &HirModule) -> Result<ExecuteArtifact, Strin
         )
     })?;
     let included_items = production_item_ids(module);
-    let lowered = lower_runtime_backend_stack_with_items(module, &included_items, "`aivi execute`")?;
-    let runtime_assembly = assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
-        let mut rendered = String::from("failed to assemble runtime plans for `aivi execute`:\n");
-        for error in errors.errors() {
-            rendered.push_str("- ");
-            rendered.push_str(&error.to_string());
-            rendered.push('\n');
-        }
-        rendered
-    })?;
+    let lowered =
+        lower_runtime_backend_stack_with_items(module, &included_items, "`aivi execute`")?;
+    let runtime_assembly =
+        assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
+            let mut rendered =
+                String::from("failed to assemble runtime plans for `aivi execute`:\n");
+            for error in errors.errors() {
+                rendered.push_str("- ");
+                rendered.push_str(&error.to_string());
+                rendered.push('\n');
+            }
+            rendered
+        })?;
     if runtime_assembly.task_by_owner(main_owner).is_none() {
         return Err(
             "`aivi execute` requires `value main` to be annotated as `Task ...`".to_owned(),
@@ -1096,14 +1093,24 @@ fn prepare_execute_artifact(module: &HirModule) -> Result<ExecuteArtifact, Strin
     }
     Ok(ExecuteArtifact {
         task_owner: main_owner,
-        runtime_assembly,
-        core: lowered.core,
+        runtime_assembly: Some(runtime_assembly),
+        core: Some(lowered.core),
         backend: lowered.backend,
+        backend_item: None,
     })
 }
 
-fn prepare_test_artifact(module: &HirModule, test_owner: HirItemId) -> Result<ExecuteArtifact, String> {
-    let included_items = selected_test_item_ids(module, test_owner);
+fn prepare_test_artifact(
+    module: &HirModule,
+    test_owner: HirItemId,
+) -> Result<ExecuteArtifact, String> {
+    let fragment = test_runtime_fragment(module, test_owner)?;
+    let included_items = runtime_fragment_included_items(module, &fragment);
+    if test_can_use_backend_only_path(module, test_owner, &included_items) {
+        if let Ok(artifact) = prepare_backend_only_test_artifact(module, &fragment) {
+            return Ok(artifact);
+        }
+    }
     let lowered = lower_runtime_backend_stack_with_items(module, &included_items, "`aivi test`")?;
     let runtime_assembly =
         assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
@@ -1116,13 +1123,98 @@ fn prepare_test_artifact(module: &HirModule, test_owner: HirItemId) -> Result<Ex
             rendered
         })?;
     if runtime_assembly.task_by_owner(test_owner).is_none() {
-        return Err("`aivi test` requires every `@test` value to be annotated as `Task ...`".to_owned());
+        return Err(
+            "`aivi test` requires every `@test` value to be annotated as `Task ...`".to_owned(),
+        );
     }
     Ok(ExecuteArtifact {
         task_owner: test_owner,
-        runtime_assembly,
-        core: lowered.core,
+        runtime_assembly: Some(runtime_assembly),
+        core: Some(lowered.core),
         backend: lowered.backend,
+        backend_item: None,
+    })
+}
+
+fn prepare_backend_only_test_artifact(
+    module: &HirModule,
+    fragment: &RuntimeFragmentSpec,
+) -> Result<ExecuteArtifact, String> {
+    let lowered = lower_runtime_fragment_backend_stack(module, fragment, "`aivi test`")?;
+    let backend_item = lowered
+        .backend
+        .items()
+        .iter()
+        .find(|(_, item)| item.name.as_ref() == fragment.name.as_ref())
+        .map(|(item_id, _)| item_id)
+        .ok_or_else(|| {
+            format!(
+                "failed to find compiled backend item for `{}` in `aivi test` fragment",
+                fragment.name
+            )
+        })?;
+    Ok(ExecuteArtifact {
+        task_owner: fragment.owner,
+        runtime_assembly: None,
+        core: None,
+        backend: lowered.backend,
+        backend_item: Some(backend_item),
+    })
+}
+
+fn test_can_use_backend_only_path(
+    module: &HirModule,
+    test_owner: HirItemId,
+    included_items: &IncludedItems,
+) -> bool {
+    if item_has_mock(module, test_owner) {
+        return false;
+    }
+    included_items
+        .iter()
+        .all(|item_id| !matches!(module.items().get(*item_id), Some(Item::Signal(_))))
+}
+
+fn item_has_mock(module: &HirModule, owner: HirItemId) -> bool {
+    let Some(item) = module.items().get(owner) else {
+        return false;
+    };
+    item.decorators().iter().any(|decorator_id| {
+        matches!(
+            module
+                .decorators()
+                .get(*decorator_id)
+                .map(|decorator| &decorator.payload),
+            Some(DecoratorPayload::Mock(_))
+        )
+    })
+}
+
+fn test_runtime_fragment(
+    module: &HirModule,
+    test_owner: HirItemId,
+) -> Result<RuntimeFragmentSpec, String> {
+    let report = aivi_hir::elaborate_general_expressions(module)
+        .into_items()
+        .into_iter()
+        .find(|item| item.owner == test_owner)
+        .ok_or_else(|| {
+            format!("failed to recover general-expression elaboration for test owner {test_owner}")
+        })?;
+    let body = match report.outcome {
+        GeneralExprOutcome::Lowered(body) => body,
+        GeneralExprOutcome::Blocked(blocked) => {
+            return Err(format!(
+                "failed to elaborate `@test` body for owner {test_owner}: {blocked}"
+            ));
+        }
+    };
+    Ok(RuntimeFragmentSpec {
+        name: format!("__test_fragment_{}", test_owner.as_raw()).into_boxed_str(),
+        owner: test_owner,
+        body_expr: report.body_expr,
+        parameters: report.parameters,
+        body,
     })
 }
 
@@ -1170,7 +1262,7 @@ fn launch_execute(
     stderr: &mut impl Write,
 ) -> Result<(), String> {
     let value = evaluate_task_owner_value(path, artifact, context, "`aivi execute`", "`main`")?;
-    execute_main_task_value(value.into_runtime(), stdout, stderr)
+    execute_main_task_value(value, stdout, stderr)
 }
 
 fn evaluate_task_owner_value(
@@ -1179,13 +1271,38 @@ fn evaluate_task_owner_value(
     context: SourceProviderContext,
     command_name: &str,
     entry_name: &str,
-) -> Result<DetachedRuntimeValue, String> {
+) -> Result<RuntimeValue, String> {
     let ExecuteArtifact {
         task_owner,
         runtime_assembly,
         core,
         backend,
+        backend_item,
     } = artifact;
+    if let Some(backend_item) = backend_item {
+        let mut evaluator = KernelEvaluator::new(&backend);
+        let globals = BTreeMap::new();
+        return evaluator
+            .evaluate_item(backend_item, &globals)
+            .map_err(|error| {
+                format!(
+                    "failed to evaluate {entry_name} for {command_name} in {}: {error}",
+                    path.display()
+                )
+            });
+    }
+    let Some(runtime_assembly) = runtime_assembly else {
+        return Err(format!(
+            "failed to prepare runtime assembly for {command_name} in {}",
+            path.display()
+        ));
+    };
+    let Some(core) = core else {
+        return Err(format!(
+            "failed to prepare typed core for {command_name} in {}",
+            path.display()
+        ));
+    };
     let mut linked = link_backend_runtime(runtime_assembly, &core, backend).map_err(|errors| {
         let mut rendered = format!(
             "failed to link backend runtime for {command_name} in {}:\n",
@@ -1200,12 +1317,15 @@ fn evaluate_task_owner_value(
     })?;
     let mut providers = SourceProviderManager::with_context(context);
     settle_execute_sources(&mut linked, &mut providers)?;
-    linked.evaluate_task_value_by_owner(task_owner).map_err(|error| {
-        format!(
-            "failed to evaluate {entry_name} for {command_name} in {}: {error}",
-            path.display()
-        )
-    })
+    linked
+        .evaluate_task_value_by_owner(task_owner)
+        .map(|value| value.into_runtime())
+        .map_err(|error| {
+            format!(
+                "failed to evaluate {entry_name} for {command_name} in {}: {error}",
+                path.display()
+            )
+        })
 }
 
 fn settle_execute_sources(
@@ -1305,6 +1425,7 @@ fn execute_runtime_task_plan(
     stderr: &mut impl Write,
 ) -> Result<RuntimeValue, String> {
     match plan {
+        RuntimeTaskPlan::Pure { value } => Ok(*value),
         RuntimeTaskPlan::RandomInt { low, high } => {
             Ok(RuntimeValue::Int(sample_random_i64_inclusive(low, high)?))
         }
@@ -1534,15 +1655,16 @@ fn prepare_run_artifact(
     })?;
     validate_run_plan(sources, &bridge)?;
     let lowered = lower_runtime_backend_stack_with_items(module, &included_items, "`aivi run`")?;
-    let runtime_assembly = assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
-        let mut rendered = String::from("failed to assemble runtime plans for `aivi run`:\n");
-        for error in errors.errors() {
-            rendered.push_str("- ");
-            rendered.push_str(&error.to_string());
-            rendered.push('\n');
-        }
-        rendered
-    })?;
+    let runtime_assembly =
+        assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
+            let mut rendered = String::from("failed to assemble runtime plans for `aivi run`:\n");
+            for error in errors.errors() {
+                rendered.push_str("- ");
+                rendered.push_str(&error.to_string());
+                rendered.push('\n');
+            }
+            rendered
+        })?;
     let runtime_backend_by_hir = backend_items_by_hir(&lowered.core, lowered.backend.as_ref());
     let hydration_inputs = compile_run_inputs(
         sources,
@@ -1970,6 +2092,71 @@ fn lower_runtime_backend_stack_with_items(
     })?;
     Ok(LoweredRunBackendStack {
         core,
+        backend: Arc::new(backend),
+    })
+}
+
+fn lower_runtime_fragment_backend_stack(
+    module: &HirModule,
+    fragment: &RuntimeFragmentSpec,
+    command_name: &str,
+) -> Result<LoweredRunBackendStack, String> {
+    let core = lower_runtime_fragment(module, fragment).map_err(|errors| {
+        let mut rendered = format!("failed to lower {command_name} module into typed core:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&error.to_string());
+            rendered.push('\n');
+        }
+        rendered
+    })?;
+    validate_core_module(&core.module).map_err(|errors| {
+        let mut rendered = format!("typed-core validation failed for {command_name}:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&error.to_string());
+            rendered.push('\n');
+        }
+        rendered
+    })?;
+    let lambda = lower_lambda_module(&core.module).map_err(|errors| {
+        let mut rendered = format!("failed to lower {command_name} module into typed lambda:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&error.to_string());
+            rendered.push('\n');
+        }
+        rendered
+    })?;
+    validate_lambda_module(&lambda).map_err(|errors| {
+        let mut rendered = format!("typed-lambda validation failed for {command_name}:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&error.to_string());
+            rendered.push('\n');
+        }
+        rendered
+    })?;
+    let backend = lower_backend_module(&lambda).map_err(|errors| {
+        let mut rendered = format!("failed to lower {command_name} module into backend IR:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&error.to_string());
+            rendered.push('\n');
+        }
+        rendered
+    })?;
+    validate_program(&backend).map_err(|errors| {
+        let mut rendered = format!("backend validation failed for {command_name}:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&error.to_string());
+            rendered.push('\n');
+        }
+        rendered
+    })?;
+    Ok(LoweredRunBackendStack {
+        core: core.module,
         backend: Arc::new(backend),
     })
 }
@@ -4909,7 +5096,8 @@ value service_smoke : Task Text Bool =
     exists "{cwd}/flag.txt"
 "#,
         );
-        fs::write(workspace.path().join("flag.txt"), "ok").expect("test fixture should be writable");
+        fs::write(workspace.path().join("flag.txt"), "ok")
+            .expect("test fixture should be writable");
 
         let (code, stdout, stderr) = test_workspace(
             &entry,
@@ -4917,7 +5105,10 @@ value service_smoke : Task Text Bool =
         );
 
         assert_eq!(code, ExitCode::SUCCESS);
-        assert!(stderr.is_empty(), "stderr should stay empty, found {stderr:?}");
+        assert!(
+            stderr.is_empty(),
+            "stderr should stay empty, found {stderr:?}"
+        );
         assert!(stdout.contains("ok   "));
         assert!(stdout.contains("util.aivi"));
         assert!(stdout.contains("mocked_exists"));
@@ -5199,5 +5390,24 @@ value main : Task Text Unit =
             fs::read(&path).expect("written bytes should be readable"),
             vec![0, 1, 2, 3]
         );
+    }
+
+    #[test]
+    fn execute_runtime_task_plan_returns_pure_payload() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let result = execute_runtime_task_plan(
+            RuntimeTaskPlan::Pure {
+                value: Box::new(RuntimeValue::Bool(true)),
+            },
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("pure task should execute");
+
+        assert_eq!(result, RuntimeValue::Bool(true));
+        assert!(stdout.is_empty());
+        assert!(stderr.is_empty());
     }
 }

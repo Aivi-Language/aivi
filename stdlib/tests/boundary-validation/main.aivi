@@ -1,251 +1,259 @@
-use aivi.duration (
-  Duration
-)
+use aivi.duration (Duration)
+
 use aivi.http (
-  HttpError
-  Timeout
-  DecodeFailure
-  RequestFailure
-  HttpHeaders
-  HttpQuery
-  HttpResponse
-  HttpTask
-  DecodeMode
-  Strict
-  Retry
+    HttpError
+    Timeout
+    DecodeFailure
+    RequestFailure
+    HttpHeaders
+    HttpQuery
+    HttpResponse
+    HttpTask
+    DecodeMode
+    Strict
+    Retry
 )
+
 use aivi.timer (
-  TimerTick
-  TimerReady
+    TimerTick
+    TimerReady
 )
+
 use aivi.log (
-  LogLevel
-  Debug
-  Error
-  LogContext
-  LogEntry
-  LogError
-  LogTask
-  LogSink
+    LogLevel
+    Debug
+    Error
+    LogContext
+    LogEntry
+    LogError
+    LogTask
+    LogSink
 )
+
 use aivi.fs (
-  FsError
-  NotFound
-  PermissionDenied
-  ReadFailed
-  WriteFailed
-  FsEvent
-  Created
-  Changed
-  Deleted
-  writeText
-  writeBytes
-  createDirAll
-  deleteFile
+    FsError
+    NotFound
+    PermissionDenied
+    ReadFailed
+    WriteFailed
+    FsEvent
+    Created
+    Changed
+    Deleted
+    writeText
+    writeBytes
+    createDirAll
+    deleteFile
 )
+
 use aivi.stdio (
-  stdoutWrite
-  stderrWrite
+    stdoutWrite
+    stderrWrite
 )
+
 use aivi.auth (
-  PkceConfig
-  PkceToken
-  PkceError
-  UserCancelled
-  PkceTimeout
+    PkceConfig
+    PkceToken
+    PkceError
+    UserCancelled
+    PkceTimeout
 )
+
 use aivi.dbus (
-  DbusValue
-  DbusString
-  DbusInt
-  DbusBool
-  DbusCall
-  DbusSignal
-  BusNameState
-  Owned
-  Queued
-  Lost
-  DbusError
-  NoReply
+    DbusValue
+    DbusString
+    DbusInt
+    DbusBool
+    DbusCall
+    DbusSignal
+    BusNameState
+    Owned
+    Queued
+    Lost
+    DbusError
+    NoReply
 )
+
 use aivi.gnome.onlineAccounts (
-  GoaAccount
-  GoaAccountId
-  GoaCapability
-  Mail
-  GoaProvider
-  GoaError
-  AccessToken
-  OAuthToken
+    GoaAccount
+    GoaAccountId
+    GoaCapability
+    Mail
+    GoaProvider
+    GoaError
+    AccessToken
+    OAuthToken
 )
+
 use aivi.gnome.notifications (
-  Notification
-  NotificationAction
-  NotificationError
-  NotificationFailed
+    Notification
+    NotificationAction
+    NotificationError
+    NotificationFailed
 )
+
 use aivi.db (
-  DbError
-  SchemaMismatch
-  QueryFailed
-  SortDir
-  Asc
-  Desc
+    DbError
+    SchemaMismatch
+    QueryFailed
+    SortDir
+    Asc
+    Desc
 )
+
 use aivi.imap (
-  SyncState
-  ImapError
-  ImapAuthFailed
-  ImapConnectionFailed
+    SyncState
+    ImapError
+    ImapAuthFailed
+    ImapConnectionFailed
 )
+
 use aivi.smtp (
-  SmtpConfig
-  SmtpMessage
-  SmtpError
-  SmtpAuthFailed
-  Attachment
+    SmtpConfig
+    SmtpMessage
+    SmtpError
+    SmtpAuthFailed
+    Attachment
 )
+
 use aivi.url (
-  Url
-  UrlError
+    Url
+    UrlError
 )
+
 use aivi.path (
-  Path
-  PathError
+    Path
+    PathError
 )
 
-type User = {
-  id: Int
-  name: Text
-}
+type User = { id: Int }
 
-value headers: HttpHeaders = Map {
-  "Authorization": "Bearer demo"
-}
+value headers:HttpHeaders =
+    Map {
+        "Authorization": "Bearer demo"
+    }
 
-value query: HttpQuery = Map {
-  "page": "1"
-}
+value query:HttpQuery =
+    Map {
+        "page": "1"
+    }
 
-value decodeMode: DecodeMode = Strict
+value decodeMode:DecodeMode = Strict
 
 type RetryBudget = Retry
 
-type UsersResponse = HttpResponse (List User)
-type UsersTask     = HttpTask (List User)
+type UsersResponse =
+  | HttpResponse (List User)
+
+type UsersTask =
+  | HttpTask (List User)
 
 @source http.get "https://api.example.com/users"
 signal users: Signal UsersResponse
 
 @source timer.every 120 with {
-  immediate: True
-  coalesce: True
+    immediate: True
 }
 signal tick: Signal TimerTick
 
 @source timer.after 1000
 signal ready: Signal TimerReady
 
-value timeoutError: HttpError = Timeout
+value timeoutError:HttpError = Timeout
+value decodeError:HttpError = DecodeFailure "bad-json"
+value requestError:HttpError = RequestFailure "offline"
+value level:LogLevel = Debug
 
-value decodeError: HttpError = DecodeFailure "bad-json"
+value context:LogContext =
+    Map {
+        "module": "stdlib"
+    }
 
-value requestError: HttpError = RequestFailure "offline"
-
-value level: LogLevel = Debug
-
-value context: LogContext = Map {
-  "module": "stdlib"
+value entry:LogEntry = {
+    level: level,
+    message: "loaded",
+    context: context
 }
 
-value entry: LogEntry = {
-  level: level,
-  message: "loaded",
-  context: context
-}
+type Writer = LogSink
 
-type Writer          = LogSink
-type CurrentLogTask  = LogTask
+type CurrentLogTask = LogTask
+
 type CurrentLogError = LogError
 
 type PollDelay = Duration
 
-value errorLevel: LogLevel = Error
+value errorLevel:LogLevel = Error
+value fsCreated:FsEvent = Created
+value fsChanged:FsEvent = Changed
+value fsDeleted:FsEvent = Deleted
+value fsNotFound:FsError = NotFound "/etc/missing"
+value fsPermDenied:FsError = PermissionDenied "/root/file"
+value pkceUserCancelled:PkceError = UserCancelled
+value pkceTimedOut:PkceError = PkceTimeout
+value busOwned:BusNameState = Owned
+value busQueued:BusNameState = Queued
+value busLost:BusNameState = Lost
+value dbusNoReply:DbusError = NoReply
 
-value fsCreated: FsEvent = Created
-value fsChanged: FsEvent = Changed
-value fsDeleted: FsEvent = Deleted
-
-value fsNotFound: FsError = NotFound "/etc/missing"
-value fsPermDenied: FsError = PermissionDenied "/root/file"
-
-value pkceUserCancelled: PkceError = UserCancelled
-value pkceTimedOut: PkceError = PkceTimeout
-
-value busOwned: BusNameState = Owned
-value busQueued: BusNameState = Queued
-value busLost: BusNameState = Lost
-value dbusNoReply: DbusError = NoReply
-
-value testCall: DbusCall = {
-  destination: "org.gnome.AiviMail.Daemon",
-  path: "/org/gnome/AiviMail/Daemon",
-  interface: "org.gnome.AiviMail.IDaemon",
-  member: "TriggerSync",
-  body: []
+value testCall:DbusCall = {
+    destination: "org.gnome.AiviMail.Daemon",
+    path: "/org/gnome/AiviMail/Daemon",
+    interface: "org.gnome.AiviMail.IDaemon",
+    member: "TriggerSync",
+    body: []
 }
 
-value testSignal: DbusSignal = {
-  path: "/org/gnome/AiviMail/Daemon",
-  interface: "org.gnome.AiviMail.IDaemon",
-  member: "SyncStateChanged",
-  body: []
+value testSignal:DbusSignal = {
+    path: "/org/gnome/AiviMail/Daemon",
+    interface: "org.gnome.AiviMail.IDaemon",
+    member: "SyncStateChanged",
+    body: []
 }
 
 type MailCapability = GoaCapability
 
-value mailCap: GoaCapability = Mail
+value mailCap:GoaCapability = Mail
 
-value notification: Notification = {
-  summary: "New mail",
-  body: Some "You have 3 new messages",
-  icon: Some "mail-unread",
-  actions: []
+value notification:Notification = {
+    summary: "New mail",
+    body: Some "You have 3 new messages",
+    icon: Some "mail-unread",
+    actions: []
 }
 
-value notifFailed: NotificationError = NotificationFailed "dbus error"
+value notifFailed:NotificationError = NotificationFailed "dbus error"
+value schemaMismatch:DbError = SchemaMismatch "v2 required"
+value queryFailed:DbError = QueryFailed "no such table"
+value sortAsc:SortDir = Asc
+value sortDesc:SortDir = Desc
 
-value schemaMismatch: DbError = SchemaMismatch "v2 required"
-value queryFailed: DbError = QueryFailed "no such table"
-value sortAsc: SortDir = Asc
-value sortDesc: SortDir = Desc
-
-value syncState: SyncState = {
-  lastSyncedAt: None,
-  inProgress: True,
-  error: None
+value syncState:SyncState = {
+    lastSyncedAt: None,
+    inProgress: True,
+    error: None
 }
 
-value imapAuthFailed: ImapError = ImapAuthFailed
-value imapConnFailed: ImapError = ImapConnectionFailed "timeout"
+value imapAuthFailed:ImapError = ImapAuthFailed
+value imapConnFailed:ImapError = ImapConnectionFailed "timeout"
 
-value smtpConfig: SmtpConfig = {
-  host: "smtp.gmail.com",
-  port: 587
+value smtpConfig:SmtpConfig = {
+    host: "smtp.gmail.com",
+    port: 587
 }
 
-value smtpAuthFailed: SmtpError = SmtpAuthFailed
+value smtpAuthFailed:SmtpError = SmtpAuthFailed
 
 type CliWrite = Text -> Task Text Unit
+
 type CliWriteBytes = Text -> Bytes -> Task Text Unit
 
-value stdoutWriter: CliWrite = stdoutWrite
-value stderrWriter: CliWrite = stderrWrite
+value stdoutWriter:CliWrite = stdoutWrite
+value stderrWriter:CliWrite = stderrWrite
 value fsWriteText: Text -> Text -> Task Text Unit = writeText
-value fsWriteBytes: CliWriteBytes = writeBytes
-value fsCreateDirAll: CliWrite = createDirAll
-value fsDeleteFile: CliWrite = deleteFile
-
+value fsWriteBytes:CliWriteBytes = writeBytes
+value fsCreateDirAll:CliWrite = createDirAll
+value fsDeleteFile:CliWrite = deleteFile
 value stdoutTask: Task Text Unit = stdoutWrite "stdout"
 value stderrTask: Task Text Unit = stderrWrite "stderr"
 value mkdirTask: Task Text Unit = createDirAll "/tmp/aivi-boundary"

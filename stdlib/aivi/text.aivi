@@ -30,6 +30,20 @@ fun withDefault:Text fallback:Text s:Text => s == ""
   T|> fallback
   F|> s
 
+@test
+value plain_text_is_non_empty: Task Text Bool = pure (nonEmpty "Ada")
+
+@test
+value joined_text_is_non_empty: Task Text Bool =
+    pure (nonEmpty (join ", " [
+        "Ada",
+        "Grace"
+    ]))
+
+@test
+value surrounded_text_is_non_empty: Task Text Bool =
+    pure (nonEmpty (surround "[" "]" "Ada"))
+
 export isEmpty
 export nonEmpty
 export join

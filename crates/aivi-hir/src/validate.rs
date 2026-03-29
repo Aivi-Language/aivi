@@ -23,13 +23,13 @@ use crate::{
     hir::{
         ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClassMemberResolution, ControlNode,
         ControlNodeKind, CustomSourceRecurrenceWakeup, DecoratorPayload, DeprecationNotice,
-        DomainMemberKind, DomainMemberResolution, ExportResolution, ExprKind, ImportBindingMetadata,
-        ImportBindingResolution, ImportValueType, IntrinsicValue, Item, LiteralSuffixResolution,
-        MarkupAttributeValue, MarkupNodeKind, Module, Name, NamePath, PatternKind, PipeStage,
-        PipeStageKind, PipeTransformMode, RecurrenceWakeupDecoratorKind, RecordExpr,
-        ResolutionState, SignalItem, SourceDecorator, SourceMetadata, SourceProviderRef,
-        TermReference, TermResolution, TextLiteral, TextSegment, TypeItemBody, TypeKind,
-        TypeReference, TypeResolution,
+        DomainMemberKind, DomainMemberResolution, ExportResolution, ExprKind,
+        ImportBindingMetadata, ImportBindingResolution, ImportValueType, IntrinsicValue, Item,
+        LiteralSuffixResolution, MarkupAttributeValue, MarkupNodeKind, Module, Name, NamePath,
+        PatternKind, PipeStage, PipeStageKind, PipeTransformMode, RecordExpr,
+        RecurrenceWakeupDecoratorKind, ResolutionState, SignalItem, SourceDecorator,
+        SourceMetadata, SourceProviderRef, TermReference, TermResolution, TextLiteral, TextSegment,
+        TypeItemBody, TypeKind, TypeReference, TypeResolution,
     },
     ids::{
         BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,
@@ -1160,10 +1160,7 @@ impl Validator<'_> {
             self.diagnostics.push(
                 Diagnostic::error("`@test` values must have a `Task ...` type")
                     .with_code(code("invalid-test-type"))
-                    .with_primary_label(
-                        span,
-                        "annotate or infer this test as a task value",
-                    ),
+                    .with_primary_label(span, "annotate or infer this test as a task value"),
             );
             return;
         };
@@ -1173,10 +1170,7 @@ impl Validator<'_> {
                     "`@test` tasks must produce `Unit`, `Bool`, `Result ...`, or `Validation ...`",
                 )
                 .with_code(code("invalid-test-result-type"))
-                .with_primary_label(
-                    span,
-                    "return one of the supported test result shapes",
-                ),
+                .with_primary_label(span, "return one of the supported test result shapes"),
             );
         }
     }
@@ -1192,7 +1186,10 @@ impl Validator<'_> {
             self.diagnostics.push(
                 Diagnostic::error("`@deprecated` message must be a plain text literal")
                     .with_code(code("invalid-deprecated-message"))
-                    .with_primary_label(message_span(self.module, message), "use a plain text literal"),
+                    .with_primary_label(
+                        message_span(self.module, message),
+                        "use a plain text literal",
+                    ),
             );
         }
         let Some(options) = deprecated.options else {
@@ -1263,12 +1260,14 @@ impl Validator<'_> {
 
         let Some(target_import) = self.mock_target_import(mock.target) else {
             self.diagnostics.push(
-                Diagnostic::error("the first `@mock` argument must name an imported top-level function")
-                    .with_code(code("invalid-mock-target"))
-                    .with_primary_label(
-                        message_span(self.module, mock.target),
-                        "reference an imported function binding here",
-                    ),
+                Diagnostic::error(
+                    "the first `@mock` argument must name an imported top-level function",
+                )
+                .with_code(code("invalid-mock-target"))
+                .with_primary_label(
+                    message_span(self.module, mock.target),
+                    "reference an imported function binding here",
+                ),
             );
             return;
         };
@@ -1374,7 +1373,8 @@ impl Validator<'_> {
         let ExprKind::Name(reference) = &self.module.exprs().get(expr_id)?.kind else {
             return None;
         };
-        let ResolutionState::Resolved(TermResolution::Import(import_id)) = reference.resolution else {
+        let ResolutionState::Resolved(TermResolution::Import(import_id)) = reference.resolution
+        else {
             return None;
         };
         Some(import_id)
@@ -1389,7 +1389,9 @@ impl Validator<'_> {
             return None;
         };
         match reference.resolution {
-            ResolutionState::Resolved(TermResolution::Item(item_id)) => typing.item_value_type(item_id),
+            ResolutionState::Resolved(TermResolution::Item(item_id)) => {
+                typing.item_value_type(item_id)
+            }
             ResolutionState::Resolved(TermResolution::Import(import_id)) => {
                 typing.import_value_type(import_id)
             }
@@ -1397,7 +1399,11 @@ impl Validator<'_> {
         }
     }
 
-    fn mock_target_type(&self, import_id: ImportId, typing: &GateTypeContext<'_>) -> Option<GateType> {
+    fn mock_target_type(
+        &self,
+        import_id: ImportId,
+        typing: &GateTypeContext<'_>,
+    ) -> Option<GateType> {
         self.module.imports()[import_id]
             .callable_type
             .as_ref()
@@ -4687,13 +4693,7 @@ impl Validator<'_> {
                     let env = GateExprEnv::default();
                     if let Some(message) = deprecated.message {
                         self.validate_case_exhaustiveness_expr_tree(message, &env, &mut typing);
-                        self.validate_recurrence_expr_tree(
-                            message,
-                            None,
-                            None,
-                            &env,
-                            &mut typing,
-                        );
+                        self.validate_recurrence_expr_tree(message, None, None, &env, &mut typing);
                     }
                     if let Some(options) = deprecated.options {
                         self.validate_case_exhaustiveness_expr_tree(options, &env, &mut typing);
@@ -10115,6 +10115,9 @@ impl<'a> GateTypeContext<'a> {
 
     fn import_value_type(&self, import_id: ImportId) -> Option<GateType> {
         let import = &self.module.imports()[import_id];
+        if let Some(ty) = import.callable_type.as_ref() {
+            return Some(self.lower_import_value_type(ty));
+        }
         match &import.metadata {
             ImportBindingMetadata::Value { ty }
             | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
@@ -15053,7 +15056,10 @@ fn test_result_type_supported(ty: &GateType) -> bool {
 }
 
 fn message_span(module: &Module, expr: ExprId) -> SourceSpan {
-    module.exprs().get(expr).map_or(SourceSpan::default(), |expr| expr.span)
+    module
+        .exprs()
+        .get(expr)
+        .map_or(SourceSpan::default(), |expr| expr.span)
 }
 
 #[derive(Clone, Copy, Debug)]

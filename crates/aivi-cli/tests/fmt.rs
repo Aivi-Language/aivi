@@ -175,6 +175,7 @@ fn fmt_check_accepts_order_helper_surfaces() {
         .arg(stdlib_path("aivi/order.aivi"))
         .arg(stdlib_path("aivi/prelude.aivi"))
         .arg(stdlib_path("tests/foundation-validation/main.aivi"))
+        .arg(stdlib_path("tests/runtime-stdlib-validation/main.aivi"))
         .arg(fixture_path(
             "milestone-2/valid/bundled-root-prelude-stdlib/main.aivi",
         ))

@@ -295,13 +295,16 @@ fn exported_function_type(module: &Module, item: &crate::FunctionItem) -> Option
     if !item.type_parameters.is_empty() || !item.context.is_empty() {
         return None;
     }
-    let Some(mut result) = item.annotation.and_then(|annotation| import_value_type(module, annotation))
+    let Some(mut result) = item
+        .annotation
+        .and_then(|annotation| import_value_type(module, annotation))
     else {
         return None;
     };
     for parameter in item.parameters.iter().rev() {
-        let Some(parameter_ty) =
-            parameter.annotation.and_then(|annotation| import_value_type(module, annotation))
+        let Some(parameter_ty) = parameter
+            .annotation
+            .and_then(|annotation| import_value_type(module, annotation))
         else {
             return None;
         };

@@ -8,7 +8,7 @@ use aivi_backend::{
     InlinePipeConstructor, InlinePipePatternKind, InlinePipeStageKind, ItemKind as BackendItemKind,
     KernelEvaluator, KernelExprKind, KernelOriginKind, LayoutKind, LoweringError,
     NonSourceWakeupCause, RecurrenceTarget, RuntimeBigInt, RuntimeDecimal, RuntimeFloat,
-    RuntimeRecordField, RuntimeSumValue, RuntimeValue, SourceProvider,
+    RuntimeRecordField, RuntimeSumValue, RuntimeTaskPlan, RuntimeValue, SourceProvider,
     StageKind as BackendStageKind, ValidationError, compile_program,
     lower_module as lower_backend_module, validate_program,
 };
@@ -571,6 +571,9 @@ value lifted:Option Int =
 value singleton:Option Int =
     pure 3
 
+value readyTask:Task Text Int =
+    pure 3
+
 value none:List Int =
     empty
 "#,
@@ -579,6 +582,7 @@ value none:List Int =
     let joined = find_item(&backend, "joined");
     let lifted = find_item(&backend, "lifted");
     let singleton = find_item(&backend, "singleton");
+    let ready_task = find_item(&backend, "readyTask");
     let none = find_item(&backend, "none");
     let none_kernel_id = backend.items()[none]
         .body
@@ -635,6 +639,23 @@ value none:List Int =
         other => panic!("expected pure body to lower into an apply tree, found {other:?}"),
     }
 
+    let ready_task_kernel = backend.kernels()[backend.items()[ready_task]
+        .body
+        .expect("readyTask should carry a body")]
+    .clone();
+    match &ready_task_kernel.exprs()[ready_task_kernel.root].kind {
+        KernelExprKind::Apply { callee, arguments } => {
+            assert_eq!(arguments.len(), 1);
+            assert!(matches!(
+                &ready_task_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Pure(
+                    BuiltinApplicativeCarrier::Task
+                ))
+            ));
+        }
+        other => panic!("expected task pure body to lower into an apply tree, found {other:?}"),
+    }
+
     assert!(matches!(
         &backend.kernels()[none_kernel_id].exprs()[backend.kernels()[none_kernel_id].root].kind,
         KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Empty(
@@ -661,6 +682,14 @@ value none:List Int =
             .evaluate_item(singleton, &globals)
             .expect("pure should evaluate"),
         RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(3)))
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(ready_task, &globals)
+            .expect("task pure should evaluate"),
+        RuntimeValue::Task(RuntimeTaskPlan::Pure {
+            value: Box::new(RuntimeValue::Int(3)),
+        })
     );
     assert_eq!(
         evaluator

@@ -2971,6 +2971,7 @@ fn map_builtin_applicative_carrier(
         core::BuiltinApplicativeCarrier::Result => BackendBuiltinApplicativeCarrier::Result,
         core::BuiltinApplicativeCarrier::Validation => BackendBuiltinApplicativeCarrier::Validation,
         core::BuiltinApplicativeCarrier::Signal => BackendBuiltinApplicativeCarrier::Signal,
+        core::BuiltinApplicativeCarrier::Task => BackendBuiltinApplicativeCarrier::Task,
     }
 }
 

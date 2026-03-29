@@ -36,6 +36,12 @@ fun between:Bool low:Int high:Int n:Int =>
 fun divides:Bool divisor:Int n:Int =>
     n % divisor == 0
 
+@test
+value abs_handles_negative: Task Text Bool = pure (abs (0 - 4) == 4)
+
+@test
+value even_detects_even: Task Text Bool = pure (isEven 6)
+
 export abs
 export negate
 export sign

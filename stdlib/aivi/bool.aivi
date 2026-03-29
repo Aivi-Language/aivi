@@ -22,6 +22,12 @@ fun neither:Bool a:Bool b:Bool =>
 fun fromInt:Bool n:Int =>
     n != 0
 
+@test
+value not_flips_false: Task Text Bool = pure (not False)
+
+@test
+value both_accepts_true_pair: Task Text Bool = pure (both True True)
+
 export not
 export xor
 export implies

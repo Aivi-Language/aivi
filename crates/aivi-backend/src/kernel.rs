@@ -64,6 +64,7 @@ pub enum BuiltinApplicativeCarrier {
     Result,
     Validation,
     Signal,
+    Task,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

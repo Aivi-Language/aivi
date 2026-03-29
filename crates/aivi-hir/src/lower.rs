@@ -7,11 +7,11 @@ use aivi_typing::Kind;
 use crate::{
     ApplicativeCluster, ApplicativeSpineHead, AtLeastTwo, BigIntLiteral, BinaryOperator, Binding,
     BindingId, BindingKind, BindingPattern, BuiltinTerm, BuiltinType, CaseControl, ClassItem,
-    ClassMember, ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeId, DecimalLiteral,
-    Decorator, DecoratorCall, DecoratorId, DecoratorPayload, DomainItem, DomainMember,
-    DomainMemberKind, DomainMemberResolution, EachControl, EmptyControl, ExportItem,
-    ExportResolution, Expr, ExprId, ExprKind, FloatLiteral, FragmentControl, FunctionItem,
-    FunctionParameter, ImportBinding, ImportBindingMetadata, ImportBindingResolution,
+    ClassMember, ClusterFinalizer, ClusterPresentation, ControlNode, ControlNodeId, DebugDecorator,
+    DecimalLiteral, Decorator, DecoratorCall, DecoratorId, DecoratorPayload, DeprecatedDecorator,
+    DomainItem, DomainMember, DomainMemberKind, DomainMemberResolution, EachControl, EmptyControl,
+    ExportItem, ExportResolution, Expr, ExprId, ExprKind, FloatLiteral, FragmentControl,
+    FunctionItem, FunctionParameter, ImportBinding, ImportBindingMetadata, ImportBindingResolution,
     ImportBundleKind, ImportId, ImportModuleResolution, ImportValueType, InstanceItem,
     InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemId, ItemKind,
     LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue,
@@ -23,7 +23,7 @@ use crate::{
     SuffixedIntegerLiteral, TermReference, TermResolution, TestDecorator, TextFragment,
     TextInterpolation, TextLiteral, TextSegment, TypeField, TypeId, TypeItem, TypeItemBody,
     TypeKind, TypeNode, TypeParameter, TypeParameterId, TypeReference, TypeResolution, TypeVariant,
-    UnaryOperator, UseItem, ValueItem, WithControl, DebugDecorator, DeprecatedDecorator,
+    UnaryOperator, UseItem, ValueItem, WithControl,
 };
 
 pub struct LoweringResult {

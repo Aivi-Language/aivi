@@ -213,7 +213,7 @@ Responsibilities:
 ## 5. Top-level forms
 
 ```aivi
-data Bool = True | False
+type Bool = True | False
 
 class Eq A
     (==) : A -> A -> Bool
@@ -234,16 +234,12 @@ use aivi.network (
 Top-level forms:
 
 - `type`
-- `data`
 - `class`
 - `instance`
 - `value`
 - `fun`
 - `signal`
 - `source`
-- `result`
-- `view`
-- `adapter`
 - `use`
 - `export`
 - `provider`
@@ -281,21 +277,21 @@ fun absolute:Int value:Int =>
 
 The parser disambiguates by position: `value` or `fun` at the start of a top-level form is a keyword; `value` as a subsequent token after the function name is a parameter.
 
-### 5.0.2 `data` — ADT declarations
+### 5.0.2 `type` — ADT declarations
 
-`data` declares algebraic data types (sum types and constructor-headed product types):
+`type` declares algebraic data types (sum types and constructor-headed product types):
 
 ```aivi
-data Bool = True | False
+type Bool = True | False
 
-data Option A =
+type Option A =
   | None
   | Some A
 
-data Result E A = Err E | Ok A
+type Result E A = Err E | Ok A
 ```
 
-Plain `type` remains for record type synonyms and other type declarations.
+The same `type` surface also covers record type synonyms and other type declarations.
 
 ### 5.0.3 `signal` — reactive signal declarations
 
@@ -331,25 +327,27 @@ signal keyDown : Signal Key
 
 The general form is `@source provider.variant args [with { ... }]` followed by `signal name : Signal T`. The provider and variant are resolved statically. Provider-backed signals remain decorator-based in the current compiler.
 
-### 5.0.5 `result` — graph-assembly records
+### 5.0.5 `result` — block form
 
-`result` defines a named graph-assembly record whose fields are reactive nodes:
+`result` is not a top-level declaration keyword. It is a block-shaped expression form that uses `{ ... }` with `<-` bindings:
 
 ```aivi
-result appState
-    users   = fetchedUsers
-    visible = users ?|> .active
-    count   = visible *|> .id |> List.length
+value appState =
+    result {
+        users <- fetchedUsers
+        visible <- users ?|> .active
+        count <- visible *|> .id |> List.length
+    }
 ```
 
-Fields form a dependency graph; execution order is dependency-driven, not declaration order.
+The binding graph is dependency-driven rather than declaration-ordered.
 
-### 5.0.6 `view` — markup view declarations
+### 5.0.6 Markup roots use `value`
 
-`view` declares a named GTK/libadwaita markup fragment:
+There is no dedicated `view` declaration keyword. Top-level markup roots are ordinary `value` declarations:
 
 ```aivi
-view mainWindow
+value mainWindow =
     <Window title="My App">
         <Box orientation="vertical">
             <Label text={greeting} />
@@ -357,11 +355,11 @@ view mainWindow
     </Window>
 ```
 
-`view` declarations are the canonical entry points for `aivi run --view mainWindow`.
+`aivi run --view mainWindow` selects a named top-level markup-valued `value`.
 
-### 5.0.7 `adapter` — adapter declarations
+### 5.0.7 There is no `adapter` keyword
 
-`adapter` declares a named adapter, bridging external data shapes or protocols into the reactive graph.
+The surface language has no dedicated `adapter` declaration keyword. Shapes that older drafts described as adapters must instead use the ordinary declaration forms that match the artifact being defined (`type`, `value`, `fun`, `signal`, `@source`, and related effect surfaces).
 
 ---
 
@@ -2432,7 +2430,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - parser ✓
 - CST (lossless for formatting and diagnostics) ✓
 - formatter (canonical pipe, arrow, cluster alignment) ✓
-- syntax for `type`, `data`, `class`, `instance`, `value`, `fun`, `signal`, `source`, `result`, `view`, `adapter`, `use`, `export`, `provider`, markup, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
+- syntax for `type`, `class`, `instance`, `value`, `fun`, `signal`, `source`, `use`, `export`, `provider`, markup, `result { ... }` blocks, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
 - line/block/doc comment lexing (`//`, `/* */`, `/** **/`) and trivia retention ✓
 - regex literal lexing plus HIR validation ✓
 - compact suffix literal lexing (`250ms`) ✓

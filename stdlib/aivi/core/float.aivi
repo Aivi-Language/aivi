@@ -57,6 +57,12 @@ fun toRadians:Float degrees:Float =>
 fun toDegrees:Float radians:Float =>
     radians * 180.0 / pi
 
+@test
+value max_prefers_greater: Task Text Bool = pure (max 3.5 2.0 == 3.5)
+
+@test
+value positive_detects_positive: Task Text Bool = pure (isPositive 1.0)
+
 export pi
 export e
 export tau

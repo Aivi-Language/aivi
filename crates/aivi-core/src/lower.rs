@@ -357,6 +357,13 @@ pub fn lower_runtime_fragment(
     RuntimeFragmentLowerer::new(hir, fragment).build()
 }
 
+pub fn runtime_fragment_included_items(
+    hir: &aivi_hir::Module,
+    fragment: &RuntimeFragmentSpec,
+) -> HashSet<HirItemId> {
+    RuntimeFragmentItemCollector::new(hir, fragment).collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct PipeKey {
     owner: HirItemId,
@@ -424,12 +431,16 @@ fn collect_debug_items(
         .iter()
         .filter(|(item_id, _)| included_items.is_none_or(|included| included.contains(item_id)))
         .filter_map(|(item_id, item)| {
-            item.decorators().iter().any(|decorator_id| {
-                hir.decorators()
-                    .get(*decorator_id)
-                    .is_some_and(|decorator| matches!(decorator.payload, DecoratorPayload::Debug(_)))
-            })
-            .then_some(item_id)
+            item.decorators()
+                .iter()
+                .any(|decorator_id| {
+                    hir.decorators()
+                        .get(*decorator_id)
+                        .is_some_and(|decorator| {
+                            matches!(decorator.payload, DecoratorPayload::Debug(_))
+                        })
+                })
+                .then_some(item_id)
         })
         .collect()
 }
@@ -470,17 +481,15 @@ fn mock_target_import(hir: &aivi_hir::Module, expr_id: HirExprId) -> Option<Impo
     let HirExprKind::Name(reference) = &hir.exprs().get(expr_id)?.kind else {
         return None;
     };
-    let aivi_hir::ResolutionState::Resolved(TermResolution::Import(import_id)) = reference.resolution
+    let aivi_hir::ResolutionState::Resolved(TermResolution::Import(import_id)) =
+        reference.resolution
     else {
         return None;
     };
     Some(import_id)
 }
 
-fn mock_replacement_target(
-    hir: &aivi_hir::Module,
-    expr_id: HirExprId,
-) -> Option<MockImportTarget> {
+fn mock_replacement_target(hir: &aivi_hir::Module, expr_id: HirExprId) -> Option<MockImportTarget> {
     let HirExprKind::Name(reference) = &hir.exprs().get(expr_id)?.kind else {
         return None;
     };
@@ -504,6 +513,15 @@ struct RuntimeFragmentLowerer<'a> {
     lowered: HashSet<HirItemId>,
     lowering_instance_members: HashSet<InstanceMemberKey>,
     lowered_instance_members: HashSet<InstanceMemberKey>,
+}
+
+struct RuntimeFragmentItemCollector<'a> {
+    hir: &'a aivi_hir::Module,
+    fragment: &'a RuntimeFragmentSpec,
+    report_by_owner: HashMap<HirItemId, aivi_hir::GeneralExprItemElaboration>,
+    instance_member_reports: HashMap<InstanceMemberKey, GeneralExprInstanceMemberElaboration>,
+    included_items: HashSet<HirItemId>,
+    visited_instance_members: HashSet<InstanceMemberKey>,
 }
 
 impl<'a> ModuleLowerer<'a> {
@@ -582,7 +600,9 @@ impl<'a> ModuleLowerer<'a> {
             Some(HirItem::Type(item)) => item.name.text(),
             Some(HirItem::Class(item)) => item.name.text(),
             Some(HirItem::Domain(item)) => item.name.text(),
-            Some(HirItem::SourceProviderContract(item)) => item.provider.key().unwrap_or("<provider>"),
+            Some(HirItem::SourceProviderContract(item)) => {
+                item.provider.key().unwrap_or("<provider>")
+            }
             Some(HirItem::Instance(_)) => "instance",
             Some(HirItem::Use(_)) => "use",
             Some(HirItem::Export(_)) => "export",
@@ -622,7 +642,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn pipe_stage_specs(&self, owner: HirItemId, pipe: &GateRuntimePipeExpr) -> Vec<PipeStageSpec> {
         let debug = self.debug_items.contains(&owner);
-        let mut specs = Vec::with_capacity(pipe.stages.len() * usize::from(debug) + pipe.stages.len() + usize::from(debug));
+        let mut specs = Vec::with_capacity(
+            pipe.stages.len() * usize::from(debug) + pipe.stages.len() + usize::from(debug),
+        );
         if debug {
             let head_ty = Type::lower(&pipe.head.ty);
             specs.push(PipeStageSpec {
@@ -1897,9 +1919,12 @@ impl<'a> ModuleLowerer<'a> {
                 TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Signal) => {
                     BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Signal)
                 }
+                TypeConstructorHead::Builtin(aivi_hir::BuiltinType::Task) => {
+                    BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Task)
+                }
                 _ => {
                     return Err(unsupported(
-                        "runtime lowering only supports pure for List, Option, Result, Validation, and Signal",
+                        "runtime lowering only supports pure for List, Option, Result, Validation, Signal, and Task",
                     ));
                 }
             },
@@ -3469,6 +3494,140 @@ impl<'a> RuntimeFragmentLowerer<'a> {
     }
 }
 
+impl<'a> RuntimeFragmentItemCollector<'a> {
+    fn new(hir: &'a aivi_hir::Module, fragment: &'a RuntimeFragmentSpec) -> Self {
+        let (items, instance_members) = elaborate_general_expressions(hir).into_parts();
+        let report_by_owner = items.into_iter().map(|item| (item.owner, item)).collect();
+        let instance_member_reports = instance_members
+            .into_iter()
+            .map(|item| {
+                (
+                    InstanceMemberKey {
+                        instance: item.instance_owner,
+                        member_index: item.member_index,
+                    },
+                    item,
+                )
+            })
+            .collect();
+        Self {
+            hir,
+            fragment,
+            report_by_owner,
+            instance_member_reports,
+            included_items: HashSet::new(),
+            visited_instance_members: HashSet::new(),
+        }
+    }
+
+    fn collect(mut self) -> HashSet<HirItemId> {
+        self.collect_item(self.fragment.owner);
+        self.collect_mock_replacements(self.fragment.owner);
+        let dependencies = referenced_hir_dependencies(&self.fragment.body);
+        for dependency in dependencies.items {
+            self.collect_item(dependency);
+        }
+        for dependency in dependencies.instance_members {
+            self.collect_instance_member(dependency);
+        }
+        self.included_items
+    }
+
+    fn collect_item(&mut self, owner: HirItemId) {
+        if !self.included_items.insert(owner) {
+            return;
+        }
+        let Some(item) = self.hir.items().get(owner) else {
+            return;
+        };
+        self.collect_mock_replacements(owner);
+        match item {
+            HirItem::Signal(signal) => {
+                for dependency in &signal.signal_dependencies {
+                    self.collect_item(*dependency);
+                }
+                if let Some(source_metadata) = &signal.source_metadata {
+                    for dependency in &source_metadata.signal_dependencies {
+                        self.collect_item(*dependency);
+                    }
+                    for dependency in source_metadata.lifecycle_dependencies.merged() {
+                        self.collect_item(dependency);
+                    }
+                }
+            }
+            HirItem::Instance(instance) => {
+                for member_index in 0..instance.members.len() {
+                    self.collect_instance_member(InstanceMemberKey {
+                        instance: owner,
+                        member_index,
+                    });
+                }
+            }
+            HirItem::Value(_) | HirItem::Function(_) => {
+                let Some(report) = self.report_by_owner.get(&owner) else {
+                    return;
+                };
+                let GeneralExprOutcome::Lowered(body) = &report.outcome else {
+                    return;
+                };
+                let dependencies = referenced_hir_dependencies(body);
+                for dependency in dependencies.items {
+                    self.collect_item(dependency);
+                }
+                for dependency in dependencies.instance_members {
+                    self.collect_instance_member(dependency);
+                }
+            }
+            HirItem::Type(_)
+            | HirItem::Class(_)
+            | HirItem::Domain(_)
+            | HirItem::SourceProviderContract(_)
+            | HirItem::Use(_)
+            | HirItem::Export(_) => {}
+        }
+    }
+
+    fn collect_instance_member(&mut self, key: InstanceMemberKey) {
+        if !self.visited_instance_members.insert(key) {
+            return;
+        }
+        self.collect_item(key.instance);
+        let Some(report) = self.instance_member_reports.get(&key) else {
+            return;
+        };
+        let GeneralExprOutcome::Lowered(body) = &report.outcome else {
+            return;
+        };
+        let dependencies = referenced_hir_dependencies(body);
+        for dependency in dependencies.items {
+            self.collect_item(dependency);
+        }
+        for dependency in dependencies.instance_members {
+            self.collect_instance_member(dependency);
+        }
+    }
+
+    fn collect_mock_replacements(&mut self, owner: HirItemId) {
+        let Some(item) = self.hir.items().get(owner) else {
+            return;
+        };
+        for decorator_id in item.decorators() {
+            let Some(decorator) = self.hir.decorators().get(*decorator_id) else {
+                continue;
+            };
+            let DecoratorPayload::Mock(mock) = &decorator.payload else {
+                continue;
+            };
+            let Some(MockImportTarget::Item(item_id)) =
+                mock_replacement_target(self.hir, mock.replacement)
+            else {
+                continue;
+            };
+            self.collect_item(item_id);
+        }
+    }
+}
+
 #[derive(Default)]
 struct HirDependencies {
     items: Vec<HirItemId>,
@@ -4359,6 +4518,9 @@ value ordered:Ordering =
 value mapped:Result Text Int =
     bimap punctuate addOne okOne
 
+value readyTask:Task Text Int =
+    pure 3
+
 value traversed:Option (List Int) =
     traverse keepSmall [1, 2]
 
@@ -4415,6 +4577,27 @@ value filtered:List Int =
         )) = &core.exprs()[*callee].kind
         else {
             panic!("bimap should lower to the builtin Result bifunctor intrinsic");
+        };
+
+        let ready_task = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "readyTask")
+            .map(|(id, _)| id)
+            .expect("expected readyTask value item");
+        let ready_task_body = core.items()[ready_task]
+            .body
+            .expect("readyTask should carry a lowered body");
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[ready_task_body].kind
+        else {
+            panic!("readyTask should lower to an apply expression");
+        };
+        assert_eq!(arguments.len(), 1);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Task),
+        )) = &core.exprs()[*callee].kind
+        else {
+            panic!("pure task should lower to the builtin Task applicative intrinsic");
         };
 
         let traversed = core

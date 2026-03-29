@@ -57,6 +57,7 @@ pub enum RuntimeConstructor {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeTaskPlan {
+    Pure { value: Box<RuntimeValue> },
     RandomInt { low: i64, high: i64 },
     RandomBytes { count: i64 },
     StdoutWrite { text: Box<str> },
@@ -83,6 +84,7 @@ pub enum RuntimeTaskPlan {
 impl fmt::Display for RuntimeTaskPlan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Pure { value } => write!(f, "pure({value})"),
             Self::RandomInt { low, high } => write!(f, "randomInt({low}, {high})"),
             Self::RandomBytes { count } => write!(f, "randomBytes({count})"),
             Self::StdoutWrite { text } => write!(f, "stdoutWrite({text})"),
@@ -3785,6 +3787,9 @@ fn pure_applicative_value(
         BuiltinApplicativeCarrier::Result => RuntimeValue::ResultOk(Box::new(payload)),
         BuiltinApplicativeCarrier::Validation => RuntimeValue::ValidationValid(Box::new(payload)),
         BuiltinApplicativeCarrier::Signal => RuntimeValue::Signal(Box::new(payload)),
+        BuiltinApplicativeCarrier::Task => RuntimeValue::Task(RuntimeTaskPlan::Pure {
+            value: Box::new(payload),
+        }),
     }
 }
 
@@ -3829,6 +3834,9 @@ fn wrap_option_in_applicative(
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
+        BuiltinApplicativeCarrier::Task => {
+            Err("runtime traverse does not yet support Task applicatives")
+        }
     }
 }
 
@@ -3873,6 +3881,9 @@ fn wrap_result_ok_in_applicative(
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
+        BuiltinApplicativeCarrier::Task => {
+            Err("runtime traverse does not yet support Task applicatives")
+        }
     }
 }
 
@@ -3917,6 +3928,9 @@ fn wrap_validation_valid_in_applicative(
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
+        BuiltinApplicativeCarrier::Task => {
+            Err("runtime traverse does not yet support Task applicatives")
+        }
     }
 }
 
@@ -4026,6 +4040,9 @@ fn sequence_traverse_results(
             Ok(RuntimeValue::Signal(Box::new(RuntimeValue::List(
                 collected,
             ))))
+        }
+        BuiltinApplicativeCarrier::Task => {
+            Err("runtime traverse does not yet support Task applicatives")
         }
     }
 }
