@@ -305,11 +305,11 @@
 
     { "name": "Pipe — truthy T|>",
       "scope": "keyword.operator.pipe.truthy.aivi",
-      "settings": { "foreground": "#B5BD68" } },
+      "settings": { "foreground": "#A0C880" } },
 
     { "name": "Pipe — falsy F|>",
       "scope": "keyword.operator.pipe.falsy.aivi",
-      "settings": { "foreground": "#CC6666" } },
+      "settings": { "foreground": "#CC7070" } },
 
     { "name": "Pipe — tap |",
       "scope": "keyword.operator.pipe.tap.aivi",

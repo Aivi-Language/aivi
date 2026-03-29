@@ -1,6 +1,7 @@
-instance Functor Option
-    map f fa = Some 1
+class Applicative F
+    pureInt : F Int
 
 instance Applicative Option
-    pure a = Some a
-    apply ff fa = Some 1
+    pureInt = Some 1
+
+value test : Option Int = pureInt

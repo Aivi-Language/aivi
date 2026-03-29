@@ -42,7 +42,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::ExportKw
         | TokenKind::PatchKw => Some(IDX_KEYWORD),
 
-        // Soft keywords are handled separately; other identifiers remain variables.
+        // Identifiers: deferred to soft_or_hard_token_type_index.
         TokenKind::Identifier => None,
 
         // Literals
@@ -51,7 +51,8 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
             Some(IDX_NUMBER)
         }
 
-        // Operators and punctuation
+        // Operators and punctuation: let TextMate grammar handle these so that
+        // per-operator colors (pipe variants, arrows, etc.) are preserved.
         TokenKind::Plus
         | TokenKind::Minus
         | TokenKind::Slash
@@ -98,7 +99,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         | TokenKind::LBracket
         | TokenKind::RBracket
         | TokenKind::CloseTagStart
-        | TokenKind::SelfCloseTagEnd => Some(IDX_OPERATOR),
+        | TokenKind::SelfCloseTagEnd => None,
 
         // Comments
         TokenKind::LineComment | TokenKind::BlockComment | TokenKind::DocComment => {
@@ -171,7 +172,10 @@ pub async fn semantic_tokens_full(
 fn soft_or_hard_token_type_index(token: aivi_syntax::Token, source: &aivi_base::SourceFile) -> Option<u32> {
     match token.kind() {
         TokenKind::Identifier if token.text(source) == "when" => Some(IDX_KEYWORD),
-        TokenKind::Identifier => Some(IDX_VARIABLE),
+        // Let TextMate grammar handle identifier coloring — it uses specific scopes
+        // (e.g. variable.parameter.labeled, variable.other.field) that carry more
+        // precise color intent than a blanket `variable` semantic token.
+        TokenKind::Identifier => None,
         kind => token_type_index(kind),
     }
 }
