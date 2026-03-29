@@ -38,6 +38,7 @@ dependencies = [
  "cranelift-module",
  "cranelift-native",
  "cranelift-object",
+ "indexmap",
  "num-bigint",
  "rust_decimal",
 ]

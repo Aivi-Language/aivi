@@ -3960,23 +3960,23 @@ fn parse_text_map(
     };
     entries
         .iter()
-        .map(|entry| {
-            let RuntimeValue::Text(key) = strip_signal(&entry.key) else {
+        .map(|(k, v)| {
+            let RuntimeValue::Text(key) = strip_signal(k) else {
                 return Err(SourceProviderExecutionError::InvalidOption {
                     instance,
                     provider,
                     option_name: option_name.into(),
                     expected: "Map Text Text".into(),
-                    value: strip_signal(&entry.key).clone(),
+                    value: strip_signal(k).clone(),
                 });
             };
-            let RuntimeValue::Text(value) = strip_signal(&entry.value) else {
+            let RuntimeValue::Text(value) = strip_signal(v) else {
                 return Err(SourceProviderExecutionError::InvalidOption {
                     instance,
                     provider,
                     option_name: option_name.into(),
                     expected: "Map Text Text".into(),
-                    value: strip_signal(&entry.value).clone(),
+                    value: strip_signal(v).clone(),
                 });
             };
             Ok((key.clone(), value.clone()))

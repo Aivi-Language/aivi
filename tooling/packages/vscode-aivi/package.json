@@ -13,13 +13,7 @@
   "icon": "icons/aivi-a.png",
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:aivi",
-    "onCommand:aivi.restartServer",
-    "onCommand:aivi.showOutputChannel",
-    "onCommand:aivi.formatDocument",
-    "onCommand:aivi.checkFile",
-    "onCommand:aivi.openCompilerLog"
+    "onStartupFinished"
   ],
   "contributes": {
     "languages": [
@@ -156,9 +150,9 @@
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/vscode": "^1.90.0",
-    "@vscode/vsce": "^3.0.0",
-    "typescript": "^5.4.0",
-    "vite": "^5.0.0"
+    "@types/vscode": "1.110.0",
+    "@vscode/vsce": "3.7.1",
+    "typescript": "6.0.2",
+    "vite": "8.0.3"
   }
 }

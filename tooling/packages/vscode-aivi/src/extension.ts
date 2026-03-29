@@ -50,6 +50,7 @@ export async function activate(
       client = undefined;
     }
     statusBar?.setStatus("starting");
+    statusBar?.show();
     client = createClient(context, outputChannel, traceOutputChannel);
     client.onDidChangeState((event) => {
       // State 2 = Running, State 1 = Starting, State 3 = Stopped
@@ -97,7 +98,21 @@ export async function activate(
     })
   );
 
-  await restart();
+  // Only start the LSP when an .aivi file is open or becomes open
+  const startLspWhenNeeded = async (): Promise<void> => {
+    if (vscode.workspace.textDocuments.some((d) => d.languageId === "aivi")) {
+      await restart();
+      return;
+    }
+    const sub = vscode.workspace.onDidOpenTextDocument(async (doc) => {
+      if (doc.languageId !== "aivi") return;
+      sub.dispose();
+      await restart();
+    });
+    context.subscriptions.push(sub);
+  };
+
+  await startLspWhenNeeded();
 }
 
 export async function deactivate(): Promise<void> {

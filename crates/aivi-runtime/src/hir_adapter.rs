@@ -1245,6 +1245,10 @@ impl fmt::Display for HirRuntimeAdapterError {
             Self::BlockedRecurrenceNode { site, blockers } => {
                 write!(f, "recurrence handoff {site:?} is blocked: {blockers:?}")
             }
+            Self::UnsupportedSourceProvider { owner, provider } => write!(
+                f,
+                "source owner {owner} uses a provider the runtime adapter cannot lower: {provider:?}"
+            ),
             Self::GraphBuild(error) => write!(f, "signal graph build failed: {error:?}"),
         }
     }

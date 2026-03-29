@@ -11,4 +11,4 @@ value users:List User = [
 
 value summaries =
     users
-     *|> (.emails *|> . <|* joinEmails)
+     *|> (["a", "b"] *|> .)

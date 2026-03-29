@@ -362,11 +362,11 @@ fn runtime_to_json(value: &RuntimeValue) -> Result<JsonValue, Box<str>> {
         }
         RuntimeValue::Map(entries) => {
             let mut object = serde_json::Map::new();
-            for entry in entries {
-                let Some(key) = entry.key.as_text() else {
+            for (key, value) in entries {
+                let Some(key) = key.as_text() else {
                     return Err("runtime JSON encoding requires Text map keys".into());
                 };
-                object.insert(key.to_owned(), runtime_to_json(&entry.value)?);
+                object.insert(key.to_owned(), runtime_to_json(value)?);
             }
             Ok(JsonValue::Object(object))
         }

@@ -3,7 +3,7 @@ signal flags:Signal Bool = True
 signal filtered:Signal Bool =
     flags
      ?|> (
-        .
+        True
          ?|> .
          T|> True
          F|> False

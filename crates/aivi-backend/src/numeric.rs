@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use num_bigint::{BigInt, Sign};
 use rust_decimal::Decimal;
 
@@ -27,6 +29,14 @@ impl PartialEq for RuntimeFloat {
 
 impl Eq for RuntimeFloat {}
 
+// Safety: `RuntimeFloat::new` rejects NaN and infinities, so every stored
+// value is a finite f64 whose bit pattern is a stable, canonical identifier.
+impl Hash for RuntimeFloat {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
 impl std::fmt::Display for RuntimeFloat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut rendered = self.0.to_string();
@@ -37,7 +47,7 @@ impl std::fmt::Display for RuntimeFloat {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RuntimeDecimal(Decimal);
 
 impl RuntimeDecimal {
@@ -65,7 +75,7 @@ impl std::fmt::Display for RuntimeDecimal {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RuntimeBigInt(BigInt);
 
 impl RuntimeBigInt {

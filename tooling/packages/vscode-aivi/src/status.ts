@@ -13,6 +13,9 @@ export class StatusBarItem {
     );
     this.item.command = "aivi.showOutputChannel";
     this.setStatus("starting");
+  }
+
+  show(): void {
     this.item.show();
   }
 

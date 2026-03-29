@@ -1,7 +1,10 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
+    hash::Hash,
 };
+
+use indexmap::IndexMap;
 
 use aivi_hir::{DomainMemberHandle, IntrinsicValue, ItemId as HirItemId, SumConstructorHandle};
 
@@ -16,30 +19,38 @@ use crate::{
     numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeRecordField {
     pub label: Box<str>,
     pub value: RuntimeValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeMapEntry {
     pub key: RuntimeValue,
     pub value: RuntimeValue,
 }
 
-/// Ordered runtime map storage.
+/// Ordered runtime map storage backed by an `IndexMap`.
 ///
-/// Runtime maps preserve source entry order even though structural matching
-/// still uses linear scans. Keeping a dedicated wrapper localises future
-/// indexing or canonical-order changes without leaking raw `Vec` usage across
-/// the runtime surface.
+/// Keys must implement `Hash + Eq` so that lookups are O(1) rather than
+/// O(n). Insertion order is preserved exactly as written in the source,
+/// satisfying the display and serialisation invariant that `{b: 2, a: 1}`
+/// prints with `b` before `a`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RuntimeMap(Vec<RuntimeMapEntry>);
+pub struct RuntimeMap(IndexMap<RuntimeValue, RuntimeValue>);
 
 impl RuntimeMap {
+    /// Build a map from a list of entries, preserving insertion order.
+    ///
+    /// Duplicate keys are silently overwritten with the last value, matching
+    /// the evaluation-time behaviour for map literals with repeated keys.
     pub fn from_entries(entries: Vec<RuntimeMapEntry>) -> Self {
-        Self(entries)
+        let mut map = IndexMap::with_capacity(entries.len());
+        for entry in entries {
+            map.insert(entry.key, entry.value);
+        }
+        Self(map)
     }
 
     pub fn len(&self) -> usize {
@@ -50,21 +61,36 @@ impl RuntimeMap {
         self.0.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, RuntimeMapEntry> {
+    /// Iterate over key-value pairs in insertion order.
+    pub fn iter(&self) -> indexmap::map::Iter<'_, RuntimeValue, RuntimeValue> {
         self.0.iter()
+    }
+
+    /// Look up a value by key in O(1) time.
+    pub fn get(&self, key: &RuntimeValue) -> Option<&RuntimeValue> {
+        self.0.get(key)
+    }
+}
+
+impl std::hash::Hash for RuntimeMap {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for (k, v) in &self.0 {
+            k.hash(state);
+            v.hash(state);
+        }
     }
 }
 
 impl<'a> IntoIterator for &'a RuntimeMap {
-    type Item = &'a RuntimeMapEntry;
-    type IntoIter = std::slice::Iter<'a, RuntimeMapEntry>;
+    type Item = (&'a RuntimeValue, &'a RuntimeValue);
+    type IntoIter = indexmap::map::Iter<'a, RuntimeValue, RuntimeValue>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RuntimeSumValue {
     /// The HIR item that defines this sum type.
     ///
@@ -82,7 +108,7 @@ pub struct RuntimeSumValue {
     pub fields: Vec<RuntimeValue>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeConstructor {
     Some,
     Ok,
@@ -91,7 +117,7 @@ pub enum RuntimeConstructor {
     Invalid,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeTaskPlan {
     Pure { value: Box<RuntimeValue> },
     RandomInt { low: i64, high: i64 },
@@ -146,7 +172,7 @@ impl fmt::Display for RuntimeTaskPlan {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeCallable {
     ItemBody {
         item: ItemId,
@@ -178,7 +204,7 @@ pub enum RuntimeCallable {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeValue {
     Unit,
     Bool(bool),
@@ -429,10 +455,10 @@ fn push_delimited_values<'a>(
 
 fn push_map_entries<'a>(stack: &mut Vec<DisplayFrame<'a>>, entries: &'a RuntimeMap) {
     stack.push(DisplayFrame::StaticText("}"));
-    for (index, entry) in entries.iter().enumerate().rev() {
-        stack.push(DisplayFrame::Value(&entry.value));
+    for (index, (key, value)) in entries.iter().enumerate().rev() {
+        stack.push(DisplayFrame::Value(value));
         stack.push(DisplayFrame::StaticText(": "));
-        stack.push(DisplayFrame::Value(&entry.key));
+        stack.push(DisplayFrame::Value(key));
         if index > 0 {
             stack.push(DisplayFrame::StaticText(", "));
         }
@@ -4493,9 +4519,9 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
             .iter()
             .all(|value| value_matches_layout(program, value, *element)),
         (LayoutKind::Map { key, value }, RuntimeValue::Map(entries)) => {
-            entries.iter().all(|entry| {
-                value_matches_layout(program, &entry.key, *key)
-                    && value_matches_layout(program, &entry.value, *value)
+            entries.iter().all(|(k, v)| {
+                value_matches_layout(program, k, *key)
+                    && value_matches_layout(program, v, *value)
             })
         }
         (LayoutKind::Record(expected), RuntimeValue::Record(fields)) => {
@@ -4717,25 +4743,16 @@ fn unordered_runtime_map_eq(
     if left.len() != right.len() {
         return Ok(false);
     }
-    let mut matched = vec![false; right.len()];
-    'left_entries: for left_entry in left {
-        for (index, right_entry) in right.iter().enumerate() {
-            if matched[index] {
-                continue;
-            }
-            if !runtime_values_may_match(&left_entry.key, &right_entry.key)
-                || !runtime_values_may_match(&left_entry.value, &right_entry.value)
-            {
-                continue;
-            }
-            if structural_eq(kernel, expr, &left_entry.key, &right_entry.key)?
-                && structural_eq(kernel, expr, &left_entry.value, &right_entry.value)?
-            {
-                matched[index] = true;
-                continue 'left_entries;
-            }
+    // Use O(1) key lookup on `right` to drive the comparison in O(n) rather
+    // than the previous O(n²) linear scan.  Both sides must agree on every
+    // key, and the associated values must be structurally equal.
+    for (left_key, left_value) in left {
+        let Some(right_value) = right.get(left_key) else {
+            return Ok(false);
+        };
+        if !structural_eq(kernel, expr, left_value, right_value)? {
+            return Ok(false);
         }
-        return Ok(false);
     }
     Ok(true)
 }
