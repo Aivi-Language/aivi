@@ -14,7 +14,7 @@ type Orientation =
 
 type Status = Running | GameOver
 
-type Pixel = Pixel Int Int
+type Pixel =   Pixel Int Int
 
 type BoardSize = {
     width: Int,

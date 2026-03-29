@@ -13,6 +13,7 @@
   "icon": "icons/aivi-a.png",
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onStartupFinished",
     "onLanguage:aivi",
     "onCommand:aivi.restartServer",
     "onCommand:aivi.showOutputChannel",

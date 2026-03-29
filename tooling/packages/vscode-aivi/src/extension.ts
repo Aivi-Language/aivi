@@ -7,11 +7,39 @@ import { registerCommands } from "./commands";
 let client: LanguageClient | undefined;
 let statusBar: StatusBarItem | undefined;
 
+const THEME_NAME = "AIVI Dark";
+const THEME_PROMPTED_KEY = "aivi.themePrompted";
+
+async function promptThemeOnFirstInstall(
+  context: vscode.ExtensionContext
+): Promise<void> {
+  if (context.globalState.get<boolean>(THEME_PROMPTED_KEY)) return;
+  await context.globalState.update(THEME_PROMPTED_KEY, true);
+
+  const current = vscode.workspace
+    .getConfiguration("workbench")
+    .get<string>("colorTheme");
+  if (current === THEME_NAME) return;
+
+  const choice = await vscode.window.showInformationMessage(
+    "Welcome to AIVI! Would you like to switch to the AIVI Dark color theme?",
+    "Apply Theme",
+    "Not Now"
+  );
+  if (choice === "Apply Theme") {
+    await vscode.workspace
+      .getConfiguration("workbench")
+      .update("colorTheme", THEME_NAME, vscode.ConfigurationTarget.Global);
+  }
+}
+
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel("AIVI");
   const traceOutputChannel = vscode.window.createOutputChannel("AIVI Trace");
+
+  void promptThemeOnFirstInstall(context);
 
   statusBar = new StatusBarItem();
   context.subscriptions.push({ dispose: () => statusBar?.dispose() });
