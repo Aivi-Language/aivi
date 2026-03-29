@@ -19,12 +19,12 @@ value sampleDescription = describeNumber 1
 
 The `_` pattern matches anything. Arms are tried from top to bottom.
 
-## Matching custom data
+## Matching custom types
 
-Custom sum types are declared with `data` and matched by constructor name:
+Custom sum types are declared with `type` and matched by constructor name:
 
 ```aivi
-data Direction =
+type Direction =
   | Up
   | Down
   | Left
@@ -39,10 +39,10 @@ fun directionLabel:Text direction:Direction => direction
 value currentDirection = directionLabel Left
 ```
 
-If a constructor carries data, bind that payload in the pattern:
+If a constructor carries a payload, bind that payload in the pattern:
 
 ```aivi
-data LoadState =
+type LoadState =
   | NotAsked
   | Loaded Text
   | Failed Text
@@ -60,7 +60,7 @@ value stateMessage = describeLoadState (Loaded "Ada")
 Use `_` when you only care about one or two cases:
 
 ```aivi
-data Status =
+type Status =
   | Running
   | Paused
   | Stopped
@@ -129,10 +129,10 @@ value topScore =
 Tuples let you match several values at once:
 
 ```aivi
-data Point =
+type Point =
   | Point Int Int
 
-data Direction =
+type Direction =
   | Up
   | Down
   | Left
@@ -153,12 +153,12 @@ value movedPoint =
 
 ## Nested patterns
 
-Patterns can be nested as deeply as the data requires:
+Patterns can be nested as deeply as the value requires:
 
 ```aivi
-data Inner = A | B
+type Inner = A | B
 
-data Outer =
+type Outer =
   | Outer Inner
 
 fun describeOuter:Text outer:Outer => outer
@@ -170,7 +170,7 @@ value outerLabel = describeOuter (Outer A)
 
 ## Built-in sum types
 
-`Option` and `Result` are ordinary data types, so matching them feels the same:
+`Option` and `Result` are ordinary tagged types, so matching them feels the same:
 
 ```aivi
 fun displayName:Text maybeName: (Option Text) => maybeName
@@ -218,10 +218,9 @@ That guarantee is one of the reasons pattern matching is the normal way to branc
 | `{ field, other }` | Destructure selected record fields |
 | `(a, b)` | Match a tuple |
 | `_` | Match anything without binding |
-| `pattern if cond` | Match only when the extra condition holds |
 
 | Operator | Meaning |
 | --- | --- |
-| `||>` | Pattern match / case split |
-| `T|>` | Branch for `True` |
-| `F|>` | Branch for `False` |
+| `\|\|>` | Pattern match / case split |
+| `T\|>` | Branch for `True` |
+| `F\|>` | Branch for `False` |

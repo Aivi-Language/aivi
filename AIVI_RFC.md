@@ -35,7 +35,7 @@ AIVI is not a thin syntax layer over Rust or GTK. It has a pure semantic core an
 - GTK4/libadwaita application development on GNOME Linux as the flagship use case
 - pure, explicit, analyzable user model
 - reactivity is a primitive of the language, not a library
-- native JIT/AOT compilation
+- native Cranelift-backed AOT compilation today, with JIT deferred
 - correctness legible through closed types, explicit boundaries, and strong diagnostics
 
 ### 2.2 Non-goals
@@ -112,7 +112,7 @@ Each IR boundary must define:
 7. **Cranelift code generation**
 8. **Runtime integration**
 
-The implementation-facing companion boundary contracts live in `docs/ir-boundary-contracts.md`.
+The implementation-facing boundary contracts are described inline in this document.
 
 ### 4.1 CST
 
@@ -206,7 +206,7 @@ Responsibilities:
 - layout decisions
 - concrete calling conventions
 - Cranelift lowering
-- AOT and JIT support
+- AOT support, with JIT deferred
 
 ---
 
@@ -236,14 +236,14 @@ Top-level forms:
 - `type`
 - `class`
 - `instance`
+- `domain`
 - `value`
 - `fun`
 - `signal`
-- `source`
 - `use`
 - `export`
 - `provider`
-- decorators via `@name`
+- decorators via `@name` (including `@source`)
 
 ### 5.0.1 `value` and `fun` declarations
 
@@ -300,7 +300,7 @@ The same `type` surface also covers record type synonyms and other type declarat
 ```aivi
 signal counter = 0
 signal query : Signal Text
-signal fullName = firstName ++ " " ++ lastName
+signal fullName = "{firstName} {lastName}"
 ```
 
 Body-less annotated forms declare **input signals** — externally publishable entry points:
@@ -327,20 +327,11 @@ signal keyDown : Signal Key
 
 The general form is `@source provider.variant args [with { ... }]` followed by `signal name : Signal T`. The provider and variant are resolved statically. Provider-backed signals remain decorator-based in the current compiler.
 
-### 5.0.5 `result` — block form
+### 5.0.5 There is no `result { ... }` block in the current parser
 
-`result` is not a top-level declaration keyword. It is a block-shaped expression form that uses `{ ... }` with `<-` bindings:
+`result` is not a top-level declaration keyword, and the current parser/compiler do not implement a `result { ... }` expression form with `<-` bindings.
 
-```aivi
-value appState =
-    result {
-        users <- fetchedUsers
-        visible <- users ?|> .active
-        count <- visible *|> .id |> List.length
-    }
-```
-
-The binding graph is dependency-driven rather than declaration-ordered.
+Older draft examples using `result { ... }` blocks are not current surface syntax. Express the same logic today with ordinary `value` / `fun` declarations, pipe operators, and helper bindings.
 
 ### 5.0.6 Markup roots use `value`
 
@@ -378,7 +369,6 @@ Comment syntax:
 - local names and a small explicit import set
 - no wildcard imports
 - no arbitrary value-level module qualification for imported module members
-- compiler-known type/domain/class namespaces may expose qualified member lookup such as `Duration.value`, `Text.join`, or `Foldable.reduce`
 - built-in names keep priority where needed
 - callable domain members and class members participate in ordinary term lookup when in scope
 
@@ -396,8 +386,6 @@ The original member name drives compiler-known metadata. The alias changes only 
 #### Name resolution for terms
 
 The compiler resolves from local name plus known context. Multiple candidates after contextual filtering produce an ambiguity diagnostic requiring explicit disambiguation through an import alias.
-
-Qualified member syntax such as `Duration.value` is not a general module-qualification escape hatch; it is a compiler-known lookup surface for the owning type/domain/class namespace only.
 
 ---
 
@@ -453,15 +441,17 @@ Accepted surface forms:
 - float literals: ASCII decimal digits, one `.`, ASCII decimal digits — `0.5`, `3.14`
 - decimal literals: ASCII decimal digits with trailing `d`, optionally with one fractional part — `19d`, `19.25d`
 - BigInt literals: ASCII decimal digits with trailing `n` — `123n`
+- adjacent negative literal forms are accepted for built-in numeric families and compact-suffix domain candidates — `-1`, `-3.4`, `-19d`, `-123n`, `-250ms`
 - compact `digits + suffix` is a domain literal suffix candidate only when the suffix is at least two ASCII letters and does not match a built-in non-`Int` literal form: `250ms`, `10sec`, `3min`
-- spacing is semantic: `250ms` is one suffixed literal candidate; `250 ms` is ordinary application
+- spacing is semantic: `250ms` is one suffixed literal candidate; `250 ms` is ordinary application; `-3` is a negative literal form but `- 3` is not
 - leading zeroes do not introduce octal or any other alternate base; `007` is decimal
 - exact one-letter alphabetic compact suffixes are reserved for built-in numeric literal families and future core numeric extensions
 - `d` and `n` are allocated to `Decimal` / `BigInt`; user-defined suffixes must use two or more letters
+- when a negative literal appears as a non-head function argument it still follows the ordinary parenthesized-argument rule, e.g. `abs (-3)`
 
 Not part of the literal grammar:
 
-- sign-prefixed numeric literals
+- spaced sign prefixes such as `- 3`
 - `_` separators inside numeric tokens
 - built-in hex, binary, or octal integer forms
 - exponent notation
@@ -553,9 +543,9 @@ Set [1, 2, 4]
 
 - plain `{ ... }` is always a record
 - plain `[ ... ]` is always a list
-- duplicate record fields are a compile-time error
+- duplicate record fields in **type declarations** are rejected; value-level duplicate record-field diagnostics remain an implementation gap
 - duplicate map keys are a compile-time error
-- duplicate set entries are allowed but may be warned and deduplicated
+- duplicate set entries are currently accepted by the checker without warning or canonicalization
 
 ---
 
@@ -563,7 +553,7 @@ Set [1, 2, 4]
 
 Core typeclasses are compiler-owned ambient prelude items injected into every checked module; local declarations may shadow them.
 
-Implemented surface syntax is:
+Parser-level surface syntax includes the following forms, but end-to-end checking for user-authored higher-kinded classes and instances is still partial:
 
 ```aivi
 class Functor F
@@ -614,8 +604,8 @@ Parser-accurate rules:
 - function example: `fun same : Eq A -> Bool v:A => ...`
 - instance-head example: `instance Eq A -> Eq (Option A)`
 - class declarations do not accept head constraint prefixes; superclass relationships are written only as body-level `with` lines
-- higher-kinded type application uses ordinary left-associative type application: `F A`, `F Int`, `F (A -> B)`, `Result Text A`, `Either L R`
-- higher-kinded instance targets are accepted when kind-correct, e.g. `instance Applicative Option` and `instance Functor (Result Text)`
+- higher-kinded type application uses ordinary left-associative type application syntax: `F A`, `F Int`, `F (A -> B)`, `Result Text A`, `Either L R`
+- parser/formatter support higher-kinded class and instance shapes, but end-to-end checking for user-authored higher-kinded member signatures and instance targets remains partial
 - current constraint-prefix disambiguation is parser-driven: a constraint must parse as a type application whose callee looks like a class name (currently a multi-character identifier such as `Eq`, `Functor`, `Applicative`)
 
 ### 7.1 Resolution rules
@@ -625,7 +615,7 @@ Parser-accurate rules:
 - orphan instances are **fully disallowed**
 - instance search is compile-time only
 - user-authored instance lookup is currently same-module only; imported user instances remain deferred
-- unary `instance` blocks with indented member bindings are the implemented surface; instance contexts are deferred
+- unary `instance` blocks with indented member bindings are the implemented surface, including constraint-prefixed instance heads such as `instance Eq A -> Eq (Option A)`; imported user-instance lookup remains deferred
 - instance bodies are checked directly against the class-member arrow types with explicit local parameter bindings
 
 ### 7.1.1 Overloaded term lookup
@@ -650,6 +640,9 @@ Typed core lowers the builtin runtime-supported class-member surface to intrinsi
 - `reduce`
 - `append`
 - `empty`
+- `bimap`
+- `traverse`
+- `filterMap`
 - `compare`
 - structural equality
 
@@ -657,18 +650,18 @@ Same-module instance members lower as hidden callable items per `(instance, memb
 
 ### 7.2 Core instances
 
-- `Option` implements `Functor`, `Applicative`, `Monad`
-- `Result E` implements `Functor`, `Applicative`, `Monad`
-- `List` implements `Functor`, `Applicative`, `Monad`
-- `Task E` implements `Functor`, `Applicative`, `Monad`
-- `Signal` implements `Functor`, `Applicative`
-- `Validation E` implements `Functor`, `Applicative`
+- `Option` implements builtin `Functor`, `Apply`, `Applicative`, `Foldable`, `Traversable`, and `Filterable`
+- `Result E` implements builtin `Functor`, `Bifunctor`, `Apply`, `Applicative`, `Foldable`, and `Traversable`
+- `List` implements builtin `Functor`, `Apply`, `Applicative`, `Foldable`, `Traversable`, and `Filterable`
+- `Validation E` implements builtin `Functor`, `Bifunctor`, `Apply`, `Applicative`, `Foldable`, and `Traversable`
+- `Signal` implements builtin `Functor`, `Apply`, and `Applicative`
+- `Task E` implements builtin `Applicative`
 - `Eq` is compiler-provided for the structural cases in §7.3
-- `Default` participates through the same evidence machinery used for other constraints
+- current `Default` evidence is narrower than general imported instance resolution: builtin `Option` defaulting comes from `use aivi.defaults (Option)`, and other cases are limited to same-module `Default` instances
 
-### 7.2.1 `Foldable.reduce`
+### 7.2.1 `reduce`
 
-`Foldable.reduce` is the compiler-provided reduction surface for builtin collection/error carriers:
+`reduce` is the compiler-provided reduction surface for builtin collection/error carriers:
 
 - `List A`: folds left-to-right in source order
 - `Option A`: `None` returns the seed unchanged; `Some x` applies the step once
@@ -682,13 +675,14 @@ No `Foldable Task` or `Foldable Signal` instance in v1.
 ```aivi
 class Eq A
     (==) : A -> A -> Bool
+    (!=) : A -> A -> Bool
 ```
 
 `Eq` uses the ordinary class/instance resolution rules in §7.1. Compiler-derived and builtin evidence covers the executable surface; user-authored `Eq` instances beyond same-module explicit evidence remain deferred.
 
 Compiler-derived `Eq` is required for:
 
-- primitive scalars: `Int`, `Float`, `Decimal`, `BigInt`, `Bool`, `Text`, `Unit`
+- primitive scalars and ordering tokens: `Int`, `Float`, `Decimal`, `BigInt`, `Bool`, `Text`, `Unit`, `Ordering`
 - tuples whose element types are `Eq`
 - closed records whose field types are `Eq`
 - closed sums whose constructor payload types are all `Eq`
@@ -730,11 +724,11 @@ The compiler is not required to prove these laws.
 
 ```aivi
 type Validation E A =
-  | Invalid (NonEmptyList E)
+  | Invalid E
   | Valid A
 ```
 
-Unlike `Result E A`, the applicative instance accumulates independent errors instead of short-circuiting on the first failure.
+Unlike `Result E A`, the applicative validation slice can accumulate independent errors instead of short-circuiting on the first failure. In the current executable path that accumulation is wired for error payloads shaped as `NonEmpty` / `NonEmptyList`.
 
 ### 8.1 Applicative semantics
 
@@ -742,7 +736,7 @@ Unlike `Result E A`, the applicative instance accumulates independent errors ins
 - `Valid f` applied to `Valid x` yields `Valid (f x)`
 - `Invalid e` applied to `Valid _` yields `Invalid e`
 - `Valid _` applied to `Invalid e` yields `Invalid e`
-- `Invalid e1` applied to `Invalid e2` yields `Invalid (e1 ++ e2)` where `++` is `NonEmptyList` concatenation
+- in the current accumulation slice, `Invalid e1` applied to `Invalid e2` yields `Invalid (e1 ++ e2)` when the error payload supports the `NonEmpty` / `NonEmptyList` concatenation path used by `zipValidation` and `&|>`
 
 ### 8.2 Intent
 
@@ -756,9 +750,9 @@ signal validatedUser =
   |> UserDraft
 ```
 
-All validators succeed → `Valid (UserDraft ...)`; one or more fail → all errors accumulated into one `Invalid` value in source order.
+All validators succeed → `Valid (UserDraft ...)`; one or more fail → all errors accumulated into one `Invalid` value in source order when the validators use the executable accumulation shape such as `Validation (NonEmptyList E)`.
 
-`Validation E` is applicative-only. Dependent validation requiring earlier successful values to choose later checks should use `Result`, `Task`, or explicit pattern matching.
+For dependent validation, the current surface can use `aivi.validation.andThen`, `Result`, `Task`, or explicit pattern matching instead of applicative accumulation.
 
 ---
 
@@ -775,16 +769,20 @@ class Default A
 
 ### 9.2 `aivi.defaults`
 
-`use aivi.defaults (Option)` brings into scope:
+`use aivi.defaults (Option)` enables the builtin `Option` default-elision path used by record omission:
 
 ```aivi
-Default (Option A)
-default = None
+use aivi.defaults (Option)
 ```
+
+In the current checker this is a compiler-recognized import bundle rather than ordinary imported instance evidence.
 
 ### 9.3 Record literal elision
 
-When an expected closed record type is known, omitted fields are filled only if a `Default` instance is in scope for every omitted field type.
+When an expected closed record type is known, omitted fields are filled only when each omitted field type is supported by the current default-evidence slice:
+
+- `Option A` via `use aivi.defaults (Option)`
+- or a same-module `Default` instance
 
 ```aivi
 type User = {
@@ -844,7 +842,7 @@ Shorthand does not introduce open records, punning across different field names,
 Omission is legal only when:
 
 - the expected record type is known
-- each omitted field has a `Default` instance in scope
+- each omitted field is covered by the current default-evidence slice (`use aivi.defaults (Option)` for `Option`, or a same-module `Default` instance)
 
 This does **not**:
 
@@ -874,7 +872,7 @@ Repetition is expressed through:
 
 Within a pipe:
 
-- `_` — entire current subject
+- `.` — entire current subject
 - `.field` — projects from the current subject
 - `.field.subfield` — chains projection
 - `.field` is illegal where no ambient subject exists
@@ -905,10 +903,12 @@ Core operators:
 Ordinary expression precedence (tighter to looser):
 
 1. function application
-2. binary `+` and `-`
-3. binary `>`, `<`, `==`, `!=`
-4. `and`
-5. `or`
+2. prefix `not`
+3. binary `*`, `/`, `%`
+4. binary `+` and `-`
+5. binary `>`, `<`, `>=`, `<=`, `==`, `!=`
+6. `and`
+7. `or`
 
 Operators at the same binary precedence associate left-to-right. Prefix `not` applies to its following ordinary expression before binary reassociation.
 
@@ -1073,7 +1073,7 @@ Joins the collection produced by the immediately preceding `*|>` with an explici
 ```aivi
 users
  *|> .email
- <|* Text.join ", "
+ <|* keepEmails
 ```
 
 `xs *|> f <|* g` elaborates to `g (map f xs)`. For `Signal (List A)`, lifted pointwise over signal updates.
@@ -1111,7 +1111,7 @@ Normative rules:
 - each iteration is scheduled and stack-safe; recurrent pipes must not lower to unbounded direct recursion
 - cancellation or owner teardown disposes the pending recurrence immediately
 - recurrent pipes with no valid runtime lowering target are rejected
-- ordinary source-driven signal state accumulation does not use `@|>` / `<|@`; it uses `+|>`
+- ordinary source-driven signal state accumulation does not use `@|>` / `<|@`; in the current checked slice it still uses helper surfaces such as `scan`, while `+|>` remains partially wired
 
 ### 11.8 `!|>` validate
 
@@ -1134,44 +1134,44 @@ Rules:
 
 ### 11.9 `~|>` previous state
 
-Reads the previously committed value of the upstream signal. Useful for comparing before/after, detecting transitions, or combining current and prior state.
+Reads the previously committed value of the upstream signal. In the current checked surface this is still the seeded-expression form rather than a named-binder form.
 
 ```aivi
 temperature
- ~|> prevTemp
-  |> delta prevTemp
+ ~|> 0
 ```
 
 Rules:
 
-- `~|>` binds the previous committed value as a named parameter
-- the first emission has no previous value; the stage is suppressed on the first tick (no synthetic prior is invented)
+- current checked programs use a seed expression after `~|>`
+- the stage reads the previously committed value on later ticks
 - `~|>` is read-only over the prior epoch; it does not create mutable state
+- the named-binder form described in older drafts is not implemented in the current checker
 
 ### 11.10 `+|>` accumulate
 
-Accumulates state across signal emissions. See §13.2.1 for the full normative description.
+`+|>` is the intended accumulate pipe surface, but it is not currently usable end to end in checked programs. Parser/HIR hooks exist, while the working checked accumulation surface still uses the ambient `scan` helper.
 
 ```aivi
 signal counter : Signal Int =
-    tick +|> 0 (state _ => state + 1)
+    tick
+     |> scan 0 step
 
-signal history : Signal (List Text) =
-    message +|> [] (acc msg => acc ++ [msg])
+fun step:Int tick:Unit current:Int =>
+    current + 1
 ```
 
-Form: `signal +|> seed (state input => next)`
+Intended form: `signal +|> seed (state input => next)`
 
-- `seed` is the initial state value
-- `state` is the previous accumulated value
-- `input` is the current upstream emission
-- `next` is the new state expression
+- parser/HIR currently recognize `+|>` stages
+- the end-to-end checked path still relies on `|> scan seed step`
+- `+|>` should not be treated as a stable executable surface until the lowering/runtime path is finished
 
-Shorthand: `signal +|> prev + .` where `prev` is the previous state and `.` is the current value.
+The shorthand forms described in older drafts are likewise incomplete today.
 
 ### 11.11 `-|>` diff
 
-Computes the structural or semantic difference between the current and previous emission. Returns a diff value whose shape depends on the carrier type.
+Computes the structural or semantic difference between the current and previous emission. The current checker accepts both an explicit diff-function form and an older seeded form; canonicalization is not yet enforced.
 
 ```aivi
 items
@@ -1182,7 +1182,8 @@ items
 Rules:
 
 - the diff function receives `(previous: A, current: A) -> D` where `D` is the diff type
-- the first emission produces a diff from an empty/zero baseline
+- current implementations also still accept the older seeded-expression form shown in the user guides
+- the first emission uses the implementation's existing baseline/seed behavior for the accepted surface
 - `-|>` is the primary operator for driving localized update pipelines
 
 ---
@@ -1243,7 +1244,7 @@ ClusterTail        ::= "&|>" Expr
 Finalizer          ::= " |>" Expr
 ```
 
-`ApplicativeCluster` is a surface form only. It does not survive into backend-facing IR.
+`ApplicativeCluster` is a surface form only. It does not survive into backend-facing IR. In the current implementation it is modeled and checked in HIR, but general typed-core lowering for executable expressions is still incomplete.
 
 ## 12.4 Typing rule
 
@@ -1328,6 +1329,8 @@ value loaded =
 
 For `Signal`, `&|>` builds a derived signal whose dependencies are the union of member dependencies, observing the latest stable upstream values per scheduler tick. This is applicative combination, not monadic binding.
 
+Current status note: `&|>` is well specified at the parser/HIR/typechecking layer, but typed-core lowering still blocks general executable use sites.
+
 ---
 
 ## 13. Signals and scheduler semantics
@@ -1362,37 +1365,29 @@ Type annotation is mandatory. Input signals participate in the signal dependency
 
 Input signals are the canonical mechanism for routing GTK event payloads into the reactive graph and the publication target for task completions and other runtime-owned boundaries.
 
-When a `signal` has no body, the source owns only the raw event stream; stateful accumulation over that stream is expressed separately using `+|>`.
+When a `signal` has no body, the source owns only the raw event stream; stateful accumulation over that stream is currently expressed separately using helper surfaces such as `scan` while `+|>` remains incomplete.
 
 ### 13.2.1 Stateful signal accumulation with `+|>`
 
-`+|>` is the canonical accumulate pipe for building stateful signals:
+`+|>` is the intended accumulate pipe for building stateful signals, but it is not yet the stable checked surface.
 
 ```aivi
-signal direction : Signal Direction =
-    keyDown +|> Right (direction key => updateDirection key direction)
+signal counter : Signal Int =
+    tick
+     |> scan 0 step
 
-signal game : Signal Game =
-    tick +|> initialGame (state _ => stepOnTick state)
+fun step:Int tick:Unit current:Int =>
+    current + 1
 ```
 
 Normative rules:
 
-- surface form: `signal +|> seed (state input => next)`
-- `signal` must elaborate to a signal whose payload type is `A`
-- `seed` has state type `S` and is the first committed value
-- the lambda `(state input => next)` takes the previous state first and the current upstream value second
-- each later update is scheduled only when the upstream signal publishes a new value in the current scheduler tick
-- `+|>` is the intended way to accumulate timer, event, source, and completion signals into state
+- intended future surface form: `signal +|> seed (state input => next)`
+- current checked fixtures still use `|> scan seed step`
+- parser/HIR support for `+|>` exists, but end-to-end user programs still fail before a stable lowering/runtime path is reached
+- stateful accumulation over timer, event, source, and completion signals is therefore still described most truthfully by the working `scan` helper path
 
-Shorthand form for simple arithmetic accumulation:
-
-```aivi
-signal counter : Signal Int =
-    tick +|> 0 (prev + 1)
-```
-
-`prev` refers to the previous state; `.` refers to the current upstream value.
+The shorthand accumulation forms from older drafts are not current executable surface.
 
 ### 13.3 Applicative meaning of `Signal`
 
@@ -1457,7 +1452,6 @@ Sources may represent:
 - file watching
 - file reads
 - sockets
-- D-Bus
 - timers
 - process events
 - mailboxes/channels
@@ -1539,7 +1533,11 @@ Stateful source handling is expressed by deriving from the raw source signal:
 signal tick : Signal Unit
 
 signal counter : Signal Int =
-    tick +|> 0 (state _ => state + 1)
+    tick
+     |> scan 0 step
+
+fun step:Int tick:Unit current:Int =>
+    current + 1
 ```
 
 ### 14.1.3 Recommended source variants
@@ -1595,11 +1593,11 @@ signal ready : Signal Unit
 Recommended timer options:
 
 - `immediate : Bool`
-- `jitterMs : Int`
+- `jitter : Duration`
 - `coalesce : Bool`
 - `activeWhen : Signal Bool`
 
-Bare integer timer arguments mean milliseconds. Suffixed durations such as `250ms` are accepted when the duration domain surface is in place.
+Current runtime code still accepts bare integer timer arguments as a legacy milliseconds path, but `Duration`-shaped values are the preferred vocabulary for new code and documentation.
 
 #### File watching and reading
 
@@ -1620,7 +1618,7 @@ signal fileText : Signal (Result FsError Text)
 
 Recommended file-watch options: `events : List FsWatchEvent`, `recursive : Bool`
 
-Recommended file-read options: `decode : DecodeMode`, `reloadOn : Signal A`, `debounce : Duration`, `readOnStart : Bool`, `activeWhen : Signal Bool`
+Recommended file-read options: `decode : DecodeMode`, `reloadOn : Signal A`, `debounce : Duration`, `readOnStart : Bool`
 
 Built-in file sources request best-effort cancellation when superseded, suspended, or torn down.
 
@@ -1662,21 +1660,7 @@ Recommended window-event options: `capture : Bool`, `repeat : Bool`, `focusOnly 
 
 #### D-Bus
 
-```aivi
-@source dbus.ownName "org.example.Mail"
-signal busName : Signal BusNameState
-
-@source dbus.signal "org.example.Mail" "/org/example/Mail" "NewMessage"
-signal busEvents : Signal MailBusEvent
-
-@source dbus.method "org.example.Mail" "/org/example/Mail" "ShowWindow"
-signal showWindow : Signal Unit
-```
-
-- `dbus.ownName`: tracks `Owned`, `Queued`, or `Lost`
-- `dbus.signal`: subscribes to inbound remote signals
-- `dbus.method`: fire-and-forget inbound method dispatch; Unit reply is placed on the D-Bus wire before the AIVI signal is published
-- non-Unit reply-producing methods are deferred
+Built-in `dbus.*` source providers are not implemented in the current provider catalog. Older draft examples in this area are therefore deferred rather than current executable surface.
 
 ### 14.1.4 Decode and delivery modes
 
@@ -1787,7 +1771,7 @@ Effects enter through:
 - may fail with `E`
 - may succeed with `A`
 - is schedulable by the runtime
-- lawful as `Functor`, `Applicative`, and `Monad`
+- has builtin executable support for `Applicative` today; broader `Functor`/`Apply`/`Monad` support remains deferred at runtime lowering
 
 Runtime execution uses linked task bindings plus scheduler-owned hidden completion inputs. A direct top-level task value lowers to a `TaskRuntimeSpec`; a worker thread evaluates the linked backend item body and publishes its result through a typed completion port back into the scheduler.
 
@@ -2194,7 +2178,7 @@ domain Duration over Int
 
 Construction is explicit. Unwrapping is explicit. Unsafe construction should remain internal or be spelled as such.
 
-Callable domain members enter ordinary term lookup when in scope. No projection syntax for domains in v1; the compiler may expose compiler-known qualified lookup surfaces such as `Duration.value` for disambiguation.
+Callable domain members enter ordinary term lookup when in scope. No projection syntax for domains in v1.
 
 ### 20.5 Literal suffixes
 
@@ -2430,7 +2414,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - parser ✓
 - CST (lossless for formatting and diagnostics) ✓
 - formatter (canonical pipe, arrow, cluster alignment) ✓
-- syntax for `type`, `class`, `instance`, `value`, `fun`, `signal`, `source`, `use`, `export`, `provider`, markup, `result { ... }` blocks, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
+- syntax for `type`, `class`, `instance`, `value`, `fun`, `signal`, `use`, `export`, `provider`, markup, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
 - line/block/doc comment lexing (`//`, `/* */`, `/** **/`) and trivia retention ✓
 - regex literal lexing plus HIR validation ✓
 - compact suffix literal lexing (`250ms`) ✓

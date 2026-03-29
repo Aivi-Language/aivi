@@ -110,6 +110,8 @@ fun area:Int width:Int height:Int =>
 value adjustedArea = area (2 + 3) (4 * 2)
 ```
 
+That includes negative literals in call position, for example `abs (-3)` rather than `abs -3`.
+
 ## Partial application
 
 Functions can be partially applied. Supplying fewer arguments returns another function:
@@ -134,10 +136,9 @@ fun trimStatus:Text status:Text => status
 fun decorateStatus:Text status:Text =>
     "[{status}]"
 
-value shownStatus =
-    " ready "
-     |> trimStatus
-     |> decorateStatus
+value shownStatus = " ready "
+  |> trimStatus
+  |> decorateStatus
 ```
 
 That style gives each step a reusable name and stays inside the current language surface.

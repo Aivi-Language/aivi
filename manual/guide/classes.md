@@ -73,7 +73,7 @@ Instances provide the implementation for a concrete type:
 class Eq A
     (==):A -> A -> Bool
 
-data Blob =
+type Blob =
   | Blob Bytes
 
 fun blobEquals:Bool left:Blob right:Blob =>
@@ -91,7 +91,7 @@ A class can expose named operations instead of operators:
 class Compare A
     same:A -> A -> Bool
 
-data Label =
+type Label =
   | Label Text
 
 instance Compare Label
@@ -102,16 +102,16 @@ instance Compare Label
 
 When a function needs to compare values of an open type parameter, use a constraint prefix on the annotation:
 
-```
-fun matchesKey: Eq K ->
-    Bool k
+```aivi
+fun matchesKey: Eq K -> Bool key:K candidate:K =>
+    key == candidate
 ```
 
 Multiple constraints use a parenthesized comma-separated list:
 
-```
-fun bothEqual: (Eq A, Eq B) ->
-    Bool a1
+```aivi
+fun bothEqual: (Eq A, Eq B) -> Bool leftA:A rightA:A leftB:B rightB:B =>
+    leftA == rightA and leftB == rightB
 ```
 
 The constraint ensures the function can only be called when `K` (or `A`, `B`, etc.) has an `Eq` instance. Without the constraint, using `==` on an open type parameter is a type error.

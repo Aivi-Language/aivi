@@ -4011,13 +4011,8 @@ fn print_usage() {
         "milestone-2 surface items: {:?}",
         [
             ItemKind::Type,
-            ItemKind::Data,
             ItemKind::Value,
             ItemKind::Signal,
-            ItemKind::Source,
-            ItemKind::ResultDecl,
-            ItemKind::View,
-            ItemKind::Adapter,
             ItemKind::Class,
             ItemKind::Instance,
             ItemKind::Domain,

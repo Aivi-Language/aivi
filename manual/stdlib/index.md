@@ -396,19 +396,19 @@ Used with `@source timer.every`. The signal type is `Signal Unit`.
 
 ## Typeclasses
 
-The following typeclasses are available everywhere:
+The following ambient classes and builtin carrier paths are wired through the current compiler/runtime slice:
 
 | Class | Key operation | Instances include |
 |---|---|---|
-| `Eq A` | `==`, `!=` | `Int`, `Bool`, `Text`, `Option`, `Result` |
+| `Eq A` | `==`, `!=` | primitive scalars, `Ordering`, `Option`, `Result`, `Validation`, `List` |
 | `Ord A` | `compare` | `Int`, `Text`, `Ordering` |
-| `Default A` | `default` | `Int`, `Bool`, `Text`, `List` |
-| `Functor F` | `map` (via `*\|>`) | `Option`, `Result`, `List`, `Signal` |
+| `Default A` | `default` | same-module `Default` instances; `Option` omission via `use aivi.defaults (Option)` |
+| `Functor F` | `map` (via `*\|>`) | `Option`, `Result`, `List`, `Validation`, `Signal` |
 | `Semigroup A` | `<>` | `Text`, `List` |
 | `Monoid A` | `empty` | `Text`, `List` |
-| `Foldable F` | `reduce` | `List` |
+| `Foldable F` | `reduce` | `List`, `Option`, `Result`, `Validation` |
 | `Filterable F` | `filter` | `List`, `Option` |
-| `Applicative F` | `pure`, `ap` | `Option`, `Result`, `List` |
-| `Monad F` | `bind` | `Option`, `Result`, `List` |
-| `Bifunctor F` | `bimap` | `Result` |
-| `Traversable F` | — | `List` |
+| `Apply F` | `apply` | `Option`, `Result`, `List`, `Validation`, `Signal` |
+| `Applicative F` | `pure`, `ap` | `Option`, `Result`, `List`, `Validation`, `Signal`, `Task` |
+| `Bifunctor F` | `bimap` | `Result`, `Validation` |
+| `Traversable F` | `traverse` | `List`, `Option`, `Result`, `Validation` |

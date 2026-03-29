@@ -725,14 +725,9 @@ pub struct ErrorItem {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Item {
     Type(NamedItem),
-    Data(NamedItem),
     Fun(NamedItem),
     Value(NamedItem),
     Signal(NamedItem),
-    Source(NamedItem),
-    ResultDecl(NamedItem),
-    View(NamedItem),
-    Adapter(NamedItem),
     Class(NamedItem),
     Instance(InstanceItem),
     Domain(DomainItem),
@@ -746,14 +741,9 @@ pub enum Item {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ItemKind {
     Type,
-    Data,
     Fun,
     Value,
     Signal,
-    Source,
-    ResultDecl,
-    View,
-    Adapter,
     Class,
     Instance,
     Domain,
@@ -767,14 +757,9 @@ impl Item {
     pub fn kind(&self) -> ItemKind {
         match self {
             Item::Type(_) => ItemKind::Type,
-            Item::Data(_) => ItemKind::Data,
             Item::Fun(_) => ItemKind::Fun,
             Item::Value(_) => ItemKind::Value,
             Item::Signal(_) => ItemKind::Signal,
-            Item::Source(_) => ItemKind::Source,
-            Item::ResultDecl(_) => ItemKind::ResultDecl,
-            Item::View(_) => ItemKind::View,
-            Item::Adapter(_) => ItemKind::Adapter,
             Item::Class(_) => ItemKind::Class,
             Item::Instance(_) => ItemKind::Instance,
             Item::Domain(_) => ItemKind::Domain,
@@ -788,14 +773,9 @@ impl Item {
     pub fn base(&self) -> &ItemBase {
         match self {
             Item::Type(item)
-            | Item::Data(item)
             | Item::Fun(item)
             | Item::Value(item)
             | Item::Signal(item)
-            | Item::Source(item)
-            | Item::ResultDecl(item)
-            | Item::View(item)
-            | Item::Adapter(item)
             | Item::Class(item) => &item.base,
             Item::Instance(item) => &item.base,
             Item::Domain(item) => &item.base,

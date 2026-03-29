@@ -53,14 +53,9 @@ pub enum TokenKind {
     Arrow,
     ThinArrow,
     TypeKw,
-    DataKw,
     FunKw,
     ValueKw,
     SignalKw,
-    SourceKw,
-    ResultDeclKw,
-    ViewKw,
-    AdapterKw,
     ClassKw,
     InstanceKw,
     DomainKw,
@@ -102,14 +97,9 @@ impl TokenKind {
         matches!(
             self,
             TokenKind::TypeKw
-                | TokenKind::DataKw
                 | TokenKind::FunKw
                 | TokenKind::ValueKw
                 | TokenKind::SignalKw
-                | TokenKind::SourceKw
-                | TokenKind::ResultDeclKw
-                | TokenKind::ViewKw
-                | TokenKind::AdapterKw
                 | TokenKind::ClassKw
                 | TokenKind::InstanceKw
                 | TokenKind::DomainKw
@@ -144,14 +134,9 @@ impl TokenKind {
         matches!(
             self,
             TokenKind::TypeKw
-                | TokenKind::DataKw
                 | TokenKind::FunKw
                 | TokenKind::ValueKw
                 | TokenKind::SignalKw
-                | TokenKind::SourceKw
-                | TokenKind::ResultDeclKw
-                | TokenKind::ViewKw
-                | TokenKind::AdapterKw
                 | TokenKind::ClassKw
                 | TokenKind::InstanceKw
                 | TokenKind::DomainKw
@@ -586,14 +571,9 @@ fn match_compound(bytes: &[u8], cursor: usize, end: usize) -> Option<(TokenKind,
 fn keyword_kind(text: &str) -> Option<TokenKind> {
     match text {
         "type" => Some(TokenKind::TypeKw),
-        "data" => Some(TokenKind::DataKw),
         "fun" => Some(TokenKind::FunKw),
         "value" => Some(TokenKind::ValueKw),
         "signal" => Some(TokenKind::SignalKw),
-        "source" => Some(TokenKind::SourceKw),
-        "result" => Some(TokenKind::ResultDeclKw),
-        "view" => Some(TokenKind::ViewKw),
-        "adapter" => Some(TokenKind::AdapterKw),
         "class" => Some(TokenKind::ClassKw),
         "instance" => Some(TokenKind::InstanceKw),
         "domain" => Some(TokenKind::DomainKw),

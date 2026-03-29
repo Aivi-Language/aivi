@@ -405,15 +405,9 @@ impl<'a> Lowerer<'a> {
 
         let lowered = match item {
             syn::Item::Type(item) => Some(Item::Type(self.lower_type_item(item))),
-            syn::Item::Data(item) => Some(Item::Type(self.lower_type_item(item))),
             syn::Item::Fun(item) => Some(Item::Function(self.lower_function_item(item))),
             syn::Item::Value(item) => Some(Item::Value(self.lower_value_item(item))),
-            syn::Item::Signal(item) | syn::Item::Source(item) => {
-                Some(Item::Signal(self.lower_signal_item(item)))
-            }
-            syn::Item::ResultDecl(item) | syn::Item::View(item) | syn::Item::Adapter(item) => {
-                Some(Item::Value(self.lower_value_item(item)))
-            }
+            syn::Item::Signal(item) => Some(Item::Signal(self.lower_signal_item(item))),
             syn::Item::Class(item) => Some(Item::Class(self.lower_class_item(item))),
             syn::Item::Instance(item) => Some(Item::Instance(self.lower_instance_item(item))),
             syn::Item::Domain(item) => Some(Item::Domain(self.lower_domain_item(item))),

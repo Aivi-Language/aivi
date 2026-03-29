@@ -81,8 +81,8 @@ use aivi.core.dict (
 )
 
 value scores: (Dict Text Int) = { entries: [] }
- |> insert "alice" 100
- |> insert "bob" 85
+  |> insert "alice" 100
+  |> insert "bob" 85
 ```
 
 ---
@@ -226,8 +226,8 @@ use aivi.core.dict (
 )
 
 value d: (Dict Text Int) = { entries: [] }
- |> insert "a" 1
- |> insert "b" 2
+  |> insert "a" 1
+  |> insert "b" 2
 
 value count:Int = size d
 ```
@@ -336,8 +336,8 @@ fun isHigh:Bool n:Int =>
     n > 50
 
 value d: (Dict Text Int) = { entries: [] }
- |> insert "low" 3
- |> insert "high" 99
+  |> insert "low" 3
+  |> insert "high" 99
 
 value highOnly: (Dict Text Int) = filterValues isHigh d
 ```

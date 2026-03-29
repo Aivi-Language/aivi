@@ -36,9 +36,8 @@ fun double:Int n:Int =>
 
 signal count = 21
 
-signal doubledCount =
-    count
-     |> double
+signal doubledCount = count
+  |> double
 ```
 
 The important idea is that `doubledCount` is defined from `count`, not assigned later.
@@ -50,9 +49,8 @@ The important idea is that `doubledCount` is defined from `count`, not assigned 
 | `value` | A named constant expression |
 | `fun` | A named pure function |
 | `signal` | A reactive value in the graph |
-| `source` | A value fed from the outside world |
-| `type` | An alias or record shape |
-| `data` | A constructor-backed tagged type |
+| `@source ...` on `signal` | A source-backed signal fed from the outside world |
+| `type` | An alias, record, or constructor-backed tagged type |
 | `domain` | An operator-oriented abstraction over a carrier type |
 
 ## Why it feels different

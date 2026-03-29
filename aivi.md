@@ -119,8 +119,8 @@ Rules:
 5. Syntax (Normative)
 ============================================================
 
-Keywords:
-signal, source, value, type, data, domain, result, view, adapter
+Declaration keywords:
+signal, value, fun, type, class, instance, domain, use, export, provider
 
 Lambda:
 x => expr
@@ -146,17 +146,20 @@ From highest to lowest:
 
 Pipe precedence (left-associative):
 
- |>    (plain)
-*|>   (map)
-!|>   (validate)
-?|>   (guard)
-||>   (fallback)
-&|>   (join)
-~|>   (previous)
-+|>   (accumulate)
--|>   (diff)
-T|>, F|> (branch)
-@|>   (source)
+  |>    (plain)
+  *|>   (map)
+  !|>   (validate)
+  ?|>   (guard)
+  ||>   (case split)
+  &|>   (applicative cluster)
+  ~|>   (previous)
+  +|>   (accumulate)
+  -|>   (diff)
+  T|>, F|> (branch)
+  @|>   (recurrence start)
+  <|@   (recurrence step)
+   |    (tap)
+  <|*   (fan-in)
 
 Example:
 a &|> b |> f  ==  (a &|> b) |> f
@@ -169,32 +172,34 @@ a &|> b |> f  ==  (a &|> b) |> f
 *|>   map
 !|>   validate
 ?|>   guard
-||>   fallback
-&|>   combine
+||>   case split
+&|>   applicative cluster
 ~|>   previous state
 +|>   accumulate state
 -|>   diff
 T|>, F|> branch
-@|>   source boundary
+@|>   recurrence start
+<|@   recurrence step
+ |    tap
+<|*   fan-in
 
 ============================================================
 8. Accumulate Pipe +|> (Normative)
 ============================================================
 
-Form:
+Intended form:
 
 signal +|> seed (state input => next)
 
-Behavior:
-- state persists across emissions
-- first state = seed
+Current status:
+- parser/HIR hooks for +|> exist
+- end-to-end checked programs still use the ambient scan helper instead
 
-Shorthand:
+Working checked shape today:
 
-signal +|> prev + .
-
-prev = previous state
-.    = current value
+signal derived =
+    source
+     |> scan seed step
 
 ============================================================
 9. Source Model (Normative)

@@ -20,9 +20,8 @@ fun double:Int n:Int =>
 
 signal count = 21
 
-signal doubledCount =
-    count
-     |> double
+signal doubledCount = count
+  |> double
 ```
 
 ## Boolean gating
@@ -32,15 +31,14 @@ Signals can branch just like ordinary values:
 ```aivi
 signal ready = True
 
-signal statusText =
-    ready
-     T|> "ready"
-     F|> "waiting"
+signal statusText = ready
+  T|> "ready"
+  F|> "waiting"
 ```
 
 ## Filtering with `?|>`
 
-`?|>` turns a value into `Option` when a predicate may reject it:
+On signals, `?|>` filters updates whose predicate fails while keeping the `Signal A` carrier:
 
 ```aivi
 type User = {
@@ -59,11 +57,12 @@ signal sessions: Signal Session = {
     user: seed
 }
 
-signal activeUsers: Signal User =
-    sessions
-     |> .user
-     ?|> .active
+signal activeUsers: Signal User = sessions
+  |> .user
+  ?|> .active
 ```
+
+For ordinary non-signal values, the same operator returns `Option A`.
 
 ## Previous and diff
 
@@ -72,13 +71,11 @@ The language has dedicated pipes for time-oriented signal transformations:
 ```aivi
 signal score = 10
 
-signal previousScore =
-    score
-     ~|> 0
+signal previousScore = score
+  ~|> 0
 
-signal scoreDelta =
-    score
-     -|> 0
+signal scoreDelta = score
+  -|> 0
 ```
 
 ## Shaping signal outputs

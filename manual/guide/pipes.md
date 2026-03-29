@@ -13,10 +13,9 @@ fun double:Int n:Int =>
 fun addOne:Int n:Int =>
     n + 1
 
-value result =
-    5
-     |> double
-     |> addOne
+value result = 5
+  |> double
+  |> addOne
 ```
 
 That reads in execution order: start with `5`, then double it, then add one.
@@ -29,9 +28,8 @@ The piped value becomes the last argument:
 fun multiply:Int factor:Int n:Int =>
     factor * n
 
-value scaled =
-    5
-     |> multiply 3
+value scaled = 5
+  |> multiply 3
 ```
 
 `multiply 3` produces a function waiting for the final argument, so the pipeline stays compact.
@@ -41,7 +39,7 @@ value scaled =
 `||>` is the branching pipe:
 
 ```aivi
-data Status =
+type Status =
   | Draft
   | Published
   | Archived
@@ -68,7 +66,9 @@ value shownAvailability = availabilityLabel True
 
 ## Filtering with `?|>`
 
-`?|>` keeps a value only when a predicate holds, returning `Option A`:
+`?|>` keeps a value only when a predicate holds.
+
+For ordinary values, it returns `Option A`:
 
 ```aivi
 type User = {
@@ -83,12 +83,13 @@ value seed:User = {
     email: "ada@example.com"
 }
 
-value activeAdult: (Option User) =
-    seed
-     ?|> (.active and .age > 18)
+value activeAdult: (Option User) = seed
+  ?|> .active and .age > 18
 ```
 
 This is especially useful when a later step should only run for values that pass a gate.
+
+For `Signal A`, the same operator keeps the `Signal A` carrier and filters out updates whose predicate fails.
 
 ## Previous-value pipe `~|>`
 
@@ -97,9 +98,8 @@ This is especially useful when a later step should only run for values that pass
 ```aivi
 signal score = 10
 
-signal previousScore =
-    score
-     ~|> 0
+signal previousScore = score
+  ~|> 0
 ```
 
 ## Diff pipe `-|>`
@@ -109,10 +109,26 @@ signal previousScore =
 ```aivi
 signal score = 10
 
-signal scoreDelta =
-    score
-     -|> 0
+signal scoreDelta = score
+  -|> 0
 ```
+
+## Other accepted pipe forms
+
+The current parser/compiler also accept these pipe-stage forms:
+
+| Operator | Meaning |
+| --- | --- |
+| `\|` | Tap / observe while preserving the current subject |
+| `*\|>` | Map / fan-out |
+| `<\|*` | Fan-out join |
+| `&\|>` | Applicative cluster stage |
+| `!\|>` | Validation stage |
+| `+\|>` | Stateful accumulation |
+| `@\|>` | Explicit recurrence start |
+| `<\|@` | Explicit recurrence step |
+
+Some of these advanced stages still have narrower validation/runtime coverage than the core `|>`, `||>`, `?|>`, `T|>`, `F|>`, `~|>`, and `-|>` forms. In particular, `+|>` is still not a stable end-to-end checked surface even though parser/HIR support exists.
 
 ## One important rule: no nested pipes
 
@@ -133,10 +149,18 @@ That keeps pipe flow explicit and matches the compiler's current nesting rule.
 
 | Operator | Meaning |
 | --- | --- |
-| `|>` | Apply a function |
-| `||>` | Pattern match / case split |
-| `T|>` | Branch for `True` |
-| `F|>` | Branch for `False` |
-| `?|>` | Filter to `Option` |
-| `~|>` | Carry previous value |
-| `-|>` | Compute a difference |
+| `\|>` | Apply a function |
+| `\|\|>` | Pattern match / case split |
+| `T\|>` | Branch for `True` |
+| `F\|>` | Branch for `False` |
+| `?\|>` | Gate values; ordinary values become `Option`, signals stay `Signal` |
+| `~\|>` | Carry previous value |
+| `-\|>` | Compute a difference |
+| `\|` | Tap / preserve the current subject |
+| `*\|>` | Map / fan-out |
+| `<\|*` | Fan-out join |
+| `&\|>` | Applicative cluster stage |
+| `!\|>` | Validation stage |
+| `+\|>` | Stateful accumulation |
+| `@\|>` | Explicit recurrence start |
+| `<\|@` | Explicit recurrence step |

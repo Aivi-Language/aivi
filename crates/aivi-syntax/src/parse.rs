@@ -237,33 +237,11 @@ impl<'a> Parser<'a> {
             TokenKind::TypeKw => {
                 Item::Type(self.parse_type_item(base, keyword_index, end, "type declaration"))
             }
-            TokenKind::DataKw => {
-                Item::Data(self.parse_type_item(base, keyword_index, end, "data declaration"))
-            }
             TokenKind::FunKw => Item::Fun(self.parse_fun_item(base, keyword_index, end)),
             TokenKind::ValueKw => Item::Value(self.parse_value_item(base, keyword_index, end)),
             TokenKind::SignalKw => {
                 Item::Signal(self.parse_signal_item(base, keyword_index, end, "signal declaration"))
             }
-            TokenKind::SourceKw => Item::Source(self.parse_source_item(base, keyword_index, end)),
-            TokenKind::ResultDeclKw => Item::ResultDecl(self.parse_value_item_with_eq(
-                base,
-                keyword_index,
-                end,
-                "result declaration",
-            )),
-            TokenKind::ViewKw => Item::View(self.parse_value_item_with_eq(
-                base,
-                keyword_index,
-                end,
-                "view declaration",
-            )),
-            TokenKind::AdapterKw => Item::Adapter(self.parse_value_item_with_eq(
-                base,
-                keyword_index,
-                end,
-                "adapter declaration",
-            )),
             TokenKind::ClassKw => Item::Class(self.parse_class_item(base, keyword_index, end)),
             TokenKind::InstanceKw => {
                 Item::Instance(self.parse_instance_item(base, keyword_index, end))
@@ -587,55 +565,6 @@ impl<'a> Parser<'a> {
             parameters,
             body,
         }
-    }
-
-    /// Parse a `source`, `result`, `view`, or `adapter` declaration using `=` body form.
-    fn parse_value_item_with_eq(
-        &mut self,
-        base: ItemBase,
-        keyword_index: usize,
-        end: usize,
-        description: &str,
-    ) -> NamedItem {
-        let mut cursor = keyword_index + 1;
-        let name = self.parse_named_item_name(keyword_index, &mut cursor, end, description);
-        let annotation = self.parse_optional_type_annotation(&mut cursor, end);
-        let body = if self
-            .consume_kind(&mut cursor, end, TokenKind::Equals)
-            .is_some()
-        {
-            self.parse_expression_body(
-                keyword_index,
-                &mut cursor,
-                end,
-                description,
-                &format!("{description} is missing its body after `=`"),
-                "expected an expression after `=`",
-            )
-        } else {
-            self.missing_body_diagnostic(
-                keyword_index,
-                &format!("{description} is missing its body"),
-                "expected `=` followed by an expression",
-            );
-            None
-        };
-
-        NamedItem {
-            base,
-            keyword_span: self.source_span_of_token(keyword_index),
-            name,
-            type_parameters: Vec::new(),
-            constraints: Vec::new(),
-            annotation,
-            parameters: Vec::new(),
-            body,
-        }
-    }
-
-    /// Parse a `source` declaration — same surface shape as `signal` with optional type + `=` body.
-    fn parse_source_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> NamedItem {
-        self.parse_signal_item(base, keyword_index, end, "source declaration")
     }
 
     fn parse_signal_item(
@@ -2261,7 +2190,32 @@ impl<'a> Parser<'a> {
                 },
             });
         }
+        if let Some(expr) = self.parse_negative_numeric_expr(cursor, end, stop) {
+            return Some(expr);
+        }
         self.parse_primary_expr(cursor, end, stop)
+    }
+
+    fn parse_negative_numeric_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+    ) -> Option<Expr> {
+        let minus_index = self.peek_nontrivia(*cursor, end)?;
+        if self.expr_should_stop(minus_index, stop) || self.tokens[minus_index].kind() != TokenKind::Minus
+        {
+            return None;
+        }
+        let literal_index = self.negative_numeric_literal_token(minus_index, end)?;
+        *cursor = literal_index + 1;
+        match self.tokens[literal_index].kind() {
+            TokenKind::Integer => Some(self.parse_integer_expr_with_sign(Some(minus_index), literal_index, cursor, end)),
+            TokenKind::Float => Some(self.parse_float_expr_with_sign(Some(minus_index), literal_index)),
+            TokenKind::Decimal => Some(self.parse_decimal_expr_with_sign(Some(minus_index), literal_index)),
+            TokenKind::BigInt => Some(self.parse_bigint_expr_with_sign(Some(minus_index), literal_index)),
+            _ => None,
+        }
     }
 
     fn parse_primary_expr(
@@ -2403,9 +2357,19 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_integer_expr(&self, index: usize, cursor: &mut usize, end: usize) -> Expr {
-        let span = self.source_span_of_token(index);
+        self.parse_integer_expr_with_sign(None, index, cursor, end)
+    }
+
+    fn parse_integer_expr_with_sign(
+        &self,
+        minus_index: Option<usize>,
+        index: usize,
+        cursor: &mut usize,
+        end: usize,
+    ) -> Expr {
+        let span = self.numeric_literal_span(minus_index, index);
         let literal = IntegerLiteral {
-            raw: self.tokens[index].text(self.source).to_owned(),
+            raw: self.numeric_literal_raw(minus_index, index),
             span,
         };
         if let Some(suffix_index) = self.peek_nontrivia(*cursor, end) {
@@ -2433,33 +2397,45 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_float_expr(&self, index: usize) -> Expr {
-        let span = self.source_span_of_token(index);
+        self.parse_float_expr_with_sign(None, index)
+    }
+
+    fn parse_float_expr_with_sign(&self, minus_index: Option<usize>, index: usize) -> Expr {
+        let span = self.numeric_literal_span(minus_index, index);
         Expr {
             span,
             kind: ExprKind::Float(FloatLiteral {
-                raw: self.tokens[index].text(self.source).to_owned(),
+                raw: self.numeric_literal_raw(minus_index, index),
                 span,
             }),
         }
     }
 
     fn parse_decimal_expr(&self, index: usize) -> Expr {
-        let span = self.source_span_of_token(index);
+        self.parse_decimal_expr_with_sign(None, index)
+    }
+
+    fn parse_decimal_expr_with_sign(&self, minus_index: Option<usize>, index: usize) -> Expr {
+        let span = self.numeric_literal_span(minus_index, index);
         Expr {
             span,
             kind: ExprKind::Decimal(DecimalLiteral {
-                raw: self.tokens[index].text(self.source).to_owned(),
+                raw: self.numeric_literal_raw(minus_index, index),
                 span,
             }),
         }
     }
 
     fn parse_bigint_expr(&self, index: usize) -> Expr {
-        let span = self.source_span_of_token(index);
+        self.parse_bigint_expr_with_sign(None, index)
+    }
+
+    fn parse_bigint_expr_with_sign(&self, minus_index: Option<usize>, index: usize) -> Expr {
+        let span = self.numeric_literal_span(minus_index, index);
         Expr {
             span,
             kind: ExprKind::BigInt(BigIntLiteral {
-                raw: self.tokens[index].text(self.source).to_owned(),
+                raw: self.numeric_literal_raw(minus_index, index),
                 span,
             }),
         }
@@ -2877,6 +2853,18 @@ impl<'a> Parser<'a> {
         }
 
         match self.tokens[index].kind() {
+            TokenKind::Minus => {
+                let literal_index = self.negative_integer_literal_token(index, end)?;
+                *cursor = literal_index + 1;
+                let span = self.numeric_literal_span(Some(index), literal_index);
+                Some(Pattern {
+                    span,
+                    kind: PatternKind::Integer(IntegerLiteral {
+                        raw: self.numeric_literal_raw(Some(index), literal_index),
+                        span,
+                    }),
+                })
+            }
             TokenKind::Identifier => {
                 *cursor = index + 1;
                 let identifier = self.identifier_from_token(index);
@@ -3179,6 +3167,9 @@ impl<'a> Parser<'a> {
 
     fn starts_expr(&self, index: usize) -> bool {
         let kind = self.tokens[index].kind();
+        if kind == TokenKind::Minus {
+            return self.negative_numeric_literal_token(index, self.tokens.len()).is_some();
+        }
         kind.is_keyword()
             || matches!(
                 kind,
@@ -3337,6 +3328,9 @@ impl<'a> Parser<'a> {
 
     fn starts_pattern(&self, index: usize) -> bool {
         let kind = self.tokens[index].kind();
+        if kind == TokenKind::Minus {
+            return self.negative_integer_literal_token(index, self.tokens.len()).is_some();
+        }
         matches!(
             kind,
             TokenKind::Identifier
@@ -3365,6 +3359,40 @@ impl<'a> Parser<'a> {
             TokenKind::Hash => stop.hash,
             kind if kind.is_pipe_operator() => stop.pipe_stage,
             _ => false,
+        }
+    }
+
+    fn negative_numeric_literal_token(&self, minus_index: usize, end: usize) -> Option<usize> {
+        if self.tokens.get(minus_index)?.kind() != TokenKind::Minus {
+            return None;
+        }
+        let literal_index = self.peek_nontrivia(minus_index + 1, end)?;
+        matches!(
+            self.tokens[literal_index].kind(),
+            TokenKind::Integer | TokenKind::Float | TokenKind::Decimal | TokenKind::BigInt
+        )
+        .then_some(())?;
+        self.tokens_are_adjacent(minus_index, literal_index)
+            .then_some(literal_index)
+    }
+
+    fn negative_integer_literal_token(&self, minus_index: usize, end: usize) -> Option<usize> {
+        let literal_index = self.negative_numeric_literal_token(minus_index, end)?;
+        (self.tokens[literal_index].kind() == TokenKind::Integer).then_some(literal_index)
+    }
+
+    fn numeric_literal_raw(&self, minus_index: Option<usize>, index: usize) -> String {
+        let raw = self.tokens[index].text(self.source);
+        match minus_index {
+            Some(_) => format!("-{raw}"),
+            None => raw.to_owned(),
+        }
+    }
+
+    fn numeric_literal_span(&self, minus_index: Option<usize>, index: usize) -> SourceSpan {
+        match minus_index {
+            Some(start) => self.source_span_for_range(start, index + 1),
+            None => self.source_span_of_token(index),
         }
     }
 
@@ -3721,7 +3749,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parses a qualified name in decorator position. Accepts keyword tokens as identifiers
-    /// (e.g. `@source`, `@adapter`) since both keywords and identifiers are valid decorator names.
+    /// (e.g. `@source`) since both keywords and identifiers are valid decorator names.
     fn parse_decorator_qualified_name(
         &self,
         cursor: &mut usize,
@@ -4430,6 +4458,39 @@ export main
     }
 
     #[test]
+    fn lexer_treats_removed_top_level_aliases_as_identifiers() {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file("aliases.aivi", "source view result adapter data");
+        let lexed = lex_module(&sources[file_id]);
+        let kinds: Vec<_> = lexed
+            .tokens()
+            .iter()
+            .filter(|token| !token.kind().is_trivia())
+            .map(|token| token.kind())
+            .collect();
+
+        assert_eq!(
+            kinds,
+            vec![
+                TokenKind::Identifier,
+                TokenKind::Identifier,
+                TokenKind::Identifier,
+                TokenKind::Identifier,
+                TokenKind::Identifier,
+            ]
+        );
+    }
+
+    #[test]
+    fn parser_rejects_removed_top_level_alias_declarations() {
+        let (_, parsed) = load(
+            "source ticks : Signal Int\nview main = 0\nresult bundle = 0\nadapter glue = 0\ndata Flag = On | Off\n",
+        );
+
+        assert!(parsed.has_errors(), "removed alias declarations should stay invalid");
+    }
+
+    #[test]
     fn parser_structures_text_interpolation_segments() {
         let (_, parsed) = load(r#"value greeting = "Hello {name}, use \{literal\} braces""#);
 
@@ -4974,6 +5035,126 @@ instance Eq A -> Eq (Option A)
         expect_decimal(&parsed.module.items[2], "19.25d");
         expect_float(&parsed.module.items[3], "3.5");
         expect_suffixed(&parsed.module.items[4], "0", "xFF");
+    }
+
+    #[test]
+    fn parser_accepts_adjacent_negative_numeric_literals() {
+        fn expect_integer(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::Integer(literal)) => assert_eq!(literal.raw, raw),
+                    other => panic!("expected integer literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        fn expect_float(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::Float(literal)) => assert_eq!(literal.raw, raw),
+                    other => panic!("expected float literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        fn expect_decimal(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::Decimal(literal)) => assert_eq!(literal.raw, raw),
+                    other => panic!("expected decimal literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        fn expect_bigint(item: &Item, raw: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::BigInt(literal)) => assert_eq!(literal.raw, raw),
+                    other => panic!("expected bigint literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        fn expect_suffixed(item: &Item, raw: &str, suffix: &str) {
+            match item {
+                Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                    Some(ExprKind::SuffixedInteger(literal)) => {
+                        assert_eq!(literal.literal.raw, raw);
+                        assert_eq!(literal.suffix.text, suffix);
+                    }
+                    other => panic!("expected suffixed integer literal, got {other:?}"),
+                },
+                other => panic!("expected value item, got {other:?}"),
+            }
+        }
+
+        let (_, parsed) = load(
+            "domain Duration over Int\n    literal ms : Int -> Duration\nvalue negativeInt = -1\nvalue negativeFloat = -3.4\nvalue negativeDecimal = -19d\nvalue negativePreciseDecimal = -19.25d\nvalue negativeBigInt = -123n\nvalue negativeDuration = -250ms\nvalue subtract = 4 - 3\n",
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "adjacent negative literals should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        expect_integer(&parsed.module.items[1], "-1");
+        expect_float(&parsed.module.items[2], "-3.4");
+        expect_decimal(&parsed.module.items[3], "-19d");
+        expect_decimal(&parsed.module.items[4], "-19.25d");
+        expect_bigint(&parsed.module.items[5], "-123n");
+        expect_suffixed(&parsed.module.items[6], "-250", "ms");
+        match &parsed.module.items[7] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::Binary { operator, left, right }) => {
+                    assert_eq!(*operator, BinaryOperator::Subtract);
+                    assert!(matches!(left.kind, ExprKind::Integer(ref literal) if literal.raw == "4"));
+                    assert!(matches!(right.kind, ExprKind::Integer(ref literal) if literal.raw == "3"));
+                }
+                other => panic!("expected subtraction expression, got {other:?}"),
+            },
+            other => panic!("expected subtract value item, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parser_rejects_spaced_negative_literal_prefixes() {
+        let (_, parsed) = load("value badInt = - 3\nvalue badFloat = - 3.4\n");
+
+        assert!(parsed.has_errors(), "spaced negative literals should stay invalid");
+    }
+
+    #[test]
+    fn parser_accepts_negative_integer_patterns() {
+        let (_, parsed) = load(
+            "fun isNegativeOne:Bool value:Int => value\n  ||> -1 -> True\n  ||> _ -> False\n",
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "negative integer patterns should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let Item::Fun(item) = &parsed.module.items[0] else {
+            panic!("expected a function item");
+        };
+        let ExprKind::Pipe(pipe) = &item
+            .expr_body()
+            .expect("function should carry a body")
+            .kind
+        else {
+            panic!("expected the function body to remain a pipe");
+        };
+        let PipeStageKind::Case(first_case) = &pipe.stages[0].kind else {
+            panic!("expected first stage to be a case arm");
+        };
+        assert!(matches!(
+            first_case.pattern.kind,
+            PatternKind::Integer(ref literal) if literal.raw == "-1"
+        ));
     }
 
     #[test]

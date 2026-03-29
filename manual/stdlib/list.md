@@ -215,7 +215,7 @@ fun double:Int n:Int =>
     n * 2
 
 value result: List Int = [1, 2, 3]
- |> map double
+  |> map double
 ```
 
 ---
@@ -297,7 +297,7 @@ fun twice: List Int n:Int =>
     [n, n]
 
 value result: List Int = [1, 2, 3]
- |> flatMap twice
+  |> flatMap twice
 ```
 
 ---
@@ -389,7 +389,7 @@ fun isSmall:Bool n:Int =>
     n < 10
 
 value result: List Int = [2, 5, 8, 11, 3]
- |> takeWhile isSmall
+  |> takeWhile isSmall
 ```
 
 ---
@@ -409,7 +409,7 @@ fun isSmall:Bool n:Int =>
     n < 10
 
 value result: List Int = [2, 5, 8, 11, 3]
- |> dropWhile isSmall
+  |> dropWhile isSmall
 ```
 
 ---

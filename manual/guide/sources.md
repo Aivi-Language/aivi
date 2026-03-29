@@ -2,6 +2,8 @@
 
 Sources are how AIVI connects the reactive graph to the outside world. Timers, HTTP requests, keyboard events, file watching, and subprocess events are all modeled as source-backed signals.
 
+Current limitation: source syntax and provider contracts are implemented, but scheduler-owned recurrence execution is still only partially wired. The forms in this guide reflect what the parser/compiler accept today; more advanced recurrence wakeup behavior is still an explicit work item in the runtime/compiler pipeline.
+
 ## Source-backed signals with `@source`
 
 Today, built-in sources are attached with the `@source` decorator immediately before the signal declaration:
@@ -24,7 +26,7 @@ That defines `tick` as a timer-driven signal.
 ## Window input
 
 ```aivi
-data Key =
+type Key =
   | Key Text
 
 @source window.keyDown with {
@@ -42,7 +44,7 @@ value view =
 ## HTTP requests
 
 ```aivi
-data HttpError =
+type HttpError =
   | Timeout
   | DecodeFailure Text
 
@@ -51,11 +53,11 @@ type User = {
     name: Text
 }
 
-data DecodeMode =
+type DecodeMode =
   | Strict
   | Permissive
 
-data Map K V =
+type Map K V =
   | EmptyMap
 
 domain Duration over Int
@@ -85,7 +87,7 @@ value view =
 ## File watching
 
 ```aivi
-data FsWatchEvent =
+type FsWatchEvent =
   | Created
   | Changed
   | Deleted
@@ -104,12 +106,12 @@ value view =
 ## Spawning a process
 
 ```aivi
-data StreamMode =
+type StreamMode =
   | Ignore
   | Lines
   | Bytes
 
-data ProcessEvent =
+type ProcessEvent =
   | Spawned
 
 @source process.spawn "rg" ["TODO", "."] with {
@@ -129,7 +131,7 @@ value view =
 You can also declare a provider contract:
 
 ```aivi
-data Mode =
+type Mode =
   | Stream
 
 domain Duration over Int

@@ -38,16 +38,13 @@
       "settings": { "foreground": "#F0C674" }
     },
     {
-      "name": "Declaration keywords — fun value signal source result view adapter data domain class instance",
+      "name": "Declaration keywords — type fun value signal source domain class instance",
       "scope": [
+        "keyword.declaration.type.aivi",
         "keyword.declaration.fun.aivi",
         "keyword.declaration.value.aivi",
         "keyword.declaration.signal.aivi",
         "keyword.declaration.source.aivi",
-        "keyword.declaration.result.aivi",
-        "keyword.declaration.view.aivi",
-        "keyword.declaration.adapter.aivi",
-        "keyword.declaration.data.aivi",
         "keyword.declaration.domain.aivi",
         "keyword.declaration.class.aivi",
         "keyword.declaration.instance.aivi",

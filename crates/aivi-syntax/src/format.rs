@@ -71,14 +71,9 @@ impl Formatter {
 
         match item {
             Item::Type(item) => lines.extend(self.format_type_item(item)),
-            Item::Data(item) => lines.extend(self.format_data_item(item)),
             Item::Fun(item) => lines.extend(self.format_fun_item(item)),
             Item::Value(item) => lines.extend(self.format_value_item("value", item)),
             Item::Signal(item) => lines.extend(self.format_value_item("signal", item)),
-            Item::Source(item) => lines.extend(self.format_value_item("source", item)),
-            Item::ResultDecl(item) => lines.extend(self.format_value_item("result", item)),
-            Item::View(item) => lines.extend(self.format_value_item("view", item)),
-            Item::Adapter(item) => lines.extend(self.format_value_item("adapter", item)),
             Item::Class(item) => lines.extend(self.format_class_item(item)),
             Item::Instance(item) => lines.extend(self.format_instance_item(item)),
             Item::Domain(item) => lines.extend(self.format_domain_item(item)),
@@ -110,10 +105,7 @@ impl Formatter {
     fn compacts_with_next_item(&self, item: &Item, lines: &[String]) -> bool {
         item.decorators().is_empty()
             && lines.len() == 1
-            && matches!(
-                item,
-                Item::Value(_) | Item::Signal(_) | Item::Source(_) | Item::Export(_)
-            )
+            && matches!(item, Item::Value(_) | Item::Signal(_) | Item::Export(_))
     }
 
     fn format_type_item(&self, item: &NamedItem) -> Vec<String> {
@@ -169,6 +161,12 @@ impl Formatter {
             return vec![header];
         };
 
+        if let ExprKind::Pipe(pipe) = &body.kind {
+            if let Some(lines) = self.format_pipe_with_head_lines(&format!("{header} ="), pipe) {
+                return lines;
+            }
+        }
+
         let force_break =
             self.should_force_expr_break(display_width(&format!("{header} = ")), body);
         let block = self.format_expr_block(body, force_break);
@@ -210,16 +208,7 @@ impl Formatter {
         };
 
         if let ExprKind::Pipe(pipe) = &body.kind {
-            if let Some(head) = &pipe.head {
-                let mut lines = vec![format!("{header} {}", self.format_expr_inline(head, 0))];
-                let stage_lines = self.format_pipe_stage_lines(&pipe.stages);
-                if !stage_lines.is_empty() {
-                    lines.extend(
-                        Block::from_lines(stage_lines)
-                            .indented(PIPE_STAGE_INDENT)
-                            .into_lines(),
-                    );
-                }
+            if let Some(lines) = self.format_pipe_with_head_lines(&header, pipe) {
                 return lines;
             }
         }
@@ -229,47 +218,6 @@ impl Formatter {
         let mut lines = vec![header];
         lines.extend(block.indented(INDENT_WIDTH).into_lines());
         lines
-    }
-
-    fn format_data_item(&self, item: &NamedItem) -> Vec<String> {
-        let mut header = format!("data {}", self.item_name(&item.name));
-        for parameter in &item.type_parameters {
-            header.push(' ');
-            header.push_str(&parameter.text);
-        }
-
-        match item.type_body() {
-            Some(TypeDeclBody::Alias(ty)) => {
-                let force_break =
-                    self.should_force_type_break(display_width(&format!("{header} = ")), ty);
-                let block = self.format_type_block(ty, force_break);
-                if block.is_inline() {
-                    vec![format!(
-                        "{header} = {}",
-                        block.inline_text().expect("inline block")
-                    )]
-                } else {
-                    block.prefixed(&format!("{header} = ")).into_lines()
-                }
-            }
-            Some(TypeDeclBody::Sum(variants)) => {
-                if variants.len() == 1 {
-                    let mut lines = vec![format!("{header} =")];
-                    lines.extend(self.format_sum_block(variants).into_lines());
-                    return lines;
-                }
-                let inline = self.format_sum_inline(variants);
-                let line = format!("{header} = {inline}");
-                if display_width(&line) <= INLINE_LIMIT {
-                    vec![line]
-                } else {
-                    let mut lines = vec![format!("{header} =")];
-                    lines.extend(self.format_sum_block(variants).into_lines());
-                    lines
-                }
-            }
-            None => vec![format!("{header} =")],
-        }
     }
 
     fn format_class_item(&self, item: &NamedItem) -> Vec<String> {
@@ -1293,6 +1241,20 @@ impl Formatter {
         Block::from_lines(lines)
     }
 
+    fn format_pipe_with_head_lines(&self, prefix: &str, pipe: &PipeExpr) -> Option<Vec<String>> {
+        let head = pipe.head.as_ref()?;
+        let mut lines = vec![format!("{prefix} {}", self.format_expr_inline(head, 0))];
+        let stage_lines = self.format_pipe_stage_lines(&pipe.stages);
+        if !stage_lines.is_empty() {
+            lines.extend(
+                Block::from_lines(stage_lines)
+                    .indented(PIPE_STAGE_INDENT)
+                    .into_lines(),
+            );
+        }
+        Some(lines)
+    }
+
     fn format_pipe_stage_lines(&self, stages: &[PipeStage]) -> Vec<String> {
         let mut lines = Vec::new();
         let mut index = 0usize;
@@ -1934,6 +1896,32 @@ mod tests {
     }
 
     #[test]
+    fn formatter_keeps_value_pipe_heads_on_the_declaration_line() {
+        let formatted = format_text(
+            "type User = { active: Bool, age: Int, email: Text }\nvalue seed:User = { active: True, age: 32, email: \"ada@example.com\" }\nvalue activeAdult:(Option User)=\nseed?|>.active and .age > 18\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "type User = {\n",
+                "    active: Bool,\n",
+                "    age: Int,\n",
+                "    email: Text\n",
+                "}\n",
+                "\n",
+                "value seed:User = {\n",
+                "    active: True,\n",
+                "    age: 32,\n",
+                "    email: \"ada@example.com\"\n",
+                "}\n",
+                "\n",
+                "value activeAdult: (Option User) = seed\n",
+                "  ?|> .active and .age > 18\n",
+            )
+        );
+    }
+
+    #[test]
     fn formatter_normalizes_markup_layout_fixture() {
         let formatted = format_fixture("valid/formatting/markup_layout.aivi");
         assert_eq!(
@@ -2161,12 +2149,6 @@ value view =
     fn formatter_keeps_single_variant_type_sums_block_shaped() {
         let formatted = format_text("type Map K V =\n  | EmptyMap\n");
         assert_eq!(formatted, concat!("type Map K V =\n", "  | EmptyMap\n",));
-    }
-
-    #[test]
-    fn formatter_keeps_single_variant_data_sums_block_shaped() {
-        let formatted = format_text("data Mode =\n  | Stream\n");
-        assert_eq!(formatted, concat!("data Mode =\n", "  | Stream\n",));
     }
 
     #[test]

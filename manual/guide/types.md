@@ -6,7 +6,7 @@ AIVI is statically typed. The compiler knows the type of every expression before
 
 | Type | Meaning | Example |
 | --- | --- | --- |
-| `Int` | Whole numbers | `42`, `0`, `0 - 7` |
+| `Int` | Whole numbers | `42`, `0`, `-7` |
 | `Float` | Floating-point numbers | `3.14`, `0.5` |
 | `Bool` | Booleans | `True`, `False` |
 | `Text` | UTF-8 text | `"hello"` |
@@ -34,6 +34,8 @@ value ada:User = {
 }
 ```
 
+Use `type` for named algebraic data types, records, and aliases.
+
 Records carry several named fields at once:
 
 ```aivi
@@ -54,18 +56,18 @@ value shownName =
     }
 ```
 
-## `data` for constructors and tagged values
+## `type` for constructors and tagged values
 
-Use `data` for algebraic data types: enums, tagged unions, and constructor-backed wrappers.
+Use `type` for algebraic data types too: enums, tagged unions, and constructor-backed wrappers.
 
 ```aivi
-data Direction =
+type Direction =
   | Up
   | Down
   | Left
   | Right
 
-data UserId =
+type UserId =
   | UserId Int
 
 value facing = Left
@@ -75,7 +77,7 @@ value currentUser = UserId 7
 Constructors can carry payloads:
 
 ```aivi
-data LoadState =
+type LoadState =
   | NotAsked
   | Loading
   | Loaded Text
@@ -90,7 +92,7 @@ value failedState = Failed "offline"
 Because constructors are part of the type, pattern matching stays precise:
 
 ```aivi
-data LoadState =
+type LoadState =
   | NotAsked
   | Loading
   | Loaded Text
@@ -192,8 +194,8 @@ value message:Text = "Hello, {name}! Your score is {score}."
 | --- | --- |
 | `type Name = Alias` | Plain aliases |
 | `type Name = { ... }` | Records |
-| `data Name = Con1 \| Con2` | Tagged unions |
-| `data Name = Name Wrapped` | Constructor-backed wrappers |
+| `type Name = Con1 \| Con2` | Tagged unions |
+| `type Name = Name Wrapped` | Constructor-backed wrappers |
 | `Option A` | Value may be present or absent |
 | `Result E A` | Success or failure |
 | `List A` | Homogeneous sequences |

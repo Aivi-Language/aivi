@@ -173,7 +173,7 @@ use aivi.prelude (
     between
 )
 
-value absolute:Int = abs - 5
+value absolute:Int = abs (-5)
 value flipped:Int = negate 7
 value even:Bool = isEven 4
 value clamped:Int = clamp 0 100 150
