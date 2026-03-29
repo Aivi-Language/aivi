@@ -545,6 +545,51 @@ Nested constructor patterns are allowed. Exhaustiveness is required for sum matc
 - records: named products
 - lists: homogeneous sequences
 
+### 6.6.1 Record row transforms
+
+Record row transforms derive a new closed record type from an existing closed record type.
+
+Supported forms:
+
+```aivi
+Pick (f1, ..., fn) R
+Omit (f1, ..., fn) R
+Optional (f1, ..., fn) R
+Required (f1, ..., fn) R
+Defaulted (f1, ..., fn) R
+Rename { old1: new1, ..., oldn: newn } R
+```
+
+Normative rules:
+
+- the source `R` must denote a closed record type
+- `Pick` keeps exactly the listed fields
+- `Omit` removes exactly the listed fields
+- `Optional` wraps listed fields in `Option` unless they are already `Option T`
+- `Required` removes at most one `Option` layer from listed fields
+- `Defaulted` produces the same resulting closed shape as `Optional`
+- `Rename` interprets each mapping as `oldName: newName`
+- every referenced source field must exist
+- post-transform field-name collisions are type errors
+
+The feature is purely type-level sugar. After elaboration the compiler operates on an ordinary closed record type; no runtime behavior is introduced.
+
+Record row transforms may also use type-level piping:
+
+```aivi
+User
+|> Omit (isAdmin)
+|> Rename { createdAt: created_at }
+```
+
+This desugars to:
+
+```aivi
+Rename { createdAt: created_at } (Omit (isAdmin) User)
+```
+
+Record row transforms reshape existing fields only. Adding or overriding fields remains the job of type-level record spread.
+
 ## 6.7 Maps and sets
 
 ```aivi

@@ -27,6 +27,7 @@ const EXPR_APPLY_PREC: u8 = 7;
 const EXPR_PROJECTION_PREC: u8 = 8;
 const EXPR_PREFIX_PREC: u8 = 9;
 const TYPE_ARROW_PREC: u8 = 0;
+const TYPE_PIPE_PREC: u8 = 0;
 const TYPE_APPLY_PREC: u8 = 1;
 const PATTERN_APPLY_PREC: u8 = 1;
 
@@ -682,6 +683,9 @@ impl Formatter {
             }
             TypeExprKind::Arrow { .. } => Block::inline(self.format_type_inline(ty, 0)),
             TypeExprKind::Apply { callee, arguments } => {
+                if self.record_row_pipeline_parts(ty).is_some() {
+                    return Block::inline(self.format_type_inline(ty, 0));
+                }
                 self.format_type_apply_block(callee, arguments, force_multiline)
             }
             TypeExprKind::Group(inner) => self.format_type_group_block(inner, force_multiline),
@@ -690,6 +694,17 @@ impl Formatter {
     }
 
     fn format_type_inline(&self, ty: &TypeExpr, parent_prec: u8) -> String {
+        if let Some((source, stages)) = self.record_row_pipeline_parts(ty) {
+            let mut rendered = self.format_type_inline(source, TYPE_PIPE_PREC + 1);
+            for (name, argument) in stages {
+                rendered.push_str(" |> ");
+                rendered.push_str(name);
+                rendered.push(' ');
+                rendered.push_str(&self.format_type_inline(argument, TYPE_APPLY_PREC + 1));
+            }
+            return wrap_if_needed(rendered, TYPE_PIPE_PREC, parent_prec);
+        }
+
         match &ty.kind {
             TypeExprKind::Name(name) => name.text.clone(),
             TypeExprKind::Group(inner) => format!("({})", self.format_type_inline(inner, 0)),
@@ -698,8 +713,8 @@ impl Formatter {
             TypeExprKind::Arrow { parameter, result } => wrap_if_needed(
                 format!(
                     "{} -> {}",
-                    self.format_type_inline(parameter, TYPE_ARROW_PREC + 1),
-                    self.format_type_inline(result, TYPE_ARROW_PREC)
+                    self.format_type_arrow_operand(parameter, true),
+                    self.format_type_arrow_operand(result, false)
                 ),
                 TYPE_ARROW_PREC,
                 parent_prec,
@@ -754,6 +769,63 @@ impl Formatter {
             rendered.push_str(&self.format_type_inline(argument, TYPE_APPLY_PREC + 1));
         }
         rendered
+    }
+
+    fn format_type_arrow_operand(&self, ty: &TypeExpr, parameter: bool) -> String {
+        if self.record_row_pipeline_parts(ty).is_some() {
+            return format!("({})", self.format_type_inline(ty, 0));
+        }
+        let parent_prec = if parameter {
+            TYPE_ARROW_PREC + 1
+        } else {
+            TYPE_ARROW_PREC
+        };
+        self.format_type_inline(ty, parent_prec)
+    }
+
+    fn record_row_pipeline_parts<'a>(
+        &self,
+        ty: &'a TypeExpr,
+    ) -> Option<(&'a TypeExpr, Vec<(&'a str, &'a TypeExpr)>)> {
+        let mut stages = Vec::new();
+        let mut current = self.ungroup_type(ty);
+        while let Some((name, argument, source)) = self.record_row_transform_stage(current) {
+            stages.push((name, argument));
+            current = self.ungroup_type(source);
+        }
+        if stages.is_empty() {
+            return None;
+        }
+        stages.reverse();
+        Some((current, stages))
+    }
+
+    fn record_row_transform_stage<'a>(
+        &self,
+        ty: &'a TypeExpr,
+    ) -> Option<(&'a str, &'a TypeExpr, &'a TypeExpr)> {
+        let TypeExprKind::Apply { callee, arguments } = &ty.kind else {
+            return None;
+        };
+        if arguments.len() != 2 {
+            return None;
+        }
+        let TypeExprKind::Name(name) = &callee.kind else {
+            return None;
+        };
+        matches!(
+            name.text.as_str(),
+            "Pick" | "Omit" | "Optional" | "Required" | "Defaulted" | "Rename"
+        )
+        .then_some((name.text.as_str(), &arguments[0], &arguments[1]))
+    }
+
+    fn ungroup_type<'a>(&self, ty: &'a TypeExpr) -> &'a TypeExpr {
+        let mut current = ty;
+        while let TypeExprKind::Group(inner) = &current.kind {
+            current = inner;
+        }
+        current
     }
 
     fn format_type_group_block(&self, inner: &TypeExpr, force_multiline: bool) -> Block {
@@ -2247,6 +2319,32 @@ value view =
                 "\n",
                 "class Functor F\n",
                 "    map: Applicative G => (A -> G B) -> F A -> G (F B)\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_preserves_record_row_transform_pipelines() {
+        let formatted = format_text(
+            concat!(
+                "type User={id:Int,name:Text,nickname:Option Text,createdAt:Text}\n",
+                "type Patch = User |> Omit (createdAt) |> Optional (name,nickname)\n",
+                "type Public = Rename {createdAt:created_at} (Pick (id,name,createdAt) User)\n",
+            ),
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "type User = {\n",
+                "    id: Int,\n",
+                "    name: Text,\n",
+                "    nickname: Option Text,\n",
+                "    createdAt: Text\n",
+                "}\n",
+                "\n",
+                "type Patch = User |> Omit (createdAt) |> Optional (name, nickname)\n",
+                "\n",
+                "type Public = User |> Pick (id, name, createdAt) |> Rename { createdAt: created_at }\n",
             )
         );
     }

@@ -1645,7 +1645,9 @@ impl<'a> Parser<'a> {
         }
         if self.tokens[index].kind() == TokenKind::Identifier {
             let identifier = self.identifier_from_token(index);
-            if identifier.is_uppercase_initial() {
+            if identifier.is_uppercase_initial()
+                && !is_record_row_transform_name(&identifier.text)
+            {
                 if let Some(next_index) = self.peek_nontrivia(index + 1, end) {
                     if self.tokens[next_index].kind() == TokenKind::PipeTap
                         || (self.starts_type_atom(next_index)
@@ -1710,8 +1712,38 @@ impl<'a> Parser<'a> {
         if !self.depth_enter(cursor) {
             return None;
         }
+        let result = self.parse_type_pipe_expr(cursor, end, stop);
+        self.depth_exit();
+        result
+    }
+
+    fn parse_type_pipe_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: TypeStop,
+    ) -> Option<TypeExpr> {
+        let mut ty = self.parse_type_arrow_expr(cursor, end, stop.with_pipe_transform())?;
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if self.type_should_stop(index, stop) || self.tokens[index].kind() != TokenKind::PipeTransform
+            {
+                break;
+            }
+            *cursor = index + 1;
+            let stage = self.parse_type_arrow_expr(cursor, end, stop.with_pipe_transform())?;
+            ty = self.make_type_apply(stage, ty);
+        }
+        Some(ty)
+    }
+
+    fn parse_type_arrow_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: TypeStop,
+    ) -> Option<TypeExpr> {
         let parameter = self.parse_type_application_expr(cursor, end, stop);
-        let result = parameter.and_then(|parameter| {
+        parameter.and_then(|parameter| {
             let Some(index) = self.peek_nontrivia(*cursor, end) else {
                 return Some(parameter);
             };
@@ -1723,9 +1755,7 @@ impl<'a> Parser<'a> {
             *cursor = index + 1;
             let result = self.parse_type_expr(cursor, end, stop)?;
             Some(self.make_type_arrow(parameter, result))
-        });
-        self.depth_exit();
-        result
+        })
     }
 
     fn parse_type_application_expr(
@@ -3659,6 +3689,7 @@ impl<'a> Parser<'a> {
             TokenKind::RParen => stop.rparen,
             TokenKind::RBrace => stop.rbrace,
             TokenKind::ThinArrow => stop.thin_arrow,
+            TokenKind::PipeTransform => stop.pipe_transform,
             _ => false,
         }
     }
@@ -4275,6 +4306,7 @@ struct TypeStop {
     rparen: bool,
     rbrace: bool,
     thin_arrow: bool,
+    pipe_transform: bool,
 }
 
 impl TypeStop {
@@ -4300,6 +4332,18 @@ impl TypeStop {
             ..Self::default()
         }
     }
+
+    fn with_pipe_transform(mut self) -> Self {
+        self.pipe_transform = true;
+        self
+    }
+}
+
+fn is_record_row_transform_name(name: &str) -> bool {
+    matches!(
+        name,
+        "Pick" | "Omit" | "Optional" | "Required" | "Defaulted" | "Rename"
+    )
 }
 
 fn text_escape_end(text: &str, start: usize, end: usize) -> usize {
@@ -5139,6 +5183,56 @@ instance Eq A -> Eq (Option A)
             panic!("expected constrained instance item");
         };
         assert_eq!(instance.context.len(), 1);
+    }
+
+    #[test]
+    fn parser_desugars_type_level_record_row_pipes_into_nested_applications() {
+        let (_, parsed) = load(
+            concat!(
+                "type User = { id: Int, name: Text, createdAt: Text }\n",
+                "type Public = User |> Pick (id, createdAt) |> Rename { createdAt: created_at }\n",
+            ),
+        );
+        assert!(
+            !parsed.has_errors(),
+            "record row transform types should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let Item::Type(item) = &parsed.module.items[1] else {
+            panic!("expected second item to be a type alias");
+        };
+        let Some(TypeDeclBody::Alias(alias)) = item.type_body() else {
+            panic!("expected type alias body");
+        };
+
+        let TypeExprKind::Apply { callee, arguments } = &alias.kind else {
+            panic!("expected piped transform to desugar into an application");
+        };
+        let TypeExprKind::Name(name) = &callee.kind else {
+            panic!("expected outer transform callee to be a name");
+        };
+        assert_eq!(name.text, "Rename");
+        assert_eq!(arguments.len(), 2);
+        assert!(matches!(arguments[0].kind, TypeExprKind::Record(_)));
+
+        let TypeExprKind::Apply {
+            callee: inner_callee,
+            arguments: inner_arguments,
+        } = &arguments[1].kind
+        else {
+            panic!("expected inner piped transform to stay nested");
+        };
+        let TypeExprKind::Name(inner_name) = &inner_callee.kind else {
+            panic!("expected inner transform callee to be a name");
+        };
+        assert_eq!(inner_name.text, "Pick");
+        assert_eq!(inner_arguments.len(), 2);
+        assert!(matches!(inner_arguments[0].kind, TypeExprKind::Tuple(_)));
+        assert!(matches!(
+            &inner_arguments[1].kind,
+            TypeExprKind::Name(name) if name.text == "User"
+        ));
     }
 
     #[test]

@@ -309,6 +309,7 @@ impl Validator<'_> {
     }
 
     fn validate_types(&mut self) {
+        let mut typing = GateTypeContext::new(self.module);
         for (_, ty) in self.module.types().iter() {
             self.check_span("type node", ty.span);
             match &ty.kind {
@@ -325,6 +326,10 @@ impl Validator<'_> {
                         self.require_type(field.span, "type field", "field type", field.ty);
                     }
                 }
+                TypeKind::RecordTransform { transform, source } => {
+                    self.require_type(ty.span, "type node", "record row transform source", *source);
+                    self.validate_record_row_transform_type(ty.span, transform, *source, &mut typing);
+                }
                 TypeKind::Arrow { parameter, result } => {
                     self.require_type(ty.span, "type node", "parameter type", *parameter);
                     self.require_type(ty.span, "type node", "result type", *result);
@@ -333,6 +338,115 @@ impl Validator<'_> {
                     self.require_type(ty.span, "type node", "type callee", *callee);
                     for argument in arguments.iter() {
                         self.require_type(ty.span, "type node", "type argument", *argument);
+                    }
+                }
+            }
+        }
+    }
+
+    fn validate_record_row_transform_type(
+        &mut self,
+        span: SourceSpan,
+        transform: &crate::RecordRowTransform,
+        source: TypeId,
+        typing: &mut GateTypeContext<'_>,
+    ) {
+        let Some(source_ty) = typing.lower_annotation(source) else {
+            return;
+        };
+        let GateType::Record(fields) = &source_ty else {
+            self.diagnostics.push(
+                Diagnostic::error("record row transforms require a closed record source type")
+                    .with_code(code("record-row-transform-source"))
+                    .with_primary_label(span, "this transform does not target a closed record type"),
+            );
+            return;
+        };
+        let field_names = fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect::<HashSet<_>>();
+        match transform {
+            crate::RecordRowTransform::Pick(labels)
+            | crate::RecordRowTransform::Omit(labels)
+            | crate::RecordRowTransform::Optional(labels)
+            | crate::RecordRowTransform::Required(labels)
+            | crate::RecordRowTransform::Defaulted(labels) => {
+                let mut seen = HashSet::new();
+                for label in labels {
+                    if !seen.insert(label.text()) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record row transform references field `{}` more than once",
+                                label.text()
+                            ))
+                            .with_code(code("duplicate-record-row-field"))
+                            .with_primary_label(label.span(), "remove the duplicate field label"),
+                        );
+                    } else if !field_names.contains(label.text()) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record row transform references unknown field `{}`",
+                                label.text()
+                            ))
+                            .with_code(code("unknown-record-row-field"))
+                            .with_primary_label(label.span(), "this field does not exist on the source record"),
+                        );
+                    }
+                }
+            }
+            crate::RecordRowTransform::Rename(renames) => {
+                let mut seen_sources = HashSet::new();
+                let mut seen_targets = HashSet::new();
+                for rename in renames {
+                    if !seen_sources.insert(rename.from.text()) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record row transform renames field `{}` more than once",
+                                rename.from.text()
+                            ))
+                            .with_code(code("duplicate-record-row-field"))
+                            .with_primary_label(rename.from.span(), "each source field may be renamed at most once"),
+                        );
+                        continue;
+                    }
+                    if !field_names.contains(rename.from.text()) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record row transform references unknown field `{}`",
+                                rename.from.text()
+                            ))
+                            .with_code(code("unknown-record-row-field"))
+                            .with_primary_label(rename.from.span(), "this field does not exist on the source record"),
+                        );
+                    }
+                    if !seen_targets.insert(rename.to.text()) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record row transform renames multiple fields to `{}`",
+                                rename.to.text()
+                            ))
+                            .with_code(code("record-row-rename-collision"))
+                            .with_primary_label(rename.to.span(), "rename targets must be unique"),
+                        );
+                    }
+                }
+                let retained_names = field_names
+                    .iter()
+                    .filter(|name| !seen_sources.contains(**name))
+                    .copied()
+                    .collect::<HashSet<_>>();
+                for rename in renames {
+                    if retained_names.contains(rename.to.text()) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "record row transform renames `{}` to `{}`, which collides with an existing field",
+                                rename.from.text(),
+                                rename.to.text()
+                            ))
+                            .with_code(code("record-row-rename-collision"))
+                            .with_primary_label(rename.to.span(), "this renamed field collides with a retained field"),
+                        );
                     }
                 }
             }
@@ -3626,6 +3740,7 @@ impl Validator<'_> {
                     self.source_option_hir_type_to_actual_type(*result, substitutions)?,
                 ),
             }),
+            TypeKind::RecordTransform { .. } => None,
         }
     }
 
@@ -3885,6 +4000,7 @@ impl Validator<'_> {
                     substitutions,
                 )
             }
+            TypeKind::RecordTransform { .. } => None,
         }
     }
 
@@ -7291,6 +7407,10 @@ impl Validator<'_> {
                                 stack.push(KindBuildFrame::Enter(field.ty));
                             }
                         }
+                        TypeKind::RecordTransform { source, .. } => {
+                            stack.push(KindBuildFrame::Exit(type_id));
+                            stack.push(KindBuildFrame::Enter(*source));
+                        }
                         TypeKind::Arrow { parameter, result } => {
                             stack.push(KindBuildFrame::Exit(type_id));
                             stack.push(KindBuildFrame::Enter(*result));
@@ -7323,6 +7443,7 @@ impl Validator<'_> {
                                 })
                                 .collect::<Vec<_>>(),
                         ),
+                        TypeKind::RecordTransform { source, .. } => lowered[source],
                         TypeKind::Arrow { parameter, result } => {
                             store.arrow_expr(lowered[parameter], lowered[result])
                         }
@@ -9980,6 +10101,9 @@ impl<'a> GateTypeContext<'a> {
                 }
                 Some(GateType::Record(lowered))
             }
+            TypeKind::RecordTransform { transform, source } => {
+                self.lower_poly_record_row_transform_partially(transform, *source, bindings, item_stack)
+            }
             TypeKind::Arrow { parameter, result } => Some(GateType::Arrow {
                 parameter: Box::new(
                     self.lower_poly_type_partially(*parameter, bindings, item_stack)?,
@@ -10127,6 +10251,7 @@ impl<'a> GateTypeContext<'a> {
             }
             (TypeKind::Tuple(_), _)
             | (TypeKind::Record(_), _)
+            | (TypeKind::RecordTransform { .. }, _)
             | (TypeKind::Arrow { .. }, _)
             | (TypeKind::Apply { .. }, TypeBinding::Type(_)) => false,
         }
@@ -10358,6 +10483,27 @@ impl<'a> GateTypeContext<'a> {
         }
 
         match value {
+            IntrinsicValue::TupleConstructor { arity } => {
+                let tuple = GateType::Tuple(
+                    (0..arity)
+                        .map(|index| {
+                            GateType::TypeParameter {
+                                parameter: TypeParameterId::from_raw(index as u32),
+                                name: format!("__tuple_ctor_{arity}_{index}"),
+                            }
+                        })
+                        .collect(),
+                );
+                (0..arity).rev().fold(tuple, |result, index| {
+                    arrow(
+                        GateType::TypeParameter {
+                            parameter: TypeParameterId::from_raw(index as u32),
+                            name: format!("__tuple_ctor_{arity}_{index}"),
+                        },
+                        result,
+                    )
+                })
+            }
             IntrinsicValue::RandomBytes => arrow(
                 primitive(BuiltinType::Int),
                 task(primitive(BuiltinType::Text), primitive(BuiltinType::Bytes)),
@@ -10965,6 +11111,7 @@ impl<'a> GateTypeContext<'a> {
                 substitutions,
                 item_stack,
             ),
+            TypeKind::RecordTransform { .. } => false,
         }
     }
 
@@ -11141,6 +11288,13 @@ impl<'a> GateTypeContext<'a> {
                 }
                 Some(GateType::Record(lowered))
             }
+            TypeKind::RecordTransform { transform, source } => self.lower_record_row_transform(
+                transform,
+                *source,
+                substitutions,
+                item_stack,
+                allow_open_type_parameters,
+            ),
             TypeKind::Arrow { parameter, result } => Some(GateType::Arrow {
                 parameter: Box::new(self.lower_type(
                     *parameter,
@@ -11172,6 +11326,118 @@ impl<'a> GateTypeContext<'a> {
                     item_stack,
                     allow_open_type_parameters,
                 )
+            }
+        }
+    }
+
+    fn lower_record_row_transform(
+        &mut self,
+        transform: &crate::RecordRowTransform,
+        source: TypeId,
+        substitutions: &HashMap<TypeParameterId, GateType>,
+        item_stack: &mut Vec<ItemId>,
+        allow_open_type_parameters: bool,
+    ) -> Option<GateType> {
+        let source = self.lower_type(
+            source,
+            substitutions,
+            item_stack,
+            allow_open_type_parameters,
+        )?;
+        self.apply_record_row_transform(transform, &source)
+    }
+
+    fn apply_record_row_transform(
+        &self,
+        transform: &crate::RecordRowTransform,
+        source: &GateType,
+    ) -> Option<GateType> {
+        let GateType::Record(fields) = source else {
+            return None;
+        };
+        let field_index = fields
+            .iter()
+            .enumerate()
+            .map(|(index, field)| (field.name.as_str(), index))
+            .collect::<HashMap<_, _>>();
+        match transform {
+            crate::RecordRowTransform::Pick(labels) => labels
+                .iter()
+                .map(|label| fields.get(*field_index.get(label.text())?).cloned())
+                .collect::<Option<Vec<_>>>()
+                .map(GateType::Record),
+            crate::RecordRowTransform::Omit(labels) => {
+                let omitted = labels
+                    .iter()
+                    .map(|label| field_index.get(label.text()).copied())
+                    .collect::<Option<HashSet<_>>>()?;
+                Some(GateType::Record(
+                    fields
+                        .iter()
+                        .enumerate()
+                        .filter(|(index, _)| !omitted.contains(index))
+                        .map(|(_, field)| field.clone())
+                        .collect(),
+                ))
+            }
+            crate::RecordRowTransform::Optional(labels)
+            | crate::RecordRowTransform::Defaulted(labels) => Some(GateType::Record(
+                fields
+                    .iter()
+                    .map(|field| {
+                        if labels.iter().any(|label| label.text() == field.name) {
+                            GateRecordField {
+                                name: field.name.clone(),
+                                ty: match &field.ty {
+                                    GateType::Option(_) => field.ty.clone(),
+                                    other => GateType::Option(Box::new(other.clone())),
+                                },
+                            }
+                        } else {
+                            field.clone()
+                        }
+                    })
+                    .collect(),
+            )),
+            crate::RecordRowTransform::Required(labels) => Some(GateType::Record(
+                fields
+                    .iter()
+                    .map(|field| {
+                        if labels.iter().any(|label| label.text() == field.name) {
+                            GateRecordField {
+                                name: field.name.clone(),
+                                ty: match &field.ty {
+                                    GateType::Option(inner) => inner.as_ref().clone(),
+                                    other => other.clone(),
+                                },
+                            }
+                        } else {
+                            field.clone()
+                        }
+                    })
+                    .collect(),
+            )),
+            crate::RecordRowTransform::Rename(renames) => {
+                let renamed = renames
+                    .iter()
+                    .map(|rename| Some((field_index.get(rename.from.text()).copied()?, rename)))
+                    .collect::<Option<HashMap<_, _>>>()?;
+                let mut result = Vec::with_capacity(fields.len());
+                let mut seen = HashSet::with_capacity(fields.len());
+                for (index, field) in fields.iter().enumerate() {
+                    let name = renamed
+                        .get(&index)
+                        .map(|rename| rename.to.text().to_owned())
+                        .unwrap_or_else(|| field.name.clone());
+                    if !seen.insert(name.clone()) {
+                        return None;
+                    }
+                    result.push(GateRecordField {
+                        name,
+                        ty: field.ty.clone(),
+                    });
+                }
+                Some(GateType::Record(result))
             }
         }
     }
@@ -11374,6 +11640,9 @@ impl<'a> GateTypeContext<'a> {
                 }
                 Some(GateType::Record(lowered))
             }
+            TypeKind::RecordTransform { transform, source } => {
+                self.lower_poly_record_row_transform(transform, *source, bindings, item_stack)
+            }
             TypeKind::Arrow { parameter, result } => Some(GateType::Arrow {
                 parameter: Box::new(self.lower_poly_type(*parameter, bindings, item_stack)?),
                 result: Box::new(self.lower_poly_type(*result, bindings, item_stack)?),
@@ -11412,6 +11681,28 @@ impl<'a> GateTypeContext<'a> {
                 }
             }
         }
+    }
+
+    fn lower_poly_record_row_transform(
+        &mut self,
+        transform: &crate::RecordRowTransform,
+        source: TypeId,
+        bindings: &PolyTypeBindings,
+        item_stack: &mut Vec<ItemId>,
+    ) -> Option<GateType> {
+        let source = self.lower_poly_type(source, bindings, item_stack)?;
+        self.apply_record_row_transform(transform, &source)
+    }
+
+    fn lower_poly_record_row_transform_partially(
+        &mut self,
+        transform: &crate::RecordRowTransform,
+        source: TypeId,
+        bindings: &PolyTypeBindings,
+        item_stack: &mut Vec<ItemId>,
+    ) -> Option<GateType> {
+        let source = self.lower_poly_type_partially(source, bindings, item_stack)?;
+        self.apply_record_row_transform(transform, &source)
     }
 
     fn lower_poly_type_reference(
@@ -11469,7 +11760,10 @@ impl<'a> GateTypeContext<'a> {
             TypeKind::Apply { .. } => self
                 .partial_poly_type_constructor_binding(type_id, bindings, &mut item_stack)
                 .map(TypeBinding::Constructor),
-            TypeKind::Tuple(_) | TypeKind::Record(_) | TypeKind::Arrow { .. } => None,
+            TypeKind::Tuple(_)
+            | TypeKind::Record(_)
+            | TypeKind::RecordTransform { .. }
+            | TypeKind::Arrow { .. } => None,
         }
     }
 
@@ -11534,7 +11828,10 @@ impl<'a> GateTypeContext<'a> {
                     }
                 }
             }
-            TypeKind::Tuple(_) | TypeKind::Record(_) | TypeKind::Arrow { .. } => None,
+            TypeKind::Tuple(_)
+            | TypeKind::Record(_)
+            | TypeKind::RecordTransform { .. }
+            | TypeKind::Arrow { .. } => None,
         }
     }
 
@@ -11609,6 +11906,7 @@ impl<'a> GateTypeContext<'a> {
             TypeKind::Apply { callee, arguments } => {
                 self.match_poly_type_application(callee, &arguments, actual, bindings, item_stack)
             }
+            TypeKind::RecordTransform { .. } => false,
         }
     }
 
@@ -11712,6 +12010,7 @@ impl<'a> GateTypeContext<'a> {
                 })
             }
             TypeKind::Tuple(_) | TypeKind::Record(_) | TypeKind::Arrow { .. } => None,
+            TypeKind::RecordTransform { .. } => None,
         }
     }
 
@@ -13940,6 +14239,7 @@ impl SourceOptionExpectedType {
         surface: SourceOptionTypeSurface,
     ) -> Option<Self> {
         match &module.types()[ty].kind {
+            TypeKind::RecordTransform { .. } => None,
             TypeKind::Name(reference) => match reference.resolution.as_ref() {
                 ResolutionState::Resolved(TypeResolution::Builtin(
                     builtin @ (BuiltinType::Int
@@ -15288,6 +15588,38 @@ mod tests {
         validate_module(lowered.module(), ValidationMode::RequireResolvedNames)
     }
 
+    fn lower_module_text(path: &str, text: &str) -> crate::LoweringResult {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, text);
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "test input should parse before module lowering: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let lowered = crate::lower_module(&parsed.module);
+        assert!(
+            !lowered.has_errors(),
+            "test input should lower before module inspection: {:?}",
+            lowered.diagnostics()
+        );
+        lowered
+    }
+
+    fn find_type_alias(module: &Module, name: &str) -> TypeId {
+        module
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &module.items()[*item_id] {
+                Item::Type(item) if item.name.text() == name => match item.body {
+                    TypeItemBody::Alias(alias) => Some(alias),
+                    TypeItemBody::Sum(_) => None,
+                },
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("expected to find type alias `{name}`"))
+    }
+
     #[test]
     fn gate_typing_infers_map_and_set_literals() {
         let mut sources = SourceDatabase::new();
@@ -16032,6 +16364,125 @@ value resultLabel =
                 .iter()
                 .any(|label| label.style == LabelStyle::Primary && !label.message.is_empty()),
             "expected regex validation to keep the parser-provided primary error span",
+        );
+    }
+
+    #[test]
+    fn resolved_validation_elaborates_record_row_transforms_into_closed_record_types() {
+        let lowered = lower_module_text(
+            "record-row-transform-types.aivi",
+            concat!(
+                "type User = { id: Int, name: Text, nickname: Option Text, createdAt: Text }\n",
+                "type Public = Pick (id, name) User\n",
+                "type Patch = Optional (name, nickname) (Omit (createdAt) User)\n",
+                "type Strict = Required (name, nickname) Patch\n",
+                "type Defaults = Rename { createdAt: created_at } (Defaulted (createdAt) User)\n",
+            ),
+        );
+        let module = lowered.module();
+        let mut typing = GateTypeContext::new(module);
+
+        assert_eq!(
+            typing.lower_annotation(find_type_alias(module, "Public")),
+            Some(GateType::Record(vec![
+                GateRecordField {
+                    name: "id".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Int),
+                },
+                GateRecordField {
+                    name: "name".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Text),
+                },
+            ]))
+        );
+        assert_eq!(
+            typing.lower_annotation(find_type_alias(module, "Patch")),
+            Some(GateType::Record(vec![
+                GateRecordField {
+                    name: "id".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Int),
+                },
+                GateRecordField {
+                    name: "name".to_owned(),
+                    ty: GateType::Option(Box::new(GateType::Primitive(BuiltinType::Text))),
+                },
+                GateRecordField {
+                    name: "nickname".to_owned(),
+                    ty: GateType::Option(Box::new(GateType::Primitive(BuiltinType::Text))),
+                },
+            ]))
+        );
+        assert_eq!(
+            typing.lower_annotation(find_type_alias(module, "Strict")),
+            Some(GateType::Record(vec![
+                GateRecordField {
+                    name: "id".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Int),
+                },
+                GateRecordField {
+                    name: "name".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Text),
+                },
+                GateRecordField {
+                    name: "nickname".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Text),
+                },
+            ]))
+        );
+        assert_eq!(
+            typing.lower_annotation(find_type_alias(module, "Defaults")),
+            Some(GateType::Record(vec![
+                GateRecordField {
+                    name: "id".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Int),
+                },
+                GateRecordField {
+                    name: "name".to_owned(),
+                    ty: GateType::Primitive(BuiltinType::Text),
+                },
+                GateRecordField {
+                    name: "nickname".to_owned(),
+                    ty: GateType::Option(Box::new(GateType::Primitive(BuiltinType::Text))),
+                },
+                GateRecordField {
+                    name: "created_at".to_owned(),
+                    ty: GateType::Option(Box::new(GateType::Primitive(BuiltinType::Text))),
+                },
+            ]))
+        );
+    }
+
+    #[test]
+    fn resolved_validation_rejects_invalid_record_row_transforms() {
+        let report = validate_resolved_text(
+            "invalid-record-row-transforms.aivi",
+            concat!(
+                "type User = { id: Int, name: Text }\n",
+                "type Missing = Pick (email) User\n",
+                "type Source = Omit (id) Text\n",
+                "type Collision = Rename { id: handle, name: handle } User\n",
+                "type Shadow = Rename { id: name } User\n",
+            ),
+        );
+        let codes = report
+            .diagnostics()
+            .iter()
+            .filter_map(|diagnostic| diagnostic.code)
+            .collect::<Vec<_>>();
+        assert!(
+            codes.contains(&DiagnosticCode::new("hir", "unknown-record-row-field")),
+            "expected missing-field transform diagnostic, got {:?}",
+            report.diagnostics()
+        );
+        assert!(
+            codes.contains(&DiagnosticCode::new("hir", "record-row-transform-source")),
+            "expected non-record transform source diagnostic, got {:?}",
+            report.diagnostics()
+        );
+        assert!(
+            codes.contains(&DiagnosticCode::new("hir", "record-row-rename-collision")),
+            "expected rename collision diagnostic, got {:?}",
+            report.diagnostics()
         );
     }
 

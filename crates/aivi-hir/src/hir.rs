@@ -1473,10 +1473,31 @@ pub struct TypeNode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecordRowTransform {
+    Pick(Vec<Name>),
+    Omit(Vec<Name>),
+    Optional(Vec<Name>),
+    Required(Vec<Name>),
+    Defaulted(Vec<Name>),
+    Rename(Vec<RecordRowRename>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecordRowRename {
+    pub span: SourceSpan,
+    pub from: Name,
+    pub to: Name,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeKind {
     Name(TypeReference),
     Tuple(AtLeastTwo<TypeId>),
     Record(Vec<TypeField>),
+    RecordTransform {
+        transform: RecordRowTransform,
+        source: TypeId,
+    },
     Arrow {
         parameter: TypeId,
         result: TypeId,

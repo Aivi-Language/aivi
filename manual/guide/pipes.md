@@ -34,6 +34,35 @@ value scaled = 5
 
 `multiply 3` produces a function waiting for the final argument, so the pipeline stays compact.
 
+## Type-level record row pipes
+
+The same `|>` surface is also available in type position for record row transforms.
+
+In a type pipeline, the type on the left becomes the final argument to the transform on the right:
+
+```aivi
+type User = {
+    id: Int,
+    name: Text,
+    createdAt: Text,
+    isAdmin: Bool
+}
+
+type UserPublic =
+    User
+    |> Omit (isAdmin)
+    |> Rename { createdAt: created_at }
+```
+
+That is equivalent to:
+
+```aivi
+type UserPublic =
+    Rename { createdAt: created_at } (Omit (isAdmin) User)
+```
+
+Type-level pipes are currently limited to record row transforms such as `Pick`, `Omit`, `Optional`, `Required`, `Defaulted`, and `Rename`.
+
 ## Pattern matching with `||>`
 
 `||>` is the branching pipe:
