@@ -4520,8 +4520,7 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
             .all(|value| value_matches_layout(program, value, *element)),
         (LayoutKind::Map { key, value }, RuntimeValue::Map(entries)) => {
             entries.iter().all(|(k, v)| {
-                value_matches_layout(program, k, *key)
-                    && value_matches_layout(program, v, *value)
+                value_matches_layout(program, k, *key) && value_matches_layout(program, v, *value)
             })
         }
         (LayoutKind::Record(expected), RuntimeValue::Record(fields)) => {

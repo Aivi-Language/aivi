@@ -534,7 +534,10 @@ fn apply_record_row_transform_import_value_type(
             fields
                 .iter()
                 .map(|field| {
-                    if labels.iter().any(|label| label.text() == field.name.as_ref()) {
+                    if labels
+                        .iter()
+                        .any(|label| label.text() == field.name.as_ref())
+                    {
                         ImportRecordField {
                             name: field.name.clone(),
                             ty: match &field.ty {
@@ -552,7 +555,10 @@ fn apply_record_row_transform_import_value_type(
             fields
                 .iter()
                 .map(|field| {
-                    if labels.iter().any(|label| label.text() == field.name.as_ref()) {
+                    if labels
+                        .iter()
+                        .any(|label| label.text() == field.name.as_ref())
+                    {
                         ImportRecordField {
                             name: field.name.clone(),
                             ty: match &field.ty {

@@ -100,8 +100,12 @@ fn compile_accepts_reactive_update_programs() {
         "expected reactive update compile to succeed, stderr was: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let metadata = fs::metadata(&output_path).expect("reactive update compile should write an object file");
-    assert!(metadata.len() > 0, "reactive update object file should not be empty");
+    let metadata =
+        fs::metadata(&output_path).expect("reactive update compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "reactive update object file should not be empty"
+    );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(

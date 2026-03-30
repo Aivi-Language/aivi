@@ -667,7 +667,9 @@ impl<'a> Parser<'a> {
             });
 
         let arrow_anchor = guard.as_ref().map(|expr| expr.span).unwrap_or(keyword_span);
-        let arrow_present = self.consume_kind(&mut cursor, end, TokenKind::Arrow).is_some();
+        let arrow_present = self
+            .consume_kind(&mut cursor, end, TokenKind::Arrow)
+            .is_some();
         if !arrow_present {
             self.diagnostics.push(
                 Diagnostic::error("reactive update is missing `=>` before its target signal")
@@ -695,7 +697,10 @@ impl<'a> Parser<'a> {
             None
         };
 
-        let target_anchor = target.as_ref().map(|name| name.span).unwrap_or(arrow_anchor);
+        let target_anchor = target
+            .as_ref()
+            .map(|name| name.span)
+            .unwrap_or(arrow_anchor);
         let left_arrow_present = if target.is_some() {
             self.consume_kind(&mut cursor, end, TokenKind::LeftArrow)
                 .is_some()
@@ -1765,8 +1770,7 @@ impl<'a> Parser<'a> {
         }
         if self.tokens[index].kind() == TokenKind::Identifier {
             let identifier = self.identifier_from_token(index);
-            if identifier.is_uppercase_initial()
-                && !is_record_row_transform_name(&identifier.text)
+            if identifier.is_uppercase_initial() && !is_record_row_transform_name(&identifier.text)
             {
                 if let Some(next_index) = self.peek_nontrivia(index + 1, end) {
                     if self.tokens[next_index].kind() == TokenKind::PipeTap
@@ -1845,7 +1849,8 @@ impl<'a> Parser<'a> {
     ) -> Option<TypeExpr> {
         let mut ty = self.parse_type_arrow_expr(cursor, end, stop.with_pipe_transform())?;
         while let Some(index) = self.peek_nontrivia(*cursor, end) {
-            if self.type_should_stop(index, stop) || self.tokens[index].kind() != TokenKind::PipeTransform
+            if self.type_should_stop(index, stop)
+                || self.tokens[index].kind() != TokenKind::PipeTransform
             {
                 break;
             }
@@ -2022,7 +2027,8 @@ impl<'a> Parser<'a> {
             let Some(index) = self.peek_nontrivia(*cursor, end) else {
                 break;
             };
-            if self.expr_should_stop(index, stop) || self.tokens[index].kind() != TokenKind::PatchApply
+            if self.expr_should_stop(index, stop)
+                || self.tokens[index].kind() != TokenKind::PatchApply
             {
                 break;
             }
@@ -2606,7 +2612,10 @@ impl<'a> Parser<'a> {
             segments,
             span: SourceSpan::new(
                 self.source.id(),
-                Span::new(self.tokens[start_index].span().start(), end_span.span().end()),
+                Span::new(
+                    self.tokens[start_index].span().start(),
+                    end_span.span().end(),
+                ),
             ),
         })
     }
@@ -3906,7 +3915,9 @@ impl<'a> Parser<'a> {
 
     fn consume_constraint_separator(&self, cursor: &mut usize, end: usize) -> bool {
         self.consume_kind(cursor, end, TokenKind::Arrow).is_some()
-            || self.consume_kind(cursor, end, TokenKind::ThinArrow).is_some()
+            || self
+                .consume_kind(cursor, end, TokenKind::ThinArrow)
+                .is_some()
     }
 
     fn negative_numeric_literal_token(&self, minus_index: usize, end: usize) -> Option<usize> {
@@ -4915,12 +4926,16 @@ value datePattern = rx"\d{4}-\d{2}-\d{2}"
         let Some(entry) = patch.entries.first() else {
             panic!("expected the patch literal to contain one entry");
         };
-        let [PatchSelectorSegment::Named { name, dotted, .. }] = entry.selector.segments.as_slice() else {
+        let [PatchSelectorSegment::Named { name, dotted, .. }] = entry.selector.segments.as_slice()
+        else {
             panic!("expected one named selector segment");
         };
 
         assert_eq!(name.text, "isAdmin");
-        assert!(!*dotted, "expected the root field selector to stay undotted");
+        assert!(
+            !*dotted,
+            "expected the root field selector to stay undotted"
+        );
     }
 
     #[test]
@@ -5092,7 +5107,10 @@ when ready => total <- result {
         let Item::ReactiveUpdate(item) = &parsed.module.items[1] else {
             panic!("expected reactive update item");
         };
-        assert_eq!(item.target.as_ref().map(|target| target.text.as_str()), Some("total"));
+        assert_eq!(
+            item.target.as_ref().map(|target| target.text.as_str()),
+            Some("total")
+        );
         assert!(matches!(
             item.guard.as_ref().map(|expr| &expr.kind),
             Some(ExprKind::Name(identifier)) if identifier.text == "ready"
@@ -5589,12 +5607,10 @@ instance Eq A -> Eq (Option A)
 
     #[test]
     fn parser_desugars_type_level_record_row_pipes_into_nested_applications() {
-        let (_, parsed) = load(
-            concat!(
-                "type User = { id: Int, name: Text, createdAt: Text }\n",
-                "type Public = User |> Pick (id, createdAt) |> Rename { createdAt: created_at }\n",
-            ),
-        );
+        let (_, parsed) = load(concat!(
+            "type User = { id: Int, name: Text, createdAt: Text }\n",
+            "type Public = User |> Pick (id, createdAt) |> Rename { createdAt: created_at }\n",
+        ));
         assert!(
             !parsed.has_errors(),
             "record row transform types should parse cleanly: {:?}",
@@ -5653,7 +5669,9 @@ instance Eq A -> Eq (Option A)
         let Item::Class(class_item) = &parsed.module.items[0] else {
             panic!("expected class item");
         };
-        let body = class_item.class_body().expect("class item should have a body");
+        let body = class_item
+            .class_body()
+            .expect("class item should have a body");
         assert_eq!(body.members.len(), 1);
         assert_eq!(body.members[0].constraints.len(), 1);
         assert!(

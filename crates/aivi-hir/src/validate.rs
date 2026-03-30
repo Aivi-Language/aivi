@@ -329,7 +329,12 @@ impl Validator<'_> {
                 }
                 TypeKind::RecordTransform { transform, source } => {
                     self.require_type(ty.span, "type node", "record row transform source", *source);
-                    self.validate_record_row_transform_type(ty.span, transform, *source, &mut typing);
+                    self.validate_record_row_transform_type(
+                        ty.span,
+                        transform,
+                        *source,
+                        &mut typing,
+                    );
                 }
                 TypeKind::Arrow { parameter, result } => {
                     self.require_type(ty.span, "type node", "parameter type", *parameter);
@@ -359,7 +364,10 @@ impl Validator<'_> {
             self.diagnostics.push(
                 Diagnostic::error("record row transforms require a closed record source type")
                     .with_code(code("record-row-transform-source"))
-                    .with_primary_label(span, "this transform does not target a closed record type"),
+                    .with_primary_label(
+                        span,
+                        "this transform does not target a closed record type",
+                    ),
             );
             return;
         };
@@ -391,7 +399,10 @@ impl Validator<'_> {
                                 label.text()
                             ))
                             .with_code(code("unknown-record-row-field"))
-                            .with_primary_label(label.span(), "this field does not exist on the source record"),
+                            .with_primary_label(
+                                label.span(),
+                                "this field does not exist on the source record",
+                            ),
                         );
                     }
                 }
@@ -407,7 +418,10 @@ impl Validator<'_> {
                                 rename.from.text()
                             ))
                             .with_code(code("duplicate-record-row-field"))
-                            .with_primary_label(rename.from.span(), "each source field may be renamed at most once"),
+                            .with_primary_label(
+                                rename.from.span(),
+                                "each source field may be renamed at most once",
+                            ),
                         );
                         continue;
                     }
@@ -418,7 +432,10 @@ impl Validator<'_> {
                                 rename.from.text()
                             ))
                             .with_code(code("unknown-record-row-field"))
-                            .with_primary_label(rename.from.span(), "this field does not exist on the source record"),
+                            .with_primary_label(
+                                rename.from.span(),
+                                "this field does not exist on the source record",
+                            ),
                         );
                     }
                     if !seen_targets.insert(rename.to.text()) {
@@ -974,8 +991,18 @@ impl Validator<'_> {
                     }
                     for update in &item.reactive_updates {
                         self.check_span("reactive update clause", update.span);
-                        self.require_expr(update.span, "reactive update clause", "guard", update.guard);
-                        self.require_expr(update.span, "reactive update clause", "body", update.body);
+                        self.require_expr(
+                            update.span,
+                            "reactive update clause",
+                            "guard",
+                            update.guard,
+                        );
+                        self.require_expr(
+                            update.span,
+                            "reactive update clause",
+                            "body",
+                            update.body,
+                        );
                     }
                     self.check_signal_dependencies(item.header.span, &item.signal_dependencies);
                     self.validate_reactive_update_dependencies(item_id, item);
@@ -5027,8 +5054,9 @@ impl Validator<'_> {
                                     crate::PatchInstructionKind::Remove => {}
                                 }
                                 for segment in entry.selector.segments.into_iter().rev() {
-                                    if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
-                                        segment
+                                    if let crate::PatchSelectorSegment::BracketExpr {
+                                        expr, ..
+                                    } = segment
                                     {
                                         work.push(CaseExhaustivenessWork::Expr {
                                             expr,
@@ -5051,8 +5079,9 @@ impl Validator<'_> {
                                     crate::PatchInstructionKind::Remove => {}
                                 }
                                 for segment in entry.selector.segments.into_iter().rev() {
-                                    if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
-                                        segment
+                                    if let crate::PatchSelectorSegment::BracketExpr {
+                                        expr, ..
+                                    } = segment
                                     {
                                         work.push(CaseExhaustivenessWork::Expr {
                                             expr,
@@ -10245,9 +10274,10 @@ impl<'a> GateTypeContext<'a> {
                 }
                 Some(GateType::Record(lowered))
             }
-            TypeKind::RecordTransform { transform, source } => {
-                self.lower_poly_record_row_transform_partially(transform, *source, bindings, item_stack)
-            }
+            TypeKind::RecordTransform { transform, source } => self
+                .lower_poly_record_row_transform_partially(
+                    transform, *source, bindings, item_stack,
+                ),
             TypeKind::Arrow { parameter, result } => Some(GateType::Arrow {
                 parameter: Box::new(
                     self.lower_poly_type_partially(*parameter, bindings, item_stack)?,
@@ -10838,9 +10868,7 @@ impl<'a> GateTypeContext<'a> {
                 GateType::Option(Box::new(primitive(BuiltinType::Text)))
             }
             IntrinsicValue::XdgDataDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
-            IntrinsicValue::XdgConfigDirs => {
-                GateType::List(Box::new(primitive(BuiltinType::Text)))
-            }
+            IntrinsicValue::XdgConfigDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
         }
     }
 
@@ -15593,7 +15621,8 @@ pub(crate) fn walk_expr_tree(
                                 crate::PatchInstructionKind::Remove => {}
                             }
                             for segment in entry.selector.segments.iter().rev() {
-                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                    segment
                                 {
                                     work.push(ExprWalkWork::Expr {
                                         expr: *expr,
@@ -15620,7 +15649,8 @@ pub(crate) fn walk_expr_tree(
                                 crate::PatchInstructionKind::Remove => {}
                             }
                             for segment in entry.selector.segments.iter().rev() {
-                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                    segment
                                 {
                                     work.push(ExprWalkWork::Expr {
                                         expr: *expr,
@@ -15937,11 +15967,13 @@ mod tests {
             .diagnostics()
             .iter()
             .filter(|diagnostic| {
-                diagnostic.code == Some(DiagnosticCode::new("hir", "reactive-update-self-reference"))
+                diagnostic.code
+                    == Some(DiagnosticCode::new("hir", "reactive-update-self-reference"))
             })
             .count();
         assert_eq!(
-            self_reference_count, 3,
+            self_reference_count,
+            3,
             "expected reactive update guard/body self-references to be diagnosed explicitly, got diagnostics: {:?}",
             report.diagnostics()
         );

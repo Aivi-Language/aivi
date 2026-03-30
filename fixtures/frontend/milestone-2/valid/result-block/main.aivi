@@ -12,7 +12,7 @@ value combined: Result Text Int =
 
 value rejected: Result Text Int =
     result {
-        left <- requirePositive -1
+        left <- requirePositive (-1)
         right <- requirePositive 22
     }
 

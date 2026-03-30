@@ -4,13 +4,13 @@ use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
     DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FunctionParam,
     Identifier, InstanceItem, InstanceMember, Item, MapExpr, MarkupAttribute, MarkupAttributeValue,
-    MarkupNode, Module, NamedItem, PatchBlock, PatchEntry, PatchInstruction,
-    PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern, PatternKind, PipeExpr,
-    PipeStage, PipeStageKind, ProjectionPath, QualifiedName, ReactiveUpdateItem, RecordExpr,
-    RecordField, RecordPatternField, ResultBinding, ResultBlockExpr, SourceDecorator,
-    SourceProviderContractItem, SourceProviderContractMember,
-    SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextLiteral, TextSegment,
-    TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+    MarkupNode, Module, NamedItem, PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind,
+    PatchSelector, PatchSelectorSegment, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind,
+    ProjectionPath, QualifiedName, ReactiveUpdateItem, RecordExpr, RecordField, RecordPatternField,
+    ResultBinding, ResultBlockExpr, SourceDecorator, SourceProviderContractItem,
+    SourceProviderContractMember, SourceProviderContractSchemaMember, SuffixedIntegerLiteral,
+    TextLiteral, TextSegment, TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant,
+    UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -220,7 +220,8 @@ impl Formatter {
             return vec![format!("{header} <-")];
         };
 
-        let force_break = self.should_force_expr_break(display_width(&format!("{header} <- ")), body);
+        let force_break =
+            self.should_force_expr_break(display_width(&format!("{header} <- ")), body);
         let block = self.format_expr_block(body, force_break);
         if block.is_inline() {
             vec![format!(
@@ -2490,13 +2491,11 @@ value view =
 
     #[test]
     fn formatter_preserves_record_row_transform_pipelines() {
-        let formatted = format_text(
-            concat!(
-                "type User={id:Int,name:Text,nickname:Option Text,createdAt:Text}\n",
-                "type Patch = User |> Omit (createdAt) |> Optional (name,nickname)\n",
-                "type Public = Rename {createdAt:created_at} (Pick (id,name,createdAt) User)\n",
-            ),
-        );
+        let formatted = format_text(concat!(
+            "type User={id:Int,name:Text,nickname:Option Text,createdAt:Text}\n",
+            "type Patch = User |> Omit (createdAt) |> Optional (name,nickname)\n",
+            "type Public = Rename {createdAt:created_at} (Pick (id,name,createdAt) User)\n",
+        ));
         assert_eq!(
             formatted,
             concat!(

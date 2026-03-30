@@ -1487,7 +1487,7 @@ value loaded =
 
 For `Signal`, `&|>` builds a derived signal whose dependencies are the union of member dependencies, observing the latest stable upstream values per scheduler tick. This is applicative combination, not monadic binding.
 
-Current status note: `&|>` is well specified at the parser/HIR/typechecking layer, but typed-core lowering still blocks general executable use sites.
+Current status note: executable lowering accepts the checked builtin applicative carriers currently wired through typed core: `List`, `Option`, `Result`, `Validation`, `Signal`, and `Task`. Unsupported user-authored carriers or unresolved class evidence remain typed-core lowering failures rather than implicit fallback.
 
 ---
 
@@ -2466,7 +2466,7 @@ Domains do not introduce implicit coercions to or from the carrier.
 
 ### 20.12 Diagnostics
 
-Diagnostics should name the domain rather than erasing it to the carrier.
+Primary diagnostics and rendered expected/actual types must prefer the domain name rather than erasing it to the carrier. Carrier details may appear only in secondary notes, debug output, or when the compiler cannot prove a domain identity for the failing value.
 
 For literal/decode/operator failures, diagnostics should explain whether the failing surface was:
 
@@ -2531,7 +2531,16 @@ Diagnostics must:
 - identify the failed invariant
 - point at the user-visible cause
 - avoid leaking backend IR details unless requested in debug output
-- suggest the intended construct when the misuse is obvious
+- include a suggestion only for the minimum required misuse set below, or for another case where the reporting phase can prove the intended construct without heuristic guessing
+
+Minimum required suggestion set:
+
+- using a `Signal` where an ordinary `value`/function expression is required must suggest declaring or moving the computation to `signal`
+- omitting a record field without satisfiable `Default` evidence must suggest importing or defining the relevant `Default` evidence
+- mixing outer constructors in one `&|>` applicative cluster must suggest rewriting the members so they share one common outer applicative constructor
+- using an unsupported widget/event pair in the executable GTK slice must suggest the nearest supported widget/event surface or removing the unsupported attribute
+
+The phase that first proves one of these misuses must attach the suggestion; later phases may preserve or refine it but must not silently drop it.
 
 Examples:
 

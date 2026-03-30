@@ -783,6 +783,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 None,
                 None,
                 PipeLoweringMode::PrefixBeforeSchedulerBoundary,
+                None,
             )
             .ok()?;
         let lowered_body = if prefix.stages.is_empty() {
@@ -1201,6 +1202,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 ambient,
                 Some(&ty),
                 PipeLoweringMode::Full,
+                None,
             )?),
             ExprKind::Regex(_)
             | ExprKind::Markup(_)
@@ -1295,8 +1297,16 @@ impl<'a> GeneralExprElaborator<'a> {
         ambient: Option<&GateType>,
         final_expected: Option<&GateType>,
         mode: PipeLoweringMode,
+        inherited_result_block_error: Option<&GateType>,
     ) -> Result<GateRuntimePipeExpr, Vec<GeneralExprBlocker>> {
-        let head = self.lower_expr(pipe.head, env, ambient, None)?;
+        let result_block_error = self.result_block_error_type(
+            final_expected,
+            pipe.result_block_desugaring
+                .then_some(inherited_result_block_error)
+                .flatten(),
+        );
+        let head =
+            self.lower_result_block_source_expr(pipe.head, env, ambient, result_block_error)?;
         let mut current = head.ty.clone();
         let mut pipe_env = env.clone();
         let stages = pipe.stages.iter().collect::<Vec<_>>();
@@ -1403,6 +1413,7 @@ impl<'a> GeneralExprElaborator<'a> {
                         &pipe_env,
                         &current,
                         stage_expected.as_ref(),
+                        result_block_error,
                     )?;
                     current = lowered_stage.result_subject.clone();
                     lowered.push(lowered_stage);
@@ -1509,6 +1520,7 @@ impl<'a> GeneralExprElaborator<'a> {
         env: &GateExprEnv,
         subject: &GateType,
         expected: Option<&GateType>,
+        result_block_error: Option<&GateType>,
     ) -> Result<GateRuntimePipeStage, Vec<GeneralExprBlocker>> {
         let mut arms = Vec::with_capacity(stages.len());
         let mut result_subject = None::<GateType>;
@@ -1520,11 +1532,12 @@ impl<'a> GeneralExprElaborator<'a> {
                 continue;
             };
             let branch_env = self.case_branch_env(env, *pattern, &branch_subject);
-            let lowered_body = match self.lower_body_expr(
+            let lowered_body = match self.lower_result_block_body_expr(
                 *body,
                 &branch_env,
                 Some(&branch_subject),
-                branch_expected.as_ref(),
+                branch_expected.as_ref().or(result_subject.as_ref()),
+                result_block_error,
             ) {
                 Ok(body) => body,
                 Err(errors) => {
@@ -1680,6 +1693,124 @@ impl<'a> GeneralExprElaborator<'a> {
             },
         };
         Ok(lowered)
+    }
+
+    fn result_block_error_type<'b>(
+        &self,
+        final_expected: Option<&'b GateType>,
+        inherited_error: Option<&'b GateType>,
+    ) -> Option<&'b GateType> {
+        inherited_error.or_else(|| match final_expected {
+            Some(GateType::Result { error, .. }) => Some(error.as_ref()),
+            _ => None,
+        })
+    }
+
+    fn ok_constructor_argument(&self, expr_id: ExprId) -> Option<ExprId> {
+        let ExprKind::Apply { callee, arguments } = &self.module.exprs()[expr_id].kind else {
+            return None;
+        };
+        let ExprKind::Name(reference) = &self.module.exprs()[*callee].kind else {
+            return None;
+        };
+        matches!(
+            reference.resolution.as_ref(),
+            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Ok))
+        )
+        .then_some(*arguments.first())
+    }
+
+    fn lowered_pipe_result_type(&self, pipe: &GateRuntimePipeExpr) -> GateType {
+        pipe.stages
+            .last()
+            .map(|stage| stage.result_subject.clone())
+            .unwrap_or_else(|| pipe.head.ty.clone())
+    }
+
+    fn lower_result_block_source_expr(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        result_block_error: Option<&GateType>,
+    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        let Some(result_block_error) = result_block_error else {
+            return self.lower_expr(expr_id, env, ambient, None);
+        };
+        if let Some(value_expr) = self.ok_constructor_argument(expr_id) {
+            let value_ty = self.expr_type(value_expr, env, ambient, None)?;
+            let result_ty = GateType::Result {
+                error: Box::new(result_block_error.clone()),
+                value: Box::new(value_ty),
+            };
+            return self.lower_expr(expr_id, env, ambient, Some(&result_ty));
+        }
+        let expr = self.module.exprs()[expr_id].clone();
+        let ExprKind::Pipe(pipe) = &expr.kind else {
+            return self.lower_expr(expr_id, env, ambient, None);
+        };
+        if !pipe.result_block_desugaring {
+            return self.lower_expr(expr_id, env, ambient, None);
+        }
+        let lowered = self.lower_pipe_expr(
+            pipe,
+            env,
+            ambient,
+            None,
+            PipeLoweringMode::Full,
+            Some(result_block_error),
+        )?;
+        let ty = self.lowered_pipe_result_type(&lowered);
+        Ok(GateRuntimeExpr {
+            span: expr.span,
+            ty,
+            kind: GateRuntimeExprKind::Pipe(lowered),
+        })
+    }
+
+    fn lower_result_block_body_expr(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        expected: Option<&GateType>,
+        result_block_error: Option<&GateType>,
+    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        if let Some(expected) = expected {
+            return self.lower_body_expr(expr_id, env, ambient, Some(expected));
+        }
+        let Some(result_block_error) = result_block_error else {
+            return self.lower_body_expr(expr_id, env, ambient, None);
+        };
+        if let Some(value_expr) = self.ok_constructor_argument(expr_id) {
+            let value_ty = self.expr_type(value_expr, env, ambient, None)?;
+            let result_ty = GateType::Result {
+                error: Box::new(result_block_error.clone()),
+                value: Box::new(value_ty),
+            };
+            return self.lower_body_expr(expr_id, env, ambient, Some(&result_ty));
+        }
+        let expr = self.module.exprs()[expr_id].clone();
+        let ExprKind::Pipe(pipe) = &expr.kind else {
+            return self.lower_body_expr(expr_id, env, ambient, None);
+        };
+        if !pipe.result_block_desugaring {
+            return self.lower_body_expr(expr_id, env, ambient, None);
+        }
+        let lowered = self.lower_pipe_expr(
+            pipe,
+            env,
+            ambient,
+            None,
+            PipeLoweringMode::Full,
+            Some(result_block_error),
+        )?;
+        let ty = self.lowered_pipe_result_type(&lowered);
+        Ok(GateRuntimeExpr {
+            span: expr.span,
+            ty,
+            kind: GateRuntimeExprKind::Pipe(lowered),
+        })
     }
 
     fn lower_function_pipe_body(

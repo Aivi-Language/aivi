@@ -307,9 +307,6 @@ impl<'a> TypeChecker<'a> {
             let Some(Item::Use(use_item)) = module.items().get(item_id) else {
                 continue;
             };
-            if use_item.module.to_string() != "aivi.defaults" {
-                continue;
-            }
             for import_id in use_item.imports.iter().copied() {
                 let import = &module.imports()[import_id];
                 match import.imported_name.text() {
@@ -1289,13 +1286,9 @@ impl<'a> TypeChecker<'a> {
                 Some(expected),
                 value_stack,
             )),
-            ExprKind::PatchLiteral(patch) => Some(self.check_patch_literal_expr(
-                expr_id,
-                &patch,
-                env,
-                expected,
-                value_stack,
-            )),
+            ExprKind::PatchLiteral(patch) => {
+                Some(self.check_patch_literal_expr(expr_id, &patch, env, expected, value_stack))
+            }
             ExprKind::AmbientSubject => None,
             ExprKind::Integer(_)
             | ExprKind::Float(_)
@@ -1986,7 +1979,9 @@ impl<'a> TypeChecker<'a> {
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
-        let target_ty = expected.cloned().or_else(|| self.inferred_expr_shape(target, env));
+        let target_ty = expected
+            .cloned()
+            .or_else(|| self.inferred_expr_shape(target, env));
         let target_ok = match target_ty.as_ref() {
             Some(subject) => self.check_expr(target, env, Some(subject), value_stack),
             None => self.check_expr(target, env, None, value_stack),
@@ -1996,7 +1991,9 @@ impl<'a> TypeChecker<'a> {
             None => self.check_patch_block_children(patch, env, value_stack),
         };
         let result_ok = match (expected, target_ty.as_ref()) {
-            (Some(expected), Some(actual)) => self.check_result_type(expr_id, Some(expected), actual),
+            (Some(expected), Some(actual)) => {
+                self.check_result_type(expr_id, Some(expected), actual)
+            }
             _ => true,
         };
         target_ok && patch_ok && result_ok
@@ -2287,7 +2284,9 @@ impl<'a> TypeChecker<'a> {
                     self.emit_unknown_patch_constructor(span, constructor, subject);
                     return None;
                 };
-                let Some(variant) = variants.iter().find(|variant| variant.name.text() == constructor)
+                let Some(variant) = variants
+                    .iter()
+                    .find(|variant| variant.name.text() == constructor)
                 else {
                     self.emit_unknown_patch_constructor(span, constructor, subject);
                     return None;
@@ -2311,7 +2310,9 @@ impl<'a> TypeChecker<'a> {
                     .copied()
                     .zip(arguments.iter().cloned())
                     .collect::<HashMap<_, _>>();
-                let Some(field_ty) = self.typing.lower_hir_type(variant.fields[0], &substitutions)
+                let Some(field_ty) = self
+                    .typing
+                    .lower_hir_type(variant.fields[0], &substitutions)
                 else {
                     self.emit_unknown_patch_constructor(span, constructor, subject);
                     return None;
@@ -2359,23 +2360,23 @@ impl<'a> TypeChecker<'a> {
         }
         match ty {
             GateType::Option(_) => Err(
-                "`Option A` only satisfies `Default` here via `use aivi.defaults (Option)` or a same-module `Default` instance"
+                "`Option A` only satisfies `Default` here via imported default evidence for `Option` or a same-module `Default` instance"
                     .to_owned(),
             ),
             GateType::Primitive(BuiltinType::Text) => Err(
-                "`Text` only satisfies `Default` here via `use aivi.defaults (defaultText)` or a same-module `Default` instance"
+                "`Text` only satisfies `Default` here via an imported `defaultText` binding or a same-module `Default` instance"
                     .to_owned(),
             ),
             GateType::Primitive(BuiltinType::Int) => Err(
-                "`Int` only satisfies `Default` here via `use aivi.defaults (defaultInt)` or a same-module `Default` instance"
+                "`Int` only satisfies `Default` here via an imported `defaultInt` binding or a same-module `Default` instance"
                     .to_owned(),
             ),
             GateType::Primitive(BuiltinType::Bool) => Err(
-                "`Bool` only satisfies `Default` here via `use aivi.defaults (defaultBool)` or a same-module `Default` instance"
+                "`Bool` only satisfies `Default` here via an imported `defaultBool` binding or a same-module `Default` instance"
                     .to_owned(),
             ),
             _ => Err(
-                "resolved-HIR default checking currently accepts same-module `Default` instances and the compiler-known `aivi.defaults` imports only"
+                "resolved-HIR default checking currently accepts same-module `Default` instances and compiler-known imported default evidence only"
                     .to_owned(),
             ),
         }
@@ -3477,7 +3478,10 @@ impl<'a> TypeChecker<'a> {
                 "{selector_kind} cannot be applied to `{subject}` in a patch selector"
             ))
             .with_code(code("invalid-patch-selector"))
-            .with_primary_label(span, "this selector segment is not valid for the current focus")
+            .with_primary_label(
+                span,
+                "this selector segment is not valid for the current focus",
+            )
             .with_note(note),
         );
     }
@@ -4510,6 +4514,52 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_metadata_backed_imported_default_values_without_defaults_module_path() {
+        let mut module = lowered_module_text(
+            "rewritten-imported-default-values.aivi",
+            "use aivi.defaults (defaultText as emptyText, defaultInt, defaultBool as disabled)\n\
+             type Settings = {\n\
+                 title: Text,\n\
+                 retries: Int,\n\
+                 enabled: Bool,\n\
+                 label: Text\n\
+             }\n\
+             value title = \"AIVI\"\n\
+             value settings:Settings = { title }\n",
+        );
+        rewrite_first_use_module_path(&mut module, &["custom", "defaults"]);
+
+        let report = typecheck_module(&module);
+        assert!(
+            report.is_ok(),
+            "expected imported default metadata to satisfy record elision independent of use-path spelling, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_metadata_backed_option_default_bundle_without_defaults_module_path() {
+        let mut module = lowered_module_text(
+            "rewritten-option-default-bundle.aivi",
+            "use aivi.defaults (Option)\n\
+             type User = {\n\
+                 name: Text,\n\
+                 nickname: Option Text\n\
+             }\n\
+             value name = \"Ada\"\n\
+             value user:User = { name }\n",
+        );
+        rewrite_first_use_module_path(&mut module, &["custom", "defaults"]);
+
+        let report = typecheck_module(&module);
+        assert!(
+            report.is_ok(),
+            "expected imported Option default bundle metadata to satisfy record elision independent of use-path spelling, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
     fn typecheck_elaborates_same_module_default_instances_into_explicit_fields() {
         let (report, module) = typecheck_and_elaborate_text(
             "same-module-default-instance-hir.aivi",
@@ -5366,5 +5416,25 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
                 (import.local_name.text() == local_name).then_some(import_id)
             })
             .expect("expected import binding to exist")
+    }
+
+    fn rewrite_first_use_module_path(module: &mut Module, segments: &[&str]) {
+        let use_item_id = module
+            .root_items()
+            .iter()
+            .copied()
+            .find(|item_id| matches!(module.items()[*item_id], Item::Use(_)))
+            .expect("expected use item to exist");
+        let Item::Use(use_item) = module
+            .arenas
+            .items
+            .get_mut(use_item_id)
+            .expect("use item should remain addressable")
+        else {
+            unreachable!("selected root item should stay a use item");
+        };
+        use_item.module =
+            crate::NamePath::from_vec(segments.iter().map(|segment| test_name(segment)).collect())
+                .expect("rewritten use path should stay valid");
     }
 }

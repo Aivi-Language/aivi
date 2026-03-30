@@ -291,7 +291,9 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                     if let Some(source_input) = binding.source_input {
                         push_unique_signal(&mut resolved, source_input.as_signal());
                     }
-                    if let Err(err) = graph_builder.define_derived(*derived, resolved.iter().copied()) {
+                    if let Err(err) =
+                        graph_builder.define_derived(*derived, resolved.iter().copied())
+                    {
                         errors.push(HirRuntimeAdapterError::GraphBuild(err));
                         continue;
                     }
@@ -1427,7 +1429,10 @@ fn collect_direct_signal_dependencies(
         }
         match &module.exprs()[expr].kind {
             hir::ExprKind::Name(reference) => {
-                if let Some(signal) = public_signal_names.get(&reference.path.to_string()).copied() {
+                if let Some(signal) = public_signal_names
+                    .get(&reference.path.to_string())
+                    .copied()
+                {
                     push_unique_signal(&mut resolved, signal);
                 }
             }

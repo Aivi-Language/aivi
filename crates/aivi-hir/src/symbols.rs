@@ -115,7 +115,11 @@ fn format_type_depth(module: &Module, id: TypeId, depth: u8) -> String {
                     format!("Required ({}) {}", format_symbol_labels(labels), source_str)
                 }
                 crate::RecordRowTransform::Defaulted(labels) => {
-                    format!("Defaulted ({}) {}", format_symbol_labels(labels), source_str)
+                    format!(
+                        "Defaulted ({}) {}",
+                        format_symbol_labels(labels),
+                        source_str
+                    )
                 }
                 crate::RecordRowTransform::Rename(renames) => format!(
                     "Rename {{ {} }} {}",

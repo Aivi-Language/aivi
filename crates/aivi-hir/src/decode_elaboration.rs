@@ -581,7 +581,10 @@ impl<'a> DecodeTypeLowerer<'a> {
                 fields
                     .iter()
                     .map(|field| {
-                        if labels.iter().any(|label| label.text() == field.name().as_str()) {
+                        if labels
+                            .iter()
+                            .any(|label| label.text() == field.name().as_str())
+                        {
                             let ty = match self.types.node(field.ty()) {
                                 aivi_typing::TypeNode::Option(_) => field.ty(),
                                 _ => self.types.option(field.ty()),
@@ -597,7 +600,10 @@ impl<'a> DecodeTypeLowerer<'a> {
                 fields
                     .iter()
                     .map(|field| {
-                        if labels.iter().any(|label| label.text() == field.name().as_str()) {
+                        if labels
+                            .iter()
+                            .any(|label| label.text() == field.name().as_str())
+                        {
                             let ty = match self.types.node(field.ty()) {
                                 aivi_typing::TypeNode::Option(inner) => *inner,
                                 _ => field.ty(),
@@ -639,12 +645,15 @@ impl<'a> DecodeTypeLowerer<'a> {
             }
         };
         self.types
-            .record(Closedness::Closed, lowered.ok_or_else(|| {
-                DecodeTypeLoweringError::invalid_shape(
-                    span,
-                    ShapeErrorKind::DuplicateRecordField("invalid".into()),
-                )
-            })?)
+            .record(
+                Closedness::Closed,
+                lowered.ok_or_else(|| {
+                    DecodeTypeLoweringError::invalid_shape(
+                        span,
+                        ShapeErrorKind::DuplicateRecordField("invalid".into()),
+                    )
+                })?,
+            )
             .map_err(|error| DecodeTypeLoweringError::invalid_shape(span, error.kind().clone()))
     }
 

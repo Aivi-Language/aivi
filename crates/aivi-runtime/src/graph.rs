@@ -201,7 +201,7 @@ impl SignalGraph {
             Some(SignalKind::Input) => Ok(()),
             Some(SignalKind::Derived(_)) | Some(SignalKind::Reactive(_)) => {
                 Err(InputValidationError::NotAnInput {
-                raw: input.as_raw(),
+                    raw: input.as_raw(),
                 })
             }
             None => Err(InputValidationError::UnknownHandle {
@@ -738,7 +738,8 @@ impl SignalGraphBuilder {
                         .into_iter()
                         .enumerate()
                         .map(|(source_order, clause)| {
-                            let handle = ReactiveClauseHandle::from_raw(reactive_clauses.len() as u32);
+                            let handle =
+                                ReactiveClauseHandle::from_raw(reactive_clauses.len() as u32);
                             reactive_clauses.push(ReactiveClauseSpec {
                                 target: signal,
                                 source_order,
@@ -1003,9 +1004,7 @@ mod tests {
                 )],
             )
             .unwrap();
-        builder
-            .define_derived(doubled, [total])
-            .unwrap();
+        builder.define_derived(doubled, [total]).unwrap();
 
         let graph = builder.build().unwrap();
         let reactive = graph

@@ -4647,6 +4647,38 @@ value chosen:Option Int =
     }
 
     #[test]
+    fn lowers_higher_kinded_class_instance_fixture_into_core_ir() {
+        let lowered = lower_fixture("milestone-2/valid/higher-kinded-class-instances/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "higher-kinded class/instance fixture should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+        let hir_validation = aivi_hir::validate_module(
+            lowered.module(),
+            aivi_hir::ValidationMode::RequireResolvedNames,
+        );
+        assert!(
+            hir_validation.is_ok(),
+            "higher-kinded class/instance fixture should validate before typed-core lowering: {:?}",
+            hir_validation.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        validate_module(&core).expect("lowered core module should validate");
+
+        let hidden_members = core
+            .items()
+            .iter()
+            .filter(|(_, item)| item.name.starts_with("instance#") && item.body.is_some())
+            .count();
+        assert!(
+            hidden_members >= 2,
+            "expected typed-core lowering to synthesize hidden items for higher-kinded instance members"
+        );
+    }
+
+    #[test]
     fn lowers_prelude_foldable_reduce_calls_into_builtin_intrinsics() {
         let lowered = lower_text(
             "typed-core-foldable-reduce.aivi",
@@ -5174,5 +5206,120 @@ value retried : Task Int Int =
             2,
             "result block bindings should lower into Ok/Err case arms"
         );
+    }
+
+    #[test]
+    fn lowers_result_blocks_with_ok_sources_and_nested_bool_tails() {
+        let lowered = lower_text(
+            "result-block-ok-sources.aivi",
+            "value promoted: Result Text Bool =\n\
+             \x20\x20\x20\x20result {\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20number <- Ok 20\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20number > 0\n\
+             \x20\x20\x20\x20}\n\
+             \n\
+             value nestedPromoted: Result Text Bool =\n\
+             \x20\x20\x20\x20result {\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20flag <- result {\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20base <- Ok 20\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20base > 0\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20}\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20flag\n\
+             \x20\x20\x20\x20}\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "result block ok-source sample should lower cleanly before typed-core lowering: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module())
+            .expect("typed-core lowering should accept ok-source result blocks");
+        validate_module(&core).expect("lowered core module should validate");
+    }
+
+    #[test]
+    fn lowers_applicative_cluster_fixture_into_core_ir() {
+        let lowered = lower_fixture("milestone-2/valid/applicative-clusters/main.aivi");
+        assert!(
+            !lowered.has_errors(),
+            "applicative cluster fixture should lower cleanly before typed-core lowering: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        validate_module(&core).expect("lowered core module should validate");
+
+        let validated_user = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "validatedUser")
+            .map(|(id, _)| id)
+            .expect("expected validatedUser signal item");
+        let ItemKind::Signal(_) = &core.items()[validated_user].kind else {
+            panic!("validatedUser should remain a signal item");
+        };
+        let body = core.items()[validated_user]
+            .body
+            .expect("validatedUser should carry a lowered body");
+        let crate::ExprKind::Apply {
+            callee: outer_callee,
+            arguments: outer_arguments,
+        } = &core.exprs()[body].kind
+        else {
+            panic!("validatedUser should lower to nested applicative apply expressions");
+        };
+        assert_eq!(outer_arguments.len(), 2);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Apply(crate::BuiltinApplyCarrier::Signal),
+        )) = &core.exprs()[*outer_callee].kind
+        else {
+            panic!("validatedUser should end in the builtin Signal apply intrinsic");
+        };
+
+        let crate::ExprKind::Apply {
+            callee: middle_callee,
+            arguments: middle_arguments,
+        } = &core.exprs()[outer_arguments[0]].kind
+        else {
+            panic!("validatedUser should keep nesting Signal apply intrinsics");
+        };
+        assert_eq!(middle_arguments.len(), 2);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Apply(crate::BuiltinApplyCarrier::Signal),
+        )) = &core.exprs()[*middle_callee].kind
+        else {
+            panic!("validatedUser should use builtin Signal apply for the second member");
+        };
+
+        let crate::ExprKind::Apply {
+            callee: inner_callee,
+            arguments: inner_arguments,
+        } = &core.exprs()[middle_arguments[0]].kind
+        else {
+            panic!("validatedUser should use builtin Signal apply for the first member");
+        };
+        assert_eq!(inner_arguments.len(), 2);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Apply(crate::BuiltinApplyCarrier::Signal),
+        )) = &core.exprs()[*inner_callee].kind
+        else {
+            panic!("validatedUser should begin with the builtin Signal apply intrinsic");
+        };
+
+        let crate::ExprKind::Apply {
+            callee: pure_callee,
+            arguments: pure_arguments,
+        } = &core.exprs()[inner_arguments[0]].kind
+        else {
+            panic!("validatedUser should seed the cluster with Applicative.pure");
+        };
+        assert_eq!(pure_arguments.len(), 1);
+        let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Signal),
+        )) = &core.exprs()[*pure_callee].kind
+        else {
+            panic!("validatedUser should seed the cluster with the builtin Signal pure intrinsic");
+        };
     }
 }

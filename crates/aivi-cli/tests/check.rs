@@ -97,10 +97,7 @@ fn check_reports_reactive_update_self_reference_from_hir() {
     let dir = TempDir::new("check-reactive-update-self-reference");
     let path = dir.write(
         "main.aivi",
-        concat!(
-            "signal total = 0\n",
-            "when total > 0 => total <- 1\n",
-        ),
+        concat!("signal total = 0\n", "when total > 0 => total <- 1\n",),
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("check")

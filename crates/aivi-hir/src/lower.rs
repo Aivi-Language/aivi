@@ -18,13 +18,14 @@ use crate::{
     MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl, MockDecorator, Module,
     Name, NamePath, PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector,
     PatchSelectorSegment, Pattern, PatternId, PatternKind, PipeExpr, PipeStage, PipeStageKind,
-    ProjectionBase, ReactiveUpdateClause, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
-    RecordRowRename, RecordRowTransform, RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind,
-    RegexLiteral, ResolutionState, ShowControl, SignalItem, SourceDecorator,
-    SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
-    TermResolution, TestDecorator, TextFragment, TextInterpolation, TextLiteral, TextSegment,
-    TypeField, TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId,
-    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
+    ProjectionBase, ReactiveUpdateClause, RecordExpr, RecordExprField, RecordFieldSurface,
+    RecordPatternField, RecordRowRename, RecordRowTransform, RecurrenceWakeupDecorator,
+    RecurrenceWakeupDecoratorKind, RegexLiteral, ResolutionState, ShowControl, SignalItem,
+    SourceDecorator, SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral,
+    TermReference, TermResolution, TestDecorator, TextFragment, TextInterpolation, TextLiteral,
+    TextSegment, TypeField, TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter,
+    TypeParameterId, TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem,
+    WithControl,
 };
 
 pub struct LoweringResult {
@@ -702,7 +703,10 @@ impl<'a> Lowerer<'a> {
                 Item::Signal(item) => item.name.text() == name,
                 Item::Class(item) => item.name.text() == name,
                 Item::Domain(item) => item.name.text() == name,
-                Item::SourceProviderContract(_) | Item::Instance(_) | Item::Use(_) | Item::Export(_) => false,
+                Item::SourceProviderContract(_)
+                | Item::Instance(_)
+                | Item::Use(_)
+                | Item::Export(_) => false,
             })
     }
 
@@ -2887,8 +2891,7 @@ impl<'a> Lowerer<'a> {
                 rest: rest.as_deref().map(|rest| self.lower_pattern(rest)),
             },
             syn::PatternKind::Record(fields) => {
-                let mut seen_fields =
-                    HashMap::<String, SourceSpan>::with_capacity(fields.len());
+                let mut seen_fields = HashMap::<String, SourceSpan>::with_capacity(fields.len());
                 let mut lowered_fields = Vec::with_capacity(fields.len());
                 for field in fields {
                     if let Some(previous_span) =
@@ -2915,8 +2918,7 @@ impl<'a> Lowerer<'a> {
                         .as_ref()
                         .map(|pattern| self.lower_pattern(pattern))
                         .unwrap_or_else(|| {
-                            let binding_name =
-                                self.make_name(&field.label.text, field.label.span);
+                            let binding_name = self.make_name(&field.label.text, field.label.span);
                             let binding = self.alloc_binding(Binding {
                                 span: field.label.span,
                                 name: binding_name.clone(),
@@ -3034,8 +3036,7 @@ impl<'a> Lowerer<'a> {
                         .as_ref()
                         .map(|value| self.lower_expr_pattern(value))
                         .unwrap_or_else(|| {
-                            let binding_name =
-                                self.make_name(&field.label.text, field.label.span);
+                            let binding_name = self.make_name(&field.label.text, field.label.span);
                             let binding = self.alloc_binding(Binding {
                                 span: field.label.span,
                                 name: binding_name.clone(),
@@ -3181,8 +3182,7 @@ impl<'a> Lowerer<'a> {
                 })
             }
             syn::TypeExprKind::Record(fields) => {
-                let mut seen_fields =
-                    HashMap::<String, SourceSpan>::with_capacity(fields.len());
+                let mut seen_fields = HashMap::<String, SourceSpan>::with_capacity(fields.len());
                 let mut lowered_fields = Vec::with_capacity(fields.len());
                 for field in fields {
                     if let Some(previous_span) =
@@ -3340,7 +3340,9 @@ impl<'a> Lowerer<'a> {
             syn::TypeExprKind::Name(name) => vec![self.make_name(&name.text, name.span)],
             syn::TypeExprKind::Tuple(elements) => elements
                 .iter()
-                .flat_map(|element| self.lower_record_row_labels(transform_span, element, transform_name))
+                .flat_map(|element| {
+                    self.lower_record_row_labels(transform_span, element, transform_name)
+                })
                 .collect(),
             _ => {
                 self.emit_error(
@@ -4539,7 +4541,8 @@ impl<'a> Lowerer<'a> {
                                 crate::PatchInstructionKind::Remove => {}
                             }
                             for segment in entry.selector.segments.iter().rev() {
-                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                    segment
                                 {
                                     work.push(AmbientProjectionWork::Expr {
                                         expr: *expr,
@@ -4566,7 +4569,8 @@ impl<'a> Lowerer<'a> {
                                 crate::PatchInstructionKind::Remove => {}
                             }
                             for segment in entry.selector.segments.iter().rev() {
-                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                    segment
                                 {
                                     work.push(AmbientProjectionWork::Expr {
                                         expr: *expr,
@@ -7417,7 +7421,9 @@ mod tests {
                     } if labels.len() == 1
                 ));
             }
-            other => panic!("expected `Patch` to lower to a nested record transform, found {other:?}"),
+            other => {
+                panic!("expected `Patch` to lower to a nested record transform, found {other:?}")
+            }
         }
 
         let Item::Type(snake) = find_named_item(module, "Snake") else {
@@ -10210,8 +10216,7 @@ signal updates : Signal Int
         else {
             panic!("expected rejected outer Ok branch");
         };
-        let ExprKind::Pipe(inner_rejected_pipe) =
-            &lowered.module().exprs()[*outer_ok_body].kind
+        let ExprKind::Pipe(inner_rejected_pipe) = &lowered.module().exprs()[*outer_ok_body].kind
         else {
             panic!("expected outer Ok branch to continue into inner pipe for the second binding");
         };

@@ -1114,14 +1114,7 @@ fn lower_gate_runtime_expr_with_purity(
                     }
                     ExprKind::Cluster(cluster_id) => {
                         let lowered = lower_cluster_as_gate_runtime_expr(
-                            module,
-                            cluster_id,
-                            expr.span,
-                            ty,
-                            env,
-                            ambient,
-                            typing,
-                            purity,
+                            module, cluster_id, expr.span, ty, env, ambient, typing, purity,
                         )?;
                         results.push(lowered);
                     }
@@ -1479,14 +1472,9 @@ fn lower_cluster_as_gate_runtime_expr(
         gate_arrow_type(finalizer_payload_parameters.clone(), result_payload.clone());
 
     let finalizer = match spine.pure_head() {
-        crate::ApplicativeSpineHead::Expr(finalizer_id) => lower_gate_runtime_expr_with_purity(
-            module,
-            finalizer_id,
-            env,
-            ambient,
-            typing,
-            purity,
-        )?,
+        crate::ApplicativeSpineHead::Expr(finalizer_id) => {
+            lower_gate_runtime_expr_with_purity(module, finalizer_id, env, ambient, typing, purity)?
+        }
         crate::ApplicativeSpineHead::TupleConstructor(arity) => GateRuntimeExpr {
             span,
             ty: finalizer_ty.clone(),
@@ -1499,10 +1487,14 @@ fn lower_cluster_as_gate_runtime_expr(
     let mut current_inner = finalizer_ty.clone();
     let pure_result = cluster_rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-    let pure_ref =
-        lower_builtin_class_member_ref(module, span, "Applicative", "pure", vec![
-            current_inner.clone()
-        ], pure_result.clone())?;
+    let pure_ref = lower_builtin_class_member_ref(
+        module,
+        span,
+        "Applicative",
+        "pure",
+        vec![current_inner.clone()],
+        pure_result.clone(),
+    )?;
     let mut current = GateRuntimeExpr {
         span,
         ty: pure_result,
@@ -1521,9 +1513,8 @@ fn lower_cluster_as_gate_runtime_expr(
             .cloned()
             .collect();
         current_inner = gate_arrow_type(remaining, result_payload.clone());
-        let apply_result =
-            cluster_rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
-                .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
+        let apply_result = cluster_rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
+            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
         let apply_ref = lower_builtin_class_member_ref(
             module,
             span,
@@ -1559,7 +1550,10 @@ fn cluster_applicative_payload_type(ty: &GateType) -> Option<GateType> {
 }
 
 /// Re-wrap a new payload inside the same applicative constructor as `applicative`.
-fn cluster_rewrap_applicative_gate_type(applicative: &GateType, payload: GateType) -> Option<GateType> {
+fn cluster_rewrap_applicative_gate_type(
+    applicative: &GateType,
+    payload: GateType,
+) -> Option<GateType> {
     match applicative {
         GateType::List(_) => Some(GateType::List(Box::new(payload))),
         GateType::Option(_) => Some(GateType::Option(Box::new(payload))),
@@ -1598,8 +1592,10 @@ fn ambient_class_member_resolution_gate(
     class_name: &str,
     member_name: &str,
 ) -> Option<ClassMemberResolution> {
-    module.ambient_items().iter().find_map(|item_id| {
-        match &module.items()[*item_id] {
+    module
+        .ambient_items()
+        .iter()
+        .find_map(|item_id| match &module.items()[*item_id] {
             Item::Class(class_item) if class_item.name.text() == class_name => class_item
                 .members
                 .iter()
@@ -1609,8 +1605,7 @@ fn ambient_class_member_resolution_gate(
                     member_index,
                 }),
             _ => None,
-        }
-    })
+        })
 }
 
 /// Build a synthetic `GateRuntimeExpr` reference to a builtin class member
@@ -1624,9 +1619,8 @@ fn lower_builtin_class_member_ref(
     argument_types: Vec<GateType>,
     result_type: GateType,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
-    let resolution =
-        ambient_class_member_resolution_gate(module, class_name, member_name)
-            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
+    let resolution = ambient_class_member_resolution_gate(module, class_name, member_name)
+        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
     let reference = TermReference::resolved(
         NamePath::from_vec(vec![
             Name::new(member_name, span).expect("class member names are valid identifiers"),
@@ -1634,8 +1628,9 @@ fn lower_builtin_class_member_ref(
         .expect("single-segment class member path is valid"),
         TermResolution::ClassMember(resolution),
     );
-    let dispatch = resolve_class_member_dispatch(module, &reference, &argument_types, Some(&result_type))
-        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
+    let dispatch =
+        resolve_class_member_dispatch(module, &reference, &argument_types, Some(&result_type))
+            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
     let callee_ty = gate_arrow_type(argument_types, result_type);
     Ok(GateRuntimeExpr {
         span,
@@ -1643,7 +1638,6 @@ fn lower_builtin_class_member_ref(
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)),
     })
 }
-
 
 /// a domain member.  If so, schedules `BuildDomainBinary` and two `Eval` tasks
 /// on `work` and returns `true`.  Returns `false` if the expression is not a

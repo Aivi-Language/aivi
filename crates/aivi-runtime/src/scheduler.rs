@@ -638,14 +638,13 @@ where
                                 evaluator.try_evaluate(signal.as_derived(), inputs)?,
                             )
                         }
-                        crate::graph::SignalKind::Reactive(spec) => self
-                            .evaluate_reactive_signal(
-                                evaluator,
-                                signal,
-                                spec,
-                                &committed_values,
-                                &pending,
-                            )?,
+                        crate::graph::SignalKind::Reactive(spec) => self.evaluate_reactive_signal(
+                            evaluator,
+                            signal,
+                            spec,
+                            &committed_values,
+                            &pending,
+                        )?,
                     };
                     pending[signal.index()] = next;
                 }
@@ -975,7 +974,9 @@ impl<'a, V> DependencyValues<'a, V> {
     }
 
     pub fn value_for(&self, signal: SignalHandle) -> Option<&'a V> {
-        self.contains_signal(signal).then(|| self.resolve(signal)).flatten()
+        self.contains_signal(signal)
+            .then(|| self.resolve(signal))
+            .flatten()
     }
 
     pub fn updated(&self, index: usize) -> bool {
@@ -1129,7 +1130,10 @@ mod tests {
             inputs: DependencyValues<'_, i32>,
         ) -> DerivedSignalUpdate<i32> {
             assert_eq!(signal, self.total);
-            let left = inputs.value_for(self.left).copied().expect("left should be present");
+            let left = inputs
+                .value_for(self.left)
+                .copied()
+                .expect("left should be present");
             let right = inputs
                 .value_for(self.right)
                 .copied()
@@ -1327,7 +1331,10 @@ mod tests {
         );
         assert_eq!(scheduler.current_value(total).unwrap().copied(), Some(105));
         assert_eq!(
-            scheduler.current_value(doubled.as_signal()).unwrap().copied(),
+            scheduler
+                .current_value(doubled.as_signal())
+                .unwrap()
+                .copied(),
             Some(210)
         );
     }
@@ -1386,7 +1393,10 @@ mod tests {
         scheduler.tick(&mut evaluator);
         assert_eq!(scheduler.current_value(total).unwrap().copied(), Some(10));
         assert_eq!(
-            scheduler.current_value(doubled.as_signal()).unwrap().copied(),
+            scheduler
+                .current_value(doubled.as_signal())
+                .unwrap()
+                .copied(),
             Some(20)
         );
 
@@ -1409,7 +1419,10 @@ mod tests {
         );
         assert_eq!(scheduler.current_value(total).unwrap().copied(), Some(10));
         assert_eq!(
-            scheduler.current_value(doubled.as_signal()).unwrap().copied(),
+            scheduler
+                .current_value(doubled.as_signal())
+                .unwrap()
+                .copied(),
             Some(20)
         );
     }

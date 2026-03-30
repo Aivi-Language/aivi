@@ -40,7 +40,10 @@ pub fn collect_signal_dependencies_for_exprs(
     module: &Module,
     exprs: impl IntoIterator<Item = ExprId>,
 ) -> Vec<ItemId> {
-    collect_signal_dependencies(module, exprs.into_iter().map(DependencyWork::Expr).collect())
+    collect_signal_dependencies(
+        module,
+        exprs.into_iter().map(DependencyWork::Expr).collect(),
+    )
 }
 
 pub(crate) fn expr_signal_dependencies<I>(module: &Module, roots: I) -> Vec<ItemId>
@@ -302,7 +305,8 @@ fn collect_signal_dependencies(module: &Module, mut work: Vec<DependencyWork>) -
                                 crate::PatchInstructionKind::Remove => {}
                             }
                             for segment in entry.selector.segments.iter().rev() {
-                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                    segment
                                 {
                                     work.push(DependencyWork::Expr(*expr));
                                 }
@@ -319,7 +323,8 @@ fn collect_signal_dependencies(module: &Module, mut work: Vec<DependencyWork>) -
                                 crate::PatchInstructionKind::Remove => {}
                             }
                             for segment in entry.selector.segments.iter().rev() {
-                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } = segment
+                                if let crate::PatchSelectorSegment::BracketExpr { expr, .. } =
+                                    segment
                                 {
                                     work.push(DependencyWork::Expr(*expr));
                                 }

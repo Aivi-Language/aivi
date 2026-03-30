@@ -169,7 +169,10 @@ pub async fn semantic_tokens_full(
     }))
 }
 
-fn soft_or_hard_token_type_index(token: aivi_syntax::Token, source: &aivi_base::SourceFile) -> Option<u32> {
+fn soft_or_hard_token_type_index(
+    token: aivi_syntax::Token,
+    source: &aivi_base::SourceFile,
+) -> Option<u32> {
     match token.kind() {
         TokenKind::Identifier if token.text(source) == "when" => Some(IDX_KEYWORD),
         // Let TextMate grammar handle identifier coloring — it uses specific scopes
