@@ -9,7 +9,33 @@ type DbError =
 
 type SortDir = Asc | Desc
 
+type Connection = {
+    database: Text
+}
+
+type TableRef A = {
+    name: Text,
+    conn: Connection,
+    changed: Signal Unit
+}
+
 type DbRow = (Dict Text Text)
+
+type DbParam = {
+    kind: Text,
+    bool: Option Bool,
+    int: Option Int,
+    float: Option Float,
+    decimal: Option Decimal,
+    bigInt: Option BigInt,
+    text: Option Text,
+    bytes: Option Bytes
+}
+
+type DbStatement = {
+    sql: Text,
+    arguments: List DbParam
+}
 
 type DbPageOpts = {
     limit: Int,
@@ -18,4 +44,4 @@ type DbPageOpts = {
 
 type DbTask A = (Task DbError A)
 
-export (DbError, SchemaMismatch, QueryFailed, ConstraintViolation, NestedTransaction, ConnectionFailed, SortDir, Asc, Desc, DbRow, DbPageOpts, DbTask)
+export (DbError, SchemaMismatch, QueryFailed, ConstraintViolation, NestedTransaction, ConnectionFailed, SortDir, Asc, Desc, Connection, TableRef, DbRow, DbParam, DbStatement, DbPageOpts, DbTask)

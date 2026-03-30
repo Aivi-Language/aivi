@@ -32,6 +32,7 @@ use crate::{
         ExternalSourceValue, SourceDecodeError, decode_external, encode_runtime_json,
         parse_json_text, validate_supported_program,
     },
+    task_executor::execute_runtime_value_with_stdio,
 };
 
 /// Scheduler-owned mailbox routing table.
@@ -266,6 +267,19 @@ impl SourceProviderContext {
             .to_string_lossy()
             .into_owned()
             .into_boxed_str()
+    }
+
+    fn normalize_sqlite_database_text(&self, database: &str) -> Box<str> {
+        if database == ":memory:" || database.starts_with("file:") {
+            return database.into();
+        }
+        let path = PathBuf::from(database);
+        let resolved = if path.is_absolute() {
+            path
+        } else {
+            self.cwd.join(path)
+        };
+        resolved.to_string_lossy().into_owned().into_boxed_str()
     }
 }
 
@@ -736,6 +750,43 @@ impl SourceProviderManager {
                     stop,
                 }
             }
+            RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbConnect) => {
+                let plan = DbConnectPlan::parse(instance, &self.context, config)?;
+                let stop = Arc::new(AtomicBool::new(false));
+                let handle = spawn_db_connect_worker(instance, port, plan, stop.clone());
+                self.thread_handles
+                    .lock()
+                    .unwrap()
+                    .entry(instance)
+                    .or_default()
+                    .push(handle);
+                ActiveProviderState::Passive {
+                    provider: config.provider.clone(),
+                    stop,
+                }
+            }
+            RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbLive) => {
+                let plan = DbLivePlan::parse(instance, config)?;
+                let stop = Arc::new(AtomicBool::new(false));
+                let delay = match action_kind {
+                    SourceLifecycleActionKind::Activate => Duration::ZERO,
+                    SourceLifecycleActionKind::Reconfigure => plan.debounce,
+                    SourceLifecycleActionKind::Suspend => {
+                        unreachable!("start_provider only runs for activate/reconfigure actions")
+                    }
+                };
+                let handle = spawn_db_live_worker(instance, port, plan, delay, stop.clone());
+                self.thread_handles
+                    .lock()
+                    .unwrap()
+                    .entry(instance)
+                    .or_default()
+                    .push(handle);
+                ActiveProviderState::Passive {
+                    provider: config.provider.clone(),
+                    stop,
+                }
+            }
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbusOwnName) => {
                 let plan = DbusOwnNamePlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
@@ -1163,6 +1214,112 @@ impl RequestResultPlan {
     }
 }
 
+#[derive(Clone)]
+struct DbConnectPlan {
+    database: Box<str>,
+    result: RequestResultPlan,
+}
+
+impl DbConnectPlan {
+    fn parse(
+        instance: SourceInstanceId,
+        context: &SourceProviderContext,
+        config: &EvaluatedSourceConfig,
+    ) -> Result<Self, SourceProviderExecutionError> {
+        let provider = BuiltinSourceProvider::DbConnect;
+        validate_argument_count(instance, provider, config, 1)?;
+        let database =
+            parse_db_connect_argument(instance, provider, 0, context, &config.arguments[0])?;
+        for option in &config.options {
+            match option.option_name.as_ref() {
+                "pool" => {
+                    let _ =
+                        parse_positive_int(instance, provider, &option.option_name, &option.value)?;
+                }
+                "activeWhen" => {}
+                _ => {
+                    return Err(SourceProviderExecutionError::UnsupportedOption {
+                        instance,
+                        provider,
+                        option_name: option.option_name.clone(),
+                    });
+                }
+            }
+        }
+        let result = RequestResultPlan::parse(instance, provider, config)?;
+        db_connect_success_value(instance, &result, &database)?;
+        db_connect_error_value(instance, &result, "db.connect probe failure")?;
+        Ok(Self { database, result })
+    }
+}
+
+#[derive(Clone)]
+struct DbLivePlan {
+    task: RuntimeValue,
+    debounce: Duration,
+    result: Option<RequestResultPlan>,
+}
+
+impl DbLivePlan {
+    fn parse(
+        instance: SourceInstanceId,
+        config: &EvaluatedSourceConfig,
+    ) -> Result<Self, SourceProviderExecutionError> {
+        let provider = BuiltinSourceProvider::DbLive;
+        validate_argument_count(instance, provider, config, 1)?;
+        let task = parse_task_argument(instance, provider, 0, &config.arguments[0])?;
+        let mut debounce = Duration::ZERO;
+        for option in &config.options {
+            match option.option_name.as_ref() {
+                "debounce" => {
+                    debounce = parse_option_duration(
+                        instance,
+                        provider,
+                        &option.option_name,
+                        &option.value,
+                    )?;
+                }
+                "refreshOn" | "activeWhen" => {}
+                "optimistic" => {
+                    if parse_bool(instance, provider, &option.option_name, &option.value)? {
+                        return Err(SourceProviderExecutionError::UnsupportedOption {
+                            instance,
+                            provider,
+                            option_name: option.option_name.clone(),
+                        });
+                    }
+                }
+                "onRollback" => {
+                    return Err(SourceProviderExecutionError::UnsupportedOption {
+                        instance,
+                        provider,
+                        option_name: option.option_name.clone(),
+                    });
+                }
+                _ => {
+                    return Err(SourceProviderExecutionError::UnsupportedOption {
+                        instance,
+                        provider,
+                        option_name: option.option_name.clone(),
+                    });
+                }
+            }
+        }
+        let result = if config.decode.is_some() {
+            let result = RequestResultPlan::parse(instance, provider, config)?;
+            db_live_query_error_value(instance, &result, "db.live query failure")?;
+            Some(result)
+        } else {
+            None
+        };
+        Ok(Self {
+            task,
+            debounce,
+            result,
+        })
+    }
+}
+
 impl ErrorPlan {
     fn from_step(
         instance: SourceInstanceId,
@@ -1265,6 +1422,7 @@ enum TextSourceErrorKind {
     Decode,
     Missing,
     Request,
+    Query,
     Connect,
     Mailbox,
 }
@@ -1276,6 +1434,7 @@ impl TextSourceErrorKind {
             Self::Decode => &DECODE_ERROR_CANDIDATES,
             Self::Missing => &MISSING_ERROR_CANDIDATES,
             Self::Request => &REQUEST_ERROR_CANDIDATES,
+            Self::Query => &QUERY_ERROR_CANDIDATES,
             Self::Connect => &CONNECT_ERROR_CANDIDATES,
             Self::Mailbox => &MAILBOX_ERROR_CANDIDATES,
         }
@@ -1289,6 +1448,7 @@ impl fmt::Display for TextSourceErrorKind {
             Self::Decode => f.write_str("decode"),
             Self::Missing => f.write_str("missing-file"),
             Self::Request => f.write_str("request"),
+            Self::Query => f.write_str("query"),
             Self::Connect => f.write_str("connect"),
             Self::Mailbox => f.write_str("mailbox"),
         }
@@ -1347,7 +1507,15 @@ const REQUEST_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
     ErrorCandidate::text("Error"),
 ];
 
-const CONNECT_ERROR_CANDIDATES: [ErrorCandidate; 3] = [
+const QUERY_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+    ErrorCandidate::text("QueryFailed"),
+    ErrorCandidate::text("ConnectionFailed"),
+    ErrorCandidate::text("RequestFailure"),
+    ErrorCandidate::text("Error"),
+];
+
+const CONNECT_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+    ErrorCandidate::text("ConnectionFailed"),
     ErrorCandidate::text("ConnectFailure"),
     ErrorCandidate::text("NetworkFailure"),
     ErrorCandidate::text("Error"),
@@ -3229,6 +3397,66 @@ fn finish_dbus_startup(
     }
 }
 
+fn spawn_db_connect_worker(
+    instance: SourceInstanceId,
+    port: DetachedRuntimePublicationPort,
+    plan: DbConnectPlan,
+    stop: Arc<AtomicBool>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        let Ok(value) = execute_db_connect(instance, &plan) else {
+            return;
+        };
+        let Ok(value) = execute_runtime_value_with_stdio(value) else {
+            return;
+        };
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+    })
+}
+
+fn spawn_db_live_worker(
+    instance: SourceInstanceId,
+    port: DetachedRuntimePublicationPort,
+    plan: DbLivePlan,
+    delay: Duration,
+    stop: Arc<AtomicBool>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        if !delay.is_zero() && sleep_with_cancellation(delay, &port) {
+            return;
+        }
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        let value = match execute_runtime_value_with_stdio(plan.task.clone()) {
+            Ok(value) => value,
+            Err(error) => {
+                let Some(result) = &plan.result else {
+                    return;
+                };
+                let Ok(value) = db_live_query_error_value(instance, result, &error.to_string())
+                else {
+                    return;
+                };
+                value
+            }
+        };
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+    })
+}
+
 fn spawn_timer_every(
     port: DetachedRuntimePublicationPort,
     plan: TimerPlan,
@@ -3859,6 +4087,24 @@ fn parse_bool(
     }
 }
 
+fn parse_positive_int(
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
+    option_name: &str,
+    value: &DetachedRuntimeValue,
+) -> Result<i64, SourceProviderExecutionError> {
+    match strip_detached_signal(value) {
+        RuntimeValue::Int(value) if *value > 0 => Ok(*value),
+        other => Err(SourceProviderExecutionError::InvalidOption {
+            instance,
+            provider,
+            option_name: option_name.into(),
+            expected: "positive Int".into(),
+            value: other.clone(),
+        }),
+    }
+}
+
 fn parse_nonnegative_int(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
@@ -3893,6 +4139,71 @@ fn parse_text_argument(
             value: other.clone(),
         }),
     }
+}
+
+fn parse_task_argument(
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
+    index: usize,
+    value: &DetachedRuntimeValue,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    match strip_detached_signal(value) {
+        RuntimeValue::Task(task) => Ok(RuntimeValue::Task(task.clone())),
+        RuntimeValue::DbTask(task) => Ok(RuntimeValue::DbTask(task.clone())),
+        other => Err(SourceProviderExecutionError::InvalidArgument {
+            instance,
+            provider,
+            index,
+            expected: "Task or DbTask".into(),
+            value: other.clone(),
+        }),
+    }
+}
+
+fn parse_db_connect_argument(
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
+    index: usize,
+    context: &SourceProviderContext,
+    value: &DetachedRuntimeValue,
+) -> Result<Box<str>, SourceProviderExecutionError> {
+    let database = match strip_detached_signal(value) {
+        RuntimeValue::Text(value) => value.clone(),
+        RuntimeValue::Record(fields) => {
+            let Some(field) = fields
+                .iter()
+                .find(|field| field.label.as_ref() == "database")
+            else {
+                return Err(SourceProviderExecutionError::InvalidArgument {
+                    instance,
+                    provider,
+                    index,
+                    expected: "Text or { database: Text }".into(),
+                    value: strip_detached_signal(value).clone(),
+                });
+            };
+            let RuntimeValue::Text(database) = strip_signal(&field.value) else {
+                return Err(SourceProviderExecutionError::InvalidArgument {
+                    instance,
+                    provider,
+                    index,
+                    expected: "Text or { database: Text }".into(),
+                    value: strip_detached_signal(value).clone(),
+                });
+            };
+            database.clone()
+        }
+        other => {
+            return Err(SourceProviderExecutionError::InvalidArgument {
+                instance,
+                provider,
+                index,
+                expected: "Text or { database: Text }".into(),
+                value: other.clone(),
+            });
+        }
+    };
+    Ok(context.normalize_sqlite_database_text(database.as_ref()))
 }
 
 fn parse_text_option(
@@ -4241,6 +4552,99 @@ fn encode_runtime_body(
     }
 }
 
+fn execute_db_connect(
+    instance: SourceInstanceId,
+    plan: &DbConnectPlan,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let output = match Command::new("sqlite3")
+        .arg(plan.database.as_ref())
+        .arg("PRAGMA schema_version;")
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) => {
+            return db_connect_error_value(
+                instance,
+                &plan.result,
+                &format!("failed to start sqlite3: {error}"),
+            );
+        }
+    };
+    if output.status.success() {
+        db_connect_success_value(instance, &plan.result, &plan.database)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let detail = if stderr.is_empty() {
+            format!("sqlite3 exited with status {}", output.status)
+        } else {
+            stderr
+        };
+        db_connect_error_value(instance, &plan.result, &detail)
+    }
+}
+
+fn db_connect_success_value(
+    instance: SourceInstanceId,
+    result: &RequestResultPlan,
+    database: &str,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let provider = BuiltinSourceProvider::DbConnect;
+    let payload = serde_json::json!({
+        "database": database,
+    });
+    let encoded = serde_json::to_string(&payload).expect("db.connect payload should encode");
+    result.success_from_text(&encoded).map_err(|error| {
+        SourceProviderExecutionError::UnsupportedProviderShape {
+            instance,
+            provider,
+            detail: format!(
+                "db.connect success payload does not match the source output shape: {error}"
+            )
+            .into_boxed_str(),
+        }
+    })
+}
+
+fn db_connect_error_value(
+    instance: SourceInstanceId,
+    result: &RequestResultPlan,
+    detail: &str,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let provider = BuiltinSourceProvider::DbConnect;
+    result
+        .error_value(TextSourceErrorKind::Connect, detail)
+        .map_err(
+            |shape| SourceProviderExecutionError::UnsupportedProviderShape {
+                instance,
+                provider,
+                detail: format!(
+                    "db.connect failure cannot be represented by the current error type: {shape}"
+                )
+                .into_boxed_str(),
+            },
+        )
+}
+
+fn db_live_query_error_value(
+    instance: SourceInstanceId,
+    result: &RequestResultPlan,
+    detail: &str,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let provider = BuiltinSourceProvider::DbLive;
+    result
+        .error_value(TextSourceErrorKind::Query, detail)
+        .map_err(
+            |shape| SourceProviderExecutionError::UnsupportedProviderShape {
+                instance,
+                provider,
+                detail: format!(
+                    "db.live failure cannot be represented by the current error type: {shape}"
+                )
+                .into_boxed_str(),
+            },
+        )
+}
+
 fn duration_from_suffix(amount: u64, suffix: &str) -> Option<Duration> {
     match suffix {
         "ns" => Some(Duration::from_nanos(amount)),
@@ -4270,7 +4674,10 @@ mod tests {
     use glib::prelude::ToVariant;
 
     use super::*;
-    use crate::{BackendLinkedRuntime, assemble_hir_runtime, link_backend_runtime};
+    use crate::{
+        BackendLinkedRuntime, EvaluatedSourceOption, SignalGraphBuilder, SourceRuntimeSpec,
+        TaskSourceRuntime, assemble_hir_runtime, link_backend_runtime,
+    };
 
     struct LoweredStack {
         hir: aivi_hir::LoweringResult,
@@ -4373,11 +4780,13 @@ mod tests {
     }
 
     fn temp_path(prefix: &str) -> PathBuf {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-scratch");
+        fs::create_dir_all(&base).expect("runtime test scratch directory should exist");
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("clock should be after epoch")
             .as_nanos();
-        env::temp_dir().join(format!(
+        base.join(format!(
             "aivi-runtime-{prefix}-{}-{unique}",
             std::process::id()
         ))
@@ -4398,6 +4807,76 @@ mod tests {
         match value {
             RuntimeValue::Text(found) => assert_eq!(found.as_ref(), expected),
             other => panic!("expected text `{expected}`, found {other:?}"),
+        }
+    }
+
+    fn spin_source_runtime_until_match(
+        runtime: &mut TaskSourceRuntime<RuntimeValue>,
+        signal: crate::SignalHandle,
+        timeout: Duration,
+        predicate: impl Fn(&RuntimeValue) -> bool,
+    ) -> Option<RuntimeValue> {
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            runtime.tick(&mut |_, _: crate::DependencyValues<'_, RuntimeValue>| None);
+            if let Some(value) = runtime.current_value(signal).unwrap() {
+                if predicate(value) {
+                    return Some(value.clone());
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        None
+    }
+
+    fn db_live_test_runtime(
+        instance: SourceInstanceId,
+    ) -> (
+        TaskSourceRuntime<RuntimeValue>,
+        crate::SignalHandle,
+        crate::startup::DetachedRuntimePublicationPort,
+    ) {
+        let mut builder = SignalGraphBuilder::new();
+        let input = builder
+            .add_input("db-live-output", None)
+            .expect("db.live output input should register");
+        let graph = builder.build().expect("db.live test graph should build");
+        let mut runtime: TaskSourceRuntime<RuntimeValue> = TaskSourceRuntime::new(graph);
+        runtime
+            .register_source(SourceRuntimeSpec::new(
+                instance,
+                input,
+                RuntimeSourceProvider::builtin(BuiltinSourceProvider::DbLive),
+            ))
+            .expect("db.live source spec should register");
+        let port = crate::startup::DetachedRuntimePublicationPort::from_source_port(
+            runtime
+                .activate_source(instance)
+                .expect("db.live source should activate"),
+        );
+        (runtime, input.as_signal(), port)
+    }
+
+    fn db_live_config(
+        instance: SourceInstanceId,
+        task: RuntimeValue,
+        debounce_ms: Option<i64>,
+    ) -> EvaluatedSourceConfig {
+        let mut options = Vec::new();
+        if let Some(debounce_ms) = debounce_ms {
+            options.push(EvaluatedSourceOption {
+                option_name: "debounce".into(),
+                value: DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(debounce_ms)),
+            });
+        }
+        EvaluatedSourceConfig {
+            owner: aivi_hir::ItemId::from_raw(0),
+            instance,
+            source: aivi_backend::SourceId::from_raw(0),
+            provider: RuntimeSourceProvider::builtin(BuiltinSourceProvider::DbLive),
+            decode: None,
+            arguments: vec![DetachedRuntimeValue::from_runtime_owned(task)].into_boxed_slice(),
+            options: options.into_boxed_slice(),
         }
     }
 
@@ -5118,6 +5597,332 @@ signal keyDown : Signal Key
         let value = spin_until(&mut linked, key_signal, Duration::from_millis(200))
             .expect("window key source should publish");
         assert!(matches!(value, RuntimeValue::Sum(_)));
+    }
+
+    #[test]
+    fn db_connect_source_publishes_connection_record() {
+        let database = temp_path("db-connect-success.sqlite");
+        let lowered = lower_text(
+            "runtime-provider-db-connect-success.aivi",
+            &format!(
+                r#"
+type DbError =
+  | ConnectionFailed Text
+  | QueryFailed Text
+
+type Connection = {{
+    database: Text
+}}
+
+value config = {{
+    database: "{}"
+}}
+
+@source db.connect config with {{
+    pool: 5
+}}
+signal db : Signal (Result DbError Connection)
+"#,
+                database.display()
+            ),
+        );
+        let assembly =
+            assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let actions = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(actions.source_actions())
+            .expect("db.connect source should execute");
+        let db_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "db"))
+            .expect("db signal binding should exist")
+            .signal();
+        let value = spin_until(&mut linked, db_signal, Duration::from_millis(300))
+            .expect("db.connect source should publish");
+        let RuntimeValue::ResultOk(connection) = value else {
+            panic!("expected Ok connection, found {value:?}");
+        };
+        let RuntimeValue::Record(fields) = connection.as_ref() else {
+            panic!("expected connection record, found {connection:?}");
+        };
+        expect_text(
+            record_field(fields, "database"),
+            database.to_string_lossy().as_ref(),
+        );
+        assert!(
+            database.exists(),
+            "db.connect should create/open the SQLite file"
+        );
+        let _ = fs::remove_file(&database);
+    }
+
+    #[test]
+    fn db_connect_source_publishes_connection_failed_error() {
+        let missing_parent = temp_path("db-connect-missing-parent");
+        let database = missing_parent.join("nested").join("db.sqlite");
+        let lowered = lower_text(
+            "runtime-provider-db-connect-failure.aivi",
+            &format!(
+                r#"
+type DbError =
+  | ConnectionFailed Text
+  | QueryFailed Text
+
+type Connection = {{
+    database: Text
+}}
+
+@source db.connect "{}"
+signal db : Signal (Result DbError Connection)
+"#,
+                database.display()
+            ),
+        );
+        let assembly =
+            assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let actions = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(actions.source_actions())
+            .expect("db.connect source should execute");
+        let db_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "db"))
+            .expect("db signal binding should exist")
+            .signal();
+        let value = spin_until(&mut linked, db_signal, Duration::from_millis(300))
+            .expect("db.connect source should publish an error");
+        let RuntimeValue::ResultErr(error) = value else {
+            panic!("expected Err connection failure, found {value:?}");
+        };
+        let RuntimeValue::Sum(sum) = error.as_ref() else {
+            panic!("expected DbError sum value, found {error:?}");
+        };
+        assert_eq!(sum.variant_name.as_ref(), "ConnectionFailed");
+        assert_eq!(
+            sum.fields.len(),
+            1,
+            "ConnectionFailed should carry one message"
+        );
+        let RuntimeValue::Text(message) = &sum.fields[0] else {
+            panic!("expected failure message text, found {:?}", sum.fields[0]);
+        };
+        assert!(
+            message.contains("open") || message.contains("unable") || message.contains("No such"),
+            "expected a SQLite open failure message, found {message}"
+        );
+        let _ = fs::remove_dir_all(&missing_parent);
+    }
+
+    #[test]
+    fn db_live_source_executes_task_immediately_on_activation_even_with_debounce() {
+        let instance = SourceInstanceId::from_raw(41);
+        let (mut runtime, rows_signal, port) = db_live_test_runtime(instance);
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(&[LinkedSourceLifecycleAction::Activate {
+                instance,
+                port,
+                config: db_live_config(
+                    instance,
+                    RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
+                        value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(7)))),
+                    }),
+                    Some(200),
+                ),
+            }])
+            .expect("db.live source should execute");
+        let value = spin_source_runtime_until_match(
+            &mut runtime,
+            rows_signal,
+            Duration::from_millis(80),
+            |value| {
+                matches!(
+                    value,
+                    RuntimeValue::ResultOk(inner)
+                        if matches!(inner.as_ref(), RuntimeValue::Int(7))
+                )
+            },
+        )
+        .expect("db.live activation should not wait for the debounce window");
+        let RuntimeValue::ResultOk(value) = value else {
+            panic!("expected Ok query result, found {value:?}");
+        };
+        assert_eq!(value.as_ref(), &RuntimeValue::Int(7));
+        providers.suspend_active_provider(instance);
+    }
+
+    #[test]
+    fn db_live_source_publishes_task_error_results() {
+        let instance = SourceInstanceId::from_raw(42);
+        let (mut runtime, rows_signal, port) = db_live_test_runtime(instance);
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(&[LinkedSourceLifecycleAction::Activate {
+                instance,
+                port,
+                config: db_live_config(
+                    instance,
+                    RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
+                        value: Box::new(RuntimeValue::ResultErr(Box::new(RuntimeValue::Text(
+                            "boom".into(),
+                        )))),
+                    }),
+                    None,
+                ),
+            }])
+            .expect("db.live source should execute");
+        let value = spin_source_runtime_until_match(
+            &mut runtime,
+            rows_signal,
+            Duration::from_millis(80),
+            |value| matches!(value, RuntimeValue::ResultErr(_)),
+        )
+        .expect("db.live should publish the task error result");
+        let RuntimeValue::ResultErr(error) = value else {
+            panic!("expected Err query result, found {value:?}");
+        };
+        let RuntimeValue::Text(message) = error.as_ref() else {
+            panic!("expected text error payload, found {error:?}");
+        };
+        assert_eq!(message.as_ref(), "boom");
+        providers.suspend_active_provider(instance);
+    }
+
+    #[test]
+    fn db_live_source_reconfigures_with_debounce() {
+        let instance = SourceInstanceId::from_raw(43);
+        let (mut runtime, rows_signal, port) = db_live_test_runtime(instance);
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(&[LinkedSourceLifecycleAction::Activate {
+                instance,
+                port,
+                config: db_live_config(
+                    instance,
+                    RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
+                        value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(1)))),
+                    }),
+                    Some(100),
+                ),
+            }])
+            .expect("db.live activation should execute");
+
+        let initial = spin_source_runtime_until_match(
+            &mut runtime,
+            rows_signal,
+            Duration::from_millis(80),
+            |value| {
+                matches!(
+                    value,
+                    RuntimeValue::ResultOk(inner)
+                        if matches!(inner.as_ref(), RuntimeValue::Int(1))
+                )
+            },
+        )
+        .expect("db.live activation should publish the initial query result");
+        let RuntimeValue::ResultOk(initial) = initial else {
+            panic!("expected Ok query result, found {initial:?}");
+        };
+        assert_eq!(initial.as_ref(), &RuntimeValue::Int(1));
+
+        let first_refresh_port = crate::startup::DetachedRuntimePublicationPort::from_source_port(
+            runtime
+                .reconfigure_source(instance)
+                .expect("db.live source should reconfigure"),
+        );
+        providers
+            .apply_actions(&[LinkedSourceLifecycleAction::Reconfigure {
+                instance,
+                port: first_refresh_port,
+                config: db_live_config(
+                    instance,
+                    RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
+                        value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(2)))),
+                    }),
+                    Some(100),
+                ),
+            }])
+            .expect("first db.live refresh should schedule successfully");
+
+        let first_delay_guard = Instant::now();
+        while first_delay_guard.elapsed() < Duration::from_millis(40) {
+            runtime.tick(&mut |_, _: crate::DependencyValues<'_, RuntimeValue>| None);
+            let current = runtime.current_value(rows_signal).unwrap().cloned();
+            assert_eq!(
+                current,
+                Some(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(1)))),
+                "db.live should keep the committed value while the debounce window is still open"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        let second_refresh_port = crate::startup::DetachedRuntimePublicationPort::from_source_port(
+            runtime
+                .reconfigure_source(instance)
+                .expect("db.live source should reconfigure again"),
+        );
+        providers
+            .apply_actions(&[LinkedSourceLifecycleAction::Reconfigure {
+                instance,
+                port: second_refresh_port,
+                config: db_live_config(
+                    instance,
+                    RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
+                        value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(3)))),
+                    }),
+                    Some(100),
+                ),
+            }])
+            .expect("second db.live refresh should schedule successfully");
+
+        let no_intermediate_publish = Instant::now();
+        while no_intermediate_publish.elapsed() < Duration::from_millis(80) {
+            runtime.tick(&mut |_, _: crate::DependencyValues<'_, RuntimeValue>| None);
+            let current = runtime.current_value(rows_signal).unwrap().cloned();
+            assert_eq!(
+                current,
+                Some(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(1)))),
+                "debounced refresh should cancel the stale worker before it can publish"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+
+        let refreshed = spin_source_runtime_until_match(
+            &mut runtime,
+            rows_signal,
+            Duration::from_millis(200),
+            |value| {
+                matches!(
+                    value,
+                    RuntimeValue::ResultOk(inner)
+                        if matches!(inner.as_ref(), RuntimeValue::Int(3))
+                )
+            },
+        )
+        .expect("db.live should eventually publish the latest debounced refresh result");
+        let RuntimeValue::ResultOk(refreshed) = refreshed else {
+            panic!("expected Ok query result, found {refreshed:?}");
+        };
+        assert_eq!(refreshed.as_ref(), &RuntimeValue::Int(3));
+        providers.suspend_active_provider(instance);
     }
 
     #[test]
