@@ -121,6 +121,40 @@ fn check_reports_reactive_update_self_reference_from_hir() {
 }
 
 #[test]
+fn check_accepts_multiline_accumulate_pipe_signal_bodies() {
+    let dir = TempDir::new("check-multiline-accumulate-pipe");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "type Key =\n",
+            "  | Left\n",
+            "type Direction =\n",
+            "  | East\n",
+            "fun updateDirection:Direction key:Key current:Direction => current\n",
+            "signal keyDown: Signal Key = Left\n",
+            "signal direction: Signal Direction = keyDown\n",
+            " +|> East updateDirection\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected multiline accumulate pipe program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for multiline accumulate pipe program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn check_rejects_result_block_bindings_that_are_not_results() {
     let dir = TempDir::new("check-result-block-binding-not-result");
     let path = dir.write(

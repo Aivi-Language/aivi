@@ -5122,6 +5122,45 @@ when ready => total <- result {
     }
 
     #[test]
+    fn parser_builds_multiline_accumulate_pipe_signal_bodies() {
+        let (_, parsed) = load(
+            r#"type Key =
+  | Left
+type Direction =
+  | East
+fun updateDirection:Direction key:Key current:Direction => current
+signal keyDown: Signal Key = Left
+signal direction: Signal Direction = keyDown
+ +|> East updateDirection
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "{:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let Item::Signal(item) = &parsed.module.items[4] else {
+            panic!("expected signal item");
+        };
+        let ExprKind::Pipe(pipe) = &item.expr_body().expect("signal body").kind else {
+            panic!("expected signal body to parse as a pipe");
+        };
+        assert!(matches!(
+            pipe.head.as_deref().map(|expr| &expr.kind),
+            Some(ExprKind::Name(identifier)) if identifier.text == "keyDown"
+        ));
+        assert_eq!(pipe.stages.len(), 1);
+        let PipeStageKind::Accumulate { seed, step } = &pipe.stages[0].kind else {
+            panic!("expected accumulate pipe stage");
+        };
+        assert!(matches!(seed.kind, ExprKind::Name(ref identifier) if identifier.text == "East"));
+        assert!(
+            matches!(step.kind, ExprKind::Name(ref identifier) if identifier.text == "updateDirection")
+        );
+    }
+
+    #[test]
     fn parser_allows_result_blocks_to_use_the_last_binding_as_the_implicit_tail() {
         let (_, parsed) = load(
             r#"value lastValue =
