@@ -728,7 +728,6 @@ Rules:
 
 - Checked form: `signalSource +|> seed step`
 - Step function shape: `input -> state -> state`
-- `|> scan seed step` is accepted and lowers the same way.
 
 ### 7.4 `when` reactive updates
 

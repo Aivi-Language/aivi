@@ -253,7 +253,7 @@ pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
                         &mut typing,
                         &mut nodes,
                     );
-                    collect_scan_node(
+                    collect_accumulate_node(
                         module,
                         owner,
                         body,
@@ -329,7 +329,7 @@ fn collect_recurrence_nodes(
 }
 
 #[derive(Clone, Copy)]
-struct ScanStage {
+struct AccumulateStage {
     stage_index: usize,
     stage_span: SourceSpan,
     stage_expr: ExprId,
@@ -337,7 +337,7 @@ struct ScanStage {
     step_expr: ExprId,
 }
 
-fn collect_scan_node(
+fn collect_accumulate_node(
     module: &Module,
     owner: ItemId,
     root: ExprId,
@@ -351,80 +351,34 @@ fn collect_scan_node(
     if matches!(pipe.recurrence_suffix(), Ok(Some(_))) {
         return;
     }
-    let Some(scan) = scan_stage(module, pipe) else {
+    let Some(stage) = accumulate_stage(pipe) else {
         return;
     };
     nodes.push(RecurrenceNodeElaboration {
         owner,
         pipe_expr: root,
-        start_stage_index: scan.stage_index,
-        start_stage_span: scan.stage_span,
-        outcome: elaborate_scan_pipe(module, pipe, &scan, env, typing),
+        start_stage_index: stage.stage_index,
+        start_stage_span: stage.stage_span,
+        outcome: elaborate_accumulate_pipe(module, pipe, &stage, env, typing),
     });
 }
 
-fn scan_stage(module: &Module, pipe: &PipeExpr) -> Option<ScanStage> {
+fn accumulate_stage(pipe: &PipeExpr) -> Option<AccumulateStage> {
     if pipe.stages.len() != 1 {
         return None;
     }
     let stage = pipe.stages.first();
     let (stage_expr, seed_expr, step_expr) = match stage.kind {
-        PipeStageKind::Transform { expr } => {
-            let (seed_expr, step_expr) = parse_scan_expr(module, expr)?;
-            (expr, seed_expr, step_expr)
-        }
         PipeStageKind::Accumulate { seed, step } => (step, seed, step),
         _ => return None,
     };
-    Some(ScanStage {
+    Some(AccumulateStage {
         stage_index: 0,
         stage_span: stage.span,
         stage_expr,
         seed_expr,
         step_expr,
     })
-}
-
-fn parse_scan_expr(module: &Module, expr_id: ExprId) -> Option<(ExprId, ExprId)> {
-    let (callee_expr, arguments) = flatten_apply_expr(module, expr_id);
-    if arguments.len() != 2 || !is_ambient_scan_name(module, callee_expr) {
-        return None;
-    }
-    Some((arguments[0], arguments[1]))
-}
-
-fn flatten_apply_expr(module: &Module, root: ExprId) -> (ExprId, Vec<ExprId>) {
-    let mut callee = root;
-    let mut segments = Vec::new();
-    while let ExprKind::Apply {
-        callee: next,
-        arguments: next_arguments,
-    } = &module.exprs()[callee].kind
-    {
-        segments.push(next_arguments.iter().copied().collect::<Vec<_>>());
-        callee = *next;
-    }
-    let mut arguments = Vec::new();
-    for segment in segments.into_iter().rev() {
-        arguments.extend(segment);
-    }
-    (callee, arguments)
-}
-
-fn is_ambient_scan_name(module: &Module, expr_id: ExprId) -> bool {
-    let ExprKind::Name(reference) = &module.exprs()[expr_id].kind else {
-        return false;
-    };
-    let crate::ResolutionState::Resolved(crate::TermResolution::Item(item_id)) =
-        reference.resolution.as_ref()
-    else {
-        return false;
-    };
-    module.ambient_items().contains(item_id)
-        && matches!(
-            &module.items()[*item_id],
-            Item::Function(function) if function.name.text() == "scan"
-        )
 }
 
 fn signal_item_reference(module: &Module, expr_id: ExprId) -> Option<ItemId> {
@@ -439,16 +393,16 @@ fn signal_item_reference(module: &Module, expr_id: ExprId) -> Option<ItemId> {
     matches!(module.items().get(*item_id), Some(Item::Signal(_))).then_some(*item_id)
 }
 
-fn elaborate_scan_pipe(
+fn elaborate_accumulate_pipe(
     module: &Module,
     pipe: &PipeExpr,
-    scan: &ScanStage,
+    stage: &AccumulateStage,
     env: &GateExprEnv,
     typing: &mut GateTypeContext<'_>,
 ) -> RecurrenceNodeOutcome {
     let target = Some(
         RecurrencePlanner::plan(Some(RecurrenceTargetEvidence::SignalItemBody))
-            .expect("signal scan nodes should always plan to signal recurrence"),
+            .expect("signal accumulate nodes should always plan to signal recurrence"),
     );
     let wakeup_signal = signal_item_reference(module, pipe.head);
     let wakeup = wakeup_signal
@@ -459,7 +413,7 @@ fn elaborate_scan_pipe(
         blockers.push(RecurrenceElaborationBlocker::MissingWakeup);
     }
 
-    let seed = match lower_gate_runtime_expr(module, scan.seed_expr, env, None, typing) {
+    let seed = match lower_gate_runtime_expr(module, stage.seed_expr, env, None, typing) {
         Ok(expr) => Some(expr),
         Err(blocker) => {
             blockers.push(RecurrenceElaborationBlocker::SeedExpressionBlocked(
@@ -473,8 +427,8 @@ fn elaborate_scan_pipe(
     if let Some(seed) = seed.as_ref() {
         match lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
             module,
-            scan.stage_span,
-            scan.step_expr,
+            stage.stage_span,
+            stage.step_expr,
             vec![pipe.head],
             env,
             &seed.ty,
@@ -490,28 +444,28 @@ fn elaborate_scan_pipe(
                     });
                 }
                 start = Some(RecurrenceStagePlan {
-                    stage_index: scan.stage_index,
-                    stage_span: scan.stage_span,
-                    expr: scan.stage_expr,
+                    stage_index: stage.stage_index,
+                    stage_span: stage.stage_span,
+                    expr: stage.stage_expr,
                     input_subject: seed.ty.clone(),
                     result_subject,
                     runtime_expr,
                 });
             }
             Err(blocker) => blockers.push(RecurrenceElaborationBlocker::StartStage {
-                stage_span: scan.stage_span,
+                stage_span: stage.stage_span,
                 blocker: recurrence_runtime_stage_blocker(blocker),
             }),
         }
     }
 
     if blockers.is_empty() {
-        let start = start.expect("planned scan nodes should have a start");
+        let start = start.expect("planned accumulate nodes should have a start");
         RecurrenceNodeOutcome::Planned(RecurrenceNodePlan {
-            target: target.expect("planned scan nodes should have a target"),
-            wakeup: wakeup.expect("planned scan nodes should have a wakeup"),
+            target: target.expect("planned accumulate nodes should have a target"),
+            wakeup: wakeup.expect("planned accumulate nodes should have a wakeup"),
             wakeup_signal,
-            seed: seed.expect("planned scan nodes should have a seed"),
+            seed: seed.expect("planned accumulate nodes should have a seed"),
             start: start.clone(),
             guards: Vec::new(),
             steps: Vec::new(),
@@ -1167,11 +1121,11 @@ mod tests {
     }
 
     #[test]
-    fn elaborates_scan_signal_wakeups() {
-        let lowered = lower_fixture("milestone-2/valid/pipe-scan-signal-wakeup/main.aivi");
+    fn elaborates_accumulate_signal_wakeups() {
+        let lowered = lower_fixture("milestone-2/valid/pipe-accumulate-signal-wakeup/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "timer scan fixture should lower cleanly: {:?}",
+            "timer accumulate fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = elaborate_recurrences(lowered.module());
@@ -1179,7 +1133,7 @@ mod tests {
             .nodes()
             .iter()
             .find(|node| item_name(lowered.module(), node.owner) == "retried")
-            .expect("expected scan node for retried");
+            .expect("expected recurrence node for retried");
         match &built_in.outcome {
             RecurrenceNodeOutcome::Planned(plan) => {
                 assert_eq!(plan.wakeup.kind(), RecurrenceWakeupKind::SourceEvent);
@@ -1192,22 +1146,22 @@ mod tests {
                     item_name(
                         lowered.module(),
                         plan.wakeup_signal
-                            .expect("scan should preserve its upstream wakeup signal"),
+                            .expect("accumulate should preserve its upstream wakeup signal"),
                     ),
                     "tick"
                 );
                 assert!(
                     plan.non_source_wakeup.is_none(),
-                    "scan wakeups should not invent a non-source witness"
+                    "accumulate wakeups should not invent a non-source witness"
                 );
             }
-            other => panic!("expected planned timer scan node, found {other:?}"),
+            other => panic!("expected planned timer recurrence node, found {other:?}"),
         }
 
         let lowered = lower_fixture("milestone-2/valid/custom-source-recurrence-wakeup/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "custom source scan fixture should lower cleanly: {:?}",
+            "custom source accumulate fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = elaborate_recurrences(lowered.module());
@@ -1215,7 +1169,7 @@ mod tests {
             .nodes()
             .iter()
             .find(|node| item_name(lowered.module(), node.owner) == "updates")
-            .expect("expected custom source scan node");
+            .expect("expected custom source recurrence node");
         match &custom.outcome {
             RecurrenceNodeOutcome::Planned(plan) => {
                 assert_eq!(plan.wakeup.kind(), RecurrenceWakeupKind::SourceEvent);
@@ -1228,19 +1182,19 @@ mod tests {
                     item_name(
                         lowered.module(),
                         plan.wakeup_signal
-                            .expect("scan should preserve its upstream wakeup signal"),
+                            .expect("accumulate should preserve its upstream wakeup signal"),
                     ),
                     "updateEvents"
                 );
             }
-            other => panic!("expected planned custom source scan node, found {other:?}"),
+            other => panic!("expected planned custom source recurrence node, found {other:?}"),
         }
     }
 
     #[test]
-    fn active_when_bodyless_sources_still_feed_scan_signals() {
+    fn active_when_bodyless_sources_still_feed_accumulate_signals() {
         let lowered = lower_text(
-            "scan_active_when_source.aivi",
+            "accumulate_active_when_source.aivi",
             r#"
 fun step:Int n:Int current:Int =>
     n
@@ -1259,7 +1213,7 @@ signal gated : Signal Int =
         );
         assert!(
             !lowered.has_errors(),
-            "activeWhen scan example should lower cleanly before elaboration: {:?}",
+            "activeWhen accumulate example should lower cleanly before elaboration: {:?}",
             lowered.diagnostics()
         );
 
@@ -1281,12 +1235,12 @@ signal gated : Signal Int =
                     item_name(
                         lowered.module(),
                         plan.wakeup_signal
-                            .expect("scan should preserve its upstream wakeup signal"),
+                            .expect("accumulate should preserve its upstream wakeup signal"),
                     ),
                     "userEvents"
                 );
             }
-            other => panic!("expected planned activeWhen scan node, found {other:?}"),
+            other => panic!("expected planned activeWhen recurrence node, found {other:?}"),
         }
     }
 

@@ -1816,9 +1816,9 @@ value retried : Task Int Int =
     }
 
     #[test]
-    fn bodyless_sources_and_scan_signals_keep_runtime_roles_separate() {
+    fn bodyless_sources_and_accumulate_signals_keep_runtime_roles_separate() {
         let lowered = lower_text(
-            "runtime-hir-adapter-bodyless-source-scan.aivi",
+            "runtime-hir-adapter-bodyless-source-accumulate.aivi",
             r#"
 fun step:Int n:Int current:Int =>
     n
@@ -1837,12 +1837,12 @@ signal gated : Signal Int =
         );
         assert!(
             !lowered.has_errors(),
-            "bodyless source scan fixture should lower cleanly: {:?}",
+            "bodyless source accumulate fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
 
         let assembly = assemble_hir_runtime(lowered.module())
-            .expect("bodyless source scan fixture should assemble");
+            .expect("bodyless source accumulate fixture should assemble");
         let user_events_id = item_id(lowered.module(), "userEvents");
         let gated_id = item_id(lowered.module(), "gated");
         let user_events = assembly
@@ -1857,7 +1857,7 @@ signal gated : Signal Int =
 
         let derived = gated
             .derived()
-            .expect("scan-derived signal should expose a public derived handle");
+            .expect("accumulate-derived signal should expose a public derived handle");
         assert_eq!(source.signal, user_events.signal());
         assert_eq!(
             source.input,
@@ -1867,12 +1867,12 @@ signal gated : Signal Int =
         );
         assert!(
             gated.source_input.is_none(),
-            "derived scan signals should not allocate their own source input handle"
+            "derived accumulate signals should not allocate their own source input handle"
         );
         assert_eq!(
             gated.dependencies(),
             &[user_events.signal()],
-            "scan-derived signals should depend on the raw source signal"
+            "accumulate-derived signals should depend on the raw source signal"
         );
         assert_eq!(
             source.spec.active_when,
@@ -1892,7 +1892,7 @@ signal gated : Signal Int =
         assert_eq!(
             recurrence.plan.wakeup_signal,
             Some(user_events_id),
-            "scan recurrence handoff should preserve its upstream wakeup signal"
+            "accumulate recurrence handoff should preserve its upstream wakeup signal"
         );
     }
 

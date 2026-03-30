@@ -1490,7 +1490,7 @@ impl LinkedDerivedEvaluator<'_> {
 
         if !wakeup_fired {
             // Non-wakeup dependencies (for example a separate direction signal captured
-            // by a scan step) may change between firings. Preserve the last committed
+            // by an accumulate step) may change between firings. Preserve the last committed
             // accumulator snapshot until the wakeup dependency actually fires.
             return Ok(DerivedSignalUpdate::Unchanged);
         }
@@ -3229,9 +3229,9 @@ value retried : Task Int Int =
     }
 
     #[test]
-    fn linked_runtime_applies_scan_steps_once_per_wakeup() {
+    fn linked_runtime_applies_accumulate_steps_once_per_wakeup() {
         let lowered = lower_text(
-            "runtime-startup-scan-signal.aivi",
+            "runtime-startup-accumulate-signal.aivi",
             r#"
 fun step:Int next:Int current:Int =>
     current + next
@@ -3254,10 +3254,10 @@ signal counter : Signal Int =
             &lowered.core,
             std::sync::Arc::new(lowered.backend.clone()),
         )
-        .expect("scan signals should now link successfully");
+        .expect("accumulate signals should now link successfully");
         let first = linked
             .tick_with_source_lifecycle()
-            .expect("initial scan tick should succeed");
+            .expect("initial accumulate tick should succeed");
         assert_eq!(first.source_actions().len(), 1);
         let port = match &first.source_actions()[0] {
             LinkedSourceLifecycleAction::Activate { port, .. } => port.clone(),
@@ -3279,7 +3279,7 @@ signal counter : Signal Int =
         .expect("first source publication should queue");
         linked
             .tick_with_source_lifecycle()
-            .expect("first scan publication tick should succeed");
+            .expect("first accumulate publication tick should succeed");
         assert_eq!(
             linked.runtime().current_value(counter_signal).unwrap(),
             Some(&RuntimeValue::Int(2))
@@ -3291,7 +3291,7 @@ signal counter : Signal Int =
         .expect("second source publication should queue");
         linked
             .tick_with_source_lifecycle()
-            .expect("second scan publication tick should succeed");
+            .expect("second accumulate publication tick should succeed");
         assert_eq!(
             linked.runtime().current_value(counter_signal).unwrap(),
             Some(&RuntimeValue::Int(5))

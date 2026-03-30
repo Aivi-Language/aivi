@@ -276,8 +276,6 @@ fun __aivi_list_any:Bool predicate:(A -> Bool) items:(List A) =>
     items
      |> reduce (__aivi_list_anyStep predicate) False
 
-fun scan:S seed:S step:(A -> S -> S) input:A =>
-    step input seed
 "#;
 
 const MAX_COMPILE_TIME_RANGE_ELEMENTS: u64 = 4096;
@@ -7338,7 +7336,7 @@ mod tests {
             "milestone-2/valid/pipe-branch-and-join/main.aivi",
             "milestone-2/valid/pipe-fanout-carriers/main.aivi",
             "milestone-2/valid/result-block/main.aivi",
-            "milestone-2/valid/pipe-scan-signal-wakeup/main.aivi",
+            "milestone-2/valid/pipe-accumulate-signal-wakeup/main.aivi",
             "milestone-2/valid/pipe-explicit-recurrence-wakeups/main.aivi",
             "milestone-1/valid/records/record_shorthand_and_elision.aivi",
             "milestone-1/valid/sources/source_declarations.aivi",
@@ -7878,7 +7876,7 @@ value answer:Int = 42
     }
 
     #[test]
-    fn resolved_validation_accepts_request_sources_with_retry_policy_and_scan() {
+    fn resolved_validation_accepts_request_sources_with_retry_policy_and_accumulate() {
         let lowered = lower_text(
             "request_source_with_retry_and_scan.aivi",
             r#"
@@ -7902,12 +7900,12 @@ signal responses : Signal (Result HttpError (List User))
 
 signal retried : Signal Int =
     responses
-     |> scan 0 keepCount
+     +|> 0 keepCount
 "#,
         );
         assert!(
             !lowered.has_errors(),
-            "request source with retry and scan should lower cleanly: {:?}",
+            "request source with retry and accumulate should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = lowered
@@ -7915,7 +7913,7 @@ signal retried : Signal Int =
             .validate(ValidationMode::RequireResolvedNames);
         assert!(
             report.is_ok(),
-            "request source with retry and scan should validate cleanly, got diagnostics: {:?}",
+            "request source with retry and accumulate should validate cleanly, got diagnostics: {:?}",
             report.diagnostics()
         );
     }
@@ -7958,11 +7956,11 @@ signal tick : Signal Unit
     }
 
     #[test]
-    fn resolved_validation_accepts_custom_sources_feeding_scan_signals() {
+    fn resolved_validation_accepts_custom_sources_feeding_accumulate_signals() {
         let lowered = lower_fixture("milestone-2/valid/custom-source-recurrence-wakeup/main.aivi");
         assert!(
             !lowered.has_errors(),
-            "custom source scan fixture should lower cleanly: {:?}",
+            "custom source accumulate fixture should lower cleanly: {:?}",
             lowered.diagnostics()
         );
         let report = lowered
@@ -7970,7 +7968,7 @@ signal tick : Signal Unit
             .validate(ValidationMode::RequireResolvedNames);
         assert!(
             report.is_ok(),
-            "custom source scan fixture should validate cleanly, got diagnostics: {:?}",
+            "custom source accumulate fixture should validate cleanly, got diagnostics: {:?}",
             report.diagnostics()
         );
 
@@ -8000,7 +7998,7 @@ signal tick : Signal Unit
         assert_eq!(
             signal_dependency_names(lowered.module(), updates),
             vec!["updateEvents".to_owned()],
-            "scan-derived signals should depend on the raw source signal rather than provider inputs"
+            "accumulate-derived signals should depend on the raw source signal rather than provider inputs"
         );
     }
 

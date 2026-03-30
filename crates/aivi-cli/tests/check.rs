@@ -162,7 +162,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/pipe-gate-carriers/main.aivi",
         "milestone-2/valid/result-block/main.aivi",
         "milestone-2/valid/pipe-transform-memos/main.aivi",
-        "milestone-2/valid/pipe-scan-signal-wakeup/main.aivi",
+        "milestone-2/valid/pipe-accumulate-signal-wakeup/main.aivi",
         "milestone-2/valid/pipe-explicit-recurrence-wakeups/main.aivi",
         "milestone-1/valid/records/record_shorthand_and_elision.aivi",
         "milestone-1/valid/sources/source_declarations.aivi",

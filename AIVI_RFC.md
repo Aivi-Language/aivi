@@ -1269,7 +1269,7 @@ Normative rules:
 - each iteration is scheduled and stack-safe; recurrent pipes must not lower to unbounded direct recursion
 - cancellation or owner teardown disposes the pending recurrence immediately
 - recurrent pipes with no valid runtime lowering target are rejected
-- ordinary source-driven signal state accumulation does not use `@|>` / `<|@`; in the current checked slice it still uses helper surfaces such as `scan`, while `+|>` remains partially wired
+- ordinary source-driven signal state accumulation uses `+|>` rather than the explicit `@|>` / `<|@` recurrence suffix
 
 ### 11.8 `!|>` validate
 
@@ -1308,7 +1308,7 @@ Rules:
 
 ### 11.10 `+|>` accumulate
 
-`+|>` is the checked accumulate pipe surface for one-stage signal recurrence. It lowers through the same scheduler-owned recurrence path that also accepts the ambient `scan` helper spelling.
+`+|>` is the checked accumulate pipe surface for one-stage signal recurrence. It lowers through the scheduler-owned recurrence path for stateful signal accumulation.
 
 ```aivi
 signal counter : Signal Int =
@@ -1322,7 +1322,6 @@ fun step:Int tick:Unit current:Int =>
 Checked form: `signalSource +|> seed step`
 
 - `+|>` lowers to the scheduler-owned recurrence node used for stateful signal accumulation
-- the helper spelling `|> scan seed step` remains accepted and lowers to the same executable path
 - the step function must have shape `input -> state -> state`
 
 The shorthand binder forms described in older drafts are still not implemented.
@@ -1523,7 +1522,7 @@ Type annotation is mandatory. Input signals participate in the signal dependency
 
 Input signals are the canonical mechanism for routing GTK event payloads into the reactive graph and the publication target for task completions and other runtime-owned boundaries.
 
-When a `signal` has no body, the source owns only the raw event stream; stateful accumulation over that stream can then be expressed by deriving another signal with `+|>` (or the equivalent `scan` helper spelling).
+When a `signal` has no body, the source owns only the raw event stream; stateful accumulation over that stream is expressed by deriving another signal with `+|>`.
 
 ### 13.2.1 Stateful signal accumulation with `+|>`
 
@@ -1541,9 +1540,8 @@ fun step:Int tick:Unit current:Int =>
 Normative rules:
 
 - current checked form: `signalSource +|> seed step`
-- the helper spelling `|> scan seed step` remains accepted and lowers identically
 - the step function must have shape `input -> state -> state`
-- stateful accumulation over timer, event, source, and completion signals uses the same scheduler-owned recurrence node regardless of whether the source spelling was `+|>` or `scan`
+- stateful accumulation over timer, event, source, and completion signals uses the same scheduler-owned recurrence node
 
 The shorthand accumulation forms from older drafts are not current executable surface.
 
@@ -1717,7 +1715,7 @@ signal tick : Signal Unit
 
 signal counter : Signal Int =
     tick
-     |> scan 0 step
+     +|> 0 step
 
 fun step:Int tick:Unit current:Int =>
     current + 1

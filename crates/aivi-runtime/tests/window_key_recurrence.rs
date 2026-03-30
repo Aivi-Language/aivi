@@ -73,7 +73,7 @@ fn spin_until(
 }
 
 #[test]
-fn window_key_scan_updates_direction_signal() {
+    fn window_key_accumulate_updates_direction_signal() {
     let lowered = lower_text(
         "runtime-window-key-direction.aivi",
         r#"
@@ -111,7 +111,7 @@ signal keyDown : Signal Key
 
 signal direction : Signal Direction =
     keyDown
-     |> scan Right updateDirection
+     +|> Right updateDirection
 "#,
     );
     let assembly =
@@ -273,15 +273,15 @@ signal keyDown : Signal Key
 
 signal direction : Signal Direction =
     keyDown
-     |> scan Right updateDirectionOrRestart
+     +|> Right updateDirectionOrRestart
 
 signal restartCount : Signal Int =
     keyDown
-     |> scan 0 updateRestartCount
+     +|> 0 updateRestartCount
 
 signal gameState : Signal GameTickState =
     tick
-     |> scan initialGameTickState stepOnTick
+     +|> initialGameTickState stepOnTick
 
 signal game : Signal Game =
     gameState

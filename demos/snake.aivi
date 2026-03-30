@@ -1,5 +1,5 @@
 domain Duration over Int
-    literal ms : Int -> Duration
+    literal ms:Int -> Duration
 
 type Key =
   | ArrowUp
@@ -65,6 +65,7 @@ value boardColumns = [0..29]
 value boardRows = [0..19]
 value foodSearchSteps = [0..599]
 value initialSeed = 2463534242
+
 value initialSnake = [
     Cell 6 10,
     Cell 5 10,
@@ -102,10 +103,9 @@ fun advanceFoodSearch:FoodSearch seed:Int =>
         value: Cell 0 0
     }
 
-fun maybePickFood:FoodSearch snake: (List Cell) seed:Int =>
-    cellIsOpen snake (spawnCandidate seed)
-      T|> { seed, found: True, value: spawnCandidate seed }
-      F|> advanceFoodSearch seed
+fun maybePickFood:FoodSearch snake: (List Cell) seed:Int => cellIsOpen snake (spawnCandidate seed)
+  T|> { seed, found: True, value: spawnCandidate seed }
+  F|> advanceFoodSearch seed
 
 fun searchFoodStep:FoodSearch snake: (List Cell) state:FoodSearch step:Int => state.found
   T|> state
@@ -134,10 +134,9 @@ fun moveCell:Cell direction:Direction cell:Cell => (direction, cell)
   ||> (East, Cell x y)  -> Cell (x + 1) y
   ||> (West, Cell x y)  -> Cell (x - 1) y
 
-fun turn:Direction blocked:Direction next:Direction current:Direction =>
-    current == blocked
-      T|> current
-      F|> next
+fun turn:Direction blocked:Direction next:Direction current:Direction => current == blocked
+  T|> current
+  F|> next
 
 fun updateDirection:Direction key:Key current:Direction => key
   ||> ArrowLeft  -> turn East West current
@@ -237,20 +236,17 @@ fun stepTickState:TickState restartCount:Int direction:Direction state:TickState
 fun stepOnTick:TickState tick:Unit state:TickState =>
     stepTickState restartCount direction state
 
-fun foodOrEmptyGlyph:Text food:Cell cell:Cell =>
-    cell == food
-      T|> "*"
-      F|> "."
+fun foodOrEmptyGlyph:Text food:Cell cell:Cell => cell == food
+  T|> "*"
+  F|> "."
 
-fun bodyOrFoodGlyph:Text snake: (List Cell) food:Cell cell:Cell =>
-    snakeContains snake cell
-      T|> "o"
-      F|> foodOrEmptyGlyph food cell
+fun bodyOrFoodGlyph:Text snake: (List Cell) food:Cell cell:Cell => snakeContains snake cell
+  T|> "o"
+  F|> foodOrEmptyGlyph food cell
 
-fun cellGlyph:Text snake: (List Cell) food:Cell cell:Cell =>
-    cell == firstCell snake
-      T|> "@"
-      F|> bodyOrFoodGlyph snake food cell
+fun cellGlyph:Text snake: (List Cell) food:Cell cell:Cell => cell == firstCell snake
+  T|> "@"
+  F|> bodyOrFoodGlyph snake food cell
 
 fun rowTextStep:Text snake: (List Cell) food:Cell row:Int text:Text col:Int =>
     "{text}{cellGlyph snake food (Cell col row)}"
@@ -283,65 +279,65 @@ fun statusLineFor:Text gameOver:Bool => gameOver
     repeat: False,
     focusOnly: True
 }
-signal keyDown : Signal Key
+signal keyDown: Signal Key
 
-signal direction : Signal Direction = keyDown
-  +|> East updateDirection
+signal direction: Signal Direction = keyDown
+ +|> East updateDirection
 
-signal restartCount : Signal Int = keyDown
-  +|> 0 countRestart
+signal restartCount: Signal Int = keyDown
+ +|> 0 countRestart
 
 @source timer.every 120ms with {
     immediate: False,
     coalesce: True
 }
-signal tick : Signal Unit
+signal tick: Signal Unit
 
-signal gameState : Signal TickState = tick
-  +|> initialTickState stepOnTick
+signal gameState: Signal TickState = tick
+ +|> initialTickState stepOnTick
 
-signal game : Signal Game = gameState
+signal game: Signal Game = gameState
   |> .game
 
-signal snake : Signal (List Cell) = game
+signal snake: Signal (List Cell) = game
   |> .snake
 
-signal food : Signal Cell = game
+signal food: Signal Cell = game
   |> .food
 
-signal score : Signal Int = game
+signal score: Signal Int = game
   |> .score
 
-signal gameOver : Signal Bool = game
+signal gameOver: Signal Bool = game
   |> .gameOver
 
-signal head : Signal Cell = snake
+signal head: Signal Cell = snake
   |> firstCell
 
-signal nextHead : Signal Cell = snake
+signal nextHead: Signal Cell = snake
   |> nextHeadFor direction
 
-signal hasEaten : Signal Bool = game
+signal hasEaten: Signal Bool = game
   |> willEat direction
 
-signal hitWall : Signal Bool = nextHead
+signal hitWall: Signal Bool = nextHead
   |> hitsWall
 
-signal hitSelf : Signal Bool = nextHead
+signal hitSelf: Signal Bool = nextHead
   |> snakeContains snake
 
-signal dead : Signal Bool = hitWall or hitSelf
+signal dead: Signal Bool = hitWall or hitSelf
 
-signal boardText : Signal Text = game
+signal boardText: Signal Text = game
   |> boardTextFor
 
-signal dirLine : Signal Text = direction
+signal dirLine: Signal Text = direction
   |> directionLabel
 
-signal scoreLine : Signal Text = score
+signal scoreLine: Signal Text = score
   |> scoreLineFor
 
-signal statusLine : Signal Text = gameOver
+signal statusLine: Signal Text = gameOver
   |> statusLineFor
 
 value main =
