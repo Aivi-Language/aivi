@@ -185,6 +185,43 @@ These built-ins publish one host-context snapshot when the source starts. They d
 | `path.cacheHome` | none | `Text` | Supported. Uses `XDG_CACHE_HOME`, or falls back to `$HOME/.cache`. |
 | `path.tempDir` | none | `Text` | Supported. Publishes the current process temp directory text. |
 
+## Database
+
+### `db.connect`
+
+**Form:** `@source db.connect config`
+
+| Option | Type | Current support |
+| --- | --- | --- |
+| `pool` | `Int` | Accepted and validated. The current runtime still opens a single SQLite connection probe per source instance; pool sizing is reserved for later provider-owned pooling work. |
+| `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
+
+**Notes**
+
+- `config` must currently evaluate to either a database path `Text` or a record containing `database: Text`.
+- Relative database paths are resolved against the runtime working directory before publication.
+- The current runtime validates that SQLite can open the target and then publishes the normalized `Connection` record.
+- The intended result shape is `Signal (Result DbError Connection)`.
+
+### `db.live`
+
+**Form:** `@source db.live query`
+
+| Option | Type | Current support |
+| --- | --- | --- |
+| `refreshOn` | `Signal B` | Present in the contract, but provider startup is not executed yet. |
+| `debounce` | `Duration` | Present in the contract, but provider startup is not executed yet. |
+| `optimistic` | `Bool` | Present in the contract, but provider startup is not executed yet. |
+| `onRollback` | `Signal DbError` | Present in the contract, but provider startup is not executed yet. |
+| `activeWhen` | `Signal Bool` | Present in the contract, but provider startup is not executed yet. |
+
+**Notes**
+
+- The compiler now recognizes `db.live` as a built-in provider key.
+- Runtime execution is still pending; starting this source currently fails as an unsupported provider.
+- The intended result shape is `Signal (Result DbError A)`.
+- The `refreshOn: users.changed` path described in the DB live design still needs deeper runtime adapter work before nested table-owned signals can drive source refreshes.
+
 ## GTK input
 
 ### `window.keyDown`

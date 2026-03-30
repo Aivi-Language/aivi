@@ -99,6 +99,8 @@ use aivi.db (
     SortDir
     Asc
     Desc
+    Connection
+    TableRef
 )
 
 use aivi.imap (
@@ -227,6 +229,15 @@ value schemaMismatch:DbError = SchemaMismatch "v2 required"
 value queryFailed:DbError = QueryFailed "no such table"
 value sortAsc:SortDir = Asc
 value sortDesc:SortDir = Desc
+signal usersChanged: Signal Unit
+value connection:Connection = {
+    database: "/tmp/aivi-demo.db"
+}
+value userTable:TableRef User = {
+    name: "users",
+    conn: connection,
+    changed: usersChanged
+}
 
 value syncState:SyncState = {
     lastSyncedAt: None,

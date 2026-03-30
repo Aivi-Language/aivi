@@ -6062,6 +6062,10 @@ impl Validator<'_> {
                         "this request-like source still needs an explicit recurrence wakeup such as `retry`, `refreshEvery`, `refreshOn`, or reactive source inputs",
                         "plain `http.get` / `http.post` sources issue one request when subscribed; polling, backoff, and refresh proof stay explicit at the current recurrence boundary",
                     ),
+                    BuiltinSourceProvider::DbLive => (
+                        "this live query source still needs an explicit recurrence wakeup such as `refreshOn` or reactive source inputs",
+                        "`db.live` issues one query when subscribed; table-change refresh and debounce stay explicit at the current recurrence boundary",
+                    ),
                     BuiltinSourceProvider::FsRead => (
                         "this snapshot source still needs an explicit recurrence wakeup such as `reloadOn` or reactive source inputs",
                         "`fs.read` publishes one snapshot and may be retriggered only explicitly; debounce and read-on-start do not by themselves prove recurrence wakeups",
@@ -6092,8 +6096,12 @@ impl Validator<'_> {
                             | BuiltinSourceProvider::PathTempDir => {
                                 "this built-in source publishes one host-context snapshot when subscribed; add an explicit recurrence wakeup or switch to a non-recurrent signal"
                             }
+                            BuiltinSourceProvider::DbConnect => {
+                                "this connection source publishes one connection snapshot when subscribed; add an explicit recurrence wakeup or switch to a non-recurrent signal"
+                            }
                             BuiltinSourceProvider::HttpGet
                             | BuiltinSourceProvider::HttpPost
+                            | BuiltinSourceProvider::DbLive
                             | BuiltinSourceProvider::FsRead => {
                                 unreachable!("request-like providers are handled above")
                             }

@@ -31,6 +31,8 @@ pub enum BuiltinSourceProvider {
     PathDataHome,
     PathCacheHome,
     PathTempDir,
+    DbConnect,
+    DbLive,
     DbusOwnName,
     DbusSignal,
     DbusMethod,
@@ -38,7 +40,7 @@ pub enum BuiltinSourceProvider {
 }
 
 impl BuiltinSourceProvider {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 24] = [
         Self::HttpGet,
         Self::HttpPost,
         Self::TimerEvery,
@@ -57,6 +59,8 @@ impl BuiltinSourceProvider {
         Self::PathDataHome,
         Self::PathCacheHome,
         Self::PathTempDir,
+        Self::DbConnect,
+        Self::DbLive,
         Self::DbusOwnName,
         Self::DbusSignal,
         Self::DbusMethod,
@@ -83,6 +87,8 @@ impl BuiltinSourceProvider {
             "path.dataHome" => Some(Self::PathDataHome),
             "path.cacheHome" => Some(Self::PathCacheHome),
             "path.tempDir" => Some(Self::PathTempDir),
+            "db.connect" => Some(Self::DbConnect),
+            "db.live" => Some(Self::DbLive),
             "dbus.ownName" => Some(Self::DbusOwnName),
             "dbus.signal" => Some(Self::DbusSignal),
             "dbus.method" => Some(Self::DbusMethod),
@@ -111,6 +117,8 @@ impl BuiltinSourceProvider {
             Self::PathDataHome => "path.dataHome",
             Self::PathCacheHome => "path.cacheHome",
             Self::PathTempDir => "path.tempDir",
+            Self::DbConnect => "db.connect",
+            Self::DbLive => "db.live",
             Self::DbusOwnName => "dbus.ownName",
             Self::DbusSignal => "dbus.signal",
             Self::DbusMethod => "dbus.method",
@@ -163,6 +171,15 @@ impl BuiltinSourceProvider {
             | Self::PathCacheHome
             | Self::PathTempDir => {
                 SourceContract::new(self, &NO_OPTIONS, STATIC_RECURRENCE, STATIC_LIFECYCLE)
+            }
+            Self::DbConnect => SourceContract::new(
+                self,
+                db_connect_options(),
+                STATIC_RECURRENCE,
+                STATIC_LIFECYCLE,
+            ),
+            Self::DbLive => {
+                SourceContract::new(self, db_live_options(), DB_LIVE_RECURRENCE, HTTP_LIFECYCLE)
             }
             Self::DbusOwnName => {
                 SourceContract::new(self, dbus_name_options(), DBUS_RECURRENCE, STREAM_LIFECYCLE)
@@ -541,6 +558,7 @@ impl fmt::Display for SourceTypeAtom {
 pub enum SourceNominalType {
     DecodeMode,
     Duration,
+    DbError,
     FsWatchEvent,
     Path,
     Retry,
@@ -553,6 +571,7 @@ impl SourceNominalType {
         match self {
             Self::DecodeMode => "DecodeMode",
             Self::Duration => "Duration",
+            Self::DbError => "DbError",
             Self::FsWatchEvent => "FsWatchEvent",
             Self::Path => "Path",
             Self::Retry => "Retry",
@@ -766,6 +785,51 @@ const PROCESS_WAKEUP_OPTIONS: [SourceOptionWakeupContract; 1] = [SourceOptionWak
     SourceOptionWakeupCause::TriggerSignal,
 )];
 
+static DB_CONNECT_OPTIONS_STORAGE: OnceLock<Vec<SourceOptionContract>> = OnceLock::new();
+
+fn db_connect_options() -> &'static [SourceOptionContract] {
+    DB_CONNECT_OPTIONS_STORAGE.get_or_init(|| {
+        vec![
+            SourceOptionContract::new("pool", SourceContractType::int()),
+            SourceOptionContract::new(
+                "activeWhen",
+                SourceContractType::signal(SourceTypeAtom::primitive(PrimitiveType::Bool)),
+            ),
+        ]
+    })
+}
+
+static DB_LIVE_OPTIONS_STORAGE: OnceLock<Vec<SourceOptionContract>> = OnceLock::new();
+
+fn db_live_options() -> &'static [SourceOptionContract] {
+    DB_LIVE_OPTIONS_STORAGE.get_or_init(|| {
+        vec![
+            SourceOptionContract::new(
+                "refreshOn",
+                SourceContractType::signal(SourceTypeAtom::parameter(SourceTypeParameter::B)),
+            ),
+            SourceOptionContract::new(
+                "debounce",
+                SourceContractType::nominal(SourceNominalType::Duration),
+            ),
+            SourceOptionContract::new("optimistic", SourceContractType::bool()),
+            SourceOptionContract::new(
+                "onRollback",
+                SourceContractType::signal(SourceTypeAtom::nominal(SourceNominalType::DbError)),
+            ),
+            SourceOptionContract::new(
+                "activeWhen",
+                SourceContractType::signal(SourceTypeAtom::primitive(PrimitiveType::Bool)),
+            ),
+        ]
+    })
+}
+
+const DB_LIVE_WAKEUP_OPTIONS: [SourceOptionWakeupContract; 1] = [SourceOptionWakeupContract::new(
+    "refreshOn",
+    SourceOptionWakeupCause::TriggerSignal,
+)];
+
 static DBUS_NAME_OPTIONS_STORAGE: OnceLock<Vec<SourceOptionContract>> = OnceLock::new();
 
 fn dbus_name_options() -> &'static [SourceOptionContract] {
@@ -837,6 +901,8 @@ const PROCESS_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::n
     Some(SourceContractIntrinsicWakeup::ProviderDefinedTrigger),
     &PROCESS_WAKEUP_OPTIONS,
 );
+const DB_LIVE_RECURRENCE: SourceRecurrenceContract =
+    SourceRecurrenceContract::new(None, &DB_LIVE_WAKEUP_OPTIONS);
 const DBUS_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::new(
     Some(SourceContractIntrinsicWakeup::ProviderDefinedTrigger),
     &[],
@@ -936,6 +1002,58 @@ mod tests {
     }
 
     #[test]
+    fn exposes_db_source_option_contract_types() {
+        let connect = BuiltinSourceProvider::DbConnect.contract();
+        let live = BuiltinSourceProvider::DbLive.contract();
+
+        assert_eq!(connect.provider(), BuiltinSourceProvider::DbConnect);
+        assert_eq!(
+            connect.option("pool").map(|option| option.ty()),
+            Some(SourceContractType::int())
+        );
+        assert_eq!(
+            connect.option("activeWhen").map(|option| option.ty()),
+            Some(SourceContractType::signal(SourceTypeAtom::primitive(
+                PrimitiveType::Bool,
+            )))
+        );
+        assert_eq!(
+            live.option("refreshOn").map(|option| option.ty()),
+            Some(SourceContractType::signal(SourceTypeAtom::parameter(
+                SourceTypeParameter::B,
+            )))
+        );
+        assert_eq!(
+            live.option("debounce").map(|option| option.ty()),
+            Some(SourceContractType::nominal(SourceNominalType::Duration))
+        );
+        assert_eq!(
+            live.option("optimistic").map(|option| option.ty()),
+            Some(SourceContractType::bool())
+        );
+        assert_eq!(
+            live.option("onRollback").map(|option| option.ty()),
+            Some(SourceContractType::signal(SourceTypeAtom::nominal(
+                SourceNominalType::DbError,
+            )))
+        );
+    }
+
+    #[test]
+    fn parses_db_source_provider_keys() {
+        assert_eq!(
+            BuiltinSourceProvider::parse("db.connect"),
+            Some(BuiltinSourceProvider::DbConnect)
+        );
+        assert_eq!(
+            BuiltinSourceProvider::parse("db.live"),
+            Some(BuiltinSourceProvider::DbLive)
+        );
+        assert_eq!(BuiltinSourceProvider::DbConnect.key(), "db.connect");
+        assert_eq!(BuiltinSourceProvider::DbLive.key(), "db.live");
+    }
+
+    #[test]
     fn uses_domain_quantity_vocabulary_for_built_in_contracts() {
         let timer = BuiltinSourceProvider::TimerEvery.contract();
         let http = BuiltinSourceProvider::HttpGet.contract();
@@ -952,6 +1070,7 @@ mod tests {
         let timer = BuiltinSourceProvider::TimerEvery.contract();
         let fs_read = BuiltinSourceProvider::FsRead.contract();
         let process = BuiltinSourceProvider::ProcessSpawn.contract();
+        let db_live = BuiltinSourceProvider::DbLive.contract();
 
         assert_eq!(http.intrinsic_wakeup(), None);
         assert_eq!(
@@ -992,11 +1111,20 @@ mod tests {
                 .map(|option| option.cause()),
             Some(SourceOptionWakeupCause::TriggerSignal)
         );
+        assert_eq!(db_live.intrinsic_wakeup(), None);
+        assert_eq!(
+            db_live
+                .wakeup_option("refreshOn")
+                .map(|option| option.cause()),
+            Some(SourceOptionWakeupCause::TriggerSignal)
+        );
     }
 
     #[test]
     fn exposes_builtin_source_lifecycle_contract_metadata() {
         let http = BuiltinSourceProvider::HttpGet.contract();
+        let db_live = BuiltinSourceProvider::DbLive.contract();
+        let db_connect = BuiltinSourceProvider::DbConnect.contract();
         let fs_read = BuiltinSourceProvider::FsRead.contract();
         let timer = BuiltinSourceProvider::TimerEvery.contract();
         let socket = BuiltinSourceProvider::SocketConnect.contract();
@@ -1004,6 +1132,14 @@ mod tests {
         assert_eq!(
             http.lifecycle().cancellation(),
             SourceCancellationPolicy::CancelInFlight
+        );
+        assert_eq!(
+            db_live.lifecycle().cancellation(),
+            SourceCancellationPolicy::CancelInFlight
+        );
+        assert_eq!(
+            db_connect.lifecycle().cancellation(),
+            SourceCancellationPolicy::ProviderManaged
         );
         assert_eq!(
             fs_read.lifecycle().cancellation(),

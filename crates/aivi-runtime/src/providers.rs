@@ -267,6 +267,19 @@ impl SourceProviderContext {
             .into_owned()
             .into_boxed_str()
     }
+
+    fn normalize_sqlite_database_text(&self, database: &str) -> Box<str> {
+        if database == ":memory:" || database.starts_with("file:") {
+            return database.into();
+        }
+        let path = PathBuf::from(database);
+        let resolved = if path.is_absolute() {
+            path
+        } else {
+            self.cwd.join(path)
+        };
+        resolved.to_string_lossy().into_owned().into_boxed_str()
+    }
 }
 
 #[derive(Clone)]
@@ -736,6 +749,21 @@ impl SourceProviderManager {
                     stop,
                 }
             }
+            RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbConnect) => {
+                let plan = DbConnectPlan::parse(instance, &self.context, config)?;
+                let stop = Arc::new(AtomicBool::new(false));
+                let handle = spawn_db_connect_worker(instance, port, plan, stop.clone());
+                self.thread_handles
+                    .lock()
+                    .unwrap()
+                    .entry(instance)
+                    .or_default()
+                    .push(handle);
+                ActiveProviderState::Passive {
+                    provider: config.provider.clone(),
+                    stop,
+                }
+            }
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbusOwnName) => {
                 let plan = DbusOwnNamePlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
@@ -1163,6 +1191,45 @@ impl RequestResultPlan {
     }
 }
 
+#[derive(Clone)]
+struct DbConnectPlan {
+    database: Box<str>,
+    result: RequestResultPlan,
+}
+
+impl DbConnectPlan {
+    fn parse(
+        instance: SourceInstanceId,
+        context: &SourceProviderContext,
+        config: &EvaluatedSourceConfig,
+    ) -> Result<Self, SourceProviderExecutionError> {
+        let provider = BuiltinSourceProvider::DbConnect;
+        validate_argument_count(instance, provider, config, 1)?;
+        let database =
+            parse_db_connect_argument(instance, provider, 0, context, &config.arguments[0])?;
+        for option in &config.options {
+            match option.option_name.as_ref() {
+                "pool" => {
+                    let _ =
+                        parse_positive_int(instance, provider, &option.option_name, &option.value)?;
+                }
+                "activeWhen" => {}
+                _ => {
+                    return Err(SourceProviderExecutionError::UnsupportedOption {
+                        instance,
+                        provider,
+                        option_name: option.option_name.clone(),
+                    });
+                }
+            }
+        }
+        let result = RequestResultPlan::parse(instance, provider, config)?;
+        db_connect_success_value(instance, &result, &database)?;
+        db_connect_error_value(instance, &result, "db.connect probe failure")?;
+        Ok(Self { database, result })
+    }
+}
+
 impl ErrorPlan {
     fn from_step(
         instance: SourceInstanceId,
@@ -1347,7 +1414,8 @@ const REQUEST_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
     ErrorCandidate::text("Error"),
 ];
 
-const CONNECT_ERROR_CANDIDATES: [ErrorCandidate; 3] = [
+const CONNECT_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+    ErrorCandidate::text("ConnectionFailed"),
     ErrorCandidate::text("ConnectFailure"),
     ErrorCandidate::text("NetworkFailure"),
     ErrorCandidate::text("Error"),
@@ -3229,6 +3297,26 @@ fn finish_dbus_startup(
     }
 }
 
+fn spawn_db_connect_worker(
+    instance: SourceInstanceId,
+    port: DetachedRuntimePublicationPort,
+    plan: DbConnectPlan,
+    stop: Arc<AtomicBool>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        let Ok(value) = execute_db_connect(instance, &plan) else {
+            return;
+        };
+        if stop.load(Ordering::Acquire) || port.is_cancelled() {
+            return;
+        }
+        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+    })
+}
+
 fn spawn_timer_every(
     port: DetachedRuntimePublicationPort,
     plan: TimerPlan,
@@ -3859,6 +3947,24 @@ fn parse_bool(
     }
 }
 
+fn parse_positive_int(
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
+    option_name: &str,
+    value: &DetachedRuntimeValue,
+) -> Result<i64, SourceProviderExecutionError> {
+    match strip_detached_signal(value) {
+        RuntimeValue::Int(value) if *value > 0 => Ok(*value),
+        other => Err(SourceProviderExecutionError::InvalidOption {
+            instance,
+            provider,
+            option_name: option_name.into(),
+            expected: "positive Int".into(),
+            value: other.clone(),
+        }),
+    }
+}
+
 fn parse_nonnegative_int(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
@@ -3893,6 +3999,52 @@ fn parse_text_argument(
             value: other.clone(),
         }),
     }
+}
+
+fn parse_db_connect_argument(
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
+    index: usize,
+    context: &SourceProviderContext,
+    value: &DetachedRuntimeValue,
+) -> Result<Box<str>, SourceProviderExecutionError> {
+    let database = match strip_detached_signal(value) {
+        RuntimeValue::Text(value) => value.clone(),
+        RuntimeValue::Record(fields) => {
+            let Some(field) = fields
+                .iter()
+                .find(|field| field.label.as_ref() == "database")
+            else {
+                return Err(SourceProviderExecutionError::InvalidArgument {
+                    instance,
+                    provider,
+                    index,
+                    expected: "Text or { database: Text }".into(),
+                    value: strip_detached_signal(value).clone(),
+                });
+            };
+            let RuntimeValue::Text(database) = strip_signal(&field.value) else {
+                return Err(SourceProviderExecutionError::InvalidArgument {
+                    instance,
+                    provider,
+                    index,
+                    expected: "Text or { database: Text }".into(),
+                    value: strip_detached_signal(value).clone(),
+                });
+            };
+            database.clone()
+        }
+        other => {
+            return Err(SourceProviderExecutionError::InvalidArgument {
+                instance,
+                provider,
+                index,
+                expected: "Text or { database: Text }".into(),
+                value: other.clone(),
+            });
+        }
+    };
+    Ok(context.normalize_sqlite_database_text(database.as_ref()))
 }
 
 fn parse_text_option(
@@ -4239,6 +4391,79 @@ fn encode_runtime_body(
             )
             .map(String::into_boxed_str),
     }
+}
+
+fn execute_db_connect(
+    instance: SourceInstanceId,
+    plan: &DbConnectPlan,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let output = match Command::new("sqlite3")
+        .arg(plan.database.as_ref())
+        .arg("PRAGMA schema_version;")
+        .output()
+    {
+        Ok(output) => output,
+        Err(error) => {
+            return db_connect_error_value(
+                instance,
+                &plan.result,
+                &format!("failed to start sqlite3: {error}"),
+            );
+        }
+    };
+    if output.status.success() {
+        db_connect_success_value(instance, &plan.result, &plan.database)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let detail = if stderr.is_empty() {
+            format!("sqlite3 exited with status {}", output.status)
+        } else {
+            stderr
+        };
+        db_connect_error_value(instance, &plan.result, &detail)
+    }
+}
+
+fn db_connect_success_value(
+    instance: SourceInstanceId,
+    result: &RequestResultPlan,
+    database: &str,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let provider = BuiltinSourceProvider::DbConnect;
+    let payload = serde_json::json!({
+        "database": database,
+    });
+    let encoded = serde_json::to_string(&payload).expect("db.connect payload should encode");
+    result.success_from_text(&encoded).map_err(|error| {
+        SourceProviderExecutionError::UnsupportedProviderShape {
+            instance,
+            provider,
+            detail: format!(
+                "db.connect success payload does not match the source output shape: {error}"
+            )
+            .into_boxed_str(),
+        }
+    })
+}
+
+fn db_connect_error_value(
+    instance: SourceInstanceId,
+    result: &RequestResultPlan,
+    detail: &str,
+) -> Result<RuntimeValue, SourceProviderExecutionError> {
+    let provider = BuiltinSourceProvider::DbConnect;
+    result
+        .error_value(TextSourceErrorKind::Connect, detail)
+        .map_err(
+            |shape| SourceProviderExecutionError::UnsupportedProviderShape {
+                instance,
+                provider,
+                detail: format!(
+                    "db.connect failure cannot be represented by the current error type: {shape}"
+                )
+                .into_boxed_str(),
+            },
+        )
 }
 
 fn duration_from_suffix(amount: u64, suffix: &str) -> Option<Duration> {
@@ -5118,6 +5343,137 @@ signal keyDown : Signal Key
         let value = spin_until(&mut linked, key_signal, Duration::from_millis(200))
             .expect("window key source should publish");
         assert!(matches!(value, RuntimeValue::Sum(_)));
+    }
+
+    #[test]
+    fn db_connect_source_publishes_connection_record() {
+        let database = temp_path("db-connect-success.sqlite");
+        let lowered = lower_text(
+            "runtime-provider-db-connect-success.aivi",
+            &format!(
+                r#"
+type DbError =
+  | ConnectionFailed Text
+  | QueryFailed Text
+
+type Connection = {{
+    database: Text
+}}
+
+value config = {{
+    database: "{}"
+}}
+
+@source db.connect config with {{
+    pool: 5
+}}
+signal db : Signal (Result DbError Connection)
+"#,
+                database.display()
+            ),
+        );
+        let assembly =
+            assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let actions = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(actions.source_actions())
+            .expect("db.connect source should execute");
+        let db_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "db"))
+            .expect("db signal binding should exist")
+            .signal();
+        let value = spin_until(&mut linked, db_signal, Duration::from_millis(300))
+            .expect("db.connect source should publish");
+        let RuntimeValue::ResultOk(connection) = value else {
+            panic!("expected Ok connection, found {value:?}");
+        };
+        let RuntimeValue::Record(fields) = connection.as_ref() else {
+            panic!("expected connection record, found {connection:?}");
+        };
+        expect_text(
+            record_field(fields, "database"),
+            database.to_string_lossy().as_ref(),
+        );
+        assert!(
+            database.exists(),
+            "db.connect should create/open the SQLite file"
+        );
+        let _ = fs::remove_file(&database);
+    }
+
+    #[test]
+    fn db_connect_source_publishes_connection_failed_error() {
+        let missing_parent = temp_path("db-connect-missing-parent");
+        let database = missing_parent.join("nested").join("db.sqlite");
+        let lowered = lower_text(
+            "runtime-provider-db-connect-failure.aivi",
+            &format!(
+                r#"
+type DbError =
+  | ConnectionFailed Text
+  | QueryFailed Text
+
+type Connection = {{
+    database: Text
+}}
+
+@source db.connect "{}"
+signal db : Signal (Result DbError Connection)
+"#,
+                database.display()
+            ),
+        );
+        let assembly =
+            assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let actions = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(actions.source_actions())
+            .expect("db.connect source should execute");
+        let db_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "db"))
+            .expect("db signal binding should exist")
+            .signal();
+        let value = spin_until(&mut linked, db_signal, Duration::from_millis(300))
+            .expect("db.connect source should publish an error");
+        let RuntimeValue::ResultErr(error) = value else {
+            panic!("expected Err connection failure, found {value:?}");
+        };
+        let RuntimeValue::Sum(sum) = error.as_ref() else {
+            panic!("expected DbError sum value, found {error:?}");
+        };
+        assert_eq!(sum.variant_name.as_ref(), "ConnectionFailed");
+        assert_eq!(
+            sum.fields.len(),
+            1,
+            "ConnectionFailed should carry one message"
+        );
+        let RuntimeValue::Text(message) = &sum.fields[0] else {
+            panic!("expected failure message text, found {:?}", sum.fields[0]);
+        };
+        assert!(
+            message.contains("open") || message.contains("unable") || message.contains("No such"),
+            "expected a SQLite open failure message, found {message}"
+        );
     }
 
     #[test]
