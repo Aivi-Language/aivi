@@ -1177,6 +1177,11 @@ pub enum ProjectionBase {
 pub struct PipeExpr {
     pub head: ExprId,
     pub stages: NonEmpty<PipeStage>,
+    /// True when this pipe was synthesised by `result { }` block desugaring
+    /// rather than written directly by the user. The nested-pipe validator
+    /// treats such pipes as transparent so that `result { a <- result { … }; … }`
+    /// is accepted without requiring the inner block to be a separate declaration.
+    pub result_block_desugaring: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

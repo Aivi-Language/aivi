@@ -2707,6 +2707,7 @@ mod tests {
                             },
                         }],
                     ),
+                    result_block_desugaring: false,
                 }),
             })
             .expect("pipe allocation should fit");

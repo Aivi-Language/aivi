@@ -2230,6 +2230,7 @@ impl<'a> Lowerer<'a> {
             kind: ExprKind::Pipe(PipeExpr {
                 head: source,
                 stages: crate::NonEmpty::new(ok_stage, vec![err_stage]),
+                result_block_desugaring: true,
             }),
         })
     }
@@ -2349,7 +2350,11 @@ impl<'a> Lowerer<'a> {
             crate::NonEmpty::from_vec(stages).expect("flush only runs for non-empty stage buffers");
         let expr = self.alloc_expr(Expr {
             span,
-            kind: ExprKind::Pipe(PipeExpr { head, stages }),
+            kind: ExprKind::Pipe(PipeExpr {
+                head,
+                stages,
+                result_block_desugaring: false,
+            }),
         });
         *current = Some(expr);
     }
@@ -10195,12 +10200,28 @@ signal updates : Signal Int
             panic!("expected rejected body to lower into a pipe");
         };
         let rejected_stages = rejected_pipe.stages.iter().collect::<Vec<_>>();
+        // `rejected` has two bindings and no explicit tail; the outer Ok(left) branch continues
+        // into the inner pipe for `right <- requirePositive 22`, whose Ok(right) branch
+        // carries the implicit `Ok right` constructor application.
         let PipeStageKind::Case {
-            body: implicit_tail,
+            body: outer_ok_body,
             ..
         } = &rejected_stages[0].kind
         else {
-            panic!("expected rejected Ok branch to be the implicit tail");
+            panic!("expected rejected outer Ok branch");
+        };
+        let ExprKind::Pipe(inner_rejected_pipe) =
+            &lowered.module().exprs()[*outer_ok_body].kind
+        else {
+            panic!("expected outer Ok branch to continue into inner pipe for the second binding");
+        };
+        let inner_rejected_stages = inner_rejected_pipe.stages.iter().collect::<Vec<_>>();
+        let PipeStageKind::Case {
+            body: implicit_tail,
+            ..
+        } = &inner_rejected_stages[0].kind
+        else {
+            panic!("expected inner Ok branch to be the implicit tail");
         };
         let ExprKind::Apply { .. } = &lowered.module().exprs()[*implicit_tail].kind else {
             panic!("implicit result tails should lower into an `Ok ...` constructor application");

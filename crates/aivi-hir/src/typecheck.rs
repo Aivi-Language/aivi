@@ -4805,6 +4805,7 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
                         },
                         Vec::new(),
                     ),
+                    result_block_desugaring: false,
                 }),
             })
             .expect("pipe allocation should fit");
@@ -4856,6 +4857,7 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
                         },
                         Vec::new(),
                     ),
+                    result_block_desugaring: false,
                 }),
             })
             .expect("pipe allocation should fit");

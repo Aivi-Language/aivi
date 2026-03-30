@@ -6351,17 +6351,23 @@ impl Validator<'_> {
         let module = self.module;
         walk_expr_tree(module, root, |_, expr, is_root| {
             if !is_root {
-                if let ExprKind::Pipe(_) = &expr.kind {
-                    self.diagnostics.push(
-                        Diagnostic::error(
-                            "pipe expression cannot be nested inside another expression",
-                        )
-                        .with_code(code("nested-pipe"))
-                        .with_primary_label(
-                            expr.span,
-                            "move this pipe into a separate named declaration",
-                        ),
-                    );
+                if let ExprKind::Pipe(pipe) = &expr.kind {
+                    // Result-block desugaring legitimately nests PipeExprs (each
+                    // `a <- result { … }` binding produces an inner pipe as the head of
+                    // the outer result-block pipe).  Skip the diagnostic for those
+                    // synthetic pipes; user-authored nested pipes are still flagged.
+                    if !pipe.result_block_desugaring {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "pipe expression cannot be nested inside another expression",
+                            )
+                            .with_code(code("nested-pipe"))
+                            .with_primary_label(
+                                expr.span,
+                                "move this pipe into a separate named declaration",
+                            ),
+                        );
+                    }
                 }
             }
         });
@@ -16975,6 +16981,7 @@ value screenView =
                             kind: PipeStageKind::Transform { expr: follow_expr },
                         }],
                     ),
+                    result_block_desugaring: false,
                 }),
             })
             .expect("expression allocation should fit");
