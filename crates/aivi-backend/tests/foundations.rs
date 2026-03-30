@@ -1466,6 +1466,8 @@ fn evaluates_inline_pipe_transforms_with_apply_and_replace_modes() {
                 stages: vec![
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: int_type.clone(),
                         result_subject: int_type.clone(),
                         kind: CoreInlinePipeStageKind::Transform {
@@ -1475,6 +1477,8 @@ fn evaluates_inline_pipe_transforms_with_apply_and_replace_modes() {
                     },
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: int_type.clone(),
                         result_subject: int_type.clone(),
                         kind: CoreInlinePipeStageKind::Transform {
@@ -1547,6 +1551,8 @@ fn evaluates_inline_pipe_transforms_with_apply_and_replace_modes() {
                 head: called_head,
                 stages: vec![CoreInlinePipeStage {
                     span,
+                    subject_memo: None,
+                    result_memo: None,
                     input_subject: int_type.clone(),
                     result_subject: int_type.clone(),
                     kind: CoreInlinePipeStageKind::Transform {
@@ -1632,6 +1638,8 @@ fn evaluates_inline_pipe_transforms_with_apply_and_replace_modes() {
                 stages: vec![
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: int_type.clone(),
                         result_subject: int_type.clone(),
                         kind: CoreInlinePipeStageKind::Transform {
@@ -1641,6 +1649,8 @@ fn evaluates_inline_pipe_transforms_with_apply_and_replace_modes() {
                     },
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: int_type.clone(),
                         result_subject: text_type.clone(),
                         kind: CoreInlinePipeStageKind::Transform {
@@ -1752,6 +1762,39 @@ fn evaluates_inline_pipe_transforms_with_apply_and_replace_modes() {
 }
 
 #[test]
+fn lowers_and_evaluates_inline_pipe_memos_across_stages() {
+    let backend = lower_text(
+        "backend-pipe-memos.aivi",
+        r#"
+fun add1:Int x:Int =>
+    x + 1
+
+value demo = 1
+  |> #before add1 #after
+  |> before + after
+"#,
+    );
+
+    let demo = find_item(&backend, "demo");
+    let kernel = &backend.kernels()[backend.items()[demo]
+        .body
+        .expect("demo should carry a body")];
+    let KernelExprKind::Pipe(pipe) = &kernel.exprs()[kernel.root].kind else {
+        panic!("demo should lower to an inline pipe expression");
+    };
+    assert_eq!(pipe.stages.len(), 2);
+    assert!(pipe.stages[0].subject_memo.is_some());
+    assert!(pipe.stages[0].result_memo.is_some());
+    assert_eq!(pipe.stages[1].subject_memo, None);
+    assert_eq!(pipe.stages[1].result_memo, None);
+
+    let result = KernelEvaluator::new(&backend)
+        .evaluate_item(demo, &BTreeMap::new())
+        .expect("pipe memos should evaluate through backend inline pipes");
+    assert_eq!(result, RuntimeValue::Int(3));
+}
+
+#[test]
 fn evaluates_replacement_transform_stage_with_ambient_subject_value() {
     let span = SourceSpan::default();
     let mut core = CoreModule::new();
@@ -1810,6 +1853,8 @@ fn evaluates_replacement_transform_stage_with_ambient_subject_value() {
                 stages: vec![
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: CoreType::Primitive(BuiltinType::Int),
                         result_subject: CoreType::Primitive(BuiltinType::Int),
                         kind: CoreInlinePipeStageKind::Transform {
@@ -1819,6 +1864,8 @@ fn evaluates_replacement_transform_stage_with_ambient_subject_value() {
                     },
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: CoreType::Primitive(BuiltinType::Int),
                         result_subject: CoreType::Primitive(BuiltinType::Int),
                         kind: CoreInlinePipeStageKind::Transform {
@@ -1828,6 +1875,8 @@ fn evaluates_replacement_transform_stage_with_ambient_subject_value() {
                     },
                     CoreInlinePipeStage {
                         span,
+                        subject_memo: None,
+                        result_memo: None,
                         input_subject: CoreType::Primitive(BuiltinType::Int),
                         result_subject: CoreType::Primitive(BuiltinType::Int),
                         kind: CoreInlinePipeStageKind::Transform {

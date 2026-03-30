@@ -715,6 +715,8 @@ impl<'a> ModuleLowerer<'a> {
             let head_ty = Type::lower(&pipe.head.ty);
             specs.push(PipeStageSpec {
                 span: pipe.head.span,
+                subject_memo: None,
+                result_memo: None,
                 input_subject: head_ty.clone(),
                 result_subject: head_ty,
                 kind: PipeStageKindSpec::Debug {
@@ -725,6 +727,8 @@ impl<'a> ModuleLowerer<'a> {
         for (stage_index, stage) in pipe.stages.iter().enumerate() {
             specs.push(PipeStageSpec {
                 span: stage.span,
+                subject_memo: stage.subject_memo,
+                result_memo: stage.result_memo,
                 input_subject: Type::lower(&stage.input_subject),
                 result_subject: Type::lower(&stage.result_subject),
                 kind: match &stage.kind {
@@ -760,6 +764,8 @@ impl<'a> ModuleLowerer<'a> {
                 let result_subject = Type::lower(&stage.result_subject);
                 specs.push(PipeStageSpec {
                     span: stage.span,
+                    subject_memo: None,
+                    result_memo: None,
                     input_subject: result_subject.clone(),
                     result_subject,
                     kind: PipeStageKindSpec::Debug {
@@ -2994,6 +3000,8 @@ impl<'a> ModuleLowerer<'a> {
                                 .collect::<Vec<_>>();
                             PipeStage {
                                 span: stage.span,
+                                subject_memo: stage.subject_memo,
+                                result_memo: stage.result_memo,
                                 input_subject: stage.input_subject,
                                 result_subject: stage.result_subject,
                                 kind: match stage.kind {
@@ -3253,6 +3261,8 @@ enum SegmentSpec {
 #[derive(Clone)]
 struct PipeStageSpec {
     span: SourceSpan,
+    subject_memo: Option<aivi_hir::BindingId>,
+    result_memo: Option<aivi_hir::BindingId>,
     input_subject: Type,
     result_subject: Type,
     kind: PipeStageKindSpec,
@@ -3995,6 +4005,48 @@ mod tests {
             pretty.contains("gate"),
             "pretty dump should mention gate stages: {pretty}"
         );
+    }
+
+    #[test]
+    fn lower_module_preserves_pipe_memos_in_core_pipe_exprs() {
+        let lowered = lower_text(
+            "pipe-memos.aivi",
+            r#"
+fun add1:Int x:Int =>
+    x + 1
+
+fun demo:Int x:Int => x
+  |> #before add1 #after
+  |> before + after
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "pipe memo fixture should lower cleanly before typed-core lowering: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        validate_module(&core).expect("typed-core module should validate");
+
+        let demo = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "demo")
+            .map(|(id, _)| id)
+            .expect("expected demo item");
+        let body = core.items()[demo]
+            .body
+            .expect("demo function should have a typed-core body");
+        let crate::expr::ExprKind::Pipe(pipe) = &core.exprs()[body].kind else {
+            panic!("expected demo body to lower into a pipe expression");
+        };
+        assert_eq!(pipe.stages.len(), 2);
+        assert!(pipe.stages[0].supports_memos());
+        assert!(pipe.stages[0].subject_memo.is_some());
+        assert!(pipe.stages[0].result_memo.is_some());
+        assert_eq!(pipe.stages[1].subject_memo, None);
+        assert_eq!(pipe.stages[1].result_memo, None);
     }
 
     #[test]

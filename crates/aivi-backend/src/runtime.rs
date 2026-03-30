@@ -1589,6 +1589,7 @@ impl<'a> KernelEvaluator<'a> {
             inline_subjects,
             globals,
         )?;
+        let mut pipe_subjects = inline_subjects.to_vec();
         for stage in &pipe.stages {
             let stage_found = current.clone();
             current = coerce_inline_pipe_value(self.program, current, stage.input_layout).ok_or(
@@ -1598,8 +1599,11 @@ impl<'a> KernelEvaluator<'a> {
                     found: stage_found,
                 },
             )?;
-            let mut stage_subjects = inline_subjects.to_vec();
-            stage_subjects[stage.subject.index()] = Some(current.clone());
+            pipe_subjects[stage.subject.index()] = Some(current.clone());
+            if let Some(slot) = stage.subject_memo {
+                pipe_subjects[slot.index()] = Some(current.clone());
+            }
+            let stage_subjects = pipe_subjects.clone();
             let result = match &stage.kind {
                 InlinePipeStageKind::Transform { mode, expr } => match mode {
                     aivi_hir::PipeTransformMode::Apply | aivi_hir::PipeTransformMode::Replace => {
@@ -1702,6 +1706,9 @@ impl<'a> KernelEvaluator<'a> {
                     found: result_found,
                 },
             )?;
+            if let Some(slot) = stage.result_memo {
+                pipe_subjects[slot.index()] = Some(current.clone());
+            }
         }
         Ok(current)
     }

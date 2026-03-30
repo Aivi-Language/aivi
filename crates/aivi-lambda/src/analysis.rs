@@ -134,26 +134,45 @@ pub(crate) fn capture_free_bindings(
                 walker.push_frame((*left, scope));
             }
             ExprKind::Pipe(pipe) => {
-                for stage in pipe.stages.iter().rev() {
+                let mut pipe_scope = scope.clone();
+                let mut stage_frames = Vec::new();
+                for stage in &pipe.stages {
+                    let mut stage_scope = pipe_scope.clone();
+                    if stage.supports_memos()
+                        && let Some(binding) = stage.subject_memo
+                    {
+                        stage_scope.insert(binding);
+                    }
                     match &stage.kind {
                         PipeStageKind::Transform { expr, .. }
                         | PipeStageKind::Tap { expr }
                         | PipeStageKind::Gate {
                             predicate: expr, ..
-                        } => walker.push_frame((*expr, scope.clone())),
+                        } => stage_frames.push((*expr, stage_scope.clone())),
                         PipeStageKind::Debug { .. } => {}
                         PipeStageKind::Case { arms } => {
-                            for arm in arms.iter().rev() {
-                                let mut arm_scope = scope.clone();
+                            for arm in arms {
+                                let mut arm_scope = stage_scope.clone();
                                 extend_scope_with_pattern(&mut arm_scope, &arm.pattern);
-                                walker.push_frame((arm.body, arm_scope));
+                                stage_frames.push((arm.body, arm_scope));
                             }
                         }
                         PipeStageKind::TruthyFalsy(pair) => {
-                            walker.push_frame((pair.falsy.body, scope.clone()));
-                            walker.push_frame((pair.truthy.body, scope.clone()));
+                            stage_frames.push((pair.truthy.body, stage_scope.clone()));
+                            stage_frames.push((pair.falsy.body, stage_scope));
                         }
                     }
+                    if stage.supports_memos() {
+                        if let Some(binding) = stage.subject_memo {
+                            pipe_scope.insert(binding);
+                        }
+                        if let Some(binding) = stage.result_memo {
+                            pipe_scope.insert(binding);
+                        }
+                    }
+                }
+                for (stage_expr, stage_scope) in stage_frames.into_iter().rev() {
+                    walker.push_frame((stage_expr, stage_scope));
                 }
                 walker.push_frame((pipe.head, scope));
             }

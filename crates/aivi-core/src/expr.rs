@@ -249,9 +249,17 @@ pub struct PatternConstructor {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PipeStage {
     pub span: SourceSpan,
+    pub subject_memo: Option<HirBindingId>,
+    pub result_memo: Option<HirBindingId>,
     pub input_subject: Type,
     pub result_subject: Type,
     pub kind: PipeStageKind,
+}
+
+impl PipeStage {
+    pub const fn supports_memos(&self) -> bool {
+        matches!(self.kind, PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

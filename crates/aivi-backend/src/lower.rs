@@ -1473,6 +1473,8 @@ impl<'a> ProgramLowerer<'a> {
         #[derive(Clone)]
         struct InlinePipeStageSpec {
             subject: InlineSubjectId,
+            subject_memo: Option<InlineSubjectId>,
+            result_memo: Option<InlineSubjectId>,
             span: SourceSpan,
             input_layout: LayoutId,
             result_layout: LayoutId,
@@ -1826,21 +1828,55 @@ impl<'a> ProgramLowerer<'a> {
                         core::ExprKind::Pipe(pipe) => {
                             let mut stage_specs = Vec::with_capacity(pipe.stages.len());
                             let mut children = Vec::new();
+                            let mut pipe_locals = locals.clone();
                             for stage in &pipe.stages {
                                 let input_layout = self.intern_core_type(&stage.input_subject)?;
                                 let result_layout = self.intern_core_type(&stage.result_subject)?;
                                 let subject_slot =
                                     alloc_inline_subject(&mut inline_subjects, input_layout)?;
+                                let subject_memo = if let Some(binding) = stage.subject_memo {
+                                    let slot =
+                                        alloc_inline_subject(&mut inline_subjects, input_layout)?;
+                                    pipe_locals.insert(
+                                        binding.as_raw(),
+                                        SubjectContext {
+                                            reference: SubjectRef::Inline(slot),
+                                            layout: input_layout,
+                                        },
+                                    );
+                                    Some(slot)
+                                } else {
+                                    None
+                                };
+                                let result_memo = if let Some(binding) = stage.result_memo {
+                                    let slot =
+                                        alloc_inline_subject(&mut inline_subjects, result_layout)?;
+                                    Some((binding.as_raw(), slot))
+                                } else {
+                                    None
+                                };
                                 let child_subject = Some(SubjectContext {
                                     reference: SubjectRef::Inline(subject_slot),
                                     layout: input_layout,
                                 });
+                                let mut stage_locals = pipe_locals.clone();
+                                if let Some(slot) = subject_memo {
+                                    if let Some(binding) = stage.subject_memo {
+                                        stage_locals.insert(
+                                            binding.as_raw(),
+                                            SubjectContext {
+                                                reference: SubjectRef::Inline(slot),
+                                                layout: input_layout,
+                                            },
+                                        );
+                                    }
+                                }
                                 let kind = match &stage.kind {
                                     core::PipeStageKind::Transform { mode, expr } => {
                                         children.push(PipeChildSpec {
                                             expr: *expr,
                                             subject: child_subject,
-                                            locals: locals.clone(),
+                                            locals: stage_locals.clone(),
                                         });
                                         InlinePipeStageBuild::Transform { mode: *mode }
                                     }
@@ -1848,7 +1884,7 @@ impl<'a> ProgramLowerer<'a> {
                                         children.push(PipeChildSpec {
                                             expr: *expr,
                                             subject: child_subject,
-                                            locals: locals.clone(),
+                                            locals: stage_locals.clone(),
                                         });
                                         InlinePipeStageBuild::Tap
                                     }
@@ -1864,7 +1900,7 @@ impl<'a> ProgramLowerer<'a> {
                                         children.push(PipeChildSpec {
                                             expr: *predicate,
                                             subject: child_subject,
-                                            locals: locals.clone(),
+                                            locals: stage_locals.clone(),
                                         });
                                         InlinePipeStageBuild::Gate {
                                             emits_negative_update: *emits_negative_update,
@@ -1873,7 +1909,7 @@ impl<'a> ProgramLowerer<'a> {
                                     core::PipeStageKind::Case { arms } => {
                                         let mut lowered_arms = Vec::with_capacity(arms.len());
                                         for arm in arms {
-                                            let mut arm_locals = locals.clone();
+                                            let mut arm_locals = stage_locals.clone();
                                             let pattern = self.lower_inline_pipe_pattern(
                                                 &arm.pattern,
                                                 input_layout,
@@ -1909,7 +1945,7 @@ impl<'a> ProgramLowerer<'a> {
                                                     layout: inline_subjects[slot.index()],
                                                 }
                                             }),
-                                            locals: locals.clone(),
+                                            locals: stage_locals.clone(),
                                         });
                                         children.push(PipeChildSpec {
                                             expr: stage_pair.falsy.body,
@@ -1919,13 +1955,24 @@ impl<'a> ProgramLowerer<'a> {
                                                     layout: inline_subjects[slot.index()],
                                                 }
                                             }),
-                                            locals: locals.clone(),
+                                            locals: stage_locals.clone(),
                                         });
                                         InlinePipeStageBuild::TruthyFalsy { truthy, falsy }
                                     }
                                 };
+                                if let Some((binding, slot)) = result_memo {
+                                    pipe_locals.insert(
+                                        binding,
+                                        SubjectContext {
+                                            reference: SubjectRef::Inline(slot),
+                                            layout: result_layout,
+                                        },
+                                    );
+                                }
                                 stage_specs.push(InlinePipeStageSpec {
                                     subject: subject_slot,
+                                    subject_memo,
+                                    result_memo: result_memo.map(|(_, slot)| slot),
                                     span: stage.span,
                                     input_layout,
                                     result_layout,
@@ -2159,6 +2206,8 @@ impl<'a> ProgramLowerer<'a> {
                         .into_iter()
                         .map(|stage| InlinePipeStage {
                             subject: stage.subject,
+                            subject_memo: stage.subject_memo,
+                            result_memo: stage.result_memo,
                             span: stage.span,
                             input_layout: stage.input_layout,
                             result_layout: stage.result_layout,

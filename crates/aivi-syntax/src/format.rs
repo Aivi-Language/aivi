@@ -1639,7 +1639,7 @@ impl Formatter {
                 PipeStageKind::Case(arm) => {
                     let padding = spaces(width.saturating_sub(display_width(&pattern)));
                     format!(
-                        " ||> {pattern}{padding} -> {}",
+                        "||> {pattern}{padding} -> {}",
                         self.format_expr_inline(&arm.body, 0)
                     )
                 }
@@ -1684,8 +1684,11 @@ impl Formatter {
         )
     }
 
-    fn pipe_alignment_prefix(&self, _operator: &str) -> &'static str {
-        " "
+    fn pipe_alignment_prefix(&self, operator: &str) -> &'static str {
+        match operator {
+            "|>" | "|" => " ",
+            _ => "",
+        }
     }
 
     fn format_markup_block(&self, node: &MarkupNode) -> Block {
@@ -2155,13 +2158,13 @@ mod tests {
                 "signal documentBody = \"Hello\"\n",
                 "\n",
                 "signal draft =\n",
-                "  &|> documentTitle\n",
-                "  &|> documentBody\n",
+                " &|> documentTitle\n",
+                " &|> documentBody\n",
                 "  |> Pair\n",
                 "\n",
                 "fun label:Text state:SaveState => state\n",
-                "  ||> Saved         -> \"saved\"\n",
-                "  ||> Dirty message -> \"dirty {message}\"\n",
+                " ||> Saved         -> \"saved\"\n",
+                " ||> Dirty message -> \"dirty {message}\"\n",
             )
         );
     }
@@ -2187,7 +2190,24 @@ mod tests {
                 "}\n",
                 "\n",
                 "value activeAdult: (Option User) = seed\n",
-                "  ?|> .active and .age > 18\n",
+                " ?|> .active and .age > 18\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_aligns_short_pipe_operators_with_three_char_stages() {
+        let formatted = format_text(
+            "fun pipeline:Text order:Order =>\norder?|>.ready|>.shipping|observeShipping|>.status\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "fun pipeline:Text order:Order => order\n",
+                " ?|> .ready\n",
+                "  |> .shipping\n",
+                "  | observeShipping\n",
+                "  |> .status\n",
             )
         );
     }
@@ -2410,8 +2430,8 @@ value view =
                 "type Status = Idle | Failed Text\n",
                 "\n",
                 "fun label:Text status:Status => status\n",
-                "  ||> Idle          -> \"idle\"\n",
-                "  ||> Failed reason -> \"failed {reason}\"\n",
+                " ||> Idle          -> \"idle\"\n",
+                " ||> Failed reason -> \"failed {reason}\"\n",
             )
         );
     }

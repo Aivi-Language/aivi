@@ -13,8 +13,8 @@ use crate::{
     typecheck::resolve_class_member_dispatch,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeFunctionSignatureMatch,
-        PipeSubjectStepOutcome, PipeSubjectWalker, gate_env_for_function, truthy_falsy_pair_stages,
-        walk_expr_tree,
+        PipeSubjectStepOutcome, PipeSubjectWalker, extend_pipe_env_with_stage_memos,
+        gate_env_for_function, pipe_stage_expr_env, truthy_falsy_pair_stages, walk_expr_tree,
     },
 };
 
@@ -282,6 +282,8 @@ pub struct GateRuntimePipeExpr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GateRuntimePipeStage {
     pub span: SourceSpan,
+    pub subject_memo: Option<BindingId>,
+    pub result_memo: Option<BindingId>,
     pub input_subject: GateType,
     pub result_subject: GateType,
     pub kind: GateRuntimePipeStageKind,
@@ -1722,17 +1724,19 @@ fn lower_runtime_pipe_expr(
     let head =
         lower_gate_runtime_expr_with_purity(module, pipe.head, env, ambient, typing, purity)?;
     let mut current = head.ty.clone();
+    let mut pipe_env = env.clone();
     let mut stages = Vec::with_capacity(pipe.stages.len());
     for stage in pipe.stages.iter() {
         let input_subject = current.clone();
+        let stage_env = pipe_stage_expr_env(&pipe_env, stage, &current);
         let (kind, result_subject) = match &stage.kind {
             PipeStageKind::Transform { expr } => {
-                let mode = typing.infer_transform_stage_mode(*expr, env, &current);
+                let mode = typing.infer_transform_stage_mode(*expr, &stage_env, &current);
                 let body = lower_gate_pipe_body_runtime_expr_with_purity(
-                    module, *expr, env, &current, typing, purity,
+                    module, *expr, &stage_env, &current, typing, purity,
                 )?;
                 let result_subject = typing
-                    .infer_transform_stage(*expr, env, &current)
+                    .infer_transform_stage(*expr, &stage_env, &current)
                     .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: stage.span })?;
                 (
                     GateRuntimePipeStageKind::Transform { mode, expr: body },
@@ -1742,14 +1746,14 @@ fn lower_runtime_pipe_expr(
             PipeStageKind::Tap { expr } => (
                 GateRuntimePipeStageKind::Tap {
                     expr: lower_gate_pipe_body_runtime_expr_with_purity(
-                        module, *expr, env, &current, typing, purity,
+                        module, *expr, &stage_env, &current, typing, purity,
                     )?,
                 },
                 current.clone(),
             ),
             PipeStageKind::Gate { expr } => {
                 let predicate =
-                    lower_gate_pipe_body_runtime_expr(module, *expr, env, &current, typing)?;
+                    lower_gate_pipe_body_runtime_expr(module, *expr, &stage_env, &current, typing)?;
                 if !predicate.ty.is_bool() {
                     return Err(GateElaborationBlocker::PredicateNotBool {
                         found: predicate.ty,
@@ -1840,10 +1844,13 @@ fn lower_runtime_pipe_expr(
         };
         stages.push(GateRuntimePipeStage {
             span: stage.span,
+            subject_memo: stage.subject_memo,
+            result_memo: stage.result_memo,
             input_subject,
             result_subject: result_subject.clone(),
             kind,
         });
+        extend_pipe_env_with_stage_memos(&mut pipe_env, stage, &current, &result_subject);
         current = result_subject;
     }
     Ok(GateRuntimePipeExpr {

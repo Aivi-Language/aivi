@@ -1337,6 +1337,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     )?;
                     lowered.push(GateRuntimePipeStage {
                         span: stage.span,
+                        subject_memo: stage.subject_memo,
+                        result_memo: stage.result_memo,
                         input_subject: current.gate_payload().clone(),
                         result_subject: result_subject.clone(),
                         kind: GateRuntimePipeStageKind::Transform { mode, expr: body },
@@ -1360,6 +1362,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     )?;
                     lowered.push(GateRuntimePipeStage {
                         span: stage.span,
+                        subject_memo: stage.subject_memo,
+                        result_memo: stage.result_memo,
                         input_subject: current.gate_payload().clone(),
                         result_subject: current.clone(),
                         kind: GateRuntimePipeStageKind::Tap { expr: body },
@@ -1388,6 +1392,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     }
                     lowered.push(GateRuntimePipeStage {
                         span: stage.span,
+                        subject_memo: stage.subject_memo,
+                        result_memo: stage.result_memo,
                         input_subject: current.clone(),
                         result_subject: result_subject.clone(),
                         kind: GateRuntimePipeStageKind::Gate {
@@ -1578,6 +1584,8 @@ impl<'a> GeneralExprElaborator<'a> {
         };
         Ok(GateRuntimePipeStage {
             span: join_stage_spans(stages),
+            subject_memo: None,
+            result_memo: None,
             input_subject: branch_subject,
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::Case { arms },
@@ -1628,6 +1636,8 @@ impl<'a> GeneralExprElaborator<'a> {
             .apply_truthy_falsy_result_type(subject, truthy_body.ty.clone());
         Ok(GateRuntimePipeStage {
             span: join_spans(pair.truthy_stage.span, pair.falsy_stage.span),
+            subject_memo: None,
+            result_memo: None,
             input_subject: subject.gate_payload().clone(),
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::TruthyFalsy {

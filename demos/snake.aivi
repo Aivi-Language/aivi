@@ -103,8 +103,10 @@ fun advanceFoodSearch:FoodSearch seed:Int =>
         value: Cell 0 0
     }
 
-fun maybePickFood:FoodSearch snake: (List Cell) seed:Int => cellIsOpen snake (spawnCandidate seed)
-  T|> { seed, found: True, value: spawnCandidate seed }
+fun maybePickFood:FoodSearch snake: (List Cell) seed:Int => seed
+  |> spawnCandidate #candidate
+  |> cellIsOpen snake
+  T|> { seed, found: True, value: candidate }
   F|> advanceFoodSearch seed
 
 fun searchFoodStep:FoodSearch snake: (List Cell) state:FoodSearch step:Int => state.found
@@ -159,8 +161,11 @@ fun hitsWall:Bool cell:Cell => cell
 fun willEat:Bool direction:Direction game:Game =>
     nextHeadFor direction game.snake == game.food
 
-fun willCrash:Bool direction:Direction game:Game =>
-    hitsWall (nextHeadFor direction game.snake) or snakeContains game.snake (nextHeadFor direction game.snake)
+fun willCrash:Bool direction:Direction game:Game => game.snake
+  |> #snake nextHeadFor direction #next
+  |> hitsWall
+  T|> True
+  F|> snakeContains snake next
 
 fun cellLengthStep:Int total:Int item:Cell =>
     total + 1

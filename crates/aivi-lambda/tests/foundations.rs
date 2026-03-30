@@ -203,6 +203,34 @@ fn lowering_rejects_unbound_top_level_locals() {
 }
 
 #[test]
+fn lowering_treats_pipe_memos_as_item_locals() {
+    let lambda = lower_text(
+        "lambda-pipe-memos.aivi",
+        r#"
+fun add1:Int x:Int =>
+    x + 1
+
+fun demo:Int x:Int => x
+  |> #before add1 #after
+  |> before + after
+"#,
+    );
+
+    let demo = lambda
+        .items()
+        .iter()
+        .find(|(_, item)| item.name.as_ref() == "demo")
+        .map(|(id, _)| id)
+        .expect("expected demo function item");
+    let body = lambda.items()[demo]
+        .body
+        .expect("demo function should carry a closure");
+    let closure = &lambda.closures()[body];
+    assert_eq!(closure.kind, ClosureKind::ItemBody);
+    assert!(closure.captures.is_empty());
+}
+
+#[test]
 fn validator_catches_missing_capture_metadata() {
     let core = manual_core_gate(CoreExprKind::Reference(CoreReference::Local(
         HirBindingId::from_raw(7),

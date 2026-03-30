@@ -557,6 +557,8 @@ pub struct InlinePipeExpr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InlinePipeStage {
     pub subject: InlineSubjectId,
+    pub subject_memo: Option<InlineSubjectId>,
+    pub result_memo: Option<InlineSubjectId>,
     pub span: SourceSpan,
     pub input_layout: LayoutId,
     pub result_layout: LayoutId,
