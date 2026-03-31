@@ -643,6 +643,21 @@ impl<'a> Lowerer<'a> {
                     body.as_ref(),
                 );
             }
+            syn::ReactiveUpdateKind::SourcePattern {
+                source,
+                pattern,
+                target,
+                body,
+            } => {
+                self.attach_source_pattern_reactive_update_clause(
+                    item.base.span,
+                    item.keyword_span,
+                    source.as_ref(),
+                    pattern.as_ref(),
+                    target.as_ref(),
+                    body.as_ref(),
+                );
+            }
             syn::ReactiveUpdateKind::Match { subject, arms } => {
                 self.attach_pattern_reactive_update_clauses(
                     item.base.span,
@@ -701,6 +716,70 @@ impl<'a> Lowerer<'a> {
             guard,
             body,
             body_mode: ReactiveUpdateBodyMode::Payload,
+        });
+    }
+
+    fn attach_source_pattern_reactive_update_clause(
+        &mut self,
+        span: SourceSpan,
+        keyword_span: SourceSpan,
+        source: Option<&syn::Identifier>,
+        pattern: Option<&syn::Pattern>,
+        target: Option<&syn::Identifier>,
+        body: Option<&syn::Expr>,
+    ) {
+        let Some(source) = source else {
+            self.emit_error(
+                span,
+                "reactive update is missing its source signal name",
+                code("reactive-update-missing-source"),
+            );
+            return;
+        };
+        let Some(pattern) = pattern else {
+            self.emit_error(
+                span,
+                "reactive update is missing its source pattern",
+                code("reactive-update-missing-source-pattern"),
+            );
+            return;
+        };
+        let Some(target) = target else {
+            self.emit_error(
+                span,
+                "reactive update is missing its target signal name",
+                code("reactive-update-missing-target"),
+            );
+            return;
+        };
+        let Some(body) = body else {
+            self.emit_error(
+                span,
+                "reactive update is missing its body expression",
+                code("reactive-update-missing-body"),
+            );
+            return;
+        };
+        if self.resolve_reactive_update_source(source).is_none() {
+            return;
+        }
+        let Some(target_item) = self.resolve_reactive_update_target(target) else {
+            return;
+        };
+
+        let source_expr = self.lower_unresolved_name_expr(source.text.as_str(), source.span);
+        let guard = self.make_pattern_match_bool_expr(source_expr, pattern, span);
+        let body = self.make_pattern_match_optional_expr(source_expr, pattern, body, span);
+        let Some(Item::Signal(signal)) = self.module.arenas.items.get_mut(target_item) else {
+            unreachable!("reactive update target resolution only returns signal items");
+        };
+        signal.reactive_updates.push(ReactiveUpdateClause {
+            span,
+            keyword_span,
+            target_span: target.span,
+            guard,
+            body,
+            body_mode: ReactiveUpdateBodyMode::OptionalPayload,
         });
     }
 
@@ -807,6 +886,32 @@ impl<'a> Lowerer<'a> {
             return None;
         }
         Some(target_item)
+    }
+
+    fn resolve_reactive_update_source(&mut self, source: &syn::Identifier) -> Option<ItemId> {
+        let Some(source_item) = self.find_predeclared_named_item(source.text.as_str()) else {
+            self.emit_error(
+                source.span,
+                format!(
+                    "reactive update source `{}` must name a previously declared signal",
+                    source.text
+                ),
+                code("reactive-update-unknown-source"),
+            );
+            return None;
+        };
+        if !matches!(self.module.items()[source_item], Item::Signal(_)) {
+            self.emit_error(
+                source.span,
+                format!(
+                    "reactive update source `{}` must refer to a previously declared signal",
+                    source.text
+                ),
+                code("reactive-update-source-not-signal"),
+            );
+            return None;
+        }
+        Some(source_item)
     }
 
     fn make_pattern_match_bool_expr(
@@ -8375,6 +8480,43 @@ when event
         ));
         assert!(matches!(
             module.exprs()[heading.reactive_updates[0].body].kind,
+            ExprKind::Pipe(_)
+        ));
+    }
+
+    #[test]
+    fn lowers_source_pattern_reactive_updates_onto_target_signals() {
+        let lowered = lower_text(
+            "source_pattern_reactive_updates.aivi",
+            r#"type Key = Key Text
+type Event = Tick | Turn Text
+
+signal keyDown : Signal Key
+signal event : Signal Event
+
+when keyDown (Key "ArrowUp") => event <- Turn "up"
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "expected source-pattern reactive updates to lower cleanly, got diagnostics: {:?}",
+            lowered.diagnostics()
+        );
+
+        let module = lowered.module();
+        let event = find_signal(module, "event");
+        assert_eq!(event.reactive_updates.len(), 1);
+        assert_eq!(signal_dependency_names(module, event), vec!["keyDown".to_owned()]);
+        assert_eq!(
+            event.reactive_updates[0].body_mode,
+            ReactiveUpdateBodyMode::OptionalPayload
+        );
+        assert!(matches!(
+            module.exprs()[event.reactive_updates[0].guard].kind,
+            ExprKind::Pipe(_)
+        ));
+        assert!(matches!(
+            module.exprs()[event.reactive_updates[0].body].kind,
             ExprKind::Pipe(_)
         ));
     }

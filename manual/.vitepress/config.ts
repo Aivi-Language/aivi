@@ -1,7 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 import aiviGrammar from '../../tooling/packages/vscode-aivi/syntaxes/aivi.tmLanguage.json'
 import aiviDarkTheme from './theme/aivi-dark-theme.json'
 import { nav, sidebar } from './navigation'
+
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 
 function manualBase(): string {
   const configured = process.env.AIVI_MANUAL_BASE?.trim()
@@ -30,6 +33,14 @@ export default defineConfig({
   markdown: {
     languages: [aiviGrammar as any],
     theme: aiviDarkTheme as any,
+  },
+
+  vite: {
+    server: {
+      fs: {
+        allow: [repoRoot],
+      },
+    },
   },
 
   themeConfig: {

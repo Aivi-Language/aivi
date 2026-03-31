@@ -4930,6 +4930,23 @@ when event
     }
 
     #[test]
+    fn typecheck_accepts_source_pattern_reactive_updates() {
+        let report = typecheck_text(
+            "source-pattern-reactive-update-valid.aivi",
+            r#"signal ready : Signal Bool
+signal total : Signal Int = 0
+
+when ready True => total <- 42
+"#,
+        );
+        assert!(
+            report.is_ok(),
+            "expected source-pattern reactive update typing to succeed, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
     fn typecheck_accepts_unannotated_function_name_from_expected_arrow() {
         let report = typecheck_text(
             "function-name-expected-arrow.aivi",

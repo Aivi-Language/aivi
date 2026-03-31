@@ -229,6 +229,17 @@ impl Formatter {
             } => {
                 self.format_guarded_reactive_update(guard.as_ref(), target.as_ref(), body.as_ref())
             }
+            ReactiveUpdateKind::SourcePattern {
+                source,
+                pattern,
+                target,
+                body,
+            } => self.format_source_pattern_reactive_update(
+                source.as_ref(),
+                pattern.as_ref(),
+                target.as_ref(),
+                body.as_ref(),
+            ),
             ReactiveUpdateKind::Match { subject, arms } => {
                 let subject = subject
                     .as_ref()
@@ -260,6 +271,26 @@ impl Formatter {
             .map(|target| target.text.clone())
             .unwrap_or_else(|| "_".to_owned());
         let header = format!("when {guard} => {target}");
+        self.format_reactive_update_body(&header, body)
+    }
+
+    fn format_source_pattern_reactive_update(
+        &self,
+        source: Option<&Identifier>,
+        pattern: Option<&Pattern>,
+        target: Option<&Identifier>,
+        body: Option<&Expr>,
+    ) -> Vec<String> {
+        let source = source
+            .map(|source| source.text.clone())
+            .unwrap_or_else(|| "_".to_owned());
+        let pattern = pattern
+            .map(|pattern| self.format_pattern_inline(pattern, 0))
+            .unwrap_or_else(|| "_".to_owned());
+        let target = target
+            .map(|target| target.text.clone())
+            .unwrap_or_else(|| "_".to_owned());
+        let header = format!("when {source} {pattern} => {target}");
         self.format_reactive_update_body(&header, body)
     }
 
@@ -2865,6 +2896,22 @@ value view =
                 "when event\n",
                 "  ||> Turn dir => heading <- dir\n",
                 "  ||> Tick => ticks <- ticks + 1\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_source_pattern_reactive_update_items() {
+        let formatted = format_text(
+            "signal event:Signal Event\nwhen keyDown(Key \"ArrowUp\")=>event<-Turn North\nwhen tick _=>event<-Tick\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "signal event : Signal Event\n",
+                "\n",
+                "when keyDown (Key \"ArrowUp\") => event <- Turn North\n",
+                "when tick _ => event <- Tick\n",
             )
         );
     }

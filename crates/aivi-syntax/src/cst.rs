@@ -724,6 +724,12 @@ pub enum ReactiveUpdateKind {
         target: Option<Identifier>,
         body: Option<Expr>,
     },
+    SourcePattern {
+        source: Option<Identifier>,
+        pattern: Option<Pattern>,
+        target: Option<Identifier>,
+        body: Option<Expr>,
+    },
     Match {
         subject: Option<Expr>,
         arms: Vec<ReactiveUpdateArm>,
