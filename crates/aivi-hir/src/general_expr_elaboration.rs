@@ -18,7 +18,7 @@ use crate::{
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{expression_matches, resolve_class_member_dispatch},
     validate::{
-        GateExprEnv, GateIssue, GateType, GateTypeContext, PolyTypeBindings,
+        GateExprEnv, GateIssue, GateProjectionStep, GateType, GateTypeContext, PolyTypeBindings,
         extend_pipe_env_with_stage_memos, pipe_stage_expr_env, truthy_falsy_pair_stages,
     },
 };
@@ -1142,13 +1142,7 @@ impl<'a> GeneralExprElaborator<'a> {
             }
             ExprKind::AmbientSubject => GateRuntimeExprKind::AmbientSubject,
             ExprKind::Projection { base, path } => {
-                let base = match base {
-                    ProjectionBase::Ambient => GateRuntimeProjectionBase::AmbientSubject,
-                    ProjectionBase::Expr(base) => GateRuntimeProjectionBase::Expr(Box::new(
-                        self.lower_expr(base, env, ambient, None)?,
-                    )),
-                };
-                GateRuntimeExprKind::Projection { base, path }
+                self.lower_projection_expr(expr_id, &base, &path, env, ambient)?
             }
             ExprKind::Apply { callee, arguments } => {
                 self.lower_apply_expr(expr_id, callee, &arguments, env, ambient, &ty)?
@@ -1218,6 +1212,105 @@ impl<'a> GeneralExprElaborator<'a> {
             span: expr.span,
             ty,
             kind,
+        })
+    }
+
+    fn lower_projection_expr(
+        &mut self,
+        expr_id: ExprId,
+        base: &ProjectionBase,
+        path: &NamePath,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+    ) -> Result<GateRuntimeExprKind, Vec<GeneralExprBlocker>> {
+        let expr = &self.module.exprs()[expr_id];
+        let mut current_expr = match base {
+            ProjectionBase::Ambient => {
+                let Some(ambient) = ambient.cloned() else {
+                    return Err(self.blockers_from_issues(vec![
+                        GateIssue::AmbientSubjectOutsidePipe { span: expr.span },
+                    ]));
+                };
+                GateRuntimeExpr {
+                    span: expr.span,
+                    ty: ambient,
+                    kind: GateRuntimeExprKind::AmbientSubject,
+                }
+            }
+            ProjectionBase::Expr(base_expr) => self.lower_expr(*base_expr, env, ambient, None)?,
+        };
+        let mut current_ty = current_expr.ty.clone();
+        let mut pending_record_segments = Vec::new();
+
+        for segment in path.segments().iter() {
+            let step = self
+                .typing
+                .project_type_step(&current_ty, segment, path)
+                .map_err(|issue| self.blockers_from_issues(vec![issue]))?;
+            match step {
+                GateProjectionStep::RecordField { result } => {
+                    pending_record_segments.push(segment.clone());
+                    current_ty = result;
+                }
+                GateProjectionStep::DomainMember { handle, result } => {
+                    current_expr = self.flush_record_projection_segments(
+                        current_expr,
+                        &mut pending_record_segments,
+                        current_ty.clone(),
+                    )?;
+                    let callee = GateRuntimeExpr {
+                        span: segment.span(),
+                        ty: GateType::Arrow {
+                            parameter: Box::new(current_ty.clone()),
+                            result: Box::new(result.clone()),
+                        },
+                        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(
+                            handle,
+                        )),
+                    };
+                    current_expr = GateRuntimeExpr {
+                        span: expr.span,
+                        ty: result.clone(),
+                        kind: GateRuntimeExprKind::Apply {
+                            callee: Box::new(callee),
+                            arguments: vec![current_expr],
+                        },
+                    };
+                    current_ty = result;
+                }
+            }
+        }
+
+        Ok(self
+            .flush_record_projection_segments(
+                current_expr,
+                &mut pending_record_segments,
+                current_ty,
+            )?
+            .kind)
+    }
+
+    fn flush_record_projection_segments(
+        &self,
+        base: GateRuntimeExpr,
+        pending_segments: &mut Vec<Name>,
+        result_ty: GateType,
+    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        if pending_segments.is_empty() {
+            return Ok(base);
+        }
+
+        let path = NamePath::from_vec(std::mem::take(pending_segments))
+            .expect("projection segments cloned from one parsed path should stay valid");
+        let GateRuntimeExpr { span, ty, kind } = base;
+        let base = match kind {
+            GateRuntimeExprKind::AmbientSubject => GateRuntimeProjectionBase::AmbientSubject,
+            kind => GateRuntimeProjectionBase::Expr(Box::new(GateRuntimeExpr { span, ty, kind })),
+        };
+        Ok(GateRuntimeExpr {
+            span,
+            ty: result_ty,
+            kind: GateRuntimeExprKind::Projection { base, path },
         })
     }
 
@@ -2649,8 +2742,8 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use super::{
-        ExprKind, GateRuntimeExprKind, GateRuntimePipeStageKind, GeneralExprBlocker,
-        GeneralExprOutcome, Item, elaborate_general_expressions,
+        ExprKind, GateRuntimeExprKind, GateRuntimePipeStageKind, GateRuntimeReference,
+        GeneralExprBlocker, GeneralExprOutcome, Item, elaborate_general_expressions,
     };
     use crate::{
         BuiltinType, PipeTransformMode,
@@ -3349,6 +3442,55 @@ fun length:Int items:(List A) =>
     }
 
     #[test]
+    fn elaborates_domain_value_projection_into_domain_member_apply() {
+        let lowered = lower_text(
+            "general-expr-domain-projection.aivi",
+            r#"
+domain Path over Text
+    fromText : Text -> Path
+    unwrap : Path -> Text
+
+value home : Path = fromText "/tmp/app"
+value raw : Text = home.unwrap
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "domain projection example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let raw = report
+            .items()
+            .iter()
+            .find(|item| item_name(lowered.module(), item.owner) == Some("raw"))
+            .expect("expected raw elaboration");
+        match &raw.outcome {
+            GeneralExprOutcome::Lowered(expr) => match &expr.kind {
+                GateRuntimeExprKind::Apply { callee, arguments } => {
+                    assert_eq!(arguments.len(), 1);
+                    assert!(matches!(
+                        &callee.kind,
+                        GateRuntimeExprKind::Reference(
+                            GateRuntimeReference::DomainMember(handle)
+                        ) if handle.domain_name.as_ref() == "Path"
+                            && handle.member_name.as_ref() == "unwrap"
+                    ));
+                    assert!(matches!(
+                        arguments[0].kind,
+                        GateRuntimeExprKind::Reference(GateRuntimeReference::Item(_))
+                    ));
+                }
+                other => {
+                    panic!("expected domain projection to lower into an apply, found {other:?}")
+                }
+            },
+            other => panic!("expected lowered value body, found {other:?}"),
+        }
+    }
+
+    #[test]
     fn elaborates_reduce_pipe_bodies_with_generic_record_accumulators() {
         let lowered = lower_text(
             "general-expr-generic-reduce-record-acc.aivi",
@@ -3643,5 +3785,42 @@ fun any:Bool predicate:(A -> Bool) items:(List A) =>
                 any.outcome
             );
         }
+    }
+
+    #[test]
+    fn snake_demo_general_expressions_lower_cleanly_after_signature_normalization() {
+        let lowered = lower_text(
+            "demos/snake.aivi",
+            include_str!("../../../demos/snake.aivi"),
+        );
+        assert!(
+            !lowered.has_errors(),
+            "snake demo should lower to HIR before general-expression elaboration: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let blocked = report
+            .items()
+            .iter()
+            .filter_map(|item| match &item.outcome {
+                GeneralExprOutcome::Blocked(blocked)
+                    if item_name(lowered.module(), item.owner) != Some("main") =>
+                {
+                    Some((
+                        item_name(lowered.module(), item.owner)
+                            .unwrap_or("<unnamed>")
+                            .to_owned(),
+                        blocked.blockers.clone(),
+                    ))
+                }
+                GeneralExprOutcome::Lowered(_) => None,
+                GeneralExprOutcome::Blocked(_) => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            blocked.is_empty(),
+            "snake demo should lower all non-markup general expressions cleanly, found blocked items: {blocked:?}"
+        );
     }
 }

@@ -15,7 +15,6 @@ use crate::{
     validate::{
         ClassConstraintBinding, ClassMemberCallMatch, DomainMemberSelection, GateExprEnv,
         GateIssue, GateRecordField, GateType, GateTypeContext, PolyTypeBindings, TypeBinding,
-        project_gate_type,
     },
 };
 
@@ -2237,7 +2236,7 @@ impl<'a> TypeChecker<'a> {
             return Some(false);
         }
 
-        match project_gate_type(&subject, path) {
+        match self.typing.project_type(&subject, path) {
             Ok(actual) => Some(self.check_result_type(expr_id, Some(expected), &actual)),
             Err(issue) => {
                 self.emit_expr_issues(&[issue]);
@@ -5632,6 +5631,42 @@ fun items:(List A) acc:(TakeAcc A) => acc.items
         assert!(
             report.is_ok(),
             "expected projection from signal-wrapped records to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_projection_from_domain_values() {
+        let report = typecheck_text(
+            "projection-from-domain-value.aivi",
+            "domain Path over Text\n\
+             \x20\x20\x20\x20fromText : Text -> Path\n\
+             \x20\x20\x20\x20unwrap : Path -> Text\n\
+             value home : Path = fromText \"/tmp/app\"\n\
+             value raw : Text = home.unwrap\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected projection from a domain value to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_reports_invalid_projection_from_signal_wrapped_domains() {
+        let report = typecheck_text(
+            "signal-projection-domain-value.aivi",
+            "domain Path over Text\n\
+             \x20\x20\x20\x20fromText : Text -> Path\n\
+             \x20\x20\x20\x20unwrap : Path -> Text\n\
+             signal home : Signal Path = fromText \"/tmp/app\"\n\
+             signal raw : Signal Text = home.unwrap\n",
+        );
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "invalid-projection"))
+            }),
+            "expected signal-wrapped domain projections to stay invalid until pointwise runtime support exists, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

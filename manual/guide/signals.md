@@ -97,7 +97,7 @@ Guards like `status.done` are fine too, but only when ordinary expression typing
 
 Use `when` when you want event-shaped reactive commits into an existing signal. Use pipes when you want to transform the current subject flowing through one expression spine.
 
-At the moment, this surface is documented and partially wired through the frontend/tooling, but runtime execution is still incomplete, so end-to-end programs using `when` are not yet fully supported.
+This surface now executes end to end in the linked runtime: guards and bodies are lowered as ordinary expressions, false guards keep the previous committed value, and later matching clauses still win by source order within a tick.
 
 ## Previous and diff
 

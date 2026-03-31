@@ -23,7 +23,7 @@ use crate::{
     hir::{
         ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClassMemberResolution, ControlNode,
         ControlNodeKind, CustomSourceRecurrenceWakeup, DecoratorPayload, DeprecationNotice,
-        DomainMemberKind, DomainMemberResolution, ExportResolution, ExprKind,
+        DomainMemberHandle, DomainMemberKind, DomainMemberResolution, ExportResolution, ExprKind,
         ImportBindingMetadata, ImportBindingResolution, ImportValueType, IntrinsicValue, Item,
         LiteralSuffixResolution, MarkupAttributeValue, MarkupNodeKind, Module, Name, NamePath,
         PatternKind, PipeStage, PipeStageKind, PipeTransformMode, ProjectionBase, RecordExpr,
@@ -9128,6 +9128,25 @@ pub(crate) struct DomainMemberCallMatch {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum GateProjectionStep {
+    RecordField {
+        result: GateType,
+    },
+    DomainMember {
+        handle: DomainMemberHandle,
+        result: GateType,
+    },
+}
+
+impl GateProjectionStep {
+    pub(crate) fn result(&self) -> &GateType {
+        match self {
+            Self::RecordField { result } | Self::DomainMember { result, .. } => result,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ClassConstraintBinding {
     pub(crate) class_item: ItemId,
     pub(crate) subject: TypeBinding,
@@ -14334,8 +14353,153 @@ impl<'a> GateTypeContext<'a> {
         info
     }
 
-    fn project_type(&self, subject: &GateType, path: &NamePath) -> Result<GateType, GateIssue> {
-        project_gate_type(subject, path)
+    pub(crate) fn project_type(
+        &mut self,
+        subject: &GateType,
+        path: &NamePath,
+    ) -> Result<GateType, GateIssue> {
+        let mut current = subject.clone();
+        for segment in path.segments().iter() {
+            current = self
+                .project_type_step(&current, segment, path)?
+                .result()
+                .clone();
+        }
+        Ok(current)
+    }
+
+    pub(crate) fn project_type_step(
+        &mut self,
+        subject: &GateType,
+        segment: &Name,
+        path: &NamePath,
+    ) -> Result<GateProjectionStep, GateIssue> {
+        match subject {
+            GateType::Record(fields) => {
+                self.project_record_field_step(fields, false, subject, segment, path)
+            }
+            GateType::Signal(payload) => match payload.as_ref() {
+                GateType::Record(fields) => {
+                    self.project_record_field_step(fields, true, subject, segment, path)
+                }
+                _ => Err(GateIssue::InvalidProjection {
+                    span: path.span(),
+                    path: name_path_text(path),
+                    subject: subject.to_string(),
+                }),
+            },
+            GateType::Domain {
+                item, arguments, ..
+            } => self.project_domain_member_step(*item, arguments, subject, segment, path),
+            _ => Err(GateIssue::InvalidProjection {
+                span: path.span(),
+                path: name_path_text(path),
+                subject: subject.to_string(),
+            }),
+        }
+    }
+
+    fn project_record_field_step(
+        &self,
+        fields: &[GateRecordField],
+        wrap_signal: bool,
+        subject: &GateType,
+        segment: &Name,
+        path: &NamePath,
+    ) -> Result<GateProjectionStep, GateIssue> {
+        let Some(field) = fields.iter().find(|field| field.name == segment.text()) else {
+            return Err(GateIssue::UnknownField {
+                span: path.span(),
+                path: name_path_text(path),
+                subject: subject.to_string(),
+            });
+        };
+        let result = if wrap_signal {
+            GateType::Signal(Box::new(field.ty.clone()))
+        } else {
+            field.ty.clone()
+        };
+        Ok(GateProjectionStep::RecordField { result })
+    }
+
+    fn project_domain_member_step(
+        &mut self,
+        domain_item: ItemId,
+        domain_arguments: &[GateType],
+        subject: &GateType,
+        segment: &Name,
+        path: &NamePath,
+    ) -> Result<GateProjectionStep, GateIssue> {
+        let Item::Domain(domain) = &self.module.items()[domain_item] else {
+            return Err(GateIssue::InvalidProjection {
+                span: path.span(),
+                path: name_path_text(path),
+                subject: subject.to_string(),
+            });
+        };
+
+        let substitutions = domain
+            .parameters
+            .iter()
+            .copied()
+            .zip(domain_arguments.iter().cloned())
+            .collect::<HashMap<_, _>>();
+        let mut matches = Vec::new();
+        let mut found_named_member = false;
+        for (member_index, member) in domain.members.iter().enumerate() {
+            if member.kind != DomainMemberKind::Method || member.name.text() != segment.text() {
+                continue;
+            }
+            found_named_member = true;
+            let resolution = DomainMemberResolution {
+                domain: domain_item,
+                member_index,
+            };
+            let Some(annotation) = self.lower_domain_member_annotation(resolution, &substitutions)
+            else {
+                continue;
+            };
+            let Some((parameters, result)) = self.function_signature(&annotation, 1) else {
+                continue;
+            };
+            let Some(parameter) = parameters.first() else {
+                continue;
+            };
+            if !parameter.same_shape(subject) {
+                continue;
+            }
+            let Some(handle) = self.module.domain_member_handle(resolution) else {
+                continue;
+            };
+            matches.push((handle, result));
+        }
+
+        match matches.len() {
+            1 => {
+                let (handle, result) = matches
+                    .pop()
+                    .expect("exactly one domain projection match should be available");
+                Ok(GateProjectionStep::DomainMember { handle, result })
+            }
+            0 if found_named_member => Err(GateIssue::InvalidProjection {
+                span: path.span(),
+                path: name_path_text(path),
+                subject: subject.to_string(),
+            }),
+            0 => Err(GateIssue::UnknownField {
+                span: path.span(),
+                path: name_path_text(path),
+                subject: subject.to_string(),
+            }),
+            _ => Err(GateIssue::AmbiguousDomainMember {
+                span: path.span(),
+                name: segment.text().to_owned(),
+                candidates: matches
+                    .into_iter()
+                    .map(|(handle, _)| format!("{}.{}", handle.domain_name, handle.member_name))
+                    .collect(),
+            }),
+        }
     }
 
     fn apply_function(&self, callee: &GateType, argument: &GateType) -> Option<GateType> {
@@ -14398,48 +14562,6 @@ pub(crate) fn truthy_falsy_pair_stages<'a>(
         }),
         _ => None,
     }
-}
-
-pub(crate) fn project_gate_type(
-    subject: &GateType,
-    path: &NamePath,
-) -> Result<GateType, GateIssue> {
-    let mut current = subject.clone();
-    for segment in path.segments().iter() {
-        let (fields, wrap_signal) = match &current {
-            GateType::Record(fields) => (fields, false),
-            GateType::Signal(payload) => match payload.as_ref() {
-                GateType::Record(fields) => (fields, true),
-                _ => {
-                    return Err(GateIssue::InvalidProjection {
-                        span: path.span(),
-                        path: name_path_text(path),
-                        subject: current.to_string(),
-                    });
-                }
-            },
-            _ => {
-                return Err(GateIssue::InvalidProjection {
-                    span: path.span(),
-                    path: name_path_text(path),
-                    subject: current.to_string(),
-                });
-            }
-        };
-        let Some(field) = fields.iter().find(|field| field.name == segment.text()) else {
-            return Err(GateIssue::UnknownField {
-                span: path.span(),
-                path: name_path_text(path),
-                subject: current.to_string(),
-            });
-        };
-        current = if wrap_signal {
-            GateType::Signal(Box::new(field.ty.clone()))
-        } else {
-            field.ty.clone()
-        };
-    }
-    Ok(current)
 }
 
 fn name_path_text(path: &NamePath) -> String {

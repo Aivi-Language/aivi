@@ -4714,6 +4714,40 @@ fun unwrapPath:Text path:Path =>
 }
 
 #[test]
+fn runtime_and_codegen_accept_domain_dot_projection_over_values() {
+    let backend = lower_text(
+        "backend-domain-dot-projection.aivi",
+        r#"
+domain Path over Text
+    fromText : Text -> Path
+    unwrap : Path -> Text
+
+value home : Path = fromText "/tmp/app"
+value raw : Text = home.unwrap
+"#,
+    );
+
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "raw"), &BTreeMap::new())
+            .expect("domain dot-projection should evaluate"),
+        RuntimeValue::Text("/tmp/app".into())
+    );
+
+    let compiled = compile_program(&backend)
+        .expect("representational domain dot-projection should compile through Cranelift");
+    let raw = find_item(&backend, "raw");
+    let raw_body = backend.items()[raw]
+        .body
+        .expect("raw should carry a body kernel");
+    let artifact = compiled
+        .kernel(raw_body)
+        .expect("compiled program should retain domain dot-projection kernel metadata");
+    assert!(artifact.code_size > 0);
+}
+
+#[test]
 fn cranelift_codegen_rejects_unsaturated_direct_item_apply_calls() {
     let backend = lower_text(
         "backend-item-body-partial-apply-codegen.aivi",

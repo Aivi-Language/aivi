@@ -297,10 +297,34 @@ impl Formatter {
             .collect();
         let parameter_annotations =
             parameter_annotations.filter(|annotations| !annotations.is_empty());
+        let (constraint_count, parameter_annotations, result_annotation) =
+            if let Some(parameter_annotations) = parameter_annotations {
+                (
+                    item.constraints.len(),
+                    Some(parameter_annotations),
+                    annotation,
+                )
+            } else if let Some((constraint_count, parameter_annotations, result_annotation)) = self
+                .split_function_signature_annotation(
+                    &item.constraints,
+                    annotation,
+                    item.parameters.len(),
+                )
+            {
+                (
+                    constraint_count,
+                    Some(parameter_annotations),
+                    result_annotation,
+                )
+            } else {
+                (item.constraints.len(), None, annotation)
+            };
 
         let mut rendered = String::new();
-        if !item.constraints.is_empty() {
-            rendered.push_str(&self.format_constraint_list_inline(&item.constraints));
+        if constraint_count > 0 {
+            rendered.push_str(
+                &self.format_constraint_list_inline(&item.constraints[..constraint_count]),
+            );
             rendered.push_str(" => ");
         }
 
@@ -309,12 +333,90 @@ impl Formatter {
                 rendered.push_str(&self.format_type_inline(parameter, TYPE_ARROW_PREC + 1));
                 rendered.push_str(" -> ");
             }
-            rendered.push_str(&self.format_type_inline(annotation, TYPE_ARROW_PREC));
+            rendered.push_str(&self.format_type_inline(result_annotation, TYPE_ARROW_PREC));
             return Some(rendered);
         }
 
-        rendered.push_str(&self.format_type_inline(annotation, TYPE_ARROW_PREC));
+        rendered.push_str(&self.format_type_inline(result_annotation, TYPE_ARROW_PREC));
         Some(rendered)
+    }
+
+    fn split_function_signature_annotation<'a>(
+        &self,
+        constraints: &'a [TypeExpr],
+        annotation: &'a TypeExpr,
+        arity: usize,
+    ) -> Option<(usize, Vec<&'a TypeExpr>, &'a TypeExpr)> {
+        let maximum_context_parameters = constraints.len().min(arity);
+        for trailing_parameter_count in 0..=maximum_context_parameters {
+            let constraint_count = constraints.len() - trailing_parameter_count;
+            let actual_constraints = &constraints[..constraint_count];
+            let leading_parameters = &constraints[constraint_count..];
+            if actual_constraints
+                .iter()
+                .any(|constraint| !Self::is_class_constraint_type_expr(constraint))
+            {
+                continue;
+            }
+            let remaining_arity = arity - trailing_parameter_count;
+            let Some((mut parameter_annotations, result_annotation)) =
+                Self::split_type_signature_annotation(annotation, remaining_arity)
+            else {
+                continue;
+            };
+            let mut normalized_parameters = leading_parameters.iter().collect::<Vec<_>>();
+            normalized_parameters.append(&mut parameter_annotations);
+            if normalized_parameters.len() == arity {
+                return Some((constraint_count, normalized_parameters, result_annotation));
+            }
+        }
+        None
+    }
+
+    fn split_type_signature_annotation<'a>(
+        annotation: &'a TypeExpr,
+        arity: usize,
+    ) -> Option<(Vec<&'a TypeExpr>, &'a TypeExpr)> {
+        let mut parameters = Vec::with_capacity(arity);
+        let mut current = annotation;
+        for _ in 0..arity {
+            let TypeExprKind::Arrow { parameter, result } = &current.kind else {
+                return None;
+            };
+            parameters.push(parameter.as_ref());
+            current = result.as_ref();
+        }
+        Some((parameters, current))
+    }
+
+    fn is_class_constraint_type_expr(ty: &TypeExpr) -> bool {
+        match &ty.kind {
+            TypeExprKind::Name(name) => !matches!(
+                name.text.as_str(),
+                "Bool"
+                    | "Int"
+                    | "Float"
+                    | "Decimal"
+                    | "BigInt"
+                    | "Text"
+                    | "Regex"
+                    | "Json"
+                    | "Unit"
+                    | "List"
+                    | "Map"
+                    | "Set"
+                    | "Option"
+                    | "Result"
+                    | "Validation"
+                    | "Signal"
+                    | "Task"
+            ),
+            TypeExprKind::Apply { callee, .. } => Self::is_class_constraint_type_expr(callee),
+            TypeExprKind::Tuple(_)
+            | TypeExprKind::Record(_)
+            | TypeExprKind::Arrow { .. }
+            | TypeExprKind::Group(_) => false,
+        }
     }
 
     fn format_class_item(&self, item: &NamedItem) -> Vec<String> {

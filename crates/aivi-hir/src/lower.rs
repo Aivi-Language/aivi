@@ -4448,13 +4448,6 @@ impl<'a> Lowerer<'a> {
             {
                 continue;
             }
-            if leading_parameters
-                .iter()
-                .copied()
-                .any(|type_id| self.is_class_constraint_type(type_id))
-            {
-                continue;
-            }
             let remaining_arity = arity - trailing_parameter_count;
             let mut item_stack = Vec::new();
             let Some((mut parameter_annotations, result_annotation)) = self
@@ -9950,6 +9943,75 @@ signal updates : Signal Int
             function.annotation.is_some(),
             "the result annotation should still be present after normalization"
         );
+    }
+
+    #[test]
+    fn normalizes_legacy_constraint_arrow_for_applied_parameter_types() {
+        let lowered = lower_text(
+            "standalone-function-signature-legacy-constraint-arrow.aivi",
+            "type List Text => Text\n\
+             func joinEmails items => \"joined\"\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "legacy formatter output should still normalize into parameter annotations: {:?}",
+            lowered.diagnostics()
+        );
+
+        let function = match find_named_item(lowered.module(), "joinEmails") {
+            Item::Function(item) => item,
+            other => panic!("expected `joinEmails` to lower as a function item, found {other:?}"),
+        };
+        assert!(
+            function.context.is_empty(),
+            "legacy `=>` output should not leave applied parameter types in the class-constraint context"
+        );
+        assert!(
+            function.parameters[0].annotation.is_some(),
+            "legacy formatter output should still reconstruct the parameter annotation"
+        );
+        assert!(
+            function.annotation.is_some(),
+            "legacy formatter output should keep the result annotation"
+        );
+    }
+
+    #[test]
+    fn snake_demo_legacy_signature_lines_keep_all_parameter_annotations() {
+        let lowered = lower_text(
+            "demos/snake.aivi",
+            include_str!("../../../demos/snake.aivi"),
+        );
+        assert!(
+            !lowered.has_errors(),
+            "snake demo should still lower cleanly after signature normalization: {:?}",
+            lowered.diagnostics()
+        );
+
+        for name in [
+            "bodyOrFoodGlyph",
+            "cellGlyph",
+            "rowTextStep",
+            "rowText",
+            "boardTextStep",
+        ] {
+            let function = match find_named_item(lowered.module(), name) {
+                Item::Function(item) => item,
+                other => panic!("expected `{name}` to lower as a function item, found {other:?}"),
+            };
+            assert!(
+                function
+                    .parameters
+                    .iter()
+                    .all(|parameter| parameter.annotation.is_some()),
+                "expected `{name}` to keep all parameter annotations, found {:?}",
+                function
+                    .parameters
+                    .iter()
+                    .map(|parameter| parameter.annotation.is_some())
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 
     #[test]

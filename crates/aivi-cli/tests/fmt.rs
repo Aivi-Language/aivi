@@ -94,6 +94,44 @@ fn fmt_normalizes_reactive_update_items() {
 }
 
 #[test]
+fn fmt_repairs_constraint_arrow_regressions_in_function_signatures() {
+    let input = TempFile::new(
+        "fmt-function-signature-arrow",
+        concat!(
+            "type List Cell => Cell -> Cell -> Text\n",
+            "func cellLabel cells row col => \"x\"\n",
+            "\n",
+            "type Eq A => A -> Bool\n",
+            "func visible value => True\n",
+        ),
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("fmt")
+        .arg(input.path())
+        .output()
+        .expect("fmt command should run");
+
+    assert!(
+        output.status.success(),
+        "fmt should succeed for function signatures, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout should be utf-8"),
+        concat!(
+            "type List Cell -> Cell -> Cell -> Text\n",
+            "func cellLabel cells row col =>\n",
+            "    \"x\"\n",
+            "\n",
+            "type Eq A => A -> Bool\n",
+            "func visible value =>\n",
+            "    True\n",
+        )
+    );
+}
+
+#[test]
 fn fmt_normalizes_markup_layout() {
     let input = TempFile::new(
         "fmt-normalize",

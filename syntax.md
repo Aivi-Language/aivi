@@ -165,7 +165,8 @@ Rules:
 - Unwrapping is explicit.
 - No implicit casts to/from the carrier.
 - Callable domain members participate in ordinary term lookup.
-- No domain projection syntax in v1.
+- Unary domain methods can also be projected with `value.member`.
+- Domain projection is still explicit member dispatch; it does not imply implicit carrier casts.
 
 ### 2.6 `signal`
 
@@ -763,9 +764,9 @@ Rules:
 
 Current implementation note:
 
-- Frontend support exists.
-- Runtime execution is not fully wired end to end yet.
-- For conservative executable code, prefer ordinary derived signals or `+|>` unless `when` is already used in the target codebase/runtime slice.
+- Top-level `when` clauses execute end to end in the linked runtime.
+- Guards and bodies are ordinary expressions with direct signal references.
+- If multiple clauses write the same signal in one tick, later source order still wins.
 
 ### 7.5 `Task E A`
 

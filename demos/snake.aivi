@@ -166,6 +166,7 @@ func nextHeadFor direction snake => snake
   |> snakeHead
   |> moveCell direction
 
+type Cell -> Bool
 func hitsWall cell => cell
  ||> Cell x y -> x < 0 or x >= board.width or y < 0 or y >= board.height
 
