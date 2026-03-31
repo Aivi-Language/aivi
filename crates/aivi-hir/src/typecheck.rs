@@ -5,9 +5,9 @@ use aivi_base::{Diagnostic, DiagnosticCode, SourceSpan};
 use crate::{
     domain_operator_elaboration::select_domain_binary_operator,
     hir::{
-        BinaryOperator, BuiltinTerm, BuiltinType, ClassMemberResolution, ExprKind, FunctionItem,
-        ImportBindingMetadata, ImportBundleKind, InstanceItem, InstanceMember, Item, MapExpr,
-        Module, Name, NamePath, PatternKind, PipeExpr, PipeStageKind, ProjectionBase,
+        BinaryOperator, BuiltinTerm, BuiltinType, ClassMemberResolution, DomainMember, ExprKind,
+        FunctionItem, ImportBindingMetadata, ImportBundleKind, InstanceItem, InstanceMember, Item,
+        MapExpr, Module, Name, NamePath, PatternKind, PipeExpr, PipeStageKind, ProjectionBase,
         ReactiveUpdateBodyMode, RecordExpr, RecordExprField, RecordFieldSurface, ResolutionState,
         SignalItem, TermReference, TermResolution, TypeItemBody, TypeResolution, UnaryOperator,
         ValueItem,
@@ -313,17 +313,17 @@ impl<'a> TypeChecker<'a> {
             .module
             .items()
             .iter()
-            .map(|(_, item)| item.clone())
+            .map(|(item_id, item)| (item_id, item.clone()))
             .collect::<Vec<_>>();
-        for item in items {
+        for (item_id, item) in items {
             match item {
                 Item::Value(item) => self.check_value_item(&item),
                 Item::Function(item) => self.check_function_item(&item),
                 Item::Signal(item) => self.check_signal_item(&item),
                 Item::Instance(item) => self.check_instance_item(&item),
+                Item::Domain(item) => self.check_domain_item(item_id, &item),
                 Item::Type(_)
                 | Item::Class(_)
-                | Item::Domain(_)
                 | Item::SourceProviderContract(_)
                 | Item::Use(_)
                 | Item::Export(_) => {}
@@ -639,6 +639,51 @@ impl<'a> TypeChecker<'a> {
             current = *result;
         }
         self.check_expr(member.body, &env, Some(&current), &mut Vec::new());
+    }
+
+    fn check_domain_item(&mut self, owner: ItemId, item: &crate::DomainItem) {
+        let Some(carrier) = self.typing.lower_open_annotation(item.carrier) else {
+            return;
+        };
+        for member in &item.members {
+            let Some(body) = member.body else {
+                continue;
+            };
+            let Some(surface) = self.typing.lower_open_annotation(member.annotation) else {
+                continue;
+            };
+            let expected = rewrite_domain_carrier_view(&surface, owner, &item.parameters, &carrier);
+            self.check_domain_member(member, body, &expected);
+        }
+    }
+
+    fn check_domain_member(&mut self, member: &DomainMember, body: ExprId, expected: &GateType) {
+        let mut env = GateExprEnv::default();
+        let mut current = expected.clone();
+        for parameter in &member.parameters {
+            let GateType::Arrow {
+                parameter: parameter_ty,
+                result,
+            } = current
+            else {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "domain member `{}` takes more parameters than its declaration allows",
+                        member.name.text()
+                    ))
+                    .with_code(code("domain-member-arity-mismatch"))
+                    .with_primary_label(
+                        member.span,
+                        "remove parameters or widen the domain member declaration",
+                    ),
+                );
+                return;
+            };
+            env.locals
+                .insert(parameter.binding, parameter_ty.as_ref().clone());
+            current = *result;
+        }
+        self.check_expr(body, &env, Some(&current), &mut Vec::new());
     }
 
     fn with_class_constraint_scope<T>(
@@ -3999,6 +4044,255 @@ fn alloc_import_default_expr(module: &mut Module, span: SourceSpan, import: Impo
             )),
         })
         .expect("default-record elaboration should fit inside the expression arena")
+}
+
+fn rewrite_domain_carrier_view(
+    ty: &GateType,
+    domain_item: ItemId,
+    domain_parameters: &[TypeParameterId],
+    carrier: &GateType,
+) -> GateType {
+    match ty {
+        GateType::Primitive(_) | GateType::TypeParameter { .. } => ty.clone(),
+        GateType::Tuple(elements) => GateType::Tuple(
+            elements
+                .iter()
+                .map(|element| {
+                    rewrite_domain_carrier_view(element, domain_item, domain_parameters, carrier)
+                })
+                .collect(),
+        ),
+        GateType::Record(fields) => GateType::Record(
+            fields
+                .iter()
+                .map(|field| GateRecordField {
+                    name: field.name.clone(),
+                    ty: rewrite_domain_carrier_view(
+                        &field.ty,
+                        domain_item,
+                        domain_parameters,
+                        carrier,
+                    ),
+                })
+                .collect(),
+        ),
+        GateType::Arrow { parameter, result } => GateType::Arrow {
+            parameter: Box::new(rewrite_domain_carrier_view(
+                parameter,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            result: Box::new(rewrite_domain_carrier_view(
+                result,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::List(element) => GateType::List(Box::new(rewrite_domain_carrier_view(
+            element,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Map { key, value } => GateType::Map {
+            key: Box::new(rewrite_domain_carrier_view(
+                key,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Set(element) => GateType::Set(Box::new(rewrite_domain_carrier_view(
+            element,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Option(element) => GateType::Option(Box::new(rewrite_domain_carrier_view(
+            element,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Result { error, value } => GateType::Result {
+            error: Box::new(rewrite_domain_carrier_view(
+                error,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Validation { error, value } => GateType::Validation {
+            error: Box::new(rewrite_domain_carrier_view(
+                error,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Signal(inner) => GateType::Signal(Box::new(rewrite_domain_carrier_view(
+            inner,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Task { error, value } => GateType::Task {
+            error: Box::new(rewrite_domain_carrier_view(
+                error,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Domain {
+            item, arguments, ..
+        } if *item == domain_item => {
+            let substitutions = domain_parameters
+                .iter()
+                .copied()
+                .zip(arguments.iter().cloned())
+                .collect::<HashMap<_, _>>();
+            substitute_gate_type(carrier, &substitutions)
+        }
+        GateType::Domain {
+            item,
+            name,
+            arguments,
+        } => GateType::Domain {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| {
+                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
+                })
+                .collect(),
+        },
+        GateType::OpaqueItem {
+            item,
+            name,
+            arguments,
+        } => GateType::OpaqueItem {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| {
+                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
+                })
+                .collect(),
+        },
+    }
+}
+
+fn substitute_gate_type(
+    ty: &GateType,
+    substitutions: &HashMap<TypeParameterId, GateType>,
+) -> GateType {
+    match ty {
+        GateType::Primitive(_) => ty.clone(),
+        GateType::TypeParameter { parameter, .. } => substitutions
+            .get(parameter)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
+        GateType::Tuple(elements) => GateType::Tuple(
+            elements
+                .iter()
+                .map(|element| substitute_gate_type(element, substitutions))
+                .collect(),
+        ),
+        GateType::Record(fields) => GateType::Record(
+            fields
+                .iter()
+                .map(|field| GateRecordField {
+                    name: field.name.clone(),
+                    ty: substitute_gate_type(&field.ty, substitutions),
+                })
+                .collect(),
+        ),
+        GateType::Arrow { parameter, result } => GateType::Arrow {
+            parameter: Box::new(substitute_gate_type(parameter, substitutions)),
+            result: Box::new(substitute_gate_type(result, substitutions)),
+        },
+        GateType::List(element) => {
+            GateType::List(Box::new(substitute_gate_type(element, substitutions)))
+        }
+        GateType::Map { key, value } => GateType::Map {
+            key: Box::new(substitute_gate_type(key, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Set(element) => {
+            GateType::Set(Box::new(substitute_gate_type(element, substitutions)))
+        }
+        GateType::Option(element) => {
+            GateType::Option(Box::new(substitute_gate_type(element, substitutions)))
+        }
+        GateType::Result { error, value } => GateType::Result {
+            error: Box::new(substitute_gate_type(error, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Validation { error, value } => GateType::Validation {
+            error: Box::new(substitute_gate_type(error, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Signal(inner) => {
+            GateType::Signal(Box::new(substitute_gate_type(inner, substitutions)))
+        }
+        GateType::Task { error, value } => GateType::Task {
+            error: Box::new(substitute_gate_type(error, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Domain {
+            item,
+            name,
+            arguments,
+        } => GateType::Domain {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| substitute_gate_type(argument, substitutions))
+                .collect(),
+        },
+        GateType::OpaqueItem {
+            item,
+            name,
+            arguments,
+        } => GateType::OpaqueItem {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| substitute_gate_type(argument, substitutions))
+                .collect(),
+        },
+    }
 }
 
 #[cfg(test)]

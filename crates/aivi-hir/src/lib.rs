@@ -53,9 +53,9 @@ pub use gate_elaboration::{
     GateStageElaboration, GateStageOutcome, OrdinaryGateStage, SignalGateFilter, elaborate_gates,
 };
 pub use general_expr_elaboration::{
-    BlockedGeneralExpr, GeneralExprBlocker, GeneralExprElaborationReport,
-    GeneralExprInstanceMemberElaboration, GeneralExprItemElaboration, GeneralExprOutcome,
-    GeneralExprParameter, MarkupRuntimeExprSite, MarkupRuntimeExprSiteError,
+    BlockedGeneralExpr, GeneralExprBlocker, GeneralExprDomainMemberElaboration,
+    GeneralExprElaborationReport, GeneralExprInstanceMemberElaboration, GeneralExprItemElaboration,
+    GeneralExprOutcome, GeneralExprParameter, MarkupRuntimeExprSite, MarkupRuntimeExprSiteError,
     MarkupRuntimeExprSites, collect_markup_runtime_expr_sites, elaborate_general_expressions,
     elaborate_runtime_expr_with_env,
 };

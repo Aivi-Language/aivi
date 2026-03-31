@@ -706,6 +706,38 @@ impl Formatter {
     }
 
     fn format_domain_member(&self, member: &DomainMember) -> Vec<String> {
+        if member.is_binding {
+            let mut header = format!(
+                "{}{}",
+                spaces(INDENT_WIDTH),
+                self.format_domain_member_name(&member.name)
+            );
+            for parameter in &member.parameters {
+                header.push(' ');
+                header.push_str(&parameter.text);
+            }
+
+            let Some(body) = &member.body else {
+                return vec![format!("{header} =")];
+            };
+
+            let force_break =
+                self.should_force_expr_break(display_width(&format!("{header} = ")), body);
+            let block = self.format_expr_block(body, force_break);
+            if block.is_inline() {
+                return vec![format!(
+                    "{header} = {}",
+                    block.inline_text().expect("inline block")
+                )];
+            } else if block.starts_with_delimiter() {
+                return block.prefixed(&format!("{header} = ")).into_lines();
+            } else {
+                let mut lines = vec![format!("{header} =")];
+                lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
+                return lines;
+            }
+        }
+
         let Some(annotation) = &member.annotation else {
             return vec![format!(
                 "{}{}:",
@@ -2488,6 +2520,23 @@ value view =
                 "\n",
                 "instance Eq Blob\n",
                 "    (==) left right = same left right\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_domain_member_bindings() {
+        let formatted = format_text(
+            "type Builder = Int -> Duration\n\ndomain Duration over Int\n    make:Builder\n    make raw=\n        raw\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "type Builder = Int -> Duration\n",
+                "\n",
+                "domain Duration over Int\n",
+                "    make : Builder\n",
+                "    make raw = raw\n",
             )
         );
     }

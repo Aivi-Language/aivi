@@ -2349,8 +2349,10 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 domain Duration over Int
     literal ms : Int -> Duration
     millis : Int -> Duration
+    millis raw = raw
     parse : Int -> Result DurationError Duration
     value : Duration -> Int
+    value duration = duration
 ```
 
 ### 20.2 Core meaning
@@ -2385,6 +2387,8 @@ domain Duration over Int
 Construction is explicit. Unwrapping is explicit. Unsafe construction should remain internal or be spelled as such.
 
 Callable domain members enter ordinary term lookup when in scope. No projection syntax for domains in v1.
+
+Callable members may also carry authored bodies by pairing a signature line with an instance-style binding line in the same domain block. Those authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
 
 ### 20.5 Literal suffixes
 

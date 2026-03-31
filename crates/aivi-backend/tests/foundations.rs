@@ -2585,6 +2585,31 @@ value raw : Int =
 }
 
 #[test]
+fn runtime_evaluates_authored_domain_member_items() {
+    let backend = lower_text(
+        "backend-authored-domain-member-runtime.aivi",
+        r#"
+type Builder = Int -> Duration
+
+domain Duration over Int
+    make : Builder
+    make raw = raw
+    unwrap : Duration -> Int
+    unwrap duration = duration
+
+value raw : Int = unwrap (make 10)
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "raw"), &BTreeMap::new())
+            .expect("authored domain members should evaluate through hidden items"),
+        RuntimeValue::Int(10)
+    );
+}
+
+#[test]
 fn runtime_evaluates_domain_operator_gate_predicates() {
     let backend = lower_text(
         "backend-domain-operators-runtime.aivi",

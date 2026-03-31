@@ -222,6 +222,7 @@ pub struct DomainMemberResolution {
 /// Stable semantic handle for one domain-owned callable surfaced past HIR elaboration.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DomainMemberHandle {
+    pub domain: ItemId,
     pub domain_name: Box<str>,
     pub member_name: Box<str>,
     pub member_index: usize,
@@ -925,6 +926,8 @@ pub struct DomainMember {
     pub kind: DomainMemberKind,
     pub name: Name,
     pub annotation: TypeId,
+    pub parameters: Vec<FunctionParameter>,
+    pub body: Option<ExprId>,
 }
 
 /// One `instance` declaration.
@@ -2027,6 +2030,7 @@ impl Module {
         };
         let member = domain.members.get(resolution.member_index)?;
         Some(DomainMemberHandle {
+            domain: resolution.domain,
             domain_name: domain.name.text().into(),
             member_name: member.name.text().into(),
             member_index: resolution.member_index,

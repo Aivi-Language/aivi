@@ -1070,26 +1070,87 @@ impl<'a> Lowerer<'a> {
             });
 
         let mut members = Vec::new();
-        let mut seen_members = HashMap::<String, SourceSpan>::new();
         if let Some(body) = &item.body {
+            let mut declaration_order = Vec::<String>::new();
+            let mut declarations = HashMap::<String, &syn::DomainMember>::new();
+            let mut bindings = HashMap::<String, &syn::DomainMember>::new();
             for member in &body.members {
-                let lowered = self.lower_domain_member(member);
-                let key = domain_member_key(&lowered);
-                if let Some(previous_span) = seen_members.insert(key.clone(), lowered.span) {
+                let key = domain_member_surface_key(&member.name);
+                if !declaration_order.contains(&key) {
+                    declaration_order.push(key.clone());
+                }
+                if member.is_binding {
+                    if let Some(previous) = bindings.get(&key) {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "duplicate domain member binding `{}`",
+                                domain_member_surface_name(&member.name)
+                            ))
+                            .with_code(code("duplicate-domain-member-binding"))
+                            .with_primary_label(
+                                member.span,
+                                "this domain member binding reuses an existing member name",
+                            )
+                            .with_secondary_label(
+                                previous.span,
+                                "previous domain member binding here",
+                            ),
+                        );
+                    } else {
+                        bindings.insert(key.clone(), member);
+                    }
+                } else if let Some(previous) = declarations.get(&key) {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
                             "duplicate domain member `{}`",
-                            domain_member_display(&lowered)
+                            domain_member_surface_name(&member.name)
                         ))
                         .with_code(code("duplicate-domain-member"))
                         .with_primary_label(
-                            lowered.span,
+                            member.span,
                             "this domain member reuses an existing member name",
                         )
-                        .with_secondary_label(previous_span, "previous domain member here"),
+                        .with_secondary_label(previous.span, "previous domain member here"),
                     );
+                } else {
+                    declarations.insert(key.clone(), member);
                 }
-                members.push(lowered);
+            }
+            for key in declaration_order {
+                let binding = bindings.remove(&key);
+                let Some(signature) = declarations.remove(&key) else {
+                    if let Some(binding) = binding {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "domain member binding `{}` is missing a signature declaration",
+                                domain_member_surface_name(&binding.name)
+                            ))
+                            .with_code(code("orphan-domain-member-binding"))
+                            .with_primary_label(
+                                binding.span,
+                                "add a preceding domain member type declaration such as `name : A -> B`",
+                            ),
+                        );
+                    }
+                    continue;
+                };
+                members.push(self.lower_domain_member(signature, binding));
+            }
+            for binding in bindings.into_values() {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "domain member binding `{}` is missing a signature declaration",
+                        domain_member_surface_name(&binding.name)
+                    ))
+                    .with_code(code("orphan-domain-member-binding"))
+                    .with_primary_label(
+                        binding.span,
+                        "add a preceding domain member type declaration such as `name : A -> B`",
+                    ),
+                );
+            }
+            for signature in declarations.into_values() {
+                members.push(self.lower_domain_member(signature, None));
             }
         }
 
@@ -1102,7 +1163,11 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_domain_member(&mut self, member: &syn::DomainMember) -> DomainMember {
+    fn lower_domain_member(
+        &mut self,
+        member: &syn::DomainMember,
+        binding: Option<&syn::DomainMember>,
+    ) -> DomainMember {
         let (kind, name) = match &member.name {
             syn::DomainMemberName::Signature(signature) => match signature {
                 syn::ClassMemberName::Identifier(identifier) => (
@@ -1134,12 +1199,39 @@ impl<'a> Lowerer<'a> {
                 );
                 self.placeholder_type(member.span)
             });
+        let (parameters, body) = if let Some(binding) = binding {
+            let parameters = binding
+                .parameters
+                .iter()
+                .map(|parameter| self.lower_instance_parameter(parameter))
+                .collect();
+            let body = binding
+                .body
+                .as_ref()
+                .map(|body| self.lower_expr(body))
+                .or_else(|| {
+                    self.emit_error(
+                        binding.span,
+                        format!(
+                            "domain member binding `{}` is missing a body",
+                            domain_member_surface_name(&binding.name)
+                        ),
+                        code("missing-domain-member-body"),
+                    );
+                    Some(self.placeholder_expr(binding.span))
+                });
+            (parameters, body)
+        } else {
+            (Vec::new(), None)
+        };
 
         DomainMember {
             span: member.span,
             kind,
             name,
             annotation,
+            parameters,
+            body,
         }
     }
 
@@ -5425,6 +5517,13 @@ impl<'a> Lowerer<'a> {
                 }
                 for member in &item.members {
                     self.resolve_type(member.annotation, namespaces, &mut env);
+                    if let Some(body) = member.body {
+                        let mut member_env = env.clone();
+                        member_env.push_term_scope(self.binding_scope(
+                            member.parameters.iter().map(|parameter| parameter.binding),
+                        ));
+                        self.resolve_expr(body, namespaces, &member_env);
+                    }
                 }
                 Item::Domain(item)
             }
@@ -6979,15 +7078,15 @@ fn domain_member_surface_name(name: &syn::DomainMemberName) -> String {
     }
 }
 
-fn domain_member_key(member: &DomainMember) -> String {
-    format!("{:?}:{}", member.kind, member.name.text())
-}
-
-fn domain_member_display(member: &DomainMember) -> String {
-    match member.kind {
-        DomainMemberKind::Method => member.name.text().to_owned(),
-        DomainMemberKind::Operator => format!("({})", member.name.text()),
-        DomainMemberKind::Literal => format!("literal {}", member.name.text()),
+fn domain_member_surface_key(name: &syn::DomainMemberName) -> String {
+    match name {
+        syn::DomainMemberName::Signature(syn::ClassMemberName::Identifier(identifier)) => {
+            format!("method:{}", identifier.text)
+        }
+        syn::DomainMemberName::Signature(syn::ClassMemberName::Operator(operator)) => {
+            format!("operator:{}", operator.text)
+        }
+        syn::DomainMemberName::Literal(identifier) => format!("literal:{}", identifier.text),
     }
 }
 
@@ -10730,6 +10829,42 @@ signal updates : Signal Int
             "expected `make` to preserve both domain candidates for later contextual resolution, found {:?}",
             reference.resolution
         );
+    }
+
+    #[test]
+    fn lowers_authored_domain_member_bindings_into_hir_members() {
+        let lowered = lower_text(
+            "domain-authored-members.aivi",
+            r#"
+type Builder = Int -> Duration
+
+domain Duration over Int
+    make : Builder
+    make raw = raw
+    unwrap : Duration -> Int
+    unwrap duration = duration
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "authored domain members should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let domain = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Domain(item) => Some(item),
+                _ => None,
+            })
+            .expect("fixture should lower one domain item");
+        assert_eq!(domain.members.len(), 2);
+        assert_eq!(domain.members[0].parameters.len(), 1);
+        assert!(domain.members[0].body.is_some());
+        assert_eq!(domain.members[1].parameters.len(), 1);
+        assert!(domain.members[1].body.is_some());
     }
 
     #[test]

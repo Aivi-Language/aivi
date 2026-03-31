@@ -7,41 +7,50 @@ use aivi_base::SourceSpan;
 use aivi_typing::GatePlanner;
 
 use crate::{
-    BigIntLiteral, BindingId, BuiltinTerm, DecimalLiteral, ExprId, ExprKind, FloatLiteral,
-    FunctionItem, FunctionParameter, GateRuntimeCaseArm, GateRuntimeExpr, GateRuntimeExprKind,
-    GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind, GateRuntimeProjectionBase,
-    GateRuntimeRecordField, GateRuntimeReference, GateRuntimeTextLiteral, GateRuntimeTextSegment,
-    GateRuntimeTruthyFalsyBranch, GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind,
-    InstanceItem, InstanceMember, IntrinsicValue, Item, ItemId, Module, Name, NamePath, PipeExpr,
-    PipeStageKind, ProjectionBase, ResolutionState, SignalItem, TermReference, TermResolution,
-    TypeItemBody, TypeResolution, ValueItem,
+    BigIntLiteral, BindingId, BuiltinTerm, DecimalLiteral, DomainItem, DomainMember, ExprId,
+    ExprKind, FloatLiteral, FunctionItem, FunctionParameter, GateRuntimeCaseArm, GateRuntimeExpr,
+    GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind,
+    GateRuntimeProjectionBase, GateRuntimeRecordField, GateRuntimeReference,
+    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
+    GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, InstanceItem, InstanceMember,
+    IntrinsicValue, Item, ItemId, Module, Name, NamePath, PipeExpr, PipeStageKind, ProjectionBase,
+    ResolutionState, SignalItem, TermReference, TermResolution, TypeItemBody, TypeParameterId,
+    TypeResolution, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{expression_matches, resolve_class_member_dispatch},
     validate::{
-        GateExprEnv, GateIssue, GateProjectionStep, GateType, GateTypeContext, PolyTypeBindings,
-        extend_pipe_env_with_stage_memos, pipe_stage_expr_env, truthy_falsy_pair_stages,
+        GateExprEnv, GateIssue, GateProjectionStep, GateRecordField, GateType, GateTypeContext,
+        PolyTypeBindings, extend_pipe_env_with_stage_memos, pipe_stage_expr_env,
+        truthy_falsy_pair_stages,
     },
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GeneralExprElaborationReport {
     items: Vec<GeneralExprItemElaboration>,
+    domain_members: Vec<GeneralExprDomainMemberElaboration>,
     instance_members: Vec<GeneralExprInstanceMemberElaboration>,
 }
 
 impl GeneralExprElaborationReport {
     pub fn new(
         items: Vec<GeneralExprItemElaboration>,
+        domain_members: Vec<GeneralExprDomainMemberElaboration>,
         instance_members: Vec<GeneralExprInstanceMemberElaboration>,
     ) -> Self {
         Self {
             items,
+            domain_members,
             instance_members,
         }
     }
 
     pub fn items(&self) -> &[GeneralExprItemElaboration] {
         &self.items
+    }
+
+    pub fn domain_members(&self) -> &[GeneralExprDomainMemberElaboration] {
+        &self.domain_members
     }
 
     pub fn instance_members(&self) -> &[GeneralExprInstanceMemberElaboration] {
@@ -52,9 +61,10 @@ impl GeneralExprElaborationReport {
         self,
     ) -> (
         Vec<GeneralExprItemElaboration>,
+        Vec<GeneralExprDomainMemberElaboration>,
         Vec<GeneralExprInstanceMemberElaboration>,
     ) {
-        (self.items, self.instance_members)
+        (self.items, self.domain_members, self.instance_members)
     }
 
     pub fn into_items(self) -> Vec<GeneralExprItemElaboration> {
@@ -62,7 +72,7 @@ impl GeneralExprElaborationReport {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.items.is_empty() && self.instance_members.is_empty()
+        self.items.is_empty() && self.domain_members.is_empty() && self.instance_members.is_empty()
     }
 }
 
@@ -77,6 +87,15 @@ pub struct GeneralExprItemElaboration {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneralExprInstanceMemberElaboration {
     pub instance_owner: ItemId,
+    pub member_index: usize,
+    pub body_expr: ExprId,
+    pub parameters: Vec<GeneralExprParameter>,
+    pub outcome: GeneralExprOutcome,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GeneralExprDomainMemberElaboration {
+    pub domain_owner: ItemId,
     pub member_index: usize,
     pub body_expr: ExprId,
     pub parameters: Vec<GeneralExprParameter>,
@@ -419,6 +438,255 @@ fn signal_pipe_body_runtime_supported(expr: &GateRuntimeExpr) -> bool {
     })
 }
 
+fn rewrite_domain_carrier_view(
+    ty: &GateType,
+    domain_item: ItemId,
+    domain_parameters: &[TypeParameterId],
+    carrier: &GateType,
+) -> GateType {
+    match ty {
+        GateType::Primitive(_) | GateType::TypeParameter { .. } => ty.clone(),
+        GateType::Tuple(elements) => GateType::Tuple(
+            elements
+                .iter()
+                .map(|element| {
+                    rewrite_domain_carrier_view(element, domain_item, domain_parameters, carrier)
+                })
+                .collect(),
+        ),
+        GateType::Record(fields) => GateType::Record(
+            fields
+                .iter()
+                .map(|field| GateRecordField {
+                    name: field.name.clone(),
+                    ty: rewrite_domain_carrier_view(
+                        &field.ty,
+                        domain_item,
+                        domain_parameters,
+                        carrier,
+                    ),
+                })
+                .collect(),
+        ),
+        GateType::Arrow { parameter, result } => GateType::Arrow {
+            parameter: Box::new(rewrite_domain_carrier_view(
+                parameter,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            result: Box::new(rewrite_domain_carrier_view(
+                result,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::List(element) => GateType::List(Box::new(rewrite_domain_carrier_view(
+            element,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Map { key, value } => GateType::Map {
+            key: Box::new(rewrite_domain_carrier_view(
+                key,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Set(element) => GateType::Set(Box::new(rewrite_domain_carrier_view(
+            element,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Option(element) => GateType::Option(Box::new(rewrite_domain_carrier_view(
+            element,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Result { error, value } => GateType::Result {
+            error: Box::new(rewrite_domain_carrier_view(
+                error,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Validation { error, value } => GateType::Validation {
+            error: Box::new(rewrite_domain_carrier_view(
+                error,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Signal(inner) => GateType::Signal(Box::new(rewrite_domain_carrier_view(
+            inner,
+            domain_item,
+            domain_parameters,
+            carrier,
+        ))),
+        GateType::Task { error, value } => GateType::Task {
+            error: Box::new(rewrite_domain_carrier_view(
+                error,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+            value: Box::new(rewrite_domain_carrier_view(
+                value,
+                domain_item,
+                domain_parameters,
+                carrier,
+            )),
+        },
+        GateType::Domain {
+            item, arguments, ..
+        } if *item == domain_item => {
+            let substitutions = domain_parameters
+                .iter()
+                .copied()
+                .zip(arguments.iter().cloned())
+                .collect::<HashMap<_, _>>();
+            substitute_gate_type(carrier, &substitutions)
+        }
+        GateType::Domain {
+            item,
+            name,
+            arguments,
+        } => GateType::Domain {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| {
+                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
+                })
+                .collect(),
+        },
+        GateType::OpaqueItem {
+            item,
+            name,
+            arguments,
+        } => GateType::OpaqueItem {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| {
+                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
+                })
+                .collect(),
+        },
+    }
+}
+
+fn substitute_gate_type(
+    ty: &GateType,
+    substitutions: &HashMap<TypeParameterId, GateType>,
+) -> GateType {
+    match ty {
+        GateType::Primitive(_) => ty.clone(),
+        GateType::TypeParameter { parameter, .. } => substitutions
+            .get(parameter)
+            .cloned()
+            .unwrap_or_else(|| ty.clone()),
+        GateType::Tuple(elements) => GateType::Tuple(
+            elements
+                .iter()
+                .map(|element| substitute_gate_type(element, substitutions))
+                .collect(),
+        ),
+        GateType::Record(fields) => GateType::Record(
+            fields
+                .iter()
+                .map(|field| GateRecordField {
+                    name: field.name.clone(),
+                    ty: substitute_gate_type(&field.ty, substitutions),
+                })
+                .collect(),
+        ),
+        GateType::Arrow { parameter, result } => GateType::Arrow {
+            parameter: Box::new(substitute_gate_type(parameter, substitutions)),
+            result: Box::new(substitute_gate_type(result, substitutions)),
+        },
+        GateType::List(element) => {
+            GateType::List(Box::new(substitute_gate_type(element, substitutions)))
+        }
+        GateType::Map { key, value } => GateType::Map {
+            key: Box::new(substitute_gate_type(key, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Set(element) => {
+            GateType::Set(Box::new(substitute_gate_type(element, substitutions)))
+        }
+        GateType::Option(element) => {
+            GateType::Option(Box::new(substitute_gate_type(element, substitutions)))
+        }
+        GateType::Result { error, value } => GateType::Result {
+            error: Box::new(substitute_gate_type(error, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Validation { error, value } => GateType::Validation {
+            error: Box::new(substitute_gate_type(error, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Signal(inner) => {
+            GateType::Signal(Box::new(substitute_gate_type(inner, substitutions)))
+        }
+        GateType::Task { error, value } => GateType::Task {
+            error: Box::new(substitute_gate_type(error, substitutions)),
+            value: Box::new(substitute_gate_type(value, substitutions)),
+        },
+        GateType::Domain {
+            item,
+            name,
+            arguments,
+        } => GateType::Domain {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| substitute_gate_type(argument, substitutions))
+                .collect(),
+        },
+        GateType::OpaqueItem {
+            item,
+            name,
+            arguments,
+        } => GateType::OpaqueItem {
+            item: *item,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| substitute_gate_type(argument, substitutions))
+                .collect(),
+        },
+    }
+}
+
 struct GeneralExprElaborator<'a> {
     module: &'a Module,
     typing: GateTypeContext<'a>,
@@ -434,6 +702,7 @@ impl<'a> GeneralExprElaborator<'a> {
 
     fn build(mut self) -> GeneralExprElaborationReport {
         let mut items = Vec::new();
+        let mut domain_members = Vec::new();
         let mut instance_members = Vec::new();
         for (item_id, item) in self.module.items().iter() {
             if self.module.ambient_items().contains(&item_id) {
@@ -447,18 +716,20 @@ impl<'a> GeneralExprElaborator<'a> {
                         items.push(item);
                     }
                 }
+                Item::Domain(domain) => {
+                    domain_members.extend(self.elaborate_domain_members(item_id, domain));
+                }
                 Item::Instance(instance) => {
                     instance_members.extend(self.elaborate_instance_members(item_id, instance));
                 }
                 Item::Type(_)
                 | Item::Class(_)
-                | Item::Domain(_)
                 | Item::SourceProviderContract(_)
                 | Item::Use(_)
                 | Item::Export(_) => {}
             }
         }
-        GeneralExprElaborationReport::new(items, instance_members)
+        GeneralExprElaborationReport::new(items, domain_members, instance_members)
     }
 
     fn collect_markup_runtime_expr_sites(
@@ -842,6 +1113,64 @@ impl<'a> GeneralExprElaborator<'a> {
             .collect()
     }
 
+    fn elaborate_domain_members(
+        &mut self,
+        owner: ItemId,
+        domain: &DomainItem,
+    ) -> Vec<GeneralExprDomainMemberElaboration> {
+        domain
+            .members
+            .iter()
+            .enumerate()
+            .filter_map(|(member_index, member)| {
+                let body_expr = member.body?;
+                let expected =
+                    self.domain_member_implementation_type(owner, domain, member.annotation)?;
+                Some(self.elaborate_domain_member(
+                    owner,
+                    member_index,
+                    member,
+                    body_expr,
+                    &expected,
+                ))
+            })
+            .collect()
+    }
+
+    fn elaborate_domain_member(
+        &mut self,
+        owner: ItemId,
+        member_index: usize,
+        member: &DomainMember,
+        body_expr: ExprId,
+        expected: &GateType,
+    ) -> GeneralExprDomainMemberElaboration {
+        let (parameters, env, result_ty) =
+            match self.lower_domain_member_parameters(member, expected) {
+                Ok(lowered) => lowered,
+                Err(blockers) => {
+                    return GeneralExprDomainMemberElaboration {
+                        domain_owner: owner,
+                        member_index,
+                        body_expr,
+                        parameters: Vec::new(),
+                        outcome: GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
+                    };
+                }
+            };
+        let outcome = match self.lower_expr(body_expr, &env, None, Some(&result_ty)) {
+            Ok(body) => GeneralExprOutcome::Lowered(body),
+            Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
+        };
+        GeneralExprDomainMemberElaboration {
+            domain_owner: owner,
+            member_index,
+            body_expr,
+            parameters,
+            outcome,
+        }
+    }
+
     fn elaborate_instance_member(
         &mut self,
         owner: ItemId,
@@ -942,6 +1271,54 @@ impl<'a> GeneralExprElaborator<'a> {
             current = *result;
         }
         Ok((lowered, env, current))
+    }
+
+    fn lower_domain_member_parameters(
+        &mut self,
+        member: &DomainMember,
+        expected: &GateType,
+    ) -> Result<(Vec<GeneralExprParameter>, GateExprEnv, GateType), Vec<GeneralExprBlocker>> {
+        let mut env = GateExprEnv::default();
+        let mut lowered = Vec::with_capacity(member.parameters.len());
+        let mut current = expected.clone();
+        for parameter in &member.parameters {
+            let GateType::Arrow {
+                parameter: parameter_ty,
+                result,
+            } = current
+            else {
+                return Err(vec![GeneralExprBlocker::UnknownExprType {
+                    span: member.span,
+                }]);
+            };
+            let binding = &self.module.bindings()[parameter.binding];
+            let parameter_ty = parameter_ty.as_ref().clone();
+            env.locals.insert(parameter.binding, parameter_ty.clone());
+            lowered.push(GeneralExprParameter {
+                binding: parameter.binding,
+                span: binding.span,
+                name: binding.name.text().into(),
+                ty: parameter_ty,
+            });
+            current = *result;
+        }
+        Ok((lowered, env, current))
+    }
+
+    fn domain_member_implementation_type(
+        &mut self,
+        owner: ItemId,
+        domain: &DomainItem,
+        annotation: crate::TypeId,
+    ) -> Option<GateType> {
+        let surface = self.typing.lower_open_annotation(annotation)?;
+        let carrier = self.typing.lower_open_annotation(domain.carrier)?;
+        Some(rewrite_domain_carrier_view(
+            &surface,
+            owner,
+            &domain.parameters,
+            &carrier,
+        ))
     }
 
     fn instance_class_item_id(&self, item: &InstanceItem) -> Option<ItemId> {
@@ -3487,6 +3864,44 @@ value raw : Text = home.unwrap
                 }
             },
             other => panic!("expected lowered value body, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_authored_domain_members_against_carrier_view() {
+        let lowered = lower_text(
+            "general-expr-domain-authored-member.aivi",
+            r#"
+type Builder = Int -> Duration
+
+domain Duration over Int
+    make : Builder
+    make raw = raw
+    unwrap : Duration -> Int
+    unwrap duration = duration
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "authored domain member example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let make = report
+            .domain_members()
+            .iter()
+            .find(|member| member.member_index == 0)
+            .expect("expected authored domain member elaboration");
+        assert_eq!(make.parameters.len(), 1);
+        match &make.outcome {
+            GeneralExprOutcome::Lowered(expr) => {
+                assert!(matches!(
+                    expr.kind,
+                    GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_))
+                ));
+            }
+            other => panic!("expected authored domain member body to lower, found {other:?}"),
         }
     }
 

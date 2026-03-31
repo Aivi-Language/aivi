@@ -134,6 +134,11 @@ pub enum LoweringError {
         member_index: usize,
         span: SourceSpan,
     },
+    MissingDomainMemberElaboration {
+        domain: HirItemId,
+        member_index: usize,
+        span: SourceSpan,
+    },
     DuplicatePipeStage {
         owner: HirItemId,
         pipe_expr: HirExprId,
@@ -253,6 +258,14 @@ impl std::fmt::Display for LoweringError {
                 f,
                 "typed-core lowering could not find a complete general-expression elaboration for instance item {instance} member {member_index}"
             ),
+            Self::MissingDomainMemberElaboration {
+                domain,
+                member_index,
+                ..
+            } => write!(
+                f,
+                "typed-core lowering could not find a complete general-expression elaboration for domain item {domain} member {member_index}"
+            ),
             Self::DuplicatePipeStage {
                 owner,
                 pipe_expr,
@@ -355,6 +368,11 @@ fn validate_general_expr_report_completeness(
         .iter()
         .map(|item| item.owner)
         .collect::<HashSet<_>>();
+    let domain_members = report
+        .domain_members()
+        .iter()
+        .map(|item| (item.domain_owner, item.member_index))
+        .collect::<HashSet<_>>();
     let instance_members = report
         .instance_members()
         .iter()
@@ -383,6 +401,17 @@ fn validate_general_expr_report_completeness(
                     owner: item_id,
                     span: signal.header.span,
                 });
+            }
+            HirItem::Domain(domain) => {
+                for (member_index, member) in domain.members.iter().enumerate() {
+                    if member.body.is_some() && !domain_members.contains(&(item_id, member_index)) {
+                        errors.push(LoweringError::MissingDomainMemberElaboration {
+                            domain: item_id,
+                            member_index,
+                            span: member.span,
+                        });
+                    }
+                }
             }
             HirItem::Instance(instance) => {
                 for (member_index, member) in instance.members.iter().enumerate() {
@@ -442,6 +471,12 @@ struct InstanceMemberKey {
     member_index: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct DomainMemberKey {
+    domain: HirItemId,
+    member_index: usize,
+}
+
 struct PipeBuilder {
     owner: ItemId,
     origin: PipeOrigin,
@@ -466,6 +501,7 @@ struct ModuleLowerer<'a> {
     module: Module,
     item_map: HashMap<HirItemId, ItemId>,
     import_item_map: HashMap<ImportId, ItemId>,
+    domain_member_item_map: HashMap<DomainMemberKey, ItemId>,
     instance_member_item_map: HashMap<InstanceMemberKey, ItemId>,
     pipe_builders: BTreeMap<PipeKey, PipeBuilder>,
     source_by_owner: HashMap<ItemId, SourceId>,
@@ -574,9 +610,12 @@ struct RuntimeFragmentLowerer<'a> {
     lowerer: ModuleLowerer<'a>,
     fragment: &'a RuntimeFragmentSpec,
     report_by_owner: HashMap<HirItemId, aivi_hir::GeneralExprItemElaboration>,
+    domain_member_reports: HashMap<DomainMemberKey, aivi_hir::GeneralExprDomainMemberElaboration>,
     instance_member_reports: HashMap<InstanceMemberKey, GeneralExprInstanceMemberElaboration>,
     lowering: HashSet<HirItemId>,
     lowered: HashSet<HirItemId>,
+    lowering_domain_members: HashSet<DomainMemberKey>,
+    lowered_domain_members: HashSet<DomainMemberKey>,
     lowering_instance_members: HashSet<InstanceMemberKey>,
     lowered_instance_members: HashSet<InstanceMemberKey>,
 }
@@ -585,8 +624,10 @@ struct RuntimeFragmentItemCollector<'a> {
     hir: &'a aivi_hir::Module,
     fragment: &'a RuntimeFragmentSpec,
     report_by_owner: HashMap<HirItemId, aivi_hir::GeneralExprItemElaboration>,
+    domain_member_reports: HashMap<DomainMemberKey, aivi_hir::GeneralExprDomainMemberElaboration>,
     instance_member_reports: HashMap<InstanceMemberKey, GeneralExprInstanceMemberElaboration>,
     included_items: HashSet<HirItemId>,
+    visited_domain_members: HashSet<DomainMemberKey>,
     visited_instance_members: HashSet<InstanceMemberKey>,
 }
 
@@ -642,6 +683,7 @@ impl<'a> ModuleLowerer<'a> {
             module: Module::new(),
             item_map: HashMap::new(),
             import_item_map: HashMap::new(),
+            domain_member_item_map: HashMap::new(),
             instance_member_item_map: HashMap::new(),
             pipe_builders: BTreeMap::new(),
             source_by_owner: HashMap::new(),
@@ -791,6 +833,7 @@ impl<'a> ModuleLowerer<'a> {
             matches!(
                 e,
                 LoweringError::MissingGeneralExprElaboration { .. }
+                    | LoweringError::MissingDomainMemberElaboration { .. }
                     | LoweringError::MissingInstanceMemberElaboration { .. }
             )
         });
@@ -873,16 +916,28 @@ impl<'a> ModuleLowerer<'a> {
             if !self.includes_item(hir_id) {
                 continue;
             }
-            let HirItem::Instance(instance) = item else {
-                continue;
-            };
-            for member_index in 0..instance.members.len() {
-                if self
-                    .seed_instance_member_item(hir_id, member_index)
-                    .is_none()
-                {
-                    break;
+            match item {
+                HirItem::Domain(domain) => {
+                    for (member_index, member) in domain.members.iter().enumerate() {
+                        if member.body.is_none() {
+                            continue;
+                        }
+                        if self.seed_domain_member_item(hir_id, member_index).is_none() {
+                            break;
+                        }
+                    }
                 }
+                HirItem::Instance(instance) => {
+                    for member_index in 0..instance.members.len() {
+                        if self
+                            .seed_instance_member_item(hir_id, member_index)
+                            .is_none()
+                        {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -896,7 +951,7 @@ impl<'a> ModuleLowerer<'a> {
                 &report,
                 |item_id| self.includes_item(item_id),
             ));
-        let (items, instance_members) = report.into_parts();
+        let (items, domain_members, instance_members) = report.into_parts();
         for item in items {
             if !self.includes_item(item.owner) {
                 continue;
@@ -912,6 +967,28 @@ impl<'a> ModuleLowerer<'a> {
                 item.body_expr,
                 item.parameters,
                 item.outcome,
+            );
+        }
+        for member in domain_members {
+            if !self.includes_item(member.domain_owner) {
+                continue;
+            }
+            let key = DomainMemberKey {
+                domain: member.domain_owner,
+                member_index: member.member_index,
+            };
+            let Some(owner) = self.domain_member_item_map.get(&key).copied() else {
+                self.errors.push(LoweringError::UnknownOwner {
+                    owner: member.domain_owner,
+                });
+                continue;
+            };
+            self.lower_general_expr_body(
+                member.domain_owner,
+                owner,
+                member.body_expr,
+                member.parameters,
+                member.outcome,
             );
         }
         for member in instance_members {
@@ -1884,11 +1961,22 @@ impl<'a> ModuleLowerer<'a> {
                 .unwrap_or(Reference::HirItem(*item)),
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::DomainMember(
                 resolution,
-            )) => self
-                .hir
-                .domain_member_handle(*resolution)
-                .map(Reference::DomainMember)
-                .unwrap_or(Reference::HirItem(resolution.domain)),
+            )) => {
+                let key = DomainMemberKey {
+                    domain: resolution.domain,
+                    member_index: resolution.member_index,
+                };
+                self.domain_member_item_map
+                    .get(&key)
+                    .copied()
+                    .map(Reference::Item)
+                    .or_else(|| {
+                        self.hir
+                            .domain_member_handle(*resolution)
+                            .map(Reference::DomainMember)
+                    })
+                    .unwrap_or(Reference::HirItem(resolution.domain))
+            }
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Builtin(term)) => {
                 Reference::Builtin(*term)
             }
@@ -2487,6 +2575,58 @@ impl<'a> ModuleLowerer<'a> {
         Some(item_id)
     }
 
+    fn seed_domain_member_item(
+        &mut self,
+        domain: HirItemId,
+        member_index: usize,
+    ) -> Option<ItemId> {
+        let key = DomainMemberKey {
+            domain,
+            member_index,
+        };
+        if let Some(item) = self.domain_member_item_map.get(&key).copied() {
+            return Some(item);
+        }
+        let HirItem::Domain(item) = self.hir.items().get(domain)? else {
+            self.errors
+                .push(LoweringError::UnknownOwner { owner: domain });
+            return None;
+        };
+        let Some(member) = item.members.get(member_index) else {
+            self.errors
+                .push(LoweringError::UnknownOwner { owner: domain });
+            return None;
+        };
+        let kind = if member.parameters.is_empty() {
+            ItemKind::Value
+        } else {
+            ItemKind::Function
+        };
+        let item_id = match self.module.items_mut().alloc(Item {
+            origin: domain,
+            span: member.span,
+            name: format!(
+                "domain#{}::member#{}::{}",
+                domain.as_raw(),
+                member_index,
+                member.name.text()
+            )
+            .into_boxed_str(),
+            kind,
+            parameters: Vec::new(),
+            body: None,
+            pipes: Vec::new(),
+        }) {
+            Ok(item_id) => item_id,
+            Err(overflow) => {
+                self.errors.push(arena_overflow("items", overflow));
+                return None;
+            }
+        };
+        self.domain_member_item_map.insert(key, item_id);
+        Some(item_id)
+    }
+
     fn lower_runtime_expr(
         &mut self,
         owner: HirItemId,
@@ -2586,9 +2726,15 @@ impl<'a> ModuleLowerer<'a> {
                                 GateRuntimeReference::SumConstructor(handle) => {
                                     Reference::SumConstructor(handle.clone())
                                 }
-                                GateRuntimeReference::DomainMember(handle) => {
-                                    Reference::DomainMember(handle.clone())
-                                }
+                                GateRuntimeReference::DomainMember(handle) => self
+                                    .domain_member_item_map
+                                    .get(&DomainMemberKey {
+                                        domain: handle.domain,
+                                        member_index: handle.member_index,
+                                    })
+                                    .copied()
+                                    .map(Reference::Item)
+                                    .unwrap_or_else(|| Reference::DomainMember(handle.clone())),
                                 GateRuntimeReference::ClassMember(dispatch) => self
                                     .lower_class_member_reference(
                                         owner, expr.span, dispatch, &expr.ty,
@@ -3336,8 +3482,20 @@ impl<'a> RuntimeFragmentLowerer<'a> {
     fn new(hir: &'a aivi_hir::Module, fragment: &'a RuntimeFragmentSpec) -> Self {
         let report = elaborate_general_expressions(hir);
         let completeness_errors = validate_general_expr_report_completeness(hir, &report, |_| true);
-        let (items, instance_members) = report.into_parts();
+        let (items, domain_members, instance_members) = report.into_parts();
         let report_by_owner = items.into_iter().map(|item| (item.owner, item)).collect();
+        let domain_member_reports = domain_members
+            .into_iter()
+            .map(|item| {
+                (
+                    DomainMemberKey {
+                        domain: item.domain_owner,
+                        member_index: item.member_index,
+                    },
+                    item,
+                )
+            })
+            .collect();
         let instance_member_reports = instance_members
             .into_iter()
             .map(|item| {
@@ -3354,9 +3512,12 @@ impl<'a> RuntimeFragmentLowerer<'a> {
             lowerer: ModuleLowerer::new(hir),
             fragment,
             report_by_owner,
+            domain_member_reports,
             instance_member_reports,
             lowering: HashSet::new(),
             lowered: HashSet::new(),
+            lowering_domain_members: HashSet::new(),
+            lowered_domain_members: HashSet::new(),
             lowering_instance_members: HashSet::new(),
             lowered_instance_members: HashSet::new(),
         };
@@ -3370,6 +3531,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
             matches!(
                 e,
                 LoweringError::MissingGeneralExprElaboration { .. }
+                    | LoweringError::MissingDomainMemberElaboration { .. }
                     | LoweringError::MissingInstanceMemberElaboration { .. }
             )
         });
@@ -3379,6 +3541,9 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         let dependencies = referenced_hir_dependencies(&self.fragment.body);
         for dependency in dependencies.items {
             self.ensure_hir_item_lowered(dependency);
+        }
+        for dependency in dependencies.domain_members {
+            self.ensure_domain_member_lowered(dependency);
         }
         for dependency in dependencies.instance_members {
             self.ensure_instance_member_lowered(dependency);
@@ -3488,6 +3653,9 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         for dependency in dependencies.items {
             self.ensure_hir_item_lowered(dependency);
         }
+        for dependency in dependencies.domain_members {
+            self.ensure_domain_member_lowered(dependency);
+        }
         for dependency in dependencies.instance_members {
             self.ensure_instance_member_lowered(dependency);
         }
@@ -3517,6 +3685,72 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         }
         self.lowering.remove(&owner);
         self.lowered.insert(owner);
+    }
+
+    fn ensure_domain_member_lowered(&mut self, key: DomainMemberKey) {
+        if self.lowered_domain_members.contains(&key) || self.lowering_domain_members.contains(&key)
+        {
+            return;
+        }
+        let Some(report) = self.domain_member_reports.get(&key).cloned() else {
+            return;
+        };
+        let Some(core_item) = self
+            .lowerer
+            .seed_domain_member_item(key.domain, key.member_index)
+        else {
+            return;
+        };
+        let body = match report.outcome {
+            GeneralExprOutcome::Lowered(body) => body,
+            GeneralExprOutcome::Blocked(blocked) => {
+                self.lowerer.errors.push(LoweringError::BlockedGeneralExpr {
+                    owner: key.domain,
+                    body_expr: report.body_expr,
+                    span: blocked.primary_span().unwrap_or_default(),
+                    blocked,
+                });
+                return;
+            }
+        };
+
+        self.lowering_domain_members.insert(key);
+        let dependencies = referenced_hir_dependencies(&body);
+        for dependency in dependencies.items {
+            self.ensure_hir_item_lowered(dependency);
+        }
+        for dependency in dependencies.domain_members {
+            self.ensure_domain_member_lowered(dependency);
+        }
+        for dependency in dependencies.instance_members {
+            self.ensure_instance_member_lowered(dependency);
+        }
+        if self.lowerer.errors.is_empty() {
+            match self.lowerer.lower_runtime_expr(key.domain, &body) {
+                Ok(lowered_body) => {
+                    let item = self
+                        .lowerer
+                        .module
+                        .items_mut()
+                        .get_mut(core_item)
+                        .expect("seeded runtime dependency item should exist");
+                    item.parameters = report
+                        .parameters
+                        .iter()
+                        .map(|parameter| ItemParameter {
+                            binding: parameter.binding,
+                            span: parameter.span,
+                            name: parameter.name.clone(),
+                            ty: Type::lower(&parameter.ty),
+                        })
+                        .collect();
+                    item.body = Some(lowered_body);
+                }
+                Err(error) => self.lowerer.errors.push(error),
+            }
+        }
+        self.lowering_domain_members.remove(&key);
+        self.lowered_domain_members.insert(key);
     }
 
     fn ensure_instance_member_lowered(&mut self, key: InstanceMemberKey) {
@@ -3554,6 +3788,9 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         let dependencies = referenced_hir_dependencies(&body);
         for dependency in dependencies.items {
             self.ensure_hir_item_lowered(dependency);
+        }
+        for dependency in dependencies.domain_members {
+            self.ensure_domain_member_lowered(dependency);
         }
         for dependency in dependencies.instance_members {
             self.ensure_instance_member_lowered(dependency);
@@ -3642,8 +3879,21 @@ impl<'a> RuntimeFragmentLowerer<'a> {
 
 impl<'a> RuntimeFragmentItemCollector<'a> {
     fn new(hir: &'a aivi_hir::Module, fragment: &'a RuntimeFragmentSpec) -> Self {
-        let (items, instance_members) = elaborate_general_expressions(hir).into_parts();
+        let (items, domain_members, instance_members) =
+            elaborate_general_expressions(hir).into_parts();
         let report_by_owner = items.into_iter().map(|item| (item.owner, item)).collect();
+        let domain_member_reports = domain_members
+            .into_iter()
+            .map(|item| {
+                (
+                    DomainMemberKey {
+                        domain: item.domain_owner,
+                        member_index: item.member_index,
+                    },
+                    item,
+                )
+            })
+            .collect();
         let instance_member_reports = instance_members
             .into_iter()
             .map(|item| {
@@ -3660,8 +3910,10 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
             hir,
             fragment,
             report_by_owner,
+            domain_member_reports,
             instance_member_reports,
             included_items: HashSet::new(),
+            visited_domain_members: HashSet::new(),
             visited_instance_members: HashSet::new(),
         }
     }
@@ -3672,6 +3924,9 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
         let dependencies = referenced_hir_dependencies(&self.fragment.body);
         for dependency in dependencies.items {
             self.collect_item(dependency);
+        }
+        for dependency in dependencies.domain_members {
+            self.collect_domain_member(dependency);
         }
         for dependency in dependencies.instance_members {
             self.collect_instance_member(dependency);
@@ -3720,16 +3975,52 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
                 for dependency in dependencies.items {
                     self.collect_item(dependency);
                 }
+                for dependency in dependencies.domain_members {
+                    self.collect_domain_member(dependency);
+                }
                 for dependency in dependencies.instance_members {
                     self.collect_instance_member(dependency);
                 }
             }
             HirItem::Type(_)
             | HirItem::Class(_)
-            | HirItem::Domain(_)
             | HirItem::SourceProviderContract(_)
             | HirItem::Use(_)
             | HirItem::Export(_) => {}
+            HirItem::Domain(domain) => {
+                for (member_index, member) in domain.members.iter().enumerate() {
+                    if member.body.is_none() {
+                        continue;
+                    }
+                    self.collect_domain_member(DomainMemberKey {
+                        domain: owner,
+                        member_index,
+                    });
+                }
+            }
+        }
+    }
+
+    fn collect_domain_member(&mut self, key: DomainMemberKey) {
+        if !self.visited_domain_members.insert(key) {
+            return;
+        }
+        self.collect_item(key.domain);
+        let Some(report) = self.domain_member_reports.get(&key) else {
+            return;
+        };
+        let GeneralExprOutcome::Lowered(body) = &report.outcome else {
+            return;
+        };
+        let dependencies = referenced_hir_dependencies(body);
+        for dependency in dependencies.items {
+            self.collect_item(dependency);
+        }
+        for dependency in dependencies.domain_members {
+            self.collect_domain_member(dependency);
+        }
+        for dependency in dependencies.instance_members {
+            self.collect_instance_member(dependency);
         }
     }
 
@@ -3747,6 +4038,9 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
         let dependencies = referenced_hir_dependencies(body);
         for dependency in dependencies.items {
             self.collect_item(dependency);
+        }
+        for dependency in dependencies.domain_members {
+            self.collect_domain_member(dependency);
         }
         for dependency in dependencies.instance_members {
             self.collect_instance_member(dependency);
@@ -3777,11 +4071,13 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
 #[derive(Default)]
 struct HirDependencies {
     items: Vec<HirItemId>,
+    domain_members: Vec<DomainMemberKey>,
     instance_members: Vec<InstanceMemberKey>,
 }
 
 fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
     let mut seen_items = HashSet::new();
+    let mut seen_domain_members = HashSet::new();
     let mut seen_instance_members = HashSet::new();
     let mut work = vec![root];
     while let Some(expr) = work.pop() {
@@ -3796,10 +4092,15 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Builtin(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::IntrinsicValue(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Import(_))
-            | GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(_)) => {}
             GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item)) => {
                 seen_items.insert(*item);
+            }
+            GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(handle)) => {
+                seen_domain_members.insert(DomainMemberKey {
+                    domain: handle.domain,
+                    member_index: handle.member_index,
+                });
             }
             GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)) => {
                 if let aivi_hir::ClassMemberImplementation::SameModuleInstance {
@@ -3879,10 +4180,13 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
     }
     let mut items = seen_items.into_iter().collect::<Vec<_>>();
     items.sort_by_key(|item| item.as_raw());
+    let mut domain_members = seen_domain_members.into_iter().collect::<Vec<_>>();
+    domain_members.sort();
     let mut instance_members = seen_instance_members.into_iter().collect::<Vec<_>>();
     instance_members.sort();
     HirDependencies {
         items,
+        domain_members,
         instance_members,
     }
 }
@@ -5052,7 +5356,7 @@ value joinedList:List Int =
             "completeness example should lower to HIR: {:?}",
             lowered.diagnostics()
         );
-        let empty = aivi_hir::GeneralExprElaborationReport::new(Vec::new(), Vec::new());
+        let empty = aivi_hir::GeneralExprElaborationReport::new(Vec::new(), Vec::new(), Vec::new());
         let errors = validate_general_expr_report_completeness(lowered.module(), &empty, |_| true);
         assert!(errors.iter().any(|error| matches!(
             error,

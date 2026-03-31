@@ -1137,6 +1137,38 @@ impl Validator<'_> {
                             "annotation",
                             member.annotation,
                         );
+                        for parameter in &member.parameters {
+                            self.check_span("domain member parameter", parameter.span);
+                            self.require_binding(
+                                member.span,
+                                "domain member",
+                                "parameter binding",
+                                parameter.binding,
+                            );
+                            if let Some(annotation) = parameter.annotation {
+                                self.require_type(
+                                    parameter.span,
+                                    "domain member parameter",
+                                    "annotation",
+                                    annotation,
+                                );
+                            }
+                        }
+                        if let Some(body) = member.body {
+                            if member.kind == DomainMemberKind::Literal {
+                                self.diagnostics.push(
+                                    Diagnostic::error(
+                                        "domain literal declarations cannot carry authored bodies",
+                                    )
+                                    .with_code(code("invalid-domain-literal-body"))
+                                    .with_label(DiagnosticLabel::primary(
+                                        member.span,
+                                        "move this logic to a callable domain member instead of a literal suffix",
+                                    )),
+                                );
+                            }
+                            self.require_expr(member.span, "domain member", "body", body);
+                        }
                     }
                 }
                 Item::SourceProviderContract(item) => {

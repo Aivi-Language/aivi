@@ -335,7 +335,10 @@ impl DomainMemberName {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DomainMember {
     pub name: DomainMemberName,
+    pub is_binding: bool,
     pub annotation: Option<TypeExpr>,
+    pub parameters: Vec<Identifier>,
+    pub body: Option<Expr>,
     pub span: SourceSpan,
 }
 

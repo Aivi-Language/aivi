@@ -151,7 +151,9 @@ domain Duration over Int
     literal ms : Int -> Duration
     literal sec : Int -> Duration
     millis : Int -> Duration
+    millis raw = raw
     value : Duration -> Int
+    value duration = duration
 
 domain Url over Text
     parse : Text -> Result UrlError Url
@@ -165,6 +167,9 @@ Rules:
 - Unwrapping is explicit.
 - No implicit casts to/from the carrier.
 - Callable domain members participate in ordinary term lookup.
+- Callable domain members may add an authored body with a second line of the form `name arg1 arg2 = expr`.
+- Authored bodies are checked against the carrier view of the current domain, while the public signature remains nominal.
+- Literal suffix declarations remain declaration-only.
 - Unary domain methods can also be projected with `value.member`.
 - Domain projection is still explicit member dispatch; it does not imply implicit carrier casts.
 
