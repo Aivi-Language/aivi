@@ -40,9 +40,10 @@ use aivi.core.either (
     Right
 )
 
-fun describeResult:Text result: (Either Text Int) => result
-  ||> Left msg -> "Error: {msg}"
-  ||> Right n  -> "Got {n}"
+type (Either Text Int) -> Text
+func describeResult result => result
+ ||> Left msg -> "Error: {msg}"
+ ||> Right n  -> "Got {n}"
 ```
 
 ---
@@ -61,10 +62,12 @@ use aivi.core.either (
     mapRight
 )
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-fun doubleRight: (Either Text Int) result: (Either Text Int) =>
+type (Either Text Int) -> (Either Text Int)
+func doubleRight result =>
     mapRight double result
 ```
 
@@ -84,10 +87,12 @@ use aivi.core.either (
     mapLeft
 )
 
-fun toMessage:Text code:Int =>
+type Int -> Text
+func toMessage code =>
     "Error {code}"
 
-fun wrapError: (Either Text Int) result: (Either Int Int) =>
+type (Either Int Int) -> (Either Text Int)
+func wrapError result =>
     mapLeft toMessage result
 ```
 
@@ -111,7 +116,8 @@ use aivi.math (negate)
 
 use aivi.text (surround)
 
-fun transformBoth: (Either Text Int) e: (Either Text Int) =>
+type (Either Text Int) -> (Either Text Int)
+func transformBoth e =>
     mapBoth (surround "[" "]") negate e
 ```
 
@@ -131,13 +137,16 @@ use aivi.core.either (
     fold
 )
 
-fun whenLeft:Int ignored:Text =>
+type Text -> Int
+func whenLeft ignored =>
     0
 
-fun whenRight:Int ignored:Text =>
+type Text -> Int
+func whenRight ignored =>
     1
 
-fun toLength:Int e: (Either Text Text) =>
+type (Either Text Text) -> Int
+func toLength e =>
     fold whenLeft whenRight e
 ```
 
@@ -159,7 +168,8 @@ use aivi.core.either (
     isRight
 )
 
-fun hasError:Bool e: (Either Text Int) =>
+type (Either Text Int) -> Bool
+func hasError e =>
     isLeft e
 ```
 
@@ -180,7 +190,8 @@ use aivi.core.either (
     fromRight
 )
 
-fun getValueOrZero:Int e: (Either Text Int) =>
+type (Either Text Int) -> Int
+func getValueOrZero e =>
     fromRight 0 e
 ```
 
@@ -200,7 +211,8 @@ use aivi.core.either (
     swap
 )
 
-fun flipEither: (Either Int Text) e: (Either Text Int) =>
+type (Either Text Int) -> (Either Int Text)
+func flipEither e =>
     swap e
 ```
 
@@ -220,7 +232,8 @@ use aivi.core.either (
     toOption
 )
 
-fun rightOrNone: (Option Int) e: (Either Text Int) =>
+type (Either Text Int) -> (Option Int)
+func rightOrNone e =>
     toOption e
 ```
 
@@ -240,7 +253,8 @@ use aivi.core.either (
     fromResult
 )
 
-fun resultToEither: (Either Text Int) result: (Result Text Int) =>
+type (Result Text Int) -> (Either Text Int)
+func resultToEither result =>
     fromResult result
 ```
 
@@ -260,9 +274,11 @@ use aivi.core.either (
     partitionEithers
 )
 
-fun takeLefts: (List Text) parts: ((List Text, List Int)) => parts
-  ||> (lefts, ignored) -> lefts
+type ((List Text, List Int)) -> (List Text)
+func takeLefts parts => parts
+ ||> (lefts, ignored) -> lefts
 
-fun splitResults: (List Text) items: (List (Either Text Int)) =>
+type (List (Either Text Int)) -> (List Text)
+func splitResults items =>
     takeLefts (partitionEithers items)
 ```

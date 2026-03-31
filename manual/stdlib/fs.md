@@ -56,7 +56,8 @@ Read a file as UTF-8 text.
 ```aivi
 use aivi.fs (readText)
 
-fun loadConfig: Task Text Text path:Text =>
+type Text -> Task Text Text
+func loadConfig path =>
     readText path
 ```
 
@@ -67,7 +68,8 @@ Read a file as raw bytes.
 ```aivi
 use aivi.fs (readBytes)
 
-fun loadIcon: Task Text Bytes path:Text =>
+type Text -> Task Text Bytes
+func loadIcon path =>
     readBytes path
 ```
 
@@ -78,7 +80,8 @@ List the names of entries in a directory (filenames only, not full paths).
 ```aivi
 use aivi.fs (readDir)
 
-fun listFiles: Task Text (List Text) dir:Text =>
+type Text -> Task Text (List Text)
+func listFiles dir =>
     readDir dir
 ```
 
@@ -89,7 +92,8 @@ Return `True` if the path exists (file or directory).
 ```aivi
 use aivi.fs (exists)
 
-fun checkCachePresent: Task Text Bool cacheDir:Text =>
+type Text -> Task Text Bool
+func checkCachePresent cacheDir =>
     exists cacheDir
 ```
 
@@ -104,7 +108,8 @@ Write UTF-8 text to a file, creating it if necessary.
 ```aivi
 use aivi.fs (writeText)
 
-fun saveConfig: Task Text Unit path:Text content:Text =>
+type Text -> Text -> Task Text Unit
+func saveConfig path content =>
     writeText path content
 ```
 
@@ -115,7 +120,8 @@ Write raw bytes to a file.
 ```aivi
 use aivi.fs (writeBytes)
 
-fun saveThumbnail: Task Text Unit path:Text data:Bytes =>
+type Text -> Bytes -> Task Text Unit
+func saveThumbnail path data =>
     writeBytes path data
 ```
 
@@ -126,7 +132,8 @@ Create a directory and any missing parent directories (equivalent to `mkdir -p`)
 ```aivi
 use aivi.fs (createDirAll)
 
-fun ensureCacheDir: Task Text Unit dir:Text =>
+type Text -> Task Text Unit
+func ensureCacheDir dir =>
     createDirAll dir
 ```
 
@@ -141,7 +148,8 @@ Rename (or move) a file or directory.
 ```aivi
 use aivi.fs (rename)
 
-fun moveFile: Task Text Unit from:Text to:Text =>
+type Text -> Text -> Task Text Unit
+func moveFile from to =>
     rename from to
 ```
 
@@ -152,7 +160,8 @@ Copy a file. The destination directory must already exist.
 ```aivi
 use aivi.fs (copy)
 
-fun backupFile: Task Text Unit src:Text dest:Text =>
+type Text -> Text -> Task Text Unit
+func backupFile src dest =>
     copy src dest
 ```
 
@@ -163,7 +172,8 @@ Delete a single file.
 ```aivi
 use aivi.fs (deleteFile)
 
-fun removeTempFile: Task Text Unit path:Text =>
+type Text -> Task Text Unit
+func removeTempFile path =>
     deleteFile path
 ```
 
@@ -174,7 +184,8 @@ Recursively delete a directory and all its contents (equivalent to `rm -rf`).
 ```aivi
 use aivi.fs (deleteDir)
 
-fun cleanCache: Task Text Unit cacheDir:Text =>
+type Text -> Task Text Unit
+func cleanCache cacheDir =>
     deleteDir cacheDir
 ```
 

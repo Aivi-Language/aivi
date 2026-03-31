@@ -15,7 +15,7 @@ Today, built-in sources are attached with the `@source` decorator immediately be
     immediate: True,
     coalesce: True
 }
-signal tick: Signal Unit
+signal tick : Signal Unit
 
 value view =
     <Window title="Timer">
@@ -35,7 +35,7 @@ type Key =
     repeat: False,
     focusOnly: True
 }
-signal keyDown: Signal Key
+signal keyDown : Signal Key
 
 value view =
     <Window title="Keys">
@@ -63,12 +63,12 @@ type Map K V =
   | EmptyMap
 
 domain Duration over Int
-    literal sec:Int -> Duration
+    literal sec : Int -> Duration
 
 domain Retry over Int
-    literal times:Int -> Retry
+    literal times : Int -> Retry
 
-value authHeaders: Map Text Text = EmptyMap
+value authHeaders : Map Text Text = EmptyMap
 
 signal apiHost = "https://api.example.com"
 
@@ -78,7 +78,7 @@ signal apiHost = "https://api.example.com"
     retry: 3times,
     timeout: 5sec
 }
-signal users: Signal (Result HttpError (List User))
+signal users : Signal (Result HttpError (List User))
 
 value view =
     <Window title="Users">
@@ -97,7 +97,7 @@ type FsWatchEvent =
 @source fs.watch "/tmp/demo.txt" with {
     events: [Created, Changed, Deleted]
 }
-signal fileEvents: Signal FsWatchEvent
+signal fileEvents : Signal FsWatchEvent
 
 value view =
     <Window title="Watcher">
@@ -120,7 +120,7 @@ type ProcessEvent =
     stdout: Lines,
     stderr: Ignore
 }
-signal grepEvents: Signal ProcessEvent
+signal grepEvents : Signal ProcessEvent
 
 value view =
     <Window title="Search">
@@ -137,19 +137,19 @@ type Mode =
   | Stream
 
 domain Duration over Int
-    literal ms:Int -> Duration
+    literal ms : Int -> Duration
 
 provider custom.feed
-    argument path:Text
-    option timeout:Duration
-    option mode:Mode
+    argument path : Text
+    option timeout : Duration
+    option mode : Mode
     wakeup: providerTrigger
 
 @source custom.feed "/tmp/demo.txt" with {
     timeout: 5ms,
     mode: Stream
 }
-signal updates: Signal Int
+signal updates : Signal Int
 
 value view =
     <Window title="Feed">

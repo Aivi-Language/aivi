@@ -1,4 +1,6 @@
 type User = { name: Text }
 
-value user:User =
-    { name: "Ada", name: "Grace" }
+value user : User = {
+    name: "Ada",
+    name: "Grace"
+}

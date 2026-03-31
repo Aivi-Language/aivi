@@ -1,4 +1,5 @@
-fun step:Int tick:Unit current:Int =>
+type Unit -> Int -> Int
+func step tick current =>
     current + 1
 
 @source timer.every 120 with {
@@ -6,6 +7,5 @@ fun step:Int tick:Unit current:Int =>
 }
 signal tick : Signal Unit
 
-signal retried : Signal Int =
-    tick
-     +|> 0 step
+signal retried : Signal Int = tick
+ +|> 0 step

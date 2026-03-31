@@ -25,7 +25,7 @@ If you need:
 | Need | Use |
 |---|---|
 | Pure constant | `value` |
-| Pure function | `fun` |
+| Pure function | `func` |
 | Reactive derived value | `signal` |
 | External event/data stream | body-less `signal : Signal T` plus `@source` or GTK event routing |
 | One-shot effect | `Task E A` |
@@ -44,7 +44,7 @@ Allowed top-level forms:
 - `instance`
 - `domain`
 - `value`
-- `fun`
+- `func`
 - `signal`
 - `use`
 - `export`
@@ -59,33 +59,39 @@ Allowed top-level forms:
 /** doc comment **/
 ```
 
-### 2.2 `value` and `fun`
+### 2.2 `value` and `func`
 
 ```aivi
 value answer = 42
-value user:User = { name: "Ada", age: 36 }
 
-fun add:Int x:Int y:Int =>
+value user : User = {
+    name: "Ada",
+    age: 36
+}
+
+type Int -> Int -> Int
+func add x y =>
     x + y
 
-fun same : Eq A -> Bool v:A =>
+type Eq A => A -> Bool
+func same v =>
     v == v
 ```
 
 Rules:
 
 - `value` = constant binding only; uses `=`.
-- `fun` = function declaration; uses `=>`.
-- Function return type comes after the function name: `fun add:Int ...`.
-- Function parameters are written as `name:Type`.
-- Constraint prefixes, when present, appear before the return type: `fun same : Eq A -> Bool v:A => ...`.
+- `func` = function declaration; uses `=>`.
+- Function signatures live on a preceding `type` line: `type Int -> Int -> Int`.
+- `func` headers keep parameters unannotated: `func add x y => ...`.
+- Constraint prefixes, when present, live on the `type` line: `type Eq A => A -> Bool`.
 - `value` is a contextual keyword and can still be a parameter name:
 
 ```aivi
-fun absolute:Int value:Int =>
-    value < 0
-     T|> 0 - value
-     F|> value
+type Int -> Int
+func absolute value => value < 0
+ T|> 0 - value
+ F|> value
 ```
 
 ### 2.3 `type`
@@ -93,13 +99,14 @@ fun absolute:Int value:Int =>
 ```aivi
 type Bool = True | False
 
-type Option A =
-  | None
-  | Some A
+type Option A = None | Some A
 
 type Result E A = Err E | Ok A
 
-type User = { name: Text, age: Int }
+type User = {
+    name: Text,
+    age: Int
+}
 ```
 
 Rules:
@@ -119,7 +126,7 @@ class Applicative F
     with Apply F
     pure : A -> F A
 
-instance Eq A -> Eq (Option A)
+instance Eq A => Eq (Option A)
     (==) left right = True
 ```
 
@@ -141,10 +148,10 @@ Rules:
 
 ```aivi
 domain Duration over Int
-    literal ms  : Int -> Duration
+    literal ms : Int -> Duration
     literal sec : Int -> Duration
-    millis      : Int -> Duration
-    value       : Duration -> Int
+    millis : Int -> Duration
+    value : Duration -> Int
 
 domain Url over Text
     parse : Text -> Result UrlError Url
@@ -165,9 +172,8 @@ Rules:
 ```aivi
 signal counter = 0
 signal fullName = "{firstName} {lastName}"
-
 signal clicked : Signal Unit
-signal query   : Signal Text
+signal query : Signal Text
 ```
 
 Rules:
@@ -208,24 +214,26 @@ Rules:
 ```aivi
 provider my.data.source
     wakeup: providerTrigger
-    argument url: Url
-    option timeout: Duration
-    option retries: Int
+    argument url : Url
+    option timeout : Duration
+    option retries : Int
 ```
 
 ### 2.9 `use` and `export`
 
 ```aivi
-use aivi.defaults (Option, defaultText, defaultInt, defaultBool)
+use aivi.defaults (
+    Option
+    defaultText
+    defaultInt
+    defaultBool
+)
+
 use my.client (fetch as clientFetch)
 
 export main
 export Url
-export (
-    Option,
-    Result,
-    Signal
-)
+export (Option, Result, Signal)
 ```
 
 Rules:
@@ -399,7 +407,12 @@ class Default A
 ### 4.2 `aivi.defaults`
 
 ```aivi
-use aivi.defaults (Option, defaultText, defaultInt, defaultBool)
+use aivi.defaults (
+    Option
+    defaultText
+    defaultInt
+    defaultBool
+)
 ```
 
 ### 4.3 Record omission
@@ -413,13 +426,15 @@ type User = {
 
 use aivi.defaults (Option)
 
-value user:User = { name: "Ada" }
+value user : User = {
+    name: "Ada"
+}
 ```
 
 This elaborates to:
 
 ```aivi
-value user:User = {
+value user : User = {
     name: "Ada",
     nickname: None,
     email: None
@@ -704,7 +719,7 @@ Rules:
 
 ```aivi
 signal clicked : Signal Unit
-signal query   : Signal Text
+signal query : Signal Text
 ```
 
 Rules:
@@ -716,11 +731,11 @@ Rules:
 ### 7.3 `+|>` accumulation
 
 ```aivi
-signal counter : Signal Int =
-    tick
-     +|> 0 step
+signal counter : Signal Int = tick
+ +|> 0 step
 
-fun step:Int tick:Unit current:Int =>
+type Unit -> Int -> Int
+func step tick current =>
     current + 1
 ```
 
@@ -733,6 +748,7 @@ Rules:
 
 ```aivi
 signal total = 0
+
 when ready => total <- left + right
 when ready and enabled => total <- left + right
 ```
@@ -819,8 +835,6 @@ Do not hallucinate arbitrary JSX/HTML/DOM widgets as automatically valid.
 
 ```aivi
 signal clicked : Signal Unit
-
-<Button label="Click me" onClick={clicked} />
 ```
 
 Rules:
@@ -957,8 +971,8 @@ Important:
 | `do` notation / `>>=` on `Signal` | `&|>` or explicit source/runtime nodes |
 | open records / row-polymorphic record assumptions | closed records plus `Pick` / `Omit` / `Rename` |
 | `{ record | field = value }` | `record <| { field: value }` |
-| `\x -> ...` | not specified here; prefer named `fun` or existing in-repo precedent only |
-| OCaml-style `fun x -> ...` | not AIVI `fun`; AIVI uses `fun name:Ret arg:Type => ...` |
+| `\x -> ...` | not specified here; prefer named `func` or existing in-repo precedent only |
+| OCaml-style `fun x -> ...` | not AIVI `func`; AIVI uses a named `func` with a leading `type` signature |
 | `where` blocks | not specified here |
 | `let ... in ...` | not specified here |
 
@@ -1018,7 +1032,7 @@ The RFC and repo evidence above do **not** give a stable authoring contract here
 
 Safest subset for code generation today:
 
-- `value`, `fun`, `type`, `domain`, `class`, `instance`
+- `value`, `func`, `type`, `domain`, `class`, `instance`
 - `use`, `export`
 - `signal name = expr`
 - body-less input signals `signal name : Signal T`
@@ -1044,11 +1058,15 @@ Use extra caution with:
 ### Pure code
 
 ```aivi
-type User = { name: Text, active: Bool }
+type User = {
+    name: Text,
+    active: Bool
+}
 
 value greeting = "hello"
 
-fun greet:Text user:User =>
+type User -> Text
+func greet user =>
     "{greeting}, {user.name}"
 ```
 
@@ -1056,7 +1074,7 @@ fun greet:Text user:User =>
 
 ```aivi
 signal firstName : Signal Text
-signal lastName  : Signal Text
+signal lastName : Signal Text
 
 signal fullName =
  &|> firstName

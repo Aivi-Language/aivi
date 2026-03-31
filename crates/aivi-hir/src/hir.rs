@@ -697,7 +697,7 @@ pub struct ValueItem {
     pub body: ExprId,
 }
 
-/// One `fun` declaration.
+/// One `func` declaration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionItem {
     pub header: ItemHeader,

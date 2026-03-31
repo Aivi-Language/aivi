@@ -141,7 +141,8 @@ use aivi.fs (
     writeBytes
 )
 
-fun prependHeader: Task Text Unit path:Text header:Text =>
+type Text -> Text -> Task Text Unit
+func prependHeader path header =>
     let headerBytes
 ```
 

@@ -1,10 +1,12 @@
-fun greetUser:Text name:Text =>
+type Text -> Text
+func greetUser name =>
     "hello {name}"
 
-fun joinLabels:Text left:Text right:Text =>
+type Text -> Text -> Text
+func joinLabels left right =>
     "{left} / {right}"
 
-value defaultRole:Text = "owner"
+value defaultRole : Text = "owner"
 
 export greetUser
 export joinLabels

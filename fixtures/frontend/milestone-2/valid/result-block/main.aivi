@@ -1,22 +1,22 @@
-fun requirePositive: Result Text Int value:Int =>
-    value > 0
-     T|> Ok value
-     F|> Err "non-positive"
+type Int -> Result Text Int
+func requirePositive value => value > 0
+ T|> Ok value
+ F|> Err "non-positive"
 
-value combined: Result Text Int =
+value combined : Result Text Int =
     result {
         left <- requirePositive 20
         right <- requirePositive 22
         left + right
     }
 
-value rejected: Result Text Int =
+value rejected : Result Text Int =
     result {
         left <- requirePositive (-1)
         right <- requirePositive 22
     }
 
-value nested: Result Text Int =
+value nested : Result Text Int =
     result {
         outer <- Ok 2
         inner <- result {

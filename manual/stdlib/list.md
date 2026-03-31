@@ -37,13 +37,14 @@ isEmpty : (List A) -> Bool
 ```aivi
 use aivi.list (isEmpty)
 
-fun describe:Text items: List Int => isEmpty items
-  T|> "empty list"
-  F|> "has elements"
+type List Int -> Text
+func describe items => isEmpty items
+ T|> "empty list"
+ F|> "has elements"
 
-value result:Text = describe []
+value result : Text = describe []
 
-value result2:Text =
+value result2 : Text =
     describe [
         1,
         2
@@ -63,11 +64,12 @@ nonEmpty : (List A) -> Bool
 ```aivi
 use aivi.list (nonEmpty)
 
-fun describeList:Text items: List Int => nonEmpty items
-  T|> "has elements"
-  F|> "empty"
+type List Int -> Text
+func describeList items => nonEmpty items
+ T|> "has elements"
+ F|> "empty"
 
-value result:Text =
+value result : Text =
     describeList [
         42
     ]
@@ -86,7 +88,7 @@ length : (List A) -> Int
 ```aivi
 use aivi.list (length)
 
-value n:Int =
+value n : Int =
     length [
         10,
         20,
@@ -107,18 +109,19 @@ head : (List A) -> Option A
 ```aivi
 use aivi.list (head)
 
-fun firstOrZero:Int items: List Int => head items
-  ||> None   -> 0
-  ||> Some n -> n
+type List Int -> Int
+func firstOrZero items => head items
+ ||> None   -> 0
+ ||> Some n -> n
 
-value result:Int =
+value result : Int =
     firstOrZero [
         5,
         10,
         15
     ]
 
-value fallback:Int = firstOrZero []
+value fallback : Int = firstOrZero []
 ```
 
 ---
@@ -134,11 +137,12 @@ tail : (List A) -> Option (List A)
 ```aivi
 use aivi.list (tail)
 
-fun restOrEmpty: List Int items: List Int => tail items
-  ||> None           -> []
-  ||> Some remaining -> remaining
+type List Int -> List Int
+func restOrEmpty items => tail items
+ ||> None           -> []
+ ||> Some remaining -> remaining
 
-value result: List Int =
+value result : List Int =
     restOrEmpty [
         1,
         2,
@@ -159,14 +163,14 @@ tailOrEmpty : (List A) -> List A
 ```aivi
 use aivi.list (tailOrEmpty)
 
-value rest: List Int =
+value rest : List Int =
     tailOrEmpty [
         1,
         2,
         3
     ]
 
-value none: List Int = tailOrEmpty []
+value none : List Int = tailOrEmpty []
 ```
 
 ---
@@ -182,11 +186,12 @@ last : (List A) -> Option A
 ```aivi
 use aivi.list (last)
 
-fun finalScore:Int scores: List Int => last scores
-  ||> None   -> 0
-  ||> Some n -> n
+type List Int -> Int
+func finalScore scores => last scores
+ ||> None   -> 0
+ ||> Some n -> n
 
-value result:Int =
+value result : Int =
     finalScore [
         80,
         90,
@@ -211,10 +216,11 @@ map : (A -> B) -> (List A) -> List B
 ```aivi
 use aivi.list (map)
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-value result: List Int = [1, 2, 3]
+value result : List Int = [1, 2, 3]
   |> map double
 ```
 
@@ -231,7 +237,8 @@ filter : (A -> Bool) -> (List A) -> List A
 ```
 use aivi.list (filter)
 
-fun isPositive:Bool n:Int =>
+type Int -> Bool
+func isPositive n =>
     n > 0
 
 value result
@@ -250,13 +257,13 @@ flatten : (List (List A)) -> List A
 ```aivi
 use aivi.list (flatten)
 
-value nested: List (List Int) = [
+value nested : List (List Int) = [
     [1, 2],
     [3, 4],
     [5]
 ]
 
-value flat: List Int = flatten nested
+value flat : List Int = flatten nested
 ```
 
 
@@ -273,10 +280,11 @@ flatMap : (A -> List B) -> (List A) -> List B
 ```aivi
 use aivi.list (flatMap)
 
-fun twice: List Int n:Int =>
+type Int -> List Int
+func twice n =>
     [n, n]
 
-value result: List Int = [1, 2, 3]
+value result : List Int = [1, 2, 3]
   |> flatMap twice
 ```
 
@@ -293,7 +301,7 @@ reverse : (List A) -> List A
 ```aivi
 use aivi.list (reverse)
 
-value original: List Int = [
+value original : List Int = [
     1,
     2,
     3,
@@ -301,7 +309,7 @@ value original: List Int = [
     5
 ]
 
-value reversed: List Int = reverse original
+value reversed : List Int = reverse original
 ```
 
 ---
@@ -317,7 +325,7 @@ take : Int -> (List A) -> List A
 ```aivi
 use aivi.list (take)
 
-value items: List Int = [
+value items : List Int = [
     10,
     20,
     30,
@@ -325,7 +333,7 @@ value items: List Int = [
     50
 ]
 
-value first3: List Int = take 3 items
+value first3 : List Int = take 3 items
 ```
 
 ---
@@ -341,7 +349,7 @@ drop : Int -> (List A) -> List A
 ```aivi
 use aivi.list (drop)
 
-value items: List Int = [
+value items : List Int = [
     10,
     20,
     30,
@@ -349,7 +357,7 @@ value items: List Int = [
     50
 ]
 
-value after2: List Int = drop 2 items
+value after2 : List Int = drop 2 items
 ```
 
 ---
@@ -365,10 +373,11 @@ takeWhile : (A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (takeWhile)
 
-fun isSmall:Bool n:Int =>
+type Int -> Bool
+func isSmall n =>
     n < 10
 
-value result: List Int = [2, 5, 8, 11, 3]
+value result : List Int = [2, 5, 8, 11, 3]
   |> takeWhile isSmall
 ```
 
@@ -385,10 +394,11 @@ dropWhile : (A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (dropWhile)
 
-fun isSmall:Bool n:Int =>
+type Int -> Bool
+func isSmall n =>
     n < 10
 
-value result: List Int = [2, 5, 8, 11, 3]
+value result : List Int = [2, 5, 8, 11, 3]
   |> dropWhile isSmall
 ```
 
@@ -405,13 +415,13 @@ intersperse : A -> (List A) -> List A
 ```aivi
 use aivi.list (intersperse)
 
-value words: List Text = [
+value words : List Text = [
     "one",
     "two",
     "three"
 ]
 
-value spaced: List Text = intersperse ", " words
+value spaced : List Text = intersperse ", " words
 ```
 
 ---
@@ -431,7 +441,8 @@ any : (A -> Bool) -> (List A) -> Bool
 ```
 use aivi.list (any)
 
-fun isNegative:Bool n:Int =>
+type Int -> Bool
+func isNegative n =>
     n < 0
 
 value result
@@ -450,10 +461,11 @@ all : (A -> Bool) -> (List A) -> Bool
 ```
 use aivi.list (all)
 
-fun isPositive:Bool n:Int =>
+type Int -> Bool
+func isPositive n =>
     n > 0
 
-value allPositive:Bool =
+value allPositive : Bool =
     all isPositive [
         1,
         2,
@@ -476,7 +488,8 @@ count : (A -> Bool) -> (List A) -> Int
 ```
 use aivi.list (count)
 
-fun isPositive:Bool n:Int =>
+type Int -> Bool
+func isPositive n =>
     n > 0
 
 value n
@@ -500,10 +513,12 @@ type User = {
     name: Text
 }
 
-fun hasId:Bool target:Int user:User =>
+type Int -> User -> Bool
+func hasId target user =>
     user.id == target
 
-fun findUser: Option User id:Int users: List User =>
+type Int -> List User -> Option User
+func findUser id users =>
     find (hasId id) users
 ```
 
@@ -520,7 +535,8 @@ findMap : (A -> Option B) -> (List A) -> Option B
 ```
 use aivi.list (findMap)
 
-fun asPositive: (Option Int) n:Int => n > 0
+type Int -> Option Int
+func asPositive n => n > 0
   T|> Some n
   F|> None
 
@@ -540,10 +556,11 @@ contains : (A -> A -> Bool) -> A -> (List A) -> Bool
 ```aivi
 use aivi.list (contains)
 
-fun intEq:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func intEq a b =>
     a == b
 
-value found:Bool =
+value found : Bool =
     contains intEq 3 [
         1,
         2,
@@ -552,7 +569,7 @@ value found:Bool =
         5
     ]
 
-value missing:Bool =
+value missing : Bool =
     contains intEq 9 [
         1,
         2,
@@ -573,10 +590,11 @@ indexOf : (A -> Bool) -> (List A) -> Option Int
 ```aivi
 use aivi.list (indexOf)
 
-fun isThirty:Bool n:Int =>
+type Int -> Bool
+func isThirty n =>
     n == 30
 
-value idx: Option Int =
+value idx : Option Int =
     indexOf isThirty [
         10,
         20,
@@ -602,7 +620,7 @@ sum : (List Int) -> Int
 ```aivi
 use aivi.list (sum)
 
-value total:Int =
+value total : Int =
     sum [
         1,
         2,
@@ -625,7 +643,7 @@ product : (List Int) -> Int
 ```aivi
 use aivi.list (product)
 
-value result:Int =
+value result : Int =
     product [
         1,
         2,
@@ -648,10 +666,11 @@ maximum : (A -> A -> Bool) -> (List A) -> Option A
 ```aivi
 use aivi.list (maximum)
 
-fun isLess:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func isLess a b =>
     a < b
 
-value highest: Option Int =
+value highest : Option Int =
     maximum isLess [
         3,
         1,
@@ -677,10 +696,11 @@ minimum : (A -> A -> Bool) -> (List A) -> Option A
 ```aivi
 use aivi.list (minimum)
 
-fun isLess:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func isLess a b =>
     a < b
 
-value lowest: Option Int =
+value lowest : Option Int =
     minimum isLess [
         3,
         1,
@@ -710,10 +730,11 @@ unique : (A -> A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (unique)
 
-fun intEq:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func intEq a b =>
     a == b
 
-value deduped: List Int =
+value deduped : List Int =
     unique intEq [
         1,
         2,
@@ -737,10 +758,11 @@ sortBy : (A -> A -> Bool) -> (List A) -> List A
 ```aivi
 use aivi.list (sortBy)
 
-fun intLt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func intLt a b =>
     a < b
 
-value sorted: List Int =
+value sorted : List Int =
     sortBy intLt [
         3,
         1,
@@ -756,10 +778,11 @@ For descending order, reverse the comparison:
 ```aivi
 use aivi.list (sortBy)
 
-fun intGt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func intGt a b =>
     a > b
 
-value descending: List Int =
+value descending : List Int =
     sortBy intGt [
         3,
         1,
@@ -788,12 +811,13 @@ use aivi.list (
     partition
 )
 
-fun isPositive:Bool n:Int =>
+type Int -> Bool
+func isPositive n =>
     n > 0
 
 value groups
-value positive: (List Int) = groups.matched
-value negative: (List Int) = groups.unmatched
+value positive : (List Int) = groups.matched
+value negative : (List Int) = groups.unmatched
 ```
 
 ---
@@ -813,19 +837,19 @@ zip : (List A) -> (List B) -> List (A, B)
 ```aivi
 use aivi.list (zip)
 
-value names: List Text = [
+value names : List Text = [
     "Alice",
     "Bob",
     "Carol"
 ]
 
-value scores: List Int = [
+value scores : List Int = [
     95,
     87,
     92
 ]
 
-value pairs: List (Text, Int) = zip names scores
+value pairs : List (Text, Int) = zip names scores
 ```
 
 ---
@@ -841,10 +865,11 @@ zipWith : (A -> B -> C) -> (List A) -> (List B) -> List C
 ```aivi
 use aivi.list (zipWith)
 
-fun add:Int a:Int b:Int =>
+type Int -> Int -> Int
+func add a b =>
     a + b
 
-value sums: List Int =
+value sums : List Int =
     zipWith add [1, 2, 3] [
         10,
         20,
@@ -870,19 +895,21 @@ use aivi.list (
     unzip
 )
 
-fun takeLefts: (List Text) state: (UnzipState Text Int) => state
-  ||> { lefts, rights } -> lefts
+type (UnzipState Text Int) -> (List Text)
+func takeLefts state => state
+ ||> { lefts, rights } -> lefts
 
-fun takeRights: (List Int) state: (UnzipState Text Int) => state
-  ||> { lefts, rights } -> rights
+type (UnzipState Text Int) -> (List Int)
+func takeRights state => state
+ ||> { lefts, rights } -> rights
 
-value pairs: List (Text, Int) = [
+value pairs : List (Text, Int) = [
     ("Alice", 95),
     ("Bob", 87),
     ("Carol", 92)
 ]
 
-value result: (UnzipState Text Int) = unzip pairs
-value names: (List Text) = takeLefts result
-value scores: (List Int) = takeRights result
+value result : (UnzipState Text Int) = unzip pairs
+value names : (List Text) = takeLefts result
+value scores : (List Int) = takeRights result
 ```

@@ -3,7 +3,7 @@
 At the top level, AIVI keeps values and functions separate:
 
 - `value` declares a named constant expression
-- `fun` declares a named pure function
+- `func` declares a named pure function
 
 That split keeps intent obvious in larger modules and matches the current surface language directly.
 
@@ -12,9 +12,9 @@ That split keeps intent obvious in larger modules and matches the current surfac
 A `value` binds a name to a single expression:
 
 ```aivi
-value answer:Int = 42
-value greeting:Text = "Hello"
-value isReady:Bool = True
+value answer : Int = 42
+value greeting : Text = "Hello"
+value isReady : Bool = True
 ```
 
 Type annotations are optional when the compiler can infer them, but they are useful in public modules and documentation.
@@ -22,9 +22,9 @@ Type annotations are optional when the compiler can infer them, but they are use
 Values can refer to earlier values:
 
 ```aivi
-value width:Int = 24
-value height:Int = 20
-value cellCount:Int = width * height
+value width : Int = 24
+value height : Int = 20
+value cellCount : Int = width * height
 ```
 
 Values can also hold records and lists:
@@ -35,12 +35,12 @@ type BoardSize = {
     height: Int
 }
 
-value boardSize:BoardSize = {
+value boardSize : BoardSize = {
     width: 24,
     height: 20
 }
 
-value checkpoints: List Int = [
+value checkpoints : List Int = [
     4,
     8,
     12
@@ -49,19 +49,21 @@ value checkpoints: List Int = [
 
 ## Functions
 
-A `fun` declaration names a pure function:
+A `func` declaration names a pure function:
 
 ```aivi
-fun add:Int x:Int y:Int =>
+type Int -> Int -> Int
+func add x y =>
     x + y
 
 value total = add 3 4
 ```
 
-The return type comes immediately after the function name. Parameters follow as `name:Type`.
+Function signatures live on a preceding `type` line, and the `func` header keeps parameters unannotated.
 
 ```aivi
-fun greet:Text name:Text =>
+type Text -> Text
+func greet name =>
     "Hello, {name}!"
 
 value greetingText = greet "Ada"
@@ -72,7 +74,8 @@ value greetingText = greet "Ada"
 Parameters are separated by spaces, not commas:
 
 ```aivi
-fun between:Bool low:Int high:Int n:Int =>
+type Int -> Int -> Int -> Bool
+func between low high n =>
     n >= low and n <= high
 
 value scoreAllowed = between 0 100 42
@@ -83,9 +86,10 @@ value scoreAllowed = between 0 100 42
 Function bodies are still just expressions, so multi-line definitions usually lean on pipes:
 
 ```aivi
-fun describeScore:Text score:Int => score >= 50
-  T|> "good"
-  F|> "keep going"
+type Int -> Text
+func describeScore score => score >= 50
+ T|> "good"
+ F|> "keep going"
 
 value scoreLabel = describeScore 88
 ```
@@ -95,7 +99,8 @@ value scoreLabel = describeScore 88
 Call a function by writing the function name followed by its arguments:
 
 ```aivi
-fun area:Int width:Int height:Int =>
+type Int -> Int -> Int
+func area width height =>
     width * height
 
 value roomArea = area 5 8
@@ -104,7 +109,8 @@ value roomArea = area 5 8
 If an argument is itself an expression, wrap it in parentheses:
 
 ```aivi
-fun area:Int width:Int height:Int =>
+type Int -> Int -> Int
+func area width height =>
     width * height
 
 value adjustedArea = area (2 + 3) (4 * 2)
@@ -117,7 +123,8 @@ That includes negative literals in call position, for example `abs (-3)` rather 
 Functions can be partially applied. Supplying fewer arguments returns another function:
 
 ```aivi
-fun multiply:Int left:Int right:Int =>
+type Int -> Int -> Int
+func multiply left right =>
     left * right
 
 value double = multiply 2
@@ -129,11 +136,13 @@ value ten = double 5
 For examples and playground-friendly snippets, prefer a named helper over an inline anonymous function:
 
 ```aivi
-fun trimStatus:Text status:Text => status
-  ||> " ready " -> "ready"
-  ||> _         -> status
+type Text -> Text
+func trimStatus status => status
+ ||> " ready " -> "ready"
+ ||> _         -> status
 
-fun decorateStatus:Text status:Text =>
+type Text -> Text
+func decorateStatus status =>
     "[{status}]"
 
 value shownStatus = " ready "
@@ -153,23 +162,25 @@ type User = {
     isAdmin: Bool
 }
 
-value user:User = {
+value user : User = {
     name: "Ada",
     isAdmin: False
 }
 
-value promoted:User = user <| {
-    name: "Grace"
-    isAdmin: True
-}
+value promoted : User =
+    user <| {
+        name: "Grace",
+        isAdmin: True,
+    }
 ```
 
 `patch { ... }` builds a reusable same-shape update function:
 
 ```aivi
-value promote:(User -> User) = patch {
-    isAdmin: True
-}
+value promote : (User -> User) =
+    patch {
+        isAdmin: True,
+    }
 ```
 
 Selectors are relative to the current focus:
@@ -186,28 +197,31 @@ The current checked slice also accepts constructor focus through `Some`, `Ok`, `
 `:=` stores a function value as data instead of applying it during patch execution.
 
 ```aivi
-fun increment:Int n:Int =>
+type Int -> Int
+func increment n =>
     n + 1
 
 type Counter = {
     step: Int -> Int
 }
 
-value keepCounter:(Counter -> Counter) = patch {
-    step: := increment
-}
+value keepCounter : (Counter -> Counter) =
+    patch {
+        step: := increment,
+    }
 ```
 
 Current limitation: structural removal syntax (`field: -`, or equivalently `.field: -`) is parsed but still rejected later in the compiler pipeline because result-type-changing patch elaboration is not wired through the executable slice yet.
 
 ## Type annotations
 
-Both `value` and `fun` use `:` for type annotations:
+Both `value` and `func` use `:` for type annotations:
 
 ```aivi
-value count:Int = 0
+value count : Int = 0
 
-fun negate:Int n:Int =>
+type Int -> Int
+func negate n =>
     0 - n
 ```
 
@@ -216,7 +230,7 @@ fun negate:Int n:Int =>
 | Form | Example |
 | --- | --- |
 | Value | `value answer:Int = 42` |
-| Function | `fun add:Int x:Int y:Int => x + y` |
+| Function | `type Int -> Int -> Int` / `func add x y => x + y` |
 | Function call | `add 3 4` |
 | Partial application | `value double = multiply 2` |
 | Patch apply | `value promoted = user <| { isAdmin: True }` |

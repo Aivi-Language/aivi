@@ -13,6 +13,8 @@
     { "include": "#decorator" },
     { "include": "#annotated-signatures" },
     { "include": "#declaration" },
+    { "include": "#pipe-stage-head" },
+    { "include": "#function-call-head" },
     { "include": "#markup" },
     { "include": "#record-key" },
     { "include": "#type-expression" },
@@ -141,14 +143,20 @@
     },
 
     "fun-signature": {
-      "begin": "\\b(fun)\\s+([a-z_][a-zA-Z0-9_]*)",
+      "begin": "\\b(func|fun)\\s+([a-z_][a-zA-Z0-9_]*)",
       "beginCaptures": {
-        "1": { "name": "keyword.declaration.fun.aivi" },
+        "1": { "name": "keyword.declaration.func.aivi" },
         "2": { "name": "entity.name.function.aivi" }
       },
       "end": "(?=\\s*=>|$)",
       "patterns": [
-        { "include": "#fun-type-annotation" }
+        { "include": "#fun-type-annotation" },
+        {
+          "match": "\\b([a-z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "variable.parameter.function.aivi" }
+          }
+        }
       ]
     },
 
@@ -337,10 +345,10 @@
           }
         },
         {
-          "comment": "fun name — function declaration",
-          "match": "\\b(fun)\\s+([a-z_][a-zA-Z0-9_]*)",
+          "comment": "func name — function declaration",
+          "match": "\\b(func|fun)\\s+([a-z_][a-zA-Z0-9_]*)",
           "captures": {
-            "1": { "name": "keyword.declaration.fun.aivi" },
+            "1": { "name": "keyword.declaration.func.aivi" },
             "2": { "name": "entity.name.function.aivi" }
           }
         },
@@ -436,6 +444,30 @@
           "captures": {
             "1": { "name": "keyword.control.export.aivi" },
             "2": { "name": "entity.name.variable.aivi" }
+          }
+        }
+      ]
+    },
+
+    "function-call-head": {
+      "patterns": [
+        {
+          "comment": "lowercase call heads followed by arguments",
+          "match": "(?<![@.])\\b(?!(?:func|fun|value|signal|source|result|type|class|instance|domain|provider|use|export|with|require|when|as|pattern|of|on|key)\\b)([a-z_][a-zA-Z0-9_]*)\\b(?=\\s+(?:[#a-z_][a-zA-Z0-9_]*|\\(|\\[|\\{|\\\"|-?\\d|<))",
+          "captures": {
+            "1": { "name": "entity.name.function.call.aivi" }
+          }
+        }
+      ]
+    },
+
+    "pipe-stage-head": {
+      "patterns": [
+        {
+          "comment": "pipe stage function heads",
+          "match": "(?:(?<=\\|\\s)|(?<=\\|>\\s)|(?<=\\?\\|>\\s)|(?<=\\*\\|>\\s)|(?<=&\\|>\\s)|(?<=T\\|>\\s)|(?<=F\\|>\\s)|(?<=@\\|>\\s)|(?<=<\\|@\\s)|(?<=<\\|\\*\\s))([a-z_][a-zA-Z0-9_]*)\\b",
+          "captures": {
+            "1": { "name": "entity.name.function.call.aivi" }
           }
         }
       ]

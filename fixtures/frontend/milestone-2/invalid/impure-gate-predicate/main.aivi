@@ -1,10 +1,11 @@
 type User = { active: Bool }
 
-value seed:User = { active: True }
+value seed : User = {
+    active: True
+}
 
-signal users:Signal User = seed
-signal ready:Signal Bool = True
+signal users : Signal User = seed
+signal ready : Signal Bool = True
 
-signal filtered:Signal User =
-    users
-     ?|> ready
+signal filtered : Signal User = users
+ ?|> ready

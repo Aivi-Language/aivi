@@ -76,121 +76,127 @@ use aivi.math (
 
 use aivi.list (length)
 
-value fnIdentity:Int = identity 42
-value fnConst:Int = const 7 "ignored"
-value fnFlip:Int = flip const "ignored" 99
-value fnCompose:Int = compose negateInt abs (0 - 5)
-value fnAndThen:Int = andThen abs negateInt (0 - 3)
-value fnAlways:Int = always 100 True
-value fnApplyTo:Int = applyTo 4 abs
-value fnApplyTwice:Int = applyTwice negateInt 10
-value eitherLeft: (Either Text Int) = Left "error"
-value eitherRight: (Either Text Int) = Right 42
-value eitherIsLeft:Bool = isLeft eitherLeft
-value eitherIsRight:Bool = isRight eitherRight
-value eitherNotLeft:Bool = isLeft eitherRight
-value eitherFromLeft: (Option Text) = fromLeft eitherLeft
-value eitherFromRight: (Option Int) = fromRight eitherRight
-value eitherFromLeftOnRight: (Option Text) = fromLeft eitherRight
-value eitherFromRightOnLeft: (Option Int) = fromRight eitherLeft
+value fnIdentity : Int = identity 42
+value fnConst : Int = const 7 "ignored"
+value fnFlip : Int = flip const "ignored" 99
+value fnCompose : Int = compose negateInt abs (0 - 5)
+value fnAndThen : Int = andThen abs negateInt (0 - 3)
+value fnAlways : Int = always 100 True
+value fnApplyTo : Int = applyTo 4 abs
+value fnApplyTwice : Int = applyTwice negateInt 10
+value eitherLeft : (Either Text Int) = Left "error"
+value eitherRight : (Either Text Int) = Right 42
+value eitherIsLeft : Bool = isLeft eitherLeft
+value eitherIsRight : Bool = isRight eitherRight
+value eitherNotLeft : Bool = isLeft eitherRight
+value eitherFromLeft : (Option Text) = fromLeft eitherLeft
+value eitherFromRight : (Option Int) = fromRight eitherRight
+value eitherFromLeftOnRight : (Option Text) = fromLeft eitherRight
+value eitherFromRightOnLeft : (Option Int) = fromRight eitherLeft
 
-fun addExcl:Text s:Text =>
+type Text -> Text
+func addExcl s =>
     "{s}!"
 
-fun doubleInt:Int n:Int =>
+type Int -> Int
+func doubleInt n =>
     n * 2
 
-value eitherMapRight: (Either Text Int) = mapRight doubleInt eitherRight
-value eitherMapLeft: (Either Text Int) = mapLeft addExcl eitherLeft
-value eitherSwap: (Either Int Text) = swap eitherLeft
-value eitherToOption: (Option Int) = toOption eitherRight
-value eitherToOptionLeft: (Option Int) = toOption eitherLeft
-value eitherToResult: (Result Text Int) = toResult eitherRight
-value resultOk: (Result Text Int) = Ok 99
-value resultErr: (Result Text Int) = Err "bad"
-value eitherFromResultOk: (Either Text Int) = fromResult resultOk
-value eitherFromResultErr: (Either Text Int) = fromResult resultErr
+value eitherMapRight : (Either Text Int) = mapRight doubleInt eitherRight
+value eitherMapLeft : (Either Text Int) = mapLeft addExcl eitherLeft
+value eitherSwap : (Either Int Text) = swap eitherLeft
+value eitherToOption : (Option Int) = toOption eitherRight
+value eitherToOptionLeft : (Option Int) = toOption eitherLeft
+value eitherToResult : (Result Text Int) = toResult eitherRight
+value resultOk : (Result Text Int) = Ok 99
+value resultErr : (Result Text Int) = Err "bad"
+value eitherFromResultOk : (Either Text Int) = fromResult resultOk
+value eitherFromResultErr : (Either Text Int) = fromResult resultErr
 
-value eitherList: (List (Either Text Int)) = [
+value eitherList : (List (Either Text Int)) = [
     Left "a",
     Right 1,
     Left "b",
     Right 2
 ]
 
-value partitioned: ((List Text, List Int)) = partitionEithers eitherList
-value floatPi:Float = pi
-value floatE:Float = e
-value floatTau:Float = tau
-value floatNegate:Float = negate 3.5
-value floatAbsHelper:Float = absHelper (0.0 - 4.2)
-value floatMax:Float = max 2.5 7.1
-value floatMin:Float = min 2.5 7.1
-value floatClampLow:Float = clamp 0.0 1.0 (0.0 - 0.5)
-value floatClampHigh:Float = clamp 0.0 1.0 1.5
-value floatClampMid:Float = clamp 0.0 1.0 0.5
-value floatLerp:Float = lerp 0.0 10.0 0.5
-value floatSignNeg:Float = sign (0.0 - 3.0)
-value floatSignPos:Float = sign 5.0
-value floatSignZero:Float = sign 0.0
-value floatBetweenYes:Bool = between 0.0 1.0 0.5
-value floatBetweenNo:Bool = between 0.0 1.0 2.0
-value floatIsZero:Bool = isZero 0.0
-value floatIsPositive:Bool = isPositive 1.0
-value floatIsNegative:Bool = isNegative (0.0 - 1.0)
-value floatSquare:Float = square 3.0
-value floatToRad:Float = toRadians 180.0
-value floatToDeg:Float = toDegrees pi
-value dictSingle: (Dict Text Int) = singleton "a" 1
-value dictInsert: (Dict Text Int) = insert "b" 2 dictSingle
-value dictGet: (Option Int) = get "a" dictSingle
-value dictGetMissing: (Option Int) = get "z" dictSingle
-value dictGetDefault:Int = getWithDefault 0 "z" dictSingle
-value dictGetDefaultFound:Int = getWithDefault 0 "a" dictSingle
-value dictMemberYes:Bool = member "a" dictSingle
-value dictMemberNo:Bool = member "z" dictSingle
-value dictRemove: (Dict Text Int) = remove "a" dictSingle
-value dictRemovedSize:Int = size (remove "a" dictSingle)
-value dictSize:Int = size dictInsert
-value dictKeys: (List Text) = keys dictSingle
-value dictValues: (List Int) = values dictSingle
+value partitioned : ((List Text, List Int)) = partitionEithers eitherList
+value floatPi : Float = pi
+value floatE : Float = e
+value floatTau : Float = tau
+value floatNegate : Float = negate 3.5
+value floatAbsHelper : Float = absHelper (0.0 - 4.2)
+value floatMax : Float = max 2.5 7.1
+value floatMin : Float = min 2.5 7.1
+value floatClampLow : Float = clamp 0.0 1.0 (0.0 - 0.5)
+value floatClampHigh : Float = clamp 0.0 1.0 1.5
+value floatClampMid : Float = clamp 0.0 1.0 0.5
+value floatLerp : Float = lerp 0.0 10.0 0.5
+value floatSignNeg : Float = sign (0.0 - 3.0)
+value floatSignPos : Float = sign 5.0
+value floatSignZero : Float = sign 0.0
+value floatBetweenYes : Bool = between 0.0 1.0 0.5
+value floatBetweenNo : Bool = between 0.0 1.0 2.0
+value floatIsZero : Bool = isZero 0.0
+value floatIsPositive : Bool = isPositive 1.0
+value floatIsNegative : Bool = isNegative (0.0 - 1.0)
+value floatSquare : Float = square 3.0
+value floatToRad : Float = toRadians 180.0
+value floatToDeg : Float = toDegrees pi
+value dictSingle : (Dict Text Int) = singleton "a" 1
+value dictInsert : (Dict Text Int) = insert "b" 2 dictSingle
+value dictGet : (Option Int) = get "a" dictSingle
+value dictGetMissing : (Option Int) = get "z" dictSingle
+value dictGetDefault : Int = getWithDefault 0 "z" dictSingle
+value dictGetDefaultFound : Int = getWithDefault 0 "a" dictSingle
+value dictMemberYes : Bool = member "a" dictSingle
+value dictMemberNo : Bool = member "z" dictSingle
+value dictRemove : (Dict Text Int) = remove "a" dictSingle
+value dictRemovedSize : Int = size (remove "a" dictSingle)
+value dictSize : Int = size dictInsert
+value dictKeys : (List Text) = keys dictSingle
+value dictValues : (List Int) = values dictSingle
 
-value dictPairs: (List (Text, Int)) = [
+value dictPairs : (List (Text, Int)) = [
     ("x", 10),
     ("y", 20)
 ]
 
-value dictFromList: (Dict Text Int) = fromList dictPairs
-value dictToList: (List (Text, Int)) = toList dictFromList
+value dictFromList : (Dict Text Int) = fromList dictPairs
+value dictToList : (List (Text, Int)) = toList dictFromList
 
-fun doubleVal:Int n:Int =>
+type Int -> Int
+func doubleVal n =>
     n * 2
 
-fun isAboveZero:Bool n:Int =>
+type Int -> Bool
+func isAboveZero n =>
     n > 0
 
-fun isAboveFive:Bool n:Int =>
+type Int -> Bool
+func isAboveFive n =>
     n > 5
 
-fun sumValues:Int x:Int y:Int =>
+type Int -> Int -> Int
+func sumValues x y =>
     x + y
 
-value dictMapped: (Dict Text Int) = mapValues doubleVal dictSingle
-value dictFiltered: (Dict Text Int) = filterValues isAboveZero dictSingle
-value dictFiltered0: (Dict Text Int) = filterValues isAboveFive dictSingle
+value dictMapped : (Dict Text Int) = mapValues doubleVal dictSingle
+value dictFiltered : (Dict Text Int) = filterValues isAboveZero dictSingle
+value dictFiltered0 : (Dict Text Int) = filterValues isAboveFive dictSingle
 
-value dictLeft: (Dict Text Int) =
+value dictLeft : (Dict Text Int) =
     insert "a" 1 {
         entries: []
     }
 
-value dictRight: (Dict Text Int) =
+value dictRight : (Dict Text Int) =
     insert "a" 10 {
         entries: []
     }
 
-value dictMerged: (Dict Text Int) = mergeWith sumValues dictLeft dictRight
-value dictUnion: (Dict Text Int) = union dictLeft dictRight
+value dictMerged : (Dict Text Int) = mergeWith sumValues dictLeft dictRight
+value dictUnion : (Dict Text Int) = union dictLeft dictRight
 
 export fnIdentity
 export fnConst

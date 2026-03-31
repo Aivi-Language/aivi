@@ -1,9 +1,7 @@
 type HttpError =
   | Timeout
 
-type User = {
-    id: Int
-}
+type User = { id: Int }
 
 type DecodeMode =
   | Strict
@@ -15,7 +13,6 @@ type Map K V =
 
 domain Duration over Int
     literal sec : Int -> Duration
-    
 
 domain Retry over Int
     literal times : Int -> Retry

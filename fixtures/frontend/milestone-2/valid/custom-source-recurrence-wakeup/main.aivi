@@ -1,4 +1,5 @@
-fun step:Int x:Int current:Int =>
+type Int -> Int -> Int
+func step x current =>
     x
 
 signal refresh = 0
@@ -6,6 +7,5 @@ signal refresh = 0
 @source custom.feed refresh
 signal updateEvents : Signal Int
 
-signal updates : Signal Int =
-    updateEvents
-     +|> 0 step
+signal updates : Signal Int = updateEvents
+ +|> 0 step

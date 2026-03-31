@@ -5,10 +5,10 @@ type Screen =
 value screenTitle = "Milestone 2"
 value refreshStep = 10
 
-fun titleFor:Text screen:Screen =>
-    screen
-     ||> Loading -> "Loading"
-     ||> Ready title -> title
+type Screen -> Text
+func titleFor screen => screen
+ ||> Loading     -> "Loading"
+ ||> Ready title -> title
 
 value currentScreen = Ready screenTitle
 value pageTitle = titleFor currentScreen

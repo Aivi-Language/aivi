@@ -58,7 +58,8 @@ use aivi.nonEmpty (
     singleton
 )
 
-fun wrapOne: (NonEmptyList Text) label:Text =>
+type Text -> (NonEmptyList Text)
+func wrapOne label =>
     singleton label
 ```
 
@@ -77,7 +78,8 @@ use aivi.nonEmpty (
     cons
 )
 
-fun buildList: (NonEmptyList Int) first:Int second:Int =>
+type Int -> Int -> (NonEmptyList Int)
+func buildList first second =>
     cons first (singleton second)
 ```
 
@@ -96,7 +98,8 @@ use aivi.nonEmpty (
     singleton
 )
 
-fun firstOf:Int nel: (NonEmptyList Int) =>
+type (NonEmptyList Int) -> Int
+func firstOf nel =>
     head nel
 ```
 
@@ -115,7 +118,8 @@ use aivi.nonEmpty (
     singleton
 )
 
-fun finalItem:Int nel: (NonEmptyList Int) =>
+type (NonEmptyList Int) -> Int
+func finalItem nel =>
     last nel
 ```
 
@@ -135,7 +139,8 @@ use aivi.nonEmpty (
     cons
 )
 
-fun countItems:Int nel: (NonEmptyList Int) =>
+type (NonEmptyList Int) -> Int
+func countItems nel =>
     length nel
 ```
 
@@ -154,7 +159,8 @@ use aivi.nonEmpty (
     singleton
 )
 
-fun asRegularList: (List Int) nel: (NonEmptyList Int) =>
+type (NonEmptyList Int) -> (List Int)
+func asRegularList nel =>
     toList nel
 ```
 
@@ -187,10 +193,12 @@ use aivi.nonEmpty (
     mapNel
 )
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-fun doubleAll: (NonEmptyList Int) nel: (NonEmptyList Int) =>
+type (NonEmptyList Int) -> (NonEmptyList Int)
+func doubleAll nel =>
     mapNel double nel
 ```
 
@@ -208,7 +216,8 @@ use aivi.nonEmpty (
     fromList
 )
 
-fun safeFromList: (Option (NonEmptyList Int)) items: (List Int) =>
+type (List Int) -> (Option (NonEmptyList Int))
+func safeFromList items =>
     fromList items
 ```
 
@@ -229,7 +238,8 @@ use aivi.nonEmpty (
     singleton
 )
 
-fun combineErrors: (NonEmptyList Text) a: (NonEmptyList Text) b: (NonEmptyList Text) =>
+type (NonEmptyList Text) -> (NonEmptyList Text) -> (NonEmptyList Text)
+func combineErrors a b =>
     appendNel a b
 ```
 

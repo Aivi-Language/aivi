@@ -44,7 +44,7 @@ Returns `True` if the text is valid JSON, `False` otherwise. Never fails — inv
 ```
 use aivi.data.json (validate)
 
-fun checkJson json =>
+func checkJson json =>
 ```
 
 ### get
@@ -60,7 +60,7 @@ Fails the task when the input is not valid JSON.
 ```
 use aivi.data.json (get)
 
-fun getName json =>
+func getName json =>
 ```
 
 ### at
@@ -75,7 +75,7 @@ Fails the task when the input is not valid JSON.
 ```
 use aivi.data.json (at)
 
-fun firstItem json =>
+func firstItem json =>
 ```
 
 ### keys
@@ -90,7 +90,7 @@ Fails the task when the input is not valid JSON.
 ```
 use aivi.data.json (keys)
 
-fun objectKeys json =>
+func objectKeys json =>
 ```
 
 ### pretty
@@ -104,7 +104,7 @@ Re-format JSON with two-space indentation. Fails the task when the input is not 
 ```
 use aivi.data.json (pretty)
 
-fun format json =>
+func format json =>
 ```
 
 ### minify
@@ -118,7 +118,7 @@ Remove all insignificant whitespace from JSON. Fails the task when the input is 
 ```
 use aivi.data.json (minify)
 
-fun compact json =>
+func compact json =>
 ```
 
 ## Error type
@@ -144,7 +144,7 @@ use aivi.data.json (
 
 use aivi.option (withDefault)
 
-fun extractName json =>
+func extractName json =>
 ```
 
 ## Example — normalise before storage
@@ -159,7 +159,7 @@ use aivi.data.json (
 
 use aivi.core (Task)
 
-fun minifyIfValid raw isValid =>
+func minifyIfValid raw isValid =>
 
-fun storeJson raw =>
+func storeJson raw =>
 ```

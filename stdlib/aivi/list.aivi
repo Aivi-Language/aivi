@@ -13,153 +13,197 @@ type ZipState A B = {
     pairs: List (A, B)
 }
 
-fun keepSome: (Option A) item:A =>
+type A -> (Option A)
+func keepSome item =>
     Some item
 
-fun keepFirst: (Option A) found: (Option A) item:A => found
-  T|> keepSome
-  F|> Some item
+type (Option A) -> A -> (Option A)
+func keepFirst found item => found
+ T|> keepSome
+ F|> Some item
 
-fun tailState: (TailState A) items: (List A) item:A seenFirst:Bool => seenFirst
-  T|> { seenFirst: True, items: append items [item] }
-  F|> { seenFirst: True, items: [] }
+type (List A) -> A -> Bool -> (TailState A)
+func tailState items item seenFirst => seenFirst
+ T|> { seenFirst: True, items: append items [item] }
+ F|> { seenFirst: True, items: [] }
 
-fun tailStep: (TailState A) state: (TailState A) item:A => state
-  ||> { seenFirst, items } -> tailState items item seenFirst
+type (TailState A) -> A -> (TailState A)
+func tailStep state item => state
+ ||> { seenFirst, items } -> tailState items item seenFirst
 
-fun tailItems: (Option (List A)) items: (List A) seenFirst:Bool => seenFirst
-  T|> Some items
-  F|> None
+type (List A) -> Bool -> (Option (List A))
+func tailItems items seenFirst => seenFirst
+ T|> Some items
+ F|> None
 
-fun tailFromState: (Option (List A)) state: (TailState A) => state
-  ||> { seenFirst, items } -> tailItems items seenFirst
+type (TailState A) -> (Option (List A))
+func tailFromState state => state
+ ||> { seenFirst, items } -> tailItems items seenFirst
 
-fun takeLast: (Option A) current: (Option A) item:A =>
+type (Option A) -> A -> (Option A)
+func takeLast current item =>
     Some item
 
-fun lengthStep:Int total:Int item:A =>
+type Int -> A -> Int
+func lengthStep total item =>
     total + 1
 
-fun anyStep:Bool predicate:(A -> Bool) found:Bool item:A => found
-  T|> True
-  F|> predicate item
+type (A -> Bool) -> Bool -> A -> Bool
+func anyStep predicate found item => found
+ T|> True
+ F|> predicate item
 
-fun allStep:Bool predicate:(A -> Bool) allMatched:Bool item:A => allMatched
-  T|> predicate item
-  F|> False
+type (A -> Bool) -> Bool -> A -> Bool
+func allStep predicate allMatched item => allMatched
+ T|> predicate item
+ F|> False
 
-fun countStep:Int predicate:(A -> Bool) total:Int item:A => predicate item
-  T|> total + 1
-  F|> total
+type (A -> Bool) -> Int -> A -> Int
+func countStep predicate total item => predicate item
+ T|> total + 1
+ F|> total
 
-fun selectMatch: (Option A) predicate:(A -> Bool) item:A => predicate item
-  T|> Some item
-  F|> None
+type (A -> Bool) -> A -> (Option A)
+func selectMatch predicate item => predicate item
+ T|> Some item
+ F|> None
 
-fun findStep: (Option A) predicate:(A -> Bool) found: (Option A) item:A => found
-  T|> keepSome
-  F|> selectMatch predicate item
+type (A -> Bool) -> (Option A) -> A -> (Option A)
+func findStep predicate found item => found
+ T|> keepSome
+ F|> selectMatch predicate item
 
-fun findMapStep: (Option B) transform: (A -> Option B) found: (Option B) item:A => found
-  T|> keepSome
-  F|> transform item
+type (A -> Option B) -> (Option B) -> A -> (Option B)
+func findMapStep transform found item => found
+ T|> keepSome
+ F|> transform item
 
-fun partitionItems: (Partition A) matched: (List A) unmatched: (List A) item:A isMatch:Bool => isMatch
-  T|> { matched: append matched [item], unmatched }
-  F|> { matched, unmatched: append unmatched [item] }
+type (List A) -> (List A) -> A -> Bool -> (Partition A)
+func partitionItems matched unmatched item isMatch => isMatch
+ T|> { matched: append matched [item], unmatched }
+ F|> { matched, unmatched: append unmatched [item] }
 
-fun partitionStep: (Partition A) predicate:(A -> Bool) state: (Partition A) item:A => state
-  ||> { matched, unmatched } -> partitionItems matched unmatched item (predicate item)
+type (A -> Bool) -> (Partition A) -> A -> (Partition A)
+func partitionStep predicate state item => state
+ ||> { matched, unmatched } -> partitionItems matched unmatched item (predicate item)
 
-fun tailOrEmpty: (List A) items: (List A) => tail items
-  ||> Some remaining -> remaining
-  ||> None           -> []
+type (List A) -> (List A)
+func tailOrEmpty items => tail items
+ ||> Some remaining -> remaining
+ ||> None           -> []
 
-fun appendZipPair: (ZipState A B) state: (ZipState A B) left:A right:B => state
-  ||> { remaining, pairs } -> { remaining: tailOrEmpty remaining, pairs: append pairs [(left, right)] }
+type (ZipState A B) -> A -> B -> (ZipState A B)
+func appendZipPair state left right => state
+ ||> { remaining, pairs } -> { remaining: tailOrEmpty remaining, pairs: append pairs [(left, right)] }
 
-fun zipHead: (ZipState A B) state: (ZipState A B) left:A headValue: (Option B) => headValue
-  T|> appendZipPair state left
-  F|> state
+type (ZipState A B) -> A -> (Option B) -> (ZipState A B)
+func zipHead state left headValue => headValue
+ T|> appendZipPair state left
+ F|> state
 
-fun zipStep: (ZipState A B) state: (ZipState A B) left:A => state
-  ||> { remaining, pairs } -> zipHead { remaining, pairs } left (head remaining)
+type (ZipState A B) -> A -> (ZipState A B)
+func zipStep state left => state
+ ||> { remaining, pairs } -> zipHead { remaining, pairs } left (head remaining)
 
-fun zippedPairs: (List (A, B)) state: (ZipState A B) => state
-  ||> { remaining, pairs } -> pairs
+type (ZipState A B) -> (List (A, B))
+func zippedPairs state => state
+ ||> { remaining, pairs } -> pairs
 
-fun isEmpty:Bool items: (List A) => head items
-  F|> True
-  T|> False
+type (List A) -> Bool
+func isEmpty items => head items
+ F|> True
+ T|> False
 
-fun nonEmpty:Bool items: (List A) => head items
-  T|> True
-  F|> False
+type (List A) -> Bool
+func nonEmpty items => head items
+ T|> True
+ F|> False
 
-fun length:Int items: (List A) => items
+type (List A) -> Int
+func length items => items
   |> reduce lengthStep 0
 
-fun head: (Option A) items: (List A) => items
+type (List A) -> (Option A)
+func head items => items
   |> reduce keepFirst None
 
-fun tail: (Option (List A)) items: (List A) => items
+type (List A) -> (Option (List A))
+func tail items => items
   |> reduce tailStep { seenFirst: False, items: [] }
   |> tailFromState
 
-fun last: (Option A) items: (List A) => items
+type (List A) -> (Option A)
+func last items => items
   |> reduce takeLast None
 
-fun zip: (List (A, B)) left: (List A) right: (List B) => left
+type (List A) -> (List B) -> (List (A, B))
+func zip left right => left
   |> reduce zipStep { remaining: right, pairs: [] }
   |> zippedPairs
 
-fun any:Bool predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> Bool
+func any predicate items => items
   |> reduce (anyStep predicate) False
 
-fun all:Bool predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> Bool
+func all predicate items => items
   |> reduce (allStep predicate) True
 
-fun count:Int predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> Int
+func count predicate items => items
   |> reduce (countStep predicate) 0
 
-fun find: (Option A) predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> (Option A)
+func find predicate items => items
   |> reduce (findStep predicate) None
 
-fun findMap: (Option B) transform: (A -> Option B) items: (List A) => items
+type (A -> Option B) -> (List A) -> (Option B)
+func findMap transform items => items
   |> reduce (findMapStep transform) None
 
-fun partition: (Partition A) predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> (Partition A)
+func partition predicate items => items
   |> reduce (partitionStep predicate) { matched: [], unmatched: [] }
 
-fun mapStep: (List B) transform:(A -> B) acc: (List B) item:A =>
+type (A -> B) -> (List B) -> A -> (List B)
+func mapStep transform acc item =>
     append acc [transform item]
 
-fun map: (List B) transform:(A -> B) items: (List A) => items
+type (A -> B) -> (List A) -> (List B)
+func map transform items => items
   |> reduce (mapStep transform) []
 
-fun filterStep: (List A) predicate:(A -> Bool) acc: (List A) item:A => predicate item
-  T|> append acc [item]
-  F|> acc
+type (A -> Bool) -> (List A) -> A -> (List A)
+func filterStep predicate acc item => predicate item
+ T|> append acc [item]
+ F|> acc
 
-fun filter: (List A) predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> (List A)
+func filter predicate items => items
   |> reduce (filterStep predicate) []
 
-fun flattenStep: (List A) acc: (List A) inner: (List A) =>
+type (List A) -> (List A) -> (List A)
+func flattenStep acc inner =>
     append acc inner
 
-fun flatten: (List A) xss: (List (List A)) => xss
+type (List (List A)) -> (List A)
+func flatten xss => xss
   |> reduce flattenStep []
 
-fun flatMapStep: (List B) transform: (A -> List B) acc: (List B) item:A =>
+type (A -> List B) -> (List B) -> A -> (List B)
+func flatMapStep transform acc item =>
     append acc (transform item)
 
-fun flatMap: (List B) transform: (A -> List B) items: (List A) => items
+type (A -> List B) -> (List A) -> (List B)
+func flatMap transform items => items
   |> reduce (flatMapStep transform) []
 
-fun reverseStep: (List A) acc: (List A) item:A =>
+type (List A) -> A -> (List A)
+func reverseStep acc item =>
     append [item] acc
 
-fun reverse: (List A) items: (List A) => items
+type (List A) -> (List A)
+func reverse items => items
   |> reduce reverseStep []
 
 type TakeState A = {
@@ -172,19 +216,23 @@ type DropState A = {
     items: List A
 }
 
-fun takeStep: (TakeState A) state: (TakeState A) item:A => state.remaining > 0
-  T|> { remaining: state.remaining - 1, items: append state.items [item] }
-  F|> state
+type (TakeState A) -> A -> (TakeState A)
+func takeStep state item => state.remaining > 0
+ T|> { remaining: state.remaining - 1, items: append state.items [item] }
+ F|> state
 
-fun take: (List A) n:Int items: (List A) => items
+type Int -> (List A) -> (List A)
+func take n items => items
   |> reduce takeStep { remaining: n, items: [] }
   |> .items
 
-fun dropStep: (DropState A) state: (DropState A) item:A => state.remaining > 0
-  T|> { remaining: state.remaining - 1, items: state.items }
-  F|> { remaining: 0, items: append state.items [item] }
+type (DropState A) -> A -> (DropState A)
+func dropStep state item => state.remaining > 0
+ T|> { remaining: state.remaining - 1, items: state.items }
+ F|> { remaining: 0, items: append state.items [item] }
 
-fun drop: (List A) n:Int items: (List A) => items
+type Int -> (List A) -> (List A)
+func drop n items => items
   |> reduce dropStep { remaining: n, items: [] }
   |> .items
 
@@ -198,63 +246,79 @@ type DropWhileState A = {
     items: List A
 }
 
-fun applyTakeWhile: (TakeWhileState A) state: (TakeWhileState A) item:A matches:Bool => matches
-  T|> { taking: True, items: append state.items [item] }
-  F|> { taking: False, items: state.items }
+type (TakeWhileState A) -> A -> Bool -> (TakeWhileState A)
+func applyTakeWhile state item matches => matches
+ T|> { taking: True, items: append state.items [item] }
+ F|> { taking: False, items: state.items }
 
-fun takeWhileStep: (TakeWhileState A) predicate:(A -> Bool) state: (TakeWhileState A) item:A => state.taking
-  T|> applyTakeWhile state item (predicate item)
-  F|> state
+type (A -> Bool) -> (TakeWhileState A) -> A -> (TakeWhileState A)
+func takeWhileStep predicate state item => state.taking
+ T|> applyTakeWhile state item (predicate item)
+ F|> state
 
-fun takeWhile: (List A) predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> (List A)
+func takeWhile predicate items => items
   |> reduce (takeWhileStep predicate) { taking: True, items: [] }
   |> .items
 
-fun applyDropWhile: (DropWhileState A) state: (DropWhileState A) item:A matches:Bool => matches
-  T|> state
-  F|> { taking: False, items: [item] }
+type (DropWhileState A) -> A -> Bool -> (DropWhileState A)
+func applyDropWhile state item matches => matches
+ T|> state
+ F|> { taking: False, items: [item] }
 
-fun dropWhileStep: (DropWhileState A) predicate:(A -> Bool) state: (DropWhileState A) item:A => state.taking
-  T|> applyDropWhile state item (predicate item)
-  F|> { taking: False, items: append state.items [item] }
+type (A -> Bool) -> (DropWhileState A) -> A -> (DropWhileState A)
+func dropWhileStep predicate state item => state.taking
+ T|> applyDropWhile state item (predicate item)
+ F|> { taking: False, items: append state.items [item] }
 
-fun dropWhile: (List A) predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> (List A)
+func dropWhile predicate items => items
   |> reduce (dropWhileStep predicate) { taking: True, items: [] }
   |> .items
 
-fun sumStep:Int acc:Int item:Int =>
+type Int -> Int -> Int
+func sumStep acc item =>
     acc + item
 
-fun productStep:Int acc:Int item:Int =>
+type Int -> Int -> Int
+func productStep acc item =>
     acc * item
 
-fun sum:Int items: (List Int) => items
+type (List Int) -> Int
+func sum items => items
   |> reduce sumStep 0
 
-fun product:Int items: (List Int) => items
+type (List Int) -> Int
+func product items => items
   |> reduce productStep 1
 
-fun chooseGreater:A compare:(A -> A -> Bool) best:A item:A => compare best item
-  T|> item
-  F|> best
+type (A -> A -> Bool) -> A -> A -> A
+func chooseGreater compare best item => compare best item
+ T|> item
+ F|> best
 
-fun chooseLesser:A compare:(A -> A -> Bool) best:A item:A => compare item best
-  T|> item
-  F|> best
+type (A -> A -> Bool) -> A -> A -> A
+func chooseLesser compare best item => compare item best
+ T|> item
+ F|> best
 
-fun maximum: (Option A) compare:(A -> A -> Bool) items: (List A) => head items
-  ||> None       -> None
-  ||> Some first -> Some (reduce (chooseGreater compare) first (tailOrEmpty items))
+type (A -> A -> Bool) -> (List A) -> (Option A)
+func maximum compare items => head items
+ ||> None       -> None
+ ||> Some first -> Some (reduce (chooseGreater compare) first (tailOrEmpty items))
 
-fun minimum: (Option A) compare:(A -> A -> Bool) items: (List A) => head items
-  ||> None       -> None
-  ||> Some first -> Some (reduce (chooseLesser compare) first (tailOrEmpty items))
+type (A -> A -> Bool) -> (List A) -> (Option A)
+func minimum compare items => head items
+ ||> None       -> None
+ ||> Some first -> Some (reduce (chooseLesser compare) first (tailOrEmpty items))
 
-fun containsStep:Bool eq:(A -> A -> Bool) target:A found:Bool item:A => found
-  T|> True
-  F|> eq target item
+type (A -> A -> Bool) -> A -> Bool -> A -> Bool
+func containsStep eq target found item => found
+ T|> True
+ F|> eq target item
 
-fun contains:Bool eq:(A -> A -> Bool) target:A items: (List A) => items
+type (A -> A -> Bool) -> A -> (List A) -> Bool
+func contains eq target items => items
   |> reduce (containsStep eq target) False
 
 type IndexState A = {
@@ -262,15 +326,18 @@ type IndexState A = {
     found: Option Int
 }
 
-fun indexFoundResult: (IndexState A) state: (IndexState A) item:A predResult:Bool => predResult
-  T|> { index: state.index + 1, found: Some state.index }
-  F|> { index: state.index + 1, found: None }
+type (IndexState A) -> A -> Bool -> (IndexState A)
+func indexFoundResult state item predResult => predResult
+ T|> { index: state.index + 1, found: Some state.index }
+ F|> { index: state.index + 1, found: None }
 
-fun indexOfStep: (IndexState A) predicate:(A -> Bool) state: (IndexState A) item:A => state.found
-  ||> Some ignored -> state
-  ||> None         -> indexFoundResult state item (predicate item)
+type (A -> Bool) -> (IndexState A) -> A -> (IndexState A)
+func indexOfStep predicate state item => state.found
+ ||> Some ignored -> state
+ ||> None         -> indexFoundResult state item (predicate item)
 
-fun indexOf: (Option Int) predicate:(A -> Bool) items: (List A) => items
+type (A -> Bool) -> (List A) -> (Option Int)
+func indexOf predicate items => items
   |> reduce (indexOfStep predicate) { index: 0, found: None }
   |> .found
 
@@ -279,11 +346,13 @@ type IntersperseState A = {
     items: List A
 }
 
-fun intersperseStep: (IntersperseState A) sep:A state: (IntersperseState A) item:A => state.first
-  T|> { first: False, items: [item] }
-  F|> { first: False, items: append (append state.items [sep]) [item] }
+type A -> (IntersperseState A) -> A -> (IntersperseState A)
+func intersperseStep sep state item => state.first
+ T|> { first: False, items: [item] }
+ F|> { first: False, items: append (append state.items [sep]) [item] }
 
-fun intersperse: (List A) sep:A items: (List A) => items
+type A -> (List A) -> (List A)
+func intersperse sep items => items
   |> reduce (intersperseStep sep) { first: True, items: [] }
   |> .items
 
@@ -292,11 +361,13 @@ type ZipWithState A B C = {
     result: List C
 }
 
-fun zipWithStep: (ZipWithState A B C) combine:(A -> B -> C) state: (ZipWithState A B C) left:A => head state.remaining
-  ||> None   -> state
-  ||> Some r -> { remaining: tailOrEmpty state.remaining, result: append state.result [combine left r] }
+type (A -> B -> C) -> (ZipWithState A B C) -> A -> (ZipWithState A B C)
+func zipWithStep combine state left => head state.remaining
+ ||> None   -> state
+ ||> Some r -> { remaining: tailOrEmpty state.remaining, result: append state.result [combine left r] }
 
-fun zipWith: (List C) combine:(A -> B -> C) left: (List A) right: (List B) => left
+type (A -> B -> C) -> (List A) -> (List B) -> (List C)
+func zipWith combine left right => left
   |> reduce (zipWithStep combine) { remaining: right, result: [] }
   |> .result
 
@@ -305,17 +376,21 @@ type UnzipState A B = {
     rights: List B
 }
 
-fun unzipStep: (UnzipState A B) state: (UnzipState A B) pair:(A, B) => pair
-  ||> (left, right) -> { lefts: append state.lefts [left], rights: append state.rights [right] }
+type (UnzipState A B) -> (A, B) -> (UnzipState A B)
+func unzipStep state pair => pair
+ ||> (left, right) -> { lefts: append state.lefts [left], rights: append state.rights [right] }
 
-fun unzip: (UnzipState A B) pairs: (List (A, B)) => pairs
+type (List (A, B)) -> (UnzipState A B)
+func unzip pairs => pairs
   |> reduce unzipStep { lefts: [], rights: [] }
 
-fun uniqueStep: (List A) eq:(A -> A -> Bool) acc: (List A) item:A => any (eq item) acc
-  T|> acc
-  F|> append acc [item]
+type (A -> A -> Bool) -> (List A) -> A -> (List A)
+func uniqueStep eq acc item => any (eq item) acc
+ T|> acc
+ F|> append acc [item]
 
-fun unique: (List A) eq:(A -> A -> Bool) items: (List A) => items
+type (A -> A -> Bool) -> (List A) -> (List A)
+func unique eq items => items
   |> reduce (uniqueStep eq) []
 
 type InsertState A = {
@@ -323,38 +398,46 @@ type InsertState A = {
     items: List A
 }
 
-fun finalizeSortInsert: (List A) item:A state: (InsertState A) => state.inserted
-  T|> state.items
-  F|> append state.items [item]
+type A -> (InsertState A) -> (List A)
+func finalizeSortInsert item state => state.inserted
+ T|> state.items
+ F|> append state.items [item]
 
-fun doInsertBefore: (InsertState A) state: (InsertState A) item:A current:A =>
+type (InsertState A) -> A -> A -> (InsertState A)
+func doInsertBefore state item current =>
     {
         inserted: True,
         items: append (append state.items [item]) [current]
     }
 
-fun doSkipInsert: (InsertState A) state: (InsertState A) current:A =>
+type (InsertState A) -> A -> (InsertState A)
+func doSkipInsert state current =>
     {
         inserted: False,
         items: append state.items [current]
     }
 
-fun insertCheckOrder: (InsertState A) compare:(A -> A -> Bool) item:A state: (InsertState A) current:A => compare item current
-  T|> doInsertBefore state item current
-  F|> doSkipInsert state current
+type (A -> A -> Bool) -> A -> (InsertState A) -> A -> (InsertState A)
+func insertCheckOrder compare item state current => compare item current
+ T|> doInsertBefore state item current
+ F|> doSkipInsert state current
 
-fun insertStep: (InsertState A) compare:(A -> A -> Bool) item:A state: (InsertState A) current:A => state.inserted
-  T|> { inserted: True, items: append state.items [current] }
-  F|> insertCheckOrder compare item state current
+type (A -> A -> Bool) -> A -> (InsertState A) -> A -> (InsertState A)
+func insertStep compare item state current => state.inserted
+ T|> { inserted: True, items: append state.items [current] }
+ F|> insertCheckOrder compare item state current
 
-fun insertSorted: (List A) compare:(A -> A -> Bool) item:A sorted: (List A) => sorted
+type (A -> A -> Bool) -> A -> (List A) -> (List A)
+func insertSorted compare item sorted => sorted
   |> reduce (insertStep compare item) { inserted: False, items: [] }
   |> finalizeSortInsert item
 
-fun sortByStep: (List A) compare:(A -> A -> Bool) sorted: (List A) item:A =>
+type (A -> A -> Bool) -> (List A) -> A -> (List A)
+func sortByStep compare sorted item =>
     insertSorted compare item sorted
 
-fun sortBy: (List A) compare:(A -> A -> Bool) items: (List A) => items
+type (A -> A -> Bool) -> (List A) -> (List A)
+func sortBy compare items => items
   |> reduce (sortByStep compare) []
 
 export Partition

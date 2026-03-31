@@ -27,7 +27,8 @@ not : Bool -> Bool
 ```aivi
 use aivi.bool (not)
 
-fun isInactive:Bool active:Bool =>
+type Bool -> Bool
+func isInactive active =>
     not active
 ```
 
@@ -44,7 +45,8 @@ xor : Bool -> Bool -> Bool
 ```aivi
 use aivi.bool (xor)
 
-fun toggleChanged:Bool previous:Bool current:Bool =>
+type Bool -> Bool -> Bool
+func toggleChanged previous current =>
     xor previous current
 ```
 
@@ -61,7 +63,8 @@ implies : Bool -> Bool -> Bool
 ```aivi
 use aivi.bool (implies)
 
-fun checkRule:Bool hasPermission:Bool canAccess:Bool =>
+type Bool -> Bool -> Bool
+func checkRule hasPermission canAccess =>
     implies hasPermission canAccess
 ```
 
@@ -78,7 +81,8 @@ both : Bool -> Bool -> Bool
 ```aivi
 use aivi.bool (both)
 
-fun isAdminAndActive:Bool isAdmin:Bool isActive:Bool =>
+type Bool -> Bool -> Bool
+func isAdminAndActive isAdmin isActive =>
     both isAdmin isActive
 ```
 
@@ -95,7 +99,8 @@ either : Bool -> Bool -> Bool
 ```aivi
 use aivi.bool (either)
 
-fun canProceed:Bool hasTokenA:Bool hasTokenB:Bool =>
+type Bool -> Bool -> Bool
+func canProceed hasTokenA hasTokenB =>
     either hasTokenA hasTokenB
 ```
 
@@ -112,7 +117,8 @@ neither : Bool -> Bool -> Bool
 ```aivi
 use aivi.bool (neither)
 
-fun isSilent:Bool isPlaying:Bool isPaused:Bool =>
+type Bool -> Bool -> Bool
+func isSilent isPlaying isPaused =>
     neither isPlaying isPaused
 ```
 
@@ -129,6 +135,7 @@ fromInt : Int -> Bool
 ```aivi
 use aivi.bool (fromInt)
 
-fun hasFlags:Bool flagBits:Int =>
+type Int -> Bool
+func hasFlags flagBits =>
     fromInt flagBits
 ```

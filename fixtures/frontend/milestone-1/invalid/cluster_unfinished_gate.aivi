@@ -1,4 +1,5 @@
-type UserDraft = UserDraft Text Text
+type UserDraft =
+  | UserDraft Text Text
 
 signal nameText = "Ada"
 signal emailText = "ada@example.com"
@@ -6,5 +7,5 @@ signal emailText = "ada@example.com"
 signal brokenDraft =
  &|> nameText
  &|> emailText
-  ?|> .ready
-   |> UserDraft
+ ?|> .ready
+  |> UserDraft

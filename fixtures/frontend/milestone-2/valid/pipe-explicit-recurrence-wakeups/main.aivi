@@ -4,17 +4,15 @@ domain Duration over Int
 domain Retry over Int
     literal times : Int -> Retry
 
-fun step x =>
+func step x =>
     x
 
 @recur.timer 5sec
-signal polled : Signal Int =
-    0
-     @|> step
-     <|@ step
+signal polled : Signal Int = 0
+ @|> step
+ <|@ step
 
 @recur.backoff 3times
-value retried : Task Int Int =
-    0
-     @|> step
-     <|@ step
+value retried : Task Int Int = 0
+ @|> step
+ <|@ step

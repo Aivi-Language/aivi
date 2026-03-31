@@ -1,8 +1,7 @@
-fun step x =>
+func step x =>
     x
 
-value broken =
-    0
-     @|> step
-     <|@ step
-     |> step
+value broken = 0
+ @|> step
+ <|@ step
+  |> step

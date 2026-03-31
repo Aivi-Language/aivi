@@ -6,63 +6,78 @@ use aivi.nonEmpty (
 type Errors E =
   | NonEmptyList E
 
-fun zipBothInvalid: (Validation (NonEmptyList E) (A, B)) le: (NonEmptyList E) re: (NonEmptyList E) =>
+type (NonEmptyList E) -> (NonEmptyList E) -> (Validation (NonEmptyList E) (A, B))
+func zipBothInvalid le re =>
     Invalid (appendNel le re)
 
-fun zipInvalidLeft: (Validation (NonEmptyList E) (A, B)) le: (NonEmptyList E) right: (Validation (NonEmptyList E) B) => right
-  ||> Invalid re -> zipBothInvalid le re
-  ||> Valid _    -> Invalid le
+type (NonEmptyList E) -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
+func zipInvalidLeft le right => right
+ ||> Invalid re -> zipBothInvalid le re
+ ||> Valid _    -> Invalid le
 
-fun zipValidRight: (Validation (NonEmptyList E) (A, B)) a:A b:B =>
+type A -> B -> (Validation (NonEmptyList E) (A, B))
+func zipValidRight a b =>
     Valid (a, b)
 
-fun zipValidLeft: (Validation (NonEmptyList E) (A, B)) a:A right: (Validation (NonEmptyList E) B) => right
-  ||> Invalid re -> Invalid re
-  ||> Valid b    -> zipValidRight a b
+type A -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
+func zipValidLeft a right => right
+ ||> Invalid re -> Invalid re
+ ||> Valid b    -> zipValidRight a b
 
-fun isValid:Bool opt: (Validation E A) => opt
-  T|> True
-  F|> False
+type (Validation E A) -> Bool
+func isValid opt => opt
+ T|> True
+ F|> False
 
-fun isInvalid:Bool opt: (Validation E A) => opt
-  F|> True
-  T|> False
+type (Validation E A) -> Bool
+func isInvalid opt => opt
+ F|> True
+ T|> False
 
-fun getOrElse:A fallback:A opt: (Validation E A) => opt
-  ||> Valid item -> item
-  ||> Invalid _  -> fallback
+type A -> (Validation E A) -> A
+func getOrElse fallback opt => opt
+ ||> Valid item -> item
+ ||> Invalid _  -> fallback
 
-fun mapErr: (Validation E2 A) transform:(E1 -> E2) opt: (Validation E1 A) => opt
-  ||> Valid item  -> Valid item
-  ||> Invalid err -> Invalid (transform err)
+type (E1 -> E2) -> (Validation E1 A) -> (Validation E2 A)
+func mapErr transform opt => opt
+ ||> Valid item  -> Valid item
+ ||> Invalid err -> Invalid (transform err)
 
-fun toResult: (Result E A) opt: (Validation E A) => opt
-  ||> Valid item  -> Ok item
-  ||> Invalid err -> Err err
+type (Validation E A) -> (Result E A)
+func toResult opt => opt
+ ||> Valid item  -> Ok item
+ ||> Invalid err -> Err err
 
-fun fromResult: (Validation E A) opt: (Result E A) => opt
-  ||> Ok item   -> Valid item
-  ||> Err error -> Invalid error
+type (Result E A) -> (Validation E A)
+func fromResult opt => opt
+ ||> Ok item   -> Valid item
+ ||> Err error -> Invalid error
 
-fun toOption: (Option A) opt: (Validation E A) => opt
-  T|> Some
-  F|> None
+type (Validation E A) -> (Option A)
+func toOption opt => opt
+ T|> Some
+ F|> None
 
-fun map: (Validation E B) transform:(A -> B) opt: (Validation E A) => opt
-  ||> Invalid e  -> Invalid e
-  ||> Valid item -> Valid (transform item)
+type (A -> B) -> (Validation E A) -> (Validation E B)
+func map transform opt => opt
+ ||> Invalid e  -> Invalid e
+ ||> Valid item -> Valid (transform item)
 
-fun andThen: (Validation E B) next: (A -> Validation E B) opt: (Validation E A) => opt
-  ||> Invalid e  -> Invalid e
-  ||> Valid item -> next item
+type (A -> Validation E B) -> (Validation E A) -> (Validation E B)
+func andThen next opt => opt
+ ||> Invalid e  -> Invalid e
+ ||> Valid item -> next item
 
-fun zipValidation: (Validation (NonEmptyList E) (A, B)) left: (Validation (NonEmptyList E) A) right: (Validation (NonEmptyList E) B) => left
-  ||> Invalid le -> zipInvalidLeft le right
-  ||> Valid a    -> zipValidLeft a right
+type (Validation (NonEmptyList E) A) -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
+func zipValidation left right => left
+ ||> Invalid le -> zipInvalidLeft le right
+ ||> Valid a    -> zipValidLeft a right
 
-fun fold:B onInvalid:(E -> B) onValid:(A -> B) opt: (Validation E A) => opt
-  ||> Invalid e  -> onInvalid e
-  ||> Valid item -> onValid item
+type (E -> B) -> (A -> B) -> (Validation E A) -> B
+func fold onInvalid onValid opt => opt
+ ||> Invalid e  -> onInvalid e
+ ||> Valid item -> onValid item
 
 export Errors
 export isValid

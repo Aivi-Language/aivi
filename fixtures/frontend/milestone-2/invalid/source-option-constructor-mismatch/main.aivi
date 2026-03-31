@@ -1,9 +1,7 @@
 type HttpError =
   | Timeout
 
-type User = {
-    id: Int
-}
+type User = { id: Int }
 
 type DecodeMode =
   | Strict

@@ -1,6 +1,5 @@
 value ready = True
 value start = "start"
 
-value branch =
-    ready
-     T|> start
+value branch = ready
+ T|> start

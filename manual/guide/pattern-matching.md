@@ -9,10 +9,11 @@ Every branch is an expression, and the compiler checks that your match is exhaus
 Use `||>` when you want to branch on a value:
 
 ```aivi
-fun describeNumber:Text n:Int => n
-  ||> 0 -> "zero"
-  ||> 1 -> "one"
-  ||> _ -> "many"
+type Int -> Text
+func describeNumber n => n
+ ||> 0 -> "zero"
+ ||> 1 -> "one"
+ ||> _ -> "many"
 
 value sampleDescription = describeNumber 1
 ```
@@ -35,11 +36,12 @@ type Direction =
   | Left
   | Right
 
-fun directionLabel:Text direction:Direction => direction
-  ||> Up    -> "up"
-  ||> Down  -> "down"
-  ||> Left  -> "left"
-  ||> Right -> "right"
+type Direction -> Text
+func directionLabel direction => direction
+ ||> Up    -> "up"
+ ||> Down  -> "down"
+ ||> Left  -> "left"
+ ||> Right -> "right"
 
 value currentDirection = directionLabel Left
 ```
@@ -52,10 +54,11 @@ type LoadState =
   | Loaded Text
   | Failed Text
 
-fun describeLoadState:Text state:LoadState => state
-  ||> NotAsked      -> "waiting"
-  ||> Loaded name   -> "loaded {name}"
-  ||> Failed reason -> "error {reason}"
+type LoadState -> Text
+func describeLoadState state => state
+ ||> NotAsked      -> "waiting"
+ ||> Loaded name   -> "loaded {name}"
+ ||> Failed reason -> "error {reason}"
 
 value stateMessage = describeLoadState (Loaded "Ada")
 ```
@@ -70,9 +73,10 @@ type Status =
   | Paused
   | Stopped
 
-fun isRunning:Bool status:Status => status
-  ||> Running -> True
-  ||> _       -> False
+type Status -> Bool
+func isRunning status => status
+ ||> Running -> True
+ ||> _       -> False
 
 value runningNow = isRunning Running
 ```
@@ -82,9 +86,10 @@ value runningNow = isRunning Running
 When the choice is really a boolean condition, calculate the condition first and then branch with `T|>` / `F|>`:
 
 ```aivi
-fun classifyNumber:Text n:Int => n > 0
-  T|> "positive"
-  F|> "not positive"
+type Int -> Text
+func classifyNumber n => n > 0
+ T|> "positive"
+ F|> "not positive"
 
 value numberClass = classifyNumber 12
 ```
@@ -101,8 +106,9 @@ type Profile = {
     score: Int
 }
 
-fun profileSummary:Text profile:Profile => profile
-  ||> { name, score } -> "{name} scored {score}"
+type Profile -> Text
+func profileSummary profile => profile
+ ||> { name, score } -> "{name} scored {score}"
 
 value summaryText =
     profileSummary {
@@ -120,8 +126,9 @@ type Profile = {
     score: Int
 }
 
-fun isTopScore:Bool profile:Profile => profile
-  ||> { score } -> score >= 100
+type Profile -> Bool
+func isTopScore profile => profile
+ ||> { score } -> score >= 100
 
 value topScore =
     isTopScore {
@@ -144,11 +151,12 @@ type Direction =
   | Left
   | Right
 
-fun step:Point move:(Point, Direction) => move
-  ||> (Point x y, Up)    -> Point x (y - 1)
-  ||> (Point x y, Down)  -> Point x (y + 1)
-  ||> (Point x y, Left)  -> Point (x - 1) y
-  ||> (Point x y, Right) -> Point (x + 1) y
+type (Point, Direction) -> Point
+func step move => move
+ ||> (Point x y, Up)    -> Point x (y - 1)
+ ||> (Point x y, Down)  -> Point x (y + 1)
+ ||> (Point x y, Left)  -> Point (x - 1) y
+ ||> (Point x y, Right) -> Point (x + 1) y
 
 value movedPoint =
     step (
@@ -167,9 +175,10 @@ type Inner = A | B
 type Outer =
   | Outer Inner
 
-fun describeOuter:Text outer:Outer => outer
-  ||> Outer A -> "outer A"
-  ||> Outer B -> "outer B"
+type Outer -> Text
+func describeOuter outer => outer
+ ||> Outer A -> "outer A"
+ ||> Outer B -> "outer B"
 
 value outerLabel = describeOuter (Outer A)
 ```
@@ -179,17 +188,19 @@ value outerLabel = describeOuter (Outer A)
 `Option` and `Result` are ordinary tagged types, so matching them feels the same:
 
 ```aivi
-fun displayName:Text maybeName: (Option Text) => maybeName
-  ||> Some name -> name
-  ||> None      -> "anonymous"
+type (Option Text) -> Text
+func displayName maybeName => maybeName
+ ||> Some name -> name
+ ||> None      -> "anonymous"
 
 value shownName = displayName (Some "Ada")
 ```
 
 ```aivi
-fun handleResult:Text result: (Result Text Int) => result
-  ||> Ok value    -> "got {value}"
-  ||> Err message -> "failed {message}"
+type (Result Text Int) -> Text
+func handleResult result => result
+ ||> Ok value    -> "got {value}"
+ ||> Err message -> "failed {message}"
 
 value handledResult = handleResult (Ok 42)
 ```
@@ -199,9 +210,10 @@ value handledResult = handleResult (Ok 42)
 When the subject is already `Bool`, `T|>` and `F|>` are shorter than a full match:
 
 ```aivi
-fun statusLabel:Text active:Bool => active
-  T|> "active"
-  F|> "inactive"
+type Bool -> Text
+func statusLabel active => active
+ T|> "active"
+ F|> "inactive"
 
 value currentStatus = statusLabel True
 ```

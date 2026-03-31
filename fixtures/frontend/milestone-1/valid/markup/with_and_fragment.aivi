@@ -3,11 +3,11 @@ type User = {
     email: Text
 }
 
-fun formatUser:Text user:User =>
-    user
-     ||> { name, email } -> "{name} <{email}>"
+type User -> Text
+func formatUser user => user
+ ||> { name, email } -> "{name} <{email}>"
 
-value user:User = {
+value user : User = {
     name: "Ada",
     email: "ada@example.com"
 }

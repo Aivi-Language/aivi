@@ -25,9 +25,9 @@ type User = {
     email: Text
 }
 
-value bestScore:Score = 42
+value bestScore : Score = 42
 
-value ada:User = {
+value ada : User = {
     id: 1,
     name: "Ada",
     email: "ada@example.com"
@@ -45,7 +45,8 @@ type User = {
     email: Text
 }
 
-fun userName:Text user:User =>
+type User -> Text
+func userName user =>
     user.name
 
 value shownName =
@@ -98,11 +99,12 @@ type LoadState =
   | Loaded Text
   | Failed Text
 
-fun loadLabel:Text state:LoadState => state
-  ||> NotAsked      -> "idle"
-  ||> Loading       -> "loading"
-  ||> Loaded name   -> "ready {name}"
-  ||> Failed reason -> "failed {reason}"
+type LoadState -> Text
+func loadLabel state => state
+ ||> NotAsked      -> "idle"
+ ||> Loading       -> "loading"
+ ||> Loaded name   -> "ready {name}"
+ ||> Failed reason -> "failed {reason}"
 
 value currentLabel = loadLabel (Loaded "Grace")
 ```
@@ -117,21 +119,21 @@ type User = {
     name: Text
 }
 
-value maybeUser: (Option User) =
+value maybeUser : (Option User) =
     Some {
         id: 1,
         name: "Ada"
     }
 
-value noUser: (Option User) = None
-value success: (Result Text Int) = Ok 42
-value failure: (Result Text Int) = Err "not found"
+value noUser : (Option User) = None
+value success : (Result Text Int) = Ok 42
+value failure : (Result Text Int) = Err "not found"
 ```
 
 Lists are homogeneous, so every element has the same type:
 
 ```aivi
-value primes: List Int = [
+value primes : List Int = [
     2,
     3,
     5,
@@ -139,13 +141,13 @@ value primes: List Int = [
     11
 ]
 
-value names: List Text = [
+value names : List Text = [
     "Ada",
     "Grace",
     "Alan"
 ]
 
-value emptyNumbers: List Int = []
+value emptyNumbers : List Int = []
 ```
 
 ## Tuples
@@ -153,12 +155,12 @@ value emptyNumbers: List Int = []
 Tuples hold a fixed number of values, often with different types:
 
 ```aivi
-value pair:(Int, Text) = (
+value pair : (Int, Text) = (
     1,
     "one"
 )
 
-value triple:(Bool, Int, Text) = (
+value triple : (Bool, Int, Text) = (
     True,
     0,
     "zero"
@@ -168,8 +170,9 @@ value triple:(Bool, Int, Text) = (
 You usually unpack tuples with pattern matching:
 
 ```aivi
-fun firstInt:Int pair:(Int, Int) => pair
-  ||> (first, _) -> first
+type (Int, Int) -> Int
+func firstInt pair => pair
+ ||> (first, _) -> first
 
 value firstValue =
     firstInt (
@@ -183,9 +186,9 @@ value firstValue =
 Interpolation lets typed values appear inside text literals:
 
 ```aivi
-value name:Text = "Ada"
-value score:Int = 42
-value message:Text = "Hello, {name}! Your score is {score}."
+value name : Text = "Ada"
+value score : Int = 42
+value message : Text = "Hello, {name}! Your score is {score}."
 ```
 
 ## Record row transforms
@@ -203,15 +206,9 @@ type User = {
     isAdmin: Bool
 }
 
-type UserPublic =
-    User
-    |> Omit (isAdmin)
-    |> Rename { createdAt: created_at }
+type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 
-type UserPatch =
-    User
-    |> Omit (createdAt, isAdmin)
-    |> Optional (name, nickname)
+type UserPatch = User |> Omit (createdAt, isAdmin) |> Optional (name, nickname)
 ```
 
 Available transforms:
@@ -236,17 +233,13 @@ Rules:
 The pipe form is only syntax sugar. This:
 
 ```aivi
-type UserPublic =
-    User
-    |> Omit (isAdmin)
-    |> Rename { createdAt: created_at }
+type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 
 means the same thing as:
 
 ```aivi
-type UserPublic =
-    Rename { createdAt: created_at } (Omit (isAdmin) User)
+type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 
 ## Summary

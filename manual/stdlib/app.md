@@ -52,12 +52,13 @@ use aivi.app.lifecycle (
     Stopped
 )
 
-fun describeLifecycle:Text state:AppLifecycle => state
-  ||> Starting  -> "starting"
-  ||> Running   -> "running"
-  ||> Suspended -> "suspended"
-  ||> Stopping  -> "stopping"
-  ||> Stopped   -> "stopped"
+type AppLifecycle -> Text
+func describeLifecycle state => state
+ ||> Starting  -> "starting"
+ ||> Running   -> "running"
+ ||> Suspended -> "suspended"
+ ||> Stopping  -> "stopping"
+ ||> Stopped   -> "stopped"
 ```
 
 ### AppActionResult
@@ -80,10 +81,11 @@ use aivi.app.lifecycle (
     ActionCancelled
 )
 
-fun handleSave:Text result: (AppActionResult Text) => result
-  ||> ActionOk v      -> "saved: {v}"
-  ||> ActionFailed e  -> "failed: {e}"
-  ||> ActionCancelled -> "cancelled"
+type (AppActionResult Text) -> Text
+func handleSave result => result
+ ||> ActionOk v      -> "saved: {v}"
+ ||> ActionFailed e  -> "failed: {e}"
+ ||> ActionCancelled -> "cancelled"
 ```
 
 ### AppCommand
@@ -105,7 +107,7 @@ A named app command suitable for display in menus, toolbars, or a command palett
 ```aivi
 use aivi.app.lifecycle (AppCommand)
 
-value newFileCommand:AppCommand = {
+value newFileCommand : AppCommand = {
     label: "New File",
     description: "Create a new empty file",
     shortcut: None
@@ -131,7 +133,7 @@ Snapshot of the undo/redo history. Bind this to toolbar button sensitivity and m
 ```aivi
 use aivi.app.lifecycle (UndoState)
 
-value emptyUndoState:UndoState = {
+value emptyUndoState : UndoState = {
     canUndo: False,
     canRedo: False,
     depth: 0
@@ -169,7 +171,7 @@ use aivi.app.lifecycle (
     NoteInfo
 )
 
-value savedNotification:AppNotification = {
+value savedNotification : AppNotification = {
     level: NoteInfo,
     title: "File saved",
     body: None
@@ -181,9 +183,10 @@ value savedNotification:AppNotification = {
 ```
 use aivi.app.lifecycle (AppLifecycle)
 
-signal lifecycle:AppLifecycle = source Starting
+signal lifecycle : AppLifecycle = source Starting
 
-fun isRunning:Bool state:AppLifecycle => state
+type AppLifecycle -> Bool
+func isRunning state => state
   ||> Running -> True
   ||> _       -> False
 ```
@@ -193,6 +196,7 @@ fun isRunning:Bool state:AppLifecycle => state
 ```aivi
 use aivi.app.lifecycle (UndoState)
 
-fun undoButtonSensitive:Bool undoState:UndoState => undoState
-  ||> { canUndo, canRedo, depth } -> canUndo
+type UndoState -> Bool
+func undoButtonSensitive undoState => undoState
+ ||> { canUndo, canRedo, depth } -> canUndo
 ```

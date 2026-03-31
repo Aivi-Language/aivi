@@ -205,5 +205,5 @@ use aivi.fs (exists)
 
 use aivi.list (filter)
 
-fun findDataFile name =>
+func findDataFile name =>
 ```

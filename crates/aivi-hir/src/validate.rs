@@ -6429,7 +6429,7 @@ impl Validator<'_> {
     ///
     /// # Invariant
     /// A pipe expression may only appear as the direct body of a top-level declaration
-    /// (`fun`, `value`, `signal`, `source`, `view`, `result`).  Placing a pipe inside
+    /// (`func`, `value`, `signal`, `source`, `view`, `result`).  Placing a pipe inside
     /// a function argument, list literal, record field, or any other sub-expression is
     /// forbidden: pipes must be written as separate named declarations.
     fn validate_no_nested_pipes(&mut self, root: ExprId) {

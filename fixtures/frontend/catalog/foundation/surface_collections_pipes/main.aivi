@@ -30,75 +30,65 @@ type CollectionSummary = {
     note: Text
 }
 
-fun add:Int total:Int x:Int =>
+type Int -> Int -> Int
+func add total x =>
     total + x
 
-fun even:Bool x:Int =>
+type Int -> Bool
+func even x =>
     x == 2 or x == 4
 
-value numbers: List Int = [
+value numbers : List Int = [
     1,
     2,
     3,
     4
 ]
 
-value emptyNumbers: List Int = []
-value maybeName: Option Text = Some "Ada"
-value missingName: Option Text = None
+value emptyNumbers : List Int = []
+value maybeName : Option Text = Some "Ada"
+value missingName : Option Text = None
 
-value countFromPipe:Int =
-    numbers
-     |> length
+value countFromPipe : Int = numbers
+  |> length
 
-value totalFromReduce:Int =
-    numbers
-     |> reduce add 0
+value totalFromReduce : Int = numbers
+  |> reduce add 0
 
-value firstFromPipe: Option Int =
-    numbers
-     |> head
+value firstFromPipe : Option Int = numbers
+  |> head
 
-value restFromPipe: Option (List Int) =
-    numbers
-     |> tail
+value restFromPipe : Option (List Int) = numbers
+  |> tail
 
-value hasEvenFromPipe:Bool =
-    numbers
-     |> any even
+value hasEvenFromPipe : Bool = numbers
+  |> any even
 
-value splitNumbers: (Partition Int) =
-    numbers
-     |> partition even
+value splitNumbers : (Partition Int) = numbers
+  |> partition even
 
-value displayNameFromPipe:Text =
-    missingName
-     |> getOrElse "guest"
+value displayNameFromPipe : Text = missingName
+  |> getOrElse "guest"
 
-value presentNameItems: List Text =
-    maybeName
-     |> optionToList
+value presentNameItems : List Text = maybeName
+  |> optionToList
 
-value nameResult: Result Text Text =
-    maybeName
-     |> toResult "missing"
+value nameResult : Result Text Text = maybeName
+  |> toResult "missing"
 
-value recoveredName:Text =
-    nameResult
-     |> withDefault "guest"
+value recoveredName : Text = nameResult
+  |> withDefault "guest"
 
-value nameOption: Option Text =
-    nameResult
-     |> toOption
+value nameOption : Option Text = nameResult
+  |> toOption
 
-value emptyFirst: Option Int =
-    emptyNumbers
-     |> head
+value emptyFirst : Option Int = emptyNumbers
+  |> head
 
-value collectionNote:Text = ["{countFromPipe} items", "total {totalFromReduce}", displayNameFromPipe, recoveredName]
- |> join ", "
+value collectionNote : Text = ["{countFromPipe} items", "total {totalFromReduce}", displayNameFromPipe, recoveredName]
+  |> join ", "
 
-value collectionSummary:CollectionSummary = {
+value collectionSummary : CollectionSummary = {
     count: countFromPipe,
     total: totalFromReduce,
     first: firstFromPipe,

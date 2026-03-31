@@ -220,7 +220,8 @@ class Eq A
 
 value answer = 42
 
-fun add:Int x:Int y:Int =>
+type Int -> Int -> Int
+func add x y =>
     x + y
 
 signal counter = 0
@@ -238,16 +239,16 @@ Top-level forms:
 - `instance`
 - `domain`
 - `value`
-- `fun`
+- `func`
 - `signal`
 - `use`
 - `export`
 - `provider`
 - decorators via `@name` (including `@source`)
 
-### 5.0.1 `value` and `fun` declarations
+### 5.0.1 `value` and `func` declarations
 
-`value` and `fun` are separate keywords for pure top-level bindings.
+`value` and `func` are separate keywords for pure top-level bindings.
 
 `value` — constant declarations only (no parameters), uses `=`:
 
@@ -256,26 +257,28 @@ value answer = 42
 value greeting = "hello"
 ```
 
-`fun` — function declarations (with parameters), uses `=>`:
+`func` — function declarations (with parameters), uses `=>`:
 
 ```aivi
-fun add:Int x:Int y:Int =>
+type Int -> Int -> Int
+func add x y =>
     x + y
 
-fun greet:Text name:Text =>
+type Text -> Text
+func greet name =>
     "Hello, {name}"
 ```
 
 `value` is a **contextual keyword**: it is also a valid identifier and parameter name. The following is valid AIVI — the parameter is named `value`:
 
 ```aivi
-fun absolute:Int value:Int =>
-    value < 0
-     T|> 0 - value
-     F|> value
+type Int -> Int
+func absolute value => value < 0
+ T|> 0 - value
+ F|> value
 ```
 
-The parser disambiguates by position: `value` or `fun` at the start of a top-level form is a keyword; `value` as a subsequent token after the function name is a parameter.
+The parser disambiguates by position: `value` or `func` at the start of a top-level form is a keyword; `value` as a subsequent token after the function name is a parameter.
 
 ### 5.0.2 `type` — ADT declarations
 
@@ -284,9 +287,7 @@ The parser disambiguates by position: `value` or `fun` at the start of a top-lev
 ```aivi
 type Bool = True | False
 
-type Option A =
-  | None
-  | Some A
+type Option A = None | Some A
 
 type Result E A = Err E | Ok A
 ```
@@ -307,7 +308,7 @@ Body-less annotated forms declare **input signals** — externally publishable e
 
 ```aivi
 signal clicked : Signal Unit
-signal query   : Signal Text
+signal query : Signal Text
 ```
 
 Top-level reactive update clauses may target an already-declared signal:
@@ -320,10 +321,11 @@ signal ready = True
 signal enabled = True
 
 when ready => total <- left + right
-when ready and enabled => total <- result {
-    next <- Ok left
-    next + right
-}
+when ready and enabled => total <-
+    result {
+        next <- Ok left
+        next + right
+    }
 ```
 
 Normative rules for `when`:
@@ -388,7 +390,7 @@ value mainWindow =
 
 ### 5.0.7 There is no `adapter` keyword
 
-The surface language has no dedicated `adapter` declaration keyword. Shapes that older drafts described as adapters must instead use the ordinary declaration forms that match the artifact being defined (`type`, `value`, `fun`, `signal`, `@source`, and related effect surfaces).
+The surface language has no dedicated `adapter` declaration keyword. Shapes that older drafts described as adapters must instead use the ordinary declaration forms that match the artifact being defined (`type`, `value`, `func`, `signal`, `@source`, and related effect surfaces).
 
 ---
 
@@ -416,6 +418,7 @@ Comment syntax:
 
 ```aivi
 use aivi.network (http)
+
 use my.client (fetch as clientFetch)
 ```
 
@@ -517,8 +520,11 @@ A compact suffix form is well-typed only when exactly one current-module domain 
 ## 6.4 Product types and data constructors
 
 ```aivi
-type Vec2 = Vec2 Int Int
-type Date = Date Year Month Day
+type Vec2 =
+  | Vec2 Int Int
+
+type Date =
+  | Date Year Month Day
 ```
 
 ### 6.4.1 Term-level constructor semantics
@@ -528,7 +534,7 @@ Every non-record ADT constructor is an ordinary curried value constructor.
 ```aivi
 type Result E A = Err E | Ok A
 
-value ok  = Ok
+value ok = Ok
 value one = Ok 1
 ```
 
@@ -539,9 +545,15 @@ Under-application is legal. Exact application constructs the value. Over-applica
 Records are built with record literals, not implicit curried constructors.
 
 ```aivi
-type User = { name: Text, age: Int }
+type User = {
+    name: Text,
+    age: Int
+}
 
-value u:User = { name: "Ada", age: 36 }
+value u : User = {
+    name: "Ada",
+    age: 36
+}
 ```
 
 ### 6.4.3 Opaque and branded types
@@ -553,9 +565,7 @@ Opaque or branded types are recommended for domain-safe wrappers such as `Year`,
 ```aivi
 type Bool = True | False
 
-type Option A =
-  | None
-  | Some A
+type Option A = None | Some A
 ```
 
 Nested constructor patterns are allowed. Exhaustiveness is required for sum matches unless a wildcard is present.
@@ -653,16 +663,17 @@ class Applicative F
 class Traversable T
     with Functor T
     with Foldable T
-    traverse : Applicative G -> (A -> G B) -> T A -> G (T B)
+    traverse : Applicative G => (A -> G B) -> T A -> G (T B)
 
 class Container A
     require Eq A
     contains : A -> List A -> Bool
 
-fun same : Eq A -> Bool v:A =>
+type Eq A => A -> Bool
+func same v =>
     v == v
 
-instance Eq A -> Eq (Option A)
+instance Eq A => Eq (Option A)
     (==) left right = True
 ```
 
@@ -681,7 +692,7 @@ Parser-accurate rules:
 - `instance` is the implemented mechanism; `implements` is not syntax
 - constraint prefixes are implemented for function annotations, class-member annotations, and instance heads
 - single constraints use `Constraint -> ...`; multiple constraints use `(C1, C2) -> ...`
-- function example: `fun same : Eq A -> Bool v:A => ...`
+- function example: `type Eq A => A -> Bool` / `func same v => ...`
 - instance-head example: `instance Eq A -> Eq (Option A)`
 - class declarations do not accept head constraint prefixes; superclass relationships are written only as body-level `with` lines
 - higher-kinded type application uses ordinary left-associative type application syntax: `F A`, `F Int`, `F (A -> B)`, `Result Text A`, `Either L R`
@@ -854,7 +865,12 @@ class Default A
 `aivi.defaults` currently exposes a narrow compiler-known default slice for record omission:
 
 ```aivi
-use aivi.defaults (Option, defaultText, defaultInt, defaultBool)
+use aivi.defaults (
+    Option
+    defaultText
+    defaultInt
+    defaultBool
+)
 ```
 
 In the current checker these names are compiler-recognized imports rather than general imported instance evidence.
@@ -876,13 +892,15 @@ type User = {
 
 use aivi.defaults (Option)
 
-value user:User = { name: "Ada" }
+value user : User = {
+    name: "Ada"
+}
 ```
 
 Elaborates to:
 
 ```aivi
-value user:User = {
+value user : User = {
     name: "Ada",
     nickname: None,
     email: None
@@ -894,7 +912,7 @@ value user:User = {
 When an expected closed record type is known, a field whose label and in-scope value name coincide may be written in shorthand:
 
 ```aivi
-value game:Game = {
+value game : Game = {
     snake,
     food,
     status,
@@ -1311,11 +1329,11 @@ Rules:
 `+|>` is the checked accumulate pipe surface for one-stage signal recurrence. It lowers through the scheduler-owned recurrence path for stateful signal accumulation.
 
 ```aivi
-signal counter : Signal Int =
-    tick
-     +|> 0 step
+signal counter : Signal Int = tick
+ +|> 0 step
 
-fun step:Int tick:Unit current:Int =>
+type Unit -> Int -> Int
+func step tick current =>
     current + 1
 ```
 
@@ -1515,7 +1533,7 @@ A body-less annotated `signal` declaration is a first-class input signal — an 
 
 ```aivi
 signal clicked : Signal Unit
-signal query   : Signal Text
+signal query : Signal Text
 ```
 
 Type annotation is mandatory. Input signals participate in the signal dependency graph exactly like derived signals; their publication port is owned by the runtime rather than user code.
@@ -1529,11 +1547,11 @@ When a `signal` has no body, the source owns only the raw event stream; stateful
 `+|>` is the checked accumulate pipe for building stateful signals.
 
 ```aivi
-signal counter : Signal Int =
-    tick
-     +|> 0 step
+signal counter : Signal Int = tick
+ +|> 0 step
 
-fun step:Int tick:Unit current:Int =>
+type Unit -> Int -> Int
+func step tick current =>
     current + 1
 ```
 
@@ -1713,11 +1731,11 @@ Stateful source handling is expressed by deriving from the raw source signal:
 @source timer.every 120
 signal tick : Signal Unit
 
-signal counter : Signal Int =
-    tick
-     +|> 0 step
+signal counter : Signal Int = tick
+ +|> 0 step
 
-fun step:Int tick:Unit current:Int =>
+type Unit -> Int -> Int
+func step tick current =>
     current + 1
 ```
 
@@ -1831,7 +1849,9 @@ Recommended process options: `cwd : Path`, `env : Map Text Text`, `stdout : Stre
 #### GTK / window events
 
 ```aivi
-@source window.keyDown with { repeat: False }
+@source window.keyDown with {
+    repeat: False
+}
 signal keyDown : Signal Key
 ```
 
@@ -1921,9 +1941,9 @@ Lifecycle rules:
 ```aivi
 provider my.data.source
     wakeup: providerTrigger
-    argument url: Url
-    option timeout: Duration
-    option retries: Int
+    argument url : Url
+    option timeout : Duration
+    option retries : Int
 ```
 
 Implemented declaration rules:
@@ -2089,8 +2109,6 @@ Expression-valued markup attributes lower as live GTK event routes only when the
 
 ```aivi
 signal clicked : Signal Unit
-
-<Button label="Click me" onClick={clicked} />
 ```
 
 Event hookup rules:
@@ -2329,10 +2347,10 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 
 ```aivi
 domain Duration over Int
-    literal ms  : Int -> Duration
-    millis      : Int -> Duration
-    parse       : Int -> Result DurationError Duration
-    value       : Duration -> Int
+    literal ms : Int -> Duration
+    millis : Int -> Duration
+    parse : Int -> Result DurationError Duration
+    value : Duration -> Int
 ```
 
 ### 20.2 Core meaning
@@ -2359,9 +2377,9 @@ domain Url over Text
     value : Url -> Text
 
 domain Duration over Int
-    millis     : Int -> Duration
+    millis : Int -> Duration
     trySeconds : Int -> Result DurationError Duration
-    value      : Duration -> Int
+    value : Duration -> Int
 ```
 
 Construction is explicit. Unwrapping is explicit. Unsafe construction should remain internal or be spelled as such.
@@ -2372,7 +2390,7 @@ Callable domain members enter ordinary term lookup when in scope. No projection 
 
 ```aivi
 domain Duration over Int
-    literal ms  : Int -> Duration
+    literal ms : Int -> Duration
     literal sec : Int -> Duration
     literal min : Int -> Duration
 ```
@@ -2401,10 +2419,10 @@ Examples:
 ```aivi
 domain Duration over Int
     literal ms : Int -> Duration
-    (+)        : Duration -> Duration -> Duration
-    (-)        : Duration -> Duration -> Duration
-    (*)        : Duration -> Int -> Duration
-    compare    : Duration -> Duration -> Ordering
+    (+) : Duration -> Duration -> Duration
+    (-) : Duration -> Duration -> Duration
+    (*) : Duration -> Int -> Duration
+    compare : Duration -> Duration -> Ordering
 
 domain Path over Text
     (/) : Path -> Text -> Path
@@ -2430,14 +2448,15 @@ Domains attach invariants stronger than the carrier type:
 ```aivi
 domain NonEmpty A over List A
     fromList : List A -> Option (NonEmpty A)
-    head     : NonEmpty A -> A
-    tail     : NonEmpty A -> List A
+    head : NonEmpty A -> A
+    tail : NonEmpty A -> List A
 ```
 
 ### 20.8 Parameterized domains
 
 ```aivi
 domain ResourceId A over Text
+
 domain NonEmpty A over List A
 ```
 
@@ -2479,10 +2498,10 @@ For literal/decode/operator failures, diagnostics should explain whether the fai
 
 ```aivi
 domain Duration over Int
-    literal ms  : Int -> Duration
+    literal ms : Int -> Duration
     literal sec : Int -> Duration
-    value       : Duration -> Int
-    (+)         : Duration -> Duration -> Duration
+    value : Duration -> Int
+    (+) : Duration -> Duration -> Duration
 ```
 
 #### Url
@@ -2498,7 +2517,7 @@ domain Url over Text
 ```aivi
 domain Path over Text
     value : Path -> Text
-    (/)   : Path -> Text -> Path
+    (/) : Path -> Text -> Path
 ```
 
 #### NonEmpty
@@ -2506,8 +2525,8 @@ domain Path over Text
 ```aivi
 domain NonEmpty A over List A
     fromList : List A -> Option (NonEmpty A)
-    head     : NonEmpty A -> A
-    tail     : NonEmpty A -> List A
+    head : NonEmpty A -> A
+    tail : NonEmpty A -> List A
 ```
 
 ### 20.14 Design boundary
@@ -2611,7 +2630,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - parser ✓
 - CST (lossless for formatting and diagnostics) ✓
 - formatter (canonical pipe, arrow, cluster alignment) ✓
-- syntax for `type`, `class`, `instance`, `value`, `fun`, `signal`, `use`, `export`, `provider`, markup, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
+- syntax for `type`, `class`, `instance`, `value`, `func`, `signal`, `use`, `export`, `provider`, markup, and pipe operators (`|>`, `?|>`, `||>`, `!|>`, `~|>`, `+|>`, `-|>`, `*|>`, `&|>`, `T|>`, `F|>`, `@|>`, `<|@`, `<|*`, `|`) ✓
 - line/block/doc comment lexing (`//`, `/* */`, `/** **/`) and trivia retention ✓
 - regex literal lexing plus HIR validation ✓
 - compact suffix literal lexing (`250ms`) ✓
@@ -3056,7 +3075,12 @@ These modules live under `stdlib/aivi/core/` and are pure AIVI — no runtime in
 Higher-order function combinators. Exports: `identity`, `const`, `flip`, `compose`, `andThen`, `always`, `on`, `applyTo`, `applyTwice`.
 
 ```aivi
-use aivi.core.fn (identity, compose, andThen, applyTwice)
+use aivi.core.fn (
+    identity
+    compose
+    andThen
+    applyTwice
+)
 ```
 
 #### `aivi.core.either`
@@ -3078,7 +3102,13 @@ IEEE 754 double-precision helpers. Pure helpers are `negate`, `absHelper`, `max`
 Compiler-resolved intrinsics (imported from the same module): `floor`, `ceil`, `round`, `sqrt`, `abs`, `toInt`, `fromInt`, `toText`, `parseText`.
 
 ```aivi
-use aivi.core.float (pi, clamp, lerp, sqrt, toInt)
+use aivi.core.float (
+    pi
+    clamp
+    lerp
+    sqrt
+    toInt
+)
 ```
 
 #### `aivi.core.dict`
@@ -3086,8 +3116,20 @@ use aivi.core.float (pi, clamp, lerp, sqrt, toInt)
 Text-keyed association dictionary. `Dict V = { entries: List (DictEntry V) }`. All operations are O(n) over the entry list. The empty dict is the literal `{ entries: [] }`.
 
 ```aivi
-use aivi.core.dict (Dict, singleton, insert, get, member, remove, fromList, toList,
-                    mapValues, filterValues, mergeWith, union)
+use aivi.core.dict (
+    Dict
+    singleton
+    insert
+    get
+    member
+    remove
+    fromList
+    toList
+    mapValues
+    filterValues
+    mergeWith
+    union
+)
 ```
 
 Exports: `Dict`, `singleton`, `insert`, `insertWith`, `get`, `getWithDefault`, `member`, `remove`, `size`, `keys`, `values`, `toList`, `fromList`, `mapValues`, `filterValues`, `mergeWith`, `union`.
@@ -3133,7 +3175,7 @@ Hard parse and HIR rules:
 - **No inline lambdas** in expressions. All functions must be named top-level declarations.
 - **Record literals** may span multiple lines. The parser accepts newline-separated fields inside `{ }` with the same indentation-aware rules as other block syntax.
 - **Nested `T|>/F|>`** must use helper functions. `T|>` and `F|>` must be an adjacent pair in the same pipe spine — nesting them requires extracting the inner branch into a named helper.
-- **`value` declarations** are monomorphic. Type variables in a `value` annotation (`value x:(Dict V)`) are rejected. Use a concrete type or promote the definition to a `fun` with a `Unit` parameter.
+- **`value` declarations** are monomorphic. Type variables in a `value` annotation (`value x:(Dict V)`) are rejected. Use a concrete type or promote the definition to a `func` with a `Unit` parameter.
 - **Parameterized `type` aliases** are supported: `type Dict V = { entries: List (DictEntry V) }`.
 
 ### 29.6 `aivi.core.range`
@@ -3141,9 +3183,24 @@ Hard parse and HIR rules:
 Pure AIVI integer range type.
 
 ```aivi
-type RangeInt = { start: Int, end: Int }
-use aivi.core.range (RangeInt, make, isEmpty, contains, length, overlaps,
-                     clampTo, startOf, endOf, shift, intersect)
+type RangeInt = {
+    start: Int,
+    end: Int
+}
+
+use aivi.core.range (
+    RangeInt
+    make
+    isEmpty
+    contains
+    length
+    overlaps
+    clampTo
+    startOf
+    endOf
+    shift
+    intersect
+)
 ```
 
 A range where `start > end` is considered empty. All operations are O(1). The `intersect` of two non-overlapping ranges is an empty range.
@@ -3204,7 +3261,9 @@ Binary buffer intrinsics. All operations are synchronous (no `Task`). Catalog mo
 The `aivi.core.bytes` module exports `BytesDecodeError`:
 
 ```aivi
-type BytesDecodeError = InvalidUtf8 | UnexpectedEnd
+type BytesDecodeError =
+  | InvalidUtf8
+  | UnexpectedEnd
 ```
 
 ### 29.10 `aivi.data.json`
@@ -3224,7 +3283,11 @@ Catalog module: `aivi.data.json`.
 The module file exports the `JsonError` ADT:
 
 ```aivi
-type JsonError = InvalidJson | MissingKey | IndexOutOfBounds | WrongType
+type JsonError =
+  | InvalidJson
+  | MissingKey
+  | IndexOutOfBounds
+  | WrongType
 ```
 
 Values returned by `JsonGet` and `JsonAt` are raw JSON text fragments (not decoded), so callers can

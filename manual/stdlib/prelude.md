@@ -73,9 +73,9 @@ use aivi.prelude (
     filterOption
 )
 
-value name: Option Text = Some "Ada"
-value displayName:Text = getOrElse "guest" name
-value hasName:Bool = isSome name
+value name : Option Text = Some "Ada"
+value displayName : Text = getOrElse "guest" name
+value hasName : Bool = isSome name
 ```
 
 ## Result Functions
@@ -87,9 +87,9 @@ use aivi.prelude (
     isErr
 )
 
-value age: Result Text Int = Ok 30
-value ageValue:Int = withDefault 0 age
-value succeeded:Bool = isOk age
+value age : Result Text Int = Ok 30
+value ageValue : Int = withDefault 0 age
+value succeeded : Bool = isOk age
 ```
 
 ## List Functions
@@ -104,15 +104,15 @@ use aivi.prelude (
     take
 )
 
-value items: List Text = [
+value items : List Text = [
     "Ada",
     "Grace",
     "Hedy"
 ]
 
-value count:Int = length items
-value first: Option Text = head items
-value empty:Bool = isEmpty []
+value count : Int = length items
+value first : Option Text = head items
+value empty : Bool = isEmpty []
 ```
 
 ## Order Functions
@@ -124,13 +124,14 @@ use aivi.prelude (
     minOf
 )
 
-fun earlier:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func earlier a b =>
     a < b
 
-value smallest:Int = min earlier 5 3
-value greatest:Int = max earlier 5 3
+value smallest : Int = min earlier 5 3
+value greatest : Int = max earlier 5 3
 
-value leastOf:Int =
+value leastOf : Int =
     minOf earlier 10 [
         7,
         4,
@@ -146,21 +147,21 @@ use aivi.prelude (
     surround
 )
 
-value csv:Text =
+value csv : Text =
     join ", " [
         "Ada",
         "Grace",
         "Hedy"
     ]
 
-value combined:Text =
+value combined : Text =
     join "" [
         "Hello",
         " ",
         "World"
     ]
 
-value wrapped:Text = surround "(" ")" "AIVI"
+value wrapped : Text = surround "(" ")" "AIVI"
 ```
 
 ## Math Functions
@@ -174,11 +175,11 @@ use aivi.prelude (
     between
 )
 
-value absolute:Int = abs (-5)
-value flipped:Int = negate 7
-value even:Bool = isEven 4
-value clamped:Int = clamp 0 100 150
-value inRange:Bool = between 1 10 5
+value absolute : Int = abs (-5)
+value flipped : Int = negate 7
+value even : Bool = isEven 4
+value clamped : Int = clamp 0 100 150
+value inRange : Bool = between 1 10 5
 ```
 
 ## Bool Functions
@@ -190,8 +191,8 @@ use aivi.prelude (
     implies
 )
 
-value inverted:Bool = not True
-value exclusive:Bool = xor True False
+value inverted : Bool = not True
+value exclusive : Bool = xor True False
 ```
 
 ## Pair Functions
@@ -203,12 +204,12 @@ use aivi.prelude (
     swap
 )
 
-value pair:(Int, Text) = (
+value pair : (Int, Text) = (
     42,
     "hello"
 )
 
-value first:Int = fst pair
-value second:Text = snd pair
-value swapped:(Text, Int) = swap pair
+value first : Int = fst pair
+value second : Text = snd pair
+value swapped : (Text, Int) = swap pair
 ```

@@ -33,110 +33,132 @@ type PrattCatalog = {
     missingRhs: PrattResult
 }
 
-fun viewTokens:TokenView tokens: (List Token) =>
+type (List Token) -> TokenView
+func viewTokens tokens =>
     {
         first: head tokens,
         rest: tail tokens
     }
 
-fun okState:ParseState label:Text remaining: (List Token) =>
+type Text -> (List Token) -> ParseState
+func okState label remaining =>
     {
         label,
         remaining,
         status: "ok"
     }
 
-fun failState:ParseState label:Text remaining: (List Token) status:Text =>
+type Text -> (List Token) -> Text -> ParseState
+func failState label remaining status =>
     { label, remaining, status }
 
-fun statusIsOk:Bool parsed:ParseState => parsed
-  ||> { status } -> status == "ok"
+type ParseState -> Bool
+func statusIsOk parsed => parsed
+ ||> { status } -> status == "ok"
 
-value emptyParse:ParseState = {
+value emptyParse : ParseState = {
     label: "empty",
     remaining: [],
     status: "empty token stream"
 }
 
-value emptyTokens: List Token = []
+value emptyTokens : List Token = []
 
-fun prefixPrimary:ParseState tokens: (List Token) => viewTokens tokens
-  ||> { first: Some (IntToken value), rest: Some remaining } -> okState "neg(lit({value}))" remaining
-  ||> { first: Some Plus }                                   -> failState "missing" emptyTokens "missing prefix operand"
-  ||> { first: Some Times }                                  -> failState "missing" emptyTokens "missing prefix operand"
-  ||> { first: Some PrefixMinus }                            -> failState "missing" emptyTokens "stacked prefix not modeled"
-  ||> { first: None }                                        -> failState "missing" emptyTokens "missing prefix operand"
+type (List Token) -> ParseState
+func prefixPrimary tokens => viewTokens tokens
+ ||> { first: Some (IntToken value), rest: Some remaining } -> okState "neg(lit({value}))" remaining
+ ||> { first: Some Plus }                                   -> failState "missing" emptyTokens "missing prefix operand"
+ ||> { first: Some Times }                                  -> failState "missing" emptyTokens "missing prefix operand"
+ ||> { first: Some PrefixMinus }                            -> failState "missing" emptyTokens "stacked prefix not modeled"
+ ||> { first: None }                                        -> failState "missing" emptyTokens "missing prefix operand"
 
-fun primary:ParseState tokens: (List Token) => viewTokens tokens
-  ||> { first: Some (IntToken value), rest: Some remaining } -> okState "lit({value})" remaining
-  ||> { first: Some PrefixMinus, rest: Some remaining }      -> prefixPrimary remaining
-  ||> { first: Some Plus }                                   -> failState "missing" tokens "expected prefix operand"
-  ||> { first: Some Times }                                  -> failState "missing" tokens "expected prefix operand"
-  ||> { first: None }                                        -> emptyParse
+type (List Token) -> ParseState
+func primary tokens => viewTokens tokens
+ ||> { first: Some (IntToken value), rest: Some remaining } -> okState "lit({value})" remaining
+ ||> { first: Some PrefixMinus, rest: Some remaining }      -> prefixPrimary remaining
+ ||> { first: Some Plus }                                   -> failState "missing" tokens "expected prefix operand"
+ ||> { first: Some Times }                                  -> failState "missing" tokens "expected prefix operand"
+ ||> { first: None }                                        -> emptyParse
 
-fun timesSuccess:ParseState left:Text right:ParseState => right
-  ||> { label, remaining } -> okState "times({left}, {label})" remaining
+type Text -> ParseState -> ParseState
+func timesSuccess left right => right
+ ||> { label, remaining } -> okState "times({left}, {label})" remaining
 
-fun timesFailure:ParseState left:Text right:ParseState => right
-  ||> { remaining, status } -> failState left remaining status
+type Text -> ParseState -> ParseState
+func timesFailure left right => right
+ ||> { remaining, status } -> failState left remaining status
 
-fun finishTimes:ParseState left:Text right:ParseState => statusIsOk right
-  T|> timesSuccess left right
-  F|> timesFailure left right
+type Text -> ParseState -> ParseState
+func finishTimes left right => statusIsOk right
+ T|> timesSuccess left right
+ F|> timesFailure left right
 
-fun parseTimes:ParseState left:Text tokens: (List Token) => viewTokens tokens
-  ||> { first: None }       -> failState left emptyTokens "missing rhs"
-  ||> { first: Some token } -> finishTimes left (primary tokens)
+type Text -> (List Token) -> ParseState
+func parseTimes left tokens => viewTokens tokens
+ ||> { first: None }       -> failState left emptyTokens "missing rhs"
+ ||> { first: Some token } -> finishTimes left (primary tokens)
 
-fun plusTimesSuccess:ParseState left:Text rightLabel:Text rhs:ParseState => rhs
-  ||> { label, remaining } -> okState "plus({left}, times({rightLabel}, {label}))" remaining
+type Text -> Text -> ParseState -> ParseState
+func plusTimesSuccess left rightLabel rhs => rhs
+ ||> { label, remaining } -> okState "plus({left}, times({rightLabel}, {label}))" remaining
 
-fun finishPlusTimes:ParseState left:Text rightLabel:Text rhs:ParseState => statusIsOk rhs
-  T|> plusTimesSuccess left rightLabel rhs
-  F|> timesFailure left rhs
+type Text -> Text -> ParseState -> ParseState
+func finishPlusTimes left rightLabel rhs => statusIsOk rhs
+ T|> plusTimesSuccess left rightLabel rhs
+ F|> timesFailure left rhs
 
-fun parsePlusTimes:ParseState left:Text rightLabel:Text tokens: (List Token) => viewTokens tokens
-  ||> { first: None }       -> failState left emptyTokens "missing rhs"
-  ||> { first: Some token } -> finishPlusTimes left rightLabel (primary tokens)
+type Text -> Text -> (List Token) -> ParseState
+func parsePlusTimes left rightLabel tokens => viewTokens tokens
+ ||> { first: None }       -> failState left emptyTokens "missing rhs"
+ ||> { first: Some token } -> finishPlusTimes left rightLabel (primary tokens)
 
-fun plusWithPieces:ParseState left:Text rightLabel:Text remaining: (List Token) => viewTokens remaining
-  ||> { first: Some Times, rest: Some afterTimes } -> parsePlusTimes left rightLabel afterTimes
-  ||> { first: Some Plus }                         -> failState left remaining "chained plus not modeled"
-  ||> { first: Some PrefixMinus }                  -> failState left remaining "unexpected prefix after rhs"
-  ||> { first: Some (IntToken value) }             -> failState left remaining "missing infix operator"
-  ||> { first: None }                              -> okState "plus({left}, {rightLabel})" emptyTokens
+type Text -> Text -> (List Token) -> ParseState
+func plusWithPieces left rightLabel remaining => viewTokens remaining
+ ||> { first: Some Times, rest: Some afterTimes } -> parsePlusTimes left rightLabel afterTimes
+ ||> { first: Some Plus }                         -> failState left remaining "chained plus not modeled"
+ ||> { first: Some PrefixMinus }                  -> failState left remaining "unexpected prefix after rhs"
+ ||> { first: Some (IntToken value) }             -> failState left remaining "missing infix operator"
+ ||> { first: None }                              -> okState "plus({left}, {rightLabel})" emptyTokens
 
-fun plusWithRight:ParseState left:Text right:ParseState => right
-  ||> { label: rightLabel, remaining } -> plusWithPieces left rightLabel remaining
+type Text -> ParseState -> ParseState
+func plusWithRight left right => right
+ ||> { label: rightLabel, remaining } -> plusWithPieces left rightLabel remaining
 
-fun finishPlus:ParseState left:Text right:ParseState => statusIsOk right
-  T|> plusWithRight left right
-  F|> timesFailure left right
+type Text -> ParseState -> ParseState
+func finishPlus left right => statusIsOk right
+ T|> plusWithRight left right
+ F|> timesFailure left right
 
-fun parsePlus:ParseState left:Text tokens: (List Token) => viewTokens tokens
-  ||> { first: None }       -> failState left emptyTokens "missing rhs"
-  ||> { first: Some token } -> finishPlus left (primary tokens)
+type Text -> (List Token) -> ParseState
+func parsePlus left tokens => viewTokens tokens
+ ||> { first: None }       -> failState left emptyTokens "missing rhs"
+ ||> { first: Some token } -> finishPlus left (primary tokens)
 
-fun continueInfixPieces:ParseState label:Text remaining: (List Token) => viewTokens remaining
-  ||> { first: Some Plus, rest: Some afterPlus }   -> parsePlus label afterPlus
-  ||> { first: Some Times, rest: Some afterTimes } -> parseTimes label afterTimes
-  ||> { first: Some PrefixMinus }                  -> failState label remaining "missing infix operator"
-  ||> { first: Some (IntToken value) }             -> failState label remaining "missing infix operator"
-  ||> { first: None }                              -> okState label emptyTokens
+type Text -> (List Token) -> ParseState
+func continueInfixPieces label remaining => viewTokens remaining
+ ||> { first: Some Plus, rest: Some afterPlus }   -> parsePlus label afterPlus
+ ||> { first: Some Times, rest: Some afterTimes } -> parseTimes label afterTimes
+ ||> { first: Some PrefixMinus }                  -> failState label remaining "missing infix operator"
+ ||> { first: Some (IntToken value) }             -> failState label remaining "missing infix operator"
+ ||> { first: None }                              -> okState label emptyTokens
 
-fun continueInfixFrom:ParseState left:ParseState => left
-  ||> { label, remaining } -> continueInfixPieces label remaining
+type ParseState -> ParseState
+func continueInfixFrom left => left
+ ||> { label, remaining } -> continueInfixPieces label remaining
 
-fun parseExpression:ParseState tokens: (List Token) =>
+type (List Token) -> ParseState
+func parseExpression tokens =>
     continueInfixFrom (primary tokens)
 
-fun summarizeParsed:PrattResult tokens: (List Token) parsed:ParseState => parsed
-  ||> { label, remaining, status } -> { ast: label, consumed: length tokens - length remaining, status }
+type (List Token) -> ParseState -> PrattResult
+func summarizeParsed tokens parsed => parsed
+ ||> { label, remaining, status } -> { ast: label, consumed: length tokens - length remaining, status }
 
-fun summarize:PrattResult tokens: (List Token) =>
+type (List Token) -> PrattResult
+func summarize tokens =>
     summarizeParsed tokens (parseExpression tokens)
 
-value precedenceTokens: List Token = [
+value precedenceTokens : List Token = [
     PrefixMinus,
     IntToken 1,
     Plus,
@@ -145,12 +167,12 @@ value precedenceTokens: List Token = [
     IntToken 3
 ]
 
-value missingRhsTokens: List Token = [
+value missingRhsTokens : List Token = [
     IntToken 4,
     Plus
 ]
 
-value prattCatalog:PrattCatalog = {
+value prattCatalog : PrattCatalog = {
     precedenceExample: summarize precedenceTokens,
     emptyStream: summarize emptyTokens,
     missingRhs: summarize missingRhsTokens

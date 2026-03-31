@@ -1,4 +1,5 @@
-type Pair = Pair Text Text
+type Pair =
+  | Pair Text Text
 
 type SaveState =
   | Saved
@@ -8,11 +9,11 @@ signal documentTitle = "Notes"
 signal documentBody = "Hello"
 
 signal draft =
-   &|> documentTitle
+ &|> documentTitle
  &|> documentBody
-    |> Pair
+  |> Pair
 
-fun label:Text state:SaveState =>
-  state
-    ||> Saved -> "saved"
-   ||> Dirty message -> "dirty {message}"
+type SaveState -> Text
+func label state => state
+ ||> Saved         -> "saved"
+ ||> Dirty message -> "dirty {message}"

@@ -1,5 +1,5 @@
 domain Duration over Int
-    literal ms:Int -> Duration
+    literal ms : Int -> Duration
 
 type Key =
   | ArrowUp
@@ -56,7 +56,7 @@ type BoardTextState = {
     value: Text
 }
 
-value board:Board = {
+value board : Board = {
     width: 30,
     height: 20
 }
@@ -72,52 +72,63 @@ value initialSnake = [
     Cell 4 10
 ]
 
-fun cellHeadStep:CellHeadState state:CellHeadState item:Cell => state.found
-  T|> state
-  F|> { found: True, value: item }
+type CellHeadState -> Cell -> CellHeadState
+func cellHeadStep state item => state.found
+ T|> state
+ F|> { found: True, value: item }
 
-fun firstCell:Cell cells: (List Cell) => cells
+type (List Cell) -> Cell
+func firstCell cells => cells
   |> reduce cellHeadStep { found: False, value: Cell 0 0 }
   |> .value
 
-fun snakeContainsStep:Bool target:Cell found:Bool item:Cell => found
-  T|> True
-  F|> item == target
+type Cell -> Bool -> Cell -> Bool
+func snakeContainsStep target found item => found
+ T|> True
+ F|> item == target
 
-fun snakeContains:Bool snake: (List Cell) cell:Cell => snake
+type (List Cell) -> Cell -> Bool
+func snakeContains snake cell => snake
   |> reduce (snakeContainsStep cell) False
 
-fun cellIsOpen:Bool snake: (List Cell) cell:Cell =>
+type (List Cell) -> Cell -> Bool
+func cellIsOpen snake cell =>
     not (snakeContains snake cell)
 
-fun nextSeed:Int seed:Int =>
+type Int -> Int
+func nextSeed seed =>
     (seed * 1103515245 + 12345) % 2147483648
 
-fun spawnCandidate:Cell seed:Int =>
+type Int -> Cell
+func spawnCandidate seed =>
     Cell (seed % board.width) ((seed / board.width) % board.height)
 
-fun advanceFoodSearch:FoodSearch seed:Int =>
+type Int -> FoodSearch
+func advanceFoodSearch seed =>
     {
         seed: nextSeed seed,
         found: False,
         value: Cell 0 0
     }
 
-fun maybePickFood:FoodSearch snake: (List Cell) seed:Int => seed
+type (List Cell) -> Int -> FoodSearch
+func maybePickFood snake seed => seed
   |> spawnCandidate #candidate
   |> cellIsOpen snake
-  T|> { seed, found: True, value: candidate }
-  F|> advanceFoodSearch seed
+ T|> { seed, found: True, value: candidate }
+ F|> advanceFoodSearch seed
 
-fun searchFoodStep:FoodSearch snake: (List Cell) state:FoodSearch step:Int => state.found
-  T|> state
-  F|> maybePickFood snake state.seed
+type (List Cell) -> FoodSearch -> Int -> FoodSearch
+func searchFoodStep snake state step => state.found
+ T|> state
+ F|> maybePickFood snake state.seed
 
-fun spawnFood:Cell snake: (List Cell) seed:Int => foodSearchSteps
+type (List Cell) -> Int -> Cell
+func spawnFood snake seed => foodSearchSteps
   |> reduce (searchFoodStep snake) { seed, found: False, value: Cell 0 0 }
   |> .value
 
-value initialGame:Game = {
+value initialGame : Game = {
     snake: initialSnake,
     food: spawnFood initialSnake initialSeed,
     score: 0,
@@ -125,81 +136,99 @@ value initialGame:Game = {
     seed: initialSeed
 }
 
-value initialTickState:TickState = {
+value initialTickState : TickState = {
     game: initialGame,
     seenRestartCount: 0
 }
 
-fun moveCell:Cell direction:Direction cell:Cell => (direction, cell)
-  ||> (North, Cell x y) -> Cell x (y - 1)
-  ||> (South, Cell x y) -> Cell x (y + 1)
-  ||> (East, Cell x y)  -> Cell (x + 1) y
-  ||> (West, Cell x y)  -> Cell (x - 1) y
+type Direction -> Cell -> Cell
+func moveCell direction cell => (direction, cell)
+ ||> (North, Cell x y) -> Cell x (y - 1)
+ ||> (South, Cell x y) -> Cell x (y + 1)
+ ||> (East, Cell x y)  -> Cell (x + 1) y
+ ||> (West, Cell x y)  -> Cell (x - 1) y
 
-fun turn:Direction blocked:Direction next:Direction current:Direction => current == blocked
-  T|> current
-  F|> next
+type Direction -> Direction -> Direction -> Direction
+func turn blocked next current => current == blocked
+ T|> current
+ F|> next
 
-fun updateDirection:Direction key:Key current:Direction => key
-  ||> ArrowLeft  -> turn East West current
-  ||> ArrowRight -> turn West East current
-  ||> ArrowUp    -> turn South North current
-  ||> ArrowDown  -> turn North South current
-  ||> Space      -> East
+type Key -> Direction -> Direction
+func updateDirection key current => key
+ ||> ArrowLeft  -> turn East West current
+ ||> ArrowRight -> turn West East current
+ ||> ArrowUp    -> turn South North current
+ ||> ArrowDown  -> turn North South current
+ ||> Space      -> East
 
-fun countRestart:Int key:Key total:Int => key
-  ||> Space -> total + 1
-  ||> _     -> total
+type Key -> Int -> Int
+func countRestart key total => key
+ ||> Space -> total + 1
+ ||> _     -> total
 
-fun nextHeadFor:Cell direction:Direction snake: (List Cell) => snake
+type Direction -> (List Cell) -> Cell
+func nextHeadFor direction snake => snake
   |> firstCell
   |> moveCell direction
 
-fun hitsWall:Bool cell:Cell => cell
-  ||> Cell x y -> x < 0 or x >= board.width or y < 0 or y >= board.height
+type Cell -> Bool
+func hitsWall cell => cell
+ ||> Cell x y -> x < 0 or x >= board.width or y < 0 or y >= board.height
 
-fun willEat:Bool direction:Direction game:Game =>
+type Direction -> Game -> Bool
+func willEat direction game =>
     nextHeadFor direction game.snake == game.food
 
-fun willCrash:Bool direction:Direction game:Game => game.snake
+type Direction -> Game -> Bool
+func willCrash direction game => game.snake
   |> #snake nextHeadFor direction #next
   |> hitsWall
-  T|> True
-  F|> snakeContains snake next
+ T|> True
+ F|> snakeContains snake next
 
-fun cellLengthStep:Int total:Int item:Cell =>
+type Int -> Cell -> Int
+func cellLengthStep total item =>
     total + 1
 
-fun cellLength:Int cells: (List Cell) => cells
+type (List Cell) -> Int
+func cellLength cells => cells
   |> reduce cellLengthStep 0
 
-fun growSnake: (List Cell) direction:Direction snake: (List Cell) =>
+type Direction -> (List Cell) -> (List Cell)
+func growSnake direction snake =>
     append [nextHeadFor direction snake] snake
 
-fun takeCellStep:CellTakeState state:CellTakeState item:Cell => state.remaining > 0
-  T|> { remaining: state.remaining - 1, cells: append state.cells [item] }
-  F|> state
+type CellTakeState -> Cell -> CellTakeState
+func takeCellStep state item => state.remaining > 0
+ T|> { remaining: state.remaining - 1, cells: append state.cells [item] }
+ F|> state
 
-fun takeCells: (List Cell) n:Int cells: (List Cell) => cells
+type Int -> (List Cell) -> (List Cell)
+func takeCells n cells => cells
   |> reduce takeCellStep { remaining: n, cells: [] }
   |> .cells
 
-fun moveSnake: (List Cell) direction:Direction snake: (List Cell) => append [nextHeadFor direction snake] snake
+type Direction -> (List Cell) -> (List Cell)
+func moveSnake direction snake => append [nextHeadFor direction snake] snake
   |> takeCells (cellLength snake)
 
-fun nextSnake: (List Cell) direction:Direction ate:Bool snake: (List Cell) => ate
-  T|> growSnake direction snake
-  F|> moveSnake direction snake
+type Direction -> Bool -> (List Cell) -> (List Cell)
+func nextSnake direction ate snake => ate
+ T|> growSnake direction snake
+ F|> moveSnake direction snake
 
-fun nextScore:Int ate:Bool score:Int => ate
-  T|> score + 1
-  F|> score
+type Bool -> Int -> Int
+func nextScore ate score => ate
+ T|> score + 1
+ F|> score
 
-fun nextFood:Cell direction:Direction ate:Bool seed:Int game:Game => ate
-  T|> spawnFood (nextSnake direction True game.snake) seed
-  F|> game.food
+type Direction -> Bool -> Int -> Game -> Cell
+func nextFood direction ate seed game => ate
+ T|> spawnFood (nextSnake direction True game.snake) seed
+ F|> game.food
 
-fun applyRunningStep:Game direction:Direction ate:Bool seed:Int game:Game =>
+type Direction -> Bool -> Int -> Game -> Game
+func applyRunningStep direction ate seed game =>
     {
         snake: nextSnake direction ate game.snake,
         food: nextFood direction ate seed game,
@@ -208,7 +237,8 @@ fun applyRunningStep:Game direction:Direction ate:Bool seed:Int game:Game =>
         seed
     }
 
-fun gameOverState:Game game:Game =>
+type Game -> Game
+func gameOverState game =>
     {
         snake: game.snake,
         food: game.food,
@@ -217,132 +247,148 @@ fun gameOverState:Game game:Game =>
         seed: game.seed
     }
 
-fun stepRunning:Game direction:Direction game:Game => willCrash direction game
-  T|> gameOverState game
-  F|> applyRunningStep direction (willEat direction game) (nextSeed game.seed) game
+type Direction -> Game -> Game
+func stepRunning direction game => willCrash direction game
+ T|> gameOverState game
+ F|> applyRunningStep direction (willEat direction game) (nextSeed game.seed) game
 
-fun restartPending:Bool restartCount:Int seenRestartCount:Int =>
+type Int -> Int -> Bool
+func restartPending restartCount seenRestartCount =>
     restartCount != seenRestartCount
 
-fun restartIfRequested:Game restart:Bool game:Game => restart
-  T|> initialGame
-  F|> game
+type Bool -> Game -> Game
+func restartIfRequested restart game => restart
+ T|> initialGame
+ F|> game
 
-fun stepGame:Game restart:Bool direction:Direction game:Game => game.gameOver
-  T|> restartIfRequested restart game
-  F|> stepRunning direction game
+type Bool -> Direction -> Game -> Game
+func stepGame restart direction game => game.gameOver
+ T|> restartIfRequested restart game
+ F|> stepRunning direction game
 
-fun stepTickState:TickState restartCount:Int direction:Direction state:TickState =>
+type Int -> Direction -> TickState -> TickState
+func stepTickState restartCount direction state =>
     {
         game: stepGame (restartPending restartCount state.seenRestartCount) direction state.game,
         seenRestartCount: restartCount
     }
 
-fun stepOnTick:TickState tick:Unit state:TickState =>
+type Unit -> TickState -> TickState
+func stepOnTick tick state =>
     stepTickState restartCount direction state
 
-fun foodOrEmptyGlyph:Text food:Cell cell:Cell => cell == food
-  T|> "*"
-  F|> "·"
+type Cell -> Cell -> Text
+func foodOrEmptyGlyph food cell => cell == food
+ T|> "*"
+ F|> "·"
 
-fun bodyOrFoodGlyph:Text snake: (List Cell) food:Cell cell:Cell => snakeContains snake cell
-  T|> "o"
-  F|> foodOrEmptyGlyph food cell
+type (List Cell) -> Cell -> Cell -> Text
+func bodyOrFoodGlyph snake food cell => snakeContains snake cell
+ T|> "o"
+ F|> foodOrEmptyGlyph food cell
 
-fun cellGlyph:Text snake: (List Cell) food:Cell cell:Cell => cell == firstCell snake
-  T|> "@"
-  F|> bodyOrFoodGlyph snake food cell
+type (List Cell) -> Cell -> Cell -> Text
+func cellGlyph snake food cell => cell == firstCell snake
+ T|> "@"
+ F|> bodyOrFoodGlyph snake food cell
 
-fun rowTextStep:Text snake: (List Cell) food:Cell row:Int text:Text col:Int =>
+type (List Cell) -> Cell -> Int -> Text -> Int -> Text
+func rowTextStep snake food row text col =>
     "{text}{cellGlyph snake food (Cell col row)}"
 
-fun rowText:Text snake: (List Cell) food:Cell row:Int => boardColumns
+type (List Cell) -> Cell -> Int -> Text
+func rowText snake food row => boardColumns
   |> reduce (rowTextStep snake food row) ""
 
-fun boardTextStep:BoardTextState snake: (List Cell) food:Cell state:BoardTextState row:Int => state.first
-  T|> { first: False, value: rowText snake food row }
-  F|> { first: False, value: "{state.value}\n{rowText snake food row}" }
+type (List Cell) -> Cell -> BoardTextState -> Int -> BoardTextState
+func boardTextStep snake food state row => state.first
+ T|> { first: False, value: rowText snake food row }
+ F|> { first: False, value: "{state.value}\n{rowText snake food row}" }
 
-fun boardTextFor:Text game:Game => boardRows
+type Game -> Text
+func boardTextFor game => boardRows
   |> reduce (boardTextStep game.snake game.food) { first: True, value: "" }
   |> .value
 
-fun directionLabel:Text direction:Direction => direction
-  ||> North -> "Up"
-  ||> South -> "Down"
-  ||> East  -> "Right"
-  ||> West  -> "Left"
+type Direction -> Text
+func directionLabel direction => direction
+ ||> North -> "Up"
+ ||> South -> "Down"
+ ||> East  -> "Right"
+ ||> West  -> "Left"
 
-fun scoreLineFor:Text score:Int =>
+type Int -> Text
+func scoreLineFor score =>
     "Score: {score}"
 
-fun statusLineFor:Text gameOver:Bool => gameOver
-  T|> "Game Over"
-  F|> "Running"
+type Bool -> Text
+func statusLineFor gameOver => gameOver
+ T|> "Game Over"
+ F|> "Running"
 
 @source window.keyDown with {
     repeat: False,
     focusOnly: True
 }
-signal keyDown: Signal Key
+signal keyDown : Signal Key
 
-signal direction: Signal Direction = keyDown
+signal direction : Signal Direction = keyDown
  +|> East updateDirection
 
-signal restartCount: Signal Int = keyDown
+signal restartCount : Signal Int = keyDown
  +|> 0 countRestart
 
 @source timer.every 120ms with {
     immediate: False,
     coalesce: True
 }
-signal tick: Signal Unit
+signal tick : Signal Unit
 
-signal gameState: Signal TickState = tick
+signal gameState : Signal TickState = tick
  +|> initialTickState stepOnTick
 
-signal game: Signal Game = gameState
+signal game : Signal Game = gameState
   |> .game
 
-signal snake: Signal (List Cell) = game
+signal snake : Signal (List Cell) = game
   |> .snake
 
-signal food: Signal Cell = game
+signal food : Signal Cell = game
   |> .food
 
-signal score: Signal Int = game
+signal score : Signal Int = game
   |> .score
 
-signal gameOver: Signal Bool = game
+signal gameOver : Signal Bool = game
   |> .gameOver
 
-signal head: Signal Cell = snake
+signal head : Signal Cell = snake
   |> firstCell
 
-signal nextHead: Signal Cell = snake
+signal nextHead : Signal Cell = snake
   |> nextHeadFor direction
 
-signal hasEaten: Signal Bool = game
+signal hasEaten : Signal Bool = game
   |> willEat direction
 
-signal hitWall: Signal Bool = nextHead
+signal hitWall : Signal Bool = nextHead
   |> hitsWall
 
-signal hitSelf: Signal Bool = nextHead
+signal hitSelf : Signal Bool = nextHead
   |> snakeContains snake
 
-signal dead: Signal Bool = hitWall or hitSelf
+signal dead : Signal Bool = hitWall or hitSelf
 
-signal boardText: Signal Text = game
+signal boardText : Signal Text = game
   |> boardTextFor
 
-signal dirLine: Signal Text = direction
+signal dirLine : Signal Text = direction
   |> directionLabel
 
-signal scoreLine: Signal Text = score
+signal scoreLine : Signal Text = score
   |> scoreLineFor
 
-signal statusLine: Signal Text = gameOver
+signal statusLine : Signal Text = gameOver
   |> statusLineFor
 
 value main =

@@ -38,9 +38,10 @@
       "settings": { "foreground": "#F0C674" }
     },
     {
-      "name": "Declaration keywords — type fun value signal source domain class instance",
+      "name": "Declaration keywords — type func value signal source domain class instance",
       "scope": [
         "keyword.declaration.type.aivi",
+        "keyword.declaration.func.aivi",
         "keyword.declaration.fun.aivi",
         "keyword.declaration.value.aivi",
         "keyword.declaration.signal.aivi",

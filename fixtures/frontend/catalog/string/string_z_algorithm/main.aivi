@@ -26,54 +26,65 @@ type ZSummary = {
     distinctMatches: List Int
 }
 
-fun samePair:Bool pair:(Text, Text) => pair
-  ||> (left, right) -> left == right
+type (Text, Text) -> Bool
+func samePair pair => pair
+ ||> (left, right) -> left == right
 
-fun pairedTokensMatch:Bool left: (List Text) right: (List Text) => zip left right
+type (List Text) -> (List Text) -> Bool
+func pairedTokensMatch left right => zip left right
   |> all samePair
 
-fun sameCount:Bool left:Int right:Int =>
+type Int -> Int -> Bool
+func sameCount left right =>
     left == right
 
-fun sameTokens:Bool left: (List Text) right: (List Text) => sameCount (length left) (length right)
-  T|> pairedTokensMatch left right
-  F|> False
+type (List Text) -> (List Text) -> Bool
+func sameTokens left right => sameCount (length left) (length right)
+ T|> pairedTokensMatch left right
+ F|> False
 
-fun matchedWhenEqual: (Option Int) matched:Int prefix: (List Text) slice: (List Text) => sameTokens prefix slice
-  T|> Some matched
-  F|> None
+type Int -> (List Text) -> (List Text) -> (Option Int)
+func matchedWhenEqual matched prefix slice => sameTokens prefix slice
+ T|> Some matched
+ F|> None
 
-fun matchingLength: (Option Int) candidate:PrefixCandidate => candidate
-  ||> { matched, prefix, slice } -> matchedWhenEqual matched prefix slice
+type PrefixCandidate -> (Option Int)
+func matchingLength candidate => candidate
+ ||> { matched, prefix, slice } -> matchedWhenEqual matched prefix slice
 
-fun matchedLength:Int candidates: (List PrefixCandidate) => findMap matchingLength candidates
-  ||> Some matched -> matched
-  ||> None         -> 0
+type (List PrefixCandidate) -> Int
+func matchedLength candidates => findMap matchingLength candidates
+ ||> Some matched -> matched
+ ||> None         -> 0
 
-fun zValue:Int probe:ZProbe => probe
-  ||> { candidates } -> matchedLength candidates
+type ZProbe -> Int
+func zValue probe => probe
+ ||> { candidates } -> matchedLength candidates
 
-fun appendZ: (List Int) values: (List Int) probe:ZProbe =>
+type (List Int) -> ZProbe -> (List Int)
+func appendZ values probe =>
     append values [zValue probe]
 
-fun probeMatchIndex:Int patternLength:Int probe:ZProbe => probe
-  ||> { index } -> index - (patternLength + 1)
+type Int -> ZProbe -> Int
+func probeMatchIndex patternLength probe => probe
+ ||> { index } -> index - (patternLength + 1)
 
-fun keepMatch: (List Int) patternLength:Int matches: (List Int) probe:ZProbe => zValue probe == patternLength
-  T|> append matches [probeMatchIndex patternLength probe]
-  F|> matches
+type Int -> (List Int) -> ZProbe -> (List Int)
+func keepMatch patternLength matches probe => zValue probe == patternLength
+ T|> append matches [probeMatchIndex patternLength probe]
+ F|> matches
 
-value pattern:Text = "aba"
-value text:Text = "ababa"
-value combined:Text = "aba#ababa"
+value pattern : Text = "aba"
+value text : Text = "ababa"
+value combined : Text = "aba#ababa"
 
-value patternTokens: List Text = [
+value patternTokens : List Text = [
     "a",
     "b",
     "a"
 ]
 
-value zProbes: List ZProbe = [
+value zProbes : List ZProbe = [
     {
         index: 1,
         candidates: [
@@ -166,13 +177,13 @@ value zProbes: List ZProbe = [
     }
 ]
 
-value distinctPatternTokens: List Text = [
+value distinctPatternTokens : List Text = [
     "a",
     "b",
     "c"
 ]
 
-value distinctProbes: List ZProbe = [
+value distinctProbes : List ZProbe = [
     {
         index: 1,
         candidates: [
@@ -235,19 +246,16 @@ value distinctProbes: List ZProbe = [
     }
 ]
 
-value zValues: List Int =
-    zProbes
-     |> reduce appendZ [0]
+value zValues : List Int = zProbes
+  |> reduce appendZ [0]
 
-value matches: List Int =
-    zProbes
-     |> reduce (keepMatch (length patternTokens)) []
+value matches : List Int = zProbes
+  |> reduce (keepMatch (length patternTokens)) []
 
-value distinctMatches: List Int =
-    distinctProbes
-     |> reduce (keepMatch (length distinctPatternTokens)) []
+value distinctMatches : List Int = distinctProbes
+  |> reduce (keepMatch (length distinctPatternTokens)) []
 
-value zSummary:ZSummary = {
+value zSummary : ZSummary = {
     pattern,
     text,
     combined,

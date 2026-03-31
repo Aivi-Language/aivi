@@ -7,7 +7,7 @@ For the current higher-kinded hierarchy, builtin executable support matrix, and 
 
 ```aivi
 class Eq A
-    (==):A -> A -> Bool
+    (==) : A -> A -> Bool
 ```
 
 This says that any type used with `Eq` must support equality.
@@ -16,7 +16,7 @@ You can declare ordinary named methods too:
 
 ```aivi
 class Display A
-    display:A -> Text
+    display : A -> Text
 ```
 
 ## Superclass declarations
@@ -26,15 +26,15 @@ Any instance of the derived class must also provide an instance of each supercla
 
 ```aivi
 class Named A
-    name:A -> Text
+    name : A -> Text
 
 class Displayed A
     with Named A
-    display:A -> Text
+    display : A -> Text
 
 class Logged A
     with Displayed A
-    logLine:A -> Text
+    logLine : A -> Text
 ```
 
 Multiple superclasses are listed as separate `with` lines:
@@ -43,7 +43,7 @@ Multiple superclasses are listed as separate `with` lines:
 class CacheKey A
     with Eq A
     with Default A
-    canonical:A -> A
+    canonical : A -> A
 ```
 
 ## Parameter constraints
@@ -53,7 +53,7 @@ Use `require` inside the class body to constrain a type parameter. This document
 ```aivi
 class Container A
     require Eq A
-    contains: A -> List A -> Bool
+    contains : A -> List A -> Bool
 ```
 
 ## Using class-backed operators
@@ -61,7 +61,8 @@ class Container A
 When a type already has an instance, you can use the operator directly:
 
 ```aivi
-fun equivalent:Bool left:Int right:Int =>
+type Int -> Int -> Bool
+func equivalent left right =>
     left == right and left != 0
 
 value sameNumber = equivalent 4 4
@@ -72,12 +73,13 @@ Instances provide the implementation for a concrete type:
 
 ```aivi
 class Eq A
-    (==):A -> A -> Bool
+    (==) : A -> A -> Bool
 
 type Blob =
   | Blob Bytes
 
-fun blobEquals:Bool left:Blob right:Blob =>
+type Blob -> Blob -> Bool
+func blobEquals left right =>
     True
 
 instance Eq Blob
@@ -90,7 +92,7 @@ A class can expose named operations instead of operators:
 
 ```aivi
 class Compare A
-    same:A -> A -> Bool
+    same : A -> A -> Bool
 
 type Label =
   | Label Text
@@ -104,14 +106,16 @@ instance Compare Label
 When a function needs to compare values of an open type parameter, use a constraint prefix on the annotation:
 
 ```aivi
-fun matchesKey: Eq K -> Bool key:K candidate:K =>
+type Eq K => K -> K -> Bool
+func matchesKey key candidate =>
     key == candidate
 ```
 
 Multiple constraints use a parenthesized comma-separated list:
 
 ```aivi
-fun bothEqual: (Eq A, Eq B) -> Bool leftA:A rightA:A leftB:B rightB:B =>
+type (Eq A, Eq B) => A -> A -> B -> B -> Bool
+func bothEqual leftA rightA leftB rightB =>
     leftA == rightA and leftB == rightB
 ```
 

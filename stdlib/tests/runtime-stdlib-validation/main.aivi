@@ -1,18 +1,22 @@
 use aivi (Task)
+
 use aivi.prelude (
     Text
     Bool
     Unit
 )
+
 use aivi.fs (exists)
+
 use aivi.data.json (validate)
+
 use aivi.stdio (stdoutWrite)
 
 @test
-value fs_exists_smoke: Task Text Bool = exists "."
+value fs_exists_smoke : Task Text Bool = exists "."
 
 @test
-value json_validate_accepts_array: Task Text Bool = validate "[]"
+value json_validate_accepts_array : Task Text Bool = validate "[]"
 
 @test
-value stdout_write_empty: Task Text Unit = stdoutWrite ""
+value stdout_write_empty : Task Text Unit = stdoutWrite ""

@@ -32,6 +32,14 @@ const MISSING_USE_ALIAS: DiagnosticCode = DiagnosticCode::new("syntax", "missing
 const MISSING_EXPORT_NAME: DiagnosticCode = DiagnosticCode::new("syntax", "missing-export-name");
 const MISSING_DECLARATION_BODY: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-declaration-body");
+const MISSING_STANDALONE_TYPE_ANNOTATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-standalone-type-annotation");
+const ORPHAN_STANDALONE_TYPE_ANNOTATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "orphan-standalone-type-annotation");
+const DUPLICATE_STANDALONE_TYPE_ANNOTATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "duplicate-standalone-type-annotation");
+const DIRECT_FUNCTION_PARAMETER_ANNOTATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "direct-function-parameter-annotation");
 const TRAILING_DECLARATION_BODY_TOKEN: DiagnosticCode =
     DiagnosticCode::new("syntax", "trailing-declaration-body-token");
 const MISSING_CLASS_MEMBER_TYPE: DiagnosticCode =
@@ -140,6 +148,13 @@ struct Parser<'a> {
     depth: usize,
 }
 
+#[derive(Clone, Debug)]
+struct PendingTypeAnnotation {
+    span: SourceSpan,
+    constraints: Vec<TypeExpr>,
+    annotation: TypeExpr,
+}
+
 impl<'a> Parser<'a> {
     fn new(source: &'a SourceFile, tokens: &'a [Token]) -> Self {
         Self {
@@ -181,6 +196,7 @@ impl<'a> Parser<'a> {
 
     fn parse(mut self) -> (Module, Vec<Diagnostic>) {
         let mut items = Vec::new();
+        let mut pending_type_annotation = None;
         while let Some(start) = self.next_significant_from(self.cursor) {
             let item = match self.tokens[start].kind() {
                 TokenKind::At => self.parse_decorated_item(start),
@@ -196,7 +212,23 @@ impl<'a> Parser<'a> {
             } else {
                 start + 1
             };
+
+            if let Some(pending) = Self::pending_type_annotation(&item) {
+                if let Some(previous) = pending_type_annotation.replace(pending) {
+                    self.emit_orphan_standalone_type_annotation(&previous, None);
+                }
+                continue;
+            }
+
+            let mut item = item;
+            if let Some(pending) = pending_type_annotation.take() {
+                self.apply_pending_type_annotation(&mut item, pending);
+            }
             items.push(item);
+        }
+
+        if let Some(pending) = pending_type_annotation.take() {
+            self.emit_orphan_standalone_type_annotation(&pending, None);
         }
 
         (
@@ -260,7 +292,7 @@ impl<'a> Parser<'a> {
             TokenKind::TypeKw => {
                 Item::Type(self.parse_type_item(base, keyword_index, end, "type declaration"))
             }
-            TokenKind::FunKw => Item::Fun(self.parse_fun_item(base, keyword_index, end)),
+            TokenKind::FuncKw => Item::Fun(self.parse_fun_item(base, keyword_index, end)),
             TokenKind::ValueKw => Item::Value(self.parse_value_item(base, keyword_index, end)),
             TokenKind::SignalKw => {
                 Item::Signal(self.parse_signal_item(base, keyword_index, end, "signal declaration"))
@@ -287,6 +319,30 @@ impl<'a> Parser<'a> {
         description: &str,
     ) -> NamedItem {
         let mut cursor = keyword_index + 1;
+        if !self.has_top_level_equals(cursor, end) {
+            let (constraints, annotation) = self.parse_constrained_type(&mut cursor, end);
+            if annotation.is_none() {
+                self.diagnostics.push(
+                    Diagnostic::error("standalone `type` annotations require a type expression")
+                        .with_code(MISSING_STANDALONE_TYPE_ANNOTATION)
+                        .with_primary_label(
+                            self.source_span_of_token(keyword_index),
+                            "expected a type expression after `type`",
+                        ),
+                );
+            }
+            return NamedItem {
+                base,
+                keyword_span: self.source_span_of_token(keyword_index),
+                name: None,
+                type_parameters: Vec::new(),
+                constraints,
+                annotation,
+                parameters: Vec::new(),
+                body: None,
+            };
+        }
+
         let name = self.parse_named_item_name(keyword_index, &mut cursor, end, description);
         let mut type_parameters = Vec::new();
 
@@ -543,10 +599,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parse a `fun` declaration: function form with parameters, uses `=>`.
+    /// Parse a `func` declaration: function form with parameters, uses `=>`.
     fn parse_fun_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> NamedItem {
         let mut cursor = keyword_index + 1;
-        let name = self.parse_named_item_name(keyword_index, &mut cursor, end, "fun declaration");
+        let name = self.parse_named_item_name(keyword_index, &mut cursor, end, "func declaration");
         let (constraints, annotation) = self.parse_function_signature_annotation(&mut cursor, end);
 
         let mut parameters = Vec::new();
@@ -565,14 +621,14 @@ impl<'a> Parser<'a> {
                 keyword_index,
                 &mut cursor,
                 end,
-                "fun declaration",
-                "fun declaration is missing its body after `=>`",
+                "func declaration",
+                "func declaration is missing its body after `=>`",
                 "expected a body expression after `=>`",
             )
         } else {
             self.missing_body_diagnostic(
                 keyword_index,
-                "fun declaration is missing its body",
+                "func declaration is missing its body",
                 "expected parameters followed by `=>`",
             );
             None
@@ -1411,7 +1467,7 @@ impl<'a> Parser<'a> {
                 .with_code(UNEXPECTED_TOP_LEVEL_TOKEN)
                 .with_primary_label(
                     self.source_span_of_token(start),
-                    "expected `type`, `val`, `fun`, `sig`, `class`, `use`, `export`, or `@decorator` here",
+                    "expected `type`, `value`, `func`, `signal`, `class`, `use`, `export`, or `@decorator` here",
                 ),
         );
         Item::Error(ErrorItem {
@@ -1743,19 +1799,35 @@ impl<'a> Parser<'a> {
 
     fn parse_function_param(&mut self, cursor: &mut usize, end: usize) -> Option<FunctionParam> {
         let name_index = self.peek_nontrivia(*cursor, end)?;
-        let kind = self.tokens[name_index].kind();
-        if kind != TokenKind::Identifier && !kind.is_keyword() {
+        if !self.is_function_param_token(name_index) {
             return None;
         }
         *cursor = name_index + 1;
         let identifier = self.identifier_from_token(name_index);
         let name = (identifier.text != "_").then_some(identifier);
-        let annotation_end = if self.peek_kind(*cursor, end) == Some(TokenKind::Colon) {
-            self.parameter_annotation_end(*cursor, end)
+        let annotation = if self.peek_kind(*cursor, end) == Some(TokenKind::Colon) {
+            let annotation_end = self.parameter_annotation_end(*cursor, end);
+            let annotation = self.parse_optional_type_annotation(cursor, annotation_end);
+            let annotation_span = annotation
+                .as_ref()
+                .map(|annotation| annotation.span)
+                .unwrap_or_else(|| self.source_span_of_token(name_index));
+            self.diagnostics.push(
+                Diagnostic::warning("function parameters no longer accept inline type annotations")
+                    .with_code(DIRECT_FUNCTION_PARAMETER_ANNOTATION)
+                    .with_primary_label(
+                        annotation_span,
+                        "prefer moving this type into the function signature annotation",
+                    )
+                    .with_secondary_label(
+                        self.source_span_of_token(name_index),
+                        "leave the parameter name unannotated here",
+                    ),
+            );
+            annotation
         } else {
-            end
+            None
         };
-        let annotation = self.parse_optional_type_annotation(cursor, annotation_end);
         Some(FunctionParam {
             name,
             annotation,
@@ -3726,8 +3798,7 @@ impl<'a> Parser<'a> {
 
     fn starts_function_param(&self, start: usize, end: usize) -> bool {
         self.peek_nontrivia(start, end).is_some_and(|index| {
-            let kind = self.tokens[index].kind();
-            !self.tokens[index].line_start() && (kind == TokenKind::Identifier || kind.is_keyword())
+            !self.tokens[index].line_start() && self.is_function_param_token(index)
         })
     }
 
@@ -3759,18 +3830,34 @@ impl<'a> Parser<'a> {
     }
 
     fn function_signature_split_candidates(&self, start: usize, body_arrow: usize) -> Vec<usize> {
-        let mut candidates = Vec::new();
-        candidates.extend(self.same_line_top_level_typed_param_starts(start, body_arrow));
-        let last_identifier = self.last_same_line_top_level_identifier(start, body_arrow);
-        if let Some(last_identifier) = last_identifier
-            && !candidates.contains(&last_identifier)
-        {
-            candidates.push(last_identifier);
-        }
+        let mut candidates = self.same_line_top_level_param_starts(start, body_arrow);
         if !candidates.contains(&body_arrow) {
             candidates.push(body_arrow);
         }
         candidates
+    }
+
+    fn same_line_top_level_param_starts(&self, start: usize, end: usize) -> Vec<usize> {
+        let mut scan = start;
+        let mut saw_token = false;
+        let mut depth = 0usize;
+        let mut starts = Vec::new();
+        while let Some(index) = self.peek_nontrivia(scan, end) {
+            if saw_token && self.tokens[index].line_start() {
+                break;
+            }
+            saw_token = true;
+            match self.tokens[index].kind() {
+                TokenKind::LParen | TokenKind::LBrace | TokenKind::LBracket => depth += 1,
+                TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                    depth = depth.saturating_sub(1)
+                }
+                _ if depth == 0 && self.is_function_param_token(index) => starts.push(index),
+                _ => {}
+            }
+            scan = index + 1;
+        }
+        starts
     }
 
     fn same_line_top_level_typed_param_starts(&self, start: usize, end: usize) -> Vec<usize> {
@@ -3806,30 +3893,6 @@ impl<'a> Parser<'a> {
         starts
     }
 
-    fn last_same_line_top_level_identifier(&self, start: usize, end: usize) -> Option<usize> {
-        let mut scan = start;
-        let mut saw_token = false;
-        let mut depth = 0usize;
-        let mut last = None;
-        while let Some(index) = self.peek_nontrivia(scan, end) {
-            if saw_token && self.tokens[index].line_start() {
-                break;
-            }
-            saw_token = true;
-            match self.tokens[index].kind() {
-                TokenKind::LParen | TokenKind::LBrace | TokenKind::LBracket => depth += 1,
-                TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
-                    depth = depth.saturating_sub(1)
-                }
-                TokenKind::Identifier if depth == 0 => last = Some(index),
-                kind if kind.is_keyword() && depth == 0 => last = Some(index),
-                _ => {}
-            }
-            scan = index + 1;
-        }
-        last
-    }
-
     fn probe_function_signature(&self, split: usize, start: usize, body_arrow: usize) -> bool {
         let mut probe = Parser::new(self.source, self.tokens);
         probe.depth = self.depth;
@@ -3841,7 +3904,10 @@ impl<'a> Parser<'a> {
             || probe
                 .next_significant_in_range(annotation_cursor, split)
                 .is_some()
-            || !probe.diagnostics.is_empty()
+            || probe
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Error)
         {
             return false;
         }
@@ -3859,7 +3925,105 @@ impl<'a> Parser<'a> {
         probe
             .next_significant_in_range(parameter_cursor, body_arrow)
             .is_none()
-            && probe.diagnostics.is_empty()
+            && !probe
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Error)
+    }
+
+    fn is_function_param_token(&self, index: usize) -> bool {
+        match self.tokens[index].kind() {
+            kind if kind.is_keyword() => true,
+            TokenKind::Identifier => {
+                let identifier = self.identifier_from_token(index);
+                !identifier.is_uppercase_initial()
+            }
+            _ => false,
+        }
+    }
+
+    fn has_top_level_equals(&self, start: usize, end: usize) -> bool {
+        let mut depth = 0usize;
+        let mut scan = start;
+        while let Some(index) = self.peek_nontrivia(scan, end) {
+            match self.tokens[index].kind() {
+                TokenKind::LParen | TokenKind::LBrace | TokenKind::LBracket => depth += 1,
+                TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                    depth = depth.saturating_sub(1)
+                }
+                TokenKind::Equals if depth == 0 => return true,
+                _ => {}
+            }
+            scan = index + 1;
+        }
+        false
+    }
+
+    fn pending_type_annotation(item: &Item) -> Option<PendingTypeAnnotation> {
+        let Item::Type(item) = item else {
+            return None;
+        };
+        if item.name.is_some() || item.body.is_some() {
+            return None;
+        }
+        Some(PendingTypeAnnotation {
+            span: item.base.span,
+            constraints: item.constraints.clone(),
+            annotation: item.annotation.clone()?,
+        })
+    }
+
+    fn apply_pending_type_annotation(&mut self, item: &mut Item, pending: PendingTypeAnnotation) {
+        match item {
+            Item::Fun(named) | Item::Value(named) | Item::Signal(named) => {
+                if !named.constraints.is_empty() || named.annotation.is_some() {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "standalone `type` annotations cannot be combined with inline annotations",
+                        )
+                        .with_code(DUPLICATE_STANDALONE_TYPE_ANNOTATION)
+                        .with_primary_label(
+                            pending.span,
+                            "remove this standalone `type` line",
+                        )
+                        .with_secondary_label(
+                            named.name
+                                .as_ref()
+                                .map(|name| name.span)
+                                .unwrap_or(named.keyword_span),
+                            "this declaration already carries its own annotation",
+                        ),
+                    );
+                    return;
+                }
+                named.constraints = pending.constraints;
+                named.annotation = Some(pending.annotation);
+            }
+            _ => self.emit_orphan_standalone_type_annotation(&pending, Some(item.span())),
+        }
+    }
+
+    fn emit_orphan_standalone_type_annotation(
+        &mut self,
+        pending: &PendingTypeAnnotation,
+        next_item_span: Option<SourceSpan>,
+    ) {
+        let diagnostic = Diagnostic::error(
+            "standalone `type` annotations must attach to the immediately following `func`, `value`, or `signal` declaration",
+        )
+        .with_code(ORPHAN_STANDALONE_TYPE_ANNOTATION)
+        .with_primary_label(
+            pending.span,
+            "this `type` line is not attached to a supported declaration",
+        );
+        self.diagnostics.push(if let Some(span) = next_item_span {
+            diagnostic.with_secondary_label(
+                span,
+                "only the immediately following `func`, `value`, or `signal` can receive a standalone annotation",
+            )
+        } else {
+            diagnostic
+        });
     }
 
     fn starts_pattern(&self, index: usize) -> bool {

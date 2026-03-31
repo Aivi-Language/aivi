@@ -34,10 +34,12 @@ type FftCatalog = {
     coverage: Text
 }
 
-fun realSample:Complex value:Int =>
+type Int -> Complex
+func realSample value =>
     { real: value, imag: 0 }
 
-fun realSignal4:Signal4 x0:Int x1:Int x2:Int x3:Int =>
+type Int -> Int -> Int -> Int -> Signal4
+func realSignal4 x0 x1 x2 x3 =>
     {
         x0: realSample x0,
         x1: realSample x1,
@@ -45,70 +47,86 @@ fun realSignal4:Signal4 x0:Int x1:Int x2:Int x3:Int =>
         x3: realSample x3
     }
 
-fun addComplex:Complex left:Complex right:Complex =>
+type Complex -> Complex -> Complex
+func addComplex left right =>
     {
         real: left.real + right.real,
         imag: left.imag + right.imag
     }
 
-fun subComplex:Complex left:Complex right:Complex =>
+type Complex -> Complex -> Complex
+func subComplex left right =>
     {
         real: left.real - right.real,
         imag: left.imag - right.imag
     }
 
-fun conjugate:Complex value:Complex =>
+type Complex -> Complex
+func conjugate value =>
     {
         real: value.real,
         imag: 0 - value.imag
     }
 
-fun quarterTurn:Complex value:Complex =>
+type Complex -> Complex
+func quarterTurn value =>
     {
         real: value.imag,
         imag: 0 - value.real
     }
 
-fun twoPoint:(Complex, Complex) left:Complex right:Complex =>
+type Complex -> Complex -> (Complex, Complex)
+func twoPoint left right =>
     (
         addComplex left right,
         subComplex left right
     )
 
-fun combineOdd:Spectrum4 even0:Complex even1:Complex odd:(Complex, Complex) => odd
-  ||> (odd0, odd1) -> { k0: addComplex even0 odd0, k1: addComplex even1 (quarterTurn odd1), k2: subComplex even0 odd0, k3: subComplex even1 (quarterTurn odd1) }
+type Complex -> Complex -> (Complex, Complex) -> Spectrum4
+func combineOdd even0 even1 odd => odd
+ ||> (odd0, odd1) -> { k0: addComplex even0 odd0, k1: addComplex even1 (quarterTurn odd1), k2: subComplex even0 odd0, k3: subComplex even1 (quarterTurn odd1) }
 
-fun combineSpectrum:Spectrum4 even:(Complex, Complex) odd:(Complex, Complex) => even
-  ||> (even0, even1) -> combineOdd even0 even1 odd
+type (Complex, Complex) -> (Complex, Complex) -> Spectrum4
+func combineSpectrum even odd => even
+ ||> (even0, even1) -> combineOdd even0 even1 odd
 
-fun fft4:Spectrum4 signal:Signal4 =>
+type Signal4 -> Spectrum4
+func fft4 signal =>
     combineSpectrum (twoPoint signal.x0 signal.x2) (twoPoint signal.x1 signal.x3)
 
-fun absolute:Int value:Int => value < 0
-  T|> 0 - value
-  F|> value
+type Int -> Int
+func absolute value => value < 0
+ T|> 0 - value
+ F|> value
 
-fun magnitude1:Int value:Complex =>
+type Complex -> Int
+func magnitude1 value =>
     absolute value.real + absolute value.imag
 
-fun spectrumMagnitude:Int spectrum:Spectrum4 =>
+type Spectrum4 -> Int
+func spectrumMagnitude spectrum =>
     magnitude1 spectrum.k0 + magnitude1 spectrum.k1 + magnitude1 spectrum.k2 + magnitude1 spectrum.k3
 
-fun isMirrored:Bool spectrum:Spectrum4 =>
+type Spectrum4 -> Bool
+func isMirrored spectrum =>
     spectrum.k1 == conjugate spectrum.k3
 
-fun isFlatSpectrum:Bool spectrum:Spectrum4 =>
+type Spectrum4 -> Bool
+func isFlatSpectrum spectrum =>
     magnitude1 spectrum.k0 == magnitude1 spectrum.k1 and magnitude1 spectrum.k1 == magnitude1 spectrum.k2 and magnitude1 spectrum.k2 == magnitude1 spectrum.k3
 
-fun mirroredNote:Text mirrored:Bool => mirrored
-  T|> "conjugate-pair"
-  F|> "skewed-spectrum"
+type Bool -> Text
+func mirroredNote mirrored => mirrored
+ T|> "conjugate-pair"
+ F|> "skewed-spectrum"
 
-fun spectrumNote:Text spectrum:Spectrum4 => isFlatSpectrum spectrum
-  T|> "flat-spectrum"
-  F|> mirroredNote (isMirrored spectrum)
+type Spectrum4 -> Text
+func spectrumNote spectrum => isFlatSpectrum spectrum
+ T|> "flat-spectrum"
+ F|> mirroredNote (isMirrored spectrum)
 
-fun summarizeSpectrum:FftSummary label:Text spectrum:Spectrum4 =>
+type Text -> Spectrum4 -> FftSummary
+func summarizeSpectrum label spectrum =>
     {
         label,
         spectrum,
@@ -118,15 +136,16 @@ fun summarizeSpectrum:FftSummary label:Text spectrum:Spectrum4 =>
         note: spectrumNote spectrum
     }
 
-fun summarizeFft:FftSummary label:Text signal:Signal4 =>
+type Text -> Signal4 -> FftSummary
+func summarizeFft label signal =>
     summarizeSpectrum label (fft4 signal)
 
-value impulseSignal:Signal4 = realSignal4 1 0 0 0
-value constantSignal:Signal4 = realSignal4 2 2 2 2
-value alternatingSignal:Signal4 = realSignal4 1 (0 - 1) 1 (0 - 1)
-value zeroSignal:Signal4 = realSignal4 0 0 0 0
+value impulseSignal : Signal4 = realSignal4 1 0 0 0
+value constantSignal : Signal4 = realSignal4 2 2 2 2
+value alternatingSignal : Signal4 = realSignal4 1 (0 - 1) 1 (0 - 1)
+value zeroSignal : Signal4 = realSignal4 0 0 0 0
 
-value fftCatalog:FftCatalog = {
+value fftCatalog : FftCatalog = {
     impulse: summarizeFft "impulse" impulseSignal,
     constant: summarizeFft "constant" constantSignal,
     alternating: summarizeFft "alternating" alternatingSignal,

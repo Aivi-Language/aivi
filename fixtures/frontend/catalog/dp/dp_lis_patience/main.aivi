@@ -24,14 +24,16 @@ type LisSummary = {
     note: Text
 }
 
-fun keepOpenPile:Placement value:Int piles: (List Pile) pile:Pile =>
+type Int -> (List Pile) -> Pile -> Placement
+func keepOpenPile value piles pile =>
     {
         value,
         placed: False,
         piles: append piles [pile]
     }
 
-fun replaceOpenPile:Placement value:Int piles: (List Pile) pile:Pile =>
+type Int -> (List Pile) -> Pile -> Placement
+func replaceOpenPile value piles pile =>
     {
         value,
         placed: True,
@@ -43,39 +45,48 @@ fun replaceOpenPile:Placement value:Int piles: (List Pile) pile:Pile =>
         ]
     }
 
-fun placeAvailable:Placement value:Int piles: (List Pile) pile:Pile => pile.top < value
-  T|> keepOpenPile value piles pile
-  F|> replaceOpenPile value piles pile
+type Int -> (List Pile) -> Pile -> Placement
+func placeAvailable value piles pile => pile.top < value
+ T|> keepOpenPile value piles pile
+ F|> replaceOpenPile value piles pile
 
-fun stepPlacement:Placement value:Int placed:Bool piles: (List Pile) pile:Pile => placed
-  T|> { value, placed: True, piles: append piles [pile] }
-  F|> placeAvailable value piles pile
+type Int -> Bool -> (List Pile) -> Pile -> Placement
+func stepPlacement value placed piles pile => placed
+ T|> { value, placed: True, piles: append piles [pile] }
+ F|> placeAvailable value piles pile
 
-fun placeStep:Placement state:Placement pile:Pile => state
-  ||> { value, placed, piles } -> stepPlacement value placed piles pile
+type Placement -> Pile -> Placement
+func placeStep state pile => state
+ ||> { value, placed, piles } -> stepPlacement value placed piles pile
 
-fun finishPlaced: (List Pile) value:Int placed:Bool piles: (List Pile) => placed
-  T|> piles
-  F|> append piles [{ top: value, cards: [value] }]
+type Int -> Bool -> (List Pile) -> (List Pile)
+func finishPlaced value placed piles => placed
+ T|> piles
+ F|> append piles [{ top: value, cards: [value] }]
 
-fun finishPlacement: (List Pile) state:Placement => state
-  ||> { value, placed, piles } -> finishPlaced value placed piles
+type Placement -> (List Pile)
+func finishPlacement state => state
+ ||> { value, placed, piles } -> finishPlaced value placed piles
 
-fun placeCard: (List Pile) value:Int piles: (List Pile) => piles
+type Int -> (List Pile) -> (List Pile)
+func placeCard value piles => piles
   |> reduce placeStep { value, placed: False, piles: [] }
   |> finishPlacement
 
-fun patienceStep: (List Pile) piles: (List Pile) value:Int =>
+type (List Pile) -> Int -> (List Pile)
+func patienceStep piles value =>
     placeCard value piles
 
-fun appendTopText: (List Text) parts: (List Text) pile:Pile =>
+type (List Text) -> Pile -> (List Text)
+func appendTopText parts pile =>
     append parts ["{pile.top}"]
 
-fun pileTops:Text piles: (List Pile) => isEmpty piles
-  T|> "none"
-  F|> join " | " (reduce appendTopText [] piles)
+type (List Pile) -> Text
+func pileTops piles => isEmpty piles
+ T|> "none"
+ F|> join " | " (reduce appendTopText [] piles)
 
-value sample: List Int = [
+value sample : List Int = [
     5,
     1,
     6,
@@ -85,27 +96,24 @@ value sample: List Int = [
     8
 ]
 
-value duplicates: List Int = [
+value duplicates : List Int = [
     2,
     2,
     2
 ]
 
-value emptySequence: List Int = []
+value emptySequence : List Int = []
 
-value samplePiles: List Pile =
-    sample
-     |> reduce patienceStep []
+value samplePiles : List Pile = sample
+  |> reduce patienceStep []
 
-value duplicatePiles: List Pile =
-    duplicates
-     |> reduce patienceStep []
+value duplicatePiles : List Pile = duplicates
+  |> reduce patienceStep []
 
-value emptyPiles: List Pile =
-    emptySequence
-     |> reduce patienceStep []
+value emptyPiles : List Pile = emptySequence
+  |> reduce patienceStep []
 
-value lisSummary:LisSummary = {
+value lisSummary : LisSummary = {
     sampleLength: length samplePiles,
     sampleTops: pileTops samplePiles,
     duplicateLength: length duplicatePiles,

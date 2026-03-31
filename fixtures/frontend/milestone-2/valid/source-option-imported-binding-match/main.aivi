@@ -1,16 +1,13 @@
 type HttpError =
   | Timeout
 
-type Session = {
-    token: Text
-}
+type Session = { token: Text }
 
 type DecodeMode =
   | Strict
   | Permissive
 
-value decodeMode:DecodeMode =
-    Strict
+value decodeMode : DecodeMode = Strict
 
 @source http.post "/login" with {
     decode: decodeMode

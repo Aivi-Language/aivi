@@ -16,7 +16,7 @@ use crate::{
     InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemId,
     ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
     MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl,
-    MockDecorator, Module, Name, NamePath, PatchBlock, PatchEntry, PatchInstruction,
+    MockDecorator, Module, Name, NamePath, NonEmpty, PatchBlock, PatchEntry, PatchInstruction,
     PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern, PatternId, PatternKind,
     PipeExpr, PipeStage, PipeStageKind, ProjectionBase, ReactiveUpdateClause, RecordExpr,
     RecordExprField, RecordFieldSurface, RecordPatternField, RecordRowRename, RecordRowTransform,
@@ -110,6 +110,7 @@ pub fn lower_module_with_resolver(
     lowerer.lower_ambient_prelude();
     let namespaces = lowerer.build_namespaces();
     lowerer.resolve_module(&namespaces);
+    lowerer.normalize_function_signature_annotations();
     lowerer.validate_cluster_normalization();
     crate::signal_metadata_elaboration::populate_signal_metadata(&mut lowerer.module);
     LoweringResult::new(lowerer.module, lowerer.diagnostics)
@@ -1401,7 +1402,7 @@ impl<'a> Lowerer<'a> {
                 self.emit_error(
                     decorator.span,
                     format!(
-                        "`@{}` is only valid on `val`, `fun`, or `sig` declarations in Milestone 2",
+                        "`@{}` is only valid on `value`, `func`, or `signal` declarations in Milestone 2",
                         path_text(&name)
                     ),
                     code("invalid-recurrence-wakeup-target"),
@@ -1434,7 +1435,7 @@ impl<'a> Lowerer<'a> {
             ) {
                 self.emit_error(
                     decorator.span,
-                    "`@debug` is only valid on top-level `val`, `fun`, or `sig` declarations",
+                    "`@debug` is only valid on top-level `value`, `func`, or `signal` declarations",
                     code("invalid-debug-target"),
                 );
             }
@@ -4358,6 +4359,349 @@ impl<'a> Lowerer<'a> {
         }
         for item_id in self.module.ambient_items().to_vec() {
             self.resolve_item(item_id, namespaces, true);
+        }
+    }
+
+    fn normalize_function_signature_annotations(&mut self) {
+        let function_ids = self
+            .module
+            .items()
+            .iter()
+            .filter_map(|(item_id, item)| matches!(item, Item::Function(_)).then_some(item_id))
+            .collect::<Vec<_>>();
+        for item_id in function_ids {
+            self.normalize_function_signature_annotation(item_id);
+        }
+    }
+
+    fn normalize_function_signature_annotation(&mut self, item_id: ItemId) {
+        let Some((arity, context, annotation, already_split, span)) =
+            (match &self.module.items()[item_id] {
+                Item::Function(item) => Some((
+                    item.parameters.len(),
+                    item.context.clone(),
+                    item.annotation,
+                    item.parameters.iter().any(|parameter| parameter.annotation.is_some()),
+                    item.header.span,
+                )),
+                _ => None,
+            })
+        else {
+            return;
+        };
+
+        let Some(annotation) = annotation else {
+            return;
+        };
+        if arity == 0 || already_split {
+            return;
+        }
+
+        let Some((constraint_count, parameter_annotations, result_annotation)) = self
+            .split_normalized_function_signature_annotation(&context, annotation, arity)
+        else {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "function annotations with parameters must describe the full function signature",
+                )
+                .with_code(code("invalid-function-signature-annotation"))
+                .with_primary_label(
+                    span,
+                    "expected one parameter type per function parameter before the result type",
+                )
+                .with_note("use a standalone `type ...` line or a compatible alias such as `type MyFunc = A -> B -> C`"),
+            );
+            return;
+        };
+
+        let Some(Item::Function(function)) = self.module.arenas.items.get_mut(item_id) else {
+            return;
+        };
+        function.context.truncate(constraint_count);
+        for (parameter, annotation) in function
+            .parameters
+            .iter_mut()
+            .zip(parameter_annotations.into_iter())
+        {
+            parameter.annotation = Some(annotation);
+        }
+        function.annotation = Some(result_annotation);
+    }
+
+    fn split_normalized_function_signature_annotation(
+        &mut self,
+        context: &[TypeId],
+        annotation: TypeId,
+        arity: usize,
+    ) -> Option<(usize, Vec<TypeId>, TypeId)> {
+        let maximum_context_parameters = context.len().min(arity);
+        for trailing_parameter_count in 0..=maximum_context_parameters {
+            let constraint_count = context.len() - trailing_parameter_count;
+            let constraints = &context[..constraint_count];
+            let leading_parameters = &context[constraint_count..];
+            if constraints
+                .iter()
+                .copied()
+                .any(|type_id| !self.is_class_constraint_type(type_id))
+            {
+                continue;
+            }
+            if leading_parameters
+                .iter()
+                .copied()
+                .any(|type_id| self.is_class_constraint_type(type_id))
+            {
+                continue;
+            }
+            let remaining_arity = arity - trailing_parameter_count;
+            let mut item_stack = Vec::new();
+            let Some((mut parameter_annotations, result_annotation)) =
+                self.split_function_signature_annotation(
+                    annotation,
+                    remaining_arity,
+                    &HashMap::new(),
+                    &mut item_stack,
+                )
+            else {
+                continue;
+            };
+            let mut normalized_parameters = leading_parameters.to_vec();
+            normalized_parameters.append(&mut parameter_annotations);
+            if normalized_parameters.len() == arity {
+                return Some((constraint_count, normalized_parameters, result_annotation));
+            }
+        }
+        None
+    }
+
+    fn split_function_signature_annotation(
+        &mut self,
+        type_id: TypeId,
+        arity: usize,
+        substitutions: &HashMap<TypeParameterId, TypeId>,
+        item_stack: &mut Vec<ItemId>,
+    ) -> Option<(Vec<TypeId>, TypeId)> {
+        if arity == 0 {
+            return Some((
+                Vec::new(),
+                self.instantiate_signature_type(type_id, substitutions)?,
+            ));
+        }
+
+        let ty = self.module.types()[type_id].clone();
+        match ty.kind {
+            TypeKind::Arrow { parameter, result } => {
+                let parameter = self.instantiate_signature_type(parameter, substitutions)?;
+                let (mut parameters, result) =
+                    self.split_function_signature_annotation(result, arity - 1, substitutions, item_stack)?;
+                parameters.insert(0, parameter);
+                Some((parameters, result))
+            }
+            TypeKind::Name(reference) => match reference.resolution.as_ref() {
+                ResolutionState::Resolved(TypeResolution::Item(alias_item_id)) => {
+                    let alias_item_id = *alias_item_id;
+                    if item_stack.contains(&alias_item_id) {
+                        return None;
+                    }
+                    let Item::Type(item) = &self.module.items()[alias_item_id] else {
+                        return None;
+                    };
+                    if !item.parameters.is_empty() {
+                        return None;
+                    }
+                    let TypeItemBody::Alias(alias) = &item.body else {
+                        return None;
+                    };
+                    let alias = *alias;
+                    item_stack.push(alias_item_id);
+                    let split = self.split_function_signature_annotation(
+                        alias,
+                        arity,
+                        substitutions,
+                        item_stack,
+                    );
+                    let popped = item_stack.pop();
+                    debug_assert_eq!(popped, Some(alias_item_id));
+                    split
+                }
+                ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
+                    let substituted = substitutions.get(parameter).copied()?;
+                    self.split_function_signature_annotation(
+                        substituted,
+                        arity,
+                        &HashMap::new(),
+                        item_stack,
+                    )
+                }
+                _ => None,
+            },
+            TypeKind::Apply { callee, arguments } => {
+                let TypeKind::Name(reference) = &self.module.types()[callee].kind else {
+                    return None;
+                };
+                let ResolutionState::Resolved(TypeResolution::Item(alias_item_id)) =
+                    reference.resolution.as_ref()
+                else {
+                    return None;
+                };
+                let alias_item_id = *alias_item_id;
+                if item_stack.contains(&alias_item_id) {
+                    return None;
+                }
+                let (parameters, alias) = match &self.module.items()[alias_item_id] {
+                    Item::Type(item) => {
+                        let TypeItemBody::Alias(alias) = &item.body else {
+                            return None;
+                        };
+                        (item.parameters.clone(), *alias)
+                    }
+                    _ => return None,
+                };
+                if parameters.len() != arguments.len() {
+                    return None;
+                }
+                let mut nested_substitutions = HashMap::with_capacity(parameters.len());
+                for (parameter, argument) in parameters.iter().zip(arguments.iter()) {
+                    nested_substitutions
+                        .insert(*parameter, self.instantiate_signature_type(*argument, substitutions)?);
+                }
+                item_stack.push(alias_item_id);
+                let split = self.split_function_signature_annotation(
+                    alias,
+                    arity,
+                    &nested_substitutions,
+                    item_stack,
+                );
+                let popped = item_stack.pop();
+                debug_assert_eq!(popped, Some(alias_item_id));
+                split
+            }
+            TypeKind::Tuple(_) | TypeKind::Record(_) | TypeKind::RecordTransform { .. } => None,
+        }
+    }
+
+    fn is_class_constraint_type(&self, type_id: TypeId) -> bool {
+        match &self.module.types()[type_id].kind {
+            TypeKind::Name(reference) => match reference.resolution.as_ref() {
+                ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
+                    matches!(self.module.items()[*item_id], Item::Class(_))
+                }
+                _ => false,
+            },
+            TypeKind::Apply { callee, .. } => self.is_class_constraint_type(*callee),
+            TypeKind::Tuple(_)
+            | TypeKind::Record(_)
+            | TypeKind::RecordTransform { .. }
+            | TypeKind::Arrow { .. } => false,
+        }
+    }
+
+    fn instantiate_signature_type(
+        &mut self,
+        type_id: TypeId,
+        substitutions: &HashMap<TypeParameterId, TypeId>,
+    ) -> Option<TypeId> {
+        if substitutions.is_empty() {
+            return Some(type_id);
+        }
+
+        let ty = self.module.types()[type_id].clone();
+        match ty.kind {
+            TypeKind::Name(reference) => match reference.resolution.as_ref() {
+                ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
+                    substitutions.get(parameter).copied().or(Some(type_id))
+                }
+                _ => Some(type_id),
+            },
+            TypeKind::Tuple(elements) => {
+                let mut changed = false;
+                let mut instantiated = Vec::with_capacity(elements.len());
+                for element in elements.iter().copied() {
+                    let instantiated_element =
+                        self.instantiate_signature_type(element, substitutions)?;
+                    changed |= instantiated_element != element;
+                    instantiated.push(instantiated_element);
+                }
+                if !changed {
+                    return Some(type_id);
+                }
+                Some(self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Tuple(
+                        AtLeastTwo::from_vec(instantiated)
+                            .expect("tuple instantiation preserves arity"),
+                    ),
+                }))
+            }
+            TypeKind::Record(fields) => {
+                let mut changed = false;
+                let mut instantiated = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let field_ty = self.instantiate_signature_type(field.ty, substitutions)?;
+                    changed |= field_ty != field.ty;
+                    instantiated.push(TypeField {
+                        span: field.span,
+                        label: field.label,
+                        ty: field_ty,
+                    });
+                }
+                if !changed {
+                    return Some(type_id);
+                }
+                Some(self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Record(instantiated),
+                }))
+            }
+            TypeKind::RecordTransform { transform, source } => {
+                let instantiated_source = self.instantiate_signature_type(source, substitutions)?;
+                if instantiated_source == source {
+                    return Some(type_id);
+                }
+                Some(self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::RecordTransform {
+                        transform,
+                        source: instantiated_source,
+                    },
+                }))
+            }
+            TypeKind::Arrow { parameter, result } => {
+                let instantiated_parameter =
+                    self.instantiate_signature_type(parameter, substitutions)?;
+                let instantiated_result = self.instantiate_signature_type(result, substitutions)?;
+                if instantiated_parameter == parameter && instantiated_result == result {
+                    return Some(type_id);
+                }
+                Some(self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Arrow {
+                        parameter: instantiated_parameter,
+                        result: instantiated_result,
+                    },
+                }))
+            }
+            TypeKind::Apply { callee, arguments } => {
+                let instantiated_callee = self.instantiate_signature_type(callee, substitutions)?;
+                let mut changed = instantiated_callee != callee;
+                let mut instantiated_arguments = Vec::with_capacity(arguments.len());
+                for argument in arguments.iter().copied() {
+                    let argument_ty = self.instantiate_signature_type(argument, substitutions)?;
+                    changed |= argument_ty != argument;
+                    instantiated_arguments.push(argument_ty);
+                }
+                if !changed {
+                    return Some(type_id);
+                }
+                Some(self.alloc_type(TypeNode {
+                    span: ty.span,
+                    kind: TypeKind::Apply {
+                        callee: instantiated_callee,
+                        arguments: NonEmpty::from_vec(instantiated_arguments)
+                            .expect("type applications preserve non-empty argument lists"),
+                    },
+                }))
+            }
         }
     }
 
@@ -9425,6 +9769,129 @@ signal updates : Signal Int
             !lowered.has_errors(),
             "fan-out filters before `<|*` should lower cleanly: {:?}",
             lowered.diagnostics()
+        );
+    }
+
+    #[test]
+    fn normalizes_standalone_function_signature_lines_into_parameter_annotations() {
+        let lowered = lower_text(
+            "standalone-function-signature.aivi",
+            "type List Text -> Text\n\
+             func joinEmails items => \"joined\"\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "standalone function signature lines should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let function = match find_named_item(lowered.module(), "joinEmails") {
+            Item::Function(item) => item,
+            other => panic!("expected `joinEmails` to lower as a function item, found {other:?}"),
+        };
+        assert!(
+            function.context.is_empty(),
+            "plain parameter types should not remain in the class-constraint context"
+        );
+        let parameter_annotation = function.parameters[0]
+            .annotation
+            .expect("parameter annotation should be reconstructed from the signature line");
+        let result_annotation = function
+            .annotation
+            .expect("result annotation should remain attached to the function");
+
+        match &lowered.module().types()[parameter_annotation].kind {
+            TypeKind::Apply { callee, arguments } => {
+                assert_eq!(arguments.len(), 1);
+                match &lowered.module().types()[*callee].kind {
+                    TypeKind::Name(reference) => assert!(
+                        matches!(
+                            reference.resolution.as_ref(),
+                            ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::List))
+                        ),
+                        "expected builtin `List` callee resolution, found {:?}",
+                        reference.resolution.as_ref()
+                    ),
+                    other => panic!("expected `List` callee in parameter annotation, found {other:?}"),
+                }
+                let argument = arguments
+                    .iter()
+                    .next()
+                    .copied()
+                    .expect("list annotation should keep its element type");
+                match &lowered.module().types()[argument].kind {
+                    TypeKind::Name(reference) => assert!(
+                        matches!(
+                            reference.resolution.as_ref(),
+                            ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Text))
+                        ),
+                        "expected builtin `Text` element resolution, found {:?}",
+                        reference.resolution.as_ref()
+                    ),
+                    other => panic!("expected `Text` list element annotation, found {other:?}"),
+                }
+            }
+            other => panic!("expected `List Text` parameter annotation, found {other:?}"),
+        }
+
+        match &lowered.module().types()[result_annotation].kind {
+            TypeKind::Name(reference) => assert!(
+                matches!(
+                    reference.resolution.as_ref(),
+                    ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Text))
+                ),
+                "expected builtin `Text` result resolution, found {:?}",
+                reference.resolution.as_ref()
+            ),
+            other => panic!("expected `Text` result annotation, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn preserves_real_class_constraints_while_normalizing_function_signatures() {
+        let lowered = lower_text(
+            "standalone-function-signature-with-constraint.aivi",
+            "type Setoid Text -> Text -> Bool\n\
+             func same text => True\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "class constraints should remain intact while normalizing function signatures: {:?}",
+            lowered.diagnostics()
+        );
+
+        let function = match find_named_item(lowered.module(), "same") {
+            Item::Function(item) => item,
+            other => panic!("expected `same` to lower as a function item, found {other:?}"),
+        };
+        assert_eq!(
+            function.context.len(),
+            1,
+            "the Setoid constraint should stay in the function context"
+        );
+        let constraint = function.context[0];
+        match &lowered.module().types()[constraint].kind {
+            TypeKind::Apply { callee, arguments } => {
+                assert_eq!(arguments.len(), 1);
+                match &lowered.module().types()[*callee].kind {
+                    TypeKind::Name(reference) => match reference.resolution.as_ref() {
+                        ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
+                            assert!(matches!(lowered.module().items()[*item_id], Item::Class(_)));
+                        }
+                        other => panic!("expected class resolution for `Setoid`, found {other:?}"),
+                    },
+                    other => panic!("expected `Setoid` callee in constraint, found {other:?}"),
+                }
+            }
+            other => panic!("expected `Setoid Text` class constraint, found {other:?}"),
+        }
+        assert!(
+            function.parameters[0].annotation.is_some(),
+            "the function parameter should still receive its normalized annotation"
+        );
+        assert!(
+            function.annotation.is_some(),
+            "the result annotation should still be present after normalization"
         );
     }
 

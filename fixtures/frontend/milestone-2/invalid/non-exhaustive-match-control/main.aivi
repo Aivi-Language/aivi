@@ -3,7 +3,7 @@ type Screen =
   | Ready Text
   | Failed Text
 
-value current:Screen = Loading
+value current : Screen = Loading
 
 value screenView =
     <with value={current} as={screen}>

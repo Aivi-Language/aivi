@@ -1,14 +1,20 @@
-fun add:Int acc:Int x:Int =>
+type Int -> Int -> Int
+func add acc x =>
     acc + x
 
-value maybeInput:Option Int =
-    Some 4
+value maybeInput : Option Int = Some 4
 
-value joined:Text =
-    reduce append empty ["hel", "lo"]
+value joined : Text =
+    reduce append empty [
+        "hel",
+        "lo"
+    ]
 
-value total:Int =
-    reduce add 10 [1, 2, 3]
+value total : Int =
+    reduce add 10 [
+        1,
+        2,
+        3
+    ]
 
-value maybeTotal:Int =
-    reduce add 10 maybeInput
+value maybeTotal : Int = reduce add 10 maybeInput

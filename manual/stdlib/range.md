@@ -61,7 +61,7 @@ use aivi.core.range (
     make
 )
 
-value none:Bool = isEmpty (make 3 1)
+value none : Bool = isEmpty (make 3 1)
 ```
 
 ### `contains : RangeInt -> Int -> Bool`
@@ -74,7 +74,7 @@ use aivi.core.range (
     make
 )
 
-value hasFive:Bool = contains (make 1 10) 5
+value hasFive : Bool = contains (make 1 10) 5
 ```
 
 ### `length : RangeInt -> Int`
@@ -87,7 +87,7 @@ use aivi.core.range (
     make
 )
 
-value count:Int = length (make 4 7)
+value count : Int = length (make 4 7)
 ```
 
 ### `startOf : RangeInt -> Int` / `endOf : RangeInt -> Int`
@@ -101,8 +101,8 @@ use aivi.core.range (
     make
 )
 
-value start:Int = startOf (make 4 7)
-value finish:Int = endOf (make 4 7)
+value start : Int = startOf (make 4 7)
+value finish : Int = endOf (make 4 7)
 ```
 
 ---
@@ -119,7 +119,7 @@ use aivi.core.range (
     make
 )
 
-value clamped:Int = clampTo (make 1 10) 15
+value clamped : Int = clampTo (make 1 10) 15
 ```
 
 ### `shift : Int -> RangeInt -> RangeInt`
@@ -133,7 +133,7 @@ use aivi.core.range (
     make
 )
 
-value shifted:RangeInt = shift 3 (make 1 5)
+value shifted : RangeInt = shift 3 (make 1 5)
 ```
 
 ### `overlaps : RangeInt -> RangeInt -> Bool`
@@ -146,7 +146,7 @@ use aivi.core.range (
     overlaps
 )
 
-value sharesValues:Bool = overlaps (make 1 5) (make 4 8)
+value sharesValues : Bool = overlaps (make 1 5) (make 4 8)
 ```
 
 ### `intersect : RangeInt -> RangeInt -> RangeInt`
@@ -160,7 +160,7 @@ use aivi.core.range (
     make
 )
 
-value shared:RangeInt = intersect (make 1 5) (make 4 8)
+value shared : RangeInt = intersect (make 1 5) (make 4 8)
 ```
 
 ---
@@ -179,12 +179,15 @@ type Viewport = {
     total: Int
 }
 
-fun visibleRange:RangeInt viewport:Viewport => viewport
-  ||> { visible, total } -> visible
+type Viewport -> RangeInt
+func visibleRange viewport => viewport
+ ||> { visible, total } -> visible
 
-fun visibleCount:Int viewport:Viewport =>
+type Viewport -> Int
+func visibleCount viewport =>
     length (visibleRange viewport)
 
-fun clampSelection:Int viewport:Viewport row:Int =>
+type Viewport -> Int -> Int
+func clampSelection viewport row =>
     clampTo (visibleRange viewport) row
 ```

@@ -2,13 +2,13 @@ type User = {
     emails: List Text
 }
 
-fun joinEmails:Text items:List Text =>
+type List Text -> Text
+func joinEmails items =>
     "joined"
 
-value users:List User = [
+value users : List User = [
     { emails: ["ada@example.com"] }
 ]
 
-value summaries =
-    users
-     *|> (["a", "b"] *|> .)
+value summaries = users
+ *|> (["a", "b"] *|> .)

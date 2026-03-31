@@ -1,5 +1,5 @@
 provider custom.feed
-    option handler: Text -> Text
+    option handler : Text -> Text
     wakeup: providerTrigger
 
 @source custom.feed

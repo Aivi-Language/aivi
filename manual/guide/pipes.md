@@ -7,10 +7,12 @@ Pipes are the main way to express flow in AIVI. Instead of deeply nested calls, 
 `|>` sends the value on the left into the function on the right:
 
 ```aivi
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-fun addOne:Int n:Int =>
+type Int -> Int
+func addOne n =>
     n + 1
 
 value result = 5
@@ -25,7 +27,8 @@ That reads in execution order: start with `5`, then double it, then add one.
 The piped value becomes the last argument:
 
 ```aivi
-fun multiply:Int factor:Int n:Int =>
+type Int -> Int -> Int
+func multiply factor n =>
     factor * n
 
 value scaled = 5
@@ -48,17 +51,13 @@ type User = {
     isAdmin: Bool
 }
 
-type UserPublic =
-    User
-    |> Omit (isAdmin)
-    |> Rename { createdAt: created_at }
+type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 
 That is equivalent to:
 
 ```aivi
-type UserPublic =
-    Rename { createdAt: created_at } (Omit (isAdmin) User)
+type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 
 Type-level pipes are currently limited to record row transforms such as `Pick`, `Omit`, `Optional`, `Required`, `Defaulted`, and `Rename`.
@@ -73,10 +72,11 @@ type Status =
   | Published
   | Archived
 
-fun statusLabel:Text status:Status => status
-  ||> Draft     -> "draft"
-  ||> Published -> "published"
-  ||> Archived  -> "archived"
+type Status -> Text
+func statusLabel status => status
+ ||> Draft     -> "draft"
+ ||> Published -> "published"
+ ||> Archived  -> "archived"
 
 value currentLabel = statusLabel Published
 ```
@@ -93,9 +93,10 @@ or a helper, branching with `T|>` / `F|>` if needed.
 For `Bool`, the dedicated true/false pipes are shorter than a full match:
 
 ```aivi
-fun availabilityLabel:Text ready:Bool => ready
-  T|> "ready"
-  F|> "waiting"
+type Bool -> Text
+func availabilityLabel ready => ready
+ T|> "ready"
+ F|> "waiting"
 
 value shownAvailability = availabilityLabel True
 ```
@@ -113,14 +114,14 @@ type User = {
     email: Text
 }
 
-value seed:User = {
+value seed : User = {
     active: True,
     age: 32,
     email: "ada@example.com"
 }
 
-value activeAdult: (Option User) = seed
-  ?|> .active and .age > 18
+value activeAdult : (Option User) = seed
+ ?|> .active and .age > 18
 ```
 
 This is especially useful when a later step should only run for values that pass a gate.
@@ -157,7 +158,7 @@ If you can describe the logic as “take this current value and keep transformin
 signal score = 10
 
 signal previousScore = score
-  ~|> 0
+ ~|> 0
 ```
 
 ## Diff pipe `-|>`
@@ -168,7 +169,7 @@ signal previousScore = score
 signal score = 10
 
 signal scoreDelta = score
-  -|> 0
+ -|> 0
 ```
 
 ## Other accepted pipe forms
@@ -193,11 +194,13 @@ Some of these advanced stages still have narrower validation/runtime coverage th
 Pipes must stay on the top-level expression spine. If you need a pipe inside another expression, pull it out into a named helper:
 
 ```aivi
-fun normalizeTitle:Text title:Text => title
-  ||> "Inbox" -> "priority"
-  ||> _       -> title
+type Text -> Text
+func normalizeTitle title => title
+ ||> "Inbox" -> "priority"
+ ||> _       -> title
 
-fun displayTitle:Text title:Text =>
+type Text -> Text
+func displayTitle title =>
     normalizeTitle title
 ```
 

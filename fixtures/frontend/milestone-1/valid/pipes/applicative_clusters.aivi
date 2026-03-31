@@ -1,5 +1,8 @@
-type UserDraft = UserDraft Text Text Int
-type NamePair = NamePair Text Text
+type UserDraft =
+  | UserDraft Text Text Int
+
+type NamePair =
+  | NamePair Text Text
 
 signal nameText = "Ada"
 signal emailText = "ada@example.com"

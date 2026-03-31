@@ -1,15 +1,12 @@
 type HttpError =
   | Timeout
 
-type Session = {
-    token: Text
-}
+type Session = { token: Text }
 
 type Box A =
   | Box A
 
-value emptyBody =
-    Box None
+value emptyBody = Box None
 
 @source http.post "/login" with {
     body: emptyBody

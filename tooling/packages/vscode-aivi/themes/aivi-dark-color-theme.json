@@ -169,10 +169,11 @@
       "scope": "keyword.other.unit.aivi",
       "settings": { "foreground": "#F0C674" } },
 
-    { "name": "Declaration keywords (type value fun signal source result view adapter data class domain instance provider)",
+    { "name": "Declaration keywords (type value func signal source result view adapter data class domain instance provider)",
       "scope": [
         "keyword.declaration.type.aivi",
         "keyword.declaration.value.aivi",
+        "keyword.declaration.func.aivi",
         "keyword.declaration.fun.aivi",
         "keyword.declaration.signal.aivi",
         "keyword.declaration.source.aivi",
@@ -207,9 +208,21 @@
       "scope": "variable.parameter.type.aivi",
       "settings": { "foreground": "#C5C8C6" } },
 
-    { "name": "Function name (fun / sig)",
-      "scope": ["entity.name.function.aivi", "entity.name.variable.signal.aivi"],
-      "settings": { "foreground": "#C5C8C6", "fontStyle": "bold" } },
+    { "name": "Function definition name",
+      "scope": "entity.name.function.aivi",
+      "settings": { "foreground": "#7AA6DA", "fontStyle": "bold" } },
+
+    { "name": "Function call head",
+      "scope": "entity.name.function.call.aivi",
+      "settings": { "foreground": "#7AA6DA" } },
+
+    { "name": "Signal name",
+      "scope": "entity.name.variable.signal.aivi",
+      "settings": { "foreground": "#8ABEB7", "fontStyle": "bold" } },
+
+    { "name": "Function parameter / argument",
+      "scope": ["variable.parameter.function.aivi", "parameter"],
+      "settings": { "foreground": "#D7BA7D" } },
 
     { "name": "Value name (val)",
       "scope": "entity.name.variable.aivi",
@@ -378,10 +391,10 @@
     "interface": { "foreground": "#8ABEB7" },
     "enum":      { "foreground": "#F0C674" },
     "enumMember":{ "foreground": "#F0C674" },
-    "function":  { "foreground": "#C5C8C6", "bold": true },
+    "function":  { "foreground": "#7AA6DA", "bold": true },
     "method":    { "foreground": "#C5C8C6", "bold": true },
     "variable":  { "foreground": "#C5C8C6" },
-    "parameter": { "foreground": "#C5C8C6" },
+    "parameter": { "foreground": "#D7BA7D" },
     "property":  { "foreground": "#8ABEB7" },
     "namespace": { "foreground": "#8ABEB7" },
     "keyword":   { "foreground": "#81A2BE" },

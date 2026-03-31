@@ -1,28 +1,37 @@
-fun identity:A x:A =>
+type A -> A
+func identity x =>
     x
 
-fun const:A x:A ignored:B =>
+type A -> B -> A
+func const x ignored =>
     x
 
-fun flip:C f:(A -> B -> C) b:B a:A =>
+type (A -> B -> C) -> B -> A -> C
+func flip f b a =>
     f a b
 
-fun compose:C f:(B -> C) g:(A -> B) x:A =>
+type (B -> C) -> (A -> B) -> A -> C
+func compose f g x =>
     f (g x)
 
-fun andThen:C f:(A -> B) g:(B -> C) x:A =>
+type (A -> B) -> (B -> C) -> A -> C
+func andThen f g x =>
     g (f x)
 
-fun always:A x:A ignored:B =>
+type A -> B -> A
+func always x ignored =>
     x
 
-fun on:C combine:(B -> B -> C) transform:(A -> B) x:A y:A =>
+type (B -> B -> C) -> (A -> B) -> A -> A -> C
+func on combine transform x y =>
     combine (transform x) (transform y)
 
-fun applyTo:B arg:A f:(A -> B) =>
+type A -> (A -> B) -> B
+func applyTo arg f =>
     f arg
 
-fun applyTwice:A f:(A -> A) x:A =>
+type (A -> A) -> A -> A
+func applyTwice f x =>
     f (f x)
 
 export identity

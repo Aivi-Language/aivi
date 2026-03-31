@@ -9,15 +9,15 @@ type Profile = {
 value name = "Ada"
 value nickname = Some "Countess"
 
-value richProfile:Profile = {
+value richProfile : Profile = {
     name,
     nickname
 }
 
-value minimalProfile:Profile = {
+value minimalProfile : Profile = {
     name: "Grace"
 }
 
-fun profileName:Text profile:Profile =>
-    profile
-     ||> { name, nickname } -> name
+type Profile -> Text
+func profileName profile => profile
+ ||> { name, nickname } -> name

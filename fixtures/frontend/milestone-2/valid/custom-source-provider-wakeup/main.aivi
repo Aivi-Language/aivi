@@ -1,4 +1,5 @@
-fun step:Int x:Int current:Int =>
+type Int -> Int -> Int
+func step x current =>
     x
 
 provider custom.feed
@@ -7,6 +8,5 @@ provider custom.feed
 @source custom.feed
 signal retryEvents : Signal Int
 
-signal retried : Signal Int =
-    retryEvents
-     +|> 0 step
+signal retried : Signal Int = retryEvents
+ +|> 0 step

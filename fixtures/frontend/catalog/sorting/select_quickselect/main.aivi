@@ -18,48 +18,59 @@ type QuickselectSummary = {
     note: Text
 }
 
-fun lowerThan:Bool pivot:Int x:Int =>
+type Int -> Int -> Bool
+func lowerThan pivot x =>
     x < pivot
 
-fun equalTo:Bool pivot:Int x:Int =>
+type Int -> Int -> Bool
+func equalTo pivot x =>
     x == pivot
 
-fun classifyRest:Buckets lower: (List Int) pivot:Int rest: (List Int) => rest
+type (List Int) -> Int -> (List Int) -> Buckets
+func classifyRest lower pivot rest => rest
   |> partition (equalTo pivot)
-  ||> { matched: equal, unmatched: higher } -> { lower, equal, higher }
+ ||> { matched: equal, unmatched: higher } -> { lower, equal, higher }
 
-fun classify:Buckets pivot:Int items: (List Int) => items
+type Int -> (List Int) -> Buckets
+func classify pivot items => items
   |> partition (lowerThan pivot)
-  ||> { matched: lower, unmatched: rest } -> classifyRest lower pivot rest
+ ||> { matched: lower, unmatched: rest } -> classifyRest lower pivot rest
 
-fun withFallback:Int fallback:Int x: (Option Int) => x
-  ||> Some found -> found
-  ||> None       -> fallback
+type Int -> (Option Int) -> Int
+func withFallback fallback x => x
+ ||> Some found -> found
+ ||> None       -> fallback
 
-fun isMissing:Bool x: (Option Int) => x
-  ||> None   -> True
-  ||> Some _ -> False
+type (Option Int) -> Bool
+func isMissing x => x
+ ||> None   -> True
+ ||> Some _ -> False
 
-fun chooseUpper: (Option Int) rank:Int lower: (List Int) equal: (List Int) higher: (List Int) => rank > length lower + length equal - 1
-  T|> quickselect (rank - length lower - length equal) higher
-  F|> head equal
+type Int -> (List Int) -> (List Int) -> (List Int) -> (Option Int)
+func chooseUpper rank lower equal higher => rank > length lower + length equal - 1
+ T|> quickselect (rank - length lower - length equal) higher
+ F|> head equal
 
-fun chooseRank: (Option Int) rank:Int lower: (List Int) equal: (List Int) higher: (List Int) => rank < length lower
-  T|> quickselect rank lower
-  F|> chooseUpper rank lower equal higher
+type Int -> (List Int) -> (List Int) -> (List Int) -> (Option Int)
+func chooseRank rank lower equal higher => rank < length lower
+ T|> quickselect rank lower
+ F|> chooseUpper rank lower equal higher
 
-fun selectFromClassified: (Option Int) rank:Int classified:{ lower: (List Int), equal: (List Int), higher: (List Int) } => classified
-  ||> { lower, equal, higher } -> chooseRank rank lower equal higher
+type Int -> { lower: (List Int), equal: (List Int), higher: (List Int) } -> (Option Int)
+func selectFromClassified rank classified => classified
+ ||> { lower, equal, higher } -> chooseRank rank lower equal higher
 
-fun classifyAndSelect: (Option Int) rank:Int items: (List Int) pivot:Int => items
+type Int -> (List Int) -> Int -> (Option Int)
+func classifyAndSelect rank items pivot => items
   |> classify pivot
   |> selectFromClassified rank
 
-fun quickselect: (Option Int) rank:Int items: (List Int) => head items
-  ||> None       -> None
-  ||> Some pivot -> classifyAndSelect rank items pivot
+type Int -> (List Int) -> (Option Int)
+func quickselect rank items => head items
+ ||> None       -> None
+ ||> Some pivot -> classifyAndSelect rank items pivot
 
-value sample: List Int = [
+value sample : List Int = [
     7,
     2,
     9,
@@ -69,13 +80,13 @@ value sample: List Int = [
     6
 ]
 
-value duplicates: List Int = [
+value duplicates : List Int = [
     3,
     3,
     3
 ]
 
-value quickselectSummary:QuickselectSummary = {
+value quickselectSummary : QuickselectSummary = {
     fourthSmallest: withFallback 0 (quickselect 3 sample),
     minimum: withFallback 0 (quickselect 0 sample),
     duplicatePick: withFallback 0 (quickselect 1 duplicates),

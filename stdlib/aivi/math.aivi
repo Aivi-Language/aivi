@@ -1,46 +1,57 @@
-fun abs:Int n:Int => n < 0
-  T|> 0 - n
-  F|> n
+type Int -> Int
+func abs n => n < 0
+ T|> 0 - n
+ F|> n
 
-fun negate:Int n:Int =>
+type Int -> Int
+func negate n =>
     0 - n
 
-fun negOrZero:Int n:Int => n < 0
-  T|> 0 - 1
-  F|> 0
+type Int -> Int
+func negOrZero n => n < 0
+ T|> 0 - 1
+ F|> 0
 
-fun sign:Int n:Int => n > 0
-  T|> 1
-  F|> negOrZero n
+type Int -> Int
+func sign n => n > 0
+ T|> 1
+ F|> negOrZero n
 
-fun isEven:Bool n:Int =>
+type Int -> Bool
+func isEven n =>
     n % 2 == 0
 
-fun isOdd:Bool n:Int =>
+type Int -> Bool
+func isOdd n =>
     n % 2 != 0
 
-fun square:Int n:Int =>
+type Int -> Int
+func square n =>
     n * n
 
-fun clampTop:Int high:Int n:Int => n > high
-  T|> high
-  F|> n
+type Int -> Int -> Int
+func clampTop high n => n > high
+ T|> high
+ F|> n
 
-fun clamp:Int low:Int high:Int n:Int => n < low
-  T|> low
-  F|> clampTop high n
+type Int -> Int -> Int -> Int
+func clamp low high n => n < low
+ T|> low
+ F|> clampTop high n
 
-fun between:Bool low:Int high:Int n:Int =>
+type Int -> Int -> Int -> Bool
+func between low high n =>
     n >= low and n <= high
 
-fun divides:Bool divisor:Int n:Int =>
+type Int -> Int -> Bool
+func divides divisor n =>
     n % divisor == 0
 
 @test
-value abs_handles_negative: Task Text Bool = pure (abs (0 - 4) == 4)
+value abs_handles_negative : Task Text Bool = pure (abs (0 - 4) == 4)
 
 @test
-value even_detects_even: Task Text Bool = pure (isEven 6)
+value even_detects_even : Task Text Bool = pure (isEven 6)
 
 export abs
 export negate

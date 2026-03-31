@@ -44,7 +44,7 @@ type BellmanFordCatalog = {
     negativeWitness: Text
 }
 
-value emptyDistances:Distances = {
+value emptyDistances : Distances = {
     source: Unreachable,
     mid: Unreachable,
     detour: Unreachable,
@@ -52,75 +52,90 @@ value emptyDistances:Distances = {
     stranded: Unreachable
 }
 
-value negativeWeightEdge:WeightedEdge = {
+value negativeWeightEdge : WeightedEdge = {
     from: Mid,
     to: Detour,
     weight: 0 - 2
 }
 
-value negativeCycleWitness:Text = "mid -> detour -> mid"
+value negativeCycleWitness : Text = "mid -> detour -> mid"
 
-fun chooseNode:A node:Node source:A mid:A detour:A goal:A stranded:A => node
-  ||> Source   -> source
-  ||> Mid      -> mid
-  ||> Detour   -> detour
-  ||> Goal     -> goal
-  ||> Stranded -> stranded
+type Node -> A -> A -> A -> A -> A -> A
+func chooseNode node source mid detour goal stranded => node
+ ||> Source   -> source
+ ||> Mid      -> mid
+ ||> Detour   -> detour
+ ||> Goal     -> goal
+ ||> Stranded -> stranded
 
-fun distanceText:Text distance:Distance => distance
-  ||> Unreachable -> "unreachable"
-  ||> Cost x      -> "{x}"
+type Distance -> Text
+func distanceText distance => distance
+ ||> Unreachable -> "unreachable"
+ ||> Cost x      -> "{x}"
 
-fun distanceOf:Distance distances:Distances node:Node =>
+type Distances -> Node -> Distance
+func distanceOf distances node =>
     chooseNode node distances.source distances.mid distances.detour distances.goal distances.stranded
 
-fun setDistance:Distances distances:Distances node:Node x:Distance => node
-  ||> Source   -> { source: x, mid: distances.mid, detour: distances.detour, goal: distances.goal, stranded: distances.stranded }
-  ||> Mid      -> { source: distances.source, mid: x, detour: distances.detour, goal: distances.goal, stranded: distances.stranded }
-  ||> Detour   -> { source: distances.source, mid: distances.mid, detour: x, goal: distances.goal, stranded: distances.stranded }
-  ||> Goal     -> { source: distances.source, mid: distances.mid, detour: distances.detour, goal: x, stranded: distances.stranded }
-  ||> Stranded -> { source: distances.source, mid: distances.mid, detour: distances.detour, goal: distances.goal, stranded: x }
+type Distances -> Node -> Distance -> Distances
+func setDistance distances node x => node
+ ||> Source   -> { source: x, mid: distances.mid, detour: distances.detour, goal: distances.goal, stranded: distances.stranded }
+ ||> Mid      -> { source: distances.source, mid: x, detour: distances.detour, goal: distances.goal, stranded: distances.stranded }
+ ||> Detour   -> { source: distances.source, mid: distances.mid, detour: x, goal: distances.goal, stranded: distances.stranded }
+ ||> Goal     -> { source: distances.source, mid: distances.mid, detour: distances.detour, goal: x, stranded: distances.stranded }
+ ||> Stranded -> { source: distances.source, mid: distances.mid, detour: distances.detour, goal: distances.goal, stranded: x }
 
-fun betterDistance:Bool left:Distance right:Distance => (left, right)
-  ||> (Cost _, Unreachable) -> True
-  ||> (Cost l, Cost r)      -> l < r
-  ||> (Unreachable, _)      -> False
+type Distance -> Distance -> Bool
+func betterDistance left right => (left, right)
+ ||> (Cost _, Unreachable) -> True
+ ||> (Cost l, Cost r)      -> l < r
+ ||> (Unreachable, _)      -> False
 
-fun plusDistance:Distance distance:Distance weight:Int => distance
-  ||> Cost x      -> Cost (x + weight)
-  ||> Unreachable -> Unreachable
+type Distance -> Int -> Distance
+func plusDistance distance weight => distance
+ ||> Cost x      -> Cost (x + weight)
+ ||> Unreachable -> Unreachable
 
-fun candidateDistance:Distance distances:Distances edge:WeightedEdge =>
+type Distances -> WeightedEdge -> Distance
+func candidateDistance distances edge =>
     plusDistance (distanceOf distances edge.from) edge.weight
 
-fun preferDistance:Distance current:Distance candidate:Distance => betterDistance candidate current
-  T|> candidate
-  F|> current
+type Distance -> Distance -> Distance
+func preferDistance current candidate => betterDistance candidate current
+ T|> candidate
+ F|> current
 
-fun relaxTarget:Distances distances:Distances target:Node candidate:Distance =>
+type Distances -> Node -> Distance -> Distances
+func relaxTarget distances target candidate =>
     setDistance distances target (preferDistance (distanceOf distances target) candidate)
 
-fun relaxEdge:Distances distances:Distances edge:WeightedEdge =>
+type Distances -> WeightedEdge -> Distances
+func relaxEdge distances edge =>
     relaxTarget distances edge.to (candidateDistance distances edge)
 
-fun runPass:Distances graph:WeightedGraph distances:Distances tick:Node => graph.edges
+type WeightedGraph -> Distances -> Node -> Distances
+func runPass graph distances tick => graph.edges
   |> reduce relaxEdge distances
 
-fun passSchedule: (List Node) graph:WeightedGraph => graph.nodes
+type WeightedGraph -> (List Node)
+func passSchedule graph => graph.nodes
   |> tail
   |> getOrElse []
 
-fun edgeCanRelax:Bool distances:Distances edge:WeightedEdge =>
+type Distances -> WeightedEdge -> Bool
+func edgeCanRelax distances edge =>
     betterDistance (candidateDistance distances edge) (distanceOf distances edge.to)
 
-fun cycleWitness:Text detected:Bool => detected
-  T|> negativeCycleWitness
-  F|> "none"
+type Bool -> Text
+func cycleWitness detected => detected
+ T|> negativeCycleWitness
+ F|> "none"
 
-fun initialDistances:Distances graph:WeightedGraph =>
+type WeightedGraph -> Distances
+func initialDistances graph =>
     setDistance emptyDistances graph.source (Cost 0)
 
-value stableGraph:WeightedGraph = {
+value stableGraph : WeightedGraph = {
     nodes: [
         Source,
         Mid,
@@ -149,7 +164,7 @@ value stableGraph:WeightedGraph = {
     ]
 }
 
-value negativeCycleGraph:WeightedGraph = {
+value negativeCycleGraph : WeightedGraph = {
     nodes: [Source, Mid, Detour, Goal],
     source: Source,
     edges: [
@@ -176,19 +191,16 @@ value negativeCycleGraph:WeightedGraph = {
     ]
 }
 
-value stableDistances:Distances =
-    passSchedule stableGraph
-     |> reduce (runPass stableGraph) (initialDistances stableGraph)
+value stableDistances : Distances = passSchedule stableGraph
+  |> reduce (runPass stableGraph) (initialDistances stableGraph)
 
-value negativeCycleDistances:Distances =
-    passSchedule negativeCycleGraph
-     |> reduce (runPass negativeCycleGraph) (initialDistances negativeCycleGraph)
+value negativeCycleDistances : Distances = passSchedule negativeCycleGraph
+  |> reduce (runPass negativeCycleGraph) (initialDistances negativeCycleGraph)
 
-value negativeCycleDetected:Bool =
-    negativeCycleGraph.edges
-     |> any (edgeCanRelax negativeCycleDistances)
+value negativeCycleDetected : Bool = negativeCycleGraph.edges
+  |> any (edgeCanRelax negativeCycleDistances)
 
-value bellmanFordCatalog:BellmanFordCatalog = {
+value bellmanFordCatalog : BellmanFordCatalog = {
     stableGoal: distanceText (distanceOf stableDistances Goal),
     stableDetour: distanceText (distanceOf stableDistances Detour),
     stableStranded: distanceText (distanceOf stableDistances Stranded),

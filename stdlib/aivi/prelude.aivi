@@ -106,178 +106,236 @@ use aivi.pair (
     duplicate as pairDuplicate
 )
 
-fun isSome:Bool opt: (Option A) =>
+type (Option A) -> Bool
+func isSome opt =>
     optionIsSome opt
 
-fun isNone:Bool opt: (Option A) =>
+type (Option A) -> Bool
+func isNone opt =>
     optionIsNone opt
 
-fun getOrElse:A fallback:A opt: (Option A) =>
+type A -> (Option A) -> A
+func getOrElse fallback opt =>
     optionGetOrElse fallback opt
 
-fun mapOption: (Option B) transform:(A -> B) opt: (Option A) =>
+type (A -> B) -> (Option A) -> (Option B)
+func mapOption transform opt =>
     optionMap transform opt
 
-fun filterOption: (Option A) predicate:(A -> Bool) opt: (Option A) =>
+type (A -> Bool) -> (Option A) -> (Option A)
+func filterOption predicate opt =>
     optionFilter predicate opt
 
-fun flatMapOption: (Option B) next: (A -> Option B) opt: (Option A) =>
+type (A -> Option B) -> (Option A) -> (Option B)
+func flatMapOption next opt =>
     optionFlatMap next opt
 
-fun zipOptions: (Option (A, B)) left: (Option A) right: (Option B) =>
+type (Option A) -> (Option B) -> (Option (A, B))
+func zipOptions left right =>
     optionZip left right
 
-fun optionFromBool: (Option A) item:A b:Bool =>
+type A -> Bool -> (Option A)
+func optionFromBool item b =>
     optionFromBool item b
 
-fun withDefault:A fallback:A opt: (Result E A) =>
+type A -> (Result E A) -> A
+func withDefault fallback opt =>
     resultWithDefault fallback opt
 
-fun isOk:Bool opt: (Result E A) =>
+type (Result E A) -> Bool
+func isOk opt =>
     resultIsOk opt
 
-fun isErr:Bool opt: (Result E A) =>
+type (Result E A) -> Bool
+func isErr opt =>
     resultIsErr opt
 
-fun mapResult: (Result E B) transform:(A -> B) opt: (Result E A) =>
+type (A -> B) -> (Result E A) -> (Result E B)
+func mapResult transform opt =>
     resultMap transform opt
 
-fun foldResult:B onErr:(E -> B) onOk:(A -> B) opt: (Result E A) =>
+type (E -> B) -> (A -> B) -> (Result E A) -> B
+func foldResult onErr onOk opt =>
     resultFold onErr onOk opt
 
-fun flatMapResult: (Result E B) next: (A -> Result E B) opt: (Result E A) =>
+type (A -> Result E B) -> (Result E A) -> (Result E B)
+func flatMapResult next opt =>
     resultFlatMap next opt
 
-fun length:Int items: (List A) =>
+type (List A) -> Int
+func length items =>
     listLength items
 
-fun head: (Option A) items: (List A) =>
+type (List A) -> (Option A)
+func head items =>
     listHead items
 
-fun last: (Option A) items: (List A) =>
+type (List A) -> (Option A)
+func last items =>
     listLast items
 
-fun tailOrEmpty: (List A) items: (List A) =>
+type (List A) -> (List A)
+func tailOrEmpty items =>
     listTailOrEmpty items
 
-fun isEmpty:Bool items: (List A) =>
+type (List A) -> Bool
+func isEmpty items =>
     listIsEmpty items
 
-fun nonEmpty:Bool items: (List A) =>
+type (List A) -> Bool
+func nonEmpty items =>
     listNonEmpty items
 
-fun flatten: (List A) lists: (List (List A)) =>
+type (List (List A)) -> (List A)
+func flatten lists =>
     listFlatten lists
 
-fun reverse: (List A) items: (List A) =>
+type (List A) -> (List A)
+func reverse items =>
     listReverse items
 
-fun take: (List A) n:Int items: (List A) =>
+type Int -> (List A) -> (List A)
+func take n items =>
     listTake n items
 
-fun drop: (List A) n:Int items: (List A) =>
+type Int -> (List A) -> (List A)
+func drop n items =>
     listDrop n items
 
-fun sum:Int items: (List Int) =>
+type (List Int) -> Int
+func sum items =>
     listSum items
 
-fun contains:Bool item:A items: (List A) =>
+type A -> (List A) -> Bool
+func contains item items =>
     listContains item items
 
-fun any:Bool predicate:(A -> Bool) items: (List A) =>
+type (A -> Bool) -> (List A) -> Bool
+func any predicate items =>
     listAny predicate items
 
-fun all:Bool predicate:(A -> Bool) items: (List A) =>
+type (A -> Bool) -> (List A) -> Bool
+func all predicate items =>
     listAll predicate items
 
-fun find: (Option A) predicate:(A -> Bool) items: (List A) =>
+type (A -> Bool) -> (List A) -> (Option A)
+func find predicate items =>
     listFind predicate items
 
-fun min:A compare:(A -> A -> Bool) left:A right:A =>
+type (A -> A -> Bool) -> A -> A -> A
+func min compare left right =>
     orderMin compare left right
 
-fun max:A compare:(A -> A -> Bool) left:A right:A =>
+type (A -> A -> Bool) -> A -> A -> A
+func max compare left right =>
     orderMax compare left right
 
-fun minOf:A compare:(A -> A -> Bool) first:A rest: (List A) =>
+type (A -> A -> Bool) -> A -> (List A) -> A
+func minOf compare first rest =>
     orderMinOf compare first rest
 
-fun maxOf:A compare:(A -> A -> Bool) first:A rest: (List A) =>
+type (A -> A -> Bool) -> A -> (List A) -> A
+func maxOf compare first rest =>
     orderMaxOf compare first rest
 
-fun comparing:(A -> A -> Bool) extract:(A -> B) compare:(B -> B -> Bool) left:A right:A =>
+type (A -> B) -> (B -> B -> Bool) -> A -> A -> (A -> A -> Bool)
+func comparing extract compare left right =>
     orderComparing extract compare left right
 
-fun join:Text separator:Text parts: (List Text) =>
+type Text -> (List Text) -> Text
+func join separator parts =>
     textJoin separator parts
 
-fun textIsEmpty:Bool t:Text =>
+type Text -> Bool
+func textIsEmpty t =>
     textIsEmpty t
 
-fun textNonEmpty:Bool t:Text =>
+type Text -> Bool
+func textNonEmpty t =>
     textNonEmpty t
 
-fun surround:Text left:Text right:Text middle:Text =>
+type Text -> Text -> Text -> Text
+func surround left right middle =>
     textSurround left right middle
 
-fun abs:Int n:Int =>
+type Int -> Int
+func abs n =>
     mathAbs n
 
-fun negate:Int n:Int =>
+type Int -> Int
+func negate n =>
     mathNegate n
 
-fun sign:Int n:Int =>
+type Int -> Int
+func sign n =>
     mathSign n
 
-fun isEven:Bool n:Int =>
+type Int -> Bool
+func isEven n =>
     mathIsEven n
 
-fun isOdd:Bool n:Int =>
+type Int -> Bool
+func isOdd n =>
     mathIsOdd n
 
-fun square:Int n:Int =>
+type Int -> Int
+func square n =>
     mathSquare n
 
-fun clamp:Int low:Int high:Int n:Int =>
+type Int -> Int -> Int -> Int
+func clamp low high n =>
     mathClamp low high n
 
-fun between:Bool low:Int high:Int n:Int =>
+type Int -> Int -> Int -> Bool
+func between low high n =>
     mathBetween low high n
 
-fun divides:Bool divisor:Int n:Int =>
+type Int -> Int -> Bool
+func divides divisor n =>
     mathDivides divisor n
 
-fun not:Bool b:Bool =>
+type Bool -> Bool
+func not b =>
     boolNot b
 
-fun xor:Bool a:Bool b:Bool =>
+type Bool -> Bool -> Bool
+func xor a b =>
     boolXor a b
 
-fun implies:Bool a:Bool b:Bool =>
+type Bool -> Bool -> Bool
+func implies a b =>
     boolImplies a b
 
-fun boolFromInt:Bool n:Int =>
+type Int -> Bool
+func boolFromInt n =>
     boolFromInt n
 
-fun fst:A pair:(A, B) =>
+type (A, B) -> A
+func fst pair =>
     pairFst pair
 
-fun snd:B pair:(A, B) =>
+type (A, B) -> B
+func snd pair =>
     pairSnd pair
 
-fun swap:(B, A) pair:(A, B) =>
+type (A, B) -> (B, A)
+func swap pair =>
     pairSwap pair
 
-fun mapFst:(B, C) f:(A -> B) pair:(A, C) =>
+type (A -> B) -> (A, C) -> (B, C)
+func mapFst f pair =>
     pairMapFst f pair
 
-fun mapSnd:(A, C) f:(B -> C) pair:(A, B) =>
+type (B -> C) -> (A, B) -> (A, C)
+func mapSnd f pair =>
     pairMapSnd f pair
 
-fun mapPair:(C, D) f:(A -> C) g:(B -> D) pair:(A, B) =>
+type (A -> C) -> (B -> D) -> (A, B) -> (C, D)
+func mapPair f g pair =>
     pairMapBoth f g pair
 
-fun duplicate:(A, A) item:A =>
+type A -> (A, A)
+func duplicate item =>
     pairDuplicate item
 
 export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, last, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, take, drop, sum, contains, any, all, find, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)

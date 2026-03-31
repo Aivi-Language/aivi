@@ -1,6 +1,5 @@
-value ready:Bool = True
+value ready : Bool = True
 
-value branch =
-    ready
-     T|> .name
-     F|> "wait"
+value branch = ready
+ T|> .name
+ F|> "wait"

@@ -381,9 +381,9 @@ pub enum ItemKind {
 impl ItemKind {
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Value => "val",
-            Self::Function => "fun",
-            Self::Signal(_) => "sig",
+            Self::Value => "value",
+            Self::Function => "func",
+            Self::Signal(_) => "signal",
             Self::Instance => "instance",
         }
     }

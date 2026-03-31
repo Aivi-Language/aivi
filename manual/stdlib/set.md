@@ -44,7 +44,7 @@ use aivi.core.set (
     singleton
 )
 
-value tags: (Set Text) = singleton "urgent"
+value tags : (Set Text) = singleton "urgent"
 ```
 
 ### `fromList : Eq A -> List A -> Set A`
@@ -57,7 +57,7 @@ use aivi.core.set (
     fromList
 )
 
-value tags: (Set Text) =
+value tags : (Set Text) =
     fromList [
         "urgent",
         "work",
@@ -77,7 +77,7 @@ use aivi.core.set (
     isEmpty
 )
 
-value noTags:Bool = isEmpty (fromList [])
+value noTags : Bool = isEmpty (fromList [])
 ```
 
 ### `member : Eq A -> A -> Set A -> Bool`
@@ -88,7 +88,7 @@ use aivi.core.set (
     member
 )
 
-value hasWork:Bool =
+value hasWork : Bool =
     member "work" (
         fromList [
             "home",
@@ -105,7 +105,7 @@ use aivi.core.set (
     size
 )
 
-value tagCount:Int =
+value tagCount : Int =
     size (
         fromList [
             "a",
@@ -125,7 +125,7 @@ use aivi.core.set (
     toList
 )
 
-value items: (List Text) =
+value items : (List Text) =
     toList (
         fromList [
             "a",
@@ -149,7 +149,7 @@ use aivi.core.set (
     insert
 )
 
-value tags: (Set Text) =
+value tags : (Set Text) =
     insert "work" (
         fromList [
             "home"
@@ -167,7 +167,7 @@ use aivi.core.set (
     remove
 )
 
-value tags: (Set Text) =
+value tags : (Set Text) =
     remove "home" (
         fromList [
             "home",
@@ -190,7 +190,7 @@ use aivi.core.set (
     union
 )
 
-value merged: (Set Text) =
+value merged : (Set Text) =
     union (fromList ["a"]) (
         fromList [
             "b",
@@ -209,7 +209,7 @@ use aivi.core.set (
     intersection
 )
 
-value shared: (Set Text) =
+value shared : (Set Text) =
     intersection (fromList ["a", "b"]) (
         fromList [
             "b",
@@ -228,7 +228,7 @@ use aivi.core.set (
     difference
 )
 
-value remaining: (Set Text) =
+value remaining : (Set Text) =
     difference (fromList ["a", "b"]) (
         fromList [
             "b"
@@ -246,7 +246,7 @@ use aivi.core.set (
     subsetOf
 )
 
-value isSubset:Bool =
+value isSubset : Bool =
     subsetOf (fromList ["a"]) (
         fromList [
             "a",
@@ -273,9 +273,11 @@ type TagFilter = {
     excluded: Set Text
 }
 
-fun matchesTagSet:Bool filter:TagFilter tagSet: (Set Text) => filter
-  ||> { required, excluded } -> isEmpty (difference required tagSet) and isEmpty (intersection excluded tagSet)
+type TagFilter -> (Set Text) -> Bool
+func matchesTagSet filter tagSet => filter
+ ||> { required, excluded } -> isEmpty (difference required tagSet) and isEmpty (intersection excluded tagSet)
 
-fun matchesTags:Bool filter:TagFilter tags: (List Text) =>
+type TagFilter -> (List Text) -> Bool
+func matchesTags filter tags =>
     matchesTagSet filter (fromList tags)
 ```

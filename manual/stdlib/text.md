@@ -24,9 +24,10 @@ isEmpty : Text -> Bool
 ```aivi
 use aivi.text (isEmpty)
 
-fun showPlaceholder:Text label:Text => isEmpty label
-  T|> "Untitled"
-  F|> label
+type Text -> Text
+func showPlaceholder label => isEmpty label
+ T|> "Untitled"
+ F|> label
 ```
 
 ---
@@ -44,7 +45,8 @@ use aivi.list (filter)
 
 use aivi.text (nonEmpty)
 
-fun filterLabels: List Text labels: List Text =>
+type List Text -> List Text
+func filterLabels labels =>
     filter nonEmpty labels
 ```
 
@@ -61,7 +63,8 @@ join : Text -> List Text -> Text
 ```aivi
 use aivi.text (join)
 
-fun csvLine:Text fields: List Text =>
+type List Text -> Text
+func csvLine fields =>
     join "," fields
 ```
 
@@ -79,6 +82,7 @@ surround : Text -> Text -> Text -> Text
 ```aivi
 use aivi.text (surround)
 
-fun htmlParagraph:Text content:Text =>
+type Text -> Text
+func htmlParagraph content =>
     surround "<p>" "</p>" content
 ```

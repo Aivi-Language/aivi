@@ -1,32 +1,39 @@
-fun not:Bool b:Bool => b
-  T|> False
-  F|> True
+type Bool -> Bool
+func not b => b
+ T|> False
+ F|> True
 
-fun xor:Bool a:Bool b:Bool => a == b
-  T|> False
-  F|> True
+type Bool -> Bool -> Bool
+func xor a b => a == b
+ T|> False
+ F|> True
 
-fun implies:Bool a:Bool b:Bool => a
-  T|> b
-  F|> True
+type Bool -> Bool -> Bool
+func implies a b => a
+ T|> b
+ F|> True
 
-fun both:Bool a:Bool b:Bool =>
+type Bool -> Bool -> Bool
+func both a b =>
     a and b
 
-fun either:Bool a:Bool b:Bool =>
+type Bool -> Bool -> Bool
+func either a b =>
     a or b
 
-fun neither:Bool a:Bool b:Bool =>
+type Bool -> Bool -> Bool
+func neither a b =>
     not a and not b
 
-fun fromInt:Bool n:Int =>
+type Int -> Bool
+func fromInt n =>
     n != 0
 
 @test
-value not_flips_false: Task Text Bool = pure (not False)
+value not_flips_false : Task Text Bool = pure (not False)
 
 @test
-value both_accepts_true_pair: Task Text Bool = pure (both True True)
+value both_accepts_true_pair : Task Text Bool = pure (both True True)
 
 export not
 export xor

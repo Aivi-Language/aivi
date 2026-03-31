@@ -29,7 +29,8 @@ fst : (A, B) -> A
 ```aivi
 use aivi.pair (fst)
 
-fun getKey:Text entry:(Text, Int) =>
+type (Text, Int) -> Text
+func getKey entry =>
     fst entry
 ```
 
@@ -46,7 +47,8 @@ snd : (A, B) -> B
 ```aivi
 use aivi.pair (snd)
 
-fun getValue:Int entry:(Text, Int) =>
+type (Text, Int) -> Int
+func getValue entry =>
     snd entry
 ```
 
@@ -63,7 +65,8 @@ swap : (A, B) -> (B, A)
 ```aivi
 use aivi.pair (swap)
 
-fun flipEntry:(Int, Text) entry:(Text, Int) =>
+type (Text, Int) -> (Int, Text)
+func flipEntry entry =>
     swap entry
 ```
 
@@ -82,7 +85,8 @@ use aivi.pair (mapFst)
 
 use aivi.math (square)
 
-fun squareFst:(Int, Text) pair:(Int, Text) =>
+type (Int, Text) -> (Int, Text)
+func squareFst pair =>
     mapFst square pair
 ```
 
@@ -101,7 +105,8 @@ use aivi.pair (mapSnd)
 
 use aivi.math (abs)
 
-fun absValue:(Text, Int) entry:(Text, Int) =>
+type (Text, Int) -> (Text, Int)
+func absValue entry =>
     mapSnd abs entry
 ```
 
@@ -123,7 +128,8 @@ use aivi.math (
     negate
 )
 
-fun normalizePair:(Int, Int) pair:(Int, Int) =>
+type (Int, Int) -> (Int, Int)
+func normalizePair pair =>
     mapBoth abs negate pair
 ```
 
@@ -140,7 +146,8 @@ fromPair : A -> B -> (A, B)
 ```aivi
 use aivi.pair (fromPair)
 
-fun makeEntry:(Text, Int) label:Text score:Int =>
+type Text -> Int -> (Text, Int)
+func makeEntry label score =>
     fromPair label score
 ```
 
@@ -157,7 +164,8 @@ toPair : A -> B -> (A, B)
 ```aivi
 use aivi.pair (toPair)
 
-fun labelScore:(Text, Int) label:Text score:Int =>
+type Text -> Int -> (Text, Int)
+func labelScore label score =>
     toPair label score
 ```
 
@@ -174,6 +182,7 @@ duplicate : A -> (A, A)
 ```aivi
 use aivi.pair (duplicate)
 
-fun mirror:(Int, Int) n:Int =>
+type Int -> (Int, Int)
+func mirror n =>
     duplicate n
 ```

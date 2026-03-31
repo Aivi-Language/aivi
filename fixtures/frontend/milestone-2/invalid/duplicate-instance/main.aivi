@@ -1,9 +1,11 @@
 class Eq A
     (==) : A -> A -> Bool
 
-type Blob = Blob Bytes
+type Blob =
+  | Blob Bytes
 
-fun blobEquals:Bool left:Blob right:Blob =>
+type Blob -> Blob -> Bool
+func blobEquals left right =>
     True
 
 instance Eq Blob

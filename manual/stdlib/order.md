@@ -17,7 +17,8 @@ use aivi.order (
 A comparator for integers in ascending order looks like this:
 
 ```aivi
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 ```
 
@@ -34,10 +35,12 @@ Returns the smaller of two values according to the comparator.
 ```aivi
 use aivi.order (min)
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun smaller:Int a:Int b:Int =>
+type Int -> Int -> Int
+func smaller a b =>
     min byInt a b
 ```
 
@@ -52,10 +55,12 @@ Returns the larger of two values according to the comparator.
 ```aivi
 use aivi.order (max)
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun larger:Int a:Int b:Int =>
+type Int -> Int -> Int
+func larger a b =>
     max byInt a b
 ```
 
@@ -70,10 +75,12 @@ Returns the smallest value in a non-empty collection represented as a first elem
 ```aivi
 use aivi.order (minOf)
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun smallest:Int first:Int rest: (List Int) =>
+type Int -> (List Int) -> Int
+func smallest first rest =>
     minOf byInt first rest
 ```
 
@@ -88,10 +95,12 @@ Returns the largest value in a non-empty collection represented as a first eleme
 ```aivi
 use aivi.order (maxOf)
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun largest:Int first:Int rest: (List Int) =>
+type Int -> (List Int) -> Int
+func largest first rest =>
     maxOf byInt first rest
 ```
 
@@ -106,10 +115,12 @@ Constrains a value to the inclusive range `[low, high]`. If the value is below `
 ```aivi
 use aivi.order (clamp)
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun clampScore:Int score:Int =>
+type Int -> Int
+func clampScore score =>
     clamp byInt 0 100 score
 ```
 
@@ -124,10 +135,12 @@ Flips a comparator so it produces the opposite ordering. Useful for sorting in d
 ```aivi
 use aivi.order (reversed)
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun descending:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func descending a b =>
     reversed byInt a b
 ```
 
@@ -149,13 +162,16 @@ type Person = {
     age: Int
 }
 
-fun byInt:Bool a:Int b:Int =>
+type Int -> Int -> Bool
+func byInt a b =>
     a < b
 
-fun ageOf:Int person:Person =>
+type Person -> Int
+func ageOf person =>
     person.age
 
-fun youngerFirst:Bool p1:Person p2:Person =>
+type Person -> Person -> Bool
+func youngerFirst p1 p2 =>
     comparing ageOf byInt p1 p2
 ```
 

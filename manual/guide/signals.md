@@ -15,7 +15,8 @@ This declares a reactive value named `count`.
 Signals are often defined from earlier signals with pipes:
 
 ```aivi
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
 signal count = 21
@@ -32,8 +33,8 @@ Signals can branch just like ordinary values:
 signal ready = True
 
 signal statusText = ready
-  T|> "ready"
-  F|> "waiting"
+ T|> "ready"
+ F|> "waiting"
 ```
 
 ## Filtering with `?|>`
@@ -48,18 +49,18 @@ type User = {
 
 type Session = { user: User }
 
-value seed:User = {
+value seed : User = {
     active: True,
     email: "ada@example.com"
 }
 
-signal sessions: Signal Session = {
+signal sessions : Signal Session = {
     user: seed
 }
 
-signal activeUsers: Signal User = sessions
+signal activeUsers : Signal User = sessions
   |> .user
-  ?|> .active
+ ?|> .active
 ```
 
 For ordinary non-signal values, the same operator returns `Option A`.
@@ -76,10 +77,11 @@ signal ready = True
 signal enabled = True
 
 when ready => total <- left + right
-when ready and enabled => total <- result {
-    next <- Ok left
-    next + right
-}
+when ready and enabled => total <-
+    result {
+        next <- Ok left
+        next + right
+    }
 ```
 
 This form means:
@@ -105,10 +107,10 @@ The language has dedicated pipes for time-oriented signal transformations:
 signal score = 10
 
 signal previousScore = score
-  ~|> 0
+ ~|> 0
 
 signal scoreDelta = score
-  -|> 0
+ -|> 0
 ```
 
 ## Shaping signal outputs

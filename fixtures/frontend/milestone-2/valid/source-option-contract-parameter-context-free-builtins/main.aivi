@@ -1,15 +1,12 @@
 type HttpError =
   | Timeout
 
-type Session = {
-    token: Text
-}
+type Session = { token: Text }
 
 type Pair A =
   | Pair A (Option A)
 
-value requestBody =
-    Pair 1 None
+value requestBody = Pair 1 None
 
 @source http.post "/login" with {
     body: requestBody

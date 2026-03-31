@@ -43,7 +43,8 @@ Returns `True` if the validation holds a value.
 ```aivi
 use aivi.validation (isValid)
 
-fun passed:Bool v: (Validation Text Int) =>
+type (Validation Text Int) -> Bool
+func passed v =>
     isValid v
 ```
 
@@ -58,7 +59,8 @@ Returns `True` if the validation has failed.
 ```aivi
 use aivi.validation (isInvalid)
 
-fun rejected:Bool v: (Validation Text Int) =>
+type (Validation Text Int) -> Bool
+func rejected v =>
     isInvalid v
 ```
 
@@ -73,7 +75,8 @@ Extracts the value from `Valid`, or returns the fallback if `Invalid`.
 ```aivi
 use aivi.validation (getOrElse)
 
-fun safeValue:Int v: (Validation Text Int) =>
+type (Validation Text Int) -> Int
+func safeValue v =>
     getOrElse 0 v
 ```
 
@@ -88,10 +91,12 @@ Transforms the error inside `Invalid`, leaving `Valid` untouched.
 ```aivi
 use aivi.validation (mapErr)
 
-fun toCode:Int message:Text =>
+type Text -> Int
+func toCode message =>
     42
 
-fun withErrorCode: (Validation Int Int) v: (Validation Text Int) => v
+type (Validation Text Int) -> (Validation Int Int)
+func withErrorCode v => v
   |> mapErr toCode
 ```
 
@@ -106,7 +111,8 @@ Converts a `Validation` to a `Result`. `Valid value` becomes `Ok value`; `Invali
 ```aivi
 use aivi.validation (toResult)
 
-fun asResult: (Result Text Int) v: (Validation Text Int) =>
+type (Validation Text Int) -> (Result Text Int)
+func asResult v =>
     toResult v
 ```
 
@@ -121,7 +127,8 @@ Converts a `Result` to a `Validation`. `Ok value` becomes `Valid value`; `Err er
 ```aivi
 use aivi.validation (fromResult)
 
-fun asValidation: (Validation Text Int) r: (Result Text Int) =>
+type (Result Text Int) -> (Validation Text Int)
+func asValidation r =>
     fromResult r
 ```
 
@@ -136,7 +143,8 @@ Converts a `Validation` to an `Option`, discarding any errors. `Valid value` bec
 ```aivi
 use aivi.validation (toOption)
 
-fun justValue: (Option Int) v: (Validation Text Int) =>
+type (Validation Text Int) -> (Option Int)
+func justValue v =>
     toOption v
 ```
 
@@ -151,10 +159,12 @@ Transforms the value inside `Valid` using a function, leaving `Invalid` untouche
 ```aivi
 use aivi.validation (map)
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-fun doubleValid: (Validation Text Int) v: (Validation Text Int) => v
+type (Validation Text Int) -> (Validation Text Int)
+func doubleValid v => v
   |> map double
 ```
 
@@ -171,11 +181,13 @@ Unlike `zipValidation`, `andThen` stops at the first failure and does not accumu
 ```aivi
 use aivi.validation (andThen)
 
-fun ensurePositive: (Validation Text Int) n:Int => n > 0
-  T|> Valid n
-  F|> Invalid "must be positive"
+type Int -> (Validation Text Int)
+func ensurePositive n => n > 0
+ T|> Valid n
+ F|> Invalid "must be positive"
 
-fun validateCount: (Validation Text Int) v: (Validation Text Int) => v
+type (Validation Text Int) -> (Validation Text Int)
+func validateCount v => v
   |> andThen ensurePositive
 ```
 
@@ -199,15 +211,18 @@ type FieldError =
   | EmptyName
   | InvalidAge
 
-fun validateName: (Validation (NonEmptyList FieldError) Text) name:Text => name
-  ||> "" -> Invalid (singleton EmptyName)
-  ||> _  -> Valid name
+type Text -> (Validation (NonEmptyList FieldError) Text)
+func validateName name => name
+ ||> "" -> Invalid (singleton EmptyName)
+ ||> _  -> Valid name
 
-fun validateAge: (Validation (NonEmptyList FieldError) Int) age:Int => age > 0
-  T|> Valid age
-  F|> Invalid (singleton InvalidAge)
+type Int -> (Validation (NonEmptyList FieldError) Int)
+func validateAge age => age > 0
+ T|> Valid age
+ F|> Invalid (singleton InvalidAge)
 
-fun validateForm: (Validation (NonEmptyList FieldError) (Text, Int)) name:Text age:Int =>
+type Text -> Int -> (Validation (NonEmptyList FieldError) (Text, Int))
+func validateForm name age =>
     zipValidation (validateName name) (validateAge age)
 ```
 
@@ -229,12 +244,15 @@ use aivi.nonEmpty (
     length
 )
 
-fun countErrors:Int errors: (NonEmptyList Text) =>
+type (NonEmptyList Text) -> Int
+func countErrors errors =>
     length errors
 
-fun identity:Int n:Int =>
+type Int -> Int
+func identity n =>
     n
 
-fun scoreOrErrorCount:Int v: (Validation (NonEmptyList Text) Int) =>
+type (Validation (NonEmptyList Text) Int) -> Int
+func scoreOrErrorCount v =>
     fold countErrors identity v
 ```

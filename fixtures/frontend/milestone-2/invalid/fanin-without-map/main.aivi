@@ -1,7 +1,7 @@
-fun collect items =>
+func collect items =>
     items
 
 value users = []
-value emails =
-    users
-     <|* collect
+
+value emails = users
+ <|* collect

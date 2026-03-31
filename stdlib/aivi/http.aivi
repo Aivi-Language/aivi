@@ -18,7 +18,7 @@ type DecodeMode =
   | Permissive
 
 domain Retry over Int
-    literal times:Int -> Retry
-    unwrap:Retry -> Int
+    literal times : Int -> Retry
+    unwrap : Retry -> Int
 
 export (HttpError, Timeout, DecodeFailure, RequestFailure, HttpHeaders, HttpQuery, HttpResponse, HttpTask, DecodeMode, Strict, Permissive, Retry)

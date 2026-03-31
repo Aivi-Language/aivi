@@ -92,7 +92,8 @@ Example:
 ```aivi
 use aivi.option (getOrElse)
 
-fun displayName:Text opt: Option Text =>
+type Option Text -> Text
+func displayName opt =>
     getOrElse "Anonymous" opt
 ```
 
@@ -131,7 +132,8 @@ Example:
 ```aivi
 use aivi.result (withDefault)
 
-fun safeScore:Int result: Result Text Int =>
+type Result Text Int -> Int
+func safeScore result =>
     withDefault 0 result
 ```
 
@@ -193,7 +195,8 @@ Example — sum a list:
 ```aivi
 use aivi.list (sum)
 
-fun sumList:Int numbers: List Int =>
+type List Int -> Int
+func sumList numbers =>
     sum numbers
 ```
 
@@ -207,10 +210,12 @@ type User = {
     name: Text
 }
 
-fun hasId:Bool id:Int user:User =>
+type Int -> User -> Bool
+func hasId id user =>
     user.id == id
 
-fun findById: (Option User) id:Int users: (List User) =>
+type Int -> (List User) -> (Option User)
+func findById id users =>
     find (hasId id) users
 ```
 
@@ -239,7 +244,8 @@ Example:
 ```aivi
 use aivi.text (join)
 
-fun csvLine:Text fields: List Text =>
+type List Text -> Text
+func csvLine fields =>
     join "," fields
 ```
 
@@ -332,7 +338,7 @@ type DecodeMode =
   | Permissive
 
 domain Retry over Int
-    literal times:Int -> Retry
+    literal times : Int -> Retry
 ```
 
 Use with `@source http.get`:

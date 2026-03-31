@@ -3,43 +3,53 @@ type JoinState = {
     value: Text
 }
 
-fun joinStep:JoinState separator:Text state:JoinState part:Text => state.first
-  T|> { first: False, value: part }
-  F|> { first: False, value: "{state.value}{separator}{part}" }
+type Text -> JoinState -> Text -> JoinState
+func joinStep separator state part => state.first
+ T|> { first: False, value: part }
+ F|> { first: False, value: "{state.value}{separator}{part}" }
 
-fun finishJoin:Text state:JoinState =>
+type JoinState -> Text
+func finishJoin state =>
     state.value
 
-fun isEmpty:Bool opt:Text =>
+type Text -> Bool
+func isEmpty opt =>
     opt == ""
 
-fun nonEmpty:Bool opt:Text =>
+type Text -> Bool
+func nonEmpty opt =>
     opt != ""
 
-fun join:Text separator:Text parts: (List Text) => parts
+type Text -> (List Text) -> Text
+func join separator parts => parts
   |> reduce (joinStep separator) { first: True, value: "" }
   |> finishJoin
 
-fun surround:Text prefix:Text suffix:Text opt:Text =>
+type Text -> Text -> Text -> Text
+func surround prefix suffix opt =>
     "{prefix}{opt}{suffix}"
 
-fun withDefault:Text fallback:Text s:Text => s == ""
-  T|> fallback
-  F|> s
+type Text -> Text -> Text
+func withDefault fallback s => s == ""
+ T|> fallback
+ F|> s
 
 @test
-value plain_text_is_non_empty: Task Text Bool = pure (nonEmpty "Ada")
+value plain_text_is_non_empty : Task Text Bool = pure (nonEmpty "Ada")
 
 @test
-value joined_text_is_non_empty: Task Text Bool =
-    pure (nonEmpty (join ", " [
-        "Ada",
-        "Grace"
-    ]))
+value joined_text_is_non_empty : Task Text Bool =
+    pure (
+        nonEmpty (
+            join ", " [
+                "Ada",
+                "Grace"
+            ]
+        )
+    )
 
 @test
-value surrounded_text_is_non_empty: Task Text Bool =
-    pure (nonEmpty (surround "[" "]" "Ada"))
+value surrounded_text_is_non_empty : Task Text Bool = pure (nonEmpty (surround "[" "]" "Ada"))
 
 export isEmpty
 export nonEmpty

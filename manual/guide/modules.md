@@ -53,13 +53,14 @@ type Direction =
   | Left
   | Right
 
-fun opposite:Direction direction:Direction => direction
-  ||> Up    -> Down
-  ||> Down  -> Up
-  ||> Left  -> Right
-  ||> Right -> Left
+type Direction -> Direction
+func opposite direction => direction
+ ||> Up    -> Down
+ ||> Down  -> Up
+ ||> Left  -> Right
+ ||> Right -> Left
 
-value startDirection:Direction = Right
+value startDirection : Direction = Right
 
 export (Direction, opposite, startDirection)
 ```
@@ -72,7 +73,8 @@ use aivi.network (
     socket
 )
 
-fun joinProviders:Text left:Text right:Text =>
+type Text -> Text -> Text
+func joinProviders left right =>
     "{left}/{right}"
 
 value primaryProvider = http
@@ -88,7 +90,7 @@ A practical order is:
 
 1. `use`
 2. `type` / `domain` / `class`
-3. `fun` and `value`
+3. `func` and `value`
 4. `signal`
 5. `export`
 

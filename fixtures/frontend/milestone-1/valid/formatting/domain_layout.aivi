@@ -1,9 +1,9 @@
 domain Duration over Int
-    literal ms:Int -> Duration
-    (*):Duration -> Int -> Duration
-    unwrap:Duration -> Int
+    literal ms : Int -> Duration
+    (*) : Duration -> Int -> Duration
+    unwrap : Duration -> Int
 
 domain Path over Text
-    literal root:Text -> Path
-    (/):Path -> Text -> Path
-    unwrap:Path -> Text
+    literal root : Text -> Path
+    (/) : Path -> Text -> Path
+    unwrap : Path -> Text

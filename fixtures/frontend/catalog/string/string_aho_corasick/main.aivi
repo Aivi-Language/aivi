@@ -44,32 +44,36 @@ type AhoCatalog = {
     missingTransition: ScanSummary
 }
 
-fun stateName:Text state:AutomatonState => state
-  ||> Root   -> "root"
-  ||> SawS   -> "s"
-  ||> SawH   -> "h"
-  ||> SawSH  -> "sh"
-  ||> SawHE  -> "he"
-  ||> SawHER -> "her"
+type AutomatonState -> Text
+func stateName state => state
+ ||> Root   -> "root"
+ ||> SawS   -> "s"
+ ||> SawH   -> "h"
+ ||> SawSH  -> "sh"
+ ||> SawHE  -> "he"
+ ||> SawHER -> "her"
 
-fun defaultNext:AutomatonState symbol:Symbol => symbol
-  ||> U -> Root
-  ||> S -> SawS
-  ||> H -> SawH
-  ||> E -> Root
-  ||> R -> Root
+type Symbol -> AutomatonState
+func defaultNext symbol => symbol
+ ||> U -> Root
+ ||> S -> SawS
+ ||> H -> SawH
+ ||> E -> Root
+ ||> R -> Root
 
-fun defaultAdvance:Advance symbol:Symbol =>
+type Symbol -> Advance
+func defaultAdvance symbol =>
     {
         next: defaultNext symbol,
         emitted: []
     }
 
-fun matchingAdvance: (Option Advance) state:AutomatonState symbol:Symbol transition:Transition => (transition.from == state) and (transition.symbol == symbol)
-  T|> Some { next: transition.next, emitted: transition.emitted }
-  F|> None
+type AutomatonState -> Symbol -> Transition -> (Option Advance)
+func matchingAdvance state symbol transition => (transition.from == state) and (transition.symbol == symbol)
+ T|> Some { next: transition.next, emitted: transition.emitted }
+ F|> None
 
-value specialTransitions: List Transition = [
+value specialTransitions : List Transition = [
     {
         from: SawS,
         symbol: H,
@@ -102,31 +106,36 @@ value specialTransitions: List Transition = [
     }
 ]
 
-fun advance:Advance state:AutomatonState symbol:Symbol => specialTransitions
+type AutomatonState -> Symbol -> Advance
+func advance state symbol => specialTransitions
   |> findMap (matchingAdvance state symbol)
-  ||> Some step -> step
-  ||> None      -> defaultAdvance symbol
+ ||> Some step -> step
+ ||> None      -> defaultAdvance symbol
 
-fun applyAdvance:ScanState trail: (List Text) matches: (List Text) step:Advance => step
-  ||> { next, emitted } -> { state: next, trail: append trail [stateName next], matches: append matches emitted }
+type (List Text) -> (List Text) -> Advance -> ScanState
+func applyAdvance trail matches step => step
+ ||> { next, emitted } -> { state: next, trail: append trail [stateName next], matches: append matches emitted }
 
-fun step:ScanState scan:ScanState symbol:Symbol => scan
-  ||> { state, trail, matches } -> applyAdvance trail matches (advance state symbol)
+type ScanState -> Symbol -> ScanState
+func step scan symbol => scan
+ ||> { state, trail, matches } -> applyAdvance trail matches (advance state symbol)
 
-fun renderList:Text items: (List Text) separator:Text fallback:Text => length items == 0
-  T|> fallback
-  F|> join separator items
+type (List Text) -> Text -> Text -> Text
+func renderList items separator fallback => length items == 0
+ T|> fallback
+ F|> join separator items
 
-fun summarize:ScanSummary scan:ScanState => scan
-  ||> { state, trail, matches } -> { finalState: stateName state, trail: renderList trail " -> " "root", matches: renderList matches ", " "none" }
+type ScanState -> ScanSummary
+func summarize scan => scan
+ ||> { state, trail, matches } -> { finalState: stateName state, trail: renderList trail " -> " "root", matches: renderList matches ", " "none" }
 
-value initialScan:ScanState = {
+value initialScan : ScanState = {
     state: Root,
     trail: [stateName Root],
     matches: []
 }
 
-value ushersInput: List Symbol = [
+value ushersInput : List Symbol = [
     U,
     S,
     H,
@@ -135,19 +144,17 @@ value ushersInput: List Symbol = [
     S
 ]
 
-value missingInput: List Symbol = [
+value missingInput : List Symbol = [
     R
 ]
 
-value ushersScan:ScanState =
-    ushersInput
-     |> reduce step initialScan
+value ushersScan : ScanState = ushersInput
+  |> reduce step initialScan
 
-value missingScan:ScanState =
-    missingInput
-     |> reduce step initialScan
+value missingScan : ScanState = missingInput
+  |> reduce step initialScan
 
-value ahoCatalog:AhoCatalog = {
+value ahoCatalog : AhoCatalog = {
     ushers: summarize ushersScan,
     missingTransition: summarize missingScan
 }

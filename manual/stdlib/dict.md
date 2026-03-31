@@ -40,7 +40,7 @@ A `Dict K V` is a record with a single field `entries` holding an association li
 ```aivi
 use aivi.core.dict (Dict)
 
-value emptyScores: (Dict Text Int) = {
+value emptyScores : (Dict Text Int) = {
     entries: []
 }
 ```
@@ -61,7 +61,7 @@ use aivi.core.dict (
     singleton
 )
 
-value greeting: (Dict Text Text) = singleton "hello" "world"
+value greeting : (Dict Text Text) = singleton "hello" "world"
 ```
 
 ---
@@ -80,7 +80,7 @@ use aivi.core.dict (
     insert
 )
 
-value scores: (Dict Text Int) = { entries: [] }
+value scores : (Dict Text Int) = { entries: [] }
   |> insert "alice" 100
   |> insert "bob" 85
 ```
@@ -101,10 +101,12 @@ use aivi.core.dict (
     insertWith
 )
 
-fun addScores:Int total:Int n:Int =>
+type Int -> Int -> Int
+func addScores total n =>
     total + n
 
-fun addScore: (Dict Text Int) key:Text n:Int d: (Dict Text Int) =>
+type Text -> Int -> (Dict Text Int) -> (Dict Text Int)
+func addScore key n d =>
     insertWith addScores key n d
 ```
 
@@ -125,12 +127,12 @@ use aivi.core.dict (
     get
 )
 
-value d: (Dict Text Int) =
+value d : (Dict Text Int) =
     insert "x" 42 {
         entries: []
     }
 
-value found: (Option Int) = get "x" d
+value found : (Option Int) = get "x" d
 ```
 
 ---
@@ -150,12 +152,12 @@ use aivi.core.dict (
     getWithDefault
 )
 
-value d: (Dict Text Int) =
+value d : (Dict Text Int) =
     insert "level" 5 {
         entries: []
     }
 
-value level:Int = getWithDefault 1 "level" d
+value level : Int = getWithDefault 1 "level" d
 ```
 
 ---
@@ -175,12 +177,12 @@ use aivi.core.dict (
     member
 )
 
-value d: (Dict Text Int) =
+value d : (Dict Text Int) =
     insert "exists" 1 {
         entries: []
     }
 
-value hasIt:Bool = member "exists" d
+value hasIt : Bool = member "exists" d
 ```
 
 ---
@@ -200,12 +202,12 @@ use aivi.core.dict (
     remove
 )
 
-value d: (Dict Text Int) =
+value d : (Dict Text Int) =
     insert "temp" 0 {
         entries: []
     }
 
-value cleaned: (Dict Text Int) = remove "temp" d
+value cleaned : (Dict Text Int) = remove "temp" d
 ```
 
 ---
@@ -225,11 +227,11 @@ use aivi.core.dict (
     size
 )
 
-value d: (Dict Text Int) = { entries: [] }
+value d : (Dict Text Int) = { entries: [] }
   |> insert "a" 1
   |> insert "b" 2
 
-value count:Int = size d
+value count : Int = size d
 ```
 
 ---
@@ -251,13 +253,13 @@ use aivi.core.dict (
     values
 )
 
-value d: (Dict Text Int) =
+value d : (Dict Text Int) =
     insert "score" 99 {
         entries: []
     }
 
-value ks: (List Text) = keys d
-value vs: (List Int) = values d
+value ks : (List Text) = keys d
+value vs : (List Int) = values d
 ```
 
 ---
@@ -278,13 +280,13 @@ use aivi.core.dict (
     toList
 )
 
-value pairs: (List (Text, Int)) = [
+value pairs : (List (Text, Int)) = [
     ("a", 1),
     ("b", 2)
 ]
 
-value d: (Dict Text Int) = fromList pairs
-value back: (List (Text, Int)) = toList d
+value d : (Dict Text Int) = fromList pairs
+value back : (List (Text, Int)) = toList d
 ```
 
 ---
@@ -304,15 +306,16 @@ use aivi.core.dict (
     mapValues
 )
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-value d: (Dict Text Int) =
+value d : (Dict Text Int) =
     insert "pts" 5 {
         entries: []
     }
 
-value doubled: (Dict Text Int) = mapValues double d
+value doubled : (Dict Text Int) = mapValues double d
 ```
 
 ---
@@ -332,14 +335,15 @@ use aivi.core.dict (
     filterValues
 )
 
-fun isHigh:Bool n:Int =>
+type Int -> Bool
+func isHigh n =>
     n > 50
 
-value d: (Dict Text Int) = { entries: [] }
+value d : (Dict Text Int) = { entries: [] }
   |> insert "low" 3
   |> insert "high" 99
 
-value highOnly: (Dict Text Int) = filterValues isHigh d
+value highOnly : (Dict Text Int) = filterValues isHigh d
 ```
 
 ---
@@ -359,20 +363,21 @@ use aivi.core.dict (
     mergeWith
 )
 
-fun addScores:Int left:Int right:Int =>
+type Int -> Int -> Int
+func addScores left right =>
     left + right
 
-value left: (Dict Text Int) =
+value left : (Dict Text Int) =
     insert "a" 1 {
         entries: []
     }
 
-value right: (Dict Text Int) =
+value right : (Dict Text Int) =
     insert "a" 10 {
         entries: []
     }
 
-value merged: (Dict Text Int) = mergeWith addScores left right
+value merged : (Dict Text Int) = mergeWith addScores left right
 ```
 
 ---
@@ -392,15 +397,15 @@ use aivi.core.dict (
     union
 )
 
-value defaults: (Dict Text Int) =
+value defaults : (Dict Text Int) =
     insert "timeout" 30 {
         entries: []
     }
 
-value overrides: (Dict Text Int) =
+value overrides : (Dict Text Int) =
     insert "timeout" 60 {
         entries: []
     }
 
-value config: (Dict Text Int) = union defaults overrides
+value config : (Dict Text Int) = union defaults overrides
 ```

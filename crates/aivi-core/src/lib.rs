@@ -5,7 +5,7 @@
 //! This crate owns a genuine post-HIR intermediate representation for the already-proven reactive
 //! and source-facing frontend slice:
 //! - core-owned type and expression nodes,
-//! - typed `val` / `fun` bodies with explicit local parameters,
+//! - typed `value` / `func` bodies with explicit local parameters,
 //! - deterministic typed arenas and ids,
 //! - normalized pipe-stage plans for gates, truthy/falsy pairs, fanout, and recurrence,
 //! - source lifecycle and decode-program nodes,

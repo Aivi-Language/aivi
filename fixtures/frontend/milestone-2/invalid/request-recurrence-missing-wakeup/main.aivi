@@ -1,8 +1,7 @@
-fun step x =>
+func step x =>
     x
 
 @source http.get "/users"
-signal broken : Signal Int =
-    0
-     @|> step
-     <|@ step
+signal broken : Signal Int = 0
+ @|> step
+ <|@ step

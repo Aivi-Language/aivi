@@ -3,31 +3,34 @@ type User = {
     email: Text
 }
 
-fun joinEmails:Text items:List Text =>
+type List Text -> Text
+func joinEmails items =>
     "joined"
 
-value users:List User = [
-    { active: True, email: "ada@example.com" }
+value users : List User = [
+    {
+        active: True,
+        email: "ada@example.com"
+    }
 ]
 
-value emails:List Text =
-    users
-     *|> .email
+value emails : List Text = users
+ *|> .email
 
-value joinedEmails:Text =
-    users
-     *|> .email
-     <|* joinEmails
+value joinedEmails : Text = users
+ *|> .email
+ <|* joinEmails
 
-signal liveUsers:Signal (List User) = [
-    { active: True, email: "ada@example.com" }
+signal liveUsers : Signal (List User) = [
+    {
+        active: True,
+        email: "ada@example.com"
+    }
 ]
 
-signal liveEmails:Signal (List Text) =
-    liveUsers
-     *|> .email
+signal liveEmails : Signal (List Text) = liveUsers
+ *|> .email
 
-signal liveJoinedEmails:Signal Text =
-    liveUsers
-     *|> .email
-     <|* joinEmails
+signal liveJoinedEmails : Signal Text = liveUsers
+ *|> .email
+ <|* joinEmails

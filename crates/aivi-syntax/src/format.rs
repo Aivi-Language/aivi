@@ -67,6 +67,21 @@ impl Formatter {
     }
 
     fn format_item(&self, item: &Item) -> Vec<String> {
+        if let Item::Fun(fun) = item {
+            if fun.annotation.is_some() {
+                let rendered = self.format_fun_item(fun);
+                let mut lines = Vec::new();
+                if let Some((type_line, rest)) = rendered.split_first() {
+                    lines.push(type_line.clone());
+                    for decorator in item.decorators() {
+                        lines.extend(self.format_decorator(decorator).into_lines());
+                    }
+                    lines.extend(rest.iter().cloned());
+                    return lines;
+                }
+            }
+        }
+
         let mut lines = Vec::new();
         for decorator in item.decorators() {
             lines.extend(self.format_decorator(decorator).into_lines());
@@ -237,14 +252,14 @@ impl Formatter {
         }
     }
 
-    /// Format a `fun` declaration: always has parameters, uses `=>` body form.
+    /// Format a `func` declaration: always has parameters, uses `=>` body form.
     fn format_fun_item(&self, item: &NamedItem) -> Vec<String> {
-        let mut header = format!("fun {}", self.item_name(&item.name));
-        if let Some(annotation) = &item.annotation {
-            header.push_str(self.type_annotation_separator(&item.constraints, annotation));
-            header
-                .push_str(&self.format_signature_annotation_inline(&item.constraints, annotation));
+        let mut lines = Vec::new();
+        if let Some(annotation) = self.format_fun_signature_annotation(item) {
+            lines.push(format!("type {annotation}"));
         }
+
+        let mut header = format!("func {}", self.item_name(&item.name));
         for parameter in &item.parameters {
             header.push(' ');
             header.push_str(&self.format_function_param(parameter));
@@ -252,20 +267,53 @@ impl Formatter {
         header.push_str(" =>");
 
         let Some(body) = item.expr_body() else {
-            return vec![header];
+            lines.push(header);
+            return lines;
         };
 
         if let ExprKind::Pipe(pipe) = &body.kind {
             if let Some(lines) = self.format_pipe_with_head_lines(&header, pipe) {
-                return lines;
+                let mut rendered = lines;
+                if let Some(annotation) = self.format_fun_signature_annotation(item) {
+                    rendered.insert(0, format!("type {annotation}"));
+                }
+                return rendered;
             }
         }
 
         let force_break = self.should_force_expr_break(INDENT_WIDTH, body);
         let block = self.format_expr_block(body, force_break);
-        let mut lines = vec![header];
+        lines.push(header);
         lines.extend(block.indented(INDENT_WIDTH).into_lines());
         lines
+    }
+
+    fn format_fun_signature_annotation(&self, item: &NamedItem) -> Option<String> {
+        let annotation = item.annotation.as_ref()?;
+        let parameter_annotations: Option<Vec<_>> = item
+            .parameters
+            .iter()
+            .map(|parameter| parameter.annotation.as_ref())
+            .collect();
+        let parameter_annotations = parameter_annotations.filter(|annotations| !annotations.is_empty());
+
+        let mut rendered = String::new();
+        if !item.constraints.is_empty() {
+            rendered.push_str(&self.format_constraint_list_inline(&item.constraints));
+            rendered.push_str(" => ");
+        }
+
+        if let Some(parameter_annotations) = parameter_annotations {
+            for parameter in parameter_annotations {
+                rendered.push_str(&self.format_type_inline(parameter, TYPE_ARROW_PREC + 1));
+                rendered.push_str(" -> ");
+            }
+            rendered.push_str(&self.format_type_inline(annotation, TYPE_ARROW_PREC));
+            return Some(rendered);
+        }
+
+        rendered.push_str(&self.format_type_inline(annotation, TYPE_ARROW_PREC));
+        Some(rendered)
     }
 
     fn format_class_item(&self, item: &NamedItem) -> Vec<String> {
@@ -609,12 +657,7 @@ impl Formatter {
     }
 
     fn format_function_param(&self, parameter: &FunctionParam) -> String {
-        let mut rendered = self.item_name(&parameter.name).to_owned();
-        if let Some(annotation) = &parameter.annotation {
-            rendered.push_str(self.type_annotation_separator(&[], annotation));
-            rendered.push_str(&self.format_type_inline(annotation, 0));
-        }
-        rendered
+        self.item_name(&parameter.name).to_owned()
     }
 
     fn format_signature_annotation_inline(
@@ -664,26 +707,8 @@ impl Formatter {
         constraints: &[TypeExpr],
         annotation: &TypeExpr,
     ) -> &'static str {
-        if !constraints.is_empty() || self.annotation_contains_type_application(annotation) {
-            ": "
-        } else {
-            ":"
-        }
-    }
-
-    fn annotation_contains_type_application(&self, ty: &TypeExpr) -> bool {
-        match &ty.kind {
-            TypeExprKind::Name(_) | TypeExprKind::Record(_) => false,
-            TypeExprKind::Group(inner) => self.annotation_contains_type_application(inner),
-            TypeExprKind::Tuple(elements) => elements
-                .iter()
-                .any(|element| self.annotation_contains_type_application(element)),
-            TypeExprKind::Arrow { parameter, result } => {
-                self.annotation_contains_type_application(parameter)
-                    || self.annotation_contains_type_application(result)
-            }
-            TypeExprKind::Apply { .. } => true,
-        }
+        let _ = (constraints, annotation);
+        " : "
     }
 
     fn format_sum_inline(&self, variants: &[TypeVariant]) -> String {
@@ -2162,7 +2187,8 @@ mod tests {
                 " &|> documentBody\n",
                 "  |> Pair\n",
                 "\n",
-                "fun label:Text state:SaveState => state\n",
+                "type SaveState -> Text\n",
+                "func label state => state\n",
                 " ||> Saved         -> \"saved\"\n",
                 " ||> Dirty message -> \"dirty {message}\"\n",
             )
@@ -2183,13 +2209,13 @@ mod tests {
                 "    email: Text\n",
                 "}\n",
                 "\n",
-                "value seed:User = {\n",
+                "value seed : User = {\n",
                 "    active: True,\n",
                 "    age: 32,\n",
                 "    email: \"ada@example.com\"\n",
                 "}\n",
                 "\n",
-                "value activeAdult: (Option User) = seed\n",
+                "value activeAdult : (Option User) = seed\n",
                 " ?|> .active and .age > 18\n",
             )
         );
@@ -2203,7 +2229,8 @@ mod tests {
         assert_eq!(
             formatted,
             concat!(
-                "fun pipeline:Text order:Order => order\n",
+                "type Order -> Text\n",
+                "func pipeline order => order\n",
                 " ?|> .ready\n",
                 "  |> .shipping\n",
                 "  | observeShipping\n",
@@ -2218,7 +2245,8 @@ mod tests {
         assert_eq!(
             formatted,
             concat!(
-                "fun formatCount:Text count:Int =>\n",
+                "type Int -> Text\n",
+                "func formatCount count =>\n",
                 "    \"{count} unread\"\n",
                 "\n",
                 "value count = 3\n",
@@ -2243,9 +2271,10 @@ mod tests {
             formatted,
             concat!(
                 "class Eq A\n",
-                "    (==):A -> A -> Bool\n",
+                "    (==) : A -> A -> Bool\n",
                 "\n",
-                "fun equivalent:Bool left:Int right:Int =>\n",
+                "type Int -> Int -> Bool\n",
+                "func equivalent left right =>\n",
                 "    left + 1 == right - 1 and left != right\n",
             )
         );
@@ -2283,14 +2312,14 @@ value view =
             formatted,
             concat!(
                 "domain Duration over Int\n",
-                "    literal ms:Int -> Duration\n",
-                "    (*):Duration -> Int -> Duration\n",
-                "    unwrap:Duration -> Int\n",
+                "    literal ms : Int -> Duration\n",
+                "    (*) : Duration -> Int -> Duration\n",
+                "    unwrap : Duration -> Int\n",
                 "\n",
                 "domain Path over Text\n",
-                "    literal root:Text -> Path\n",
-                "    (/):Path -> Text -> Path\n",
-                "    unwrap:Path -> Text\n",
+                "    literal root : Text -> Path\n",
+                "    (/) : Path -> Text -> Path\n",
+                "    unwrap : Path -> Text\n",
             )
         );
     }
@@ -2304,7 +2333,7 @@ value view =
             formatted,
             concat!(
                 "class Eq A\n",
-                "    (==):A -> A -> Bool\n",
+                "    (==) : A -> A -> Bool\n",
                 "\n",
                 "instance Eq Blob\n",
                 "    (==) left right = same left right\n",
@@ -2323,7 +2352,7 @@ value view =
                 "class Applicative F\n",
                 "    with Functor F\n",
                 "    require Eq A\n",
-                "    pureInt: F Int\n",
+                "    pureInt : F Int\n",
             )
         );
     }
@@ -2335,12 +2364,12 @@ value view =
             formatted,
             concat!(
                 "provider custom.feed\n",
-                "    argument path:Text\n",
-                "    option timeout:Duration\n",
+                "    argument path : Text\n",
+                "    option timeout : Duration\n",
                 "    wakeup: providerTrigger\n",
                 "\n",
                 "provider custom.timer\n",
-                "    option activeWhen: Signal Bool\n",
+                "    option activeWhen : Signal Bool\n",
                 "    wakeup: timer\n",
             )
         );
@@ -2362,7 +2391,7 @@ value view =
             formatted,
             concat!(
                 "domain Bucket over Int\n",
-                "    (%):Bucket -> Int -> Bucket\n",
+                "    (%) : Bucket -> Int -> Bucket\n",
             )
         );
     }
@@ -2376,9 +2405,9 @@ value view =
             formatted,
             concat!(
                 "domain Duration over Int\n",
-                "    literal ms:Int -> Duration\n",
+                "    literal ms : Int -> Duration\n",
                 "\n",
-                "value delay:Duration = 250ms\n",
+                "value delay : Duration = 250ms\n",
                 "value applied = wrap 250ms\n",
             )
         );
@@ -2392,10 +2421,10 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "value pi:Float = 3.14\n",
-                "value amount:Decimal = 19.25d\n",
-                "value whole:Decimal = 19d\n",
-                "value count:BigInt = 123n\n",
+                "value pi : Float = 3.14\n",
+                "value amount : Decimal = 19.25d\n",
+                "value whole : Decimal = 19d\n",
+                "value count : BigInt = 123n\n",
             )
         );
     }
@@ -2429,7 +2458,8 @@ value view =
             concat!(
                 "type Status = Idle | Failed Text\n",
                 "\n",
-                "fun label:Text status:Status => status\n",
+                "type Status -> Text\n",
+                "func label status => status\n",
                 " ||> Idle          -> \"idle\"\n",
                 " ||> Failed reason -> \"failed {reason}\"\n",
             )
@@ -2449,7 +2479,8 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "fun ignore:Int _ =>\n",
+                "type Int\n",
+                "func ignore _ =>\n",
                 "    .\n",
                 "\n",
                 "value projection = .email\n",
@@ -2466,10 +2497,11 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "fun project:{ name: Text, age: Int } profile:{ name: Text, age: Int } =>\n",
+                "type { name: Text, age: Int } -> { name: Text, age: Int }\n",
+                "func project profile =>\n",
                 "    profile\n",
                 "\n",
-                "value profile:{ name: Text, age: Int } = {\n",
+                "value profile : { name: Text, age: Int } = {\n",
                 "    name: \"Ada\",\n",
                 "    age: 37\n",
                 "}\n",
@@ -2498,13 +2530,14 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "fun wrap: Result Text Int value: (Result Text Int) =>\n",
+                "type (Result Text Int) -> Result Text Int\n",
+                "func wrap value =>\n",
                 "    value\n",
                 "\n",
-                "value active: Signal Bool = True\n",
+                "value active : Signal Bool = True\n",
                 "\n",
                 "class Functor F\n",
-                "    map: Applicative G => (A -> G B) -> F A -> G (F B)\n",
+                "    map : Applicative G => (A -> G B) -> F A -> G (F B)\n",
             )
         );
     }
@@ -2561,7 +2594,7 @@ value view =
                 "    socket\n",
                 ")\n",
                 "\n",
-                "value profile:Profile = {\n",
+                "value profile : Profile = {\n",
                 "    name,\n",
                 "    nickname\n",
                 "}\n",
@@ -2604,12 +2637,12 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "signal total: Signal Int\n",
-                "signal ready: Signal Bool\n",
+                "signal total : Signal Int\n",
+                "signal ready : Signal Bool\n",
                 "\n",
                 "when ready => total <- signal1 + signal2\n",
                 "when ready.done => total <-\n",
-                "    result {\n",
+                    "    result {\n",
                 "        next <- Ok signal1\n",
                 "        next + signal2\n",
                 "    }\n",

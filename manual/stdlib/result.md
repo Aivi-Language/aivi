@@ -31,7 +31,8 @@ Returns `True` if the result is `Ok`.
 ```aivi
 use aivi.result (isOk)
 
-fun succeeded:Bool result: (Result Text Int) =>
+type (Result Text Int) -> Bool
+func succeeded result =>
     isOk result
 ```
 
@@ -46,7 +47,8 @@ Returns `True` if the result is `Err`.
 ```aivi
 use aivi.result (isErr)
 
-fun failed:Bool result: (Result Text Int) =>
+type (Result Text Int) -> Bool
+func failed result =>
     isErr result
 ```
 
@@ -61,10 +63,12 @@ Transforms the error inside `Err`, leaving `Ok` untouched.
 ```aivi
 use aivi.result (mapErr)
 
-fun toCode:Int message:Text =>
+type Text -> Int
+func toCode message =>
     42
 
-fun withErrorCode: (Result Int Int) r: (Result Text Int) => r
+type (Result Text Int) -> (Result Int Int)
+func withErrorCode r => r
   |> mapErr toCode
 ```
 
@@ -79,7 +83,8 @@ Extracts the value from `Ok`, or returns the fallback if `Err`.
 ```aivi
 use aivi.result (withDefault)
 
-fun safeScore:Int result: (Result Text Int) =>
+type (Result Text Int) -> Int
+func safeScore result =>
     withDefault 0 result
 ```
 
@@ -94,7 +99,8 @@ Returns the result unchanged if it is `Ok`, otherwise returns the fallback resul
 ```aivi
 use aivi.result (orElse)
 
-fun withFallback: (Result Text Int) primary: (Result Text Int) secondary: (Result Text Int) => primary
+type (Result Text Int) -> (Result Text Int) -> (Result Text Int)
+func withFallback primary secondary => primary
   |> orElse secondary
 ```
 
@@ -109,11 +115,13 @@ Chains a `Result`-returning function over an `Ok` value. Propagates `Err` withou
 ```aivi
 use aivi.result (flatMap)
 
-fun ensurePositive: (Result Text Int) n:Int => n > 0
-  T|> Ok n
-  F|> Err "must be positive"
+type Int -> (Result Text Int)
+func ensurePositive n => n > 0
+ T|> Ok n
+ F|> Err "must be positive"
 
-fun validateCount: (Result Text Int) result: (Result Text Int) => result
+type (Result Text Int) -> (Result Text Int)
+func validateCount result => result
   |> flatMap ensurePositive
 ```
 
@@ -128,7 +136,8 @@ Removes one layer of nesting from a `Result E (Result E A)`.
 ```aivi
 use aivi.result (flatten)
 
-fun unwrapNested: (Result Text Int) r: (Result Text (Result Text Int)) =>
+type (Result Text (Result Text Int)) -> (Result Text Int)
+func unwrapNested r =>
     flatten r
 ```
 
@@ -143,7 +152,8 @@ Converts a `Result` to an `Option`, discarding the error. `Ok value` becomes `So
 ```aivi
 use aivi.result (toOption)
 
-fun justValue: (Option Int) result: (Result Text Int) =>
+type (Result Text Int) -> (Option Int)
+func justValue result =>
     toOption result
 ```
 
@@ -158,7 +168,8 @@ Converts `Ok value` to a one-element list, or `Err` to an empty list.
 ```aivi
 use aivi.result (toList)
 
-fun resultItems: (List Int) result: (Result Text Int) =>
+type (Result Text Int) -> (List Int)
+func resultItems result =>
     toList result
 ```
 
@@ -173,10 +184,12 @@ Transforms the value inside `Ok` using a function, leaving `Err` untouched.
 ```aivi
 use aivi.result (map)
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-fun doubleResult: (Result Text Int) result: (Result Text Int) => result
+type (Result Text Int) -> (Result Text Int)
+func doubleResult result => result
   |> map double
 ```
 
@@ -191,13 +204,16 @@ Transforms both sides of a `Result` simultaneously: `onErr` for `Err`, `onOk` fo
 ```aivi
 use aivi.result (mapBoth)
 
-fun toCode:Int message:Text =>
+type Text -> Int
+func toCode message =>
     500
 
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
-fun normalise: (Result Int Int) result: (Result Text Int) =>
+type (Result Text Int) -> (Result Int Int)
+func normalise result =>
     mapBoth toCode double result
 ```
 
@@ -212,13 +228,16 @@ Collapses a `Result` to a single value by applying `onOk` to `Ok` or `onErr` to 
 ```aivi
 use aivi.result (fold)
 
-fun zero:Int ignored:Text =>
+type Text -> Int
+func zero ignored =>
     0
 
-fun identity:Int n:Int =>
+type Int -> Int
+func identity n =>
     n
 
-fun resultToInt:Int result: (Result Text Int) =>
+type (Result Text Int) -> Int
+func resultToInt result =>
     fold zero identity result
 ```
 
@@ -233,6 +252,7 @@ Converts an `Option` to a `Result`. `Some value` becomes `Ok value`; `None` beco
 ```aivi
 use aivi.result (fromOption)
 
-fun requireAge: (Result Text Int) opt: (Option Int) =>
+type (Option Int) -> (Result Text Int)
+func requireAge opt =>
     fromOption "Age is required" opt
 ```

@@ -15,7 +15,8 @@ It is designed around a few strong rules:
 This is a complete, valid AIVI module:
 
 ```aivi
-fun formatGreeting:Text name:Text =>
+type Text -> Text
+func formatGreeting name =>
     "Hello, {name}!"
 
 value greeting = formatGreeting "Ada"
@@ -23,7 +24,7 @@ value greeting = formatGreeting "Ada"
 
 It already shows the two most common top-level forms:
 
-- `fun` for a named pure function
+- `func` for a named pure function
 - `value` for a named constant
 
 ## A first signal
@@ -31,7 +32,8 @@ It already shows the two most common top-level forms:
 Signals represent values that participate in the reactive graph:
 
 ```aivi
-fun double:Int n:Int =>
+type Int -> Int
+func double n =>
     n * 2
 
 signal count = 21
@@ -47,7 +49,7 @@ The important idea is that `doubledCount` is defined from `count`, not assigned 
 | Concept | What it is |
 | --- | --- |
 | `value` | A named constant expression |
-| `fun` | A named pure function |
+| `func` | A named pure function |
 | `signal` | A reactive value in the graph |
 | `@source ...` on `signal` | A source-backed signal fed from the outside world |
 | `type` | An alias, record, or constructor-backed tagged type |

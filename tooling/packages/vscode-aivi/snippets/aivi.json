@@ -10,18 +10,18 @@
     "description": "Declare a record type"
   },
   "Function declaration": {
-    "prefix": "fun",
-    "body": ["fun ${1:name}: ${2:ReturnType} #${3:param}: ${4:ParamType} =>", "    ${5:body}"],
+    "prefix": "func",
+    "body": ["type ${2:ParamType} -> ${3:ReturnType}", "func ${1:name} ${4:param} =>", "    ${5:body}"],
     "description": "Declare a function"
   },
   "Value binding": {
     "prefix": "val",
-    "body": ["val ${1:name} = ${2:expr}"],
+    "body": ["value ${1:name} = ${2:expr}"],
     "description": "Declare a value binding"
   },
   "Signal binding": {
     "prefix": "sig",
-    "body": ["sig ${1:name} =", "    ${2:expr}"],
+    "body": ["signal ${1:name} =", "    ${2:expr}"],
     "description": "Declare a signal"
   },
   "HTTP source signal": {
@@ -31,13 +31,13 @@
       "    decode: Strict,",
       "    timeout: ${3:5s},",
       "}",
-      "sig ${4:name} : Signal (Result HttpError ${5:Type})"
+      "signal ${4:name} : Signal (Result HttpError ${5:Type})"
     ],
     "description": "Declare an HTTP source signal"
   },
   "Timer source signal": {
     "prefix": "source-timer",
-    "body": ["@source timer.every ${1:1000}", "sig ${2:tick} : Signal Unit"],
+    "body": ["@source timer.every ${1:1000}", "signal ${2:tick} : Signal Unit"],
     "description": "Declare a timer source signal"
   },
   "File watch source": {
@@ -46,7 +46,7 @@
       "@source fs.watch \"${1:path}\" with {",
       "    events: [${2:Changed}],",
       "}",
-      "sig ${3:fileEvents} : Signal FsEvent"
+      "signal ${3:fileEvents} : Signal FsEvent"
     ],
     "description": "Declare a file-watch source signal"
   },
