@@ -56,13 +56,13 @@ func nodeLabel node => node
  ||> C -> "C"
  ||> D -> "D"
 
-type (List Text) -> Node -> (List Text)
+type List Text => Node -> (List Text)
 func appendNodeLabel parts node =>
     append parts [
         nodeLabel node
     ]
 
-type (List Node) -> Text
+type List Node => Text
 func orderLabel nodes => nodes
   |> reduce appendNodeLabel []
   |> join " -> "

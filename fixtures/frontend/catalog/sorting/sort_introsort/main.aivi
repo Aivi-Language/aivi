@@ -41,7 +41,7 @@ func mergeHeap left right => (left, right)
  ||> (other, Empty)                                               -> other
  ||> (Node leftValue leftChildren, Node rightValue rightChildren) -> mergeNodes leftValue leftChildren rightValue rightChildren
 
-type (List Heap) -> Heap
+type List Heap => Heap
 func mergePairs children => children
  ||> []                            -> Empty
  ||> [first]                       -> first
@@ -61,7 +61,7 @@ func heapDrain heap => heapPop heap
  ||> { value: None }         -> []
  ||> { value: Some x, rest } -> append [x] (heapDrain rest)
 
-type (List Int) -> (List Int)
+type List Int => (List Int)
 func heapSort items => items
   |> reduce heapInsert Empty
   |> heapDrain
@@ -76,7 +76,7 @@ func insertOrdered x items => items
  ||> []               -> [x]
  ||> [first, ...rest] -> insertAfterFirst x first rest
 
-type (List Int) -> (List Int)
+type List Int => (List Int)
 func insertionSort items => items
   |> reduce insertOrdered []
 
@@ -88,7 +88,7 @@ type Int -> Int -> Bool
 func equalTo pivot x =>
     x == pivot
 
-type (List Int) -> Int -> (List Int) -> Buckets
+type List Int => Int -> (List Int) -> Buckets
 func classifyRest lower pivot rest => rest
   |> partition (equalTo pivot)
  ||> { matched: equal, unmatched: higher } -> { lower, equal, higher }
@@ -98,7 +98,7 @@ func classify pivot items => items
   |> partition (lowerThan pivot)
  ||> { matched: lower, unmatched: rest } -> classifyRest lower pivot rest
 
-type (List Int) -> (List Int) -> (List Int) -> (List Int)
+type List Int => (List Int) -> (List Int) -> (List Int)
 func appendThree left middle right =>
     append left (append middle right)
 

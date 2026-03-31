@@ -27,7 +27,7 @@ type SuffixCatalog = {
     duplicateCandidates: SuffixSummary
 }
 
-type (List Suffix) -> SuffixView
+type List Suffix => SuffixView
 func viewSuffixes items =>
     {
         first: head items,
@@ -42,37 +42,37 @@ type Suffix -> Suffix -> Bool
 func earlier left right =>
     left.value < right.value or (left.value == right.value and left.start < right.start)
 
-type (List Suffix) -> Suffix -> Suffix -> (List Suffix) -> (List Suffix)
+type List Suffix => Suffix -> Suffix -> (List Suffix) -> (List Suffix)
 func insertAfterHead sorted item first remaining => earlier item first
  T|> append [item] sorted
  F|> append [first] (insertSuffix remaining item)
 
-type (List Suffix) -> Suffix -> (List Suffix)
+type List Suffix => Suffix -> (List Suffix)
 func insertSuffix sorted item => viewSuffixes sorted
  ||> { first: None }                             -> [item]
  ||> { first: Some first, rest: Some remaining } -> insertAfterHead sorted item first remaining
 
-type (List Text) -> Suffix -> (List Text)
+type List Text => Suffix -> (List Text)
 func collectLabels labels suffix =>
     append labels [
         suffixLabel suffix
     ]
 
-type (List Suffix) -> (List Text)
+type List Suffix => (List Text)
 func collectAllLabels items => items
   |> reduce collectLabels []
 
-type (List Suffix) -> Text
+type List Suffix => Text
 func describeOrder items => length items == 0
  T|> "empty"
  F|> join " < " (collectAllLabels items)
 
-type (List Suffix) -> Text
+type List Suffix => Text
 func firstLabel items => viewSuffixes items
  ||> { first: Some suffix } -> suffixLabel suffix
  ||> { first: None }        -> "empty"
 
-type (List Suffix) -> SuffixSummary
+type List Suffix => SuffixSummary
 func summarize items =>
     {
         order: describeOrder items,

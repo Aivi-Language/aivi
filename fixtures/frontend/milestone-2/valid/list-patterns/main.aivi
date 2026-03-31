@@ -5,12 +5,12 @@ type Summary = {
     count: Int
 }
 
-type (List Int) -> Int
+type List Int => Int
 func listLength values => values
  ||> []             -> 0
  ||> [_head, ...xs] -> 1 + listLength xs
 
-type (List Int) -> Int
+type List Int => Int
 func prefixScore values => values
  ||> []                       -> 0
  ||> [first]                  -> first

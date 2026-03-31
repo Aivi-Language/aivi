@@ -88,13 +88,13 @@ type Phase -> Text
 func phaseLabel phase =>
     choosePhase phase "fetch" "parse" "analyze" "package" "publish"
 
-type (List Text) -> Phase -> (List Text)
+type List Text => Phase -> (List Text)
 func appendPhaseLabel parts phase =>
     append parts [
         phaseLabel phase
     ]
 
-type (List Phase) -> Text
+type List Phase => Text
 func orderLabel order => order
   |> reduce appendPhaseLabel []
   |> join " -> "
@@ -135,7 +135,7 @@ type Phase -> Phase -> Bool
 func isPhase expected candidate =>
     candidate == expected
 
-type (List Phase) -> Phase -> Bool
+type List Phase => Phase -> Bool
 func queuedContains queued phase => queued
   |> any (isPhase phase)
 

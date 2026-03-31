@@ -97,18 +97,18 @@ func nodeLabel node => node
  ||> D -> "D"
  ||> E -> "E"
 
-type (List Text) -> Node -> (List Text)
+type List Text => Node -> (List Text)
 func appendNodeLabel parts node =>
     append parts [
         nodeLabel node
     ]
 
-type (List Node) -> Text
+type List Node => Text
 func nodeListLabel nodes => nodes
   |> reduce appendNodeLabel []
   |> join ", "
 
-type (List Node) -> Text
+type List Node => Text
 func componentText component =>
     join "" [
         "[",
@@ -116,13 +116,13 @@ func componentText component =>
         "]"
     ]
 
-type (List Text) -> (List Node) -> (List Text)
+type List Text => (List Node) -> (List Text)
 func appendComponentLabel parts component =>
     append parts [
         componentText component
     ]
 
-type (List (List Node)) -> Text
+type List (List Node) => Text
 func componentsLabel components => components
   |> reduce appendComponentLabel []
   |> join " | "

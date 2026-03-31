@@ -15,7 +15,7 @@ func notContains x items => items
   |> filter (notEq x)
   |> length == length items
 
-type (Set A) -> Bool
+type Set A => Bool
 func isEmpty s =>
     length s.items == 0
 
@@ -43,11 +43,11 @@ func remove v s =>
         items: filteredItems (notEq v) s
     }
 
-type (Set A) -> Int
+type Set A => Int
 func size s => s.items
   |> length
 
-type (Set A) -> (List A)
+type Set A => (List A)
 func toList s =>
     s.items
 

@@ -44,17 +44,17 @@ func stateName state => state
  ||> BranchB -> "branch-b"
  ||> Accept  -> "accept"
 
-type (List Text) -> NfaState -> (List Text)
+type List Text => NfaState -> (List Text)
 func collectNames labels state =>
     append labels [
         stateName state
     ]
 
-type (List NfaState) -> (List Text)
+type List NfaState => (List Text)
 func collectSubsetNames subset => subset
   |> reduce collectNames []
 
-type (List NfaState) -> Text
+type List NfaState => Text
 func subsetLabel subset => length subset == 0
  T|> "empty"
  F|> join "," (collectSubsetNames subset)
@@ -63,7 +63,7 @@ type NfaState -> (List NfaState) -> Bool
 func containsState candidate subset => subset
   |> any (isState candidate)
 
-type (List NfaState) -> NfaState -> (List NfaState)
+type List NfaState => NfaState -> (List NfaState)
 func insertState subset state => containsState state subset
  T|> subset
  F|> append subset [state]
@@ -106,15 +106,15 @@ type Symbol -> (List NfaState) -> NfaState -> (List NfaState)
 func moveStep symbol subset state => moveFromState state symbol
   |> reduce insertState subset
 
-type (List NfaState) -> Symbol -> (List NfaState)
+type List NfaState => Symbol -> (List NfaState)
 func moveSet subset symbol => subset
   |> reduce (moveStep symbol) []
 
-type (List NfaState) -> Bool
+type List NfaState => Bool
 func acceptingSubset subset => subset
   |> any (isState Accept)
 
-type (List NfaState) -> DfaSummary
+type List NfaState => DfaSummary
 func summarize subset =>
     {
         label: subsetLabel subset,

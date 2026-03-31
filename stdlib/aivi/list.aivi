@@ -17,30 +17,30 @@ type A -> (Option A)
 func keepSome item =>
     Some item
 
-type (Option A) -> A -> (Option A)
+type Option A => A -> (Option A)
 func keepFirst found item => found
  T|> keepSome
  F|> Some item
 
-type (List A) -> A -> Bool -> (TailState A)
+type List A => A -> Bool -> (TailState A)
 func tailState items item seenFirst => seenFirst
  T|> { seenFirst: True, items: append items [item] }
  F|> { seenFirst: True, items: [] }
 
-type (TailState A) -> A -> (TailState A)
+type TailState A => A -> (TailState A)
 func tailStep state item => state
  ||> { seenFirst, items } -> tailState items item seenFirst
 
-type (List A) -> Bool -> (Option (List A))
+type List A => Bool -> (Option (List A))
 func tailItems items seenFirst => seenFirst
  T|> Some items
  F|> None
 
-type (TailState A) -> (Option (List A))
+type TailState A => (Option (List A))
 func tailFromState state => state
  ||> { seenFirst, items } -> tailItems items seenFirst
 
-type (Option A) -> A -> (Option A)
+type Option A => A -> (Option A)
 func takeLast current item =>
     Some item
 
@@ -78,7 +78,7 @@ func findMapStep transform found item => found
  T|> keepSome
  F|> transform item
 
-type (List A) -> (List A) -> A -> Bool -> (Partition A)
+type List A => (List A) -> A -> Bool -> (Partition A)
 func partitionItems matched unmatched item isMatch => isMatch
  T|> { matched: append matched [item], unmatched }
  F|> { matched, unmatched: append unmatched [item] }
@@ -87,56 +87,56 @@ type (A -> Bool) -> (Partition A) -> A -> (Partition A)
 func partitionStep predicate state item => state
  ||> { matched, unmatched } -> partitionItems matched unmatched item (predicate item)
 
-type (List A) -> (List A)
+type List A => (List A)
 func tailOrEmpty items => tail items
  ||> Some remaining -> remaining
  ||> None           -> []
 
-type (ZipState A B) -> A -> B -> (ZipState A B)
+type ZipState A B => A -> B -> (ZipState A B)
 func appendZipPair state left right => state
  ||> { remaining, pairs } -> { remaining: tailOrEmpty remaining, pairs: append pairs [(left, right)] }
 
-type (ZipState A B) -> A -> (Option B) -> (ZipState A B)
+type ZipState A B => A -> (Option B) -> (ZipState A B)
 func zipHead state left headValue => headValue
  T|> appendZipPair state left
  F|> state
 
-type (ZipState A B) -> A -> (ZipState A B)
+type ZipState A B => A -> (ZipState A B)
 func zipStep state left => state
  ||> { remaining, pairs } -> zipHead { remaining, pairs } left (head remaining)
 
-type (ZipState A B) -> (List (A, B))
+type ZipState A B => (List (A, B))
 func zippedPairs state => state
  ||> { remaining, pairs } -> pairs
 
-type (List A) -> Bool
+type List A => Bool
 func isEmpty items => head items
  F|> True
  T|> False
 
-type (List A) -> Bool
+type List A => Bool
 func nonEmpty items => head items
  T|> True
  F|> False
 
-type (List A) -> Int
+type List A => Int
 func length items => items
   |> reduce lengthStep 0
 
-type (List A) -> (Option A)
+type List A => (Option A)
 func head items => items
   |> reduce keepFirst None
 
-type (List A) -> (Option (List A))
+type List A => (Option (List A))
 func tail items => items
   |> reduce tailStep { seenFirst: False, items: [] }
   |> tailFromState
 
-type (List A) -> (Option A)
+type List A => (Option A)
 func last items => items
   |> reduce takeLast None
 
-type (List A) -> (List B) -> (List (A, B))
+type List A => (List B) -> (List (A, B))
 func zip left right => left
   |> reduce zipStep { remaining: right, pairs: [] }
   |> zippedPairs
@@ -182,11 +182,11 @@ type (A -> Bool) -> (List A) -> (List A)
 func filter predicate items => items
   |> reduce (filterStep predicate) []
 
-type (List A) -> (List A) -> (List A)
+type List A => (List A) -> (List A)
 func flattenStep acc inner =>
     append acc inner
 
-type (List (List A)) -> (List A)
+type List (List A) => (List A)
 func flatten xss => xss
   |> reduce flattenStep []
 
@@ -198,11 +198,11 @@ type (A -> List B) -> (List A) -> (List B)
 func flatMap transform items => items
   |> reduce (flatMapStep transform) []
 
-type (List A) -> A -> (List A)
+type List A => A -> (List A)
 func reverseStep acc item =>
     append [item] acc
 
-type (List A) -> (List A)
+type List A => (List A)
 func reverse items => items
   |> reduce reverseStep []
 
@@ -216,7 +216,7 @@ type DropState A = {
     items: List A
 }
 
-type (TakeState A) -> A -> (TakeState A)
+type TakeState A => A -> (TakeState A)
 func takeStep state item => state.remaining > 0
  T|> { remaining: state.remaining - 1, items: append state.items [item] }
  F|> state
@@ -226,7 +226,7 @@ func take n items => items
   |> reduce takeStep { remaining: n, items: [] }
   |> .items
 
-type (DropState A) -> A -> (DropState A)
+type DropState A => A -> (DropState A)
 func dropStep state item => state.remaining > 0
  T|> { remaining: state.remaining - 1, items: state.items }
  F|> { remaining: 0, items: append state.items [item] }
@@ -246,7 +246,7 @@ type DropWhileState A = {
     items: List A
 }
 
-type (TakeWhileState A) -> A -> Bool -> (TakeWhileState A)
+type TakeWhileState A => A -> Bool -> (TakeWhileState A)
 func applyTakeWhile state item matches => matches
  T|> { taking: True, items: append state.items [item] }
  F|> { taking: False, items: state.items }
@@ -261,7 +261,7 @@ func takeWhile predicate items => items
   |> reduce (takeWhileStep predicate) { taking: True, items: [] }
   |> .items
 
-type (DropWhileState A) -> A -> Bool -> (DropWhileState A)
+type DropWhileState A => A -> Bool -> (DropWhileState A)
 func applyDropWhile state item matches => matches
  T|> state
  F|> { taking: False, items: [item] }
@@ -284,11 +284,11 @@ type Int -> Int -> Int
 func productStep acc item =>
     acc * item
 
-type (List Int) -> Int
+type List Int => Int
 func sum items => items
   |> reduce sumStep 0
 
-type (List Int) -> Int
+type List Int => Int
 func product items => items
   |> reduce productStep 1
 
@@ -326,7 +326,7 @@ type IndexState A = {
     found: Option Int
 }
 
-type (IndexState A) -> A -> Bool -> (IndexState A)
+type IndexState A => A -> Bool -> (IndexState A)
 func indexFoundResult state item predResult => predResult
  T|> { index: state.index + 1, found: Some state.index }
  F|> { index: state.index + 1, found: None }
@@ -376,11 +376,11 @@ type UnzipState A B = {
     rights: List B
 }
 
-type (UnzipState A B) -> (A, B) -> (UnzipState A B)
+type UnzipState A B => (A, B) -> (UnzipState A B)
 func unzipStep state pair => pair
  ||> (left, right) -> { lefts: append state.lefts [left], rights: append state.rights [right] }
 
-type (List (A, B)) -> (UnzipState A B)
+type List (A, B) => (UnzipState A B)
 func unzip pairs => pairs
   |> reduce unzipStep { lefts: [], rights: [] }
 
@@ -403,14 +403,14 @@ func finalizeSortInsert item state => state.inserted
  T|> state.items
  F|> append state.items [item]
 
-type (InsertState A) -> A -> A -> (InsertState A)
+type InsertState A => A -> A -> (InsertState A)
 func doInsertBefore state item current =>
     {
         inserted: True,
         items: append (append state.items [item]) [current]
     }
 
-type (InsertState A) -> A -> (InsertState A)
+type InsertState A => A -> (InsertState A)
 func doSkipInsert state current =>
     {
         inserted: False,

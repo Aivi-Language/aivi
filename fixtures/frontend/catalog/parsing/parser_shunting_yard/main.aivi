@@ -38,7 +38,7 @@ type ShuntingCatalog = {
     missingClose: RunSummary
 }
 
-type (List Token) -> TokenView
+type List Token => TokenView
 func viewTokens items =>
     {
         top: head items,
@@ -54,13 +54,13 @@ func operatorText operator => operator
  ||> Plus  -> "+"
  ||> Times -> "*"
 
-type (List Text) -> Operator -> (List Text)
+type List Text => Operator -> (List Text)
 func emitOperator output operator =>
     append output [
         operatorText operator
     ]
 
-type (List Token) -> (List Text) -> Text -> ParseState
+type List Token => (List Text) -> Text -> ParseState
 func continueState stack output note =>
     {
         stack,
@@ -69,7 +69,7 @@ func continueState stack output note =>
         note
     }
 
-type (List Token) -> (List Text) -> Text -> ParseState
+type List Token => (List Text) -> Text -> ParseState
 func invalidState stack output note =>
     {
         stack,
@@ -78,7 +78,7 @@ func invalidState stack output note =>
         note
     }
 
-type (List Text) -> Text
+type List Text => Text
 func postfixText output => length output == 0
  T|> "empty"
  F|> join " " output
@@ -112,16 +112,16 @@ type Operator -> Operator -> Bool
 func shouldPop stacked incoming =>
     ((precedence stacked) > (precedence incoming)) or ((precedence stacked) == (precedence incoming))
 
-type (List Token) -> (List Text) -> Operator -> Operator -> ParseState
+type List Token => (List Text) -> Operator -> Operator -> ParseState
 func popThenPush remaining output stacked incoming =>
     continueState (pushToken (OperatorToken incoming) remaining) (emitOperator output stacked) (popNote stacked incoming)
 
-type (List Token) -> (List Text) -> Operator -> Operator -> (List Token) -> ParseState
+type List Token => (List Text) -> Operator -> Operator -> (List Token) -> ParseState
 func handleStackedOperator stack output incoming stacked remaining => shouldPop stacked incoming
  T|> popThenPush remaining output stacked incoming
  F|> continueState (pushToken (OperatorToken incoming) stack) output (pushNote incoming)
 
-type (List Token) -> (List Text) -> Operator -> ParseState
+type List Token => (List Text) -> Operator -> ParseState
 func handleOperatorFrom stack output incoming => viewTokens stack
  ||> { top: Some (OperatorToken stacked), rest: Some remaining } -> handleStackedOperator stack output incoming stacked remaining
  ||> { top: Some OpenGroup }                                     -> continueState (pushToken (OperatorToken incoming) stack) output (pushNote incoming)
@@ -132,14 +132,14 @@ type ParseState -> Operator -> ParseState
 func handleOperator state operator => state
  ||> { stack, output } -> handleOperatorFrom stack output operator
 
-type (List Text) -> (List Token) -> Operator -> ParseState
+type List Text => (List Token) -> Operator -> ParseState
 func closeAfterOperator output remaining operator => viewTokens remaining
  ||> { top: Some OpenGroup, rest: Some restAfterOpen } -> continueState restAfterOpen (emitOperator output operator) "close grouped operator"
  ||> { top: Some (OperatorToken nested) }              -> invalidState remaining (emitOperator output operator) "group contained too many operators"
  ||> { top: Some CloseGroup }                          -> invalidState remaining (emitOperator output operator) "unexpected nested close"
  ||> { top: None }                                     -> invalidState remaining (emitOperator output operator) "missing open group"
 
-type (List Token) -> (List Text) -> ParseState
+type List Token => (List Text) -> ParseState
 func closeGroupFrom stack output => viewTokens stack
  ||> { top: Some (OperatorToken operator), rest: Some remaining } -> closeAfterOperator output remaining operator
  ||> { top: Some OpenGroup, rest: Some remaining }                -> continueState remaining output "close empty group"
@@ -166,14 +166,14 @@ func step state token => state
  ||> { valid: True }  -> stepWhenValid state token
  ||> { valid: False } -> state
 
-type (List Text) -> Operator -> (List Token) -> RunSummary
+type List Text => Operator -> (List Token) -> RunSummary
 func finalizeAfterFirst output first remaining => viewTokens remaining
  ||> { top: None }                                             -> { postfix: postfixText (emitOperator output first), operatorDepth: 0, status: "ok" }
  ||> { top: Some (OperatorToken second), rest: Some leftover } -> { postfix: postfixText (emitOperator (emitOperator output first) second), operatorDepth: length leftover, status: "ok" }
  ||> { top: Some OpenGroup }                                   -> { postfix: postfixText (emitOperator output first), operatorDepth: length remaining, status: "missing close group" }
  ||> { top: Some CloseGroup }                                  -> { postfix: postfixText (emitOperator output first), operatorDepth: length remaining, status: "unexpected close group" }
 
-type (List Text) -> (List Token) -> RunSummary
+type List Text => (List Token) -> RunSummary
 func finalizeStack output stack => viewTokens stack
  ||> { top: None }                                             -> { postfix: postfixText output, operatorDepth: 0, status: "ok" }
  ||> { top: Some (OperatorToken first), rest: Some remaining } -> finalizeAfterFirst output first remaining

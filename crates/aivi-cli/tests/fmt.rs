@@ -80,8 +80,8 @@ fn fmt_normalizes_reactive_update_items() {
     assert_eq!(
         String::from_utf8(output.stdout).expect("stdout should be utf-8"),
         concat!(
-            "signal total: Signal Int\n",
-            "signal ready: Signal Bool\n",
+            "signal total : Signal Int\n",
+            "signal ready : Signal Bool\n",
             "\n",
             "when ready => total <- signal1 + signal2\n",
             "when ready and True => total <-\n",

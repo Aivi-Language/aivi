@@ -27,7 +27,7 @@ type Int -> Int -> Bool
 func matchesIndex target x =>
     x == target
 
-type (List Int) -> Int -> FenwickNode -> Int
+type List Int => Int -> FenwickNode -> Int
 func addIfOnPath path total node => any (matchesIndex node.index) path
  T|> total + node.total
  F|> total
@@ -47,7 +47,7 @@ func appendUpdatedNode update nodes node =>
         applyNode update node
     ]
 
-type (List FenwickNode) -> Update -> (List FenwickNode)
+type List FenwickNode => Update -> (List FenwickNode)
 func applyUpdate tree update => tree
   |> reduce (appendUpdatedNode update) []
 
@@ -78,7 +78,7 @@ func prefixPath target => prefixPaths
  ||> Some path -> path
  ||> None      -> []
 
-type (List FenwickNode) -> Int -> Int
+type List FenwickNode => Int -> Int
 func prefixSum tree target => tree
   |> reduce (addIfOnPath (prefixPath target)) 0
 
@@ -87,7 +87,7 @@ func selectNodeTotal target node => node.index == target
  T|> Some node.total
  F|> None
 
-type (List FenwickNode) -> Int -> Int
+type List FenwickNode => Int -> Int
 func bucketTotal tree target => tree
   |> findMap (selectNodeTotal target)
  ||> Some total -> total

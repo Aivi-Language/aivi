@@ -46,12 +46,12 @@ func substitutionCost left right => left == right
  T|> 0
  F|> 1
 
-type (List Int) -> Int
+type List Int => Int
 func firstValue values => head values
  ||> Some x -> x
  ||> None   -> 0
 
-type (List Int) -> Int
+type List Int => Int
 func lastValue values => last values
  ||> Some x -> x
  ||> None   -> 0
@@ -60,7 +60,7 @@ type InitialRowState -> Text -> InitialRowState
 func extendInitialRow state token => state
  ||> { next, values } -> { next: next + 1, values: append values [next + 1] }
 
-type (List Text) -> (List Int)
+type List Text => (List Int)
 func initialRow tokens => tokens
   |> reduce extendInitialRow { next: 0, values: [0] }
   |> .values
@@ -93,7 +93,7 @@ type CellState -> (Text, Int) -> CellState
 func advanceCell state pair => state
  ||> { sourceToken, prevDiagonal, leftValue, values } -> advancePair sourceToken prevDiagonal leftValue values pair
 
-type (List Text) -> Int -> (List Int) -> Text -> (List Int)
+type List Text => Int -> (List Int) -> Text -> (List Int)
 func nextRow targetTokens rowIndex prevRow sourceToken => zip targetTokens (tailOrEmpty prevRow)
   |> reduce advanceCell { sourceToken, prevDiagonal: firstValue prevRow, leftValue: rowIndex, values: [rowIndex] }
   |> .values
@@ -107,7 +107,7 @@ func recordRow rowIndex targetTokens rows row =>
         rows: append rows [row]
     }
 
-type (List Text) -> (List Int) -> MatrixState
+type List Text => (List Int) -> MatrixState
 func seedRows targetTokens row =>
     {
         rowIndex: 0,
@@ -116,7 +116,7 @@ func seedRows targetTokens row =>
         rows: [row]
     }
 
-type (List Text) -> MatrixState
+type List Text => MatrixState
 func seedMatrix targetTokens =>
     seedRows targetTokens (initialRow targetTokens)
 
@@ -128,11 +128,11 @@ type MatrixState -> Text -> MatrixState
 func advanceMatrix state sourceToken => state
  ||> { rowIndex, targetTokens, finalRow, rows } -> commitRow rowIndex targetTokens rows sourceToken finalRow
 
-type (List Text) -> (List Text) -> MatrixState
+type List Text => (List Text) -> MatrixState
 func buildMatrix sourceTokens targetTokens => sourceTokens
   |> reduce advanceMatrix (seedMatrix targetTokens)
 
-type (List Text) -> (List Text) -> Int
+type List Text => (List Text) -> Int
 func editDistance sourceTokens targetTokens => buildMatrix sourceTokens targetTokens
   |> .finalRow
   |> lastValue

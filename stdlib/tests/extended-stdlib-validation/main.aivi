@@ -371,7 +371,7 @@ value flatMappedResult : Result Text Int = resultFlatMap resultDouble okResult
 value nestedResult : Result Text (Result Text Int) = Ok (Ok 7)
 value flattenedResult : Result Text Int = resultFlatten nestedResult
 
-type (Result Text Int) -> (Result Int Text)
+type Result Text Int => (Result Int Text)
 func swapTypes result => result
  ||> Ok n    -> Err n
  ||> Err msg -> Ok msg

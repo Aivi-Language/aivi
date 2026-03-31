@@ -69,31 +69,31 @@ func remove k d =>
         entries: filterOldKey k d
     }
 
-type (Dict K V) -> Int
+type Dict K V => Int
 func size d => d.entries
   |> length
 
-type (DictEntry K V) -> K
+type DictEntry K V => K
 func extractKey entry =>
     entry.key
 
-type (Dict K V) -> (List K)
+type Dict K V => (List K)
 func keys d => d.entries
   |> map extractKey
 
-type (DictEntry K V) -> V
+type DictEntry K V => V
 func extractValue entry =>
     entry.value
 
-type (Dict K V) -> (List V)
+type Dict K V => (List V)
 func values d => d.entries
   |> map extractValue
 
-type (DictEntry K V) -> ((K, V))
+type DictEntry K V => ((K, V))
 func toPair entry =>
     (entry.key, entry.value)
 
-type (Dict K V) -> (List (K, V))
+type Dict K V => (List (K, V))
 func toList d => d.entries
   |> map toPair
 

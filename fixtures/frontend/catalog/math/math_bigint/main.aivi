@@ -16,11 +16,11 @@ type BigInt -> BigInt -> BigInt
 func multiplyBigInt product x =>
     product * x
 
-type (List BigInt) -> BigInt
+type List BigInt => BigInt
 func sumBigInts values =>
     reduce addBigInt 0n values
 
-type (List BigInt) -> BigInt
+type List BigInt => BigInt
 func productBigInts values =>
     reduce multiplyBigInt 1n values
 

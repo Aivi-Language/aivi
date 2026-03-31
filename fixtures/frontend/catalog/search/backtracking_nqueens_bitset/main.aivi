@@ -105,7 +105,7 @@ type Int -> SolveState
 func solveQueens size =>
     search size 0 0 emptySearchState emptySolveState
 
-type (Option (List Int)) -> (Option BoardSummary)
+type Option (List Int) => (Option BoardSummary)
 func summarizeBoard solution => solution
  ||> Some columns -> Some { columns, depth: length columns }
  ||> None         -> None

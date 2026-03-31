@@ -18,12 +18,12 @@ type A -> (List A)
 func singleton item =>
     [item]
 
-type (Result E A) -> Bool
+type Result E A => Bool
 func isOk opt => opt
  T|> True
  F|> False
 
-type (Result E A) -> Bool
+type Result E A => Bool
 func isErr opt => opt
  F|> True
  T|> False
@@ -38,7 +38,7 @@ func withDefault fallback opt => opt
  ||> Ok item -> item
  ||> Err _   -> fallback
 
-type (Result E A) -> (Result E A) -> (Result E A)
+type Result E A => (Result E A) -> (Result E A)
 func orElse fallback opt => opt
  ||> Ok item -> Ok item
  ||> Err _   -> fallback
@@ -48,17 +48,17 @@ func flatMap next opt => opt
  T|> next
  F|> keepErr
 
-type (Result E (Result E A)) -> (Result E A)
+type Result E (Result E A) => (Result E A)
 func flatten opt => opt
  ||> Ok nested -> nested
  ||> Err error -> Err error
 
-type (Result E A) -> (Option A)
+type Result E A => (Option A)
 func toOption opt => opt
  T|> keepSome
  F|> None
 
-type (Result E A) -> (List A)
+type Result E A => (List A)
 func toList opt => opt
  T|> singleton
  F|> []

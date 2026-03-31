@@ -16,7 +16,7 @@ type Int -> Int -> Int
 func sumStep total value =>
     total + value
 
-type (Option CatalogUser) -> Text
+type Option CatalogUser => Text
 func chooseLabel user => user
  T|> .name
  F|> "guest"

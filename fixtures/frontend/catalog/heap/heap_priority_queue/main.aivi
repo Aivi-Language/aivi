@@ -35,7 +35,7 @@ func merge left right => (left, right)
  ||> (other, Empty)                                               -> other
  ||> (Node leftEntry leftChildren, Node rightEntry rightChildren) -> mergeNodes leftEntry leftChildren rightEntry rightChildren
 
-type (List Heap) -> Heap
+type List Heap => Heap
 func mergePairs children => children
  ||> []                            -> Empty
  ||> [first]                       -> first
@@ -50,12 +50,12 @@ func pop heap => heap
  ||> Empty               -> { entry: None, rest: Empty }
  ||> Node entry children -> { entry: Some entry, rest: mergePairs children }
 
-type (Option Entry) -> Text
+type Option Entry => Text
 func labelOf x => x
  ||> Some entry -> entry.label
  ||> None       -> "empty"
 
-type (Option Entry) -> Bool
+type Option Entry => Bool
 func isEmptyEntry x => x
  ||> None   -> True
  ||> Some _ -> False

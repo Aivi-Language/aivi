@@ -59,13 +59,13 @@ func edgeLabel edge =>
         ":{edge.weight}"
     ]
 
-type (List Text) -> Edge -> (List Text)
+type List Text => Edge -> (List Text)
 func appendEdgeLabel parts edge =>
     append parts [
         edgeLabel edge
     ]
 
-type (List Edge) -> Text
+type List Edge => Text
 func edgeListLabel edges => edges
   |> reduce appendEdgeLabel []
   |> join ", "

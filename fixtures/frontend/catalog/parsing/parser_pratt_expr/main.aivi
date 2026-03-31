@@ -33,7 +33,7 @@ type PrattCatalog = {
     missingRhs: PrattResult
 }
 
-type (List Token) -> TokenView
+type List Token => TokenView
 func viewTokens tokens =>
     {
         first: head tokens,
@@ -64,7 +64,7 @@ value emptyParse : ParseState = {
 
 value emptyTokens : List Token = []
 
-type (List Token) -> ParseState
+type List Token => ParseState
 func prefixPrimary tokens => viewTokens tokens
  ||> { first: Some (IntToken value), rest: Some remaining } -> okState "neg(lit({value}))" remaining
  ||> { first: Some Plus }                                   -> failState "missing" emptyTokens "missing prefix operand"
@@ -72,7 +72,7 @@ func prefixPrimary tokens => viewTokens tokens
  ||> { first: Some PrefixMinus }                            -> failState "missing" emptyTokens "stacked prefix not modeled"
  ||> { first: None }                                        -> failState "missing" emptyTokens "missing prefix operand"
 
-type (List Token) -> ParseState
+type List Token => ParseState
 func primary tokens => viewTokens tokens
  ||> { first: Some (IntToken value), rest: Some remaining } -> okState "lit({value})" remaining
  ||> { first: Some PrefixMinus, rest: Some remaining }      -> prefixPrimary remaining
@@ -146,15 +146,15 @@ type ParseState -> ParseState
 func continueInfixFrom left => left
  ||> { label, remaining } -> continueInfixPieces label remaining
 
-type (List Token) -> ParseState
+type List Token => ParseState
 func parseExpression tokens =>
     continueInfixFrom (primary tokens)
 
-type (List Token) -> ParseState -> PrattResult
+type List Token => ParseState -> PrattResult
 func summarizeParsed tokens parsed => parsed
  ||> { label, remaining, status } -> { ast: label, consumed: length tokens - length remaining, status }
 
-type (List Token) -> PrattResult
+type List Token => PrattResult
 func summarize tokens =>
     summarizeParsed tokens (parseExpression tokens)
 

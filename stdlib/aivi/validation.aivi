@@ -6,11 +6,11 @@ use aivi.nonEmpty (
 type Errors E =
   | NonEmptyList E
 
-type (NonEmptyList E) -> (NonEmptyList E) -> (Validation (NonEmptyList E) (A, B))
+type NonEmptyList E => (NonEmptyList E) -> (Validation (NonEmptyList E) (A, B))
 func zipBothInvalid le re =>
     Invalid (appendNel le re)
 
-type (NonEmptyList E) -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
+type NonEmptyList E => (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
 func zipInvalidLeft le right => right
  ||> Invalid re -> zipBothInvalid le re
  ||> Valid _    -> Invalid le
@@ -24,12 +24,12 @@ func zipValidLeft a right => right
  ||> Invalid re -> Invalid re
  ||> Valid b    -> zipValidRight a b
 
-type (Validation E A) -> Bool
+type Validation E A => Bool
 func isValid opt => opt
  T|> True
  F|> False
 
-type (Validation E A) -> Bool
+type Validation E A => Bool
 func isInvalid opt => opt
  F|> True
  T|> False
@@ -44,17 +44,17 @@ func mapErr transform opt => opt
  ||> Valid item  -> Valid item
  ||> Invalid err -> Invalid (transform err)
 
-type (Validation E A) -> (Result E A)
+type Validation E A => (Result E A)
 func toResult opt => opt
  ||> Valid item  -> Ok item
  ||> Invalid err -> Err err
 
-type (Result E A) -> (Validation E A)
+type Result E A => (Validation E A)
 func fromResult opt => opt
  ||> Ok item   -> Valid item
  ||> Err error -> Invalid error
 
-type (Validation E A) -> (Option A)
+type Validation E A => (Option A)
 func toOption opt => opt
  T|> Some
  F|> None
@@ -69,7 +69,7 @@ func andThen next opt => opt
  ||> Invalid e  -> Invalid e
  ||> Valid item -> next item
 
-type (Validation (NonEmptyList E) A) -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
+type Validation (NonEmptyList E) A => (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
 func zipValidation left right => left
  ||> Invalid le -> zipInvalidLeft le right
  ||> Valid a    -> zipValidLeft a right

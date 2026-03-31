@@ -112,7 +112,7 @@ func advance state symbol => specialTransitions
  ||> Some step -> step
  ||> None      -> defaultAdvance symbol
 
-type (List Text) -> (List Text) -> Advance -> ScanState
+type List Text => (List Text) -> Advance -> ScanState
 func applyAdvance trail matches step => step
  ||> { next, emitted } -> { state: next, trail: append trail [stateName next], matches: append matches emitted }
 
@@ -120,7 +120,7 @@ type ScanState -> Symbol -> ScanState
 func step scan symbol => scan
  ||> { state, trail, matches } -> applyAdvance trail matches (advance state symbol)
 
-type (List Text) -> Text -> Text -> Text
+type List Text => Text -> Text -> Text
 func renderList items separator fallback => length items == 0
  T|> fallback
  F|> join separator items

@@ -106,11 +106,11 @@ use aivi.pair (
     duplicate as pairDuplicate
 )
 
-type (Option A) -> Bool
+type Option A => Bool
 func isSome opt =>
     optionIsSome opt
 
-type (Option A) -> Bool
+type Option A => Bool
 func isNone opt =>
     optionIsNone opt
 
@@ -130,7 +130,7 @@ type (A -> Option B) -> (Option A) -> (Option B)
 func flatMapOption next opt =>
     optionFlatMap next opt
 
-type (Option A) -> (Option B) -> (Option (A, B))
+type Option A => (Option B) -> (Option (A, B))
 func zipOptions left right =>
     optionZip left right
 
@@ -142,11 +142,11 @@ type A -> (Result E A) -> A
 func withDefault fallback opt =>
     resultWithDefault fallback opt
 
-type (Result E A) -> Bool
+type Result E A => Bool
 func isOk opt =>
     resultIsOk opt
 
-type (Result E A) -> Bool
+type Result E A => Bool
 func isErr opt =>
     resultIsErr opt
 
@@ -162,35 +162,35 @@ type (A -> Result E B) -> (Result E A) -> (Result E B)
 func flatMapResult next opt =>
     resultFlatMap next opt
 
-type (List A) -> Int
+type List A => Int
 func length items =>
     listLength items
 
-type (List A) -> (Option A)
+type List A => (Option A)
 func head items =>
     listHead items
 
-type (List A) -> (Option A)
+type List A => (Option A)
 func last items =>
     listLast items
 
-type (List A) -> (List A)
+type List A => (List A)
 func tailOrEmpty items =>
     listTailOrEmpty items
 
-type (List A) -> Bool
+type List A => Bool
 func isEmpty items =>
     listIsEmpty items
 
-type (List A) -> Bool
+type List A => Bool
 func nonEmpty items =>
     listNonEmpty items
 
-type (List (List A)) -> (List A)
+type List (List A) => (List A)
 func flatten lists =>
     listFlatten lists
 
-type (List A) -> (List A)
+type List A => (List A)
 func reverse items =>
     listReverse items
 
@@ -202,7 +202,7 @@ type Int -> (List A) -> (List A)
 func drop n items =>
     listDrop n items
 
-type (List Int) -> Int
+type List Int => Int
 func sum items =>
     listSum items
 

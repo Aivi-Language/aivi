@@ -9,11 +9,11 @@ type A -> (NonEmptyList A) -> (NonEmptyList A)
 func cons item nel => nel
  ||> MkNEL h t -> MkNEL item (append [h] t)
 
-type (NonEmptyList A) -> A
+type NonEmptyList A => A
 func head nel => nel
  ||> MkNEL h ignored -> h
 
-type (NonEmptyList A) -> (List A)
+type NonEmptyList A => (List A)
 func toList nel => nel
  ||> MkNEL h t -> append [h] t
 
@@ -25,7 +25,7 @@ type A -> (List A) -> A
 func lastOfTail h t => t
   |> reduce lastStep h
 
-type (NonEmptyList A) -> A
+type NonEmptyList A => A
 func last nel => nel
  ||> MkNEL h t -> lastOfTail h t
 
@@ -33,11 +33,11 @@ type Int -> A -> Int
 func nelLengthStep acc ignored =>
     acc + 1
 
-type (List A) -> Int
+type List A => Int
 func tailLength t => t
   |> reduce nelLengthStep 1
 
-type (NonEmptyList A) -> Int
+type NonEmptyList A => Int
 func length nel => nel
  ||> MkNEL ignored t -> tailLength t
 
@@ -53,16 +53,16 @@ type (A -> B) -> (NonEmptyList A) -> (NonEmptyList B)
 func mapNel transform nel => nel
  ||> MkNEL h t -> MkNEL (transform h) (mappedTail transform t)
 
-type (Option (NonEmptyList A)) -> A -> (Option (NonEmptyList A))
+type Option (NonEmptyList A) => A -> (Option (NonEmptyList A))
 func fromListStep acc item => acc
  ||> None             -> Some (MkNEL item [])
  ||> Some (MkNEL h t) -> Some (MkNEL h (append t [item]))
 
-type (List A) -> (Option (NonEmptyList A))
+type List A => (Option (NonEmptyList A))
 func fromList items => items
   |> reduce fromListStep None
 
-type (NonEmptyList A) -> (NonEmptyList A) -> (NonEmptyList A)
+type NonEmptyList A => (NonEmptyList A) -> (NonEmptyList A)
 func appendNel left right => left
  ||> MkNEL h t -> MkNEL h (append t (toList right))
 

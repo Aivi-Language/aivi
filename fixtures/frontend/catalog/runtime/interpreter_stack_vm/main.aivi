@@ -30,16 +30,16 @@ type VmCatalog = {
     haltedEarly: VmSummary
 }
 
-type (List Int) -> Int -> (List Int)
+type List Int => Int -> (List Int)
 func pushStack stack x =>
     append stack [x]
 
-type (List Int) -> (Option (Int, List Int))
+type List Int => (Option (Int, List Int))
 func pop stack => head stack
  ||> Some x -> Some (x, tailOrEmpty stack)
  ||> None   -> None
 
-type (List Int) -> Bool -> (List Text) -> Text -> VmState
+type List Int => Bool -> (List Text) -> Text -> VmState
 func stateWithLog stack halted log entry =>
     {
         stack,
@@ -47,26 +47,26 @@ func stateWithLog stack halted log entry =>
         log: append log [entry]
     }
 
-type (List Int) -> (List Text) -> VmState
+type List Int => (List Text) -> VmState
 func underflowState stack log =>
     stateWithLog stack True log "underflow"
 
-type (List Text) -> Int -> (List Int) -> (Option (Int, List Int)) -> VmState
+type List Text => Int -> (List Int) -> (Option (Int, List Int)) -> VmState
 func finishAdd log right afterRight leftStep => leftStep
  ||> Some (left, afterLeft) -> stateWithLog (pushStack afterLeft (left + right)) False log "add"
  ||> None                   -> underflowState afterRight log
 
-type (List Text) -> (List Int) -> VmState
+type List Text => (List Int) -> VmState
 func applyAdd log stack => pop stack
  ||> Some (right, afterRight) -> finishAdd log right afterRight (pop afterRight)
  ||> None                     -> underflowState stack log
 
-type (List Text) -> (List Int) -> VmState
+type List Text => (List Int) -> VmState
 func applyNegate log stack => pop stack
  ||> Some (x, remaining) -> stateWithLog (pushStack remaining (0 - x)) False log "negate"
  ||> None                -> underflowState stack log
 
-type (List Int) -> (List Text) -> Instruction -> VmState
+type List Int => (List Text) -> Instruction -> VmState
 func continueStep stack log instruction => instruction
  ||> Push x    -> stateWithLog (pushStack stack x) False log "push {x}"
  ||> Add       -> applyAdd log stack
@@ -88,7 +88,7 @@ value initialState : VmState = {
     halted: False
 }
 
-type (List Instruction) -> VmState
+type List Instruction => VmState
 func runProgram program => program
   |> reduce step initialState
 

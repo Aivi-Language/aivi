@@ -20,12 +20,12 @@ type A -> (Result E A)
 func okValue item =>
     Ok item
 
-type (Option A) -> Bool
+type Option A => Bool
 func isSome opt => opt
  T|> True
  F|> False
 
-type (Option A) -> Bool
+type Option A => Bool
 func isNone opt => opt
  F|> True
  T|> False
@@ -35,7 +35,7 @@ func getOrElse fallback opt => opt
  ||> Some item -> item
  ||> None      -> fallback
 
-type (Option A) -> (Option A) -> (Option A)
+type Option A => (Option A) -> (Option A)
 func orElse fallback opt => opt
  T|> keepSome
  F|> fallback
@@ -45,12 +45,12 @@ func flatMap next opt => opt
  T|> next
  F|> None
 
-type (Option (Option A)) -> (Option A)
+type Option (Option A) => (Option A)
 func flatten opt => opt
  ||> Some nested -> nested
  ||> None        -> None
 
-type (Option A) -> (List A)
+type Option A => (List A)
 func toList opt => opt
  T|> singleton
  F|> []
@@ -70,7 +70,7 @@ func filter predicate opt => opt
  ||> None      -> None
  ||> Some item -> filterHelp item (predicate item)
 
-type (Option A) -> (Option B) -> (Option (A, B))
+type Option A => (Option B) -> (Option (A, B))
 func zip left right => left
  ||> None   -> None
  ||> Some a -> zipHelp a right

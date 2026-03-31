@@ -35,7 +35,7 @@ type (Text, Text) -> Bool
 func samePair pair => pair
  ||> (left, right) -> left == right
 
-type (List Text) -> (List Text) -> Bool
+type List Text => (List Text) -> Bool
 func pairedTokensMatch left right => zip left right
   |> all samePair
 
@@ -43,7 +43,7 @@ type Int -> Int -> Bool
 func sameCount left right =>
     left == right
 
-type (List Text) -> (List Text) -> Bool
+type List Text => (List Text) -> Bool
 func sameTokens left right => sameCount (length left) (length right)
  T|> pairedTokensMatch left right
  F|> False
@@ -57,21 +57,21 @@ type PrefixCandidate -> (Option Int)
 func matchingLength candidate => candidate
  ||> { matched, prefix, slice } -> matchedWhenEqual matched prefix slice
 
-type (List PrefixCandidate) -> Int
+type List PrefixCandidate => Int
 func matchedLength candidates => findMap matchingLength candidates
  ||> Some matched -> matched
  ||> None         -> 0
 
-type (List Int) -> PrefixEntry -> (List Int)
+type List Int => PrefixEntry -> (List Int)
 func appendLps values entry => entry
  ||> { candidates } -> append values [matchedLength candidates]
 
-type (List Text) -> (List Int) -> Int -> (List Text) -> (List Int)
+type List Text => (List Int) -> Int -> (List Text) -> (List Int)
 func collectWindowMatch patternTokens matches start tokens => sameTokens patternTokens tokens
  T|> append matches [start]
  F|> matches
 
-type (List Text) -> (List Int) -> SearchWindow -> (List Int)
+type List Text => (List Int) -> SearchWindow -> (List Int)
 func collectMatch patternTokens matches window => window
  ||> { start, tokens } -> collectWindowMatch patternTokens matches start tokens
 
