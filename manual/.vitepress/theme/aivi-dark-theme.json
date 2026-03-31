@@ -18,6 +18,11 @@
       "settings": { "foreground": "#B5BD68" }
     },
     {
+      "name": "String interpolation expression",
+      "scope": "meta.interpolation.aivi",
+      "settings": { "foreground": "#C5C8C6" }
+    },
+    {
       "name": "String interpolation",
       "scope": ["string.template", "punctuation.section.interpolation"],
       "settings": { "foreground": "#8ABEB7" }

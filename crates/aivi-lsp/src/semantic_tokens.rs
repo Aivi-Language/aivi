@@ -173,6 +173,9 @@ fn soft_or_hard_token_type_index(
 ) -> Option<u32> {
     match token.kind() {
         TokenKind::Identifier if token.text(source) == "when" => Some(IDX_KEYWORD),
+        // Interpolated string literals need TextMate's nested scopes so the
+        // interpolation braces and body can be themed independently.
+        TokenKind::StringLiteral if string_literal_has_interpolation(token.text(source)) => None,
         // Let TextMate grammar handle identifier coloring — it uses specific scopes
         // (e.g. variable.parameter.labeled, variable.other.field) that carry more
         // precise color intent than a blanket `variable` semantic token.
@@ -181,9 +184,36 @@ fn soft_or_hard_token_type_index(
     }
 }
 
+fn string_literal_has_interpolation(literal: &str) -> bool {
+    let mut chars = literal.chars();
+    if chars.next() != Some('"') {
+        return false;
+    }
+
+    let mut escaped = false;
+    for ch in chars {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escaped = true,
+            '"' => return false,
+            '{' => return true,
+            _ => {}
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{IDX_KEYWORD, soft_or_hard_token_type_index, token_type_index};
+    use super::{
+        IDX_KEYWORD, IDX_STRING, soft_or_hard_token_type_index, string_literal_has_interpolation,
+        token_type_index,
+    };
     use aivi_base::{FileId, SourceFile};
     use aivi_syntax::{TokenKind, lex_module};
 
@@ -208,5 +238,51 @@ mod tests {
             soft_or_hard_token_type_index(when, &source),
             Some(IDX_KEYWORD)
         );
+    }
+
+    #[test]
+    fn detects_unescaped_text_interpolation_holes() {
+        assert!(string_literal_has_interpolation(
+            r#""Final score: {game.score}""#
+        ));
+        assert!(!string_literal_has_interpolation(
+            r#""use \{literal\} braces""#
+        ));
+    }
+
+    #[test]
+    fn leaves_interpolated_string_literals_to_textmate() {
+        let source = SourceFile::new(
+            FileId::new(0),
+            "test.aivi",
+            r#"value label = "Final score: {game.score}""#,
+        );
+        let lexed = lex_module(&source);
+        let string = lexed
+            .tokens()
+            .iter()
+            .find(|token| token.kind() == TokenKind::StringLiteral)
+            .copied()
+            .expect("expected a string literal token");
+
+        assert_eq!(soft_or_hard_token_type_index(string, &source), None);
+    }
+
+    #[test]
+    fn keeps_plain_string_literals_as_semantic_strings() {
+        let source = SourceFile::new(
+            FileId::new(0),
+            "test.aivi",
+            r#"value label = "use \{literal\} braces""#,
+        );
+        let lexed = lex_module(&source);
+        let string = lexed
+            .tokens()
+            .iter()
+            .find(|token| token.kind() == TokenKind::StringLiteral)
+            .copied()
+            .expect("expected a string literal token");
+
+        assert_eq!(soft_or_hard_token_type_index(string, &source), Some(IDX_STRING));
     }
 }

@@ -152,6 +152,10 @@
                 "punctuation.definition.string.end.aivi"],
       "settings": { "foreground": "#B5BD68" } },
 
+    { "name": "String interpolation expression",
+      "scope": "meta.interpolation.aivi",
+      "settings": { "foreground": "#C5C8C6" } },
+
     { "name": "String interpolation braces",
       "scope": ["punctuation.section.interpolation.begin.aivi",
                 "punctuation.section.interpolation.end.aivi"],

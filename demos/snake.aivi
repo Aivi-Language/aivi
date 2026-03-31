@@ -307,26 +307,11 @@ func directionLabel direction => direction
  ||> East  -> "Right"
  ||> West  -> "Left"
 
-type Int -> Text
-func scoreLineFor score =>
-    "Score: {score}"
-
-type Bool -> Text
-func statusLineFor gameOver => gameOver
- T|> "Game Over"
- F|> "Running"
-
 @source window.keyDown with {
     repeat: False,
     focusOnly: True
 }
 signal keyDown : Signal Key
-
-signal direction : Signal Direction = keyDown
- +|> East updateDirection
-
-signal restartCount : Signal Int = keyDown
- +|> 0 countRestart
 
 @source timer.every 120ms with {
     immediate: False,
@@ -334,45 +319,26 @@ signal restartCount : Signal Int = keyDown
 }
 signal tick : Signal Unit
 
+signal direction : Signal Direction = keyDown
+ +|> East updateDirection
+
+signal restartCount : Signal Int = keyDown
+ +|> 0 countRestart
+
 signal gameState : Signal TickState = tick
  +|> initialTickState stepOnTick
 
-signal game : Signal Game = gameState
-  |> .game
-
-signal snake : Signal (List Cell) = game
-  |> .snake
-
-signal food : Signal Cell = game
-  |> .food
-
-signal score : Signal Int = game
-  |> .score
-
-signal gameOver : Signal Bool = game
-  |> .gameOver
-
-signal boardText : Signal Text = game
-  |> boardTextFor
-
-signal dirLine : Signal Text = direction
-  |> directionLabel
-
-signal scoreLine : Signal Text = score
-  |> scoreLineFor
-
-signal statusLine : Signal Text = gameOver
-  |> statusLineFor
+signal game : Signal Game = gameState.game
 
 value main =
     <Window title="AIVI Snake">
         <Box orientation="vertical" spacing={8}>
-            <Label text={dirLine} />
-            <Label text={scoreLine} />
-            <Label text={statusLine} />
-            <Label text={boardText} monospace />
-            <show when={gameOver}>
-                <Label text={"Final score: {score}"} />
+            <Label text={directionLabel direction} />
+            <Label text={"Score: {game.score}"} />
+            <Label text={game.gameOver T|> "Game Over" F|> "Running"} />
+            <Label text={boardTextFor game} monospace />
+            <show when={game.gameOver}>
+                <Label text={"Final score: {game.score}"} />
             </show>
         </Box>
     </Window>
