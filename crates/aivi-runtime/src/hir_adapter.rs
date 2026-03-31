@@ -350,6 +350,19 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                     let mut clause_bindings = Vec::with_capacity(signal.reactive_updates.len());
                     let mut clause_specs = Vec::with_capacity(signal.reactive_updates.len());
                     for (clause_index, update) in signal.reactive_updates.iter().enumerate() {
+                        let trigger_signal = match update.trigger_source {
+                            Some(source_item) => match public_signals.get(&source_item).copied() {
+                                Some(signal) => Some(signal),
+                                None => {
+                                    errors.push(HirRuntimeAdapterError::UnknownSignalDependency {
+                                        owner: binding.item,
+                                        dependency: source_item,
+                                    });
+                                    continue;
+                                }
+                            },
+                            None => None,
+                        };
                         let guard_fragment = match compile_runtime_expr_fragment(
                             self.module,
                             binding.item,
@@ -431,6 +444,9 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         {
                             push_unique_signal(&mut reactive_dependencies, dependency);
                         }
+                        if let Some(trigger_signal) = trigger_signal {
+                            push_unique_signal(&mut reactive_dependencies, trigger_signal);
+                        }
                         clause_bindings.push(HirReactiveUpdateBinding {
                             span: update.span,
                             keyword_span: update.keyword_span,
@@ -439,16 +455,17 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                             body: update.body,
                             body_mode: update.body_mode,
                             clause: ReactiveClauseHandle::from_raw(next_reactive_clause_raw),
+                            trigger_signal,
                             guard_dependencies: guard_dependencies.clone().into_boxed_slice(),
                             body_dependencies: body_dependencies.clone().into_boxed_slice(),
                             compiled_guard: guard_fragment,
                             compiled_body: body_fragment,
                         });
                         next_reactive_clause_raw = next_reactive_clause_raw.wrapping_add(1);
-                        clause_specs.push(ReactiveClauseBuilderSpec::new(
-                            guard_dependencies,
-                            body_dependencies,
-                        ));
+                        clause_specs.push(
+                            ReactiveClauseBuilderSpec::new(guard_dependencies, body_dependencies)
+                                .with_trigger_signal(trigger_signal),
+                        );
                     }
                     if let Some(source_input) = binding.source_input {
                         let source_signal = source_input.as_signal();
@@ -1041,6 +1058,7 @@ pub struct HirReactiveUpdateBinding {
     pub body: hir::ExprId,
     pub body_mode: hir::ReactiveUpdateBodyMode,
     pub clause: ReactiveClauseHandle,
+    pub trigger_signal: Option<SignalHandle>,
     pub guard_dependencies: Box<[SignalHandle]>,
     pub body_dependencies: Box<[SignalHandle]>,
     pub compiled_guard: HirCompiledRuntimeExpr,
@@ -2591,6 +2609,10 @@ when ready True => total <- 42
         assert!(matches!(total.kind, HirSignalBindingKind::Reactive { .. }));
         assert_eq!(total.dependencies(), &[ready.signal()]);
         assert_eq!(total.reactive_updates().len(), 1);
+        assert_eq!(
+            total.reactive_updates()[0].trigger_signal,
+            Some(ready.signal())
+        );
         assert_eq!(
             total.reactive_updates()[0].body_mode,
             hir::ReactiveUpdateBodyMode::OptionalPayload

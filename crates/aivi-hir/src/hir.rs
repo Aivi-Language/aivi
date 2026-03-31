@@ -737,6 +737,7 @@ pub struct ReactiveUpdateClause {
     pub guard: ExprId,
     pub body: ExprId,
     pub body_mode: ReactiveUpdateBodyMode,
+    pub trigger_source: Option<ItemId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

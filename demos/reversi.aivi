@@ -1,0 +1,824 @@
+use aivi.list (
+    length
+    head
+    tailOrEmpty
+    at
+    replaceAt
+)
+
+use aivi.text (join)
+
+use aivi.option (getOrElse)
+
+use aivi.order (
+    minOf
+    maxOf
+)
+
+type Disc =
+  | Empty
+  | Red
+  | Blue
+
+type Turn =
+  | Human
+  | Computer
+
+type Outcome =
+  | HumanWins
+  | ComputerWins
+  | Draw
+
+type Status =
+  | Active Turn
+  | Passed Turn
+  | Finished Outcome
+
+type Axis =
+  | North
+  | South
+  | West
+  | East
+
+type Ray =
+  | NorthWest
+  | NorthRay
+  | NorthEast
+  | WestRay
+  | EastRay
+  | SouthWest
+  | SouthRay
+  | SouthEast
+
+type Coord =
+  | Coord Int Int
+
+type Board = List (List Disc)
+
+type TurnResolution = {
+    status: Status,
+    legalMoves: List Coord
+}
+
+type GameState = {
+    board: Board,
+    cursor: Coord,
+    status: Status,
+    legalMoves: List Coord,
+    humanCount: Int,
+    computerCount: Int,
+    moveNumber: Int,
+    lastMove: Option Coord
+}
+
+type Candidate = {
+    coord: Coord,
+    flips: Int,
+    score: Int
+}
+
+type CellView = {
+    id: Int,
+    label: Text,
+    active: Bool
+}
+
+type RowView = {
+    id: Int,
+    cells: List CellView
+}
+
+type Event =
+  | Tick
+  | MoveCursor Axis
+  | TryPlace
+  | Restart
+
+type Key =
+  | Key Text
+
+domain Duration over Int
+    literal ms : Int -> Duration
+
+value boardSize = 20
+value lastIndex = 19
+value centerLow = 9
+value centerHigh = 10
+
+value boardIndices = [0..19]
+
+value rays = [
+    NorthWest,
+    NorthRay,
+    NorthEast,
+    WestRay,
+    EastRay,
+    SouthWest,
+    SouthRay,
+    SouthEast
+]
+
+value corners = [
+    Coord 0 0,
+    Coord 19 0,
+    Coord 0 19,
+    Coord 19 19
+]
+
+type Int -> Int -> Bool
+func smallerInt left right =>
+    left < right
+
+type Coord -> Int
+func coordX coord => coord
+ ||> Coord x _ -> x
+
+type Coord -> Int
+func coordY coord => coord
+ ||> Coord _ y -> y
+
+type Coord -> Int
+func coordId coord => coord
+ ||> Coord x y -> y * boardSize + x
+
+type Coord -> Coord -> Bool
+func sameCoord target coord =>
+    target == coord
+
+type Coord -> Bool
+func onBoard coord => coord
+ ||> Coord x y -> x >= 0 and x < boardSize and y >= 0 and y < boardSize
+
+type Int -> Int
+func clampIndex n => (n < 0, n > lastIndex)
+ ||> (True, _)         -> 0
+ ||> (False, True)     -> lastIndex
+ ||> (False, False)    -> n
+
+type Int -> Int -> Coord
+func coordFromRow y x =>
+    Coord x y
+
+type Axis -> Coord -> Coord
+func stepCursor axis coord => (axis, coord)
+ ||> (North, Coord x y) -> Coord x (clampIndex (y - 1))
+ ||> (South, Coord x y) -> Coord x (clampIndex (y + 1))
+ ||> (West, Coord x y)  -> Coord (clampIndex (x - 1)) y
+ ||> (East, Coord x y)  -> Coord (clampIndex (x + 1)) y
+
+type Ray -> Coord -> Coord
+func stepRay ray coord => (ray, coord)
+ ||> (NorthWest, Coord x y) -> Coord (x - 1) (y - 1)
+ ||> (NorthRay, Coord x y)  -> Coord x (y - 1)
+ ||> (NorthEast, Coord x y) -> Coord (x + 1) (y - 1)
+ ||> (WestRay, Coord x y)   -> Coord (x - 1) y
+ ||> (EastRay, Coord x y)   -> Coord (x + 1) y
+ ||> (SouthWest, Coord x y) -> Coord (x - 1) (y + 1)
+ ||> (SouthRay, Coord x y)  -> Coord x (y + 1)
+ ||> (SouthEast, Coord x y) -> Coord (x + 1) (y + 1)
+
+type Turn -> Disc
+func discForTurn turn => turn
+ ||> Human    -> Red
+ ||> Computer -> Blue
+
+type Turn -> Turn
+func otherTurn turn => turn
+ ||> Human    -> Computer
+ ||> Computer -> Human
+
+type Disc -> Disc
+func otherDisc disc => disc
+ ||> Red   -> Blue
+ ||> Blue  -> Red
+ ||> Empty -> Empty
+
+type Turn -> Text
+func turnLabel turn => turn
+ ||> Human    -> "Red (you)"
+ ||> Computer -> "Blue (computer)"
+
+type Outcome -> Text
+func outcomeText outcome => outcome
+ ||> HumanWins    -> "Red wins."
+ ||> ComputerWins -> "Blue wins."
+ ||> Draw         -> "Draw."
+
+type Status -> Bool
+func humanToAct status => status
+ ||> Active Human     -> True
+ ||> Passed Computer  -> True
+ ||> _                -> False
+
+type Status -> Bool
+func computerToAct status => status
+ ||> Active Computer -> True
+ ||> Passed Human    -> True
+ ||> _               -> False
+
+type Status -> Bool
+func finished status => status
+ ||> Finished _ -> True
+ ||> _          -> False
+
+type Int -> Disc
+func emptyDisc ignored =>
+    Empty
+
+type (List Disc) -> Int -> (List Disc)
+func emptyRowStep row ignored =>
+    append row [Empty]
+
+type Int -> (List Disc)
+func emptyRow ignored => boardIndices
+  |> reduce emptyRowStep []
+
+type Board -> Int -> Board
+func emptyBoardStep board ignored =>
+    append board [emptyRow ignored]
+
+value emptyBoard : Board = boardIndices
+  |> reduce emptyBoardStep []
+
+type Int -> Board -> (List Disc)
+func rowAt y board => at y board
+ ||> Some row -> row
+ ||> None     -> []
+
+type Int -> (List Disc) -> Disc
+func discAtX x row => at x row
+ ||> Some disc -> disc
+ ||> None      -> Empty
+
+type Board -> Coord -> Disc
+func discAt board coord => coord
+ ||> Coord x y -> discAtX x (rowAt y board)
+
+type Board -> Coord -> Disc -> Board
+func setDisc board coord disc => coord
+ ||> Coord x y -> replaceAt y (replaceAt x disc (rowAt y board)) board
+
+type Disc -> Board -> Coord -> Board
+func setManyStep disc board coord =>
+    setDisc board coord disc
+
+type Board -> Disc -> (List Coord) -> Board
+func setMany board disc coords => coords
+  |> reduce (setManyStep disc) board
+
+type Coord -> Disc -> Board -> Board
+func put coord disc board =>
+    setDisc board coord disc
+
+type Coord -> (List Coord) -> Bool
+func coordInList coord coords => coords
+  |> reduce (coordInListStep coord) False
+
+type Coord -> Bool -> Coord -> Bool
+func coordInListStep target found coord => found
+ T|> True
+ F|> sameCoord target coord
+
+type Coord -> (List Coord) -> Coord
+func chooseCursor current moves => (coordInList current moves, head moves)
+ ||> (True, _)            -> current
+ ||> (False, Some first)  -> first
+ ||> (False, None)        -> current
+
+type Board -> Disc -> Ray -> Coord -> (List Coord) -> Disc -> (List Coord)
+func resolveScan board disc ray coord captured current => (current == otherDisc disc, current == disc, length captured > 0)
+ ||> (True, _, _)            -> scanFlips board disc ray (stepRay ray coord) (append captured [coord])
+ ||> (False, True, True)     -> captured
+ ||> _                       -> []
+
+type Board -> Disc -> Ray -> Coord -> (List Coord) -> (List Coord)
+func scanFlips board disc ray coord captured => onBoard coord
+ T|> scanFlipsInBounds board disc ray coord captured
+ F|> []
+
+type Board -> Disc -> Ray -> Coord -> (List Coord) -> (List Coord)
+func scanFlipsInBounds board disc ray coord captured => discAt board coord
+ ||> Empty   -> []
+ ||> current -> resolveScan board disc ray coord captured current
+
+type Board -> Disc -> Coord -> Ray -> (List Coord)
+func flipsInRay board disc coord ray =>
+    scanFlips board disc ray (stepRay ray coord) []
+
+type Board -> Disc -> Coord -> (List Coord)
+func flipsForMove board disc coord => rays
+  |> reduce (flipsForMoveStep board disc coord) []
+
+type Board -> Disc -> Coord -> (List Coord) -> Ray -> (List Coord)
+func flipsForMoveStep board disc coord acc ray =>
+    append acc (flipsInRay board disc coord ray)
+
+type Board -> Disc -> Coord -> Bool
+func legalMove board disc coord =>
+    discAt board coord == Empty and length (flipsForMove board disc coord) > 0
+
+type Board -> Disc -> Int -> (List Coord)
+func rowMoves board disc y =>
+    rowMovesFromIndices board disc y boardIndices
+
+type Board -> Disc -> Int -> (List Int) -> (List Coord)
+func rowMovesFromIndices board disc y remaining => head remaining
+ ||> Some x -> continueRowMoves board disc y x (tailOrEmpty remaining)
+ ||> None   -> []
+
+type Board -> Disc -> Int -> Int -> (List Int) -> (List Coord)
+func continueRowMoves board disc y x remaining => legalMove board disc (coordFromRow y x)
+ T|> append [coordFromRow y x] (rowMovesFromIndices board disc y remaining)
+ F|> rowMovesFromIndices board disc y remaining
+
+type Board -> Disc -> (List Coord)
+func legalMoves board disc =>
+    legalMovesFromRows board disc boardIndices
+
+type Board -> Disc -> (List Int) -> (List Coord)
+func legalMovesFromRows board disc remaining => head remaining
+ ||> Some y -> append (rowMoves board disc y) (legalMovesFromRows board disc (tailOrEmpty remaining))
+ ||> None   -> []
+
+type Board -> Disc -> Coord -> (List Coord) -> Board
+func boardAfterFlips board disc coord flips => flips
+  |> setMany board disc
+  |> put coord disc
+
+type Board -> Disc -> Coord -> Board
+func boardAfterMove board disc coord => flipsForMove board disc coord
+  |> boardAfterFlips board disc coord
+
+type Disc -> Disc -> Bool
+func sameDisc target disc =>
+    target == disc
+
+type Disc -> (List Disc) -> Int
+func countInRow target row => row
+  |> reduce (countInRowStep target) 0
+
+type Disc -> Int -> Disc -> Int
+func countInRowStep target total disc => sameDisc target disc
+ T|> total + 1
+ F|> total
+
+type Disc -> Board -> Int
+func countDisc target board => board
+  |> reduce (countDiscStep target) 0
+
+type Disc -> Int -> (List Disc) -> Int
+func countDiscStep target total row =>
+    total + countInRow target row
+
+type Int -> Int -> Outcome
+func outcomeFromCounts humanCount computerCount => (humanCount > computerCount, computerCount > humanCount)
+ ||> (True, _)         -> HumanWins
+ ||> (False, True)     -> ComputerWins
+ ||> _                 -> Draw
+
+type Board -> Outcome
+func outcomeForBoard board =>
+    outcomeFromCounts (countDisc Red board) (countDisc Blue board)
+
+type Board -> Turn -> (List Coord) -> (List Coord) -> TurnResolution
+func resolveTurn board preferred preferredMoves fallbackMoves => (length preferredMoves > 0, length fallbackMoves > 0)
+ ||> (True, _)         -> { status: Active preferred, legalMoves: preferredMoves }
+ ||> (False, True)     -> { status: Passed preferred, legalMoves: fallbackMoves }
+ ||> (False, False)    -> { status: Finished (outcomeForBoard board), legalMoves: [] }
+
+type Board -> Turn -> TurnResolution
+func advanceTurn board preferred =>
+    resolveTurn board preferred (legalMoves board (discForTurn preferred)) (legalMoves board (discForTurn (otherTurn preferred)))
+
+type Board -> Coord -> Int -> (Option Coord) -> TurnResolution -> GameState
+func makeState board currentCursor moveNumber lastMove resolution =>
+    {
+        board: board,
+        cursor: chooseCursor currentCursor resolution.legalMoves,
+        status: resolution.status,
+        legalMoves: resolution.legalMoves,
+        humanCount: countDisc Red board,
+        computerCount: countDisc Blue board,
+        moveNumber: moveNumber,
+        lastMove: lastMove
+    }
+
+value initialBoard : Board = emptyBoard
+  |> put (Coord centerLow centerLow) Blue
+  |> put (Coord centerHigh centerHigh) Blue
+  |> put (Coord centerLow centerHigh) Red
+  |> put (Coord centerHigh centerLow) Red
+
+value initialResolution : TurnResolution =
+    advanceTurn initialBoard Human
+
+value initial : GameState =
+    makeState initialBoard (Coord centerLow centerHigh) 0 None initialResolution
+
+type Int -> Bool
+func oneFromEdge n =>
+    n == 1 or n == lastIndex - 1
+
+type Int -> Bool
+func twoFromEdge n =>
+    n == 2 or n == lastIndex - 2
+
+type Coord -> Bool
+func cornerCoord coord =>
+    coordInList coord corners
+
+type Coord -> Bool
+func cornerBand coord => coord
+ ||> Coord x y -> (x <= 1 or x >= lastIndex - 1) and (y <= 1 or y >= lastIndex - 1)
+
+type Coord -> Bool
+func edgeCoord coord => coord
+ ||> Coord x y -> x == 0 or x == lastIndex or y == 0 or y == lastIndex
+
+type Coord -> Bool
+func innerRing coord => coord
+ ||> Coord x y -> oneFromEdge x or oneFromEdge y
+
+type Coord -> Bool
+func secondRing coord => coord
+ ||> Coord x y -> twoFromEdge x or twoFromEdge y
+
+type Coord -> Int
+func positionalWeight coord => (cornerCoord coord, cornerBand coord, edgeCoord coord, innerRing coord, secondRing coord)
+ ||> (True, _, _, _, _)              -> 160
+ ||> (False, True, _, _, _)          -> -60
+ ||> (False, False, True, _, _)      -> 18
+ ||> (False, False, False, True, _)  -> -4
+ ||> (False, False, False, False, True) -> 8
+ ||> _                               -> 3
+
+type Board -> Coord -> Int
+func discPositionScore board coord => discAt board coord
+ ||> Blue  -> positionalWeight coord
+ ||> Red   -> 0 - positionalWeight coord
+ ||> Empty -> 0
+
+type Board -> Int
+func boardPositionScore board =>
+    boardPositionRows board boardIndices
+
+type Board -> (List Int) -> Int
+func boardPositionRows board remaining => head remaining
+ ||> Some y -> rowPositionScore board y + boardPositionRows board (tailOrEmpty remaining)
+ ||> None   -> 0
+
+type Board -> Int -> Int
+func rowPositionScore board y =>
+    rowPositionCells board y boardIndices
+
+type Board -> Int -> (List Int) -> Int
+func rowPositionCells board y remaining => head remaining
+ ||> Some x -> discPositionScore board (coordFromRow y x) + rowPositionCells board y (tailOrEmpty remaining)
+ ||> None   -> 0
+
+type Board -> Int
+func boardPieceScore board =>
+    (countDisc Blue board - countDisc Red board) * 2
+
+type Board -> Int
+func evaluateBoard board =>
+    boardPositionScore board + boardPieceScore board
+
+type Outcome -> Int
+func terminalScore outcome => outcome
+ ||> HumanWins    -> -100000
+ ||> ComputerWins -> 100000
+ ||> Draw         -> 0
+
+type Board -> Coord -> Int
+func humanReplyValue board coord =>
+    evaluateBoard (boardAfterMove board Red coord)
+
+type Board -> (List Coord) -> Int
+func minHumanReplyScore board moves => head moves
+ ||> Some first -> continueHumanReplies board moves first
+ ||> None       -> evaluateBoard board
+
+type Board -> (List Coord) -> Coord -> Int
+func continueHumanReplies board moves first => tailOrEmpty moves
+  |> reduce (minHumanReplyStep board) (humanReplyValue board first)
+
+type Board -> Int -> Coord -> Int
+func minHumanReplyStep board best coord => humanReplyValue board coord < best
+ T|> humanReplyValue board coord
+ F|> best
+
+type Board -> TurnResolution -> Int
+func replyScoreForTransition board resolution => resolution.status
+ ||> Finished outcome -> terminalScore outcome
+ ||> Passed Human     -> evaluateBoard board + 180 + length resolution.legalMoves * 6
+ ||> Active Human     -> minHumanReplyScore board resolution.legalMoves
+ ||> Passed Computer  -> evaluateBoard board
+ ||> Active Computer  -> evaluateBoard board
+
+type Board -> Int
+func replyScore board =>
+    replyScoreForTransition board (advanceTurn board Human)
+
+type Coord -> Int -> Board -> Int
+func finalCandidateScore coord flipCount afterBoard =>
+    replyScore afterBoard + flipCount * 6 + positionalWeight coord * 2
+
+type Coord -> (List Coord) -> Board -> Candidate
+func buildCandidate coord flips afterBoard =>
+    {
+        coord: coord,
+        flips: length flips,
+        score: finalCandidateScore coord (length flips) afterBoard
+    }
+
+type Board -> Coord -> (List Coord) -> Candidate
+func candidateForMove board coord flips =>
+    buildCandidate coord flips (boardAfterFlips board Blue coord flips)
+
+type Board -> Coord -> Candidate
+func candidateForCoord board coord =>
+    candidateForMove board coord (flipsForMove board Blue coord)
+
+type Candidate -> Candidate -> Bool
+func betterCandidate left right =>
+    left.score < right.score
+        or (left.score == right.score and left.flips < right.flips)
+        or (left.score == right.score and left.flips == right.flips and coordId left.coord > coordId right.coord)
+
+type List Candidate -> (Option Candidate)
+func bestCandidate candidates => head candidates
+ ||> Some first -> Some (maxOf betterCandidate first (tailOrEmpty candidates))
+ ||> None       -> None
+
+type Board -> (List Coord) -> (Option Candidate)
+func bestComputerMove board moves =>
+    head moves
+ ||> Some first -> Some (continueComputerMoves board moves first)
+ ||> None       -> None
+
+type Board -> (List Coord) -> Coord -> Candidate
+func continueComputerMoves board moves first => tailOrEmpty moves
+  |> reduce (bestComputerMoveStep board) (candidateForCoord board first)
+
+type Board -> Candidate -> Coord -> Candidate
+func bestComputerMoveStep board best coord =>
+    keepBetterCandidate best (candidateForCoord board coord)
+
+type Candidate -> Candidate -> Candidate
+func keepBetterCandidate best candidate => betterCandidate best candidate
+ T|> candidate
+ F|> best
+
+type Coord -> GameState -> GameState
+func withCursor cursor state =>
+    {
+        board: state.board,
+        cursor: cursor,
+        status: state.status,
+        legalMoves: state.legalMoves,
+        humanCount: state.humanCount,
+        computerCount: state.computerCount,
+        moveNumber: state.moveNumber,
+        lastMove: state.lastMove
+    }
+
+type GameState -> Turn -> Coord -> Board -> GameState
+func applyResolvedBoard state turn coord afterBoard =>
+    makeState afterBoard state.cursor (state.moveNumber + 1) (Some coord) (advanceTurn afterBoard (otherTurn turn))
+
+type GameState -> Turn -> Coord -> (List Coord) -> GameState
+func applyResolvedTurn state turn coord flips => boardAfterFlips state.board (discForTurn turn) coord flips
+  |> applyResolvedBoard state turn coord
+
+type GameState -> Turn -> Coord -> GameState
+func applyTurnMove state turn coord => flipsForMove state.board (discForTurn turn) coord
+  |> applyResolvedTurn state turn coord
+
+type Axis -> GameState -> GameState
+func handleCursor axis state =>
+    withCursor (stepCursor axis state.cursor) state
+
+type GameState -> Bool
+func selectedPlayable state => humanToAct state.status
+ T|> coordInList state.cursor state.legalMoves
+ F|> False
+
+type GameState -> GameState
+func handleTryPlace state => (humanToAct state.status, coordInList state.cursor state.legalMoves)
+ ||> (True, True)  -> applyTurnMove state Human state.cursor
+ ||> _             -> state
+
+type GameState -> GameState
+func runComputerTurn state => bestComputerMove state.board state.legalMoves
+ ||> Some candidate -> applyTurnMove state Computer candidate.coord
+ ||> None           -> makeState state.board state.cursor state.moveNumber state.lastMove (advanceTurn state.board Computer)
+
+type GameState -> GameState
+func handleTick state => computerToAct state.status
+ T|> runComputerTurn state
+ F|> state
+
+type Event -> GameState -> GameState
+func step event state => event
+ ||> Restart         -> initial
+ ||> MoveCursor axis -> handleCursor axis state
+ ||> TryPlace        -> handleTryPlace state
+ ||> Tick            -> handleTick state
+
+type Coord -> Text
+func coordLabel coord => coord
+ ||> Coord x y -> "({x + 1}, {y + 1})"
+
+type Status -> Text
+func statusLabel status => status
+ ||> Active Human     -> "Red (you) to move"
+ ||> Active Computer  -> "Blue (computer) to move"
+ ||> Passed Human     -> "Red passes - Blue keeps the move"
+ ||> Passed Computer  -> "Blue passes - Red keeps the move"
+ ||> Finished outcome -> outcomeText outcome
+
+type GameState -> Text
+func humanHint state => selectedPlayable state
+ T|> "Place at {coordLabel state.cursor} with Enter, Space, or the button."
+ F|> "Use the arrow keys to land on one of the marked cells."
+
+type GameState -> Text
+func hintLine state => state.status
+ ||> Active Human     -> humanHint state
+ ||> Active Computer  -> "Blue is scoring replies with a positional two-ply search."
+ ||> Passed Human     -> "Red has no legal move. Blue will act on the next tick."
+ ||> Passed Computer  -> "Blue has no legal move. Red can play immediately."
+ ||> Finished _       -> "Press Restart to begin a new game."
+
+type GameState -> Text
+func scoreLine state =>
+    "Red {state.humanCount} | Blue {state.computerCount} | Moves {state.moveNumber}"
+
+type GameState -> Text
+func cursorLine state => selectedPlayable state
+ T|> "Cursor {coordLabel state.cursor} is legal."
+ F|> "Cursor {coordLabel state.cursor}."
+
+type GameState -> Text
+func lastMoveLine state => state.lastMove
+ ||> Some coord -> lastMoveAt coord
+ ||> None       -> "Last move: opening layout"
+
+type Coord -> Text
+func lastMoveAt coord =>
+    coord
+ ||> Coord x y -> "Last move: ({x + 1}, {y + 1})"
+
+type GameState -> Coord -> Text
+func emptyCellLabel state coord => (coordInList coord state.legalMoves, humanToAct state.status, computerToAct state.status)
+ ||> (True, True, _)    -> "◌"
+ ||> (True, False, True) -> "◍"
+ ||> _                  -> "·"
+
+type GameState -> Coord -> Text
+func cellLabel state coord => discAt state.board coord
+ ||> Red   -> "🔴"
+ ||> Blue  -> "🔵"
+ ||> Empty -> emptyCellLabel state coord
+
+type GameState -> Int -> Int -> CellView
+func cellView state y x =>
+    {
+        id: x,
+        label: cellLabel state (Coord x y),
+        active: Coord x y == state.cursor
+    }
+
+type GameState -> Int -> (List CellView)
+func rowCells state y => boardIndices
+  |> reduce (rowCellsStep state y) []
+
+type GameState -> Int -> (List CellView) -> Int -> (List CellView)
+func rowCellsStep state y cells x =>
+    append cells [cellView state y x]
+
+type GameState -> Int -> RowView
+func rowView state y =>
+    {
+        id: y,
+        cells: rowCells state y
+    }
+
+type GameState -> (List RowView)
+func boardRows state => boardIndices
+  |> reduce (boardRowsStep state) []
+
+type GameState -> (List RowView) -> Int -> (List RowView)
+func boardRowsStep state rows y =>
+    append rows [rowView state y]
+
+@source timer.every 220ms with {
+    immediate: False,
+    coalesce: True
+}
+signal tick : Signal Unit
+
+@source window.keyDown with {
+    repeat: False,
+    focusOnly: True
+}
+signal keyDown : Signal Key
+
+signal placeClick : Signal Unit
+
+signal restartClick : Signal Unit
+
+signal event : Signal Event
+
+when tick _ => event <- Tick
+when keyDown (Key "ArrowLeft") => event <- MoveCursor West
+when keyDown (Key "ArrowRight") => event <- MoveCursor East
+when keyDown (Key "ArrowUp") => event <- MoveCursor North
+when keyDown (Key "ArrowDown") => event <- MoveCursor South
+when keyDown (Key "Space") => event <- TryPlace
+when keyDown (Key "Return") => event <- TryPlace
+when keyDown (Key "r") => event <- Restart
+when keyDown (Key "R") => event <- Restart
+when restartClick _ => event <- Restart
+when placeClick _ => event <- TryPlace
+
+signal state : Signal GameState = event
+ +|> initial step
+
+signal phase : Signal Status = state
+ |> .status
+
+signal rows : Signal (List RowView) = state
+ |> boardRows
+
+signal statusText : Signal Text = phase
+ |> statusLabel
+
+signal scoreText : Signal Text = state
+ |> scoreLine
+
+signal cursorText : Signal Text = state
+ |> cursorLine
+
+signal hintText : Signal Text = state
+ |> hintLine
+
+signal lastMoveText : Signal Text = state
+ |> lastMoveLine
+
+signal canPlace : Signal Bool = state
+ |> selectedPlayable
+
+signal aiThinking : Signal Bool = phase
+ |> computerToAct
+
+value main =
+    <Window title="AIVI Reversi 20x20">
+        <Box orientation="vertical" spacing={8}>
+            <Label text={statusText} />
+            <Label text={scoreText} />
+            <Label text={cursorText} />
+            <Label text={lastMoveText} />
+            <Label text={hintText} />
+            <Box orientation="horizontal" spacing={8}>
+                <Button label="Place Disc" onClick={placeClick} sensitive={canPlace} />
+                <Button label="Restart" onClick={restartClick} />
+                <show when={aiThinking}>
+                    <Spinner spinning={True} />
+                </show>
+            </Box>
+            <with value={phase} as={currentPhase}>
+                <match on={currentPhase}>
+                    <case pattern={Finished outcome}>
+                        <Label text="{outcomeText outcome} Press Restart to play again." />
+                    </case>
+                    <case pattern={Passed Human}>
+                        <Label text="Red has no legal move, so Blue keeps the move." />
+                    </case>
+                    <case pattern={Passed Computer}>
+                        <Label text="Blue has no legal move, so Red keeps the move." />
+                    </case>
+                    <case pattern={Active Human}>
+                        <Label text="Marked cells are legal. The highlighted toggle is the active cursor." />
+                    </case>
+                    <case pattern={Active Computer}>
+                        <Label text="Blue is evaluating the board, reply space, corners, and edge pressure." />
+                    </case>
+                </match>
+            </with>
+            <ScrolledWindow hexpand={True} vexpand={True}>
+                <Box orientation="vertical" spacing={1}>
+                    <each of={rows} as={row} key={row.id}>
+                        <Box orientation="horizontal" spacing={1}>
+                            <each of={row.cells} as={cell} key={cell.id}>
+                                <ToggleButton label={cell.label} active={cell.active} sensitive={False} />
+                            </each>
+                        </Box>
+                    </each>
+                </Box>
+            </ScrolledWindow>
+        </Box>
+    </Window>
+
+export main

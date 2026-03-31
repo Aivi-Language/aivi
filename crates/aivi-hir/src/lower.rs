@@ -716,6 +716,7 @@ impl<'a> Lowerer<'a> {
             guard,
             body,
             body_mode: ReactiveUpdateBodyMode::Payload,
+            trigger_source: None,
         });
     }
 
@@ -760,9 +761,9 @@ impl<'a> Lowerer<'a> {
             );
             return;
         };
-        if self.resolve_reactive_update_source(source).is_none() {
+        let Some(source_item) = self.resolve_reactive_update_source(source) else {
             return;
-        }
+        };
         let Some(target_item) = self.resolve_reactive_update_target(target) else {
             return;
         };
@@ -780,6 +781,7 @@ impl<'a> Lowerer<'a> {
             guard,
             body,
             body_mode: ReactiveUpdateBodyMode::OptionalPayload,
+            trigger_source: Some(source_item),
         });
     }
 
@@ -859,6 +861,7 @@ impl<'a> Lowerer<'a> {
             guard,
             body,
             body_mode: ReactiveUpdateBodyMode::OptionalPayload,
+            trigger_source: None,
         });
     }
 

@@ -1066,8 +1066,17 @@ mod tests {
             .lines()
             .find(|row| row.contains('@'))
             .expect("board text should contain a snake head");
-        row.find('@')
+        row.chars()
+            .position(|ch| ch == '@')
             .expect("board row should expose the snake head column")
+    }
+
+    fn head_y(board_text: &str) -> usize {
+        board_text
+            .lines()
+            .enumerate()
+            .find_map(|(index, row)| row.contains('@').then_some(index))
+            .expect("board text should contain a snake head row")
     }
 
     fn collect_label_texts(widget: &gtk::Widget, labels: &mut Vec<String>) {
@@ -1186,7 +1195,6 @@ mod tests {
         let context = harness.control().context();
         let initial_board = board_text_for(&harness, board_item);
         let initial_head_x = head_x(&initial_board);
-        eprintln!("initial snake board:\n{initial_board}");
         let initial_hydration = harness.with_access(|access| access.latest_applied_hydration());
         assert_eq!(
             initial_head_x, 6,
@@ -1210,7 +1218,6 @@ mod tests {
             .expect("presenting the run-session window should release startup timers");
         pump_context(&context, Duration::from_millis(650));
         let advanced_board = board_text_for(&harness, board_item);
-        eprintln!("advanced snake board:\n{advanced_board}");
         assert!(
             head_x(&advanced_board) > initial_head_x,
             "board should start advancing after presentation releases the startup-held timer source"
@@ -1366,30 +1373,32 @@ mod tests {
             }),
             "dispatching ArrowUp should update the snake direction before waiting for a collision"
         );
-        assert!(
-            pump_until(&context, Duration::from_secs(3), || {
-                text_signal_for(&harness, status_item) == "Game Over"
-            }),
+        pump_context(&context, Duration::from_secs(3));
+        assert_eq!(
+            text_signal_for(&harness, status_item),
+            "Game Over",
             "steering upward should eventually collide with the wall and end the game"
         );
         let game_over_board = board_text_for(&harness, board_item);
-        eprintln!("game over board:\n{game_over_board}");
         assert_eq!(text_signal_for(&harness, direction_item), "Up");
 
         driver.dispatch_window_key_event("Space", false);
         assert!(
-            pump_until(&context, Duration::from_secs(2), || {
+            pump_until(&context, Duration::from_millis(100), || {
                 text_signal_for(&harness, status_item) == "Running"
+                    && text_signal_for(&harness, direction_item) == "Right"
             }),
-            "pressing Space after game over should restart the snake on a live timer tick"
+            "pressing Space should immediately reset the event-driven snake"
         );
         let restarted_board = board_text_for(&harness, board_item);
-        eprintln!("restarted board:\n{restarted_board}");
-        assert_eq!(text_signal_for(&harness, direction_item), "Right");
         assert_eq!(
-            head_x(&restarted_board),
-            6,
-            "restart should return the snake to its initial starting lane"
+            head_y(&restarted_board),
+            10,
+            "restart should return the snake to its starting row"
+        );
+        assert!(
+            matches!(head_x(&restarted_board), 6 | 7),
+            "restart should return the snake to its starting lane before or just after the first timer step"
         );
         assert_ne!(
             restarted_board, game_over_board,

@@ -126,6 +126,29 @@ value fallback : Int = firstOrZero []
 
 ---
 
+### at
+
+Returns the element at the given zero-based index wrapped in `Some`, or `None` if the index is negative or out of range.
+
+```
+at : Int -> (List A) -> Option A
+```
+
+```aivi
+use aivi.list (at)
+
+value items : List Text = [
+    "alpha",
+    "beta",
+    "gamma"
+]
+
+value middle : Option Text = at 1 items
+value missing : Option Text = at 9 items
+```
+
+---
+
 ### tail
 
 Returns all elements after the first, wrapped in `Some (List A)`, or `None` if the list is empty.
@@ -358,6 +381,29 @@ value items : List Int = [
 ]
 
 value after2 : List Int = drop 2 items
+```
+
+---
+
+### replaceAt
+
+Returns a new list with the element at the given zero-based index replaced. Negative or out-of-range indices leave the original list unchanged.
+
+```
+replaceAt : Int -> A -> (List A) -> List A
+```
+
+```aivi
+use aivi.list (replaceAt)
+
+value items : List Int = [
+    10,
+    20,
+    30
+]
+
+value updated : List Int = replaceAt 1 99 items
+value unchanged : List Int = replaceAt 9 42 items
 ```
 
 ---

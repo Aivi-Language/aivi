@@ -119,6 +119,17 @@ func nonEmpty items => head items
  T|> True
  F|> False
 
+type AtState A = {
+    remaining: Int,
+    found: Option A
+}
+
+type AtState A => A -> (AtState A)
+func atStep state item => (state.found, state.remaining == 0)
+ ||> (Some _, _)    -> state
+ ||> (None, True)   -> { remaining: -1, found: Some item }
+ ||> (None, False)  -> { remaining: state.remaining - 1, found: None }
+
 type List A => Int
 func length items => items
   |> reduce lengthStep 0
@@ -126,6 +137,13 @@ func length items => items
 type List A => (Option A)
 func head items => items
   |> reduce keepFirst None
+
+type Int -> (List A) -> (Option A)
+func at index items => index < 0
+ T|> None
+ F|> items
+  |> reduce atStep { remaining: index, found: None }
+  |> .found
 
 type List A => (Option (List A))
 func tail items => items
@@ -164,6 +182,25 @@ func findMap transform items => items
 type (A -> Bool) -> (List A) -> (Partition A)
 func partition predicate items => items
   |> reduce (partitionStep predicate) { matched: [], unmatched: [] }
+
+type ReplaceAtState A = {
+    remaining: Int,
+    replaced: Bool,
+    items: List A
+}
+
+type A -> (ReplaceAtState A) -> A -> (ReplaceAtState A)
+func replaceAtStep replacement state item => (state.replaced, state.remaining == 0)
+ ||> (True, _)      -> { remaining: state.remaining, replaced: True, items: append state.items [item] }
+ ||> (False, True)  -> { remaining: -1, replaced: True, items: append state.items [replacement] }
+ ||> (False, False) -> { remaining: state.remaining - 1, replaced: False, items: append state.items [item] }
+
+type Int -> A -> (List A) -> (List A)
+func replaceAt index replacement items => index < 0
+ T|> items
+ F|> items
+  |> reduce (replaceAtStep replacement) { remaining: index, replaced: False, items: [] }
+  |> .items
 
 type (A -> B) -> (List B) -> A -> (List B)
 func mapStep transform acc item =>
@@ -446,10 +483,12 @@ export isEmpty
 export nonEmpty
 export length
 export head
+export at
 export tail
 export tailOrEmpty
 export last
 export map
+export replaceAt
 export filter
 export flatten
 export flatMap

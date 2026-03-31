@@ -891,6 +891,11 @@ where
                 .graph
                 .reactive_clause(clause)
                 .expect("reactive signal clauses are built from the same graph");
+            if let Some(trigger_signal) = clause_spec.trigger_signal() {
+                if pending[trigger_signal.index()].is_unchanged() {
+                    continue;
+                }
+            }
             let should_commit = evaluator.try_evaluate_reactive_guard(
                 signal,
                 clause,

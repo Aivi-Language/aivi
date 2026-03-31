@@ -4383,6 +4383,80 @@ when ready True => total <- 42
     }
 
     #[test]
+    fn linked_runtime_source_pattern_updates_only_fire_for_their_trigger_source() {
+        let lowered = lower_text(
+            "runtime-startup-source-pattern-reactive-trigger-gating.aivi",
+            r#"
+provider custom.tick
+    wakeup: providerTrigger
+
+provider custom.key
+    wakeup: providerTrigger
+
+@source custom.tick
+signal tick : Signal Bool
+
+@source custom.key
+signal key : Signal Bool
+
+signal current : Signal Int = 0
+
+when tick True => current <- 1
+when key True => current <- 2
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build for source-pattern trigger gating");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("source-pattern trigger gating fixture should link successfully");
+
+        let first = linked
+            .tick_with_source_lifecycle()
+            .expect("initial trigger-gating tick should succeed");
+        assert_eq!(first.source_actions().len(), 2);
+        let tick_port = activation_port_for_owner(&linked, lowered.hir.module(), &first, "tick");
+        let key_port = activation_port_for_owner(&linked, lowered.hir.module(), &first, "key");
+        let current_signal = signal_handle(&linked, lowered.hir.module(), "current");
+        assert_eq!(
+            linked.runtime().current_value(current_signal).unwrap(),
+            Some(&RuntimeValue::Int(0)),
+            "seeded targets should remain seeded before any source-pattern trigger fires"
+        );
+
+        key_port
+            .publish(DetachedRuntimeValue::from_runtime_owned(
+                RuntimeValue::Bool(true),
+            ))
+            .expect("key publication should queue");
+        linked
+            .tick_with_source_lifecycle()
+            .expect("key trigger tick should succeed");
+        assert_eq!(
+            linked.runtime().current_value(current_signal).unwrap(),
+            Some(&RuntimeValue::Int(2)),
+            "matching key publications should commit the key clause body"
+        );
+
+        tick_port
+            .publish(DetachedRuntimeValue::from_runtime_owned(
+                RuntimeValue::Bool(true),
+            ))
+            .expect("tick publication should queue");
+        linked
+            .tick_with_source_lifecycle()
+            .expect("tick trigger tick should succeed");
+        assert_eq!(
+            linked.runtime().current_value(current_signal).unwrap(),
+            Some(&RuntimeValue::Int(1)),
+            "later tick publications should not be overwritten by stale key source values"
+        );
+    }
+
+    #[test]
     fn linked_runtime_applies_target_pipelines_to_reactive_when_bodies() {
         let lowered = lower_text(
             "runtime-startup-reactive-when-pipeline.aivi",

@@ -342,6 +342,7 @@ pub struct ReactiveClauseSpec {
     source_order: usize,
     guard_dependencies: Box<[SignalHandle]>,
     body_dependencies: Box<[SignalHandle]>,
+    trigger_signal: Option<SignalHandle>,
 }
 
 impl ReactiveClauseSpec {
@@ -359,6 +360,10 @@ impl ReactiveClauseSpec {
 
     pub fn body_dependencies(&self) -> &[SignalHandle] {
         &self.body_dependencies
+    }
+
+    pub fn trigger_signal(&self) -> Option<SignalHandle> {
+        self.trigger_signal
     }
 }
 
@@ -432,6 +437,7 @@ pub struct SignalGraphBuilder {
 pub struct ReactiveClauseBuilderSpec {
     pub guard_dependencies: Box<[SignalHandle]>,
     pub body_dependencies: Box<[SignalHandle]>,
+    pub trigger_signal: Option<SignalHandle>,
 }
 
 impl ReactiveClauseBuilderSpec {
@@ -442,7 +448,13 @@ impl ReactiveClauseBuilderSpec {
         Self {
             guard_dependencies: guard_dependencies.into_iter().collect(),
             body_dependencies: body_dependencies.into_iter().collect(),
+            trigger_signal: None,
         }
+    }
+
+    pub fn with_trigger_signal(mut self, trigger_signal: Option<SignalHandle>) -> Self {
+        self.trigger_signal = trigger_signal;
+        self
     }
 }
 
@@ -642,9 +654,19 @@ impl SignalGraphBuilder {
                     }
                     merged.insert(dependency);
                 }
+                if let Some(trigger_signal) = clause.trigger_signal {
+                    self.validate_signal(trigger_signal)?;
+                    if trigger_signal == signal {
+                        return Err(GraphBuildError::SelfDependency {
+                            signal: signal.as_derived(),
+                        });
+                    }
+                    merged.insert(trigger_signal);
+                }
                 Ok(PendingReactiveClause {
                     guard_dependencies: clause.guard_dependencies,
                     body_dependencies: clause.body_dependencies,
+                    trigger_signal: clause.trigger_signal,
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -745,6 +767,7 @@ impl SignalGraphBuilder {
                                 source_order,
                                 guard_dependencies: clause.guard_dependencies,
                                 body_dependencies: clause.body_dependencies,
+                                trigger_signal: clause.trigger_signal,
                             });
                             handle
                         })
@@ -930,6 +953,7 @@ struct PendingReactiveSpec {
 struct PendingReactiveClause {
     guard_dependencies: Box<[SignalHandle]>,
     body_dependencies: Box<[SignalHandle]>,
+    trigger_signal: Option<SignalHandle>,
 }
 
 #[cfg(test)]

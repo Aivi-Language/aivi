@@ -1,6 +1,8 @@
 use aivi.list (
     count
+    at
     head
+    replaceAt
     tailOrEmpty
 )
 
@@ -37,30 +39,10 @@ type Int -> Bool
 func isBlank x =>
     x == 0
 
-type List Int => Int -> Int -> (Option Int)
-func advanceCellAt cells index current => index == 0
- T|> Some current
- F|> cellAt (tailOrEmpty cells) (index - 1)
-
-type List Int => Int -> (Option Int)
-func cellAt cells index => head cells
- ||> Some current -> advanceCellAt cells index current
- ||> None         -> None
-
 type List Int => Int -> Int
-func valueAt cells index => cellAt cells index
+func valueAt cells index => at index cells
  ||> Some x -> x
  ||> None   -> 0
-
-type Int -> (List Int) -> Int -> Int -> (List Int)
-func replaceCurrent current rest index x => index == 0
- T|> append [x] rest
- F|> append [current] (replaceAt rest (index - 1) x)
-
-type List Int => Int -> Int -> (List Int)
-func replaceAt cells index x => head cells
- ||> Some current -> replaceCurrent current (tailOrEmpty cells) index x
- ||> None         -> []
 
 type Int -> Int
 func rowOf index =>
@@ -140,7 +122,7 @@ func continueCandidate cells index candidate attempt => attempt
 
 type List Int => Int -> Int -> (Result Text (List Int))
 func tryCandidate cells index candidate => validPlacement cells index candidate
- T|> continueCandidate cells index candidate (solveMode (replaceAt cells index candidate) FindNext)
+ T|> continueCandidate cells index candidate (solveMode (replaceAt index candidate cells) FindNext)
  F|> nextCandidate cells index candidate
 
 type List Int => (Result Text (List Int))

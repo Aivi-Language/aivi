@@ -43,12 +43,14 @@ use aivi.list (
     map
     filter
     reverse
+    at
     take
     drop
     takeWhile
     dropWhile
     flatten
     flatMap
+    replaceAt
     zip
     zipWith
     unzip
@@ -223,6 +225,10 @@ func smaller a b =>
 value doubled : List Int = map double numbers
 value positives : List Int = filter isPositive numbers
 value reversed : List Int = reverse numbers
+value secondNumber : Option Int = at 1 numbers
+value missingNumber : Option Int = at 99 numbers
+value replacedNumbers : List Int = replaceAt 2 99 numbers
+value unchangedNumbers : List Int = replaceAt 99 42 numbers
 value firstThree : List Int = take 3 numbers
 value afterTwo : List Int = drop 2 numbers
 value smallOnes : List Int = takeWhile isSmall numbers
@@ -435,6 +441,15 @@ value extended_validation_covers_bool_and_math : Task Text Bool = pure (squareTe
 
 @test
 value extended_validation_covers_list_ops : Task Text Bool = pure (sorted == [1, 1, 3, 4, 5])
+
+@test
+value extended_validation_covers_list_index_ops : Task Text Bool =
+    pure (
+        secondNumber == Some 2
+            and missingNumber == None
+            and replacedNumbers == [1, 2, 99, 4, 5]
+            and unchangedNumbers == numbers
+    )
 
 @test
 value extended_validation_covers_result_ops : Task Text Bool = pure (mappedErrResult == Err "error: not found")

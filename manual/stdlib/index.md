@@ -145,11 +145,13 @@ func safeScore result =>
 use aivi.list (
     length
     head
+    at
     tail
     tailOrEmpty
     last
     isEmpty
     nonEmpty
+    replaceAt
     any
     all
     count
@@ -177,9 +179,11 @@ List operations use the built-in `reduce` and `append` functions (available ever
 | `isEmpty` | `List A -> Bool` | `True` if the list has no elements |
 | `nonEmpty` | `List A -> Bool` | `True` if the list has at least one element |
 | `head` | `List A -> Option A` | First element, or `None` |
+| `at` | `Int -> List A -> Option A` | Element at the given zero-based index, or `None` when out of range |
 | `tail` | `List A -> Option (List A)` | All but first element, or `None` |
 | `tailOrEmpty` | `List A -> List A` | All but first element, or `[]` |
 | `last` | `List A -> Option A` | Last element, or `None` |
+| `replaceAt` | `Int -> A -> List A -> List A` | Replace the element at the given zero-based index, leaving out-of-range lists unchanged |
 | `any` | `(A -> Bool) -> List A -> Bool` | `True` if any element satisfies the predicate |
 | `all` | `(A -> Bool) -> List A -> Bool` | `True` if all elements satisfy the predicate |
 | `count` | `(A -> Bool) -> List A -> Int` | Number of elements satisfying the predicate |

@@ -27,11 +27,13 @@ use aivi.result (
 use aivi.list (
     length as listLength
     head as listHead
+    at as listAt
     last as listLast
     tailOrEmpty as listTailOrEmpty
     isEmpty as listIsEmpty
     nonEmpty as listNonEmpty
     map as listMap
+    replaceAt as listReplaceAt
     filter as listFilter
     flatten as listFlatten
     flatMap as listFlatMap
@@ -170,6 +172,10 @@ type List A => (Option A)
 func head items =>
     listHead items
 
+type Int -> (List A) -> (Option A)
+func at index items =>
+    listAt index items
+
 type List A => (Option A)
 func last items =>
     listLast items
@@ -193,6 +199,10 @@ func flatten lists =>
 type List A => (List A)
 func reverse items =>
     listReverse items
+
+type Int -> A -> (List A) -> (List A)
+func replaceAt index replacement items =>
+    listReplaceAt index replacement items
 
 type Int -> (List A) -> (List A)
 func take n items =>
@@ -338,4 +348,4 @@ type A -> (A, A)
 func duplicate item =>
     pairDuplicate item
 
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, last, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, take, drop, sum, contains, any, all, find, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, at, last, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, replaceAt, take, drop, sum, contains, any, all, find, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)
