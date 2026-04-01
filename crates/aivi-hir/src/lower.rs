@@ -7293,7 +7293,7 @@ fn is_known_module(module: &str) -> bool {
         module,
         "aivi.network" | "aivi.defaults" | "aivi.random" | "aivi.stdio" | "aivi.db"
             | "aivi.text" | "aivi.time" | "aivi.env" | "aivi.i18n" | "aivi.log"
-            | "aivi.regex"
+            | "aivi.regex" | "aivi.http"
     )
 }
 
@@ -8385,6 +8385,105 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                     primitive_import_type(BuiltinType::Text),
                     arrow_import_type(
                         primitive_import_type(BuiltinType::Int),
+                        primitive_import_type(BuiltinType::Text),
+                    ),
+                ),
+            ),
+        )),
+        // HTTP intrinsics (Task-returning, runs on worker thread via ureq)
+        ("aivi.http", "get") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpGet,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Text),
+                ),
+            ),
+        )),
+        ("aivi.http", "getBytes") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpGetBytes,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bytes),
+                ),
+            ),
+        )),
+        ("aivi.http", "getStatus") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpGetStatus,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.http", "post") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpPost,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        task_import_type(
+                            primitive_import_type(BuiltinType::Text),
+                            primitive_import_type(BuiltinType::Text),
+                        ),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.http", "put") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpPut,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        task_import_type(
+                            primitive_import_type(BuiltinType::Text),
+                            primitive_import_type(BuiltinType::Text),
+                        ),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.http", "delete") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpDelete,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Text),
+                ),
+            ),
+        )),
+        ("aivi.http", "head") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpHead,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    list_import_type(ImportValueType::Tuple(vec![
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Text),
+                    ])),
+                ),
+            ),
+        )),
+        ("aivi.http", "postJson") => Some(intrinsic_import_value(
+            IntrinsicValue::HttpPostJson,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
                         primitive_import_type(BuiltinType::Text),
                     ),
                 ),

@@ -392,6 +392,15 @@ pub enum IntrinsicValue {
     RegexFindAll,
     RegexReplace,
     RegexReplaceAll,
+    // HTTP intrinsics (Task-returning, runs on worker thread via ureq)
+    HttpGet,
+    HttpGetBytes,
+    HttpGetStatus,
+    HttpPost,
+    HttpPut,
+    HttpDelete,
+    HttpHead,
+    HttpPostJson,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -513,6 +522,14 @@ impl fmt::Display for IntrinsicValue {
             Self::RegexFindAll => f.write_str("aivi.regex.findAll"),
             Self::RegexReplace => f.write_str("aivi.regex.replace"),
             Self::RegexReplaceAll => f.write_str("aivi.regex.replaceAll"),
+            Self::HttpGet => f.write_str("aivi.http.get"),
+            Self::HttpGetBytes => f.write_str("aivi.http.getBytes"),
+            Self::HttpGetStatus => f.write_str("aivi.http.getStatus"),
+            Self::HttpPost => f.write_str("aivi.http.post"),
+            Self::HttpPut => f.write_str("aivi.http.put"),
+            Self::HttpDelete => f.write_str("aivi.http.delete"),
+            Self::HttpHead => f.write_str("aivi.http.head"),
+            Self::HttpPostJson => f.write_str("aivi.http.postJson"),
         }
     }
 }

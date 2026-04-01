@@ -266,6 +266,15 @@ pub enum RuntimeTaskPlan {
     RegexFindAll { pattern: Box<str>, text: Box<str> },
     RegexReplace { pattern: Box<str>, replacement: Box<str>, text: Box<str> },
     RegexReplaceAll { pattern: Box<str>, replacement: Box<str>, text: Box<str> },
+    // HTTP task plans (run on worker thread via ureq)
+    HttpGet { url: Box<str> },
+    HttpGetBytes { url: Box<str> },
+    HttpGetStatus { url: Box<str> },
+    HttpPost { url: Box<str>, content_type: Box<str>, body: Box<str> },
+    HttpPut { url: Box<str>, content_type: Box<str>, body: Box<str> },
+    HttpDelete { url: Box<str> },
+    HttpHead { url: Box<str> },
+    HttpPostJson { url: Box<str>, body: Box<str> },
 }
 
 impl fmt::Display for RuntimeTaskPlan {
@@ -318,6 +327,14 @@ impl fmt::Display for RuntimeTaskPlan {
             Self::RegexReplaceAll { pattern, replacement, text } => {
                 write!(f, "regex.replaceAll({pattern}, {replacement}, {text})")
             }
+            Self::HttpGet { url } => write!(f, "http.get({url})"),
+            Self::HttpGetBytes { url } => write!(f, "http.getBytes({url})"),
+            Self::HttpGetStatus { url } => write!(f, "http.getStatus({url})"),
+            Self::HttpPost { url, .. } => write!(f, "http.post({url})"),
+            Self::HttpPut { url, .. } => write!(f, "http.put({url})"),
+            Self::HttpDelete { url } => write!(f, "http.delete({url})"),
+            Self::HttpHead { url } => write!(f, "http.head({url})"),
+            Self::HttpPostJson { url, .. } => write!(f, "http.postJson({url})"),
         }
     }
 }
@@ -3900,6 +3917,14 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         | IntrinsicValue::RegexFindText
         | IntrinsicValue::RegexFindAll => 2,
         IntrinsicValue::RegexReplace | IntrinsicValue::RegexReplaceAll => 3,
+        // HTTP intrinsics
+        IntrinsicValue::HttpGet
+        | IntrinsicValue::HttpGetBytes
+        | IntrinsicValue::HttpGetStatus
+        | IntrinsicValue::HttpDelete
+        | IntrinsicValue::HttpHead => 1,
+        IntrinsicValue::HttpPostJson => 2,
+        IntrinsicValue::HttpPost | IntrinsicValue::HttpPut => 3,
     }
 }
 
@@ -4845,6 +4870,47 @@ fn evaluate_intrinsic_value(
                 pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
                 replacement: expect_intrinsic_text(kernel, expr, value, 1, replacement)?,
                 text: expect_intrinsic_text(kernel, expr, value, 2, text)?,
+            }))
+        }
+        (IntrinsicValue::HttpGet, [url]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpGet {
+            url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+        })),
+        (IntrinsicValue::HttpGetBytes, [url]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpGetBytes {
+                url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+            }))
+        }
+        (IntrinsicValue::HttpGetStatus, [url]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpGetStatus {
+                url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+            }))
+        }
+        (IntrinsicValue::HttpDelete, [url]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpDelete {
+                url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+            }))
+        }
+        (IntrinsicValue::HttpHead, [url]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpHead {
+            url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+        })),
+        (IntrinsicValue::HttpPostJson, [url, body]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpPostJson {
+                url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+                body: expect_intrinsic_text(kernel, expr, value, 1, body)?,
+            }))
+        }
+        (IntrinsicValue::HttpPost, [url, content_type, body]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpPost {
+                url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+                content_type: expect_intrinsic_text(kernel, expr, value, 1, content_type)?,
+                body: expect_intrinsic_text(kernel, expr, value, 2, body)?,
+            }))
+        }
+        (IntrinsicValue::HttpPut, [url, content_type, body]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::HttpPut {
+                url: expect_intrinsic_text(kernel, expr, value, 0, url)?,
+                content_type: expect_intrinsic_text(kernel, expr, value, 1, content_type)?,
+                body: expect_intrinsic_text(kernel, expr, value, 2, body)?,
             }))
         }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),

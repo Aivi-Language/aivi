@@ -342,6 +342,87 @@ pub fn execute_runtime_task_plan(
                     .into(),
             ))
         }
+        RuntimeTaskPlan::HttpGet { url } => {
+            let body = ureq::get(url.as_ref())
+                .call()
+                .map_err(|e| task_error(format!("http get: {e}")))?
+                .into_string()
+                .map_err(|e| task_error(format!("http read: {e}")))?;
+            Ok(RuntimeValue::Text(body.into()))
+        }
+        RuntimeTaskPlan::HttpGetBytes { url } => {
+            let mut bytes = Vec::new();
+            ureq::get(url.as_ref())
+                .call()
+                .map_err(|e| task_error(format!("http get: {e}")))?
+                .into_reader()
+                .read_to_end(&mut bytes)
+                .map_err(|e| task_error(format!("http read: {e}")))?;
+            Ok(RuntimeValue::Bytes(bytes.into_boxed_slice()))
+        }
+        RuntimeTaskPlan::HttpGetStatus { url } => {
+            let status = ureq::get(url.as_ref())
+                .call()
+                .map(|r| r.status() as i64)
+                .unwrap_or_else(|e| match e {
+                    ureq::Error::Status(code, _) => code as i64,
+                    _ => 0,
+                });
+            Ok(RuntimeValue::Int(status))
+        }
+        RuntimeTaskPlan::HttpPost { url, content_type, body } => {
+            let response = ureq::post(url.as_ref())
+                .set("Content-Type", content_type.as_ref())
+                .send_string(body.as_ref())
+                .map_err(|e| task_error(format!("http post: {e}")))?
+                .into_string()
+                .map_err(|e| task_error(format!("http read: {e}")))?;
+            Ok(RuntimeValue::Text(response.into()))
+        }
+        RuntimeTaskPlan::HttpPut { url, content_type, body } => {
+            let response = ureq::put(url.as_ref())
+                .set("Content-Type", content_type.as_ref())
+                .send_string(body.as_ref())
+                .map_err(|e| task_error(format!("http put: {e}")))?
+                .into_string()
+                .map_err(|e| task_error(format!("http read: {e}")))?;
+            Ok(RuntimeValue::Text(response.into()))
+        }
+        RuntimeTaskPlan::HttpDelete { url } => {
+            let response = ureq::delete(url.as_ref())
+                .call()
+                .map_err(|e| task_error(format!("http delete: {e}")))?
+                .into_string()
+                .map_err(|e| task_error(format!("http read: {e}")))?;
+            Ok(RuntimeValue::Text(response.into()))
+        }
+        RuntimeTaskPlan::HttpHead { url } => {
+            let response = ureq::head(url.as_ref())
+                .call()
+                .map_err(|e| task_error(format!("http head: {e}")))?;
+            let names = response.headers_names();
+            let headers: Vec<RuntimeValue> = names
+                .iter()
+                .filter_map(|name| {
+                    response.header(name).map(|val| {
+                        RuntimeValue::Tuple(vec![
+                            RuntimeValue::Text(name.clone().into()),
+                            RuntimeValue::Text(val.into()),
+                        ])
+                    })
+                })
+                .collect();
+            Ok(RuntimeValue::List(headers))
+        }
+        RuntimeTaskPlan::HttpPostJson { url, body } => {
+            let response = ureq::post(url.as_ref())
+                .set("Content-Type", "application/json")
+                .send_string(body.as_ref())
+                .map_err(|e| task_error(format!("http post json: {e}")))?
+                .into_string()
+                .map_err(|e| task_error(format!("http read: {e}")))?;
+            Ok(RuntimeValue::Text(response.into()))
+        }
     }
 }
 

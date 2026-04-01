@@ -11516,6 +11516,45 @@ impl<'a> GateTypeContext<'a> {
                     ),
                 ),
             ),
+            IntrinsicValue::HttpGet | IntrinsicValue::HttpDelete => arrow(
+                primitive(BuiltinType::Text),
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+            ),
+            IntrinsicValue::HttpGetBytes => arrow(
+                primitive(BuiltinType::Text),
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Bytes)),
+            ),
+            IntrinsicValue::HttpGetStatus => arrow(
+                primitive(BuiltinType::Text),
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Int)),
+            ),
+            IntrinsicValue::HttpPost | IntrinsicValue::HttpPut => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    arrow(
+                        primitive(BuiltinType::Text),
+                        task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                    ),
+                ),
+            ),
+            IntrinsicValue::HttpPostJson => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                ),
+            ),
+            IntrinsicValue::HttpHead => arrow(
+                primitive(BuiltinType::Text),
+                task(
+                    primitive(BuiltinType::Text),
+                    list(GateType::Tuple(vec![
+                        primitive(BuiltinType::Text),
+                        primitive(BuiltinType::Text),
+                    ])),
+                ),
+            ),
         }
     }
 

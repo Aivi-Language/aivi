@@ -1,25 +1,83 @@
-use aivi.core.dict (Dict)
+use aivi.http (
+    get
+    getBytes
+    getStatus
+    post
+    put
+    delete
+    head
+    postJson
+)
 
-type HttpError =
-  | Timeout
-  | DecodeFailure Text
-  | RequestFailure Text
+// Type aliases
+type HttpError = Text
+type Url = Text
+type ContentType = Text
+type StatusCode = Int
+type Header = (Text, Text)
 
-type HttpHeaders = (Dict Text Text)
+// Common content types
+value contentTypeJson : ContentType = "application/json"
+value contentTypeForm : ContentType = "application/x-www-form-urlencoded"
+value contentTypePlain : ContentType = "text/plain; charset=utf-8"
+value contentTypeHtml : ContentType = "text/html; charset=utf-8"
 
-type HttpQuery = (Dict Text Text)
+// Convenience: GET returning text body
+type Url -> Task HttpError Text
+func fetch = url => get url
 
-type HttpResponse A = (Result HttpError A)
+// Convenience: GET returning bytes
+type Url -> Task HttpError Bytes
+func fetchBytes = url => getBytes url
 
-type HttpTask A = (Task HttpError A)
+// Convenience: GET returning status code only
+type Url -> Task HttpError StatusCode
+func checkStatus = url => getStatus url
 
-type DecodeMode =
-  | Strict
-  | Permissive
+// POST with JSON body
+type Url -> Text -> Task HttpError Text
+func postJsonBody = url => jsonBody => postJson url jsonBody
 
-domain Retry over Int
-    literal times : Int -> Retry
-    type Retry -> Int
-    unwrap
+// POST with form body
+type Url -> Text -> Task HttpError Text
+func postForm = url => formBody => post url contentTypeForm formBody
 
-export (HttpError, Timeout, DecodeFailure, RequestFailure, HttpHeaders, HttpQuery, HttpResponse, HttpTask, DecodeMode, Strict, Permissive, Retry)
+// PUT with JSON body
+type Url -> Text -> Task HttpError Text
+func putJsonBody = url => jsonBody => put url contentTypeJson jsonBody
+
+// DELETE
+type Url -> Task HttpError Text
+func remove = url => delete url
+
+// Fetch headers
+type Url -> Task HttpError (List Header)
+func fetchHeaders = url => head url
+
+export (
+    HttpError
+    Url
+    ContentType
+    StatusCode
+    Header
+    contentTypeJson
+    contentTypeForm
+    contentTypePlain
+    contentTypeHtml
+    get
+    getBytes
+    getStatus
+    post
+    put
+    delete
+    head
+    postJson
+    fetch
+    fetchBytes
+    checkStatus
+    postJsonBody
+    postForm
+    putJsonBody
+    remove
+    fetchHeaders
+)
