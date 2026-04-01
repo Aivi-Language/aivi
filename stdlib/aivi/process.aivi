@@ -4,6 +4,8 @@ type ProcessError =
   | NonZeroExit Int
   | ProcessProtocolError Text
 
+type ProcessSource = Unit
+
 type ProcessStatus =
   | Exited Int
   | Killed
@@ -28,4 +30,4 @@ type ProcessTask = (Task ProcessError ProcessOutput)
 // @source process.run { command: "git", args: ["status"] }
 // signal gitStatus : Signal (Result ProcessError ProcessOutput)
 
-export (ProcessError, SpawnFailed, ProcessTimeout, NonZeroExit, ProcessProtocolError, ProcessStatus, Exited, Killed, ProcessOutput, ProcessConfig, ProcessTask)
+export (ProcessSource, ProcessError, SpawnFailed, ProcessTimeout, NonZeroExit, ProcessProtocolError, ProcessStatus, Exited, Killed, ProcessOutput, ProcessConfig, ProcessTask)

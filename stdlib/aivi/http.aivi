@@ -11,6 +11,7 @@ use aivi.http (
 
 // Type aliases
 type HttpError = Text
+type HttpSource = Unit
 type Url = Text
 type ContentType = Text
 type StatusCode = Int
@@ -56,6 +57,7 @@ func fetchHeaders = url => head url
 
 export (
     HttpError
+    HttpSource
     Url
     ContentType
     StatusCode

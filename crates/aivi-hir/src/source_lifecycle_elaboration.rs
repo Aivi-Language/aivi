@@ -157,6 +157,9 @@ pub fn elaborate_source_lifecycles(module: &Module) -> SourceLifecycleElaboratio
         let Item::Signal(signal) = item else {
             continue;
         };
+        if signal.is_source_capability_handle {
+            continue;
+        }
         let Some((decorator_id, source_span, source)) = signal_source_decorator(module, signal)
         else {
             continue;

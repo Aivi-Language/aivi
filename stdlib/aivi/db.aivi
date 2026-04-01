@@ -7,6 +7,8 @@ type DbError =
   | NestedTransaction
   | ConnectionFailed Text
 
+type DbSource = Unit
+
 type SortDir = Asc | Desc
 
 type Connection = {
@@ -44,4 +46,4 @@ type DbPageOpts = {
 
 type DbTask A = (Task DbError A)
 
-export (DbError, SchemaMismatch, QueryFailed, ConstraintViolation, NestedTransaction, ConnectionFailed, SortDir, Asc, Desc, Connection, TableRef, DbRow, DbParam, DbStatement, DbPageOpts, DbTask)
+export (DbSource, DbError, SchemaMismatch, QueryFailed, ConstraintViolation, NestedTransaction, ConnectionFailed, SortDir, Asc, Desc, Connection, TableRef, DbRow, DbParam, DbStatement, DbPageOpts, DbTask)

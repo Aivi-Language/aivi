@@ -1,5 +1,7 @@
 use aivi.path (parent, filename, stem, extension, join, isAbsolute, normalize)
 
+type PathSource = Unit
+
 type PathError =
   | InvalidPath Text
   | PathNotFound Text
@@ -37,4 +39,4 @@ value has_extension_for_dotted : Task Text Bool = pure (hasExtension "foo.txt")
 @test
 value is_relative_for_local : Task Text Bool = pure (isRelative "foo/bar.txt")
 
-export (Path, PathError, InvalidPath, PathNotFound, parent, filename, stem, extension, join, isAbsolute, normalize, hasExtension, isRelative)
+export (PathSource, Path, PathError, InvalidPath, PathNotFound, parent, filename, stem, extension, join, isAbsolute, normalize, hasExtension, isRelative)

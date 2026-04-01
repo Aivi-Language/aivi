@@ -2006,6 +2006,18 @@ Rules for the unified model:
 - pure helper modules such as path/text/list stay in the stdlib; only duplicated external boundary
   modules are candidates for removal
 
+Current implementation status:
+
+- built-in provider contracts now preserve `operation` and `command` members in syntax, HIR, and
+  validation
+- built-in capability handles for `fs`, `http`, `db`, `env`, `log`, `stdio`, `random`, `process`,
+  `path`, and `dbus` now lower direct top-level `signal = handle.member ...` and
+  `value = handle.member ...` forms onto the existing source-provider/task/intrinsic code paths
+- capability-handle anchors are compile-time-only and therefore do not export or assemble as runtime
+  graph signals
+- custom provider contracts can already declare capability members, but direct custom handle-member
+  execution is still pending
+
 This direction deliberately avoids requiring arbitrary signal-wrapped domain/member application.
 Current language support only guarantees record projection through `Signal` payloads plus narrow
 pointwise lifting for a small set of canonical carriers; provider capabilities keep the external

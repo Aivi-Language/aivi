@@ -1,5 +1,7 @@
 use aivi.stdio (stdoutWrite, stderrWrite)
 
+type StdioSource = Unit
+
 type WriteError =
   | StdioUnavailable
 
@@ -22,4 +24,4 @@ func writeErrorLine = text =>
 @test
 value testWriteLineType : Task Text Bool = pure True
 
-export (WriteError, StdioUnavailable, Stream, Stdout, Stderr, StdioTask, StdoutTask, StderrTask, stdoutWrite, stderrWrite, writeLine, writeErrorLine)
+export (StdioSource, WriteError, StdioUnavailable, Stream, Stdout, Stderr, StdioTask, StdoutTask, StderrTask, stdoutWrite, stderrWrite, writeLine, writeErrorLine)

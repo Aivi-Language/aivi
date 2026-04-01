@@ -2230,6 +2230,54 @@ signal retried : Signal Int =
     }
 
     #[test]
+    fn capability_handle_anchors_do_not_assemble_as_runtime_signals() {
+        let lowered = lower_text(
+            "runtime-hir-capability-handles.aivi",
+            r#"
+type FsSource = Unit
+type FsError = Text
+
+signal projectRoot : Signal Text = "/tmp/demo"
+
+@source fs projectRoot
+signal files : FsSource
+
+signal config : Signal (Result FsError Text) = files.read "config.json"
+value cleanup : Task Text Unit = files.delete "cache.txt"
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "capability handle runtime fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let assembly = assemble_hir_runtime(lowered.module())
+            .expect("capability handle runtime fixture should assemble");
+
+        let files_id = item_id(lowered.module(), "files");
+        let config_id = item_id(lowered.module(), "config");
+        let cleanup_id = item_id(lowered.module(), "cleanup");
+
+        assert!(
+            assembly.owner(files_id).is_none(),
+            "compile-time capability handles should not allocate runtime owners"
+        );
+        assert!(
+            assembly.signal(files_id).is_none(),
+            "compile-time capability handles should not assemble as runtime signals"
+        );
+        assert!(
+            assembly.source_by_owner(config_id).is_some(),
+            "capability source operations should still assemble as ordinary runtime sources"
+        );
+        assert!(
+            assembly.task_by_owner(cleanup_id).is_some(),
+            "capability value commands should still assemble as ordinary runtime tasks"
+        );
+    }
+
+    #[test]
     fn assembles_db_live_refresh_from_changed_projection() {
         let lowered = lower_text(
             "runtime-hir-adapter-db-live-changed.aivi",

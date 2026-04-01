@@ -16,6 +16,8 @@ type LogEntry = {
 
 type LogError = Text
 
+type LogSource = Unit
+
 type LogTask = (Task LogError Unit)
 
 type LogSink = (LogEntry -> LogTask)
@@ -85,6 +87,7 @@ export (
     LogContext
     LogEntry
     LogError
+    LogSource
     LogTask
     LogSink
     levelDebug

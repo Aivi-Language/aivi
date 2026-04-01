@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use aivi_base::{Diagnostic, DiagnosticLabel, SourceSpan};
+use aivi_base::{Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan};
 use aivi_typing::BuiltinSourceProvider;
 
 use crate::{
@@ -15,16 +15,7 @@ pub(crate) fn is_builtin_source_capability_family_path(path: &NamePath) -> bool 
     }
     matches!(
         path.segments().first().text(),
-        "fs"
-            | "http"
-            | "db"
-            | "env"
-            | "log"
-            | "stdio"
-            | "random"
-            | "process"
-            | "path"
-            | "dbus"
+        "fs" | "http" | "db" | "env" | "log" | "stdio" | "random" | "process" | "path" | "dbus"
     )
 }
 
@@ -158,7 +149,8 @@ fn collect_capability_handles(
                 )),
             ),
             HandleProviderClassification::BuiltinProvider(_)
-            | HandleProviderClassification::InvalidShape(_) => {}
+            | HandleProviderClassification::Custom(_)
+            | HandleProviderClassification::InvalidShape => {}
         }
     }
     for item_id in handles.keys().copied().collect::<Vec<_>>() {
@@ -207,16 +199,17 @@ fn rewrite_capability_uses(
                     );
                     continue;
                 }
-                match lower_signal_capability_use(module, &signal, handle, &invocation, diagnostics) {
-                    Some(rewrite) => signal_rewrites.push(SignalCapabilityRewrite {
-                        item_id,
-                        rewrite,
-                    }),
+                match lower_signal_capability_use(module, &signal, handle, &invocation, diagnostics)
+                {
+                    Some(rewrite) => {
+                        signal_rewrites.push(SignalCapabilityRewrite { item_id, rewrite })
+                    }
                     None => {}
                 }
             }
             Item::Value(value) => {
-                let Some(invocation) = parse_capability_invocation(module, value.body, handles) else {
+                let Some(invocation) = parse_capability_invocation(module, value.body, handles)
+                else {
                     continue;
                 };
                 let Some(handle) = handles.get(&invocation.handle) else {
@@ -425,7 +418,10 @@ fn lower_builtin_signal_member(
     match family {
         BuiltinCapabilityFamily::Fs => match invocation.member.as_str() {
             "read" => Some(SourceDecorator {
-                provider: Some(provider_name_path(invocation.span, BuiltinSourceProvider::FsRead)),
+                provider: Some(provider_name_path(
+                    invocation.span,
+                    BuiltinSourceProvider::FsRead,
+                )),
                 arguments: vec![scoped_path_argument(
                     module,
                     handle,
@@ -436,7 +432,10 @@ fn lower_builtin_signal_member(
                 options: handle.options,
             }),
             "watch" => Some(SourceDecorator {
-                provider: Some(provider_name_path(invocation.span, BuiltinSourceProvider::FsWatch)),
+                provider: Some(provider_name_path(
+                    invocation.span,
+                    BuiltinSourceProvider::FsWatch,
+                )),
                 arguments: vec![scoped_path_argument(
                     module,
                     handle,
@@ -450,7 +449,10 @@ fn lower_builtin_signal_member(
         },
         BuiltinCapabilityFamily::Http => match invocation.member.as_str() {
             "get" => Some(SourceDecorator {
-                provider: Some(provider_name_path(invocation.span, BuiltinSourceProvider::HttpGet)),
+                provider: Some(provider_name_path(
+                    invocation.span,
+                    BuiltinSourceProvider::HttpGet,
+                )),
                 arguments: vec![scoped_http_url_argument(
                     module,
                     handle,
@@ -472,7 +474,10 @@ fn lower_builtin_signal_member(
                 options: handle.options,
             }),
             "live" => Some(SourceDecorator {
-                provider: Some(provider_name_path(invocation.span, BuiltinSourceProvider::DbLive)),
+                provider: Some(provider_name_path(
+                    invocation.span,
+                    BuiltinSourceProvider::DbLive,
+                )),
                 arguments: inherited_arguments(handle, &invocation.arguments),
                 options: handle.options,
             }),
@@ -480,7 +485,10 @@ fn lower_builtin_signal_member(
         },
         BuiltinCapabilityFamily::Env => match invocation.member.as_str() {
             "get" => Some(SourceDecorator {
-                provider: Some(provider_name_path(invocation.span, BuiltinSourceProvider::EnvGet)),
+                provider: Some(provider_name_path(
+                    invocation.span,
+                    BuiltinSourceProvider::EnvGet,
+                )),
                 arguments: inherited_arguments(handle, &invocation.arguments),
                 options: handle.options,
             }),
@@ -564,7 +572,9 @@ fn lower_builtin_value_member(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ExprId> {
     match family {
-        BuiltinCapabilityFamily::Fs => lower_fs_value_member(module, handle, invocation, diagnostics),
+        BuiltinCapabilityFamily::Fs => {
+            lower_fs_value_member(module, handle, invocation, diagnostics)
+        }
         BuiltinCapabilityFamily::Http => {
             let intrinsic = match invocation.member.as_str() {
                 "get" => IntrinsicValue::HttpGet,
@@ -577,9 +587,19 @@ fn lower_builtin_value_member(
                 "postJson" => IntrinsicValue::HttpPostJson,
                 _ => return None,
             };
-            let arguments =
-                combine_http_value_arguments(module, handle, &invocation.arguments, invocation.span, diagnostics);
-            Some(build_intrinsic_call(module, intrinsic, invocation.span, arguments))
+            let arguments = combine_http_value_arguments(
+                module,
+                handle,
+                &invocation.arguments,
+                invocation.span,
+                diagnostics,
+            );
+            Some(build_intrinsic_call(
+                module,
+                intrinsic,
+                invocation.span,
+                arguments,
+            ))
         }
         BuiltinCapabilityFamily::Db => {
             let intrinsic = match invocation.member.as_str() {
@@ -676,167 +696,195 @@ fn lower_fs_value_member(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ExprId> {
     match invocation.member.as_str() {
-        "read" | "readText" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsReadText,
-            invocation.span,
-            vec![scoped_path_argument(
+        "read" | "readText" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "readBytes" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsReadBytes,
-            invocation.span,
-            vec![scoped_path_argument(
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsReadText,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "readBytes" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "readDir" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsReadDir,
-            invocation.span,
-            vec![scoped_path_argument(
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsReadBytes,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "readDir" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "exists" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsExists,
-            invocation.span,
-            vec![scoped_path_argument(
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsReadDir,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "exists" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "write" | "writeText" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsWriteText,
-            invocation.span,
-            vec![
-                scoped_path_argument(
-                    module,
-                    handle,
-                    invocation.arguments.first().copied(),
-                    invocation.span,
-                    diagnostics,
-                )?,
-                *invocation.arguments.get(1)?,
-            ],
-        )),
-        "writeBytes" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsWriteBytes,
-            invocation.span,
-            vec![
-                scoped_path_argument(
-                    module,
-                    handle,
-                    invocation.arguments.first().copied(),
-                    invocation.span,
-                    diagnostics,
-                )?,
-                *invocation.arguments.get(1)?,
-            ],
-        )),
-        "createDirAll" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsCreateDirAll,
-            invocation.span,
-            vec![scoped_path_argument(
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsExists,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "write" | "writeText" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "delete" | "deleteFile" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsDeleteFile,
-            invocation.span,
-            vec![scoped_path_argument(
+            )?;
+            let text = *invocation.arguments.get(1)?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsWriteText,
+                invocation.span,
+                vec![path, text],
+            ))
+        }
+        "writeBytes" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "deleteDir" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsDeleteDir,
-            invocation.span,
-            vec![scoped_path_argument(
+            )?;
+            let bytes = *invocation.arguments.get(1)?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsWriteBytes,
+                invocation.span,
+                vec![path, bytes],
+            ))
+        }
+        "createDirAll" => {
+            let path = scoped_path_argument(
                 module,
                 handle,
                 invocation.arguments.first().copied(),
                 invocation.span,
                 diagnostics,
-            )?],
-        )),
-        "rename" | "move" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsRename,
-            invocation.span,
-            vec![
-                scoped_path_argument(
-                    module,
-                    handle,
-                    invocation.arguments.first().copied(),
-                    invocation.span,
-                    diagnostics,
-                )?,
-                scoped_path_argument(
-                    module,
-                    handle,
-                    invocation.arguments.get(1).copied(),
-                    invocation.span,
-                    diagnostics,
-                )?,
-            ],
-        )),
-        "copy" => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::FsCopy,
-            invocation.span,
-            vec![
-                scoped_path_argument(
-                    module,
-                    handle,
-                    invocation.arguments.first().copied(),
-                    invocation.span,
-                    diagnostics,
-                )?,
-                scoped_path_argument(
-                    module,
-                    handle,
-                    invocation.arguments.get(1).copied(),
-                    invocation.span,
-                    diagnostics,
-                )?,
-            ],
-        )),
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsCreateDirAll,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "delete" | "deleteFile" => {
+            let path = scoped_path_argument(
+                module,
+                handle,
+                invocation.arguments.first().copied(),
+                invocation.span,
+                diagnostics,
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsDeleteFile,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "deleteDir" => {
+            let path = scoped_path_argument(
+                module,
+                handle,
+                invocation.arguments.first().copied(),
+                invocation.span,
+                diagnostics,
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsDeleteDir,
+                invocation.span,
+                vec![path],
+            ))
+        }
+        "rename" | "move" => {
+            let from = scoped_path_argument(
+                module,
+                handle,
+                invocation.arguments.first().copied(),
+                invocation.span,
+                diagnostics,
+            )?;
+            let to = scoped_path_argument(
+                module,
+                handle,
+                invocation.arguments.get(1).copied(),
+                invocation.span,
+                diagnostics,
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsRename,
+                invocation.span,
+                vec![from, to],
+            ))
+        }
+        "copy" => {
+            let from = scoped_path_argument(
+                module,
+                handle,
+                invocation.arguments.first().copied(),
+                invocation.span,
+                diagnostics,
+            )?;
+            let to = scoped_path_argument(
+                module,
+                handle,
+                invocation.arguments.get(1).copied(),
+                invocation.span,
+                diagnostics,
+            )?;
+            Some(build_intrinsic_call(
+                module,
+                IntrinsicValue::FsCopy,
+                invocation.span,
+                vec![from, to],
+            ))
+        }
         _ => None,
     }
 }
 
-fn inherited_arguments(handle: &CapabilityHandleBinding, member_arguments: &[ExprId]) -> Vec<ExprId> {
+fn inherited_arguments(
+    handle: &CapabilityHandleBinding,
+    member_arguments: &[ExprId],
+) -> Vec<ExprId> {
     let mut arguments = handle.arguments.clone();
     arguments.extend(member_arguments.iter().copied());
     arguments
@@ -853,7 +901,8 @@ fn combine_http_value_arguments(
         return handle.arguments.clone();
     }
     let mut arguments = member_arguments.to_vec();
-    if let Some(url) = scoped_http_url_argument(module, handle, Some(member_arguments[0]), span, diagnostics)
+    if let Some(url) =
+        scoped_http_url_argument(module, handle, Some(member_arguments[0]), span, diagnostics)
     {
         arguments[0] = url;
     }
@@ -1036,7 +1085,10 @@ fn signal_with_source_decorator<'a>(
 fn signal_has_source_decorator(module: &Module, signal: &SignalItem) -> bool {
     signal.header.decorators.iter().any(|decorator_id| {
         matches!(
-            module.decorators().get(*decorator_id).map(|decorator| &decorator.payload),
+            module
+                .decorators()
+                .get(*decorator_id)
+                .map(|decorator| &decorator.payload),
             Some(DecoratorPayload::Source(_))
         )
     })
@@ -1047,10 +1099,14 @@ fn classify_handle_provider(path: &NamePath) -> HandleProviderClassification {
         return HandleProviderClassification::BuiltinFamily(family);
     }
     match SourceProviderRef::from_path(Some(path)) {
-        SourceProviderRef::Builtin(provider) => HandleProviderClassification::BuiltinProvider(provider),
+        SourceProviderRef::Builtin(provider) => {
+            HandleProviderClassification::BuiltinProvider(provider)
+        }
         SourceProviderRef::Custom(key) => HandleProviderClassification::Custom(key),
-        SourceProviderRef::InvalidShape(key) => HandleProviderClassification::InvalidShape(key),
-        SourceProviderRef::Missing => unreachable!("explicit provider paths should never classify as missing"),
+        SourceProviderRef::InvalidShape(_) => HandleProviderClassification::InvalidShape,
+        SourceProviderRef::Missing => {
+            unreachable!("explicit provider paths should never classify as missing")
+        }
     }
 }
 
@@ -1118,7 +1174,10 @@ fn supports_builtin_value_member(family: BuiltinCapabilityFamily, member: &str) 
         BuiltinCapabilityFamily::Env => matches!(member, "get" | "list"),
         BuiltinCapabilityFamily::Log => matches!(member, "emit" | "emitContext"),
         BuiltinCapabilityFamily::Stdio => {
-            matches!(member, "write" | "stdoutWrite" | "writeError" | "stderrWrite")
+            matches!(
+                member,
+                "write" | "stdoutWrite" | "writeError" | "stderrWrite"
+            )
         }
         BuiltinCapabilityFamily::Random => matches!(
             member,
@@ -1139,10 +1198,8 @@ fn supports_builtin_value_member(family: BuiltinCapabilityFamily, member: &str) 
 }
 
 fn intrinsic_name_path(intrinsic: IntrinsicValue, span: SourceSpan) -> NamePath {
-    let segments = intrinsic
-        .to_string()
-        .split('.')
-        .collect::<Vec<_>>();
+    let rendered = intrinsic.to_string();
+    let segments = rendered.split('.').collect::<Vec<_>>();
     name_path(span, &segments)
 }
 
@@ -1155,14 +1212,16 @@ fn name_path(span: SourceSpan, segments: &[&str]) -> NamePath {
     NamePath::from_vec(
         segments
             .iter()
-            .map(|segment| Name::new(*segment, span).expect("compiler-generated names should be valid"))
+            .map(|segment| {
+                Name::new(*segment, span).expect("compiler-generated names should be valid")
+            })
             .collect(),
     )
     .expect("compiler-generated name paths should be valid")
 }
 
-fn code(name: &str) -> Box<str> {
-    name.into()
+fn code(name: &'static str) -> DiagnosticCode {
+    DiagnosticCode::new("hir", name)
 }
 
 #[derive(Clone, Debug)]
@@ -1187,5 +1246,5 @@ enum HandleProviderClassification {
     BuiltinFamily(BuiltinCapabilityFamily),
     BuiltinProvider(BuiltinSourceProvider),
     Custom(Box<str>),
-    InvalidShape(Box<str>),
+    InvalidShape,
 }

@@ -6,6 +6,8 @@ type DbusValue =
   | DbusStruct (List DbusValue)
   | DbusVariant DbusValue
 
+type DbusSource = Unit
+
 type DbusCall = {
     destination: Text,
     path: Text,
@@ -49,4 +51,4 @@ type DbusMatchRule = {
     member: Option Text
 }
 
-export (DbusValue, DbusString, DbusInt, DbusBool, DbusList, DbusStruct, DbusVariant, DbusCall, DbusSignal, BusNameFlag, AllowReplacement, ReplaceExisting, DoNotQueue, BusNameState, Owned, Queued, Lost, DbusError, NameNotOwned, ServiceUnknown, NoReply, AccessDenied, InvalidArgs, DbusProtocolError, DbusCallResult, DbusTask, DbusMatchRule)
+export (DbusSource, DbusValue, DbusString, DbusInt, DbusBool, DbusList, DbusStruct, DbusVariant, DbusCall, DbusSignal, BusNameFlag, AllowReplacement, ReplaceExisting, DoNotQueue, BusNameState, Owned, Queued, Lost, DbusError, NameNotOwned, ServiceUnknown, NoReply, AccessDenied, InvalidArgs, DbusProtocolError, DbusCallResult, DbusTask, DbusMatchRule)

@@ -2,7 +2,7 @@
 
 Sources are how AIVI connects the reactive graph to the outside world. Timers, HTTP requests, keyboard events, file watching, and subprocess events are all modeled as source-backed signals.
 
-Current limitation: source syntax and provider contracts are implemented, but scheduler-owned recurrence execution is still only partially wired. The forms in this guide reflect what the parser/compiler accept today; more advanced recurrence wakeup behavior is still an explicit work item in the runtime/compiler pipeline.
+Current limitation: source syntax, provider contracts, and built-in capability-handle lowering are implemented, but scheduler-owned recurrence execution is still only partially wired. The forms in this guide reflect what the parser/compiler accept today; more advanced recurrence wakeup behavior and custom capability-member execution are still explicit work items in the runtime/compiler pipeline.
 
 For the current compiler-and-runtime-backed reference, including every built-in source kind and option-level support notes, see the [Built-in Source Catalog](/guide/source-catalog).
 
@@ -32,6 +32,40 @@ In that model:
 - host snapshots such as environment/process/XDG data use the same provider boundary
 - sink-style effects such as logging, stdio writes, D-Bus method calls, and outbound sends do too
 - raw JSON-as-text helper workflows are compatibility paths, not the design target
+
+## Built-in capability handles
+
+Built-in provider families now support bodyless handle anchors plus direct top-level member use.
+The compiler lowers those forms onto the existing built-in source providers, task intrinsics, and
+pure host-context intrinsics:
+
+```aivi
+use aivi.fs (FsSource, FsError)
+
+signal projectRoot : Signal Text = "/tmp/demo"
+
+@source fs projectRoot
+signal files : FsSource
+
+signal config : Signal (Result FsError Text) = files.read "config.json"
+value cleanup = files.delete "cache.txt"
+```
+
+Today this lowering is implemented for the built-in families that currently straddle `@source` and
+compatibility stdlib/task surfaces: `fs`, `http`, `db`, `env`, `log`, `stdio`, `random`,
+`process`, `path`, and `dbus`.
+
+Current rules:
+
+- handle anchors must stay bodyless and use a nominal non-`Signal` annotation such as `FsSource`
+- direct `signal name : Signal T = handle.member ...` forms lower to ordinary bodyless source
+  bindings with synthesized `@source provider.variant ...` metadata
+- direct `value name = handle.member ...` forms lower to the existing one-shot runtime intrinsic
+  path for commands, queries, and host snapshots
+- capability handles are compile-time anchors, not exported runtime signals
+- custom provider contracts may declare `operation` and `command` members already, but direct
+  handle-member execution for custom providers is not wired yet; keep using explicit
+  `@source provider.variant ...` declarations there for now
 
 ## Source-backed signals with `@source`
 
@@ -156,8 +190,8 @@ value view =
 ## Custom providers
 
 You can also declare a provider contract. Argument and option declarations still describe the
-`@source` boundary itself; `operation` and `command` declarations preserve the future
-capability-member surface in HIR so later handle lowering can target one provider-owned API:
+`@source` boundary itself; `operation` and `command` declarations preserve the capability-member
+surface in HIR so later custom-provider handle lowering can target one provider-owned API:
 
 ```aivi
 type Mode =

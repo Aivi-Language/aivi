@@ -9105,6 +9105,13 @@ mod tests {
         }
     }
 
+    fn find_value<'a>(module: &'a crate::Module, name: &str) -> &'a crate::ValueItem {
+        match find_named_item(module, name) {
+            Item::Value(item) => item,
+            other => panic!("expected `{name}` to be a value item, found {other:?}"),
+        }
+    }
+
     fn signal_dependency_names(module: &crate::Module, item: &crate::SignalItem) -> Vec<String> {
         item.signal_dependencies
             .iter()
@@ -10983,6 +10990,98 @@ signal game : Signal Int = stepOnTick tick
         assert_eq!(
             metadata.provider,
             SourceProviderRef::InvalidShape("http".into())
+        );
+    }
+
+    #[test]
+    fn lowers_source_capability_handles_into_existing_source_and_task_paths() {
+        let lowered = lower_text(
+            "source_capability_handles.aivi",
+            r#"
+type FsSource = Unit
+type FsError = Text
+
+signal projectRoot : Signal Text = "/tmp/demo"
+
+@source fs projectRoot
+signal files : FsSource
+
+signal config : Signal (Result FsError Text) = files.read "config.json"
+value cleanup = files.delete "cache.txt"
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "capability handle lowering should not introduce front-end diagnostics: {:?}",
+            lowered.diagnostics()
+        );
+
+        let files = find_signal(lowered.module(), "files");
+        assert!(
+            files.is_source_capability_handle,
+            "bodyless `@source fs` anchors should lower as capability handles"
+        );
+        assert!(
+            files.source_metadata.is_none(),
+            "capability handles must not produce executable source metadata"
+        );
+        assert!(
+            crate::exports::exports(lowered.module())
+                .find("files")
+                .is_none(),
+            "capability handles are compile-time anchors and should not be exported as runtime signals"
+        );
+
+        let config = find_signal(lowered.module(), "config");
+        assert!(
+            config.body.is_none(),
+            "signal capability operations should lower into bodyless source bindings"
+        );
+        let metadata = config
+            .source_metadata
+            .as_ref()
+            .expect("lowered capability source should carry ordinary source metadata");
+        assert_eq!(
+            metadata.provider,
+            SourceProviderRef::Builtin(aivi_typing::BuiltinSourceProvider::FsRead)
+        );
+        assert_eq!(
+            signal_dependency_names(lowered.module(), config),
+            vec!["projectRoot".to_owned()],
+            "synthesized provider arguments should depend on the inherited handle root, not the handle anchor itself"
+        );
+
+        let cleanup = find_value(lowered.module(), "cleanup");
+        let ExprKind::Apply { callee, arguments } = &lowered.module().exprs()[cleanup.body].kind
+        else {
+            panic!("expected cleanup to lower into an intrinsic application");
+        };
+        let ExprKind::Name(reference) = &lowered.module().exprs()[*callee].kind else {
+            panic!("expected cleanup callee to be a resolved intrinsic");
+        };
+        assert_eq!(
+            reference.resolution,
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(IntrinsicValue::FsDeleteFile))
+        );
+        let joined_path = *arguments.first();
+        let ExprKind::Apply {
+            callee: join_callee,
+            arguments: join_arguments,
+        } = &lowered.module().exprs()[joined_path].kind
+        else {
+            panic!("expected cleanup path to lower through a synthesized path join");
+        };
+        let ExprKind::Name(join_reference) = &lowered.module().exprs()[*join_callee].kind else {
+            panic!("expected path join callee to be a resolved intrinsic");
+        };
+        assert_eq!(
+            join_reference.resolution,
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(IntrinsicValue::PathJoin))
+        );
+        assert_eq!(
+            join_arguments.len(),
+            2,
+            "path joins should combine the inherited handle root with the member path"
         );
     }
 

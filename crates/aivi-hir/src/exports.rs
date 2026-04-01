@@ -235,7 +235,8 @@ fn explicit_item_exported_name(
             callable_type: exported_function_type(module, item),
             deprecation,
         }),
-        Item::Signal(item) => (item.name.text() == exported_name && !item.is_source_capability_handle)
+        Item::Signal(item) => (item.name.text() == exported_name
+            && !item.is_source_capability_handle)
             .then(|| ExportedName {
                 name: exported_name.to_owned(),
                 kind: ExportedNameKind::Signal,
