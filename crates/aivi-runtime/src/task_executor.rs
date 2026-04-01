@@ -235,7 +235,10 @@ pub fn execute_runtime_task_plan(
             let ms = start.elapsed().as_millis() as i64;
             Ok(RuntimeValue::Int(ms))
         }
-        RuntimeTaskPlan::TimeFormat { epoch_ms, pattern: _ } => {
+        RuntimeTaskPlan::TimeFormat {
+            epoch_ms,
+            pattern: _,
+        } => {
             // Basic fallback: return epoch_ms as decimal text (chrono not available)
             Ok(RuntimeValue::Text(format!("{epoch_ms}").into()))
         }
@@ -247,12 +250,10 @@ pub fn execute_runtime_task_plan(
             }
         }
         // Env intrinsics
-        RuntimeTaskPlan::EnvGet { name } => {
-            Ok(match std::env::var(name.as_ref()) {
-                Ok(val) => RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(val.into()))),
-                Err(_) => RuntimeValue::OptionNone,
-            })
-        }
+        RuntimeTaskPlan::EnvGet { name } => Ok(match std::env::var(name.as_ref()) {
+            Ok(val) => RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(val.into()))),
+            Err(_) => RuntimeValue::OptionNone,
+        }),
         RuntimeTaskPlan::EnvList { prefix } => {
             let pairs: Vec<RuntimeValue> = std::env::vars()
                 .filter(|(k, _)| prefix.is_empty() || k.starts_with(prefix.as_ref()))
@@ -270,7 +271,11 @@ pub fn execute_runtime_task_plan(
             eprintln!("[{level}] {message}");
             Ok(RuntimeValue::Unit)
         }
-        RuntimeTaskPlan::LogEmitContext { level, message, context } => {
+        RuntimeTaskPlan::LogEmitContext {
+            level,
+            message,
+            context,
+        } => {
             let ctx: Vec<String> = context.iter().map(|(k, v)| format!("{k}={v}")).collect();
             eprintln!("[{level}] {message} {{{}}}", ctx.join(", "));
             Ok(RuntimeValue::Unit)
@@ -290,24 +295,23 @@ pub fn execute_runtime_task_plan(
         }
         // Regex intrinsics
         RuntimeTaskPlan::RegexIsMatch { pattern, text } => {
-            let re = Regex::new(pattern.as_ref())
-                .map_err(|e| task_error(format!("regex: {e}")))?;
+            let re = Regex::new(pattern.as_ref()).map_err(|e| task_error(format!("regex: {e}")))?;
             Ok(RuntimeValue::Bool(re.is_match(text.as_ref())))
         }
         RuntimeTaskPlan::RegexFind { pattern, text } => {
-            let re = Regex::new(pattern.as_ref())
-                .map_err(|e| task_error(format!("regex: {e}")))?;
+            let re = Regex::new(pattern.as_ref()).map_err(|e| task_error(format!("regex: {e}")))?;
             match re.find(text.as_ref()) {
                 Some(m) => {
                     let char_idx = text[..m.start()].chars().count() as i64;
-                    Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(char_idx))))
+                    Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(
+                        char_idx,
+                    ))))
                 }
                 None => Ok(RuntimeValue::OptionNone),
             }
         }
         RuntimeTaskPlan::RegexFindText { pattern, text } => {
-            let re = Regex::new(pattern.as_ref())
-                .map_err(|e| task_error(format!("regex: {e}")))?;
+            let re = Regex::new(pattern.as_ref()).map_err(|e| task_error(format!("regex: {e}")))?;
             match re.find(text.as_ref()) {
                 Some(m) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(
                     m.as_str().into(),
@@ -316,26 +320,31 @@ pub fn execute_runtime_task_plan(
             }
         }
         RuntimeTaskPlan::RegexFindAll { pattern, text } => {
-            let re = Regex::new(pattern.as_ref())
-                .map_err(|e| task_error(format!("regex: {e}")))?;
+            let re = Regex::new(pattern.as_ref()).map_err(|e| task_error(format!("regex: {e}")))?;
             let matches: Vec<RuntimeValue> = re
                 .find_iter(text.as_ref())
                 .map(|m| RuntimeValue::Text(m.as_str().into()))
                 .collect();
             Ok(RuntimeValue::List(matches.into()))
         }
-        RuntimeTaskPlan::RegexReplace { pattern, replacement, text } => {
-            let re = Regex::new(pattern.as_ref())
-                .map_err(|e| task_error(format!("regex: {e}")))?;
+        RuntimeTaskPlan::RegexReplace {
+            pattern,
+            replacement,
+            text,
+        } => {
+            let re = Regex::new(pattern.as_ref()).map_err(|e| task_error(format!("regex: {e}")))?;
             Ok(RuntimeValue::Text(
                 re.replacen(text.as_ref(), 1, replacement.as_ref())
                     .into_owned()
                     .into(),
             ))
         }
-        RuntimeTaskPlan::RegexReplaceAll { pattern, replacement, text } => {
-            let re = Regex::new(pattern.as_ref())
-                .map_err(|e| task_error(format!("regex: {e}")))?;
+        RuntimeTaskPlan::RegexReplaceAll {
+            pattern,
+            replacement,
+            text,
+        } => {
+            let re = Regex::new(pattern.as_ref()).map_err(|e| task_error(format!("regex: {e}")))?;
             Ok(RuntimeValue::Text(
                 re.replace_all(text.as_ref(), replacement.as_ref())
                     .into_owned()
@@ -370,7 +379,11 @@ pub fn execute_runtime_task_plan(
                 });
             Ok(RuntimeValue::Int(status))
         }
-        RuntimeTaskPlan::HttpPost { url, content_type, body } => {
+        RuntimeTaskPlan::HttpPost {
+            url,
+            content_type,
+            body,
+        } => {
             let response = ureq::post(url.as_ref())
                 .set("Content-Type", content_type.as_ref())
                 .send_string(body.as_ref())
@@ -379,7 +392,11 @@ pub fn execute_runtime_task_plan(
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(response.into()))
         }
-        RuntimeTaskPlan::HttpPut { url, content_type, body } => {
+        RuntimeTaskPlan::HttpPut {
+            url,
+            content_type,
+            body,
+        } => {
             let response = ureq::put(url.as_ref())
                 .set("Content-Type", content_type.as_ref())
                 .send_string(body.as_ref())

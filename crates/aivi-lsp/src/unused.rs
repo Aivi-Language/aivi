@@ -123,10 +123,7 @@ fn collect_exported_items(module: &Module) -> HashSet<ItemId> {
 /// Extract the name text and name span for an item, if the item kind has a
 /// user-visible name. Returns `None` for structural items (export, use,
 /// instance, source provider contract) that have no meaningful "unused" state.
-fn item_name_and_span(
-    module: &Module,
-    item_id: ItemId,
-) -> Option<(&str, aivi_base::SourceSpan)> {
+fn item_name_and_span(module: &Module, item_id: ItemId) -> Option<(&str, aivi_base::SourceSpan)> {
     match &module.items()[item_id] {
         Item::Value(item) => Some((item.name.text(), item.name.span())),
         Item::Function(item) => Some((item.name.text(), item.name.span())),
@@ -140,4 +137,3 @@ fn item_name_and_span(
         }
     }
 }
-

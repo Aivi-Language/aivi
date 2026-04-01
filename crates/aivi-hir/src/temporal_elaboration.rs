@@ -87,27 +87,13 @@ pub struct BlockedTemporalStage {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TemporalElaborationBlocker {
     UnknownSubjectType,
-    InvalidSubjectType {
-        found: GateType,
-    },
+    InvalidSubjectType { found: GateType },
     StageReadsSignals,
-    UnknownStageExprType {
-        span: SourceSpan,
-    },
-    SeedTypeMismatch {
-        expected: GateType,
-        found: GateType,
-    },
-    UnsupportedSeededDiffSubject {
-        found: GateType,
-    },
-    DiffFunctionShapeMismatch {
-        expected: String,
-        found: GateType,
-    },
-    SignalResultNotSupported {
-        found: GateType,
-    },
+    UnknownStageExprType { span: SourceSpan },
+    SeedTypeMismatch { expected: GateType, found: GateType },
+    UnsupportedSeededDiffSubject { found: GateType },
+    DiffFunctionShapeMismatch { expected: String, found: GateType },
+    SignalResultNotSupported { found: GateType },
     RuntimeExprBlocked(GateElaborationBlocker),
 }
 
@@ -210,8 +196,14 @@ fn collect_temporal_pipe(
             }
             match &stage.kind {
                 PipeStageKind::Previous { expr } => {
-                    let outcome =
-                        elaborate_previous_stage(module, stage.span, *expr, current_env, current, typing);
+                    let outcome = elaborate_previous_stage(
+                        module,
+                        stage.span,
+                        *expr,
+                        current_env,
+                        current,
+                        typing,
+                    );
                     temporal_stages.push(TemporalStageElaboration {
                         owner,
                         pipe_expr,
@@ -225,8 +217,14 @@ fn collect_temporal_pipe(
                     }
                 }
                 PipeStageKind::Diff { expr } => {
-                    let outcome =
-                        elaborate_diff_stage(module, stage.span, *expr, current_env, current, typing);
+                    let outcome = elaborate_diff_stage(
+                        module,
+                        stage.span,
+                        *expr,
+                        current_env,
+                        current,
+                        typing,
+                    );
                     temporal_stages.push(TemporalStageElaboration {
                         owner,
                         pipe_expr,
@@ -415,14 +413,11 @@ fn elaborate_diff_stage(
     };
 
     let mode = if let Some((parameters, result_ty)) = typing.function_signature(&stage_ty, 2) {
-        if !parameters[0].same_shape(payload.as_ref()) || !parameters[1].same_shape(payload.as_ref())
+        if !parameters[0].same_shape(payload.as_ref())
+            || !parameters[1].same_shape(payload.as_ref())
         {
             blockers.push(TemporalElaborationBlocker::DiffFunctionShapeMismatch {
-                expected: format!(
-                    "{} -> {} -> _",
-                    payload.as_ref(),
-                    payload.as_ref()
-                ),
+                expected: format!("{} -> {} -> _", payload.as_ref(), payload.as_ref()),
                 found: stage_ty.clone(),
             });
             None
@@ -474,8 +469,12 @@ fn elaborate_diff_stage(
     let runtime_expr = runtime_expr.expect("planned diff stage should lower its runtime expr");
     let result_subject = GateType::Signal(Box::new(result_payload));
     let mode = match discriminant {
-        DiffStageModeDiscriminant::Function => DiffStageMode::Function { diff_expr: runtime_expr },
-        DiffStageModeDiscriminant::Seed => DiffStageMode::Seed { seed_expr: runtime_expr },
+        DiffStageModeDiscriminant::Function => DiffStageMode::Function {
+            diff_expr: runtime_expr,
+        },
+        DiffStageModeDiscriminant::Seed => DiffStageMode::Seed {
+            seed_expr: runtime_expr,
+        },
     };
     TemporalStageOutcome::Diff(DiffStagePlan {
         input_subject: subject,

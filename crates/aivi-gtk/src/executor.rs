@@ -547,7 +547,11 @@ where
         Ok(())
     }
 
-    pub fn input_value_for_instance(&self, instance: &GtkNodeInstance, input: InputHandle) -> Option<V> {
+    pub fn input_value_for_instance(
+        &self,
+        instance: &GtkNodeInstance,
+        input: InputHandle,
+    ) -> Option<V> {
         self.scoped_value(instance, input)
             .or_else(|| self.default_values.get(&input).cloned())
     }

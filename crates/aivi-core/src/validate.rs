@@ -255,7 +255,10 @@ impl fmt::Display for ValidationError {
                 write!(f, "gate stage {stage} does not carry a Bool predicate")
             }
             Self::TemporalStageTypeMismatch { stage } => {
-                write!(f, "temporal stage {stage} does not match its declared type contract")
+                write!(
+                    f,
+                    "temporal stage {stage} does not match its declared type contract"
+                )
             }
             Self::TruthyFalsyResultMismatch { stage } => {
                 write!(

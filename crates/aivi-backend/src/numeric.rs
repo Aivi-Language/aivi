@@ -134,12 +134,20 @@ impl RuntimeBigInt {
 
     pub(crate) fn bigint_div(&self, other: &Self) -> Option<Self> {
         use num_traits::Zero;
-        if other.0.is_zero() { None } else { Some(Self(&self.0 / &other.0)) }
+        if other.0.is_zero() {
+            None
+        } else {
+            Some(Self(&self.0 / &other.0))
+        }
     }
 
     pub(crate) fn bigint_rem(&self, other: &Self) -> Option<Self> {
         use num_traits::Zero;
-        if other.0.is_zero() { None } else { Some(Self(&self.0 % &other.0)) }
+        if other.0.is_zero() {
+            None
+        } else {
+            Some(Self(&self.0 % &other.0))
+        }
     }
 
     pub(crate) fn bigint_pow(&self, exp: u32) -> Self {

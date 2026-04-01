@@ -2304,7 +2304,8 @@ mod tests {
         roots: &'a [WidgetSnapshot],
         path: &[&str],
     ) -> Option<&'a WidgetSnapshot> {
-        roots.iter()
+        roots
+            .iter()
             .find_map(|root| find_widget_snapshot_by_path(root, path))
     }
 
@@ -2384,9 +2385,10 @@ mod tests {
         assert!(
             result.changed_signals.iter().any(|signal| {
                 signal.name == "lastMoveText"
-                    && signal.value.as_ref().is_some_and(|value| {
-                        value != &json!("Last move: opening layout")
-                    })
+                    && signal
+                        .value
+                        .as_ref()
+                        .is_some_and(|value| value != &json!("Last move: opening layout"))
             }),
             "the click should update the reversi move summary"
         );

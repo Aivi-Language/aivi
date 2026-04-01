@@ -4,15 +4,14 @@ use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
     DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FunctionParam,
     FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, MapExpr, MapExprEntry,
-    MarkupAttribute,
-    MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock, PatchEntry, PatchInstruction,
-    PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern, PatternKind, PipeExpr,
-    PipeStage, PipeStageKind, ProjectionPath, QualifiedName, ReactiveUpdateArm, ReactiveUpdateItem,
-    ReactiveUpdateKind, RecordExpr, RecordField, RecordPatternField, ResultBinding, ResultBlockExpr,
-    SourceDecorator, SourceProviderContractItem, SourceProviderContractMember,
-    SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextInterpolation, TextLiteral,
-    TextSegment,
-    TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+    MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock, PatchEntry,
+    PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern,
+    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
+    ReactiveUpdateArm, ReactiveUpdateItem, ReactiveUpdateKind, RecordExpr, RecordField,
+    RecordPatternField, ResultBinding, ResultBlockExpr, SourceDecorator,
+    SourceProviderContractItem, SourceProviderContractMember, SourceProviderContractSchemaMember,
+    SuffixedIntegerLiteral, TextInterpolation, TextLiteral, TextSegment, TypeDeclBody, TypeExpr,
+    TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -458,16 +457,21 @@ impl Formatter {
                         base.kind,
                         ExprKind::Name(ref name) if name.text == parameter_name.text
                     ) =>
-            (
-                Expr {
-                    span,
-                    kind: ExprKind::AmbientProjection(path),
-                },
-                true,
-            ),
+            {
+                (
+                    Expr {
+                        span,
+                        kind: ExprKind::AmbientProjection(path),
+                    },
+                    true,
+                )
+            }
             ExprKind::Group(inner) => {
-                let (inner, changed) =
-                    self.restore_free_function_subject_expr(*inner, parameter_name, ambient_allowed);
+                let (inner, changed) = self.restore_free_function_subject_expr(
+                    *inner,
+                    parameter_name,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -521,8 +525,11 @@ impl Formatter {
                 )
             }
             ExprKind::Map(map) => {
-                let (map, changed) =
-                    self.restore_free_function_subject_map_expr(map, parameter_name, ambient_allowed);
+                let (map, changed) = self.restore_free_function_subject_map_expr(
+                    map,
+                    parameter_name,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -582,8 +589,11 @@ impl Formatter {
                 )
             }
             ExprKind::Range { start, end } => {
-                let (start, start_changed) =
-                    self.restore_free_function_subject_expr(*start, parameter_name, ambient_allowed);
+                let (start, start_changed) = self.restore_free_function_subject_expr(
+                    *start,
+                    parameter_name,
+                    ambient_allowed,
+                );
                 let (end, end_changed) =
                     self.restore_free_function_subject_expr(*end, parameter_name, ambient_allowed);
                 (
@@ -612,8 +622,11 @@ impl Formatter {
                 )
             }
             ExprKind::Apply { callee, arguments } => {
-                let (callee, callee_changed) =
-                    self.restore_free_function_subject_expr(*callee, parameter_name, ambient_allowed);
+                let (callee, callee_changed) = self.restore_free_function_subject_expr(
+                    *callee,
+                    parameter_name,
+                    ambient_allowed,
+                );
                 let mut changed = callee_changed;
                 let arguments = arguments
                     .into_iter()
@@ -659,8 +672,11 @@ impl Formatter {
             } => {
                 let (left, left_changed) =
                     self.restore_free_function_subject_expr(*left, parameter_name, ambient_allowed);
-                let (right, right_changed) =
-                    self.restore_free_function_subject_expr(*right, parameter_name, ambient_allowed);
+                let (right, right_changed) = self.restore_free_function_subject_expr(
+                    *right,
+                    parameter_name,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -688,8 +704,11 @@ impl Formatter {
                 )
             }
             ExprKind::PatchApply { target, patch } => {
-                let (target, target_changed) =
-                    self.restore_free_function_subject_expr(*target, parameter_name, ambient_allowed);
+                let (target, target_changed) = self.restore_free_function_subject_expr(
+                    *target,
+                    parameter_name,
+                    ambient_allowed,
+                );
                 let (patch, patch_changed) = self.restore_free_function_subject_patch_block(
                     patch,
                     parameter_name,
@@ -886,11 +905,8 @@ impl Formatter {
             })
             .collect();
         let tail = block.tail.map(|tail| {
-            let (tail, tail_changed) = self.restore_free_function_subject_expr(
-                *tail,
-                parameter_name,
-                ambient_allowed,
-            );
+            let (tail, tail_changed) =
+                self.restore_free_function_subject_expr(*tail, parameter_name, ambient_allowed);
             changed |= tail_changed;
             Box::new(tail)
         });
@@ -986,11 +1002,8 @@ impl Formatter {
     ) -> (PipeExpr, bool) {
         let mut changed = false;
         let head = pipe.head.map(|head| {
-            let (head, head_changed) = self.restore_free_function_subject_expr(
-                *head,
-                parameter_name,
-                ambient_allowed,
-            );
+            let (head, head_changed) =
+                self.restore_free_function_subject_expr(*head, parameter_name, ambient_allowed);
             changed |= head_changed;
             Box::new(head)
         });
@@ -1137,11 +1150,12 @@ impl Formatter {
             .map(|attribute| {
                 let value = attribute.value.map(|value| match value {
                     MarkupAttributeValue::Text(text) => {
-                        let (text, value_changed) = self.restore_free_function_subject_text_literal(
-                            text,
-                            parameter_name,
-                            ambient_allowed,
-                        );
+                        let (text, value_changed) = self
+                            .restore_free_function_subject_text_literal(
+                                text,
+                                parameter_name,
+                                ambient_allowed,
+                            );
                         changed |= value_changed;
                         MarkupAttributeValue::Text(text)
                     }
@@ -1154,7 +1168,9 @@ impl Formatter {
                         changed |= value_changed;
                         MarkupAttributeValue::Expr(expr)
                     }
-                    MarkupAttributeValue::Pattern(pattern) => MarkupAttributeValue::Pattern(pattern),
+                    MarkupAttributeValue::Pattern(pattern) => {
+                        MarkupAttributeValue::Pattern(pattern)
+                    }
                 });
                 MarkupAttribute {
                     name: attribute.name,
@@ -1503,6 +1519,12 @@ impl Formatter {
             SourceProviderContractMember::ArgumentSchema(member) => {
                 self.format_source_provider_contract_schema_member("argument", member)
             }
+            SourceProviderContractMember::OperationSchema(member) => {
+                self.format_source_provider_contract_schema_member("operation", member)
+            }
+            SourceProviderContractMember::CommandSchema(member) => {
+                self.format_source_provider_contract_schema_member("command", member)
+            }
         }
     }
 
@@ -1576,8 +1598,7 @@ impl Formatter {
                     self.format_domain_member_name(&member.name),
                     self.type_annotation_separator(&[], annotation)
                 );
-                let force_break =
-                    self.should_force_type_break(display_width(&prefix), annotation);
+                let force_break = self.should_force_type_break(display_width(&prefix), annotation);
                 let block = self.format_type_block(annotation, force_break);
                 if block.is_inline() {
                     return vec![format!(
@@ -1599,8 +1620,7 @@ impl Formatter {
         // Signature members: emit `type TypeExpr` line if annotated
         if let Some(annotation) = &member.annotation {
             let prefix = format!("{}type ", spaces(INDENT_WIDTH));
-            let force_break =
-                self.should_force_type_break(display_width(&prefix), annotation);
+            let force_break = self.should_force_type_break(display_width(&prefix), annotation);
             let block = self.format_type_block(annotation, force_break);
             if block.is_inline() {
                 lines.push(format!(
@@ -3463,6 +3483,8 @@ value view =
                 "provider custom.feed\n",
                 "    argument path : Text\n",
                 "    option timeout : Duration\n",
+                "    operation read : Text -> Signal Text\n",
+                "    command delete : Text -> Task Text Unit\n",
                 "    wakeup: providerTrigger\n",
                 "\n",
                 "provider custom.timer\n",
@@ -3483,7 +3505,9 @@ value view =
 
     #[test]
     fn formatter_normalizes_percent_domain_operator_layout() {
-        let formatted = format_text("domain Bucket over Int = {\n    type Bucket -> Int -> Bucket\n    (%)\n}\n");
+        let formatted = format_text(
+            "domain Bucket over Int = {\n    type Bucket -> Int -> Bucket\n    (%)\n}\n",
+        );
         assert_eq!(
             formatted,
             concat!(

@@ -405,7 +405,8 @@ impl HydrationRevisionState {
     }
 
     fn should_apply(&self, revision: u64) -> bool {
-        self.latest_applied.map_or(true, |applied| revision > applied)
+        self.latest_applied
+            .map_or(true, |applied| revision > applied)
     }
 
     fn mark_applied(&mut self, revision: u64) {

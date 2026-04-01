@@ -622,7 +622,9 @@ impl<'a> Parser<'a> {
         let name = self.parse_named_item_name(keyword_index, &mut cursor, end, "func declaration");
         let (constraints, annotation) = self.parse_function_signature_annotation(&mut cursor, end);
 
-        let has_equals = self.consume_kind(&mut cursor, end, TokenKind::Equals).is_some();
+        let has_equals = self
+            .consume_kind(&mut cursor, end, TokenKind::Equals)
+            .is_some();
         if !has_equals {
             if self.peek_nontrivia(cursor, end).is_some_and(|index| {
                 self.is_function_param_token(index)
@@ -634,12 +636,14 @@ impl<'a> Parser<'a> {
                     .map(|identifier| identifier.span)
                     .unwrap_or_else(|| self.source_span_of_token(keyword_index));
                 self.diagnostics.push(
-                    Diagnostic::error("func declaration is missing `=` before its parameters and body")
-                        .with_code(MISSING_DECLARATION_BODY)
-                        .with_primary_label(
-                            anchor_span,
-                            "insert `=` between the function name and its body",
-                        ),
+                    Diagnostic::error(
+                        "func declaration is missing `=` before its parameters and body",
+                    )
+                    .with_code(MISSING_DECLARATION_BODY)
+                    .with_primary_label(
+                        anchor_span,
+                        "insert `=` between the function name and its body",
+                    ),
                 );
             } else {
                 self.missing_body_diagnostic(
@@ -650,11 +654,10 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let (function_form, parameters, body) =
-            if let Some((parameters, body)) =
-                self.parse_unary_subject_function_body(keyword_index, &mut cursor, end)
-            {
-                (FunctionSurfaceForm::UnarySubjectSugar, parameters, body)
+        let (function_form, parameters, body) = if let Some((parameters, body)) =
+            self.parse_unary_subject_function_body(keyword_index, &mut cursor, end)
+        {
+            (FunctionSurfaceForm::UnarySubjectSugar, parameters, body)
         } else {
             let mut parameters = Vec::new();
             while self.starts_function_param(cursor, end) {
@@ -664,41 +667,40 @@ impl<'a> Parser<'a> {
                 parameters.push(parameter);
             }
 
-            let body = if let Some(arrow_index) =
-                self.consume_kind(&mut cursor, end, TokenKind::Arrow)
-            {
-                let body = self.parse_expression_body(
-                    keyword_index,
-                    &mut cursor,
-                    end,
-                    "func declaration",
-                    "func declaration is missing its body after `=>`",
-                    "expected a body expression after `=>`",
-                );
-                if parameters.is_empty() {
-                    self.diagnostics.push(
-                        Diagnostic::error(
-                            "func declarations require an explicit parameter before `=>`",
-                        )
-                        .with_code(NULLARY_FUNCTION_DECLARATION)
-                        .with_primary_label(
-                            self.source_span_of_token(arrow_index),
-                            "insert a parameter such as `_` before `=>`",
-                        )
-                        .with_note(
-                            "ignored unary functions are written as `func name = _ => body`",
-                        ),
+            let body =
+                if let Some(arrow_index) = self.consume_kind(&mut cursor, end, TokenKind::Arrow) {
+                    let body = self.parse_expression_body(
+                        keyword_index,
+                        &mut cursor,
+                        end,
+                        "func declaration",
+                        "func declaration is missing its body after `=>`",
+                        "expected a body expression after `=>`",
                     );
-                }
-                body
-            } else {
-                self.missing_body_diagnostic(
-                    keyword_index,
-                    "func declaration is missing its body",
-                    "expected `=>` followed by a body expression",
-                );
-                None
-            };
+                    if parameters.is_empty() {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "func declarations require an explicit parameter before `=>`",
+                            )
+                            .with_code(NULLARY_FUNCTION_DECLARATION)
+                            .with_primary_label(
+                                self.source_span_of_token(arrow_index),
+                                "insert a parameter such as `_` before `=>`",
+                            )
+                            .with_note(
+                                "ignored unary functions are written as `func name = _ => body`",
+                            ),
+                        );
+                    }
+                    body
+                } else {
+                    self.missing_body_diagnostic(
+                        keyword_index,
+                        "func declaration is missing its body",
+                        "expected `=>` followed by a body expression",
+                    );
+                    None
+                };
             (FunctionSurfaceForm::Explicit, parameters, body)
         };
 
@@ -1248,9 +1250,8 @@ impl<'a> Parser<'a> {
         if !has_equals {
             return None;
         }
-        let head_span = self.source_span_of_token(
-            self.peek_nontrivia(*cursor, end).unwrap_or(*cursor),
-        );
+        let head_span =
+            self.source_span_of_token(self.peek_nontrivia(*cursor, end).unwrap_or(*cursor));
         self.consume_kind(cursor, end, TokenKind::Equals);
         let lbrace_index = if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace) {
             idx
@@ -1389,9 +1390,8 @@ impl<'a> Parser<'a> {
         if !has_equals {
             return None;
         }
-        let head_span = self.source_span_of_token(
-            self.peek_nontrivia(*cursor, end).unwrap_or(*cursor),
-        );
+        let head_span =
+            self.source_span_of_token(self.peek_nontrivia(*cursor, end).unwrap_or(*cursor));
         self.consume_kind(cursor, end, TokenKind::Equals);
         let lbrace_index = if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace) {
             idx
@@ -1450,9 +1450,8 @@ impl<'a> Parser<'a> {
         if !has_equals {
             return None;
         }
-        let head_span = self.source_span_of_token(
-            self.peek_nontrivia(*cursor, end).unwrap_or(*cursor),
-        );
+        let head_span =
+            self.source_span_of_token(self.peek_nontrivia(*cursor, end).unwrap_or(*cursor));
         self.consume_kind(cursor, end, TokenKind::Equals);
         let lbrace_index = if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace) {
             idx
@@ -1498,28 +1497,29 @@ impl<'a> Parser<'a> {
                 let type_end = self
                     .find_next_domain_member_start(*cursor, inner_end, member_indent)
                     .unwrap_or(inner_end);
-                let annotation =
-                    self.parse_type_expr(cursor, type_end, TypeStop::default())
-                        .or_else(|| {
-                            self.diagnostics.push(
-                                Diagnostic::error(
-                                    "domain member type annotation is missing its type after `type`",
-                                )
-                                .with_code(MISSING_DOMAIN_MEMBER_TYPE)
-                                .with_primary_label(
-                                    self.source_span_for_range(index, *cursor),
-                                    "expected a type such as `Int -> Duration`",
-                                ),
-                            );
-                            None
-                        });
+                let annotation = self
+                    .parse_type_expr(cursor, type_end, TypeStop::default())
+                    .or_else(|| {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "domain member type annotation is missing its type after `type`",
+                            )
+                            .with_code(MISSING_DOMAIN_MEMBER_TYPE)
+                            .with_primary_label(
+                                self.source_span_for_range(index, *cursor),
+                                "expected a type such as `Int -> Duration`",
+                            ),
+                        );
+                        None
+                    });
                 *cursor = type_end;
                 pending_annotation = annotation;
                 continue;
             }
 
             let before = *cursor;
-            let Some(mut member) = self.parse_domain_member(cursor, inner_end, member_indent) else {
+            let Some(mut member) = self.parse_domain_member(cursor, inner_end, member_indent)
+            else {
                 break;
             };
 
@@ -1572,14 +1572,12 @@ impl<'a> Parser<'a> {
 
         if let Some(annotation) = pending_annotation {
             self.diagnostics.push(
-                Diagnostic::error(
-                    "domain member type annotation has no following member",
-                )
-                .with_code(MISSING_DOMAIN_MEMBER_NAME)
-                .with_primary_label(
-                    annotation.span,
-                    "expected a member binding after this type annotation",
-                ),
+                Diagnostic::error("domain member type annotation has no following member")
+                    .with_code(MISSING_DOMAIN_MEMBER_NAME)
+                    .with_primary_label(
+                        annotation.span,
+                        "expected a member binding after this type annotation",
+                    ),
             );
         }
 
@@ -1766,10 +1764,7 @@ impl<'a> Parser<'a> {
                 self.diagnostics.push(
                     Diagnostic::error("domain literal is missing `:` before its type")
                         .with_code(MISSING_DOMAIN_MEMBER_TYPE)
-                        .with_primary_label(
-                            suffix.span,
-                            "expected `:` followed by a member type",
-                        ),
+                        .with_primary_label(suffix.span, "expected `:` followed by a member type"),
                 );
                 None
             };
@@ -1831,30 +1826,24 @@ impl<'a> Parser<'a> {
                 .parse_expr(cursor, member_end, ExprStop::default())
                 .or_else(|| {
                     self.diagnostics.push(
-                        Diagnostic::error(
-                            "domain member binding is missing its body after `=`",
-                        )
-                        .with_code(MISSING_DOMAIN_MEMBER_BODY)
-                        .with_primary_label(
-                            equals_span,
-                            "expected an expression body for this domain member",
-                        ),
+                        Diagnostic::error("domain member binding is missing its body after `=`")
+                            .with_code(MISSING_DOMAIN_MEMBER_BODY)
+                            .with_primary_label(
+                                equals_span,
+                                "expected an expression body for this domain member",
+                            ),
                     );
                     None
                 });
             if body.is_some() {
-                if let Some(trailing_index) =
-                    self.next_significant_in_range(*cursor, member_end)
-                {
+                if let Some(trailing_index) = self.next_significant_in_range(*cursor, member_end) {
                     self.diagnostics.push(
-                        Diagnostic::error(
-                            "domain member body must contain exactly one expression",
-                        )
-                        .with_code(TRAILING_DECLARATION_BODY_TOKEN)
-                        .with_primary_label(
-                            self.source_span_of_token(trailing_index),
-                            "this token is outside the domain member body",
-                        ),
+                        Diagnostic::error("domain member body must contain exactly one expression")
+                            .with_code(TRAILING_DECLARATION_BODY_TOKEN)
+                            .with_primary_label(
+                                self.source_span_of_token(trailing_index),
+                                "this token is outside the domain member body",
+                            ),
                     );
                 }
             }
@@ -1873,10 +1862,7 @@ impl<'a> Parser<'a> {
             self.diagnostics.push(
                 Diagnostic::error("domain member binding is missing `=` before its body")
                     .with_code(MISSING_DOMAIN_MEMBER_BODY)
-                    .with_primary_label(
-                        name.span(),
-                        "expected `=` followed by an expression body",
-                    ),
+                    .with_primary_label(name.span(), "expected `=` followed by an expression body"),
             );
             return None;
         }
@@ -1898,7 +1884,26 @@ impl<'a> Parser<'a> {
         let start = *cursor;
         let name = self.parse_identifier(cursor, end)?;
         match name.text.as_str() {
-            "option" | "argument" => {
+            "option" | "argument" | "operation" | "command" => {
+                let schema_kind = match name.text.as_str() {
+                    "option" => ("source option", "timeout", "Text", "OptionSchema"),
+                    "argument" => ("source argument", "path", "Text", "ArgumentSchema"),
+                    "operation" => (
+                        "provider operation",
+                        "read",
+                        "Text -> Signal Text",
+                        "OperationSchema",
+                    ),
+                    "command" => (
+                        "provider command",
+                        "delete",
+                        "Text -> Task Text Unit",
+                        "CommandSchema",
+                    ),
+                    _ => {
+                        unreachable!("provider contract schema members stay within known keywords")
+                    }
+                };
                 let schema_name = self.parse_identifier(cursor, end).or_else(|| {
                     self.diagnostics.push(
                         Diagnostic::error("provider contract schema member is missing its name")
@@ -1906,12 +1911,8 @@ impl<'a> Parser<'a> {
                             .with_primary_label(
                                 name.span,
                                 format!(
-                                    "expected a {} name such as `timeout`",
-                                    if name.text == "option" {
-                                        "source option"
-                                    } else {
-                                        "source argument"
-                                    }
+                                    "expected a {} name such as `{}`",
+                                    schema_kind.0, schema_kind.1
                                 ),
                             ),
                     );
@@ -1928,12 +1929,8 @@ impl<'a> Parser<'a> {
                                 .with_primary_label(
                                     schema_name.as_ref().map_or(name.span, |item| item.span),
                                     format!(
-                                        "expected a {} type such as `Text` or `Signal Bool`",
-                                        if name.text == "option" {
-                                            "source option"
-                                        } else {
-                                            "source argument"
-                                        }
+                                        "expected a {} type such as `{}`",
+                                        schema_kind.0, schema_kind.2
                                     ),
                                 ),
                             );
@@ -1957,10 +1954,12 @@ impl<'a> Parser<'a> {
                     annotation,
                     span: self.source_span_for_range(start, *cursor),
                 };
-                Some(if name.text == "option" {
-                    SourceProviderContractMember::OptionSchema(member)
-                } else {
-                    SourceProviderContractMember::ArgumentSchema(member)
+                Some(match schema_kind.3 {
+                    "OptionSchema" => SourceProviderContractMember::OptionSchema(member),
+                    "ArgumentSchema" => SourceProviderContractMember::ArgumentSchema(member),
+                    "OperationSchema" => SourceProviderContractMember::OperationSchema(member),
+                    "CommandSchema" => SourceProviderContractMember::CommandSchema(member),
+                    _ => unreachable!("provider contract schema kinds stay within known variants"),
                 })
             }
             _ => {
@@ -2613,13 +2612,7 @@ impl<'a> Parser<'a> {
             return None;
         }
         let body = self
-            .parse_pipe_expr_from_head(
-                head_start,
-                Some(head),
-                cursor,
-                end,
-                ExprStop::default(),
-            )
+            .parse_pipe_expr_from_head(head_start, Some(head), cursor, end, ExprStop::default())
             .and_then(|expr| self.finish_expression_body(cursor, end, "func declaration", expr))
             .or_else(|| {
                 self.missing_body_diagnostic(
@@ -2643,7 +2636,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn implicit_function_subject_expr_at(&self, parameter: &FunctionParam, span: SourceSpan) -> Expr {
+    fn implicit_function_subject_expr_at(
+        &self,
+        parameter: &FunctionParam,
+        span: SourceSpan,
+    ) -> Expr {
         let name = parameter
             .name
             .clone()
@@ -2662,9 +2659,10 @@ impl<'a> Parser<'a> {
     ) -> (Expr, bool) {
         let span = expr.span;
         match expr.kind {
-            ExprKind::SubjectPlaceholder if !ambient_allowed => {
-                (self.implicit_function_subject_expr_at(parameter, span), true)
-            }
+            ExprKind::SubjectPlaceholder if !ambient_allowed => (
+                self.implicit_function_subject_expr_at(parameter, span),
+                true,
+            ),
             ExprKind::AmbientProjection(path) if !ambient_allowed => (
                 Expr {
                     span,
@@ -2764,8 +2762,11 @@ impl<'a> Parser<'a> {
                 )
             }
             ExprKind::Record(record) => {
-                let (record, changed) = self
-                    .rewrite_free_function_subject_record_expr(record, parameter, ambient_allowed);
+                let (record, changed) = self.rewrite_free_function_subject_record_expr(
+                    record,
+                    parameter,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -2775,8 +2776,11 @@ impl<'a> Parser<'a> {
                 )
             }
             ExprKind::Text(text) => {
-                let (text, changed) =
-                    self.rewrite_free_function_subject_text_literal(text, parameter, ambient_allowed);
+                let (text, changed) = self.rewrite_free_function_subject_text_literal(
+                    text,
+                    parameter,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -2878,8 +2882,11 @@ impl<'a> Parser<'a> {
                 )
             }
             ExprKind::ResultBlock(block) => {
-                let (block, changed) =
-                    self.rewrite_free_function_subject_result_block(block, parameter, ambient_allowed);
+                let (block, changed) = self.rewrite_free_function_subject_result_block(
+                    block,
+                    parameter,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -2891,8 +2898,11 @@ impl<'a> Parser<'a> {
             ExprKind::PatchApply { target, patch } => {
                 let (target, target_changed) =
                     self.rewrite_free_function_subject_expr(*target, parameter, ambient_allowed);
-                let (patch, patch_changed) =
-                    self.rewrite_free_function_subject_patch_block(patch, parameter, ambient_allowed);
+                let (patch, patch_changed) = self.rewrite_free_function_subject_patch_block(
+                    patch,
+                    parameter,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -2905,8 +2915,11 @@ impl<'a> Parser<'a> {
                 )
             }
             ExprKind::PatchLiteral(patch) => {
-                let (patch, changed) =
-                    self.rewrite_free_function_subject_patch_block(patch, parameter, ambient_allowed);
+                let (patch, changed) = self.rewrite_free_function_subject_patch_block(
+                    patch,
+                    parameter,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -2927,8 +2940,11 @@ impl<'a> Parser<'a> {
                 )
             }
             ExprKind::Markup(node) => {
-                let (node, changed) =
-                    self.rewrite_free_function_subject_markup_node(node, parameter, ambient_allowed);
+                let (node, changed) = self.rewrite_free_function_subject_markup_node(
+                    node,
+                    parameter,
+                    ambient_allowed,
+                );
                 (
                     Expr {
                         span,
@@ -3022,8 +3038,11 @@ impl<'a> Parser<'a> {
             .map(|entry| {
                 let (key, key_changed) =
                     self.rewrite_free_function_subject_expr(entry.key, parameter, ambient_allowed);
-                let (value, value_changed) = self
-                    .rewrite_free_function_subject_expr(entry.value, parameter, ambient_allowed);
+                let (value, value_changed) = self.rewrite_free_function_subject_expr(
+                    entry.value,
+                    parameter,
+                    ambient_allowed,
+                );
                 changed |= key_changed || value_changed;
                 MapExprEntry {
                     key,
@@ -3052,8 +3071,11 @@ impl<'a> Parser<'a> {
             .bindings
             .into_iter()
             .map(|binding| {
-                let (expr, expr_changed) =
-                    self.rewrite_free_function_subject_expr(binding.expr, parameter, ambient_allowed);
+                let (expr, expr_changed) = self.rewrite_free_function_subject_expr(
+                    binding.expr,
+                    parameter,
+                    ambient_allowed,
+                );
                 changed |= expr_changed;
                 ResultBinding {
                     name: binding.name,
@@ -3095,8 +3117,11 @@ impl<'a> Parser<'a> {
                     .into_iter()
                     .map(|segment| match segment {
                         PatchSelectorSegment::BracketExpr { expr, span } => {
-                            let (expr, expr_changed) =
-                                self.rewrite_free_function_subject_expr(*expr, parameter, ambient_allowed);
+                            let (expr, expr_changed) = self.rewrite_free_function_subject_expr(
+                                *expr,
+                                parameter,
+                                ambient_allowed,
+                            );
                             changed |= expr_changed;
                             PatchSelectorSegment::BracketExpr {
                                 expr: Box::new(expr),
@@ -3108,14 +3133,20 @@ impl<'a> Parser<'a> {
                     .collect();
                 let instruction_kind = match entry.instruction.kind {
                     PatchInstructionKind::Replace(expr) => {
-                        let (expr, expr_changed) = self
-                            .rewrite_free_function_subject_expr(*expr, parameter, ambient_allowed);
+                        let (expr, expr_changed) = self.rewrite_free_function_subject_expr(
+                            *expr,
+                            parameter,
+                            ambient_allowed,
+                        );
                         changed |= expr_changed;
                         PatchInstructionKind::Replace(Box::new(expr))
                     }
                     PatchInstructionKind::Store(expr) => {
-                        let (expr, expr_changed) = self
-                            .rewrite_free_function_subject_expr(*expr, parameter, ambient_allowed);
+                        let (expr, expr_changed) = self.rewrite_free_function_subject_expr(
+                            *expr,
+                            parameter,
+                            ambient_allowed,
+                        );
                         changed |= expr_changed;
                         PatchInstructionKind::Store(Box::new(expr))
                     }
@@ -3183,11 +3214,13 @@ impl<'a> Parser<'a> {
     ) -> (PipeStage, bool) {
         let (kind, changed) = match stage.kind {
             PipeStageKind::Transform { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Transform { expr }, changed)
             }
             PipeStageKind::Gate { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Gate { expr }, changed)
             }
             PipeStageKind::Case(arm) => {
@@ -3203,47 +3236,58 @@ impl<'a> Parser<'a> {
                 )
             }
             PipeStageKind::Map { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Map { expr }, changed)
             }
             PipeStageKind::Apply { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Apply { expr }, changed)
             }
             PipeStageKind::ClusterFinalizer { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::ClusterFinalizer { expr }, changed)
             }
             PipeStageKind::RecurStart { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::RecurStart { expr }, changed)
             }
             PipeStageKind::RecurStep { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::RecurStep { expr }, changed)
             }
             PipeStageKind::Tap { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Tap { expr }, changed)
             }
             PipeStageKind::FanIn { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::FanIn { expr }, changed)
             }
             PipeStageKind::Truthy { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Truthy { expr }, changed)
             }
             PipeStageKind::Falsy { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Falsy { expr }, changed)
             }
             PipeStageKind::Validate { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Validate { expr }, changed)
             }
             PipeStageKind::Previous { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Previous { expr }, changed)
             }
             PipeStageKind::Accumulate { seed, step } => {
@@ -3257,7 +3301,8 @@ impl<'a> Parser<'a> {
                 )
             }
             PipeStageKind::Diff { expr } => {
-                let (expr, changed) = self.rewrite_free_function_subject_expr(expr, parameter, true);
+                let (expr, changed) =
+                    self.rewrite_free_function_subject_expr(expr, parameter, true);
                 (PipeStageKind::Diff { expr }, changed)
             }
         };
@@ -3285,21 +3330,27 @@ impl<'a> Parser<'a> {
             .map(|attribute| {
                 let value = attribute.value.map(|value| match value {
                     MarkupAttributeValue::Text(text) => {
-                        let (text, value_changed) = self.rewrite_free_function_subject_text_literal(
-                            text,
-                            parameter,
-                            ambient_allowed,
-                        );
+                        let (text, value_changed) = self
+                            .rewrite_free_function_subject_text_literal(
+                                text,
+                                parameter,
+                                ambient_allowed,
+                            );
                         changed |= value_changed;
                         MarkupAttributeValue::Text(text)
                     }
                     MarkupAttributeValue::Expr(expr) => {
-                        let (expr, value_changed) =
-                            self.rewrite_free_function_subject_expr(expr, parameter, ambient_allowed);
+                        let (expr, value_changed) = self.rewrite_free_function_subject_expr(
+                            expr,
+                            parameter,
+                            ambient_allowed,
+                        );
                         changed |= value_changed;
                         MarkupAttributeValue::Expr(expr)
                     }
-                    MarkupAttributeValue::Pattern(pattern) => MarkupAttributeValue::Pattern(pattern),
+                    MarkupAttributeValue::Pattern(pattern) => {
+                        MarkupAttributeValue::Pattern(pattern)
+                    }
                 });
                 MarkupAttribute {
                     name: attribute.name,
@@ -3312,8 +3363,11 @@ impl<'a> Parser<'a> {
             .children
             .into_iter()
             .map(|child| {
-                let (child, child_changed) = self
-                    .rewrite_free_function_subject_markup_node(child, parameter, ambient_allowed);
+                let (child, child_changed) = self.rewrite_free_function_subject_markup_node(
+                    child,
+                    parameter,
+                    ambient_allowed,
+                );
                 changed |= child_changed;
                 child
             })
@@ -7657,7 +7711,7 @@ instance Eq A -> Eq (Option A) = {
                     .body
                     .as_ref()
                     .expect("provider contract should have a body");
-                assert_eq!(body.members.len(), 3);
+                assert_eq!(body.members.len(), 5);
                 match &body.members[0] {
                     SourceProviderContractMember::ArgumentSchema(member) => {
                         assert_eq!(
@@ -7677,6 +7731,24 @@ instance Eq A -> Eq (Option A) = {
                     other => panic!("expected option schema member, got {other:?}"),
                 }
                 match &body.members[2] {
+                    SourceProviderContractMember::OperationSchema(member) => {
+                        assert_eq!(
+                            member.name.as_ref().map(|name| name.text.as_str()),
+                            Some("read")
+                        );
+                    }
+                    other => panic!("expected operation schema member, got {other:?}"),
+                }
+                match &body.members[3] {
+                    SourceProviderContractMember::CommandSchema(member) => {
+                        assert_eq!(
+                            member.name.as_ref().map(|name| name.text.as_str()),
+                            Some("delete")
+                        );
+                    }
+                    other => panic!("expected command schema member, got {other:?}"),
+                }
+                match &body.members[4] {
                     SourceProviderContractMember::FieldValue(member) => {
                         assert_eq!(
                             member.name.as_ref().map(|name| name.text.as_str()),
@@ -8055,9 +8127,8 @@ domain Duration over Int = {
 
     #[test]
     fn parser_reports_trailing_tokens_after_expression_body() {
-        let (_, parsed) = load(
-            "fun prependCells:List Int = head:Int tail:List Int =>\n    head :: tail\n",
-        );
+        let (_, parsed) =
+            load("fun prependCells:List Int = head:Int tail:List Int =>\n    head :: tail\n");
 
         assert!(parsed.has_errors());
         assert!(
@@ -8255,7 +8326,10 @@ fun scoreLineFor:Text = "Score: {.}"
         let Item::Fun(current_status) = &parsed.module.items[0] else {
             panic!("expected currentStatus function item");
         };
-        assert_eq!(current_status.function_form, FunctionSurfaceForm::UnarySubjectSugar);
+        assert_eq!(
+            current_status.function_form,
+            FunctionSurfaceForm::UnarySubjectSugar
+        );
         assert_eq!(current_status.parameters.len(), 1);
         assert!(matches!(
             current_status.expr_body().map(|expr| &expr.kind),
@@ -8268,7 +8342,10 @@ fun scoreLineFor:Text = "Score: {.}"
         let Item::Fun(score_line_for) = &parsed.module.items[1] else {
             panic!("expected scoreLineFor function item");
         };
-        assert_eq!(score_line_for.function_form, FunctionSurfaceForm::UnarySubjectSugar);
+        assert_eq!(
+            score_line_for.function_form,
+            FunctionSurfaceForm::UnarySubjectSugar
+        );
         assert_eq!(score_line_for.parameters.len(), 1);
         let Some(Expr {
             kind: ExprKind::Text(text),
@@ -8294,9 +8371,12 @@ fun scoreLineFor:Text = "Score: {.}"
         let (_, parsed) = load("fun constant:Int = => 1\n");
 
         assert!(parsed.has_errors(), "nullary functions should stay invalid");
-        assert!(parsed.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code == Some(NULLARY_FUNCTION_DECLARATION)
-        }));
+        assert!(
+            parsed
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(NULLARY_FUNCTION_DECLARATION) })
+        );
     }
 
     #[test]

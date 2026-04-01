@@ -1013,6 +1013,8 @@ pub struct CustomSourceContractMetadata {
     pub recurrence_wakeup: Option<CustomSourceRecurrenceWakeup>,
     pub arguments: Vec<CustomSourceArgumentSchema>,
     pub options: Vec<CustomSourceOptionSchema>,
+    pub operations: Vec<CustomSourceCapabilityMember>,
+    pub commands: Vec<CustomSourceCapabilityMember>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1032,6 +1034,13 @@ pub struct CustomSourceArgumentSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CustomSourceOptionSchema {
+    pub span: SourceSpan,
+    pub name: Name,
+    pub annotation: TypeId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CustomSourceCapabilityMember {
     pub span: SourceSpan,
     pub name: Name,
     pub annotation: TypeId,

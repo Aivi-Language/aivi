@@ -1942,6 +1942,8 @@ provider my.data.source
     argument url : Url
     option timeout : Duration
     option retries : Int
+    operation read : Url -> Signal Payload
+    command refresh : Url -> Task Text Unit
 ```
 
 Implemented declaration rules:
@@ -1951,6 +1953,11 @@ Implemented declaration rules:
 - unknown declaration fields are immediate diagnostics
 - argument and option declarations are restricted to primitive types, same-module types, `List`, and `Signal` compositions over those closed shapes
 - richer schemas are rejected at declaration time
+- `operation` and `command` declarations are accepted and preserved in HIR as future capability
+  members
+- operation/command annotations use ordinary well-kinded term types instead of the narrower
+  argument/option proof surface, because they model provider API members rather than authored
+  `@source` inputs
 - reactive source inputs always count as `sourceEvent` wakeups for any provider; non-reactive custom wakeups must be declared explicitly
 
 ### 14.4.1 Planned provider capability unification

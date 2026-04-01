@@ -1192,6 +1192,26 @@ impl Validator<'_> {
                             option.annotation,
                         );
                     }
+                    for operation in &item.contract.operations {
+                        self.check_span("provider contract operation", operation.span);
+                        self.check_name(&operation.name);
+                        self.require_type(
+                            operation.span,
+                            "provider contract operation",
+                            "annotation",
+                            operation.annotation,
+                        );
+                    }
+                    for command in &item.contract.commands {
+                        self.check_span("provider contract command", command.span);
+                        self.check_name(&command.name);
+                        self.require_type(
+                            command.span,
+                            "provider contract command",
+                            "annotation",
+                            command.annotation,
+                        );
+                    }
                 }
                 Item::Instance(item) => {
                     self.check_type_reference(&item.class);
@@ -1902,6 +1922,20 @@ impl Validator<'_> {
                             option.annotation,
                             &[],
                             "provider contract option annotation",
+                        );
+                    }
+                    for operation in &item.contract.operations {
+                        self.check_expected_type_kind(
+                            operation.annotation,
+                            &[],
+                            "provider contract operation annotation",
+                        );
+                    }
+                    for command in &item.contract.commands {
+                        self.check_expected_type_kind(
+                            command.annotation,
+                            &[],
+                            "provider contract command annotation",
                         );
                     }
                 }
@@ -9491,18 +9525,15 @@ impl GateType {
             return self.clone();
         }
         match self {
-            Self::TypeParameter { parameter, .. } => subs
-                .get(parameter)
-                .cloned()
-                .unwrap_or_else(|| self.clone()),
+            Self::TypeParameter { parameter, .. } => {
+                subs.get(parameter).cloned().unwrap_or_else(|| self.clone())
+            }
             Self::Primitive(_) => self.clone(),
             Self::Arrow { parameter, result } => Self::Arrow {
                 parameter: Box::new(parameter.substitute_type_parameters(subs)),
                 result: Box::new(result.substitute_type_parameters(subs)),
             },
-            Self::List(element) => {
-                Self::List(Box::new(element.substitute_type_parameters(subs)))
-            }
+            Self::List(element) => Self::List(Box::new(element.substitute_type_parameters(subs))),
             Self::Option(element) => {
                 Self::Option(Box::new(element.substitute_type_parameters(subs)))
             }
@@ -9528,9 +9559,7 @@ impl GateType {
                 key: Box::new(key.substitute_type_parameters(subs)),
                 value: Box::new(value.substitute_type_parameters(subs)),
             },
-            Self::Set(element) => {
-                Self::Set(Box::new(element.substitute_type_parameters(subs)))
-            }
+            Self::Set(element) => Self::Set(Box::new(element.substitute_type_parameters(subs))),
             Self::Result { error, value } => Self::Result {
                 error: Box::new(error.substitute_type_parameters(subs)),
                 value: Box::new(value.substitute_type_parameters(subs)),
@@ -9579,15 +9608,13 @@ impl GateType {
             Self::Arrow { parameter, result } => {
                 parameter.has_type_params() || result.has_type_params()
             }
-            Self::List(e) | Self::Option(e) | Self::Signal(e) | Self::Set(e) => {
-                e.has_type_params()
-            }
+            Self::List(e) | Self::Option(e) | Self::Signal(e) | Self::Set(e) => e.has_type_params(),
             Self::Tuple(elements) => elements.iter().any(|e| e.has_type_params()),
             Self::Record(fields) => fields.iter().any(|f| f.ty.has_type_params()),
             Self::Map { key, value } => key.has_type_params() || value.has_type_params(),
-            Self::Result { error, value } | Self::Validation { error, value } | Self::Task { error, value } => {
-                error.has_type_params() || value.has_type_params()
-            }
+            Self::Result { error, value }
+            | Self::Validation { error, value }
+            | Self::Task { error, value } => error.has_type_params() || value.has_type_params(),
             Self::Domain { arguments, .. } | Self::OpaqueItem { arguments, .. } => {
                 arguments.iter().any(|a| a.has_type_params())
             }
@@ -9634,20 +9661,15 @@ impl GateType {
             Self::Record(tfields) => match self {
                 Self::Record(sfields) => {
                     sfields.len() == tfields.len()
-                        && sfields.iter().zip(tfields.iter()).all(|(s, t)| {
-                            s.name == t.name && s.ty.fits_template(&t.ty)
-                        })
+                        && sfields
+                            .iter()
+                            .zip(tfields.iter())
+                            .all(|(s, t)| s.name == t.name && s.ty.fits_template(&t.ty))
                 }
                 _ => false,
             },
-            Self::Map {
-                key: tk,
-                value: tv,
-            } => match self {
-                Self::Map {
-                    key: sk,
-                    value: sv,
-                } => sk.fits_template(tk) && sv.fits_template(tv),
+            Self::Map { key: tk, value: tv } => match self {
+                Self::Map { key: sk, value: sv } => sk.fits_template(tk) && sv.fits_template(tv),
                 _ => false,
             },
             Self::Result {
@@ -9692,7 +9714,10 @@ impl GateType {
                 } => {
                     si == ti
                         && sargs.len() == targs.len()
-                        && sargs.iter().zip(targs.iter()).all(|(s, t)| s.fits_template(t))
+                        && sargs
+                            .iter()
+                            .zip(targs.iter())
+                            .all(|(s, t)| s.fits_template(t))
                 }
                 _ => false,
             },
@@ -9708,7 +9733,10 @@ impl GateType {
                 } => {
                     si == ti
                         && sargs.len() == targs.len()
-                        && sargs.iter().zip(targs.iter()).all(|(s, t)| s.fits_template(t))
+                        && sargs
+                            .iter()
+                            .zip(targs.iter())
+                            .all(|(s, t)| s.fits_template(t))
                 }
                 _ => false,
             },
@@ -11358,18 +11386,21 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::TextFromInt => {
                 arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Text))
             }
-            IntrinsicValue::TextParseInt => {
-                arrow(primitive(BuiltinType::Text), option(primitive(BuiltinType::Int)))
-            }
+            IntrinsicValue::TextParseInt => arrow(
+                primitive(BuiltinType::Text),
+                option(primitive(BuiltinType::Int)),
+            ),
             IntrinsicValue::TextFromBool => {
                 arrow(primitive(BuiltinType::Bool), primitive(BuiltinType::Text))
             }
-            IntrinsicValue::TextParseBool => {
-                arrow(primitive(BuiltinType::Text), option(primitive(BuiltinType::Bool)))
-            }
-            IntrinsicValue::TextConcat => {
-                arrow(list(primitive(BuiltinType::Text)), primitive(BuiltinType::Text))
-            }
+            IntrinsicValue::TextParseBool => arrow(
+                primitive(BuiltinType::Text),
+                option(primitive(BuiltinType::Bool)),
+            ),
+            IntrinsicValue::TextConcat => arrow(
+                list(primitive(BuiltinType::Text)),
+                primitive(BuiltinType::Text),
+            ),
             // Float transcendental intrinsics
             IntrinsicValue::FloatSin
             | IntrinsicValue::FloatCos
@@ -11380,13 +11411,15 @@ impl<'a> GateTypeContext<'a> {
             | IntrinsicValue::FloatFrac => {
                 arrow(primitive(BuiltinType::Float), primitive(BuiltinType::Float))
             }
-            IntrinsicValue::FloatAsin | IntrinsicValue::FloatAcos => {
-                arrow(primitive(BuiltinType::Float), option(primitive(BuiltinType::Float)))
-            }
-            IntrinsicValue::FloatLog
-            | IntrinsicValue::FloatLog2
-            | IntrinsicValue::FloatLog10 => {
-                arrow(primitive(BuiltinType::Float), option(primitive(BuiltinType::Float)))
+            IntrinsicValue::FloatAsin | IntrinsicValue::FloatAcos => arrow(
+                primitive(BuiltinType::Float),
+                option(primitive(BuiltinType::Float)),
+            ),
+            IntrinsicValue::FloatLog | IntrinsicValue::FloatLog2 | IntrinsicValue::FloatLog10 => {
+                arrow(
+                    primitive(BuiltinType::Float),
+                    option(primitive(BuiltinType::Float)),
+                )
             }
             IntrinsicValue::FloatAtan2 | IntrinsicValue::FloatHypot => arrow(
                 primitive(BuiltinType::Float),
@@ -11420,7 +11453,10 @@ impl<'a> GateTypeContext<'a> {
             // Env intrinsics
             IntrinsicValue::EnvGet => arrow(
                 primitive(BuiltinType::Text),
-                task(primitive(BuiltinType::Text), option(primitive(BuiltinType::Text))),
+                task(
+                    primitive(BuiltinType::Text),
+                    option(primitive(BuiltinType::Text)),
+                ),
             ),
             IntrinsicValue::EnvList => arrow(
                 primitive(BuiltinType::Text),
@@ -11555,10 +11591,9 @@ impl<'a> GateTypeContext<'a> {
                     ])),
                 ),
             ),
-            IntrinsicValue::BigIntFromInt => arrow(
-                primitive(BuiltinType::Int),
-                primitive(BuiltinType::BigInt),
-            ),
+            IntrinsicValue::BigIntFromInt => {
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::BigInt))
+            }
             IntrinsicValue::BigIntFromText => arrow(
                 primitive(BuiltinType::Text),
                 option(primitive(BuiltinType::BigInt)),
@@ -11567,16 +11602,18 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::BigInt),
                 option(primitive(BuiltinType::Int)),
             ),
-            IntrinsicValue::BigIntToText => arrow(
-                primitive(BuiltinType::BigInt),
-                primitive(BuiltinType::Text),
-            ),
-            IntrinsicValue::BigIntAdd
-            | IntrinsicValue::BigIntSub
-            | IntrinsicValue::BigIntMul => arrow(
-                primitive(BuiltinType::BigInt),
-                arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::BigInt)),
-            ),
+            IntrinsicValue::BigIntToText => {
+                arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::Text))
+            }
+            IntrinsicValue::BigIntAdd | IntrinsicValue::BigIntSub | IntrinsicValue::BigIntMul => {
+                arrow(
+                    primitive(BuiltinType::BigInt),
+                    arrow(
+                        primitive(BuiltinType::BigInt),
+                        primitive(BuiltinType::BigInt),
+                    ),
+                )
+            }
             IntrinsicValue::BigIntDiv | IntrinsicValue::BigIntMod => arrow(
                 primitive(BuiltinType::BigInt),
                 arrow(
@@ -11596,12 +11633,12 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::BigInt),
                 arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::Int)),
             ),
-            IntrinsicValue::BigIntEq
-            | IntrinsicValue::BigIntGt
-            | IntrinsicValue::BigIntLt => arrow(
-                primitive(BuiltinType::BigInt),
-                arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::Bool)),
-            ),
+            IntrinsicValue::BigIntEq | IntrinsicValue::BigIntGt | IntrinsicValue::BigIntLt => {
+                arrow(
+                    primitive(BuiltinType::BigInt),
+                    arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::Bool)),
+                )
+            }
         }
     }
 
@@ -13754,11 +13791,7 @@ impl<'a> GateTypeContext<'a> {
         }
         let mut bindings = PolyTypeBindings::new();
         let mut instantiated_parameters = Vec::with_capacity(argument_types.len());
-        for (parameter, actual) in function
-            .parameters
-            .iter()
-            .zip(argument_types.iter())
-        {
+        for (parameter, actual) in function.parameters.iter().zip(argument_types.iter()) {
             let annotation = parameter.annotation?;
             if let Some(lowered) = self.lower_annotation(annotation) {
                 if !lowered.same_shape(actual) {
@@ -13801,11 +13834,9 @@ impl<'a> GateTypeContext<'a> {
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
-            let result_ty = self
-                .lower_annotation(result_annotation)
-                .or_else(|| {
-                    self.instantiate_poly_hir_type_partially(result_annotation, &bindings)
-                })?;
+            let result_ty = self.lower_annotation(result_annotation).or_else(|| {
+                self.instantiate_poly_hir_type_partially(result_annotation, &bindings)
+            })?;
             let curried = remaining_types
                 .into_iter()
                 .rev()
@@ -15052,8 +15083,7 @@ impl<'a> GateTypeContext<'a> {
                 PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
                 | PipeStageKind::RecurStep { .. }
-                | PipeStageKind::Validate { .. }
-                 => {
+                | PipeStageKind::Validate { .. } => {
                     stage_index += 1;
                     GateExprInfo::default()
                 }
@@ -15226,7 +15256,11 @@ impl<'a> GateTypeContext<'a> {
         }
         // Polymorphic application: if the parameter is an open type variable, substitute it in
         // the result to produce a concrete return type without requiring exact structural equality.
-        if let GateType::TypeParameter { parameter: param_id, .. } = parameter.as_ref() {
+        if let GateType::TypeParameter {
+            parameter: param_id,
+            ..
+        } = parameter.as_ref()
+        {
             return Some(result.substitute_type_parameter(*param_id, argument));
         }
         None

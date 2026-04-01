@@ -3213,9 +3213,10 @@ impl<'a> TypeChecker<'a> {
                 .iter()
                 .map(|p| {
                     p.annotation.and_then(|ann| {
-                        self.typing
-                            .lower_annotation(ann)
-                            .or_else(|| self.typing.instantiate_poly_hir_type_partially(ann, &bindings))
+                        self.typing.lower_annotation(ann).or_else(|| {
+                            self.typing
+                                .instantiate_poly_hir_type_partially(ann, &bindings)
+                        })
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;

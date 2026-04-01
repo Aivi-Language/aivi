@@ -3368,7 +3368,8 @@ value url:Text = "https://{host}/users"
 "#,
     );
 
-    compile_program(&backend).expect("interpolated text should now compile via runtime text concat");
+    compile_program(&backend)
+        .expect("interpolated text should now compile via runtime text concat");
 }
 
 #[test]

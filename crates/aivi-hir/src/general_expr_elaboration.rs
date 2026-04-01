@@ -3104,12 +3104,12 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<(), MarkupRuntimeExprSiteError> {
         let (expr, ty) = match self.typing.infer_expr(expr, env, None).ty {
             Some(ty) => (expr, ty),
-            None => self.signal_payload_markup_runtime_expr_site(expr, env).ok_or(
-                MarkupRuntimeExprSiteError::UnknownExprType {
+            None => self
+                .signal_payload_markup_runtime_expr_site(expr, env)
+                .ok_or(MarkupRuntimeExprSiteError::UnknownExprType {
                     expr,
                     span: self.module.exprs()[expr].span,
-                },
-            )?,
+                })?,
         };
         let parameters = env_parameters(self.module, env);
         sites.entry(expr).or_insert(MarkupRuntimeExprSite {
@@ -3140,7 +3140,8 @@ impl<'a> GeneralExprElaborator<'a> {
         let ExprKind::Name(reference) = &self.module.exprs()[*callee].kind else {
             return None;
         };
-        let ResolutionState::Resolved(TermResolution::Item(item_id)) = reference.resolution.as_ref()
+        let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
         else {
             return None;
         };

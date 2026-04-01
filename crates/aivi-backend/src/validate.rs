@@ -899,84 +899,61 @@ fn validate_pipeline(
                     }
                 }
             }
-            StageKind::Temporal(temporal) => {
-                match temporal {
-                    TemporalStage::Previous {
-                        payload_layout,
-                        seed,
-                    } => {
-                        validate_kernel_contract(
-                            program,
-                            *seed,
-                            None,
-                            false,
-                            *payload_layout,
-                            errors,
-                        );
-                        if signal_payload_layout(program, stage.input_layout) != Some(*payload_layout)
-                            || signal_payload_layout(program, stage.result_layout)
-                                != Some(*payload_layout)
-                        {
-                            errors.push(ValidationError::TemporalStageContractMismatch {
-                                pipeline: pipeline_id,
-                                stage_index: stage.index,
-                            });
-                        }
-                    }
-                    TemporalStage::DiffFunction {
-                        input_layout,
-                        result_layout,
-                        callable_layout,
-                        diff,
-                    } => {
-                        validate_kernel_contract(
-                            program,
-                            *diff,
-                            None,
-                            false,
-                            *callable_layout,
-                            errors,
-                        );
-                        if signal_payload_layout(program, stage.input_layout) != Some(*input_layout)
-                            || signal_payload_layout(program, stage.result_layout)
-                                != Some(*result_layout)
-                            || !diff_callable_matches(
-                                program,
-                                *callable_layout,
-                                *input_layout,
-                                *result_layout,
-                            )
-                        {
-                            errors.push(ValidationError::TemporalStageContractMismatch {
-                                pipeline: pipeline_id,
-                                stage_index: stage.index,
-                            });
-                        }
-                    }
-                    TemporalStage::DiffSeed {
-                        payload_layout,
-                        seed,
-                    } => {
-                        validate_kernel_contract(
-                            program,
-                            *seed,
-                            None,
-                            false,
-                            *payload_layout,
-                            errors,
-                        );
-                        if signal_payload_layout(program, stage.input_layout) != Some(*payload_layout)
-                            || signal_payload_layout(program, stage.result_layout)
-                                != Some(*payload_layout)
-                        {
-                            errors.push(ValidationError::TemporalStageContractMismatch {
-                                pipeline: pipeline_id,
-                                stage_index: stage.index,
-                            });
-                        }
+            StageKind::Temporal(temporal) => match temporal {
+                TemporalStage::Previous {
+                    payload_layout,
+                    seed,
+                } => {
+                    validate_kernel_contract(program, *seed, None, false, *payload_layout, errors);
+                    if signal_payload_layout(program, stage.input_layout) != Some(*payload_layout)
+                        || signal_payload_layout(program, stage.result_layout)
+                            != Some(*payload_layout)
+                    {
+                        errors.push(ValidationError::TemporalStageContractMismatch {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        });
                     }
                 }
-            }
+                TemporalStage::DiffFunction {
+                    input_layout,
+                    result_layout,
+                    callable_layout,
+                    diff,
+                } => {
+                    validate_kernel_contract(program, *diff, None, false, *callable_layout, errors);
+                    if signal_payload_layout(program, stage.input_layout) != Some(*input_layout)
+                        || signal_payload_layout(program, stage.result_layout)
+                            != Some(*result_layout)
+                        || !diff_callable_matches(
+                            program,
+                            *callable_layout,
+                            *input_layout,
+                            *result_layout,
+                        )
+                    {
+                        errors.push(ValidationError::TemporalStageContractMismatch {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        });
+                    }
+                }
+                TemporalStage::DiffSeed {
+                    payload_layout,
+                    seed,
+                } => {
+                    validate_kernel_contract(program, *seed, None, false, *payload_layout, errors);
+                    if signal_payload_layout(program, stage.input_layout) != Some(*payload_layout)
+                        || signal_payload_layout(program, stage.result_layout)
+                            != Some(*payload_layout)
+                    {
+                        errors.push(ValidationError::TemporalStageContractMismatch {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        });
+                    }
+                }
+            },
             StageKind::Fanout(fanout) => {
                 validate_kernel_contract(
                     program,
@@ -1538,7 +1515,10 @@ fn diff_callable_matches(
     let Some(LayoutKind::Arrow {
         parameter: first_parameter,
         result: nested_result,
-    }) = program.layouts().get(callable_layout).map(|layout| &layout.kind)
+    }) = program
+        .layouts()
+        .get(callable_layout)
+        .map(|layout| &layout.kind)
     else {
         return false;
     };

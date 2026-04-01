@@ -46,9 +46,8 @@ use crate::{
     RecurrenceWakeupKind, SignalInfo, SourceArgumentKernel, SourceCancellationPolicy,
     SourceInstanceId, SourceOptionBinding, SourceOptionKernel, SourcePlan, SourceProvider,
     SourceReplacementPolicy, SourceStaleWorkPolicy, SourceTeardownPolicy, Stage, StageKind,
-    SubjectRef, SuffixedIntegerLiteral, TemporalStage, TextLiteral, TextSegment,
-    TruthyFalsyBranch, TruthyFalsyStage, UnaryOperator, ValidationError, VariantLayout,
-    validate_program,
+    SubjectRef, SuffixedIntegerLiteral, TemporalStage, TextLiteral, TextSegment, TruthyFalsyBranch,
+    TruthyFalsyStage, UnaryOperator, ValidationError, VariantLayout, validate_program,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

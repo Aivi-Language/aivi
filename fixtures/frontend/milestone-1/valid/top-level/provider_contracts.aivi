@@ -1,6 +1,8 @@
 provider custom.feed
     argument path : Text
     option timeout : Duration
+    operation read : Text -> Signal Text
+    command delete : Text -> Task Text Unit
     wakeup: providerTrigger
 
 provider custom.timer

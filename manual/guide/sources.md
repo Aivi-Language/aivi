@@ -155,7 +155,9 @@ value view =
 
 ## Custom providers
 
-You can also declare a provider contract:
+You can also declare a provider contract. Argument and option declarations still describe the
+`@source` boundary itself; `operation` and `command` declarations preserve the future
+capability-member surface in HIR so later handle lowering can target one provider-owned API:
 
 ```aivi
 type Mode =
@@ -167,6 +169,8 @@ provider custom.feed
     argument path : Text
     option timeout : Duration
     option mode : Mode
+    operation read : Text -> Signal Int
+    command delete : Text -> Task Text Unit
     wakeup: providerTrigger
 
 @source custom.feed "/tmp/demo.txt" with {
@@ -190,5 +194,5 @@ value view =
 | `@source http.get ...` | HTTP-backed signal |
 | `@source fs.watch ...` | File watch signal |
 | `@source process.spawn ...` | Process-backed signal |
-| `provider custom.feed` | Custom source contract |
+| `provider custom.feed` | Custom source/capability contract |
 | [Built-in Source Catalog](/guide/source-catalog) | Current source-kind and option reference |

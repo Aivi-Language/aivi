@@ -1352,6 +1352,7 @@ impl<'a> Lowerer<'a> {
         let mut wakeup_span = None;
         let mut argument_spans = HashMap::new();
         let mut option_spans = HashMap::new();
+        let mut capability_member_spans = HashMap::new();
         let Some(body) = body else {
             return contract;
         };
@@ -1462,10 +1463,68 @@ impl<'a> Lowerer<'a> {
                         annotation: self.lower_type_expr(annotation),
                     });
                 }
+                syn::SourceProviderContractMember::OperationSchema(member) => {
+                    self.lower_custom_source_contract_capability_member(
+                        member,
+                        "operation",
+                        &mut contract.operations,
+                        &mut capability_member_spans,
+                    );
+                }
+                syn::SourceProviderContractMember::CommandSchema(member) => {
+                    self.lower_custom_source_contract_capability_member(
+                        member,
+                        "command",
+                        &mut contract.commands,
+                        &mut capability_member_spans,
+                    );
+                }
             }
         }
 
         contract
+    }
+
+    fn lower_custom_source_contract_capability_member(
+        &mut self,
+        member: &syn::SourceProviderContractSchemaMember,
+        kind: &'static str,
+        members: &mut Vec<crate::CustomSourceCapabilityMember>,
+        seen: &mut HashMap<String, (SourceSpan, &'static str)>,
+    ) {
+        let Some(name) = member.name.as_ref() else {
+            return;
+        };
+        if let Some((previous_span, previous_kind)) =
+            seen.insert(name.text.clone(), (member.span, kind))
+        {
+            let detail = if previous_kind == kind {
+                format!("this {kind} repeats an earlier declaration")
+            } else {
+                format!("this {kind} conflicts with an earlier {previous_kind} declaration")
+            };
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "provider contract capability member `{}` is duplicated",
+                    name.text
+                ))
+                .with_code(code("duplicate-source-provider-contract-field"))
+                .with_primary_label(member.span, detail)
+                .with_secondary_label(
+                    previous_span,
+                    format!("previous {previous_kind} declared here"),
+                ),
+            );
+            return;
+        }
+        let Some(annotation) = member.annotation.as_ref() else {
+            return;
+        };
+        members.push(crate::CustomSourceCapabilityMember {
+            span: member.span,
+            name: self.make_name(&name.text, name.span),
+            annotation: self.lower_type_expr(annotation),
+        });
     }
 
     fn lower_custom_source_contract_wakeup(
@@ -1510,10 +1569,7 @@ impl<'a> Lowerer<'a> {
             // importing `length` from `aivi.core.bytes`).  Detect this as a direct
             // self-import where every requested name is a known intrinsic and suppress
             // the cycle error in that case.
-            let is_direct_self_import = cycle
-                .modules()
-                .iter()
-                .all(|m| m.as_ref() == module_name);
+            let is_direct_self_import = cycle.modules().iter().all(|m| m.as_ref() == module_name);
             let all_intrinsics = item.imports.iter().all(|import| {
                 import
                     .path
@@ -2394,11 +2450,12 @@ impl<'a> Lowerer<'a> {
             })
         } else {
             self.diagnostics.push(
-                aivi_base::Diagnostic::error(
-                    "operator section not supported for this operator",
-                )
-                .with_code(code("unsupported-operator-section"))
-                .with_primary_label(span, "no built-in function backing for this operator section"),
+                aivi_base::Diagnostic::error("operator section not supported for this operator")
+                    .with_code(code("unsupported-operator-section"))
+                    .with_primary_label(
+                        span,
+                        "no built-in function backing for this operator section",
+                    ),
             );
             let reference = TermReference::unresolved(
                 self.make_path(&[self.make_name("__aivi_binary_eq", span)]),
@@ -5664,6 +5721,12 @@ impl<'a> Lowerer<'a> {
                 for option in &item.contract.options {
                     self.resolve_type(option.annotation, namespaces, &mut env);
                 }
+                for operation in &item.contract.operations {
+                    self.resolve_type(operation.annotation, namespaces, &mut env);
+                }
+                for command in &item.contract.commands {
+                    self.resolve_type(command.annotation, namespaces, &mut env);
+                }
                 Item::SourceProviderContract(item)
             }
             Item::Use(item) => Item::Use(item),
@@ -6734,7 +6797,9 @@ impl<'a> Lowerer<'a> {
         }
 
         match candidates.as_slice() {
-            [import_id] => Some(ResolutionState::Resolved(ExportResolution::Import(*import_id))),
+            [import_id] => Some(ResolutionState::Resolved(ExportResolution::Import(
+                *import_id,
+            ))),
             [] => None,
             _ => {
                 self.emit_error(
@@ -7317,9 +7382,19 @@ fn builtin_type(name: &str) -> Option<BuiltinType> {
 fn is_known_module(module: &str) -> bool {
     matches!(
         module,
-        "aivi.network" | "aivi.defaults" | "aivi.random" | "aivi.stdio" | "aivi.db"
-            | "aivi.text" | "aivi.time" | "aivi.env" | "aivi.i18n" | "aivi.log"
-            | "aivi.regex" | "aivi.http" | "aivi.bigint"
+        "aivi.network"
+            | "aivi.defaults"
+            | "aivi.random"
+            | "aivi.stdio"
+            | "aivi.db"
+            | "aivi.text"
+            | "aivi.time"
+            | "aivi.env"
+            | "aivi.i18n"
+            | "aivi.log"
+            | "aivi.regex"
+            | "aivi.http"
+            | "aivi.bigint"
     )
 }
 
@@ -9860,6 +9935,10 @@ signal tick : Signal Unit
         assert_eq!(contract.contract.options.len(), 2);
         assert_eq!(contract.contract.options[0].name.text(), "timeout");
         assert_eq!(contract.contract.options[1].name.text(), "mode");
+        assert_eq!(contract.contract.operations.len(), 1);
+        assert_eq!(contract.contract.operations[0].name.text(), "read");
+        assert_eq!(contract.contract.commands.len(), 1);
+        assert_eq!(contract.contract.commands[0].name.text(), "delete");
 
         let updates = find_signal(lowered.module(), "updates");
         let metadata = updates
@@ -9878,6 +9957,8 @@ signal tick : Signal Unit
                 ),
                 arguments: contract.contract.arguments.clone(),
                 options: contract.contract.options.clone(),
+                operations: contract.contract.operations.clone(),
+                commands: contract.contract.commands.clone(),
             }),
             "same-module provider declarations should resolve onto matching custom @source use sites"
         );
@@ -9947,6 +10028,8 @@ provider custom.feed
                 recurrence_wakeup: Some(crate::CustomSourceRecurrenceWakeup::Timer),
                 arguments: Vec::new(),
                 options: Vec::new(),
+                operations: Vec::new(),
+                commands: Vec::new(),
             }),
             "provider contract resolution should use the module namespace rather than declaration order"
         );
@@ -10017,6 +10100,25 @@ provider custom.feed
     }
 
     #[test]
+    fn provider_contract_declarations_report_duplicate_capability_member_names() {
+        let lowered = lower_text(
+            "provider_contract_duplicate_capability_members.aivi",
+            r#"
+provider custom.feed
+    operation read : Text -> Signal Text
+    command read : Text -> Task Text Unit
+"#,
+        );
+        assert!(
+            lowered.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(super::code("duplicate-source-provider-contract-field"))
+            }),
+            "expected duplicate capability member diagnostic, got diagnostics: {:?}",
+            lowered.diagnostics()
+        );
+    }
+
+    #[test]
     fn provider_contract_metadata_allows_nonreactive_recurrence() {
         let lowered = lower_fixture("milestone-2/valid/custom-source-provider-wakeup/main.aivi");
         assert!(
@@ -10046,6 +10148,8 @@ provider custom.feed
                 ),
                 arguments: Vec::new(),
                 options: Vec::new(),
+                operations: Vec::new(),
+                commands: Vec::new(),
             }),
             "matching provider contracts should populate custom wakeup metadata before validation"
         );
@@ -10092,6 +10196,8 @@ provider custom.feed
             recurrence_wakeup: Some(crate::CustomSourceRecurrenceWakeup::ProviderDefinedTrigger),
             arguments: Vec::new(),
             options: Vec::new(),
+            operations: Vec::new(),
+            commands: Vec::new(),
         });
 
         let report = module.validate(ValidationMode::RequireResolvedNames);
@@ -10138,6 +10244,8 @@ provider custom.feed
             recurrence_wakeup: Some(crate::CustomSourceRecurrenceWakeup::ProviderDefinedTrigger),
             arguments: Vec::new(),
             options: Vec::new(),
+            operations: Vec::new(),
+            commands: Vec::new(),
         });
 
         let report = module.validate(ValidationMode::Structural);
@@ -11146,7 +11254,8 @@ value joinedEmails:Text =
         let lowered = lower_text(
             "standalone-function-signature.aivi",
             "type List Text -> Text\n\
-             func joinEmails = items=> \"joined\"\n",        );
+             func joinEmails = items=> \"joined\"\n",
+        );
         assert!(
             !lowered.has_errors(),
             "standalone function signature lines should lower cleanly: {:?}",
@@ -11222,7 +11331,8 @@ value joinedEmails:Text =
         let lowered = lower_text(
             "standalone-function-signature-with-constraint.aivi",
             "type Setoid Text -> Text -> Bool\n\
-             func same = text=> True\n",        );
+             func same = text=> True\n",
+        );
         assert!(
             !lowered.has_errors(),
             "class constraints should remain intact while normalizing function signatures: {:?}",
@@ -11269,7 +11379,8 @@ value joinedEmails:Text =
         let lowered = lower_text(
             "standalone-function-signature-legacy-constraint-arrow.aivi",
             "type List Text => Text\n\
-             func joinEmails = items=> \"joined\"\n",        );
+             func joinEmails = items=> \"joined\"\n",
+        );
         assert!(
             !lowered.has_errors(),
             "legacy formatter output should still normalize into parameter annotations: {:?}",

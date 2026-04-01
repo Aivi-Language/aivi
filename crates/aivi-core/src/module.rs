@@ -495,15 +495,9 @@ pub struct FanoutJoin {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TemporalStage {
-    Previous {
-        seed_expr: ExprId,
-    },
-    DiffFunction {
-        diff_expr: ExprId,
-    },
-    DiffSeed {
-        seed_expr: ExprId,
-    },
+    Previous { seed_expr: ExprId },
+    DiffFunction { diff_expr: ExprId },
+    DiffSeed { seed_expr: ExprId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

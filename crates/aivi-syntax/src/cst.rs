@@ -823,6 +823,8 @@ pub enum SourceProviderContractMember {
     FieldValue(SourceProviderContractFieldValue),
     OptionSchema(SourceProviderContractSchemaMember),
     ArgumentSchema(SourceProviderContractSchemaMember),
+    OperationSchema(SourceProviderContractSchemaMember),
+    CommandSchema(SourceProviderContractSchemaMember),
 }
 
 /// Body of a `provider` contract declaration.

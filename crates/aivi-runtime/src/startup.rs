@@ -3093,7 +3093,9 @@ impl<'a> LinkBuilder<'a> {
                     BackendStageKind::Temporal(BackendTemporalStage::Previous { seed, .. }) => {
                         kernels.push(*seed);
                     }
-                    BackendStageKind::Temporal(BackendTemporalStage::DiffFunction { diff, .. }) => {
+                    BackendStageKind::Temporal(BackendTemporalStage::DiffFunction {
+                        diff, ..
+                    }) => {
                         kernels.push(*diff);
                     }
                     BackendStageKind::Temporal(BackendTemporalStage::DiffSeed { seed, .. }) => {

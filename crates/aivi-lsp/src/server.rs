@@ -266,7 +266,11 @@ impl LanguageServer for Backend {
         };
         let hir = aivi_query::hir_module(&self.state.db, file);
         let lenses = crate::code_lens::collect_code_lenses(hir.module(), hir.source(), uri);
-        Ok(if lenses.is_empty() { None } else { Some(lenses) })
+        Ok(if lenses.is_empty() {
+            None
+        } else {
+            Some(lenses)
+        })
     }
 }
 

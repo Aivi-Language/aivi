@@ -224,57 +224,166 @@ impl fmt::Display for RuntimeDbCommitPlan {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RuntimeTaskPlan {
-    Pure { value: Box<RuntimeValue> },
-    RandomInt { low: i64, high: i64 },
-    RandomBytes { count: i64 },
-    StdoutWrite { text: Box<str> },
-    StderrWrite { text: Box<str> },
-    FsWriteText { path: Box<str>, text: Box<str> },
-    FsWriteBytes { path: Box<str>, bytes: Box<[u8]> },
-    FsCreateDirAll { path: Box<str> },
-    FsDeleteFile { path: Box<str> },
-    FsReadText { path: Box<str> },
-    FsReadDir { path: Box<str> },
-    FsExists { path: Box<str> },
-    FsReadBytes { path: Box<str> },
-    FsRename { from: Box<str>, to: Box<str> },
-    FsCopy { from: Box<str>, to: Box<str> },
-    FsDeleteDir { path: Box<str> },
-    JsonValidate { json: Box<str> },
-    JsonGet { json: Box<str>, key: Box<str> },
-    JsonAt { json: Box<str>, index: i64 },
-    JsonKeys { json: Box<str> },
-    JsonPretty { json: Box<str> },
-    JsonMinify { json: Box<str> },
+    Pure {
+        value: Box<RuntimeValue>,
+    },
+    RandomInt {
+        low: i64,
+        high: i64,
+    },
+    RandomBytes {
+        count: i64,
+    },
+    StdoutWrite {
+        text: Box<str>,
+    },
+    StderrWrite {
+        text: Box<str>,
+    },
+    FsWriteText {
+        path: Box<str>,
+        text: Box<str>,
+    },
+    FsWriteBytes {
+        path: Box<str>,
+        bytes: Box<[u8]>,
+    },
+    FsCreateDirAll {
+        path: Box<str>,
+    },
+    FsDeleteFile {
+        path: Box<str>,
+    },
+    FsReadText {
+        path: Box<str>,
+    },
+    FsReadDir {
+        path: Box<str>,
+    },
+    FsExists {
+        path: Box<str>,
+    },
+    FsReadBytes {
+        path: Box<str>,
+    },
+    FsRename {
+        from: Box<str>,
+        to: Box<str>,
+    },
+    FsCopy {
+        from: Box<str>,
+        to: Box<str>,
+    },
+    FsDeleteDir {
+        path: Box<str>,
+    },
+    JsonValidate {
+        json: Box<str>,
+    },
+    JsonGet {
+        json: Box<str>,
+        key: Box<str>,
+    },
+    JsonAt {
+        json: Box<str>,
+        index: i64,
+    },
+    JsonKeys {
+        json: Box<str>,
+    },
+    JsonPretty {
+        json: Box<str>,
+    },
+    JsonMinify {
+        json: Box<str>,
+    },
     // Time task plans
     TimeNowMs,
     TimeMonotonicMs,
-    TimeFormat { epoch_ms: i64, pattern: Box<str> },
-    TimeParse { text: Box<str>, pattern: Box<str> },
+    TimeFormat {
+        epoch_ms: i64,
+        pattern: Box<str>,
+    },
+    TimeParse {
+        text: Box<str>,
+        pattern: Box<str>,
+    },
     // Env task plans
-    EnvGet { name: Box<str> },
-    EnvList { prefix: Box<str> },
+    EnvGet {
+        name: Box<str>,
+    },
+    EnvList {
+        prefix: Box<str>,
+    },
     // Log task plans
-    LogEmit { level: Box<str>, message: Box<str> },
-    LogEmitContext { level: Box<str>, message: Box<str>, context: Box<[(Box<str>, Box<str>)]> },
+    LogEmit {
+        level: Box<str>,
+        message: Box<str>,
+    },
+    LogEmitContext {
+        level: Box<str>,
+        message: Box<str>,
+        context: Box<[(Box<str>, Box<str>)]>,
+    },
     // Random float task plan
     RandomFloat,
     // Regex task plans
-    RegexIsMatch { pattern: Box<str>, text: Box<str> },
-    RegexFind { pattern: Box<str>, text: Box<str> },
-    RegexFindText { pattern: Box<str>, text: Box<str> },
-    RegexFindAll { pattern: Box<str>, text: Box<str> },
-    RegexReplace { pattern: Box<str>, replacement: Box<str>, text: Box<str> },
-    RegexReplaceAll { pattern: Box<str>, replacement: Box<str>, text: Box<str> },
+    RegexIsMatch {
+        pattern: Box<str>,
+        text: Box<str>,
+    },
+    RegexFind {
+        pattern: Box<str>,
+        text: Box<str>,
+    },
+    RegexFindText {
+        pattern: Box<str>,
+        text: Box<str>,
+    },
+    RegexFindAll {
+        pattern: Box<str>,
+        text: Box<str>,
+    },
+    RegexReplace {
+        pattern: Box<str>,
+        replacement: Box<str>,
+        text: Box<str>,
+    },
+    RegexReplaceAll {
+        pattern: Box<str>,
+        replacement: Box<str>,
+        text: Box<str>,
+    },
     // HTTP task plans (run on worker thread via ureq)
-    HttpGet { url: Box<str> },
-    HttpGetBytes { url: Box<str> },
-    HttpGetStatus { url: Box<str> },
-    HttpPost { url: Box<str>, content_type: Box<str>, body: Box<str> },
-    HttpPut { url: Box<str>, content_type: Box<str>, body: Box<str> },
-    HttpDelete { url: Box<str> },
-    HttpHead { url: Box<str> },
-    HttpPostJson { url: Box<str>, body: Box<str> },
+    HttpGet {
+        url: Box<str>,
+    },
+    HttpGetBytes {
+        url: Box<str>,
+    },
+    HttpGetStatus {
+        url: Box<str>,
+    },
+    HttpPost {
+        url: Box<str>,
+        content_type: Box<str>,
+        body: Box<str>,
+    },
+    HttpPut {
+        url: Box<str>,
+        content_type: Box<str>,
+        body: Box<str>,
+    },
+    HttpDelete {
+        url: Box<str>,
+    },
+    HttpHead {
+        url: Box<str>,
+    },
+    HttpPostJson {
+        url: Box<str>,
+        body: Box<str>,
+    },
 }
 
 impl fmt::Display for RuntimeTaskPlan {
@@ -321,10 +430,18 @@ impl fmt::Display for RuntimeTaskPlan {
                 write!(f, "regex.findText({pattern}, {text})")
             }
             Self::RegexFindAll { pattern, text } => write!(f, "regex.findAll({pattern}, {text})"),
-            Self::RegexReplace { pattern, replacement, text } => {
+            Self::RegexReplace {
+                pattern,
+                replacement,
+                text,
+            } => {
                 write!(f, "regex.replace({pattern}, {replacement}, {text})")
             }
-            Self::RegexReplaceAll { pattern, replacement, text } => {
+            Self::RegexReplaceAll {
+                pattern,
+                replacement,
+                text,
+            } => {
                 write!(f, "regex.replaceAll({pattern}, {replacement}, {text})")
             }
             Self::HttpGet { url } => write!(f, "http.get({url})"),
@@ -3904,7 +4021,9 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         | IntrinsicValue::FloatFrac => 1,
         IntrinsicValue::FloatAtan2 | IntrinsicValue::FloatPow | IntrinsicValue::FloatHypot => 2,
         // Time intrinsics
-        IntrinsicValue::TimeNowMs | IntrinsicValue::TimeMonotonicMs | IntrinsicValue::RandomFloat => 0,
+        IntrinsicValue::TimeNowMs
+        | IntrinsicValue::TimeMonotonicMs
+        | IntrinsicValue::RandomFloat => 0,
         IntrinsicValue::TimeFormat | IntrinsicValue::TimeParse => 2,
         // Env intrinsics
         IntrinsicValue::EnvGet | IntrinsicValue::EnvList => 1,
@@ -4410,7 +4529,9 @@ fn evaluate_intrinsic_value(
             match haystack.find(needle.as_ref()) {
                 Some(byte_idx) => {
                     let char_idx = haystack[..byte_idx].chars().count() as i64;
-                    Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(char_idx))))
+                    Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(
+                        char_idx,
+                    ))))
                 }
                 None => Ok(RuntimeValue::OptionNone),
             }
@@ -4509,7 +4630,9 @@ fn evaluate_intrinsic_value(
             let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
             match s.trim() {
                 "True" => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(true)))),
-                "False" => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(false)))),
+                "False" => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(
+                    false,
+                )))),
                 _ => Ok(RuntimeValue::OptionNone),
             }
         }
@@ -4836,9 +4959,7 @@ fn evaluate_intrinsic_value(
             }))
         }
         // Random float — Task-returning
-        (IntrinsicValue::RandomFloat, []) => {
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomFloat))
-        }
+        (IntrinsicValue::RandomFloat, []) => Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomFloat)),
         // I18n intrinsics — pure/synchronous
         (IntrinsicValue::I18nTranslate, [text]) => {
             let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
@@ -4848,7 +4969,11 @@ fn evaluate_intrinsic_value(
             let singular = expect_intrinsic_text(kernel, expr, value, 0, singular)?;
             let plural = expect_intrinsic_text(kernel, expr, value, 1, plural)?;
             let count = expect_intrinsic_i64(kernel, expr, value, 2, count)?;
-            Ok(RuntimeValue::Text(if count == 1 { singular } else { plural }))
+            Ok(RuntimeValue::Text(if count == 1 {
+                singular
+            } else {
+                plural
+            }))
         }
         // Regex intrinsics — Task-returning
         (IntrinsicValue::RegexIsMatch, [pattern, text]) => {

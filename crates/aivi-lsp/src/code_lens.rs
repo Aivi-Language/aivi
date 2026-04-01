@@ -54,10 +54,7 @@ fn item_has_test_decorator(module: &Module, item_id: ItemId) -> bool {
     })
 }
 
-fn item_name_and_span(
-    module: &Module,
-    item_id: ItemId,
-) -> Option<(&str, aivi_base::SourceSpan)> {
+fn item_name_and_span(module: &Module, item_id: ItemId) -> Option<(&str, aivi_base::SourceSpan)> {
     match &module.items()[item_id] {
         Item::Value(item) => Some((item.name.text(), item.name.span())),
         Item::Function(item) => Some((item.name.text(), item.name.span())),
@@ -66,4 +63,3 @@ fn item_name_and_span(
         _ => None,
     }
 }
-

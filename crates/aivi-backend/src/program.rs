@@ -238,7 +238,10 @@ impl fmt::Display for Program {
                                 )?;
                             }
                         }
-                        StageKind::Temporal(TemporalStage::Previous { payload_layout, seed }) => {
+                        StageKind::Temporal(TemporalStage::Previous {
+                            payload_layout,
+                            seed,
+                        }) => {
                             writeln!(
                                 f,
                                 "      previous seed=kernel{seed} payload=layout{payload_layout}"
@@ -255,7 +258,10 @@ impl fmt::Display for Program {
                                 "      diff kernel=kernel{diff} callable=layout{callable_layout} input=layout{input_layout} result=layout{result_layout}"
                             )?;
                         }
-                        StageKind::Temporal(TemporalStage::DiffSeed { payload_layout, seed }) => {
+                        StageKind::Temporal(TemporalStage::DiffSeed {
+                            payload_layout,
+                            seed,
+                        }) => {
                             writeln!(
                                 f,
                                 "      diff-seed seed=kernel{seed} payload=layout{payload_layout}"
