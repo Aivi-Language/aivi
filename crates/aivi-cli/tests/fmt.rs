@@ -99,10 +99,10 @@ fn fmt_repairs_constraint_arrow_regressions_in_function_signatures() {
         "fmt-function-signature-arrow",
         concat!(
             "type List Cell => Cell -> Cell -> Text\n",
-            "func cellLabel cells row col => \"x\"\n",
+            "func cellLabel = cells row col => \"x\"\n",
             "\n",
             "type Eq A => A -> Bool\n",
-            "func visible value => True\n",
+            "func visible = value => True\n",
         ),
     );
 
@@ -121,11 +121,11 @@ fn fmt_repairs_constraint_arrow_regressions_in_function_signatures() {
         String::from_utf8(output.stdout).expect("stdout should be utf-8"),
         concat!(
             "type List Cell -> Cell -> Cell -> Text\n",
-            "func cellLabel cells row col =>\n",
+            "func cellLabel = cells row col =>\n",
             "    \"x\"\n",
             "\n",
             "type Eq A => A -> Bool\n",
-            "func visible value =>\n",
+            "func visible = value =>\n",
             "    True\n",
         )
     );

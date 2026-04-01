@@ -603,6 +603,15 @@ pub enum RuntimePropertyBinding {
     Setter(RuntimeSetterBinding),
 }
 
+impl RuntimePropertyBinding {
+    pub fn name(&self) -> &Name {
+        match self {
+            Self::Static(p) => &p.name,
+            Self::Setter(s) => &s.name,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeSetterBinding {
     pub site: AttributeSite,

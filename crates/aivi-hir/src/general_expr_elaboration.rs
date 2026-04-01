@@ -3445,7 +3445,7 @@ mod tests {
     fn elaborates_truthy_falsy_branches_from_expected_result_types() {
         let lowered = lower_text(
             "expected-truthy-falsy-branches.aivi",
-            "fun choose:(List Int) flag:Bool =>\n\
+            "fun choose:(List Int) = flag:Bool =>\n\
                 flag\n\
                  T|> []\n\
                  F|> [1]\n",
@@ -3564,11 +3564,12 @@ mod tests {
     fn blocks_map_pipe_stages_in_general_expr_bodies() {
         let lowered = lower_text(
             "general-expr-blocked-map-stage.aivi",
-            "fun identity:Int x:Int =>\n\
-             x\n\
-             \n\
-             fun duplicate:List Int = values:List Int=>\n\             values\n\
-              *|> identity\n",
+            r#"fun identity:Int = x:Int => x
+
+fun duplicate:List Int = values:List Int =>
+    values
+     *|> identity
+"#,
         );
         assert!(
             !lowered.has_errors(),

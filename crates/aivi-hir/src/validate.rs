@@ -17234,7 +17234,7 @@ fun statusLabel:Text = status:Status=>    status
     fn case_exhaustiveness_accepts_builtin_case_pairs() {
         let report = validate_resolved_text(
             "builtin_exhaustive_cases.aivi",
-            r#"fun boolLabel:Text ready:Bool =>
+            r#"fun boolLabel:Text = ready:Bool =>
     ready
      ||> True -> "ready"
      ||> False -> "waiting"
@@ -17630,7 +17630,7 @@ value screenView =
         let mut sources = SourceDatabase::new();
         let file_id = sources.add_file(
             "source-option-concrete-application.aivi",
-            "fun keep:Option Int opt:Option Int => opt\n\
+            "fun keep:Option Int = opt:Option Int => opt\n\
              value chosen = keep None\n",
         );
         let parsed = parse_module(&sources[file_id]);

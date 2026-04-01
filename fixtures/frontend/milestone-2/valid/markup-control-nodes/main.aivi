@@ -9,7 +9,8 @@ type Screen =
   | Failed Text
 
 type Item -> Text
-func itemLabel = item=>    item.title
+func itemLabel = item =>
+    item.title
 
 value header = "Users"
 

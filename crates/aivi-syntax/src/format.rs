@@ -2478,7 +2478,7 @@ mod tests {
                 "  |> Pair\n",
                 "\n",
                 "type SaveState -> Text\n",
-                "func label state => state\n",
+                "func label = state => state\n",
                 " ||> Saved         -> \"saved\"\n",
                 " ||> Dirty message -> \"dirty {message}\"\n",
             )
@@ -2514,13 +2514,13 @@ mod tests {
     #[test]
     fn formatter_aligns_short_pipe_operators_with_three_char_stages() {
         let formatted = format_text(
-            "fun pipeline:Text order:Order =>\norder?|>.ready|>.shipping|observeShipping|>.status\n",
+            "fun pipeline:Text = order:Order =>\norder?|>.ready|>.shipping|observeShipping|>.status\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "type Order -> Text\n",
-                "func pipeline order => order\n",
+                "func pipeline = order => order\n",
                 " ?|> .ready\n",
                 "  |> .shipping\n",
                 "  | observeShipping\n",
@@ -2536,7 +2536,7 @@ mod tests {
             formatted,
             concat!(
                 "type Int -> Text\n",
-                "func formatCount count =>\n",
+                "func formatCount = count =>\n",
                 "    \"{count} unread\"\n",
                 "\n",
                 "value count = 3\n",
@@ -2564,7 +2564,7 @@ mod tests {
                 "    (==) : A -> A -> Bool\n",
                 "\n",
                 "type Int -> Int -> Bool\n",
-                "func equivalent left right =>\n",
+                "func equivalent = left right =>\n",
                 "    left + 1 == right - 1 and left != right\n",
             )
         );
@@ -2763,7 +2763,7 @@ value view =
     #[test]
     fn formatter_aligns_match_arms_and_top_level_spacing() {
         let formatted = format_text(
-            "type Status=Idle|Failed Text\nfun label:Text status:Status =>\nstatus||>Idle->\"idle\"||>Failed reason->\"failed {reason}\"\n",
+            "type Status=Idle|Failed Text\nfun label:Text = status:Status =>\nstatus||>Idle->\"idle\"||>Failed reason->\"failed {reason}\"\n",
         );
         assert_eq!(
             formatted,
@@ -2771,7 +2771,7 @@ value view =
                 "type Status = Idle | Failed Text\n",
                 "\n",
                 "type Status -> Text\n",
-                "func label status => status\n",
+                "func label = status => status\n",
                 " ||> Idle          -> \"idle\"\n",
                 " ||> Failed reason -> \"failed {reason}\"\n",
             )
@@ -2787,12 +2787,12 @@ value view =
     #[test]
     fn formatter_preserves_subject_placeholders_ranges_and_discard_params() {
         let formatted =
-            format_text("fun ignore:Int _=>.\nvalue projection=.email\nvalue values=[1..10]\n");
+            format_text("fun ignore:Int = _ => .\nvalue projection=.email\nvalue values=[1..10]\n");
         assert_eq!(
             formatted,
             concat!(
                 "type Int\n",
-                "func ignore _ =>\n",
+                "func ignore = _ =>\n",
                 "    .\n",
                 "\n",
                 "value projection = .email\n",
@@ -2804,13 +2804,13 @@ value view =
     #[test]
     fn formatter_keeps_record_type_fields_spaced_while_other_annotations_are_compact() {
         let formatted = format_text(
-            "fun project:{name:Text,age:Int} profile:{name:Text,age:Int}=>profile\nvalue profile:{name:Text,age:Int}={name:\"Ada\",age:37}\n",
+            "fun project:{name:Text,age:Int} = profile:{name:Text,age:Int} => profile\nvalue profile:{name:Text,age:Int}={name:\"Ada\",age:37}\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "type { name: Text, age: Int } -> { name: Text, age: Int }\n",
-                "func project profile =>\n",
+                "func project = profile =>\n",
                 "    profile\n",
                 "\n",
                 "value profile : { name: Text, age: Int } = {\n",
@@ -2837,13 +2837,13 @@ value view =
     #[test]
     fn formatter_spaces_applied_and_constrained_annotations() {
         let formatted = format_text(
-            "fun wrap:Result Text Int value:(Result Text Int)=>value\nvalue active:Signal Bool=True\nclass Functor F\n    map:Applicative G=>(A -> G B) -> F A -> G (F B)\n",
+            "fun wrap:Result Text Int = value:(Result Text Int) => value\nvalue active:Signal Bool=True\nclass Functor F\n    map:Applicative G=>(A -> G B) -> F A -> G (F B)\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "type (Result Text Int) -> Result Text Int\n",
-                "func wrap value =>\n",
+                "func wrap = value =>\n",
                 "    value\n",
                 "\n",
                 "value active : Signal Bool = True\n",

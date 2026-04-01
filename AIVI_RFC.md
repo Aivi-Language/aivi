@@ -690,7 +690,7 @@ Parser-accurate rules:
 - `instance` is the implemented mechanism; `implements` is not syntax
 - constraint prefixes are implemented for function annotations, class-member annotations, and instance heads
 - single constraints use `Constraint -> ...`; multiple constraints use `(C1, C2) -> ...`
-- function example: `type Eq A => A -> Bool` / `func same v => ...`
+- function example: `type Eq A => A -> Bool` / `func same = v => ...`
 - instance-head example: `instance Eq A -> Eq (Option A)`
 - class declarations do not accept head constraint prefixes; superclass relationships are written only as body-level `with` lines
 - higher-kinded type application uses ordinary left-associative type application syntax: `F A`, `F Int`, `F (A -> B)`, `Result Text A`, `Either L R`

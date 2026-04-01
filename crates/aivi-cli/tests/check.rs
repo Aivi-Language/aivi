@@ -194,7 +194,7 @@ fn check_accepts_multiline_accumulate_pipe_signal_bodies() {
             "  | Left\n",
             "type Direction =\n",
             "  | East\n",
-            "fun updateDirection:Direction key:Key current:Direction => current\n",
+            "fun updateDirection:Direction = key:Key current:Direction => current\n",
             "signal keyDown: Signal Key = Left\n",
             "signal direction: Signal Direction = keyDown\n",
             " +|> East updateDirection\n",

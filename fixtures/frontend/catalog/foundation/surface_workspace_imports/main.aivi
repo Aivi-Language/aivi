@@ -12,7 +12,8 @@ type WorkspaceSummary = {
 }
 
 type Bool -> Text
-func readyLabel = ready=> ready T|> "ready"
+func readyLabel = ready => ready
+ T|> "ready"
  F|> "waiting"
 
 value primaryGreeting : Text = greetUser "Ada"

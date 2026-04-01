@@ -9661,9 +9661,11 @@ signal updates : Signal Int
     fn tracks_signal_dependencies_through_helper_bodies() {
         let lowered = lower_text(
             "signal-helper-dependencies.aivi",
-            "signal direction : Signal Int = 1\n\
-             signal tick : Signal Int = 0\n\
-             fun stepOnTick:Int = tick:Int=> direction\n\             signal game : Signal Int = stepOnTick tick\n",
+            r#"signal direction : Signal Int = 1
+signal tick : Signal Int = 0
+fun stepOnTick:Int = tick:Int => direction
+signal game : Signal Int = stepOnTick tick
+"#,
         );
         assert!(
             !lowered.has_errors(),
@@ -10055,7 +10057,7 @@ signal updates : Signal Int
     fn does_not_double_report_followup_recurrence_starts() {
         let lowered = lower_text(
             "duplicate-recurrence-starts.aivi",
-            "fun step x => x\nvalue broken = 0 @|> step @|> step <|@ step\n",
+            "fun step = x => x\nvalue broken = 0 @|> step @|> step <|@ step\n",
         );
         assert!(
             lowered.has_errors(),
@@ -10091,8 +10093,11 @@ signal updates : Signal Int
     fn exposes_trailing_recurrence_suffix_views() {
         let lowered = lower_text(
             "recurrence-suffix-view.aivi",
-            "fun keep x => x\n\
-             fun start = x=> x\n\             fun step = x=> x\n\             signal retried = 0 |> keep | keep @|> start <|@ step <|@ step\n",
+            r#"fun keep = x => x
+fun start = x => x
+fun step = x => x
+signal retried = 0 |> keep | keep @|> start <|@ step <|@ step
+"#,
         );
         assert!(
             !lowered.has_errors(),
@@ -10147,16 +10152,18 @@ signal updates : Signal Int
     fn allows_recurrence_guards_before_steps() {
         let lowered = lower_text(
             "recurrence-guard-view.aivi",
-            "domain Duration over Int\n\
-             \tliteral sec : Int -> Duration\n\
-             type Cursor = { hasNext: Bool }\n\
-             fun keep:Cursor = cursor:Cursor=> cursor\n\             value seed:Cursor = { hasNext: True }\n\
-             @recur.timer 1sec\n\
-             signal cursor : Signal Cursor =\n\
-              seed\n\
-               @|> keep\n\
-               ?|> .hasNext\n\
-               <|@ keep\n",
+            r#"domain Duration over Int
+	literal sec : Int -> Duration
+type Cursor = { hasNext: Bool }
+fun keep:Cursor = cursor:Cursor => cursor
+value seed:Cursor = { hasNext: True }
+@recur.timer 1sec
+signal cursor : Signal Cursor =
+ seed
+  @|> keep
+  ?|> .hasNext
+  <|@ keep
+"#,
         );
         assert!(
             !lowered.has_errors(),
@@ -10184,14 +10191,16 @@ signal updates : Signal Int
     fn allows_fanout_filters_before_join() {
         let lowered = lower_text(
             "fanout-filter-before-join.aivi",
-            "type User = { email: Text }\n\
-             fun keepText:Bool = email:Text=> True\n\             fun joinEmails:Text items:List Text => \"joined\"\n\
-             value users:List User = [{ email: \"ada@example.com\" }]\n\
-             value joinedEmails:Text =\n\
-              users\n\
-               *|> .email\n\
-               ?|> keepText\n\
-               <|* joinEmails\n",
+            r#"type User = { email: Text }
+fun keepText:Bool = email:Text => True
+fun joinEmails:Text = items:List Text => "joined"
+value users:List User = [{ email: "ada@example.com" }]
+value joinedEmails:Text =
+ users
+  *|> .email
+  ?|> keepText
+  <|* joinEmails
+"#,
         );
         assert!(
             !lowered.has_errors(),
@@ -11134,7 +11143,7 @@ domain Duration over Int
     fn duplicate_record_pattern_fields_report_hir_diagnostics() {
         let lowered = lower_text(
             "duplicate-record-pattern-field.aivi",
-            "type User = { name: Text }\nfun extract:Text user:User =>\n    user\n     ||> { name, name } -> name\n",
+            "type User = { name: Text }\nfun extract:Text = user:User =>\n    user\n     ||> { name, name } -> name\n",
         );
         assert!(
             lowered.has_errors(),

@@ -5025,7 +5025,7 @@ value view =
                         && widget
                             .properties
                             .iter()
-                            .any(|property| property.name.text() == "label")
+                            .any(|property| property.name().text() == "label")
                         && widget.event_hooks.is_empty() =>
                 {
                     Some(widget)
@@ -5036,7 +5036,7 @@ value view =
         let property_names = restart
             .properties
             .iter()
-            .map(|property| property.name.text().to_owned())
+            .map(|property| property.name().text().to_owned())
             .collect::<Vec<_>>();
         assert!(property_names.iter().any(|name| name == "compact"));
         assert!(property_names.iter().any(|name| name == "hasFrame"));

@@ -14,5 +14,6 @@ signal draft =
   |> Pair
 
 type SaveState -> Text
-func label = state=> state ||> Saved         -> "saved"
+func label = state => state
+ ||> Saved         -> "saved"
  ||> Dirty message -> "dirty {message}"

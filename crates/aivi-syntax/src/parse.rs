@@ -7042,10 +7042,11 @@ instance Eq A -> Eq (Option A)
     #[test]
     fn parser_accepts_domain_member_bindings_after_type_annotation() {
         let (_, parsed) = load(
-            "type Builder = Int -> Duration\n\
-domain Duration over Int\n\
-    type Builder\n\
-    make raw = raw\n",
+            r#"type Builder = Int -> Duration
+domain Duration over Int
+    type Builder
+    make raw = raw
+"#,
         );
 
         assert!(
@@ -7173,8 +7174,9 @@ domain Duration over Int\n\
 
     #[test]
     fn parser_reports_trailing_tokens_after_expression_body() {
-        let (_, parsed) =
-            load("fun prependCells:List Int head:Int tail:List Int =>\n    head :: tail\n");
+        let (_, parsed) = load(
+            "fun prependCells:List Int = head:Int tail:List Int =>\n    head :: tail\n",
+        );
 
         assert!(parsed.has_errors());
         assert!(
