@@ -369,8 +369,10 @@ fn lowers_source_decode_into_backend_plans() {
         "backend-source-decode.aivi",
         r#"
 domain Duration over Int
-    parse : Int -> Result Text Duration
-    unwrap : Duration -> Int
+    type Int -> Result Text Duration
+    parse
+    type Duration -> Int
+    unwrap
 
 @source custom.feed
 signal timeout : Signal Duration
@@ -2393,8 +2395,10 @@ fn lowers_domain_operators_into_backend_gate_kernels() {
         r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
-    (>) : Duration -> Duration -> Bool
+    type Duration -> Duration -> Duration
+    (+)
+    type Duration -> Duration -> Bool
+    (>)
 
 type Window = {
     delay: Duration
@@ -2492,7 +2496,8 @@ fn runtime_evaluates_domain_operator_items_and_structural_equality() {
         r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
+    type Duration -> Duration -> Duration
+    (+)
 
 value same : Bool = 10ms + 5ms == 15ms
 value different : Bool = 10ms + 5ms != 12ms
@@ -2535,9 +2540,12 @@ fn runtime_evaluates_domain_member_resolution_fixture() {
         "backend-domain-member-resolution-runtime.aivi",
         r#"
 domain NonEmpty A over List A
-    singleton : A -> NonEmpty A
-    head : NonEmpty A -> A
-    tail : NonEmpty A -> List A
+    type A -> NonEmpty A
+    singleton
+    type NonEmpty A -> A
+    head
+    type NonEmpty A -> List A
+    tail
 
 value items : NonEmpty Int = singleton 1
 value first : Int = head items
@@ -2568,7 +2576,8 @@ fn runtime_evaluates_inline_pipe_domain_member_calls() {
         r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    unwrap : Duration -> Int
+    type Duration -> Int
+    unwrap
 
 value raw : Int =
     10ms
@@ -2592,9 +2601,9 @@ fn runtime_evaluates_authored_domain_member_items() {
 type Builder = Int -> Duration
 
 domain Duration over Int
-    make : Builder
+    type Builder
     make raw = raw
-    unwrap : Duration -> Int
+    type Duration -> Int
     unwrap duration = duration
 
 value raw : Int = unwrap (make 10)
@@ -2616,8 +2625,10 @@ fn runtime_evaluates_domain_operator_gate_predicates() {
         r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
-    (>) : Duration -> Duration -> Bool
+    type Duration -> Duration -> Duration
+    (+)
+    type Duration -> Duration -> Bool
+    (>)
 
 type Window = {
     delay: Duration
@@ -4780,8 +4791,10 @@ fn cranelift_codegen_compiles_direct_by_reference_domain_member_calls() {
         "backend-domain-member-codegen.aivi",
         r#"
 domain Path over Text
-    fromText : Text -> Path
-    unwrap : Path -> Text
+    type Text -> Path
+    fromText
+    type Path -> Text
+    unwrap
 
 fun wrapPath:Path raw:Text =>
     fromText raw
@@ -4853,8 +4866,10 @@ fn runtime_and_codegen_accept_domain_dot_projection_over_values() {
         "backend-domain-dot-projection.aivi",
         r#"
 domain Path over Text
-    fromText : Text -> Path
-    unwrap : Path -> Text
+    type Text -> Path
+    fromText
+    type Path -> Text
+    unwrap
 
 value home : Path = fromText "/tmp/app"
 value raw : Text = home.unwrap
@@ -5252,8 +5267,10 @@ fn cranelift_codegen_rejects_nonrepresentational_domain_member_calls() {
         r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
-    (>) : Duration -> Duration -> Bool
+    type Duration -> Duration -> Duration
+    (+)
+    type Duration -> Duration -> Bool
+    (>)
 
 type Window = {
     delay: Duration

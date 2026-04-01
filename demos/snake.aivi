@@ -4,9 +4,7 @@ type Direction =
   | East
   | West
 
-type Status =
-  | Running
-  | GameOver
+type Status = Running | GameOver
 
 type Cell =
   | Cell Int Int
@@ -19,19 +17,14 @@ type Event =
 type Key =
   | Key Text
 
-type GameState = {
-    snake: List Cell,
-    dir: Direction,
-    food: Cell,
-    score: Int,
-    seed: Int,
-    status: Status
-}
-
-type CellTakeState = {
+type SnakeTakeState = {
     remaining: Int,
     cells: List Cell
 }
+
+type List Cell -> Snake
+func makeSnake cells =>
+    cells
 
 domain Duration over Int
     literal ms : Int -> Duration
@@ -41,12 +34,6 @@ value boardH = 20
 value boardColumns = [0..29]
 value boardRows = [0..19]
 value seed0 = 2463534242
-
-value snake0 = [
-    Cell 6 10,
-    Cell 5 10,
-    Cell 4 10
-]
 
 type Direction -> Direction
 func opposite d => d
@@ -70,7 +57,70 @@ type Int -> Int
 func nextSeed s =>
     (s * 1103515245 + 12345) % 2147483647
 
-type (List Cell) -> Int -> Cell
+type Cell -> Bool -> Cell -> Bool
+func snakeContainsStep target found item => found
+ T|> True
+ F|> item == target
+
+type List Cell -> Cell
+func snakeHeadRaw snake => snake
+ ||> [head, ...rest] -> head
+ ||> _               -> Cell 0 0
+
+type List Cell -> Cell -> Bool
+func snakeContainsRaw snake cell => snake
+  |> reduce (snakeContainsStep cell) False
+
+type Int -> Cell -> Int
+func snakeLengthStep total cell =>
+    total + 1
+
+type List Cell -> Int
+func snakeLengthRaw snake => snake
+  |> reduce snakeLengthStep 0
+
+type SnakeTakeState -> Cell -> SnakeTakeState
+func takeCellStep state item => state.remaining > 0
+ T|> { remaining: state.remaining - 1, cells: append state.cells [item] }
+ F|> state
+
+type Int -> (List Cell) -> (List Cell)
+func takeCells n cells => cells
+  |> reduce takeCellStep { remaining: n, cells: [] }
+  |> .cells
+
+domain Snake over List Cell
+    type List Cell -> Snake
+    fromCells cells = cells
+
+    type Snake -> Cell
+    head snake = snakeHeadRaw snake
+
+    type Snake -> Cell -> Bool
+    contains snake cell = snakeContainsRaw snake cell
+
+    type Snake -> Int
+    length snake = snakeLengthRaw snake
+
+    type Snake -> Cell -> Snake
+    grow snake cell = append [cell] snake
+
+    type Snake -> Cell -> Snake
+    move snake cell = takeCells (snakeLengthRaw snake) (append [cell] snake)
+
+    type Snake -> Direction -> Cell
+    nextHead snake dir = moveDir dir (snakeHeadRaw snake)
+
+type GameState = {
+    snake: Snake,
+    dir: Direction,
+    food: Cell,
+    score: Int,
+    seed: Int,
+    status: Status
+}
+
+type Snake -> Int -> Cell
 func spawnFood snake s =>
     Cell (s % boardW) (nextSeed s % boardH)
 
@@ -80,6 +130,13 @@ func dirLabel d => d
  ||> South -> "Down"
  ||> East  -> "Right"
  ||> West  -> "Left"
+
+value snake0 : Snake =
+    makeSnake [
+        Cell 6 10,
+        Cell 5 10,
+        Cell 4 10
+    ]
 
 value initial : GameState = {
     snake: snake0,
@@ -104,89 +161,25 @@ func handleTurn d st => st.status
 type Direction -> GameState -> GameState
 func applyTurn d st => d == opposite st.dir
  T|> st
- F|> {
-        snake: st.snake,
-        dir: d,
-        food: st.food,
-        score: st.score,
-        seed: st.seed,
-        status: st.status
-    }
-
-type (List Cell) -> Cell
-func headCell snake => snake
- ||> [head, ...rest] -> head
- ||> _               -> Cell 0 0
-
-type Cell -> Bool -> Cell -> Bool
-func snakeContainsStep target found item => found
- T|> True
- F|> item == target
-
-type (List Cell) -> Cell -> Bool
-func snakeContains snake cell => snake
-  |> reduce (snakeContainsStep cell) False
-
-type Int -> Cell -> Int
-func cellLengthStep total cell =>
-    total + 1
-
-type (List Cell) -> Int
-func cellLength cells => cells
-  |> reduce cellLengthStep 0
-
-type CellTakeState -> Cell -> CellTakeState
-func takeCellStep state item => state.remaining > 0
- T|> { remaining: state.remaining - 1, cells: append state.cells [item] }
- F|> state
-
-type Int -> (List Cell) -> (List Cell)
-func takeCells n cells => cells
-  |> reduce takeCellStep { remaining: n, cells: [] }
-  |> .cells
-
-type GameState -> Cell
-func nextHead st =>
-    moveDir st.dir (headCell st.snake)
+ F|> { snake: st.snake, dir: d, food: st.food, score: st.score, seed: st.seed, status: st.status }
 
 type GameState -> GameState
 func handleTick st => st.status
  ||> GameOver -> st
- ||> Running  -> advance st (nextHead st)
+ ||> Running  -> advance st (st.snake.nextHead st.dir)
 
 type GameState -> Cell -> GameState
-func advance st h => outside h or snakeContains st.snake h
- T|> {
-        snake: st.snake,
-        dir: st.dir,
-        food: st.food,
-        score: st.score,
-        seed: st.seed,
-        status: GameOver
-    }
+func advance st h => outside h or (st.snake.contains h)
+ T|> { snake: st.snake, dir: st.dir, food: st.food, score: st.score, seed: st.seed, status: GameOver }
  F|> resolveMove st h
 
 type GameState -> Cell -> GameState
 func resolveMove st h => h == st.food
- T|> {
-        snake: append [h] st.snake,
-        dir: st.dir,
-        food: spawnFood (append [h] st.snake) (nextSeed st.seed),
-        score: st.score + 1,
-        seed: nextSeed st.seed,
-        status: Running
-    }
- F|> {
-        snake: takeCells (cellLength st.snake) (append [h] st.snake),
-        dir: st.dir,
-        food: st.food,
-        score: st.score,
-        seed: nextSeed st.seed,
-        status: Running
-    }
+ T|> { snake: st.snake.grow h, dir: st.dir, food: spawnFood (st.snake.grow h) (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed, status: Running }
+ F|> { snake: st.snake.move h, dir: st.dir, food: st.food, score: st.score, seed: nextSeed st.seed, status: Running }
 
 type GameState -> Int -> Int -> Text
-func cellGlyph st y x => (Cell x y == headCell st.snake, snakeContains st.snake (Cell x y), Cell x y == st.food)
+func cellGlyph st y x => (Cell x y == st.snake.head, st.snake.contains (Cell x y), Cell x y == st.food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"

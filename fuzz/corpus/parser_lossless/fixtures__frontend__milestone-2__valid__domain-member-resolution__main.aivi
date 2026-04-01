@@ -1,14 +1,19 @@
 domain Duration over Int
     literal ms : Int -> Duration
-    make : Int -> Duration
-    value : Duration -> Int
+    type Int -> Duration
+    make
+    type Duration -> Int
+    value
 
 domain Count over Int
-    make : Int -> Count
+    type Int -> Count
+    make
 
 domain NonEmpty A over List A
-    singleton : A -> NonEmpty A
-    head : NonEmpty A -> A
+    type A -> NonEmpty A
+    singleton
+    type NonEmpty A -> A
+    head
 
 val delay : Duration = make 250
 val delayMillis : Int = value delay

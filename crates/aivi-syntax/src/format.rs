@@ -737,61 +737,85 @@ impl Formatter {
     }
 
     fn format_domain_member(&self, member: &DomainMember) -> Vec<String> {
-        if member.is_binding {
-            let mut header = format!(
-                "{}{}",
-                spaces(INDENT_WIDTH),
-                self.format_domain_member_name(&member.name)
-            );
-            for parameter in &member.parameters {
-                header.push(' ');
-                header.push_str(&parameter.text);
-            }
+        let mut lines = Vec::new();
 
-            let Some(body) = &member.body else {
-                return vec![format!("{header} =")];
-            };
-
-            let force_break =
-                self.should_force_expr_break(display_width(&format!("{header} = ")), body);
-            let block = self.format_expr_block(body, force_break);
-            if block.is_inline() {
-                return vec![format!(
-                    "{header} = {}",
-                    block.inline_text().expect("inline block")
-                )];
-            } else if block.starts_with_delimiter() {
-                return block.prefixed(&format!("{header} = ")).into_lines();
+        // Literal members use the colon syntax: `literal ms : Int -> Duration`
+        if matches!(member.name, DomainMemberName::Literal(_)) {
+            if let Some(annotation) = &member.annotation {
+                let prefix = format!(
+                    "{}{}{}",
+                    spaces(INDENT_WIDTH),
+                    self.format_domain_member_name(&member.name),
+                    self.type_annotation_separator(&[], annotation)
+                );
+                let force_break =
+                    self.should_force_type_break(display_width(&prefix), annotation);
+                let block = self.format_type_block(annotation, force_break);
+                if block.is_inline() {
+                    return vec![format!(
+                        "{prefix}{}",
+                        block.inline_text().expect("inline block")
+                    )];
+                } else {
+                    return block.prefixed(&prefix).into_lines();
+                }
             } else {
-                let mut lines = vec![format!("{header} =")];
-                lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
-                return lines;
+                return vec![format!(
+                    "{}{}:",
+                    spaces(INDENT_WIDTH),
+                    self.format_domain_member_name(&member.name)
+                )];
             }
         }
 
-        let Some(annotation) = &member.annotation else {
-            return vec![format!(
-                "{}{}:",
-                spaces(INDENT_WIDTH),
-                self.format_domain_member_name(&member.name)
-            )];
-        };
-        let prefix = format!(
-            "{}{}{}",
-            spaces(INDENT_WIDTH),
-            self.format_domain_member_name(&member.name),
-            self.type_annotation_separator(&[], annotation)
-        );
-        let force_break = self.should_force_type_break(display_width(&prefix), annotation);
-        let block = self.format_type_block(annotation, force_break);
-        if block.is_inline() {
-            vec![format!(
-                "{prefix}{}",
-                block.inline_text().expect("inline block")
-            )]
-        } else {
-            block.prefixed(&prefix).into_lines()
+        // Signature members: emit `type TypeExpr` line if annotated
+        if let Some(annotation) = &member.annotation {
+            let prefix = format!("{}type ", spaces(INDENT_WIDTH));
+            let force_break =
+                self.should_force_type_break(display_width(&prefix), annotation);
+            let block = self.format_type_block(annotation, force_break);
+            if block.is_inline() {
+                lines.push(format!(
+                    "{prefix}{}",
+                    block.inline_text().expect("inline block")
+                ));
+            } else {
+                lines.extend(block.prefixed(&prefix).into_lines());
+            }
         }
+
+        // Emit the member name line
+        let mut header = format!(
+            "{}{}",
+            spaces(INDENT_WIDTH),
+            self.format_domain_member_name(&member.name)
+        );
+        for parameter in &member.parameters {
+            header.push(' ');
+            header.push_str(&parameter.text);
+        }
+
+        let Some(body) = &member.body else {
+            // Declaration-only: just the name
+            lines.push(header);
+            return lines;
+        };
+
+        let force_break =
+            self.should_force_expr_break(display_width(&format!("{header} = ")), body);
+        let block = self.format_expr_block(body, force_break);
+        if block.is_inline() {
+            lines.push(format!(
+                "{header} = {}",
+                block.inline_text().expect("inline block")
+            ));
+        } else if block.starts_with_delimiter() {
+            lines.extend(block.prefixed(&format!("{header} = ")).into_lines());
+        } else {
+            lines.push(format!("{header} ="));
+            lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
+        }
+        lines
     }
 
     fn format_instance_member(&self, member: &InstanceMember) -> Vec<String> {
@@ -2527,13 +2551,17 @@ value view =
             concat!(
                 "domain Duration over Int\n",
                 "    literal ms : Int -> Duration\n",
-                "    (*) : Duration -> Int -> Duration\n",
-                "    unwrap : Duration -> Int\n",
+                "    type Duration -> Int -> Duration\n",
+                "    (*)\n",
+                "    type Duration -> Int\n",
+                "    unwrap\n",
                 "\n",
                 "domain Path over Text\n",
                 "    literal root : Text -> Path\n",
-                "    (/) : Path -> Text -> Path\n",
-                "    unwrap : Path -> Text\n",
+                "    type Path -> Text -> Path\n",
+                "    (/)\n",
+                "    type Path -> Text\n",
+                "    unwrap\n",
             )
         );
     }
@@ -2558,7 +2586,7 @@ value view =
     #[test]
     fn formatter_normalizes_domain_member_bindings() {
         let formatted = format_text(
-            "type Builder = Int -> Duration\n\ndomain Duration over Int\n    make:Builder\n    make raw=\n        raw\n",
+            "type Builder = Int -> Duration\n\ndomain Duration over Int\n    type Builder\n    make raw=\n        raw\n",
         );
         assert_eq!(
             formatted,
@@ -2566,7 +2594,7 @@ value view =
                 "type Builder = Int -> Duration\n",
                 "\n",
                 "domain Duration over Int\n",
-                "    make : Builder\n",
+                "    type Builder\n",
                 "    make raw = raw\n",
             )
         );
@@ -2617,12 +2645,13 @@ value view =
 
     #[test]
     fn formatter_normalizes_percent_domain_operator_layout() {
-        let formatted = format_text("domain Bucket over Int\n    (%):Bucket -> Int -> Bucket\n");
+        let formatted = format_text("domain Bucket over Int\n    type Bucket -> Int -> Bucket\n    (%)\n");
         assert_eq!(
             formatted,
             concat!(
                 "domain Bucket over Int\n",
-                "    (%) : Bucket -> Int -> Bucket\n",
+                "    type Bucket -> Int -> Bucket\n",
+                "    (%)\n",
             )
         );
     }

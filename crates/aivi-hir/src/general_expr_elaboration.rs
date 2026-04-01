@@ -17,7 +17,7 @@ use crate::{
     ResolutionState, SignalItem, TermReference, TermResolution, TypeItemBody, TypeParameterId,
     TypeResolution, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
-    typecheck::{expression_matches, resolve_class_member_dispatch},
+    typecheck::{expression_matches, resolve_class_member_dispatch, signal_payload_type},
     validate::{
         GateExprEnv, GateIssue, GateProjectionStep, GateRecordField, GateType, GateTypeContext,
         PolyTypeBindings, extend_pipe_env_with_stage_memos, pipe_stage_expr_env,
@@ -2994,7 +2994,13 @@ impl<'a> GeneralExprElaborator<'a> {
     fn with_child_env(&mut self, env: &GateExprEnv, with_node: &crate::WithControl) -> GateExprEnv {
         let mut child_env = env.clone();
         if let Some(value_ty) = self.typing.infer_expr(with_node.value, env, None).ty {
-            child_env.locals.insert(with_node.binding, value_ty);
+            child_env.locals.insert(
+                with_node.binding,
+                match value_ty {
+                    GateType::Signal(payload) => *payload,
+                    other => other,
+                },
+            );
         }
         child_env
     }
@@ -3005,12 +3011,15 @@ impl<'a> GeneralExprElaborator<'a> {
         env: &GateExprEnv,
         sites: &mut BTreeMap<ExprId, MarkupRuntimeExprSite>,
     ) -> Result<(), MarkupRuntimeExprSiteError> {
-        let ty = self.typing.infer_expr(expr, env, None).ty.ok_or(
-            MarkupRuntimeExprSiteError::UnknownExprType {
-                expr,
-                span: self.module.exprs()[expr].span,
-            },
-        )?;
+        let (expr, ty) = match self.typing.infer_expr(expr, env, None).ty {
+            Some(ty) => (expr, ty),
+            None => self.signal_payload_markup_runtime_expr_site(expr, env).ok_or(
+                MarkupRuntimeExprSiteError::UnknownExprType {
+                    expr,
+                    span: self.module.exprs()[expr].span,
+                },
+            )?,
+        };
         let parameters = env_parameters(self.module, env);
         sites.entry(expr).or_insert(MarkupRuntimeExprSite {
             expr,
@@ -3019,6 +3028,39 @@ impl<'a> GeneralExprElaborator<'a> {
             parameters,
         });
         Ok(())
+    }
+
+    fn signal_payload_markup_runtime_expr_site(
+        &mut self,
+        expr: ExprId,
+        env: &GateExprEnv,
+    ) -> Option<(ExprId, GateType)> {
+        let ExprKind::Apply { callee, arguments } = &self.module.exprs()[expr].kind else {
+            return None;
+        };
+        if arguments.len() != 1 {
+            return None;
+        }
+        let payload_expr = arguments
+            .iter()
+            .next()
+            .copied()
+            .expect("non-empty arguments should expose their first payload expression");
+        let ExprKind::Name(reference) = &self.module.exprs()[*callee].kind else {
+            return None;
+        };
+        let ResolutionState::Resolved(TermResolution::Item(item_id)) = reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let Item::Signal(signal) = &self.module.items()[*item_id] else {
+            return None;
+        };
+        self.typing
+            .infer_expr(payload_expr, env, None)
+            .ty
+            .or_else(|| signal_payload_type(self.module, signal))
+            .map(|ty| (payload_expr, ty))
     }
 }
 

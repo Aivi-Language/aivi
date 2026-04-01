@@ -2354,10 +2354,11 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 ```aivi
 domain Duration over Int
     literal ms : Int -> Duration
-    millis : Int -> Duration
+    type Int -> Duration
     millis raw = raw
-    parse : Int -> Result DurationError Duration
-    value : Duration -> Int
+    type Int -> Result DurationError Duration
+    parse
+    type Duration -> Int
     value duration = duration
 ```
 
@@ -2381,20 +2382,25 @@ A domain may be introduced only through domain-owned constructors or smart const
 
 ```aivi
 domain Url over Text
-    parse : Text -> Result UrlError Url
-    value : Url -> Text
+    type Text -> Result UrlError Url
+    parse
+    type Url -> Text
+    value
 
 domain Duration over Int
-    millis : Int -> Duration
-    trySeconds : Int -> Result DurationError Duration
-    value : Duration -> Int
+    type Int -> Duration
+    millis
+    type Int -> Result DurationError Duration
+    trySeconds
+    type Duration -> Int
+    value
 ```
 
 Construction is explicit. Unwrapping is explicit. Unsafe construction should remain internal or be spelled as such.
 
 Callable domain members enter ordinary term lookup when in scope. No projection syntax for domains in v1.
 
-Callable members may also carry authored bodies by pairing a signature line with an instance-style binding line in the same domain block. Those authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
+Callable members may also carry authored bodies: place a `type TypeExpr` annotation line immediately before the member name, and write the body on the same line as the name (`name arg1 arg2 = expr`). Those authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
 
 ### 20.5 Literal suffixes
 
@@ -2429,13 +2435,18 @@ Examples:
 ```aivi
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
-    (-) : Duration -> Duration -> Duration
-    (*) : Duration -> Int -> Duration
-    compare : Duration -> Duration -> Ordering
+    type Duration -> Duration -> Duration
+    (+)
+    type Duration -> Duration -> Duration
+    (-)
+    type Duration -> Int -> Duration
+    (*)
+    type Duration -> Ordering
+    compare
 
 domain Path over Text
-    (/) : Path -> Text -> Path
+    type Path -> Text -> Path
+    (/)
 ```
 
 Operator rules:
@@ -2457,9 +2468,12 @@ Domains attach invariants stronger than the carrier type:
 
 ```aivi
 domain NonEmpty A over List A
-    fromList : List A -> Option (NonEmpty A)
-    head : NonEmpty A -> A
-    tail : NonEmpty A -> List A
+    type List A -> Option (NonEmpty A)
+    fromList
+    type NonEmpty A -> A
+    head
+    type NonEmpty A -> List A
+    tail
 ```
 
 ### 20.8 Parameterized domains
@@ -2510,33 +2524,42 @@ For literal/decode/operator failures, diagnostics should explain whether the fai
 domain Duration over Int
     literal ms : Int -> Duration
     literal sec : Int -> Duration
-    value : Duration -> Int
-    (+) : Duration -> Duration -> Duration
+    type Duration -> Int
+    value
+    type Duration -> Duration -> Duration
+    (+)
 ```
 
 #### Url
 
 ```aivi
 domain Url over Text
-    parse : Text -> Result UrlError Url
-    value : Url -> Text
+    type Text -> Result UrlError Url
+    parse
+    type Url -> Text
+    value
 ```
 
 #### Path
 
 ```aivi
 domain Path over Text
-    value : Path -> Text
-    (/) : Path -> Text -> Path
+    type Path -> Text
+    value
+    type Path -> Text -> Path
+    (/)
 ```
 
 #### NonEmpty
 
 ```aivi
 domain NonEmpty A over List A
-    fromList : List A -> Option (NonEmpty A)
-    head : NonEmpty A -> A
-    tail : NonEmpty A -> List A
+    type List A -> Option (NonEmpty A)
+    fromList
+    type NonEmpty A -> A
+    head
+    type NonEmpty A -> List A
+    tail
 ```
 
 ### 20.14 Design boundary

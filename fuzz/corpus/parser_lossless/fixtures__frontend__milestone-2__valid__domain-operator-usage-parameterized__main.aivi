@@ -1,7 +1,10 @@
 domain Amount A over A
-    wrap : A -> Amount A
-    (+) : Amount A -> Amount A -> Amount A
-    value : Amount A -> A
+    type A -> Amount A
+    wrap
+    type Amount A -> Amount A -> Amount A
+    (+)
+    type Amount A -> A
+    value
 
 val total : Amount Int = wrap 1 + wrap 2
 val raw : Int = value total

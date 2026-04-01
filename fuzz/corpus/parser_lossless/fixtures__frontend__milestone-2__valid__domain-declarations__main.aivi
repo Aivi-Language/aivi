@@ -1,16 +1,23 @@
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
-    value : Duration -> Int
+    type Duration -> Duration -> Duration
+    (+)
+    type Duration -> Int
+    value
 
 domain Path over Text
     literal root : Text -> Path
-    (/) : Path -> Text -> Path
-    value : Path -> Text
+    type Path -> Text -> Path
+    (/)
+    type Path -> Text
+    value
 
 domain NonEmpty A over List A
-    fromList : List A -> Option (NonEmpty A)
-    head : NonEmpty A -> A
-    tail : NonEmpty A -> List A
+    type List A -> Option (NonEmpty A)
+    fromList
+    type NonEmpty A -> A
+    head
+    type NonEmpty A -> List A
+    tail
 
 export Path

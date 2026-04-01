@@ -514,6 +514,44 @@ where
         Ok(())
     }
 
+    pub fn set_input_for_instance(
+        &mut self,
+        instance: &GtkNodeInstance,
+        input: InputHandle,
+        value: V,
+    ) -> Result<(), GtkExecutorError<H::Error>> {
+        if let Some(site) = self.setter_sites.get(&input).cloned() {
+            if instance.node != site.node {
+                return Err(GtkExecutorError::SetterInputInstanceMismatch {
+                    input,
+                    expected: site.node,
+                    instance: instance.clone(),
+                });
+            }
+            self.scoped_values
+                .entry(instance.clone())
+                .or_default()
+                .insert(input, value.clone());
+            if self.is_mounted(instance) {
+                let handle = self.widget_handle(instance)?.clone();
+                self.host
+                    .apply_dynamic_property(&handle, &site.binding, &value)
+                    .map_err(GtkExecutorError::Host)?;
+            }
+            return Ok(());
+        }
+        self.scoped_values
+            .entry(instance.clone())
+            .or_default()
+            .insert(input, value);
+        Ok(())
+    }
+
+    pub fn input_value_for_instance(&self, instance: &GtkNodeInstance, input: InputHandle) -> Option<V> {
+        self.scoped_value(instance, input)
+            .or_else(|| self.default_values.get(&input).cloned())
+    }
+
     pub fn dispatch_event<S>(
         &self,
         route: GtkEventRouteId,

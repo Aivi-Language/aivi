@@ -1179,35 +1179,10 @@ impl<'a> Lowerer<'a> {
 
         let mut members = Vec::new();
         if let Some(body) = &item.body {
-            let mut declaration_order = Vec::<String>::new();
-            let mut declarations = HashMap::<String, &syn::DomainMember>::new();
-            let mut bindings = HashMap::<String, &syn::DomainMember>::new();
+            let mut seen_keys = HashMap::<String, SourceSpan>::new();
             for member in &body.members {
                 let key = domain_member_surface_key(&member.name);
-                if !declaration_order.contains(&key) {
-                    declaration_order.push(key.clone());
-                }
-                if member.is_binding {
-                    if let Some(previous) = bindings.get(&key) {
-                        self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "duplicate domain member binding `{}`",
-                                domain_member_surface_name(&member.name)
-                            ))
-                            .with_code(code("duplicate-domain-member-binding"))
-                            .with_primary_label(
-                                member.span,
-                                "this domain member binding reuses an existing member name",
-                            )
-                            .with_secondary_label(
-                                previous.span,
-                                "previous domain member binding here",
-                            ),
-                        );
-                    } else {
-                        bindings.insert(key.clone(), member);
-                    }
-                } else if let Some(previous) = declarations.get(&key) {
+                if let Some(previous_span) = seen_keys.get(&key) {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
                             "duplicate domain member `{}`",
@@ -1218,47 +1193,12 @@ impl<'a> Lowerer<'a> {
                             member.span,
                             "this domain member reuses an existing member name",
                         )
-                        .with_secondary_label(previous.span, "previous domain member here"),
+                        .with_secondary_label(*previous_span, "previous domain member here"),
                     );
                 } else {
-                    declarations.insert(key.clone(), member);
+                    seen_keys.insert(key, member.span);
                 }
-            }
-            for key in declaration_order {
-                let binding = bindings.remove(&key);
-                let Some(signature) = declarations.remove(&key) else {
-                    if let Some(binding) = binding {
-                        self.diagnostics.push(
-                            Diagnostic::error(format!(
-                                "domain member binding `{}` is missing a signature declaration",
-                                domain_member_surface_name(&binding.name)
-                            ))
-                            .with_code(code("orphan-domain-member-binding"))
-                            .with_primary_label(
-                                binding.span,
-                                "add a preceding domain member type declaration such as `name : A -> B`",
-                            ),
-                        );
-                    }
-                    continue;
-                };
-                members.push(self.lower_domain_member(signature, binding));
-            }
-            for binding in bindings.into_values() {
-                self.diagnostics.push(
-                    Diagnostic::error(format!(
-                        "domain member binding `{}` is missing a signature declaration",
-                        domain_member_surface_name(&binding.name)
-                    ))
-                    .with_code(code("orphan-domain-member-binding"))
-                    .with_primary_label(
-                        binding.span,
-                        "add a preceding domain member type declaration such as `name : A -> B`",
-                    ),
-                );
-            }
-            for signature in declarations.into_values() {
-                members.push(self.lower_domain_member(signature, None));
+                members.push(self.lower_domain_member(member));
             }
         }
 
@@ -1271,11 +1211,7 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_domain_member(
-        &mut self,
-        member: &syn::DomainMember,
-        binding: Option<&syn::DomainMember>,
-    ) -> DomainMember {
+    fn lower_domain_member(&mut self, member: &syn::DomainMember) -> DomainMember {
         let (kind, name) = match &member.name {
             syn::DomainMemberName::Signature(signature) => match signature {
                 syn::ClassMemberName::Identifier(identifier) => (
@@ -1307,31 +1243,12 @@ impl<'a> Lowerer<'a> {
                 );
                 self.placeholder_type(member.span)
             });
-        let (parameters, body) = if let Some(binding) = binding {
-            let parameters = binding
-                .parameters
-                .iter()
-                .map(|parameter| self.lower_instance_parameter(parameter))
-                .collect();
-            let body = binding
-                .body
-                .as_ref()
-                .map(|body| self.lower_expr(body))
-                .or_else(|| {
-                    self.emit_error(
-                        binding.span,
-                        format!(
-                            "domain member binding `{}` is missing a body",
-                            domain_member_surface_name(&binding.name)
-                        ),
-                        code("missing-domain-member-body"),
-                    );
-                    Some(self.placeholder_expr(binding.span))
-                });
-            (parameters, body)
-        } else {
-            (Vec::new(), None)
-        };
+        let parameters = member
+            .parameters
+            .iter()
+            .map(|parameter| self.lower_instance_parameter(parameter))
+            .collect();
+        let body = member.body.as_ref().map(|body| self.lower_expr(body));
 
         DomainMember {
             span: member.span,

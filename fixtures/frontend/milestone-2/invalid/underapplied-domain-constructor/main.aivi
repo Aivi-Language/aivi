@@ -1,4 +1,5 @@
 domain ResourceId A over A
-    wrap : A -> ResourceId A
+    type A -> ResourceId A
+    wrap
 
 type Broken = ResourceId

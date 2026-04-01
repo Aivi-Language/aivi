@@ -2,10 +2,15 @@ domain Duration over Int
 
 domain Path over Text
     literal root : Text -> Path
-    (/) : Path -> Text -> Path
-    unwrap : Path -> Text
+    type Path -> Text -> Path
+    (/)
+    type Path -> Text
+    unwrap
 
 domain NonEmpty A over List A
-    fromList : List A -> Option (NonEmpty A)
-    head : NonEmpty A -> A
-    tail : NonEmpty A -> List A
+    type List A -> Option (NonEmpty A)
+    fromList
+    type NonEmpty A -> A
+    head
+    type NonEmpty A -> List A
+    tail

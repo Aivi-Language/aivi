@@ -150,14 +150,16 @@ Rules:
 domain Duration over Int
     literal ms : Int -> Duration
     literal sec : Int -> Duration
-    millis : Int -> Duration
+    type Int -> Duration
     millis raw = raw
-    value : Duration -> Int
+    type Duration -> Int
     value duration = duration
 
 domain Url over Text
-    parse : Text -> Result UrlError Url
-    value : Url -> Text
+    type Text -> Result UrlError Url
+    parse
+    type Url -> Text
+    value
 ```
 
 Rules:
@@ -166,10 +168,11 @@ Rules:
 - Construction is explicit.
 - Unwrapping is explicit.
 - No implicit casts to/from the carrier.
+- Callable domain members are declared with a `type TypeExpr` annotation line immediately before the member name line.
 - Callable domain members participate in ordinary term lookup.
-- Callable domain members may add an authored body with a second line of the form `name arg1 arg2 = expr`.
+- Callable domain members may include an authored body of the form `name arg1 arg2 = expr` on the same line as the member name.
 - Authored bodies are checked against the carrier view of the current domain, while the public signature remains nominal.
-- Literal suffix declarations remain declaration-only.
+- Literal suffix declarations remain declaration-only and use `literal name : TypeExpr` syntax.
 - Unary domain methods can also be projected with `value.member`.
 - Domain projection is still explicit member dispatch; it does not imply implicit carrier casts.
 
@@ -836,6 +839,7 @@ value mainWindow =
         <Box orientation="vertical" spacing={8}>
             <Label text={greeting} />
             <Button label="Click me" onClick={clicked} />
+            <Button label="Select Alpha" onClick={selectRow "Alpha"} />
         </Box>
     </Window>
 ```
@@ -1013,7 +1017,7 @@ Important:
 | mutable component state / hooks | `signal` |
 | `useEffect(...)` | `Task` or `@source` |
 | JSX fragments `<>...</>` | `<fragment>...</fragment>` |
-| arbitrary callback expressions in events | direct input signal routing like `onClick={clicked}` |
+| arbitrary callback expressions in events | direct input signal routing like `onClick={clicked}` or `onClick={selectRow item}` |
 | DOM / virtual DOM mental model | direct GTK widget lowering |
 | arbitrary HTML tags | current GTK widget catalog only |
 

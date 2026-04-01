@@ -539,8 +539,10 @@ fn compile_reports_codegen_limits_without_emitting_fake_artifacts() {
         r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
-    (>) : Duration -> Duration -> Bool
+    type Duration -> Duration -> Duration
+    (+)
+    type Duration -> Duration -> Bool
+    (>)
 
 type Window = {
     delay: Duration

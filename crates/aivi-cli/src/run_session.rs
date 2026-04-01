@@ -549,6 +549,7 @@ impl RunSessionState {
         if !queued_events.is_empty() {
             let mut sink = RunEventSink {
                 driver: &self.driver,
+                executor: &self.executor,
                 handlers: &self.event_handlers,
             };
             for event in queued_events {
@@ -901,6 +902,7 @@ fn schedule_run_session(
 
 struct RunEventSink<'a> {
     driver: &'a GlibLinkedRuntimeDriver,
+    executor: &'a GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     handlers: &'a BTreeMap<HirExprId, ResolvedRunEventHandler>,
 }
 
@@ -919,12 +921,27 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
                 route.id
             )
         })?;
+        let payload = match handler.payload {
+            ResolvedRunEventPayload::GtkPayload => value.0,
+            ResolvedRunEventPayload::ScopedInput => self
+                .executor
+                .input_value_for_instance(&route.instance, route.binding.input)
+                .map(|value| value.0)
+                .ok_or_else(|| {
+                    format!(
+                        "missing scoped event payload input {} for route {} on {}",
+                        route.binding.input.as_raw(),
+                        route.id,
+                        route.instance
+                    )
+                })?,
+        };
         let stamp = self
             .driver
-            .current_stamp(handler.input)
+            .current_stamp(handler.signal_input)
             .map_err(|error| format!("{error}"))?;
         self.driver
-            .queue_publication_now(Publication::new(stamp, value.0))
+            .queue_publication_now(Publication::new(stamp, payload))
             .map_err(|error| {
                 format!(
                     "failed to publish GTK event on route {} into signal `{}` (item {}): {error}",
@@ -942,7 +959,10 @@ mod tests {
         HydrationRevisionState, MainContextRequestQueue, RunLaunchConfig, RunSessionLifecycle,
         RunSessionPhase, RunSessionScheduleState, start_run_session_with_launch_config,
     };
+    use aivi_base::SourceDatabase;
     use aivi_backend::RuntimeValue;
+    use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
+    use aivi_syntax::parse_module;
     use gtk::prelude::*;
     use std::{
         env,
@@ -986,6 +1006,30 @@ mod tests {
         let lowered = snapshot.entry_hir();
         crate::prepare_run_artifact(&snapshot.sources, lowered.module(), None)
             .expect("run-session test fixture should prepare")
+    }
+
+    fn prepare_run_from_text(path: &str, source: &str) -> crate::RunArtifact {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, source);
+        let file = &sources[file_id];
+        let parsed = parse_module(file);
+        assert!(!parsed.has_errors(), "test input should parse cleanly");
+        let lowered = lower_hir_module(&parsed.module);
+        assert!(
+            !lowered.has_errors(),
+            "test input should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let validation = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            validation.diagnostics().is_empty(),
+            "test input should validate cleanly: {:?}",
+            validation.diagnostics()
+        );
+        crate::prepare_run_artifact(&sources, lowered.module(), None)
+            .expect("run-session text fixture should prepare")
     }
 
     fn pump_context(context: &gtk::glib::MainContext, duration: Duration) {
@@ -1099,6 +1143,22 @@ mod tests {
             .into_iter()
             .find(|text| text.contains('@') && text.contains('\n'))
             .expect("snake window should expose a board label")
+    }
+
+    fn find_button_by_label(widget: &gtk::Widget, label: &str) -> Option<gtk::Button> {
+        if let Ok(button) = widget.clone().downcast::<gtk::Button>() {
+            if button.label().as_deref() == Some(label) {
+                return Some(button);
+            }
+        }
+        let mut child = widget.first_child();
+        while let Some(current) = child {
+            if let Some(found) = find_button_by_label(&current, label) {
+                return Some(found);
+            }
+            child = current.next_sibling();
+        }
+        None
     }
 
     #[test]
@@ -1345,6 +1405,125 @@ mod tests {
             text_signal_for(&harness, direction_item),
             "Up",
             "queued window key events should update the direction signal in the same run-session work cycle"
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
+    fn button_click_event_payloads_use_current_markup_bindings() {
+        let artifact = prepare_run_from_text(
+            "event-hook-payload-run.aivi",
+            r#"
+signal selected : Signal Text
+signal selectedText : Signal Text = selected
+ +|> "None" keepLatest
+
+type Text -> Text -> Text
+func keepLatest next current =>
+    next
+
+value rows = ["Alpha", "Beta"]
+
+value main =
+    <Window title="Host">
+        <Box orientation="vertical">
+            <Label text={selectedText} />
+            <each of={rows} as={item} key={item}>
+                <Button label={item} onClick={selected item} />
+            </each>
+        </Box>
+    </Window>
+
+export main
+"#,
+        );
+        let selected_item = required_signal_item(&artifact, "selectedText");
+        let harness = start_run_session_with_launch_config(
+            Path::new("event-hook-payload-run.aivi"),
+            artifact,
+            RunLaunchConfig::default(),
+        )
+        .expect("payload event handler fixture should start a run session");
+        let beta = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| {
+                find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Beta")
+            })
+            .expect("fixture should render a Beta button");
+        assert_eq!(text_signal_for(&harness, selected_item), "None");
+
+        beta.emit_clicked();
+        harness.with_access(|access| {
+            access
+                .process_pending_work()
+                .expect("clicked payload event should process in one work cycle");
+        });
+        assert_eq!(
+            text_signal_for(&harness, selected_item),
+            "Beta",
+            "payload event hooks should publish the clicked row binding into the selected signal"
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
+    fn reversi_board_click_applies_human_move_and_triggers_computer_turn() {
+        let path = repo_path("demos/reversi.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let last_move_item = required_signal_item(&artifact, "lastMoveText");
+        let status_item = required_signal_item(&artifact, "statusText");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("reversi demo should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the reversi window should release startup-held timers");
+        assert_eq!(
+            text_signal_for(&harness, status_item),
+            "Red (you) to move",
+            "reversi should start on the human turn"
+        );
+        assert_eq!(
+            text_signal_for(&harness, last_move_item),
+            "Last move: opening layout",
+            "reversi should start from the opening layout"
+        );
+
+        let opening_move = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
+            .expect("reversi board should expose at least one legal opening move");
+        assert!(
+            opening_move.is_sensitive(),
+            "opening move button should be clickable"
+        );
+
+        opening_move.emit_clicked();
+        harness.with_access(|access| {
+            access
+                .process_pending_work()
+                .expect("clicked board move should process in one work cycle");
+        });
+        assert_ne!(
+            text_signal_for(&harness, last_move_item),
+            "Last move: opening layout",
+            "clicking a legal board button should apply a human move"
+        );
+        assert_eq!(
+            text_signal_for(&harness, status_item),
+            "Blue (computer) to move",
+            "after a human move, the computer should take the next turn"
+        );
+        assert!(
+            pump_until(&context, Duration::from_secs(4), || {
+                text_signal_for(&harness, status_item) != "Blue (computer) to move"
+            }),
+            "the computer turn should resolve after the human click"
         );
 
         harness.shutdown();

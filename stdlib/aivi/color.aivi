@@ -1,14 +1,25 @@
 domain Color over Int
-    argb : Int -> Color
-    unwrap : Color -> Int
-    red : Color -> Int
-    green : Color -> Int
-    blue : Color -> Int
-    alpha : Color -> Int
-    withAlpha : Color -> Int -> Color
-    withRed : Color -> Int -> Color
-    withGreen : Color -> Int -> Color
-    withBlue : Color -> Int -> Color
-    blend : Color -> Color -> Float -> Color
+    type Int -> Color
+    argb
+    type Color -> Int
+    unwrap
+    type Color -> Int
+    red
+    type Color -> Int
+    green
+    type Color -> Int
+    blue
+    type Color -> Int
+    alpha
+    type Color -> Int -> Color
+    withAlpha
+    type Color -> Int -> Color
+    withRed
+    type Color -> Int -> Color
+    withGreen
+    type Color -> Int -> Color
+    withBlue
+    type Color -> Color -> Float -> Color
+    blend
 
 export Color

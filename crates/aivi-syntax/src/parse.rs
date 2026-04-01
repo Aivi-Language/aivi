@@ -1341,6 +1341,7 @@ impl<'a> Parser<'a> {
         }
         let member_indent = self.line_indent_of_token(first_index);
         let mut members = Vec::new();
+        let mut pending_annotation: Option<TypeExpr> = None;
 
         while let Some(index) = self.peek_nontrivia(*cursor, end) {
             if !self.tokens[index].line_start()
@@ -1349,14 +1350,57 @@ impl<'a> Parser<'a> {
             {
                 break;
             }
+
+            // Handle `type TypeExpr` lines as annotations for the next member
+            if self.tokens[index].kind() == TokenKind::TypeKw {
+                *cursor = index + 1;
+                let type_end = self
+                    .find_next_domain_member_start(*cursor, end, member_indent)
+                    .unwrap_or(end);
+                let annotation =
+                    self.parse_type_expr(cursor, type_end, TypeStop::default())
+                        .or_else(|| {
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    "domain member type annotation is missing its type after `type`",
+                                )
+                                .with_code(MISSING_DOMAIN_MEMBER_TYPE)
+                                .with_primary_label(
+                                    self.source_span_for_range(index, *cursor),
+                                    "expected a type such as `Int -> Duration`",
+                                ),
+                            );
+                            None
+                        });
+                *cursor = type_end;
+                pending_annotation = annotation;
+                continue;
+            }
+
             let before = *cursor;
-            let Some(member) = self.parse_domain_member(cursor, end, member_indent) else {
+            let Some(mut member) = self.parse_domain_member(cursor, end, member_indent) else {
                 break;
             };
+            if let Some(annotation) = pending_annotation.take() {
+                member.annotation = Some(annotation);
+            }
             members.push(member);
             if *cursor <= before {
                 break;
             }
+        }
+
+        if let Some(annotation) = pending_annotation {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "domain member type annotation has no following member",
+                )
+                .with_code(MISSING_DOMAIN_MEMBER_NAME)
+                .with_primary_label(
+                    annotation.span,
+                    "expected a member binding after this type annotation",
+                ),
+            );
         }
 
         (!members.is_empty()).then_some(DomainBody {
@@ -1505,7 +1549,9 @@ impl<'a> Parser<'a> {
         member_indent: usize,
     ) -> Option<DomainMember> {
         let start = *cursor;
-        let name = if self
+
+        // Literal members keep the colon syntax: `literal ms : Int -> Duration`
+        if self
             .consume_identifier_text(cursor, end, "literal")
             .is_some()
         {
@@ -1520,132 +1566,119 @@ impl<'a> Parser<'a> {
                 );
                 return None;
             };
-            DomainMemberName::Literal(suffix)
-        } else {
-            let name = self.parse_signature_member_name(cursor, end)?;
-            if self.consume_kind(cursor, end, TokenKind::Colon).is_some() {
-                let annotation = self
-                    .parse_type_expr(cursor, end, TypeStop::default())
+            let annotation = if self.consume_kind(cursor, end, TokenKind::Colon).is_some() {
+                self.parse_type_expr(cursor, end, TypeStop::default())
                     .or_else(|| {
                         self.diagnostics.push(
-                            Diagnostic::error("domain member is missing its type after `:`")
+                            Diagnostic::error("domain literal is missing its type after `:`")
                                 .with_code(MISSING_DOMAIN_MEMBER_TYPE)
                                 .with_primary_label(
-                                    name.span(),
+                                    suffix.span,
                                     "expected a member type such as `Int -> Duration`",
                                 ),
                         );
                         None
-                    });
-                return Some(DomainMember {
-                    name: DomainMemberName::Signature(name),
-                    is_binding: false,
-                    annotation,
-                    parameters: Vec::new(),
-                    body: None,
-                    span: self.source_span_for_range(start, *cursor),
-                });
-            }
-
-            let mut parameters = Vec::new();
-            while let Some(index) = self.peek_nontrivia(*cursor, end) {
-                if self.tokens[index].line_start() {
-                    break;
-                }
-                match self.tokens[index].kind() {
-                    TokenKind::Identifier => {
-                        parameters.push(self.identifier_from_token(index));
-                        *cursor = index + 1;
-                    }
-                    TokenKind::Equals => break,
-                    _ => break,
-                }
-            }
-
-            let equals_span = if let Some(index) = self.consume_kind(cursor, end, TokenKind::Equals)
-            {
-                Some(self.source_span_of_token(index))
+                    })
             } else {
                 self.diagnostics.push(
-                    Diagnostic::error("domain member binding is missing `=` before its body")
-                        .with_code(MISSING_DOMAIN_MEMBER_BODY)
+                    Diagnostic::error("domain literal is missing `:` before its type")
+                        .with_code(MISSING_DOMAIN_MEMBER_TYPE)
                         .with_primary_label(
-                            name.span(),
-                            "expected `=` followed by an expression body",
+                            suffix.span,
+                            "expected `:` followed by a member type",
                         ),
                 );
                 None
             };
+            return Some(DomainMember {
+                name: DomainMemberName::Literal(suffix),
+                annotation,
+                parameters: Vec::new(),
+                body: None,
+                span: self.source_span_for_range(start, *cursor),
+            });
+        }
+
+        // Signature members: `name params = body` (binding) or `name` (declaration-only)
+        let name = self.parse_signature_member_name(cursor, end)?;
+
+        let mut parameters = Vec::new();
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if self.tokens[index].line_start() {
+                break;
+            }
+            match self.tokens[index].kind() {
+                TokenKind::Identifier => {
+                    parameters.push(self.identifier_from_token(index));
+                    *cursor = index + 1;
+                }
+                TokenKind::Equals => break,
+                _ => break,
+            }
+        }
+
+        if let Some(eq_index) = self.consume_kind(cursor, end, TokenKind::Equals) {
+            let equals_span = self.source_span_of_token(eq_index);
             let member_end = self
                 .find_next_domain_member_start(*cursor, end, member_indent)
                 .unwrap_or(end);
-            let body = if let Some(equals_span) = equals_span {
-                self.parse_expr(cursor, member_end, ExprStop::default())
-                    .or_else(|| {
-                        self.diagnostics.push(
-                            Diagnostic::error(
-                                "domain member binding is missing its body after `=`",
-                            )
-                            .with_code(MISSING_DOMAIN_MEMBER_BODY)
-                            .with_primary_label(
-                                equals_span,
-                                "expected an expression body for this domain member",
-                            ),
-                        );
-                        None
-                    })
-            } else {
-                None
-            };
-            if body.is_some() {
-                if let Some(trailing_index) = self.next_significant_in_range(*cursor, member_end) {
+            let body = self
+                .parse_expr(cursor, member_end, ExprStop::default())
+                .or_else(|| {
                     self.diagnostics.push(
-                        Diagnostic::error("domain member body must contain exactly one expression")
-                            .with_code(TRAILING_DECLARATION_BODY_TOKEN)
-                            .with_primary_label(
-                                self.source_span_of_token(trailing_index),
-                                "this token is outside the domain member body",
-                            ),
+                        Diagnostic::error(
+                            "domain member binding is missing its body after `=`",
+                        )
+                        .with_code(MISSING_DOMAIN_MEMBER_BODY)
+                        .with_primary_label(
+                            equals_span,
+                            "expected an expression body for this domain member",
+                        ),
+                    );
+                    None
+                });
+            if body.is_some() {
+                if let Some(trailing_index) =
+                    self.next_significant_in_range(*cursor, member_end)
+                {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "domain member body must contain exactly one expression",
+                        )
+                        .with_code(TRAILING_DECLARATION_BODY_TOKEN)
+                        .with_primary_label(
+                            self.source_span_of_token(trailing_index),
+                            "this token is outside the domain member body",
+                        ),
                     );
                 }
             }
             *cursor = member_end;
             return Some(DomainMember {
                 name: DomainMemberName::Signature(name),
-                is_binding: true,
                 annotation: None,
                 parameters,
                 body,
                 span: self.source_span_for_range(start, member_end),
             });
-        };
+        }
 
-        let annotation = if self.consume_kind(cursor, end, TokenKind::Colon).is_some() {
-            self.parse_type_expr(cursor, end, TypeStop::default())
-                .or_else(|| {
-                    self.diagnostics.push(
-                        Diagnostic::error("domain member is missing its type after `:`")
-                            .with_code(MISSING_DOMAIN_MEMBER_TYPE)
-                            .with_primary_label(
-                                name.span(),
-                                "expected a member type such as `Int -> Duration`",
-                            ),
-                    );
-                    None
-                })
-        } else {
+        // No `=` — declaration-only member (just a name, no body)
+        if !parameters.is_empty() {
             self.diagnostics.push(
-                Diagnostic::error("domain member is missing `:` before its type")
-                    .with_code(MISSING_DOMAIN_MEMBER_TYPE)
-                    .with_primary_label(name.span(), "expected `:` followed by a member type"),
+                Diagnostic::error("domain member binding is missing `=` before its body")
+                    .with_code(MISSING_DOMAIN_MEMBER_BODY)
+                    .with_primary_label(
+                        name.span(),
+                        "expected `=` followed by an expression body",
+                    ),
             );
-            None
-        };
+            return None;
+        }
 
         Some(DomainMember {
-            name,
-            is_binding: false,
-            annotation,
+            name: DomainMemberName::Signature(name),
+            annotation: None,
             parameters: Vec::new(),
             body: None,
             span: self.source_span_for_range(start, *cursor),
@@ -4955,7 +4988,7 @@ impl<'a> Parser<'a> {
     fn starts_domain_member(&self, index: usize) -> bool {
         matches!(
             self.tokens[index].kind(),
-            TokenKind::Identifier | TokenKind::LParen
+            TokenKind::Identifier | TokenKind::LParen | TokenKind::TypeKw
         )
     }
 
@@ -6852,11 +6885,11 @@ instance Eq A -> Eq (Option A)
     }
 
     #[test]
-    fn parser_accepts_domain_member_bindings_after_signatures() {
+    fn parser_accepts_domain_member_bindings_after_type_annotation() {
         let (_, parsed) = load(
             "type Builder = Int -> Duration\n\
 domain Duration over Int\n\
-    make : Builder\n\
+    type Builder\n\
     make raw = raw\n",
         );
 
@@ -6869,17 +6902,12 @@ domain Duration over Int\n\
             panic!("expected a domain item");
         };
         let body = item.body.as_ref().expect("domain should carry a body");
-        assert_eq!(body.members.len(), 2);
-        assert!(!body.members[0].is_binding);
+        assert_eq!(body.members.len(), 1);
         assert!(body.members[0].annotation.is_some());
-        assert!(body.members[0].parameters.is_empty());
-        assert!(body.members[0].body.is_none());
-        assert!(body.members[1].is_binding);
-        assert!(body.members[1].annotation.is_none());
-        assert_eq!(body.members[1].parameters.len(), 1);
-        assert_eq!(body.members[1].parameters[0].text, "raw");
+        assert_eq!(body.members[0].parameters.len(), 1);
+        assert_eq!(body.members[0].parameters[0].text, "raw");
         assert!(matches!(
-            body.members[1].body.as_ref().map(|expr| &expr.kind),
+            body.members[0].body.as_ref().map(|expr| &expr.kind),
             Some(ExprKind::Name(identifier)) if identifier.text == "raw"
         ));
     }

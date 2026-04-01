@@ -1,7 +1,9 @@
 domain Duration over Int
-    make : Int -> Duration
+    type Int -> Duration
+    make
 
 domain Count over Int
-    make : Int -> Count
+    type Int -> Count
+    make
 
 value bad = make 1

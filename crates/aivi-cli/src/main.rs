@@ -40,9 +40,10 @@ use aivi_gtk::{
 };
 use aivi_hir::{
     BuiltinTerm, BuiltinType, DecoratorPayload, ExprId as HirExprId, ExprKind, GeneralExprOutcome,
-    GeneralExprParameter, Item, ItemId as HirItemId, Module as HirModule,
-    PatternId as HirPatternId, PatternKind, TermResolution, TypeKind, TypeResolution,
-    ValidationMode, ValueItem, collect_markup_runtime_expr_sites, elaborate_runtime_expr_with_env,
+    GeneralExprParameter, Item, ItemId as HirItemId, MarkupRuntimeExprSites,
+    Module as HirModule, PatternId as HirPatternId, PatternKind, TermResolution, TypeKind,
+    TypeResolution, ValidationMode, ValueItem, collect_markup_runtime_expr_sites,
+    elaborate_runtime_expr_with_env, signal_payload_type,
 };
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_query::{
@@ -567,6 +568,7 @@ enum HydratedRunNode {
     Widget {
         instance: GtkNodeInstance,
         properties: Box<[HydratedRunProperty]>,
+        event_inputs: Box<[HydratedRunProperty]>,
         children: Box<[HydratedRunNode]>,
     },
     Show {
@@ -633,10 +635,17 @@ struct HydratedRunEachItem {
 }
 
 #[derive(Clone, Debug)]
+enum ResolvedRunEventPayload {
+    GtkPayload,
+    ScopedInput,
+}
+
+#[derive(Clone, Debug)]
 struct ResolvedRunEventHandler {
     signal_item: aivi_hir::ItemId,
     signal_name: Box<str>,
-    input: RuntimeInputHandle,
+    signal_input: RuntimeInputHandle,
+    payload: ResolvedRunEventPayload,
 }
 /// RAII wrapper that deletes a temporary file on drop.
 ///
@@ -1466,17 +1475,24 @@ fn prepare_run_artifact(
             rendered
         })?;
     let runtime_backend_by_hir = backend_items_by_hir(&lowered.core, lowered.backend.as_ref());
+    let sites = collect_markup_runtime_expr_sites(module, view.body).map_err(|error| {
+        format!(
+            "failed to collect runtime expression environments for run view at {}: {error}",
+            source_location(sources, module.exprs()[view.body].span)
+        )
+    })?;
     let hydration_inputs = compile_run_inputs(
         sources,
         module,
         view_owner,
-        view.body,
+        &sites,
         &bridge,
         lowered.backend.as_ref(),
         &runtime_backend_by_hir,
     )?;
     let required_signal_globals = collect_run_required_signal_globals(&hydration_inputs);
-    let event_handlers = resolve_run_event_handlers(module, &bridge, &runtime_assembly, sources)?;
+    let event_handlers =
+        resolve_run_event_handlers(module, &sites, &bridge, &runtime_assembly, sources)?;
     Ok(RunArtifact {
         view_name: view.name.text().into(),
         module: module.clone(),
@@ -1963,6 +1979,7 @@ fn lower_runtime_fragment_backend_stack(
 
 fn resolve_run_event_handlers(
     module: &HirModule,
+    sites: &MarkupRuntimeExprSites,
     bridge: &GtkBridgeGraph,
     runtime_assembly: &HirRuntimeAssembly,
     sources: &SourceDatabase,
@@ -1975,6 +1992,7 @@ fn resolve_run_event_handlers(
         for event in &widget.event_hooks {
             let resolved = resolve_run_event_handler(
                 module,
+                sites,
                 runtime_assembly,
                 sources,
                 &widget.widget,
@@ -1989,6 +2007,7 @@ fn resolve_run_event_handlers(
 
 fn resolve_run_event_handler(
     module: &HirModule,
+    sites: &MarkupRuntimeExprSites,
     runtime_assembly: &HirRuntimeAssembly,
     sources: &SourceDatabase,
     widget: &aivi_hir::NamePath,
@@ -1996,12 +2015,96 @@ fn resolve_run_event_handler(
     expr: HirExprId,
 ) -> Result<ResolvedRunEventHandler, String> {
     let location = source_location(sources, module.exprs()[expr].span);
-    let ExprKind::Name(reference) = &module.exprs()[expr].kind else {
+    let Some(event) = lookup_widget_event(widget, event_name) else {
         return Err(format!(
-            "event handler at {location} must be a direct signal name, not {:?}",
-            module.exprs()[expr].kind
+            "event handler at {location} uses unsupported GTK event `{}` on widget `{}`",
+            event_name,
+            run_widget_name(widget)
         ));
     };
+    match &module.exprs()[expr].kind {
+        ExprKind::Name(reference) => {
+            let (item_id, signal, signal_input) =
+                resolve_run_event_signal_target(module, runtime_assembly, reference, &location)?;
+            let payload = event.payload;
+            if !signal_accepts_event_payload(module, signal, payload) {
+                return Err(format!(
+                    "event handler `{}` at {location} points at signal `{}`, but `{}` on `{}` publishes `{}` and requires `{}`",
+                    name_path_text(&reference.path),
+                    signal.name.text(),
+                    event_name,
+                    run_widget_name(widget),
+                    payload.label(),
+                    payload.required_signal_type_label()
+                ));
+            }
+            Ok(ResolvedRunEventHandler {
+                signal_item: item_id,
+                signal_name: signal.name.text().into(),
+                signal_input,
+                payload: ResolvedRunEventPayload::GtkPayload,
+            })
+        }
+        ExprKind::Apply { callee, arguments } => {
+            if arguments.len() != 1 {
+                return Err(format!(
+                    "event handler at {location} must call a direct signal name with exactly one explicit payload expression"
+                ));
+            }
+            let ExprKind::Name(reference) = &module.exprs()[*callee].kind else {
+                return Err(format!(
+                    "event handler at {location} must call a direct signal name when providing an explicit payload"
+                ));
+            };
+            let payload_expr = arguments
+                .iter()
+                .next()
+                .copied()
+                .expect("single-argument handler applications should expose a payload expression");
+            let (item_id, signal, signal_input) =
+                resolve_run_event_signal_target(module, runtime_assembly, reference, &location)?;
+            let required_payload = signal_payload_type(module, signal).ok_or_else(|| {
+                format!(
+                    "event handler `{}` at {location} points at signal `{}`, but explicit payload hooks require a known `Signal A` payload type",
+                    name_path_text(&reference.path),
+                    signal.name.text()
+                )
+            })?;
+            let site = sites.get(payload_expr).ok_or_else(|| {
+                format!(
+                    "event handler `{}` at {location} uses payload expression {} without a collected runtime environment",
+                    name_path_text(&reference.path),
+                    payload_expr.as_raw()
+                )
+            })?;
+            if site.ty != required_payload {
+                return Err(format!(
+                    "event handler `{}` at {location} points at signal `{}`, but the explicit payload has type `{}` and the signal requires `{}`",
+                    name_path_text(&reference.path),
+                    signal.name.text(),
+                    site.ty,
+                    required_payload
+                ));
+            }
+            Ok(ResolvedRunEventHandler {
+                signal_item: item_id,
+                signal_name: signal.name.text().into(),
+                signal_input,
+                payload: ResolvedRunEventPayload::ScopedInput,
+            })
+        }
+        _ => Err(format!(
+            "event handler at {location} must be a direct signal name or a direct signal application with one explicit payload"
+        )),
+    }
+}
+
+fn resolve_run_event_signal_target<'a>(
+    module: &'a HirModule,
+    runtime_assembly: &HirRuntimeAssembly,
+    reference: &aivi_hir::TermReference,
+    location: &str,
+) -> Result<(aivi_hir::ItemId, &'a aivi_hir::SignalItem, RuntimeInputHandle), String> {
     let aivi_hir::ResolutionState::Resolved(TermResolution::Item(item_id)) =
         reference.resolution.as_ref()
     else {
@@ -2024,38 +2127,14 @@ fn resolve_run_event_handler(
             signal.name.text()
         )
     })?;
-    let Some(input) = binding.input() else {
+    let Some(signal_input) = binding.input() else {
         return Err(format!(
             "event handler `{}` at {location} points at signal `{}`, but only direct input signals are publishable from GTK events",
             name_path_text(&reference.path),
             signal.name.text()
         ));
     };
-    let Some(event) = lookup_widget_event(widget, event_name) else {
-        return Err(format!(
-            "event handler `{}` at {location} uses unsupported GTK event `{}` on widget `{}`",
-            name_path_text(&reference.path),
-            event_name,
-            run_widget_name(widget)
-        ));
-    };
-    let payload = event.payload;
-    if !signal_accepts_event_payload(module, signal, payload) {
-        return Err(format!(
-            "event handler `{}` at {location} points at signal `{}`, but `{}` on `{}` publishes `{}` and requires `{}`",
-            name_path_text(&reference.path),
-            signal.name.text(),
-            event_name,
-            run_widget_name(widget),
-            payload.label(),
-            payload.required_signal_type_label()
-        ));
-    }
-    Ok(ResolvedRunEventHandler {
-        signal_item: *item_id,
-        signal_name: signal.name.text().into(),
-        input,
-    })
+    Ok((*item_id, signal, signal_input))
 }
 
 fn signal_accepts_event_payload(
@@ -2138,6 +2217,7 @@ fn hir_item_kind_label(item: &Item) -> &'static str {
 }
 
 fn collect_run_input_specs_from_bridge(
+    module: &HirModule,
     bridge: &GtkBridgeGraph,
 ) -> BTreeMap<RuntimeInputHandle, RunInputSpec> {
     let mut inputs = BTreeMap::new();
@@ -2153,6 +2233,11 @@ fn collect_run_input_specs_from_bridge(
                             }
                         };
                         inputs.insert(setter.input, spec);
+                    }
+                }
+                for event in &widget.event_hooks {
+                    if let Some(payload_expr) = event_handler_payload_expr(module, event.handler) {
+                        inputs.insert(event.input, RunInputSpec::Expr(payload_expr));
                     }
                 }
             }
@@ -2196,25 +2281,19 @@ fn compile_run_inputs(
     sources: &SourceDatabase,
     module: &HirModule,
     view_owner: aivi_hir::ItemId,
-    view_body: HirExprId,
+    sites: &aivi_hir::MarkupRuntimeExprSites,
     bridge: &GtkBridgeGraph,
     runtime_backend: &BackendProgram,
     runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
 ) -> Result<BTreeMap<RuntimeInputHandle, CompiledRunInput>, String> {
-    let sites = collect_markup_runtime_expr_sites(module, view_body).map_err(|error| {
-        format!(
-            "failed to collect runtime expression environments for run view at {}: {error}",
-            source_location(sources, module.exprs()[view_body].span)
-        )
-    })?;
     let mut inputs = BTreeMap::new();
-    for (input, spec) in collect_run_input_specs_from_bridge(bridge) {
+    for (input, spec) in collect_run_input_specs_from_bridge(module, bridge) {
         let compiled = match spec {
             RunInputSpec::Expr(expr) => CompiledRunInput::Expr(compile_run_expr_fragment(
                 sources,
                 module,
                 view_owner,
-                &sites,
+                sites,
                 expr,
                 runtime_backend,
                 runtime_backend_by_hir,
@@ -2231,7 +2310,7 @@ fn compile_run_inputs(
                                 sources,
                                 module,
                                 view_owner,
-                                &sites,
+                                sites,
                                 interpolation.expr,
                                 runtime_backend,
                                 runtime_backend_by_hir,
@@ -2247,6 +2326,16 @@ fn compile_run_inputs(
         inputs.insert(input, compiled);
     }
     Ok(inputs)
+}
+
+fn event_handler_payload_expr(module: &HirModule, handler: HirExprId) -> Option<HirExprId> {
+    let ExprKind::Apply { arguments, .. } = &module.exprs()[handler].kind else {
+        return None;
+    };
+    if arguments.len() != 1 {
+        return None;
+    }
+    arguments.iter().next().copied()
 }
 
 fn collect_run_required_signal_globals(
@@ -2493,9 +2582,25 @@ fn plan_run_node(
                     });
                 }
             }
+            let mut event_inputs = Vec::new();
+            for event in &widget.event_hooks {
+                if !shared.inputs.contains_key(&event.input) {
+                    continue;
+                }
+                event_inputs.push(HydratedRunProperty {
+                    input: event.input,
+                    value: DetachedRuntimeValue::from_runtime_owned(evaluate_run_input(
+                        &shared.inputs,
+                        globals,
+                        event.input,
+                        env,
+                    )?),
+                });
+            }
             Ok(HydratedRunNode::Widget {
                 instance: instance.clone(),
                 properties: properties.into_boxed_slice(),
+                event_inputs: event_inputs.into_boxed_slice(),
                 children: plan_run_child_group(
                     shared,
                     globals,
@@ -2722,7 +2827,7 @@ fn plan_run_node(
         GtkBridgeNodeKind::With(with_node) => {
             let value = evaluate_run_input(&shared.inputs, globals, with_node.value.input, env)?;
             let mut child_env = env.clone();
-            child_env.insert(with_node.binding, value);
+            child_env.insert(with_node.binding, strip_signal_runtime_value(value));
             Ok(HydratedRunNode::With {
                 instance: instance.clone(),
                 value_input: with_node.value.input,
@@ -2792,11 +2897,12 @@ fn apply_run_node(
         HydratedRunNode::Widget {
             instance,
             properties,
+            event_inputs,
             children,
         } => {
             for property in properties {
                 executor
-                    .set_property_for_instance(
+                    .set_input_for_instance(
                         instance,
                         property.input,
                         RunHostValue(property.value.clone()),
@@ -2805,6 +2911,21 @@ fn apply_run_node(
                         format!(
                             "failed to apply dynamic input {} on {}: {error}",
                             property.input.as_raw(),
+                            instance
+                        )
+                    })?;
+            }
+            for event_input in event_inputs {
+                executor
+                    .set_input_for_instance(
+                        instance,
+                        event_input.input,
+                        RunHostValue(event_input.value.clone()),
+                    )
+                    .map_err(|error| {
+                        format!(
+                            "failed to apply event input {} on {}: {error}",
+                            event_input.input.as_raw(),
                             instance
                         )
                     })?;
@@ -3841,9 +3962,10 @@ fn print_usage() {
 #[cfg(test)]
 mod tests {
     use super::{
-        HydratedRunNode, RunHydrationStaticState, WorkspaceHirSnapshot, check_file,
-        execute_file_with_context, plan_run_hydration, prepare_execute_artifact,
-        prepare_run_artifact, run_hydration_globals_ready, test_file_with_context,
+        HydratedRunNode, ResolvedRunEventHandler, ResolvedRunEventPayload,
+        RunHydrationStaticState, WorkspaceHirSnapshot, check_file, execute_file_with_context,
+        plan_run_hydration, prepare_execute_artifact, prepare_run_artifact,
+        run_hydration_globals_ready, test_file_with_context,
     };
     use aivi_backend::{DetachedRuntimeValue, RuntimeTaskPlan, RuntimeValue};
     use aivi_base::SourceDatabase;
@@ -4495,6 +4617,120 @@ value view =
     }
 
     #[test]
+    fn prepare_run_accepts_signal_payload_event_hooks_with_markup_bindings() {
+        let artifact = prepare_run_from_text(
+            "event-hook-payload.aivi",
+            r#"
+signal selected : Signal Text
+signal selectedText : Signal Text = selected
+ +|> "None" keepLatest
+
+type Text -> Text -> Text
+func keepLatest next current =>
+    next
+
+value rows = ["Alpha", "Beta"]
+
+value view =
+    <Window title="Host">
+        <Box>
+            <Label text={selectedText} />
+            <each of={rows} as={item} key={item}>
+                <Button label={item} onClick={selected item} />
+            </each>
+        </Box>
+    </Window>
+"#,
+            None,
+        )
+        .expect("event hooks should accept direct signal payload expressions from markup bindings");
+        let widget = artifact
+            .bridge
+            .nodes()
+            .iter()
+            .find_map(|node| match &node.kind {
+                GtkBridgeNodeKind::Widget(widget)
+                    if widget.widget.segments().last().text() == "Button" =>
+                {
+                    Some(widget)
+                }
+                _ => None,
+            })
+            .expect("bridge should keep the button widget template");
+        let handler = widget
+            .event_hooks
+            .first()
+            .expect("button should keep one event hook");
+        assert!(artifact.event_handlers.contains_key(&handler.handler));
+        assert!(artifact.hydration_inputs.contains_key(&handler.input));
+        assert!(matches!(
+            artifact.event_handlers.get(&handler.handler),
+            Some(ResolvedRunEventHandler {
+                payload: ResolvedRunEventPayload::ScopedInput,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn prepare_run_accepts_with_bindings_from_signal_payloads() {
+        let artifact = prepare_run_from_text(
+            "with-signal-payload.aivi",
+            r#"
+type Screen = {
+    title: Text
+}
+
+signal screen : Signal Screen
+
+value view =
+    <Window title="Host">
+        <with value={screen} as={currentScreen}>
+            <Label text={currentScreen.title} />
+        </with>
+    </Window>
+"#,
+            None,
+        )
+        .expect("with bindings should expose the current payload of signal expressions");
+        let root = artifact
+            .bridge
+            .node(artifact.bridge.root().plan)
+            .expect("window root should exist in the bridge");
+        let GtkBridgeNodeKind::Widget(window) = &root.kind else {
+            panic!("expected a widget root, found {:?}", root.kind.tag());
+        };
+        let with_ref = window.default_children.roots[0];
+        let with_node = artifact
+            .bridge
+            .node(with_ref.plan)
+            .expect("window child should exist");
+        let GtkBridgeNodeKind::With(with_node) = &with_node.kind else {
+            panic!("expected a with child, found {:?}", with_node.kind.tag());
+        };
+        let label_ref = with_node.body.roots[0];
+        let label_node = artifact
+            .bridge
+            .node(label_ref.plan)
+            .expect("label child should exist");
+        let GtkBridgeNodeKind::Widget(label) = &label_node.kind else {
+            panic!("expected a label widget, found {:?}", label_node.kind.tag());
+        };
+        let text_input = label
+            .properties
+            .iter()
+            .find_map(|property| match property {
+                RuntimePropertyBinding::Setter(binding) if binding.name.text() == "text" => {
+                    Some(binding.input)
+                }
+                _ => None,
+            })
+            .expect("label text should stay dynamic under the with binding");
+        assert!(artifact.hydration_inputs.contains_key(&with_node.value.input));
+        assert!(artifact.hydration_inputs.contains_key(&text_input));
+    }
+
+    #[test]
     fn prepare_run_accepts_expanded_widget_catalog_entries() {
         let artifact = prepare_run_from_text(
             "expanded-widget-catalog.aivi",
@@ -4850,6 +5086,26 @@ value view =
         .expect_err("button clicks should require Signal Unit handlers");
         assert!(error.contains("Signal Unit"));
         assert!(error.contains("onClick"));
+    }
+
+    #[test]
+    fn prepare_run_rejects_explicit_event_payload_type_mismatch() {
+        let error = prepare_run_from_text(
+            "event-explicit-payload-mismatch.aivi",
+            r#"
+signal click : Signal Int
+
+value view =
+    <Window title="Host">
+        <Button label="Save" onClick={click "wrong"} />
+    </Window>
+"#,
+            None,
+        )
+        .expect_err("explicit event payloads should match the target signal payload type");
+        assert!(error.contains("explicit payload"));
+        assert!(error.contains("Text"));
+        assert!(error.contains("Int"));
     }
 
     #[test]

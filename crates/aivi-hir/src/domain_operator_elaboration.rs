@@ -209,7 +209,8 @@ mod tests {
             r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (+) : Duration -> Duration -> Duration
+    type Duration -> Duration -> Duration
+    (+)
 
 value total = 10ms + 5ms
 "#,
@@ -228,7 +229,8 @@ value total = 10ms + 5ms
             r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (-) : Duration -> Duration -> Duration
+    type Duration -> Duration -> Duration
+    (-)
 
 value remaining = 10ms - 5ms
 "#,
@@ -246,8 +248,10 @@ value remaining = 10ms - 5ms
             "domain-operator-amount.aivi",
             r#"
 domain Amount A over A
-    wrap : A -> Amount A
-    (+) : Amount A -> Amount A -> Amount A
+    type A -> Amount A
+    wrap
+    type Amount A -> Amount A -> Amount A
+    (+)
 
 value total = wrap 1 + wrap 2
 "#,
@@ -268,8 +272,10 @@ value total = wrap 1 + wrap 2
             "domain-operator-path.aivi",
             r#"
 domain Path over Text
-    root : Text -> Path
-    (/) : Path -> Text -> Path
+    type Text -> Path
+    root
+    type Path -> Text -> Path
+    (/)
 
 value nested = root "/tmp" / "config"
 "#,
@@ -288,7 +294,8 @@ value nested = root "/tmp" / "config"
             r#"
 domain Duration over Int
     literal ms : Int -> Duration
-    (*) : Duration -> Int -> Duration
+    type Duration -> Int -> Duration
+    (*)
 
 value scaled = 10ms * 2
 "#,
