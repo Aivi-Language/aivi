@@ -7293,7 +7293,7 @@ fn is_known_module(module: &str) -> bool {
         module,
         "aivi.network" | "aivi.defaults" | "aivi.random" | "aivi.stdio" | "aivi.db"
             | "aivi.text" | "aivi.time" | "aivi.env" | "aivi.i18n" | "aivi.log"
-            | "aivi.regex" | "aivi.http"
+            | "aivi.regex" | "aivi.http" | "aivi.bigint"
     )
 }
 
@@ -8486,6 +8486,149 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                         primitive_import_type(BuiltinType::Text),
                         primitive_import_type(BuiltinType::Text),
                     ),
+                ),
+            ),
+        )),
+        // BigInt intrinsics (pure/synchronous)
+        ("aivi.bigint", "fromInt") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntFromInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                primitive_import_type(BuiltinType::BigInt),
+            ),
+        )),
+        ("aivi.bigint", "fromText") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntFromText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                option_import_type(primitive_import_type(BuiltinType::BigInt)),
+            ),
+        )),
+        ("aivi.bigint", "toInt") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntToInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                option_import_type(primitive_import_type(BuiltinType::Int)),
+            ),
+        )),
+        ("aivi.bigint", "toText") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntToText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.bigint", "add") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntAdd,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::BigInt),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "sub") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntSub,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::BigInt),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "mul") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntMul,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::BigInt),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "div") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntDiv,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    option_import_type(primitive_import_type(BuiltinType::BigInt)),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "mod") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntMod,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    option_import_type(primitive_import_type(BuiltinType::BigInt)),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "pow") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntPow,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::BigInt),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "neg") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntNeg,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                primitive_import_type(BuiltinType::BigInt),
+            ),
+        )),
+        ("aivi.bigint", "abs") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntAbs,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                primitive_import_type(BuiltinType::BigInt),
+            ),
+        )),
+        ("aivi.bigint", "cmp") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntCmp,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "eq") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntEq,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "gt") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntGt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
+        ("aivi.bigint", "lt") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntLt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::BigInt),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::BigInt),
+                    primitive_import_type(BuiltinType::Bool),
                 ),
             ),
         )),

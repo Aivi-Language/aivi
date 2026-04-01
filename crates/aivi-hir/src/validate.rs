@@ -11555,6 +11555,53 @@ impl<'a> GateTypeContext<'a> {
                     ])),
                 ),
             ),
+            IntrinsicValue::BigIntFromInt => arrow(
+                primitive(BuiltinType::Int),
+                primitive(BuiltinType::BigInt),
+            ),
+            IntrinsicValue::BigIntFromText => arrow(
+                primitive(BuiltinType::Text),
+                option(primitive(BuiltinType::BigInt)),
+            ),
+            IntrinsicValue::BigIntToInt => arrow(
+                primitive(BuiltinType::BigInt),
+                option(primitive(BuiltinType::Int)),
+            ),
+            IntrinsicValue::BigIntToText => arrow(
+                primitive(BuiltinType::BigInt),
+                primitive(BuiltinType::Text),
+            ),
+            IntrinsicValue::BigIntAdd
+            | IntrinsicValue::BigIntSub
+            | IntrinsicValue::BigIntMul => arrow(
+                primitive(BuiltinType::BigInt),
+                arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::BigInt)),
+            ),
+            IntrinsicValue::BigIntDiv | IntrinsicValue::BigIntMod => arrow(
+                primitive(BuiltinType::BigInt),
+                arrow(
+                    primitive(BuiltinType::BigInt),
+                    option(primitive(BuiltinType::BigInt)),
+                ),
+            ),
+            IntrinsicValue::BigIntPow => arrow(
+                primitive(BuiltinType::BigInt),
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::BigInt)),
+            ),
+            IntrinsicValue::BigIntNeg | IntrinsicValue::BigIntAbs => arrow(
+                primitive(BuiltinType::BigInt),
+                primitive(BuiltinType::BigInt),
+            ),
+            IntrinsicValue::BigIntCmp => arrow(
+                primitive(BuiltinType::BigInt),
+                arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::Int)),
+            ),
+            IntrinsicValue::BigIntEq
+            | IntrinsicValue::BigIntGt
+            | IntrinsicValue::BigIntLt => arrow(
+                primitive(BuiltinType::BigInt),
+                arrow(primitive(BuiltinType::BigInt), primitive(BuiltinType::Bool)),
+            ),
         }
     }
 

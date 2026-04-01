@@ -1,0 +1,179 @@
+use aivi.bigint (
+    fromInt
+    fromText
+    toInt
+    toText
+    add
+    sub
+    mul
+    div
+    mod as bigMod
+    pow
+    neg
+    abs as bigAbs
+    cmp
+    eq as bigEq
+    gt
+    lt
+)
+
+// Safe parse from a decimal text string
+type Text -> Option BigInt
+func parse = t =>
+    fromText t
+
+// Convert from Int
+type Int -> BigInt
+func fromInteger = n =>
+    fromInt n
+
+// Arithmetic
+type BigInt -> BigInt -> BigInt
+func plus = a => b =>
+    add a b
+
+type BigInt -> BigInt -> BigInt
+func minus = a => b =>
+    sub a b
+
+type BigInt -> BigInt -> BigInt
+func times = a => b =>
+    mul a b
+
+type BigInt -> BigInt -> Option BigInt
+func dividedBy = a => b =>
+    div a b
+
+type BigInt -> BigInt -> Option BigInt
+func remainder = a => b =>
+    bigMod a b
+
+type BigInt -> Int -> BigInt
+func raiseTo = base => exp =>
+    pow base exp
+
+type BigInt -> BigInt
+func negate = n =>
+    neg n
+
+type BigInt -> BigInt
+func absolute = n =>
+    bigAbs n
+
+// Comparison
+type BigInt -> BigInt -> Bool
+func equals = a => b =>
+    bigEq a b
+
+type BigInt -> BigInt -> Bool
+func greaterThan = a => b =>
+    gt a b
+
+type BigInt -> BigInt -> Bool
+func lessThan = a => b =>
+    lt a b
+
+type BigInt -> BigInt -> Bool
+func greaterOrEqual = a => b =>
+    gt a b
+    T|> True
+    F|> bigEq a b
+
+type BigInt -> BigInt -> Bool
+func lessOrEqual = a => b =>
+    lt a b
+    T|> True
+    F|> bigEq a b
+
+// Constants
+value zero : BigInt = fromInt 0
+value one : BigInt = fromInt 1
+value negOne : BigInt = neg (fromInt 1)
+
+// Sign checks
+type BigInt -> Bool
+func isZero = n =>
+    bigEq n zero
+
+type BigInt -> Bool
+func isPositive = n =>
+    gt n zero
+
+type BigInt -> Bool
+func isNegative = n =>
+    lt n zero
+
+// Factorial (recursive — unbounded BigInt result)
+type BigInt -> BigInt
+func factHelper = n =>
+    bigEq n zero
+    T|> one
+    F|> mul n (factHelper (sub n one))
+
+type Int -> BigInt
+func factorial = n =>
+    n <= 0
+    T|> one
+    F|> factHelper (fromInt n)
+
+@test
+value bigint_fromInt_basic : Task Text Bool = pure (bigEq (fromInt 42) (fromInt 42))
+
+@test
+value bigint_add_basic : Task Text Bool = pure (bigEq (add (fromInt 100) (fromInt 200)) (fromInt 300))
+
+@test
+value bigint_mul_basic : Task Text Bool = pure (bigEq (mul (fromInt 3) (fromInt 4)) (fromInt 12))
+
+@test
+value bigint_gt_basic : Task Text Bool = pure (gt (fromInt 10) (fromInt 5))
+
+@test
+value bigint_zero_check : Task Text Bool = pure (isZero zero)
+
+@test
+value bigint_neg_check : Task Text Bool = pure (isNegative (neg (fromInt 1)))
+
+@test
+value bigint_toText_basic : Task Text Bool = pure (toText (fromInt 42) == "42")
+
+export (
+    fromInt
+    fromText
+    toInt
+    toText
+    add
+    sub
+    mul
+    div
+    bigMod
+    pow
+    neg
+    bigAbs
+    cmp
+    bigEq
+    gt
+    lt
+    parse
+    fromInteger
+    plus
+    minus
+    times
+    dividedBy
+    remainder
+    raiseTo
+    negate
+    absolute
+    equals
+    greaterThan
+    lessThan
+    greaterOrEqual
+    lessOrEqual
+    zero
+    one
+    negOne
+    isZero
+    isPositive
+    isNegative
+    factorial
+)

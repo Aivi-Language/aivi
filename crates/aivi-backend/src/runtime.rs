@@ -3925,6 +3925,23 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         | IntrinsicValue::HttpHead => 1,
         IntrinsicValue::HttpPostJson => 2,
         IntrinsicValue::HttpPost | IntrinsicValue::HttpPut => 3,
+        // BigInt intrinsics
+        IntrinsicValue::BigIntFromInt
+        | IntrinsicValue::BigIntFromText
+        | IntrinsicValue::BigIntToInt
+        | IntrinsicValue::BigIntToText
+        | IntrinsicValue::BigIntNeg
+        | IntrinsicValue::BigIntAbs => 1,
+        IntrinsicValue::BigIntAdd
+        | IntrinsicValue::BigIntSub
+        | IntrinsicValue::BigIntMul
+        | IntrinsicValue::BigIntDiv
+        | IntrinsicValue::BigIntMod
+        | IntrinsicValue::BigIntPow
+        | IntrinsicValue::BigIntCmp
+        | IntrinsicValue::BigIntEq
+        | IntrinsicValue::BigIntGt
+        | IntrinsicValue::BigIntLt => 2,
     }
 }
 
@@ -4913,6 +4930,97 @@ fn evaluate_intrinsic_value(
                 body: expect_intrinsic_text(kernel, expr, value, 2, body)?,
             }))
         }
+        // BigInt intrinsics — pure, no I/O
+        (IntrinsicValue::BigIntFromInt, [n]) => {
+            let n = expect_intrinsic_i64(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::BigInt(RuntimeBigInt::from_i64(n)))
+        }
+        (IntrinsicValue::BigIntFromText, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            match RuntimeBigInt::from_decimal_str(&s) {
+                Some(b) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::BigInt(b)))),
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::BigIntToInt, [n]) => {
+            let b = expect_intrinsic_bigint(kernel, expr, value, 0, n)?;
+            match b.to_i64() {
+                Some(n) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(n)))),
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::BigIntToText, [n]) => {
+            let b = expect_intrinsic_bigint(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::Text(b.to_decimal_str()))
+        }
+        (IntrinsicValue::BigIntAdd, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::BigInt(a.bigint_add(&b)))
+        }
+        (IntrinsicValue::BigIntSub, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::BigInt(a.bigint_sub(&b)))
+        }
+        (IntrinsicValue::BigIntMul, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::BigInt(a.bigint_mul(&b)))
+        }
+        (IntrinsicValue::BigIntDiv, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            match a.bigint_div(&b) {
+                Some(r) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::BigInt(r)))),
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::BigIntMod, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            match a.bigint_rem(&b) {
+                Some(r) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::BigInt(r)))),
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::BigIntPow, [base, exp]) => {
+            let base = expect_intrinsic_bigint(kernel, expr, value, 0, base)?;
+            let exp = expect_intrinsic_i64(kernel, expr, value, 1, exp)?.max(0) as u32;
+            Ok(RuntimeValue::BigInt(base.bigint_pow(exp)))
+        }
+        (IntrinsicValue::BigIntNeg, [n]) => {
+            let b = expect_intrinsic_bigint(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::BigInt(b.bigint_neg()))
+        }
+        (IntrinsicValue::BigIntAbs, [n]) => {
+            let b = expect_intrinsic_bigint(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::BigInt(b.bigint_abs()))
+        }
+        (IntrinsicValue::BigIntCmp, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Int(match a.cmp(&b) {
+                std::cmp::Ordering::Less => -1,
+                std::cmp::Ordering::Equal => 0,
+                std::cmp::Ordering::Greater => 1,
+            }))
+        }
+        (IntrinsicValue::BigIntEq, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Bool(a == b))
+        }
+        (IntrinsicValue::BigIntGt, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Bool(a > b))
+        }
+        (IntrinsicValue::BigIntLt, [a, b]) => {
+            let a = expect_intrinsic_bigint(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_bigint(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Bool(a < b))
+        }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
     }
 }
@@ -5275,6 +5383,25 @@ fn expect_intrinsic_float(
             value,
             index,
             found: found.clone(),
+        }),
+    }
+}
+
+fn expect_intrinsic_bigint(
+    kernel: KernelId,
+    expr: KernelExprId,
+    value: IntrinsicValue,
+    index: usize,
+    argument: &RuntimeValue,
+) -> Result<RuntimeBigInt, EvaluationError> {
+    match strip_signal(argument.clone()) {
+        RuntimeValue::BigInt(found) => Ok(found),
+        found => Err(EvaluationError::InvalidIntrinsicArgument {
+            kernel,
+            expr,
+            value,
+            index,
+            found,
         }),
     }
 }

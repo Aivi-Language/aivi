@@ -102,6 +102,71 @@ impl RuntimeBigInt {
     pub(crate) fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.cmp(&other.0)
     }
+
+    pub(crate) fn from_i64(n: i64) -> Self {
+        Self(BigInt::from(n))
+    }
+
+    pub(crate) fn to_i64(&self) -> Option<i64> {
+        use num_traits::ToPrimitive;
+        self.0.to_i64()
+    }
+
+    pub(crate) fn from_decimal_str(s: &str) -> Option<Self> {
+        s.trim().parse::<BigInt>().ok().map(Self)
+    }
+
+    pub(crate) fn to_decimal_str(&self) -> Box<str> {
+        self.0.to_string().into_boxed_str()
+    }
+
+    pub(crate) fn bigint_add(&self, other: &Self) -> Self {
+        Self(&self.0 + &other.0)
+    }
+
+    pub(crate) fn bigint_sub(&self, other: &Self) -> Self {
+        Self(&self.0 - &other.0)
+    }
+
+    pub(crate) fn bigint_mul(&self, other: &Self) -> Self {
+        Self(&self.0 * &other.0)
+    }
+
+    pub(crate) fn bigint_div(&self, other: &Self) -> Option<Self> {
+        use num_traits::Zero;
+        if other.0.is_zero() { None } else { Some(Self(&self.0 / &other.0)) }
+    }
+
+    pub(crate) fn bigint_rem(&self, other: &Self) -> Option<Self> {
+        use num_traits::Zero;
+        if other.0.is_zero() { None } else { Some(Self(&self.0 % &other.0)) }
+    }
+
+    pub(crate) fn bigint_pow(&self, exp: u32) -> Self {
+        if exp == 0 {
+            return Self(BigInt::from(1u32));
+        }
+        let mut result = BigInt::from(1u32);
+        let mut base = self.0.clone();
+        let mut n = exp;
+        while n > 0 {
+            if n & 1 == 1 {
+                result = result * &base;
+            }
+            base = &base * &base;
+            n >>= 1;
+        }
+        Self(result)
+    }
+
+    pub(crate) fn bigint_neg(&self) -> Self {
+        Self(-self.0.clone())
+    }
+
+    pub(crate) fn bigint_abs(&self) -> Self {
+        use num_traits::Signed;
+        Self(self.0.abs())
+    }
 }
 
 impl std::fmt::Display for RuntimeBigInt {

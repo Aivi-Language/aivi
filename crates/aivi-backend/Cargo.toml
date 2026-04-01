@@ -17,6 +17,7 @@ cranelift-native = "0.130.0"
 cranelift-object = "0.130.0"
 indexmap = "2"
 num-bigint = "0.4.6"
+num-traits = "0.2"
 rust_decimal = "1.40.0"
 
 [dev-dependencies]

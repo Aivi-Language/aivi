@@ -401,6 +401,23 @@ pub enum IntrinsicValue {
     HttpDelete,
     HttpHead,
     HttpPostJson,
+    // BigInt intrinsics (pure/synchronous)
+    BigIntFromInt,
+    BigIntFromText,
+    BigIntToInt,
+    BigIntToText,
+    BigIntAdd,
+    BigIntSub,
+    BigIntMul,
+    BigIntDiv,
+    BigIntMod,
+    BigIntPow,
+    BigIntNeg,
+    BigIntAbs,
+    BigIntCmp,
+    BigIntEq,
+    BigIntGt,
+    BigIntLt,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -530,6 +547,22 @@ impl fmt::Display for IntrinsicValue {
             Self::HttpDelete => f.write_str("aivi.http.delete"),
             Self::HttpHead => f.write_str("aivi.http.head"),
             Self::HttpPostJson => f.write_str("aivi.http.postJson"),
+            Self::BigIntFromInt => f.write_str("aivi.bigint.fromInt"),
+            Self::BigIntFromText => f.write_str("aivi.bigint.fromText"),
+            Self::BigIntToInt => f.write_str("aivi.bigint.toInt"),
+            Self::BigIntToText => f.write_str("aivi.bigint.toText"),
+            Self::BigIntAdd => f.write_str("aivi.bigint.add"),
+            Self::BigIntSub => f.write_str("aivi.bigint.sub"),
+            Self::BigIntMul => f.write_str("aivi.bigint.mul"),
+            Self::BigIntDiv => f.write_str("aivi.bigint.div"),
+            Self::BigIntMod => f.write_str("aivi.bigint.mod"),
+            Self::BigIntPow => f.write_str("aivi.bigint.pow"),
+            Self::BigIntNeg => f.write_str("aivi.bigint.neg"),
+            Self::BigIntAbs => f.write_str("aivi.bigint.abs"),
+            Self::BigIntCmp => f.write_str("aivi.bigint.cmp"),
+            Self::BigIntEq => f.write_str("aivi.bigint.eq"),
+            Self::BigIntGt => f.write_str("aivi.bigint.gt"),
+            Self::BigIntLt => f.write_str("aivi.bigint.lt"),
         }
     }
 }
