@@ -1480,22 +1480,40 @@ impl<'a> Lowerer<'a> {
         let module_segments = module.segments().iter().map(Name::text).collect::<Vec<_>>();
         let module_resolution = self.resolver.resolve(&module_segments);
         if let ImportModuleResolution::Cycle(cycle) = &module_resolution {
-            self.diagnostics.push(
-                Diagnostic::error(format!(
-                    "import cycle detected: {}",
-                    cycle
-                        .modules()
-                        .iter()
-                        .map(|module| module.as_ref())
-                        .collect::<Vec<_>>()
-                        .join(" -> ")
-                ))
-                .with_code(code("import-cycle"))
-                .with_primary_label(
-                    item.base.span,
-                    "this `use` item closes a cycle in the workspace import graph",
-                ),
-            );
+            // A module may import its own intrinsics by name (e.g. `aivi.core.bytes`
+            // importing `length` from `aivi.core.bytes`).  Detect this as a direct
+            // self-import where every requested name is a known intrinsic and suppress
+            // the cycle error in that case.
+            let is_direct_self_import = cycle
+                .modules()
+                .iter()
+                .all(|m| m.as_ref() == module_name);
+            let all_intrinsics = item.imports.iter().all(|import| {
+                import
+                    .path
+                    .segments
+                    .last()
+                    .map(|s| known_import_metadata(&module_name, &s.text).is_some())
+                    .unwrap_or(false)
+            });
+            if !(is_direct_self_import && all_intrinsics) {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "import cycle detected: {}",
+                        cycle
+                            .modules()
+                            .iter()
+                            .map(|module| module.as_ref())
+                            .collect::<Vec<_>>()
+                            .join(" -> ")
+                    ))
+                    .with_code(code("import-cycle"))
+                    .with_primary_label(
+                        item.base.span,
+                        "this `use` item closes a cycle in the workspace import graph",
+                    ),
+                );
+            }
         }
         let mut imports = item
             .imports
@@ -1626,12 +1644,18 @@ impl<'a> Lowerer<'a> {
                     ),
                 }
             }
-            ImportModuleResolution::Cycle(_) => (
-                ImportBindingResolution::Cycle,
-                ImportBindingMetadata::Unknown,
-                None,
-                None,
-            ),
+            ImportModuleResolution::Cycle(_) => {
+                // For direct self-imports, intrinsics are still accessible by name.
+                match known_import_metadata(module_name, imported_name.text()) {
+                    Some(metadata) => (ImportBindingResolution::Resolved, metadata, None, None),
+                    None => (
+                        ImportBindingResolution::Cycle,
+                        ImportBindingMetadata::Unknown,
+                        None,
+                        None,
+                    ),
+                }
+            }
         }
     }
 
@@ -7205,6 +7229,7 @@ fn is_known_module(module: &str) -> bool {
     matches!(
         module,
         "aivi.network" | "aivi.defaults" | "aivi.random" | "aivi.stdio" | "aivi.db"
+            | "aivi.text" | "aivi.time" | "aivi.env" | "aivi.i18n" | "aivi.log"
     )
 }
 
@@ -7789,6 +7814,432 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.desktop.xdg", "configDirs") => Some(intrinsic_import_value(
             IntrinsicValue::XdgConfigDirs,
             list_import_type(primitive_import_type(BuiltinType::Text)),
+        )),
+        // Text intrinsics
+        ("aivi.text", "length") => Some(intrinsic_import_value(
+            IntrinsicValue::TextLength,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Int),
+            ),
+        )),
+        ("aivi.text", "byteLen") => Some(intrinsic_import_value(
+            IntrinsicValue::TextByteLen,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Int),
+            ),
+        )),
+        ("aivi.text", "slice") => Some(intrinsic_import_value(
+            IntrinsicValue::TextSlice,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Text),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.text", "find") => Some(intrinsic_import_value(
+            IntrinsicValue::TextFind,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    option_import_type(primitive_import_type(BuiltinType::Int)),
+                ),
+            ),
+        )),
+        ("aivi.text", "contains") => Some(intrinsic_import_value(
+            IntrinsicValue::TextContains,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
+        ("aivi.text", "startsWith") => Some(intrinsic_import_value(
+            IntrinsicValue::TextStartsWith,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
+        ("aivi.text", "endsWith") => Some(intrinsic_import_value(
+            IntrinsicValue::TextEndsWith,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
+        ("aivi.text", "toUpper") => Some(intrinsic_import_value(
+            IntrinsicValue::TextToUpper,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "toLower") => Some(intrinsic_import_value(
+            IntrinsicValue::TextToLower,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "trim") => Some(intrinsic_import_value(
+            IntrinsicValue::TextTrim,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "trimStart") => Some(intrinsic_import_value(
+            IntrinsicValue::TextTrimStart,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "trimEnd") => Some(intrinsic_import_value(
+            IntrinsicValue::TextTrimEnd,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "replace") => Some(intrinsic_import_value(
+            IntrinsicValue::TextReplace,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Text),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.text", "replaceAll") => Some(intrinsic_import_value(
+            IntrinsicValue::TextReplaceAll,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Text),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.text", "split") => Some(intrinsic_import_value(
+            IntrinsicValue::TextSplit,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    list_import_type(primitive_import_type(BuiltinType::Text)),
+                ),
+            ),
+        )),
+        ("aivi.text", "repeat") => Some(intrinsic_import_value(
+            IntrinsicValue::TextRepeat,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Text),
+                ),
+            ),
+        )),
+        ("aivi.text", "fromInt") => Some(intrinsic_import_value(
+            IntrinsicValue::TextFromInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "parseInt") => Some(intrinsic_import_value(
+            IntrinsicValue::TextParseInt,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                option_import_type(primitive_import_type(BuiltinType::Int)),
+            ),
+        )),
+        ("aivi.text", "fromBool") => Some(intrinsic_import_value(
+            IntrinsicValue::TextFromBool,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Bool),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "parseBool") => Some(intrinsic_import_value(
+            IntrinsicValue::TextParseBool,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                option_import_type(primitive_import_type(BuiltinType::Bool)),
+            ),
+        )),
+        ("aivi.text", "concat") => Some(intrinsic_import_value(
+            IntrinsicValue::TextConcat,
+            arrow_import_type(
+                list_import_type(primitive_import_type(BuiltinType::Text)),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        // Float transcendental intrinsics
+        ("aivi.core.float", "sin") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatSin,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "cos") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatCos,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "tan") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatTan,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "asin") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatAsin,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                option_import_type(primitive_import_type(BuiltinType::Float)),
+            ),
+        )),
+        ("aivi.core.float", "acos") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatAcos,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                option_import_type(primitive_import_type(BuiltinType::Float)),
+            ),
+        )),
+        ("aivi.core.float", "atan") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatAtan,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "atan2") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatAtan2,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Float),
+                    primitive_import_type(BuiltinType::Float),
+                ),
+            ),
+        )),
+        ("aivi.core.float", "exp") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatExp,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "log") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatLog,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                option_import_type(primitive_import_type(BuiltinType::Float)),
+            ),
+        )),
+        ("aivi.core.float", "log2") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatLog2,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                option_import_type(primitive_import_type(BuiltinType::Float)),
+            ),
+        )),
+        ("aivi.core.float", "log10") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatLog10,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                option_import_type(primitive_import_type(BuiltinType::Float)),
+            ),
+        )),
+        ("aivi.core.float", "pow") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatPow,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Float),
+                    option_import_type(primitive_import_type(BuiltinType::Float)),
+                ),
+            ),
+        )),
+        ("aivi.core.float", "hypot") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatHypot,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Float),
+                    primitive_import_type(BuiltinType::Float),
+                ),
+            ),
+        )),
+        ("aivi.core.float", "trunc") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatTrunc,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        ("aivi.core.float", "frac") => Some(intrinsic_import_value(
+            IntrinsicValue::FloatFrac,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Float),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        // Time intrinsics
+        ("aivi.time", "nowMs") => Some(intrinsic_import_value(
+            IntrinsicValue::TimeNowMs,
+            task_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Int),
+            ),
+        )),
+        ("aivi.time", "monotonicMs") => Some(intrinsic_import_value(
+            IntrinsicValue::TimeMonotonicMs,
+            task_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Int),
+            ),
+        )),
+        ("aivi.time", "format") => Some(intrinsic_import_value(
+            IntrinsicValue::TimeFormat,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Text),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.time", "parse") => Some(intrinsic_import_value(
+            IntrinsicValue::TimeParse,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Int),
+                    ),
+                ),
+            ),
+        )),
+        // Env intrinsics
+        ("aivi.env", "get") => Some(intrinsic_import_value(
+            IntrinsicValue::EnvGet,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    option_import_type(primitive_import_type(BuiltinType::Text)),
+                ),
+            ),
+        )),
+        ("aivi.env", "list") => Some(intrinsic_import_value(
+            IntrinsicValue::EnvList,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    list_import_type(ImportValueType::Tuple(vec![
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Text),
+                    ])),
+                ),
+            ),
+        )),
+        // Log intrinsics
+        ("aivi.log", "emit") => Some(intrinsic_import_value(
+            IntrinsicValue::LogEmit,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Unit),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.log", "emitContext") => Some(intrinsic_import_value(
+            IntrinsicValue::LogEmitContext,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        list_import_type(ImportValueType::Tuple(vec![
+                            primitive_import_type(BuiltinType::Text),
+                            primitive_import_type(BuiltinType::Text),
+                        ])),
+                        task_import_type(
+                            primitive_import_type(BuiltinType::Text),
+                            primitive_import_type(BuiltinType::Unit),
+                        ),
+                    ),
+                ),
+            ),
+        )),
+        // Random float intrinsic
+        ("aivi.random", "randomFloat") => Some(intrinsic_import_value(
+            IntrinsicValue::RandomFloat,
+            task_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        // I18n intrinsics
+        ("aivi.i18n", "tr") => Some(intrinsic_import_value(
+            IntrinsicValue::I18nTranslate,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.i18n", "trn") => Some(intrinsic_import_value(
+            IntrinsicValue::I18nTranslatePlural,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Int),
+                        primitive_import_type(BuiltinType::Text),
+                    ),
+                ),
+            ),
         )),
         _ => None,
     }

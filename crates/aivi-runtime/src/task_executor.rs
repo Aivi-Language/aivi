@@ -7,8 +7,8 @@ use std::{
 };
 
 use aivi_backend::{
-    RuntimeDbCommitPlan, RuntimeDbQueryPlan, RuntimeDbStatement, RuntimeDbTaskPlan, RuntimeMap,
-    RuntimeMapEntry, RuntimeTaskPlan, RuntimeValue,
+    RuntimeDbCommitPlan, RuntimeDbQueryPlan, RuntimeDbStatement, RuntimeDbTaskPlan, RuntimeFloat,
+    RuntimeMap, RuntimeMapEntry, RuntimeTaskPlan, RuntimeValue,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -218,6 +218,74 @@ pub fn execute_runtime_task_plan(
                 task_error(format!("json.minify: serialisation error: {error}"))
             })?;
             Ok(RuntimeValue::Text(minified.into()))
+        }
+        // Time intrinsics
+        RuntimeTaskPlan::TimeNowMs => {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            Ok(RuntimeValue::Int(ms))
+        }
+        RuntimeTaskPlan::TimeMonotonicMs => {
+            static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+            let start = START.get_or_init(std::time::Instant::now);
+            let ms = start.elapsed().as_millis() as i64;
+            Ok(RuntimeValue::Int(ms))
+        }
+        RuntimeTaskPlan::TimeFormat { epoch_ms, pattern: _ } => {
+            // Basic fallback: return epoch_ms as decimal text (chrono not available)
+            Ok(RuntimeValue::Text(format!("{epoch_ms}").into()))
+        }
+        RuntimeTaskPlan::TimeParse { text, pattern: _ } => {
+            // Basic fallback: try parsing as epoch ms integer string
+            match text.trim().parse::<i64>() {
+                Ok(ms) => Ok(RuntimeValue::Int(ms)),
+                Err(_) => Err(task_error(format!("cannot parse timestamp: {}", text))),
+            }
+        }
+        // Env intrinsics
+        RuntimeTaskPlan::EnvGet { name } => {
+            Ok(match std::env::var(name.as_ref()) {
+                Ok(val) => RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(val.into()))),
+                Err(_) => RuntimeValue::OptionNone,
+            })
+        }
+        RuntimeTaskPlan::EnvList { prefix } => {
+            let pairs: Vec<RuntimeValue> = std::env::vars()
+                .filter(|(k, _)| prefix.is_empty() || k.starts_with(prefix.as_ref()))
+                .map(|(k, v)| {
+                    RuntimeValue::Tuple(vec![
+                        RuntimeValue::Text(k.into()),
+                        RuntimeValue::Text(v.into()),
+                    ])
+                })
+                .collect();
+            Ok(RuntimeValue::List(pairs))
+        }
+        // Log intrinsics
+        RuntimeTaskPlan::LogEmit { level, message } => {
+            eprintln!("[{level}] {message}");
+            Ok(RuntimeValue::Unit)
+        }
+        RuntimeTaskPlan::LogEmitContext { level, message, context } => {
+            let ctx: Vec<String> = context.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            eprintln!("[{level}] {message} {{{}}}", ctx.join(", "));
+            Ok(RuntimeValue::Unit)
+        }
+        // Random float
+        RuntimeTaskPlan::RandomFloat => {
+            let bytes = read_os_random_bytes(8)?;
+            let array: [u8; 8] = bytes
+                .as_ref()
+                .try_into()
+                .map_err(|_| task_error("random float: unexpected byte buffer size"))?;
+            let bits = u64::from_le_bytes(array);
+            let f = (bits >> 11) as f64 / (1u64 << 53) as f64;
+            RuntimeFloat::new(f)
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| task_error("random float: result is not finite"))
         }
     }
 }

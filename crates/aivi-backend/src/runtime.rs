@@ -246,6 +246,19 @@ pub enum RuntimeTaskPlan {
     JsonKeys { json: Box<str> },
     JsonPretty { json: Box<str> },
     JsonMinify { json: Box<str> },
+    // Time task plans
+    TimeNowMs,
+    TimeMonotonicMs,
+    TimeFormat { epoch_ms: i64, pattern: Box<str> },
+    TimeParse { text: Box<str>, pattern: Box<str> },
+    // Env task plans
+    EnvGet { name: Box<str> },
+    EnvList { prefix: Box<str> },
+    // Log task plans
+    LogEmit { level: Box<str>, message: Box<str> },
+    LogEmitContext { level: Box<str>, message: Box<str>, context: Box<[(Box<str>, Box<str>)]> },
+    // Random float task plan
+    RandomFloat,
 }
 
 impl fmt::Display for RuntimeTaskPlan {
@@ -273,6 +286,19 @@ impl fmt::Display for RuntimeTaskPlan {
             Self::JsonKeys { json } => write!(f, "json.keys({json})"),
             Self::JsonPretty { json } => write!(f, "json.pretty({json})"),
             Self::JsonMinify { json } => write!(f, "json.minify({json})"),
+            Self::TimeNowMs => f.write_str("time.nowMs"),
+            Self::TimeMonotonicMs => f.write_str("time.monotonicMs"),
+            Self::TimeFormat { epoch_ms, pattern } => {
+                write!(f, "time.format({epoch_ms}, {pattern})")
+            }
+            Self::TimeParse { text, pattern } => write!(f, "time.parse({text}, {pattern})"),
+            Self::EnvGet { name } => write!(f, "env.get({name})"),
+            Self::EnvList { prefix } => write!(f, "env.list({prefix})"),
+            Self::LogEmit { level, message } => write!(f, "log.emit({level}, {message})"),
+            Self::LogEmitContext { level, message, .. } => {
+                write!(f, "log.emitContext({level}, {message})")
+            }
+            Self::RandomFloat => f.write_str("random.randomFloat"),
         }
     }
 }
@@ -3803,6 +3829,52 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::XdgRuntimeDir => 0,
         IntrinsicValue::XdgDataDirs => 0,
         IntrinsicValue::XdgConfigDirs => 0,
+        // Text intrinsics
+        IntrinsicValue::TextLength
+        | IntrinsicValue::TextByteLen
+        | IntrinsicValue::TextToUpper
+        | IntrinsicValue::TextToLower
+        | IntrinsicValue::TextTrim
+        | IntrinsicValue::TextTrimStart
+        | IntrinsicValue::TextTrimEnd
+        | IntrinsicValue::TextFromInt
+        | IntrinsicValue::TextParseInt
+        | IntrinsicValue::TextFromBool
+        | IntrinsicValue::TextParseBool
+        | IntrinsicValue::TextConcat
+        | IntrinsicValue::I18nTranslate => 1,
+        IntrinsicValue::TextFind
+        | IntrinsicValue::TextContains
+        | IntrinsicValue::TextStartsWith
+        | IntrinsicValue::TextEndsWith
+        | IntrinsicValue::TextSplit
+        | IntrinsicValue::TextRepeat
+        | IntrinsicValue::I18nTranslatePlural => 2,
+        IntrinsicValue::TextSlice
+        | IntrinsicValue::TextReplace
+        | IntrinsicValue::TextReplaceAll => 3,
+        // Float transcendental intrinsics
+        IntrinsicValue::FloatSin
+        | IntrinsicValue::FloatCos
+        | IntrinsicValue::FloatTan
+        | IntrinsicValue::FloatAsin
+        | IntrinsicValue::FloatAcos
+        | IntrinsicValue::FloatAtan
+        | IntrinsicValue::FloatExp
+        | IntrinsicValue::FloatLog
+        | IntrinsicValue::FloatLog2
+        | IntrinsicValue::FloatLog10
+        | IntrinsicValue::FloatTrunc
+        | IntrinsicValue::FloatFrac => 1,
+        IntrinsicValue::FloatAtan2 | IntrinsicValue::FloatPow | IntrinsicValue::FloatHypot => 2,
+        // Time intrinsics
+        IntrinsicValue::TimeNowMs | IntrinsicValue::TimeMonotonicMs | IntrinsicValue::RandomFloat => 0,
+        IntrinsicValue::TimeFormat | IntrinsicValue::TimeParse => 2,
+        // Env intrinsics
+        IntrinsicValue::EnvGet | IntrinsicValue::EnvList => 1,
+        // Log intrinsics
+        IntrinsicValue::LogEmit => 2,
+        IntrinsicValue::LogEmitContext => 3,
     }
 }
 
@@ -4245,6 +4317,471 @@ fn evaluate_intrinsic_value(
         (IntrinsicValue::XdgConfigDirs, []) => {
             let dirs = xdg_search_dirs("XDG_CONFIG_DIRS", &["/etc/xdg"]);
             Ok(RuntimeValue::List(dirs))
+        }
+        // Text intrinsics — pure/synchronous
+        (IntrinsicValue::TextLength, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Int(s.chars().count() as i64))
+        }
+        (IntrinsicValue::TextByteLen, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Int(s.len() as i64))
+        }
+        (IntrinsicValue::TextSlice, [from, to, text]) => {
+            let from = expect_intrinsic_i64(kernel, expr, value, 0, from)?;
+            let to = expect_intrinsic_i64(kernel, expr, value, 1, to)?;
+            let s = expect_intrinsic_text(kernel, expr, value, 2, text)?;
+            let chars: Vec<char> = s.chars().collect();
+            let from = (from.max(0) as usize).min(chars.len());
+            let to = (to.max(0) as usize).min(chars.len()).max(from);
+            let sliced: String = chars[from..to].iter().collect();
+            Ok(RuntimeValue::Text(sliced.into()))
+        }
+        (IntrinsicValue::TextFind, [needle, haystack]) => {
+            let needle = expect_intrinsic_text(kernel, expr, value, 0, needle)?;
+            let haystack = expect_intrinsic_text(kernel, expr, value, 1, haystack)?;
+            match haystack.find(needle.as_ref()) {
+                Some(byte_idx) => {
+                    let char_idx = haystack[..byte_idx].chars().count() as i64;
+                    Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(char_idx))))
+                }
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::TextContains, [needle, haystack]) => {
+            let needle = expect_intrinsic_text(kernel, expr, value, 0, needle)?;
+            let haystack = expect_intrinsic_text(kernel, expr, value, 1, haystack)?;
+            Ok(RuntimeValue::Bool(haystack.contains(needle.as_ref())))
+        }
+        (IntrinsicValue::TextStartsWith, [prefix, text]) => {
+            let prefix = expect_intrinsic_text(kernel, expr, value, 0, prefix)?;
+            let text = expect_intrinsic_text(kernel, expr, value, 1, text)?;
+            Ok(RuntimeValue::Bool(text.starts_with(prefix.as_ref())))
+        }
+        (IntrinsicValue::TextEndsWith, [suffix, text]) => {
+            let suffix = expect_intrinsic_text(kernel, expr, value, 0, suffix)?;
+            let text = expect_intrinsic_text(kernel, expr, value, 1, text)?;
+            Ok(RuntimeValue::Bool(text.ends_with(suffix.as_ref())))
+        }
+        (IntrinsicValue::TextToUpper, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Text(s.to_uppercase().into()))
+        }
+        (IntrinsicValue::TextToLower, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Text(s.to_lowercase().into()))
+        }
+        (IntrinsicValue::TextTrim, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Text(s.trim().into()))
+        }
+        (IntrinsicValue::TextTrimStart, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Text(s.trim_start().into()))
+        }
+        (IntrinsicValue::TextTrimEnd, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Text(s.trim_end().into()))
+        }
+        (IntrinsicValue::TextReplace, [needle, replacement, text]) => {
+            let needle = expect_intrinsic_text(kernel, expr, value, 0, needle)?;
+            let replacement = expect_intrinsic_text(kernel, expr, value, 1, replacement)?;
+            let text = expect_intrinsic_text(kernel, expr, value, 2, text)?;
+            let result = text.replacen(needle.as_ref(), replacement.as_ref(), 1);
+            Ok(RuntimeValue::Text(result.into()))
+        }
+        (IntrinsicValue::TextReplaceAll, [needle, replacement, text]) => {
+            let needle = expect_intrinsic_text(kernel, expr, value, 0, needle)?;
+            let replacement = expect_intrinsic_text(kernel, expr, value, 1, replacement)?;
+            let text = expect_intrinsic_text(kernel, expr, value, 2, text)?;
+            Ok(RuntimeValue::Text(
+                text.replace(needle.as_ref(), replacement.as_ref()).into(),
+            ))
+        }
+        (IntrinsicValue::TextSplit, [separator, text]) => {
+            let sep = expect_intrinsic_text(kernel, expr, value, 0, separator)?;
+            let text = expect_intrinsic_text(kernel, expr, value, 1, text)?;
+            let parts: Vec<RuntimeValue> = text
+                .split(sep.as_ref())
+                .map(|p| RuntimeValue::Text(p.into()))
+                .collect();
+            Ok(RuntimeValue::List(parts))
+        }
+        (IntrinsicValue::TextRepeat, [count, text]) => {
+            let count = expect_intrinsic_i64(kernel, expr, value, 0, count)?.max(0) as usize;
+            let text = expect_intrinsic_text(kernel, expr, value, 1, text)?;
+            Ok(RuntimeValue::Text(text.repeat(count).into()))
+        }
+        (IntrinsicValue::TextFromInt, [n]) => {
+            let n = expect_intrinsic_i64(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::Text(n.to_string().into()))
+        }
+        (IntrinsicValue::TextParseInt, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            match s.trim().parse::<i64>() {
+                Ok(n) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(n)))),
+                Err(_) => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::TextFromBool, [b]) => {
+            let bv = match strip_signal(b.clone()) {
+                RuntimeValue::Bool(v) => v,
+                found => {
+                    return Err(EvaluationError::InvalidIntrinsicArgument {
+                        kernel,
+                        expr,
+                        value,
+                        index: 0,
+                        found,
+                    });
+                }
+            };
+            Ok(RuntimeValue::Text(if bv { "True" } else { "False" }.into()))
+        }
+        (IntrinsicValue::TextParseBool, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            match s.trim() {
+                "True" => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(true)))),
+                "False" => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(false)))),
+                _ => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        (IntrinsicValue::TextConcat, [list]) => {
+            let parts = match strip_signal(list.clone()) {
+                RuntimeValue::List(v) => v,
+                found => {
+                    return Err(EvaluationError::InvalidIntrinsicArgument {
+                        kernel,
+                        expr,
+                        value,
+                        index: 0,
+                        found,
+                    });
+                }
+            };
+            let mut result = String::new();
+            for part in &parts {
+                if let RuntimeValue::Text(t) = strip_signal(part.clone()) {
+                    result.push_str(&t);
+                }
+            }
+            Ok(RuntimeValue::Text(result.into()))
+        }
+        // Float transcendental intrinsics — pure/synchronous
+        (IntrinsicValue::FloatSin, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.sin())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatSin,
+                    reason: "sin result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatCos, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.cos())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatCos,
+                    reason: "cos result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatTan, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.tan())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatTan,
+                    reason: "tan result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatAsin, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            let result = f.asin();
+            if result.is_finite() {
+                Ok(RuntimeValue::OptionSome(Box::new(
+                    RuntimeFloat::new(result)
+                        .map(RuntimeValue::Float)
+                        .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                            kernel,
+                            expr,
+                            value: IntrinsicValue::FloatAsin,
+                            reason: "asin result is not finite",
+                        })?,
+                )))
+            } else {
+                Ok(RuntimeValue::OptionNone)
+            }
+        }
+        (IntrinsicValue::FloatAcos, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            let result = f.acos();
+            if result.is_finite() {
+                Ok(RuntimeValue::OptionSome(Box::new(
+                    RuntimeFloat::new(result)
+                        .map(RuntimeValue::Float)
+                        .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                            kernel,
+                            expr,
+                            value: IntrinsicValue::FloatAcos,
+                            reason: "acos result is not finite",
+                        })?,
+                )))
+            } else {
+                Ok(RuntimeValue::OptionNone)
+            }
+        }
+        (IntrinsicValue::FloatAtan, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.atan())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatAtan,
+                    reason: "atan result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatAtan2, [y, x]) => {
+            let y = expect_intrinsic_float(kernel, expr, value, 0, y)?;
+            let x = expect_intrinsic_float(kernel, expr, value, 1, x)?;
+            RuntimeFloat::new(y.atan2(x))
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatAtan2,
+                    reason: "atan2 result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatExp, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.exp())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatExp,
+                    reason: "exp result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatLog, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            if f > 0.0 {
+                Ok(RuntimeValue::OptionSome(Box::new(
+                    RuntimeFloat::new(f.ln())
+                        .map(RuntimeValue::Float)
+                        .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                            kernel,
+                            expr,
+                            value: IntrinsicValue::FloatLog,
+                            reason: "log result is not finite",
+                        })?,
+                )))
+            } else {
+                Ok(RuntimeValue::OptionNone)
+            }
+        }
+        (IntrinsicValue::FloatLog2, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            if f > 0.0 {
+                Ok(RuntimeValue::OptionSome(Box::new(
+                    RuntimeFloat::new(f.log2())
+                        .map(RuntimeValue::Float)
+                        .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                            kernel,
+                            expr,
+                            value: IntrinsicValue::FloatLog2,
+                            reason: "log2 result is not finite",
+                        })?,
+                )))
+            } else {
+                Ok(RuntimeValue::OptionNone)
+            }
+        }
+        (IntrinsicValue::FloatLog10, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            if f > 0.0 {
+                Ok(RuntimeValue::OptionSome(Box::new(
+                    RuntimeFloat::new(f.log10())
+                        .map(RuntimeValue::Float)
+                        .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                            kernel,
+                            expr,
+                            value: IntrinsicValue::FloatLog10,
+                            reason: "log10 result is not finite",
+                        })?,
+                )))
+            } else {
+                Ok(RuntimeValue::OptionNone)
+            }
+        }
+        (IntrinsicValue::FloatPow, [base, exp]) => {
+            let base = expect_intrinsic_float(kernel, expr, value, 0, base)?;
+            let exp = expect_intrinsic_float(kernel, expr, value, 1, exp)?;
+            let result = base.powf(exp);
+            if result.is_finite() {
+                Ok(RuntimeValue::OptionSome(Box::new(
+                    RuntimeFloat::new(result)
+                        .map(RuntimeValue::Float)
+                        .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                            kernel,
+                            expr,
+                            value: IntrinsicValue::FloatPow,
+                            reason: "pow result is not finite",
+                        })?,
+                )))
+            } else {
+                Ok(RuntimeValue::OptionNone)
+            }
+        }
+        (IntrinsicValue::FloatHypot, [a, b]) => {
+            let a = expect_intrinsic_float(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_float(kernel, expr, value, 1, b)?;
+            RuntimeFloat::new(a.hypot(b))
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatHypot,
+                    reason: "hypot result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatTrunc, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.trunc())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatTrunc,
+                    reason: "trunc result is not finite",
+                })
+        }
+        (IntrinsicValue::FloatFrac, [n]) => {
+            let f = expect_intrinsic_float(kernel, expr, value, 0, n)?;
+            RuntimeFloat::new(f.fract())
+                .map(RuntimeValue::Float)
+                .ok_or_else(|| EvaluationError::IntrinsicFailed {
+                    kernel,
+                    expr,
+                    value: IntrinsicValue::FloatFrac,
+                    reason: "frac result is not finite",
+                })
+        }
+        // Time intrinsics — Task-returning
+        (IntrinsicValue::TimeNowMs, []) => Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeNowMs)),
+        (IntrinsicValue::TimeMonotonicMs, []) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeMonotonicMs))
+        }
+        (IntrinsicValue::TimeFormat, [ms, pattern]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeFormat {
+                epoch_ms: expect_intrinsic_i64(kernel, expr, value, 0, ms)?,
+                pattern: expect_intrinsic_text(kernel, expr, value, 1, pattern)?,
+            }))
+        }
+        (IntrinsicValue::TimeParse, [text, pattern]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeParse {
+                text: expect_intrinsic_text(kernel, expr, value, 0, text)?,
+                pattern: expect_intrinsic_text(kernel, expr, value, 1, pattern)?,
+            }))
+        }
+        // Env intrinsics — Task-returning
+        (IntrinsicValue::EnvGet, [name]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::EnvGet {
+            name: expect_intrinsic_text(kernel, expr, value, 0, name)?,
+        })),
+        (IntrinsicValue::EnvList, [prefix]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::EnvList {
+            prefix: expect_intrinsic_text(kernel, expr, value, 0, prefix)?,
+        })),
+        // Log intrinsics — Task-returning
+        (IntrinsicValue::LogEmit, [level, message]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::LogEmit {
+                level: expect_intrinsic_text(kernel, expr, value, 0, level)?,
+                message: expect_intrinsic_text(kernel, expr, value, 1, message)?,
+            }))
+        }
+        (IntrinsicValue::LogEmitContext, [level, message, context]) => {
+            let level = expect_intrinsic_text(kernel, expr, value, 0, level)?;
+            let message = expect_intrinsic_text(kernel, expr, value, 1, message)?;
+            let context_list = match strip_signal(context.clone()) {
+                RuntimeValue::List(v) => v,
+                found => {
+                    return Err(EvaluationError::InvalidIntrinsicArgument {
+                        kernel,
+                        expr,
+                        value,
+                        index: 2,
+                        found,
+                    });
+                }
+            };
+            let mut pairs: Vec<(Box<str>, Box<str>)> = Vec::with_capacity(context_list.len());
+            for entry in &context_list {
+                match strip_signal(entry.clone()) {
+                    RuntimeValue::Tuple(elements) if elements.len() == 2 => {
+                        let k = match strip_signal(elements[0].clone()) {
+                            RuntimeValue::Text(t) => t,
+                            found => {
+                                return Err(EvaluationError::InvalidIntrinsicArgument {
+                                    kernel,
+                                    expr,
+                                    value,
+                                    index: 2,
+                                    found,
+                                });
+                            }
+                        };
+                        let v = match strip_signal(elements[1].clone()) {
+                            RuntimeValue::Text(t) => t,
+                            found => {
+                                return Err(EvaluationError::InvalidIntrinsicArgument {
+                                    kernel,
+                                    expr,
+                                    value,
+                                    index: 2,
+                                    found,
+                                });
+                            }
+                        };
+                        pairs.push((k, v));
+                    }
+                    found => {
+                        return Err(EvaluationError::InvalidIntrinsicArgument {
+                            kernel,
+                            expr,
+                            value,
+                            index: 2,
+                            found,
+                        });
+                    }
+                }
+            }
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::LogEmitContext {
+                level,
+                message,
+                context: pairs.into_boxed_slice(),
+            }))
+        }
+        // Random float — Task-returning
+        (IntrinsicValue::RandomFloat, []) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomFloat))
+        }
+        // I18n intrinsics — pure/synchronous
+        (IntrinsicValue::I18nTranslate, [text]) => {
+            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(RuntimeValue::Text(s))
+        }
+        (IntrinsicValue::I18nTranslatePlural, [singular, plural, count]) => {
+            let singular = expect_intrinsic_text(kernel, expr, value, 0, singular)?;
+            let plural = expect_intrinsic_text(kernel, expr, value, 1, plural)?;
+            let count = expect_intrinsic_i64(kernel, expr, value, 2, count)?;
+            Ok(RuntimeValue::Text(if count == 1 { singular } else { plural }))
         }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
     }

@@ -11306,6 +11306,168 @@ impl<'a> GateTypeContext<'a> {
             }
             IntrinsicValue::XdgDataDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
             IntrinsicValue::XdgConfigDirs => GateType::List(Box::new(primitive(BuiltinType::Text))),
+            // Text intrinsics
+            IntrinsicValue::TextLength | IntrinsicValue::TextByteLen => {
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Int))
+            }
+            IntrinsicValue::TextSlice => arrow(
+                primitive(BuiltinType::Int),
+                arrow(
+                    primitive(BuiltinType::Int),
+                    arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                ),
+            ),
+            IntrinsicValue::TextFind => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    option(primitive(BuiltinType::Int)),
+                ),
+            ),
+            IntrinsicValue::TextContains
+            | IntrinsicValue::TextStartsWith
+            | IntrinsicValue::TextEndsWith => arrow(
+                primitive(BuiltinType::Text),
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Bool)),
+            ),
+            IntrinsicValue::TextToUpper
+            | IntrinsicValue::TextToLower
+            | IntrinsicValue::TextTrim
+            | IntrinsicValue::TextTrimStart
+            | IntrinsicValue::TextTrimEnd => {
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text))
+            }
+            IntrinsicValue::TextReplace | IntrinsicValue::TextReplaceAll => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                ),
+            ),
+            IntrinsicValue::TextSplit => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    list(primitive(BuiltinType::Text)),
+                ),
+            ),
+            IntrinsicValue::TextRepeat => arrow(
+                primitive(BuiltinType::Int),
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+            ),
+            IntrinsicValue::TextFromInt => {
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Text))
+            }
+            IntrinsicValue::TextParseInt => {
+                arrow(primitive(BuiltinType::Text), option(primitive(BuiltinType::Int)))
+            }
+            IntrinsicValue::TextFromBool => {
+                arrow(primitive(BuiltinType::Bool), primitive(BuiltinType::Text))
+            }
+            IntrinsicValue::TextParseBool => {
+                arrow(primitive(BuiltinType::Text), option(primitive(BuiltinType::Bool)))
+            }
+            IntrinsicValue::TextConcat => {
+                arrow(list(primitive(BuiltinType::Text)), primitive(BuiltinType::Text))
+            }
+            // Float transcendental intrinsics
+            IntrinsicValue::FloatSin
+            | IntrinsicValue::FloatCos
+            | IntrinsicValue::FloatTan
+            | IntrinsicValue::FloatAtan
+            | IntrinsicValue::FloatExp
+            | IntrinsicValue::FloatTrunc
+            | IntrinsicValue::FloatFrac => {
+                arrow(primitive(BuiltinType::Float), primitive(BuiltinType::Float))
+            }
+            IntrinsicValue::FloatAsin | IntrinsicValue::FloatAcos => {
+                arrow(primitive(BuiltinType::Float), option(primitive(BuiltinType::Float)))
+            }
+            IntrinsicValue::FloatLog
+            | IntrinsicValue::FloatLog2
+            | IntrinsicValue::FloatLog10 => {
+                arrow(primitive(BuiltinType::Float), option(primitive(BuiltinType::Float)))
+            }
+            IntrinsicValue::FloatAtan2 | IntrinsicValue::FloatHypot => arrow(
+                primitive(BuiltinType::Float),
+                arrow(primitive(BuiltinType::Float), primitive(BuiltinType::Float)),
+            ),
+            IntrinsicValue::FloatPow => arrow(
+                primitive(BuiltinType::Float),
+                arrow(
+                    primitive(BuiltinType::Float),
+                    option(primitive(BuiltinType::Float)),
+                ),
+            ),
+            // Time intrinsics
+            IntrinsicValue::TimeNowMs | IntrinsicValue::TimeMonotonicMs => {
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Int))
+            }
+            IntrinsicValue::TimeFormat => arrow(
+                primitive(BuiltinType::Int),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                ),
+            ),
+            IntrinsicValue::TimeParse => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Int)),
+                ),
+            ),
+            // Env intrinsics
+            IntrinsicValue::EnvGet => arrow(
+                primitive(BuiltinType::Text),
+                task(primitive(BuiltinType::Text), option(primitive(BuiltinType::Text))),
+            ),
+            IntrinsicValue::EnvList => arrow(
+                primitive(BuiltinType::Text),
+                task(
+                    primitive(BuiltinType::Text),
+                    list(GateType::Tuple(vec![
+                        primitive(BuiltinType::Text),
+                        primitive(BuiltinType::Text),
+                    ])),
+                ),
+            ),
+            // Log intrinsics
+            IntrinsicValue::LogEmit => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Unit)),
+                ),
+            ),
+            IntrinsicValue::LogEmitContext => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    arrow(
+                        list(GateType::Tuple(vec![
+                            primitive(BuiltinType::Text),
+                            primitive(BuiltinType::Text),
+                        ])),
+                        task(primitive(BuiltinType::Text), primitive(BuiltinType::Unit)),
+                    ),
+                ),
+            ),
+            // Random float intrinsic
+            IntrinsicValue::RandomFloat => {
+                task(primitive(BuiltinType::Text), primitive(BuiltinType::Float))
+            }
+            // I18n intrinsics
+            IntrinsicValue::I18nTranslate => {
+                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text))
+            }
+            IntrinsicValue::I18nTranslatePlural => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Text)),
+                ),
+            ),
         }
     }
 
