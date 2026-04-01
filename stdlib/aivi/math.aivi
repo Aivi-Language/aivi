@@ -47,11 +47,98 @@ type Int -> Int -> Bool
 func divides = divisor n =>
     n % divisor == 0
 
+type Int -> Int -> Int
+func gcd = a b => b == 0
+ T|> abs a
+ F|> gcd b (a % b)
+
+type Int -> Int -> Int
+func lcmHelper = a b =>
+    abs (a * b / gcd a b)
+
+type Int -> Bool -> Int -> Int
+func lcmCheckB = a bIsZero b => bIsZero
+ T|> 0
+ F|> lcmHelper a b
+
+type Int -> Int -> Int
+func lcm = a b => a == 0
+ T|> 0
+ F|> lcmCheckB a (b == 0) b
+
+type Int -> Int -> Int -> Int
+func powHelper = base exp acc => exp == 0
+ T|> acc
+ F|> powHelper base (exp - 1) (acc * base)
+
+type Int -> Int -> Int
+func pow = base exp => exp < 0
+ T|> 0
+ F|> powHelper base exp 1
+
+type Int -> List Int -> List Int
+func digitsHelper = n acc => n == 0
+ T|> acc
+ F|> digitsHelper (n / 10) (append [n % 10] acc)
+
+type Int -> List Int
+func digits = n => n == 0
+ T|> [0]
+ F|> digitsHelper (abs n) []
+
+type Int -> Int -> Int
+func fromDigitsStep = acc d =>
+    acc * 10 + d
+
+type List Int -> Int
+func fromDigits = ds => ds
+    |> reduce fromDigitsStep 0
+
+type Int -> Int -> Bool
+func checkDivisor = n d => n % d == 0
+ T|> True
+ F|> hasDivisorFrom n (d + 1)
+
+type Int -> Int -> Bool
+func hasDivisorFrom = n d => d * d > n
+ T|> False
+ F|> checkDivisor n d
+
+type Int -> Bool
+func isPrimeAbove2 = n => isEven n
+ T|> False
+ F|> hasDivisorFrom n 3
+
+type Int -> Bool
+func isPrimeAbove1 = n => n == 2
+ T|> True
+ F|> isPrimeAbove2 n
+
+type Int -> Bool
+func isPrime = n => n < 2
+ T|> False
+ F|> isPrimeAbove1 n
+
 @test
 value abs_handles_negative : Task Text Bool = pure (abs (0 - 4) == 4)
 
 @test
 value even_detects_even : Task Text Bool = pure (isEven 6)
+
+@test
+value gcd_of_12_and_8 : Task Text Bool = pure (gcd 12 8 == 4)
+
+@test
+value lcm_of_4_and_6 : Task Text Bool = pure (lcm 4 6 == 12)
+
+@test
+value pow_2_to_10 : Task Text Bool = pure (pow 2 10 == 1024)
+
+@test
+value digits_of_123 : Task Text Bool = pure (digits 123 == [1, 2, 3])
+
+@test
+value seven_is_prime : Task Text Bool = pure (isPrime 7)
 
 export abs
 export negate
@@ -62,3 +149,9 @@ export square
 export clamp
 export between
 export divides
+export gcd
+export lcm
+export pow
+export digits
+export fromDigits
+export isPrime

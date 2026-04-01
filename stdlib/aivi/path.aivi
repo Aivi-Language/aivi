@@ -1,3 +1,5 @@
+use aivi.path (parent, filename, stem, extension, join, isAbsolute, normalize)
+
 type PathError =
   | InvalidPath Text
   | PathNotFound Text
@@ -18,4 +20,20 @@ domain Path over Text
     type Path -> Option Text
     ext
 
-export (Path, PathError, InvalidPath, PathNotFound)
+type Text -> Bool
+func hasExtension = path => extension path
+ T|> True
+ F|> False
+
+type Text -> Bool
+func isRelative = path => isAbsolute path
+ T|> False
+ F|> True
+
+@test
+value has_extension_for_dotted : Task Text Bool = pure (hasExtension "foo.txt")
+
+@test
+value is_relative_for_local : Task Text Bool = pure (isRelative "foo/bar.txt")
+
+export (Path, PathError, InvalidPath, PathNotFound, parent, filename, stem, extension, join, isAbsolute, normalize, hasExtension, isRelative)
