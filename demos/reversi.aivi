@@ -1,3 +1,8 @@
+use aivi.list (
+    head as listHead
+    tailOrEmpty as listTailOrEmpty
+)
+
 type Disc =
   | Empty
   | Red
@@ -16,6 +21,11 @@ type Status =
   | Active Turn
   | Passed Turn
   | Finished Outcome
+
+type AnimState =
+  | Idle
+  | Previewing Coord (List Coord) Int
+  | Flipping Coord (List Coord) (List Coord)
 
 type Ray =
   | NorthWest
@@ -43,7 +53,8 @@ type GameState = {
     computerCount: Int,
     moveNumber: Int,
     lastMove: Option Coord,
-    lastFlips: List Coord
+    lastFlips: List Coord,
+    animState: AnimState
 }
 
 type Candidate = {
@@ -501,7 +512,8 @@ func makeState = board moveNumber lastMove lastFlips humanCount computerCount re
         computerCount: computerCount,
         moveNumber: moveNumber,
         lastMove: lastMove,
-        lastFlips: lastFlips
+        lastFlips: lastFlips,
+        animState: Idle
     }
 
 value initialBoard : (List (List Disc)) =
@@ -524,10 +536,14 @@ value initial : GameState = {
     computerCount: 2,
     moveNumber: 0,
     lastMove: None,
-    lastFlips: []
+    lastFlips: [],
+    animState: Idle
 }
 
 value noFlips : List Coord = []
+value previewBlinkCycleTicks = 6
+value previewBlinkVisibleTicks = 3
+value previewLastTick = 17
 
 type Int -> Bool
 func oneFromEdge = n=>    n == 1 or n == lastIndex - 1
@@ -608,9 +624,47 @@ type Coord -> GameState -> GameState
 func handleTryPlace = coord state=> (humanToAct state.status, coordInList coord state.legalMoves) ||> (True, True)  -> applyTurnMove state Human coord
  ||> _             -> state
 
+type GameState -> (List (List Disc)) -> AnimState -> GameState
+func computerAnimState = state board animState=>    {
+        board: board,
+        status: Active Computer,
+        legalMoves: [],
+        humanCount: countDisc Red board,
+        computerCount: countDisc Blue board,
+        moveNumber: state.moveNumber,
+        lastMove: state.lastMove,
+        lastFlips: state.lastFlips,
+        animState: animState
+    }
+
+type GameState -> Coord -> (List Coord) -> GameState
+func beginComputerPreview = state coord flips=>    computerAnimState state state.board (Previewing coord flips 0)
+
+type GameState -> Coord -> (List Coord) -> GameState
+func beginComputerFlips = state coord flips=>    computerAnimState state (put coord (discForTurn Computer) state.board) (Flipping coord flips flips)
+
+type GameState -> Coord -> (List Coord) -> Int -> GameState
+func advanceComputerPreview = state coord flips tick=> tick >= previewLastTick T|> beginComputerFlips state coord flips
+ F|> computerAnimState state state.board (Previewing coord flips (tick + 1))
+
+type GameState -> Coord -> (List Coord) -> GameState
+func finishComputerAnimation = state coord flips=>    makeState state.board (state.moveNumber + 1) (Some coord) flips (countDisc Red state.board) (countDisc Blue state.board) (advanceTurn state.board Human)
+
+type GameState -> Coord -> (List Coord) -> Coord -> (List Coord) -> GameState
+func continueComputerFlips = state coord flips nextFlip remaining=>    computerAnimState state (setDisc state.board nextFlip (discForTurn Computer)) (Flipping coord flips (listTailOrEmpty remaining))
+
+type GameState -> Coord -> (List Coord) -> (List Coord) -> GameState
+func advanceComputerFlips = state coord flips remaining=> listHead remaining ||> Some nextFlip -> continueComputerFlips state coord flips nextFlip remaining
+ ||> None          -> finishComputerAnimation state coord flips
+
 type GameState -> GameState
-func runComputerTurn = state=> bestComputerMove state.board state.legalMoves ||> Some candidate -> applyTurnMove state Computer candidate.coord
+func startComputerAnim = state=> bestComputerMove state.board state.legalMoves ||> Some candidate -> beginComputerPreview state candidate.coord (flipsForMove state.board (discForTurn Computer) candidate.coord)
  ||> None           -> makeState state.board state.moveNumber state.lastMove noFlips state.humanCount state.computerCount (advanceTurn state.board Computer)
+
+type GameState -> GameState
+func runComputerTurn = state=> state.animState ||> Idle                           -> startComputerAnim state
+ ||> Previewing coord flips tick    -> advanceComputerPreview state coord flips tick
+ ||> Flipping coord flips remaining -> advanceComputerFlips state coord flips remaining
 
 type GameState -> GameState
 func handleComputerTurn = state=> computerToAct state.status T|> runComputerTurn state
@@ -632,11 +686,13 @@ func statusLabel = status=> status ||> Active Human     -> "You are red"
  ||> Finished outcome -> outcomeText outcome
 
 type GameState -> Text
-func titlebarHintLine = state=> state.status ||> Active Human     -> "Click a marked cell."
- ||> Active Computer  -> "Blue is thinking."
- ||> Passed Human     -> "Red passes."
- ||> Passed Computer  -> "Blue passes."
- ||> Finished _       -> "Restart to play again."
+func titlebarHintLine = state=> (state.status, state.animState) ||> (Active Human, _)              -> "Click a marked cell."
+ ||> (Active Computer, Previewing _ _ _) -> "Blue is placing a stone."
+ ||> (Active Computer, Flipping _ _ _)   -> "Blue is flipping stones."
+ ||> (Active Computer, _)                -> "Blue is thinking."
+ ||> (Passed Human, _)                   -> "Red passes."
+ ||> (Passed Computer, _)                -> "Blue passes."
+ ||> (Finished _, _)                     -> "Restart to play again."
 
 type GameState -> Text
 func scoreLine = state=>    "Red {state.humanCount} | Blue {state.computerCount} | Moves {state.moveNumber}"
@@ -658,14 +714,45 @@ type (Option Coord) -> Coord -> Bool
 func isLastMove = lastMove coord=> lastMove ||> Some lc -> sameCoord lc coord
  ||> None      -> False
 
+type Int -> Bool
+func animStoneVisible = tick=>    tick % previewBlinkCycleTicks < previewBlinkVisibleTicks
+
+type Int -> Float
+func previewOpacityAtTick = tick=>    animStoneVisible tick T|> 1.0
+ F|> 0.0
+
+type Coord -> Coord -> (Option Text)
+func previewLabelAt = animCoord coord=>    sameCoord animCoord coord T|> Some "🔵"
+ F|> None
+
+type AnimState -> Coord -> (Option Text)
+func previewLabel = animState coord=> animState ||> Previewing animCoord _ _ -> previewLabelAt animCoord coord
+ ||> _                         -> None
+
+type Coord -> Int -> Coord -> Float
+func previewOpacityForCoord = animCoord tick coord=>    sameCoord animCoord coord T|> previewOpacityAtTick tick
+ F|> 1.0
+
+type AnimState -> Coord -> Float
+func cellOpacity = animState coord=> animState ||> Previewing animCoord _ tick -> previewOpacityForCoord animCoord tick coord
+ ||> _                         -> 1.0
+
+type AnimState -> Coord -> Bool
+func cellAnimateOpacity = animState coord=> animState ||> Previewing animCoord _ _ -> sameCoord animCoord coord
+ ||> _                         -> False
+
 type (List (List Disc)) -> Status -> (List Coord) -> (Option Coord) -> (List Coord) -> Coord -> Text
-func cellLabel = board status legalMoves lastMove lastFlips coord=>
+func baseCellLabel = board status legalMoves lastMove lastFlips coord=>
     (discAt board coord, computerToAct status, isLastMove lastMove coord, coordInList coord lastFlips)
  ||> (Red, True, True, _) -> "🎯"
  ||> (Red, True, _, True) -> "🟠"
  ||> (Red, _, _, _)       -> "🔴"
  ||> (Blue, _, _, _)      -> "🔵"
  ||> (Empty, _, _, _)     -> emptyCellLabel status legalMoves coord
+
+type (List (List Disc)) -> Status -> (List Coord) -> (Option Coord) -> (List Coord) -> AnimState -> Coord -> Text
+func cellLabel = board status legalMoves lastMove lastFlips animState coord=> previewLabel animState coord ||> Some label -> label
+ ||> None       -> baseCellLabel board status legalMoves lastMove lastFlips coord
 
 type GameState -> Coord -> Bool
 func cellEnabled = state coord=> (humanToAct state.status, coordInList coord state.legalMoves) ||> (True, True)  -> True
@@ -720,9 +807,11 @@ value main =
                         <each of={boardIndices} as={x} key={x}>
                             <with value={Coord x y} as={coord}>
                                 <Button
-                                    label={cellLabel currentState.board currentState.status currentState.legalMoves currentState.lastMove currentState.lastFlips coord}
+                                    label={cellLabel currentState.board currentState.status currentState.legalMoves currentState.lastMove currentState.lastFlips currentState.animState coord}
                                     onClick={placeCoord coord}
                                     sensitive={cellEnabled currentState coord}
+                                    animateOpacity={cellAnimateOpacity currentState.animState coord}
+                                    opacity={cellOpacity currentState.animState coord}
                                     compact
                                     hasFrame={False}
                                     widthRequest={52}

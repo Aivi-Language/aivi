@@ -42,6 +42,10 @@ button.aivi-compact-button {
     min-width: 0;
     min-height: 0;
 }
+
+button.aivi-animate-opacity {
+    transition: opacity 220ms ease-in-out;
+}
 "#;
 
 thread_local! {
@@ -489,6 +493,13 @@ where
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::Hexpand) => widget.set_hexpand(value),
             GtkPropertySetter::Bool(GtkBoolPropertySetter::Vexpand) => widget.set_vexpand(value),
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::AnimateOpacity) => {
+                if value {
+                    widget.add_css_class("aivi-animate-opacity");
+                } else {
+                    widget.remove_css_class("aivi-animate-opacity");
+                }
+            }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::Monospace) => {
                 if value {
                     widget.add_css_class("monospace");
@@ -895,6 +906,10 @@ where
         value: f64,
     ) -> Result<(), GtkConcreteHostError> {
         match property.setter {
+            GtkPropertySetter::F64(GtkF64PropertySetter::WidgetOpacity) => {
+                widget.set_opacity(value.clamp(0.0, 1.0));
+                Ok(())
+            }
             GtkPropertySetter::F64(GtkF64PropertySetter::ProgressBarFraction) => {
                 widget
                     .clone()
@@ -2357,7 +2372,7 @@ value view =
                 </HeaderBar.end>
             </HeaderBar>
         </Window.titlebar>
-        <Button label="A" compact hasFrame={False} widthRequest={26} heightRequest={26} />
+        <Button label="A" compact hasFrame={False} widthRequest={26} heightRequest={26} animateOpacity opacity={0.35} />
     </Window>
 "#,
             );
@@ -2395,9 +2410,11 @@ value view =
                 .downcast::<gtk::Button>()
                 .expect("window content should be a button");
             assert!(content.has_css_class("aivi-compact-button"));
+            assert!(content.has_css_class("aivi-animate-opacity"));
             assert!(!content.has_frame());
             assert_eq!(content.width_request(), 26);
             assert_eq!(content.height_request(), 26);
+            assert!((content.property::<f64>("opacity") - 0.35).abs() < f64::EPSILON);
         });
     }
 

@@ -117,6 +117,7 @@ pub enum GtkBoolPropertySetter {
     Sensitive,
     Hexpand,
     Vexpand,
+    AnimateOpacity,
     Monospace,
     ButtonCompact,
     ButtonHasFrame,
@@ -164,6 +165,7 @@ pub enum GtkI64PropertySetter {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GtkF64PropertySetter {
+    WidgetOpacity,
     ProgressBarFraction,
 }
 
@@ -352,6 +354,12 @@ const VEXPAND_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::Vexpand),
 };
 
+const ANIMATE_OPACITY_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "animateOpacity",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::AnimateOpacity),
+};
+
 const MONOSPACE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "monospace",
     value_shape: GtkPropertyValueShape::Bool,
@@ -380,6 +388,12 @@ const HEIGHT_REQUEST_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "heightRequest",
     value_shape: GtkPropertyValueShape::I64,
     setter: GtkPropertySetter::I64(GtkI64PropertySetter::HeightRequest),
+};
+
+const OPACITY_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "opacity",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::WidgetOpacity),
 };
 
 const WINDOW_TITLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
@@ -714,10 +728,12 @@ const BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         SENSITIVE_PROPERTY,
         HEXPAND_PROPERTY,
         VEXPAND_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
         BUTTON_COMPACT_PROPERTY,
         BUTTON_HAS_FRAME_PROPERTY,
         WIDTH_REQUEST_PROPERTY,
         HEIGHT_REQUEST_PROPERTY,
+        OPACITY_PROPERTY,
         BUTTON_LABEL_PROPERTY,
     ],
     events: &[BUTTON_CLICK_EVENT],
@@ -1123,6 +1139,8 @@ mod tests {
         assert!(lookup_widget_property(&button, "hasFrame").is_some());
         assert!(lookup_widget_property(&button, "widthRequest").is_some());
         assert!(lookup_widget_property(&button, "heightRequest").is_some());
+        assert!(lookup_widget_property(&button, "animateOpacity").is_some());
+        assert!(lookup_widget_property(&button, "opacity").is_some());
         assert!(lookup_widget_property(&label, "label").is_some());
         assert!(lookup_widget_property(&label, "monospace").is_some());
         assert!(lookup_widget_property(&entry, "text").is_some());

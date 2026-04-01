@@ -1027,10 +1027,6 @@ impl<'a> CraneliftCompiler<'a> {
         enum Task {
             Visit(KernelExprId),
             BuildOptionSome(KernelExprId),
-            BuildText {
-                expr: KernelExprId,
-                fragments: Vec<Option<Box<str>>>,
-            },
             BuildProjection(KernelExprId),
             BuildDirectApply {
                 expr: KernelExprId,
@@ -1523,33 +1519,6 @@ impl<'a> CraneliftCompiler<'a> {
                         }
                     };
                     values.push(value);
-                }
-                Task::BuildText { expr, fragments } => {
-                    let interpolation_count = fragments
-                        .iter()
-                        .filter(|fragment| fragment.is_none())
-                        .count();
-                    let interpolation_values = drain_tail(&mut values, interpolation_count);
-                    let mut interpolation_iter = interpolation_values.into_iter();
-                    let mut parts = Vec::with_capacity(fragments.len());
-                    for fragment in fragments {
-                        match fragment {
-                            Some(raw) if raw.is_empty() => {}
-                            Some(raw) => {
-                                parts.push(self.materialize_text_constant(
-                                    kernel_id,
-                                    raw.as_ref(),
-                                    builder,
-                                )?);
-                            }
-                            None => parts.push(interpolation_iter.next().expect(
-                                "dynamic text interpolation placeholders should align with values",
-                            )),
-                        }
-                    }
-                    values.push(self.lower_dynamic_text_concat(
-                        kernel_id, expr, &parts, builder,
-                    )?);
                 }
                 Task::BuildProjection(expr_id) => {
                     let expr = &kernel.exprs()[expr_id];
@@ -5421,26 +5390,6 @@ impl<'a> CraneliftCompiler<'a> {
         Ok(builder.ins().symbol_value(self.pointer_type(), global))
     }
 
-    fn materialize_text_literal(
-        &mut self,
-        kernel_id: KernelId,
-        kernel: &Kernel,
-        expr_id: KernelExprId,
-        text: &crate::TextLiteral,
-        builder: &mut FunctionBuilder<'_>,
-    ) -> Result<Value, CodegenError> {
-        let rendered = self
-            .render_static_text_literal(kernel_id, kernel, expr_id, text)?
-            .ok_or_else(|| {
-                self.unsupported_expression(
-                    kernel_id,
-                    expr_id,
-                    "text interpolation still requires a native text formatting contract beyond static literal folding",
-                )
-            })?;
-        self.materialize_text_constant(kernel_id, rendered.as_ref(), builder)
-    }
-
     fn lower_intrinsic_value(
         &mut self,
         kernel_id: KernelId,
@@ -5629,16 +5578,6 @@ impl<'a> CraneliftCompiler<'a> {
                 Ok(self.lower_inline_scalar_option_some(kind, payload, builder))
             }
         }
-    }
-
-    fn require_static_scalar_aggregate_expression(
-        &self,
-        kernel_id: KernelId,
-        kernel: &Kernel,
-        expr_id: KernelExprId,
-    ) -> Result<(), CodegenError> {
-        let _ = self.encode_static_scalar_aggregate_constant(kernel_id, kernel, expr_id)?;
-        Ok(())
     }
 
     fn materialize_static_scalar_aggregate_expression(
