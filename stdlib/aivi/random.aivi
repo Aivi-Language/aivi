@@ -1,6 +1,12 @@
+use aivi.random (randomBytes, randomInt)
+
 type RandomError =
   | InsufficientEntropy
 
 type RandomTask = (Task RandomError Bytes)
 
-export (RandomError, InsufficientEntropy, RandomTask)
+type RandomIntTask = (Task Text Int)
+
+type RandomBytesTask = (Task Text Bytes)
+
+export (RandomError, InsufficientEntropy, RandomTask, RandomIntTask, RandomBytesTask, randomBytes, randomInt)

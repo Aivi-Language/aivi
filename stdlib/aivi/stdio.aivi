@@ -1,3 +1,5 @@
+use aivi.stdio (stdoutWrite, stderrWrite)
+
 type WriteError =
   | StdioUnavailable
 
@@ -5,4 +7,19 @@ type Stream = Stdout | Stderr
 
 type StdioTask = (Task WriteError Unit)
 
-export (WriteError, StdioUnavailable, Stream, Stdout, Stderr, StdioTask)
+type StdoutTask = (Task Text Unit)
+
+type StderrTask = (Task Text Unit)
+
+type Text -> Task Text Unit
+func writeLine = text =>
+    stdoutWrite "{text}\n"
+
+type Text -> Task Text Unit
+func writeErrorLine = text =>
+    stderrWrite "{text}\n"
+
+@test
+value testWriteLineType : Task Text Bool = pure True
+
+export (WriteError, StdioUnavailable, Stream, Stdout, Stderr, StdioTask, StdoutTask, StderrTask, stdoutWrite, stderrWrite, writeLine, writeErrorLine)
