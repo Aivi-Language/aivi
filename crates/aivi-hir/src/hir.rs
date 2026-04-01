@@ -385,6 +385,13 @@ pub enum IntrinsicValue {
     // I18n intrinsics (pure/synchronous)
     I18nTranslate,
     I18nTranslatePlural,
+    // Regex intrinsics (Task-returning — bad pattern propagates as error)
+    RegexIsMatch,
+    RegexFind,
+    RegexFindText,
+    RegexFindAll,
+    RegexReplace,
+    RegexReplaceAll,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -500,6 +507,12 @@ impl fmt::Display for IntrinsicValue {
             Self::RandomFloat => f.write_str("aivi.random.randomFloat"),
             Self::I18nTranslate => f.write_str("aivi.i18n.tr"),
             Self::I18nTranslatePlural => f.write_str("aivi.i18n.trn"),
+            Self::RegexIsMatch => f.write_str("aivi.regex.isMatch"),
+            Self::RegexFind => f.write_str("aivi.regex.find"),
+            Self::RegexFindText => f.write_str("aivi.regex.findText"),
+            Self::RegexFindAll => f.write_str("aivi.regex.findAll"),
+            Self::RegexReplace => f.write_str("aivi.regex.replace"),
+            Self::RegexReplaceAll => f.write_str("aivi.regex.replaceAll"),
         }
     }
 }
@@ -1074,6 +1087,9 @@ pub enum ExportResolution {
     Item(ItemId),
     BuiltinTerm(BuiltinTerm),
     BuiltinType(BuiltinType),
+    /// Re-export of an imported binding (e.g. an intrinsic or a name from
+    /// another module forwarded through this one).
+    Import(ImportId),
 }
 
 /// One integer literal preserved in raw form.

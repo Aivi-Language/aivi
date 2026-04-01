@@ -10,6 +10,7 @@ use aivi_backend::{
     RuntimeDbCommitPlan, RuntimeDbQueryPlan, RuntimeDbStatement, RuntimeDbTaskPlan, RuntimeFloat,
     RuntimeMap, RuntimeMapEntry, RuntimeTaskPlan, RuntimeValue,
 };
+use regex::Regex;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeTaskExecutionError {
@@ -286,6 +287,60 @@ pub fn execute_runtime_task_plan(
             RuntimeFloat::new(f)
                 .map(RuntimeValue::Float)
                 .ok_or_else(|| task_error("random float: result is not finite"))
+        }
+        // Regex intrinsics
+        RuntimeTaskPlan::RegexIsMatch { pattern, text } => {
+            let re = Regex::new(pattern.as_ref())
+                .map_err(|e| task_error(format!("regex: {e}")))?;
+            Ok(RuntimeValue::Bool(re.is_match(text.as_ref())))
+        }
+        RuntimeTaskPlan::RegexFind { pattern, text } => {
+            let re = Regex::new(pattern.as_ref())
+                .map_err(|e| task_error(format!("regex: {e}")))?;
+            match re.find(text.as_ref()) {
+                Some(m) => {
+                    let char_idx = text[..m.start()].chars().count() as i64;
+                    Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(char_idx))))
+                }
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        RuntimeTaskPlan::RegexFindText { pattern, text } => {
+            let re = Regex::new(pattern.as_ref())
+                .map_err(|e| task_error(format!("regex: {e}")))?;
+            match re.find(text.as_ref()) {
+                Some(m) => Ok(RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(
+                    m.as_str().into(),
+                )))),
+                None => Ok(RuntimeValue::OptionNone),
+            }
+        }
+        RuntimeTaskPlan::RegexFindAll { pattern, text } => {
+            let re = Regex::new(pattern.as_ref())
+                .map_err(|e| task_error(format!("regex: {e}")))?;
+            let matches: Vec<RuntimeValue> = re
+                .find_iter(text.as_ref())
+                .map(|m| RuntimeValue::Text(m.as_str().into()))
+                .collect();
+            Ok(RuntimeValue::List(matches.into()))
+        }
+        RuntimeTaskPlan::RegexReplace { pattern, replacement, text } => {
+            let re = Regex::new(pattern.as_ref())
+                .map_err(|e| task_error(format!("regex: {e}")))?;
+            Ok(RuntimeValue::Text(
+                re.replacen(text.as_ref(), 1, replacement.as_ref())
+                    .into_owned()
+                    .into(),
+            ))
+        }
+        RuntimeTaskPlan::RegexReplaceAll { pattern, replacement, text } => {
+            let re = Regex::new(pattern.as_ref())
+                .map_err(|e| task_error(format!("regex: {e}")))?;
+            Ok(RuntimeValue::Text(
+                re.replace_all(text.as_ref(), replacement.as_ref())
+                    .into_owned()
+                    .into(),
+            ))
         }
     }
 }

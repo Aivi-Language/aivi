@@ -11468,6 +11468,54 @@ impl<'a> GateTypeContext<'a> {
                     arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Text)),
                 ),
             ),
+            // Regex intrinsics
+            IntrinsicValue::RegexIsMatch => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Bool)),
+                ),
+            ),
+            IntrinsicValue::RegexFind => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(
+                        primitive(BuiltinType::Text),
+                        option(primitive(BuiltinType::Int)),
+                    ),
+                ),
+            ),
+            IntrinsicValue::RegexFindText => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(
+                        primitive(BuiltinType::Text),
+                        option(primitive(BuiltinType::Text)),
+                    ),
+                ),
+            ),
+            IntrinsicValue::RegexFindAll => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    task(
+                        primitive(BuiltinType::Text),
+                        list(primitive(BuiltinType::Text)),
+                    ),
+                ),
+            ),
+            IntrinsicValue::RegexReplace | IntrinsicValue::RegexReplaceAll => arrow(
+                primitive(BuiltinType::Text),
+                arrow(
+                    primitive(BuiltinType::Text),
+                    arrow(
+                        primitive(BuiltinType::Text),
+                        task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                    ),
+                ),
+            ),
         }
     }
 

@@ -259,6 +259,13 @@ pub enum RuntimeTaskPlan {
     LogEmitContext { level: Box<str>, message: Box<str>, context: Box<[(Box<str>, Box<str>)]> },
     // Random float task plan
     RandomFloat,
+    // Regex task plans
+    RegexIsMatch { pattern: Box<str>, text: Box<str> },
+    RegexFind { pattern: Box<str>, text: Box<str> },
+    RegexFindText { pattern: Box<str>, text: Box<str> },
+    RegexFindAll { pattern: Box<str>, text: Box<str> },
+    RegexReplace { pattern: Box<str>, replacement: Box<str>, text: Box<str> },
+    RegexReplaceAll { pattern: Box<str>, replacement: Box<str>, text: Box<str> },
 }
 
 impl fmt::Display for RuntimeTaskPlan {
@@ -299,6 +306,18 @@ impl fmt::Display for RuntimeTaskPlan {
                 write!(f, "log.emitContext({level}, {message})")
             }
             Self::RandomFloat => f.write_str("random.randomFloat"),
+            Self::RegexIsMatch { pattern, text } => write!(f, "regex.isMatch({pattern}, {text})"),
+            Self::RegexFind { pattern, text } => write!(f, "regex.find({pattern}, {text})"),
+            Self::RegexFindText { pattern, text } => {
+                write!(f, "regex.findText({pattern}, {text})")
+            }
+            Self::RegexFindAll { pattern, text } => write!(f, "regex.findAll({pattern}, {text})"),
+            Self::RegexReplace { pattern, replacement, text } => {
+                write!(f, "regex.replace({pattern}, {replacement}, {text})")
+            }
+            Self::RegexReplaceAll { pattern, replacement, text } => {
+                write!(f, "regex.replaceAll({pattern}, {replacement}, {text})")
+            }
         }
     }
 }
@@ -3875,6 +3894,12 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         // Log intrinsics
         IntrinsicValue::LogEmit => 2,
         IntrinsicValue::LogEmitContext => 3,
+        // Regex intrinsics
+        IntrinsicValue::RegexIsMatch
+        | IntrinsicValue::RegexFind
+        | IntrinsicValue::RegexFindText
+        | IntrinsicValue::RegexFindAll => 2,
+        IntrinsicValue::RegexReplace | IntrinsicValue::RegexReplaceAll => 3,
     }
 }
 
@@ -4782,6 +4807,45 @@ fn evaluate_intrinsic_value(
             let plural = expect_intrinsic_text(kernel, expr, value, 1, plural)?;
             let count = expect_intrinsic_i64(kernel, expr, value, 2, count)?;
             Ok(RuntimeValue::Text(if count == 1 { singular } else { plural }))
+        }
+        // Regex intrinsics — Task-returning
+        (IntrinsicValue::RegexIsMatch, [pattern, text]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexIsMatch {
+                pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
+                text: expect_intrinsic_text(kernel, expr, value, 1, text)?,
+            }))
+        }
+        (IntrinsicValue::RegexFind, [pattern, text]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexFind {
+                pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
+                text: expect_intrinsic_text(kernel, expr, value, 1, text)?,
+            }))
+        }
+        (IntrinsicValue::RegexFindText, [pattern, text]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexFindText {
+                pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
+                text: expect_intrinsic_text(kernel, expr, value, 1, text)?,
+            }))
+        }
+        (IntrinsicValue::RegexFindAll, [pattern, text]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexFindAll {
+                pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
+                text: expect_intrinsic_text(kernel, expr, value, 1, text)?,
+            }))
+        }
+        (IntrinsicValue::RegexReplace, [pattern, replacement, text]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexReplace {
+                pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
+                replacement: expect_intrinsic_text(kernel, expr, value, 1, replacement)?,
+                text: expect_intrinsic_text(kernel, expr, value, 2, text)?,
+            }))
+        }
+        (IntrinsicValue::RegexReplaceAll, [pattern, replacement, text]) => {
+            Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexReplaceAll {
+                pattern: expect_intrinsic_text(kernel, expr, value, 0, pattern)?,
+                replacement: expect_intrinsic_text(kernel, expr, value, 1, replacement)?,
+                text: expect_intrinsic_text(kernel, expr, value, 2, text)?,
+            }))
         }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
     }

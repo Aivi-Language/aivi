@@ -1,0 +1,89 @@
+use aivi.regex (
+    isMatch
+    find
+    findText
+    findAll
+    replace
+    replaceAll
+)
+
+// Type aliases for clarity
+type Pattern = Text
+type RegexError = Text
+
+// Test if text matches pattern
+type Pattern -> Text -> Task RegexError Bool
+func matches = pattern => text => isMatch pattern text
+
+// Find first match position (char index)
+type Pattern -> Text -> Task RegexError (Option Int)
+func firstIndex = pattern => text => find pattern text
+
+// Find first match text
+type Pattern -> Text -> Task RegexError (Option Text)
+func firstMatch = pattern => text => findText pattern text
+
+// Find all matches
+type Pattern -> Text -> Task RegexError (List Text)
+func allMatches = pattern => text => findAll pattern text
+
+// Replace first match
+type Pattern -> Text -> Text -> Task RegexError Text
+func replaceFirst = pattern => replacement => text => replace pattern replacement text
+
+// Replace all matches
+type Pattern -> Text -> Text -> Task RegexError Text
+func replaceEach = pattern => replacement => text => replaceAll pattern replacement text
+
+// Check if text has any match
+type Pattern -> Text -> Task RegexError Bool
+func hasMatch = pattern => text => isMatch pattern text
+
+// Common patterns
+value emailPattern : Pattern = "^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$"
+value urlPattern : Pattern = "https?://[^\\s]+"
+value intPattern : Pattern = "^-?[0-9]+$"
+value floatPattern : Pattern = "^-?[0-9]+(\\.[0-9]+)?$"
+value whitespacePattern : Pattern = "\\s+"
+value alphanumPattern : Pattern = "^[a-zA-Z0-9]+$"
+
+// Convenience: test against common patterns
+type Text -> Task RegexError Bool
+func isEmail = text => isMatch emailPattern text
+
+type Text -> Task RegexError Bool
+func isUrl = text => isMatch urlPattern text
+
+type Text -> Task RegexError Bool
+func isIntText = text => isMatch intPattern text
+
+type Text -> Task RegexError Bool
+func isAlphaNum = text => isMatch alphanumPattern text
+
+export (
+    Pattern
+    RegexError
+    isMatch
+    find
+    findText
+    findAll
+    replace
+    replaceAll
+    matches
+    firstIndex
+    firstMatch
+    allMatches
+    replaceFirst
+    replaceEach
+    hasMatch
+    emailPattern
+    urlPattern
+    intPattern
+    floatPattern
+    whitespacePattern
+    alphanumPattern
+    isEmail
+    isUrl
+    isIntText
+    isAlphaNum
+)

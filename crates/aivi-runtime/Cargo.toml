@@ -14,6 +14,7 @@ aivi-typing.workspace = true
 gio = "0.22.2"
 glib = "0.22.3"
 serde_json = "1.0"
+regex = "1"
 url = "2.5"
 
 [dev-dependencies]

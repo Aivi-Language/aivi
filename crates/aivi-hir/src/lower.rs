@@ -6643,6 +6643,17 @@ impl<'a> Lowerer<'a> {
         }
 
         let name = target.segments().first().text();
+
+        // Allow re-exporting imported names (e.g. intrinsics forwarded through
+        // a module's own `use` declaration).
+        if let Some(resolution) = self.resolve_export_import_target(
+            target,
+            &namespaces.term_imports,
+            &namespaces.type_imports,
+        ) {
+            return resolution;
+        }
+
         if let Some(builtin) = builtin_term(name) {
             return ResolutionState::Resolved(ExportResolution::BuiltinTerm(builtin));
         }
@@ -6656,6 +6667,58 @@ impl<'a> Lowerer<'a> {
             code("unknown-export-target"),
         );
         ResolutionState::Unresolved
+    }
+
+    fn resolve_export_import_target(
+        &mut self,
+        target: &NamePath,
+        term_imports: &HashMap<String, Vec<NamedSite<ImportId>>>,
+        type_imports: &HashMap<String, Vec<NamedSite<ImportId>>>,
+    ) -> Option<ResolutionState<ExportResolution>> {
+        let name = target.segments().first().text();
+        let mut candidates: Vec<ImportId> = Vec::new();
+
+        match lookup_item(term_imports, name) {
+            LookupResult::Unique(import_id) => candidates.push(import_id),
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    target.span(),
+                    format!("export `{}` is ambiguous", path_text(target)),
+                    code("ambiguous-export"),
+                );
+                return Some(ResolutionState::Unresolved);
+            }
+            LookupResult::Missing => {}
+        }
+        match lookup_item(type_imports, name) {
+            LookupResult::Unique(import_id) => {
+                if !candidates.contains(&import_id) {
+                    candidates.push(import_id);
+                }
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    target.span(),
+                    format!("export `{}` is ambiguous", path_text(target)),
+                    code("ambiguous-export"),
+                );
+                return Some(ResolutionState::Unresolved);
+            }
+            LookupResult::Missing => {}
+        }
+
+        match candidates.as_slice() {
+            [import_id] => Some(ResolutionState::Resolved(ExportResolution::Import(*import_id))),
+            [] => None,
+            _ => {
+                self.emit_error(
+                    target.span(),
+                    format!("export `{}` is ambiguous", path_text(target)),
+                    code("ambiguous-export"),
+                );
+                Some(ResolutionState::Unresolved)
+            }
+        }
     }
 
     fn resolve_export_item_target(
@@ -7230,6 +7293,7 @@ fn is_known_module(module: &str) -> bool {
         module,
         "aivi.network" | "aivi.defaults" | "aivi.random" | "aivi.stdio" | "aivi.db"
             | "aivi.text" | "aivi.time" | "aivi.env" | "aivi.i18n" | "aivi.log"
+            | "aivi.regex"
     )
 }
 
@@ -8218,6 +8282,91 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
             task_import_type(
                 primitive_import_type(BuiltinType::Text),
                 primitive_import_type(BuiltinType::Float),
+            ),
+        )),
+        // Regex intrinsics
+        ("aivi.regex", "isMatch") => Some(intrinsic_import_value(
+            IntrinsicValue::RegexIsMatch,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Bool),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.regex", "find") => Some(intrinsic_import_value(
+            IntrinsicValue::RegexFind,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        option_import_type(primitive_import_type(BuiltinType::Int)),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.regex", "findText") => Some(intrinsic_import_value(
+            IntrinsicValue::RegexFindText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        option_import_type(primitive_import_type(BuiltinType::Text)),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.regex", "findAll") => Some(intrinsic_import_value(
+            IntrinsicValue::RegexFindAll,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        list_import_type(primitive_import_type(BuiltinType::Text)),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.regex", "replace") => Some(intrinsic_import_value(
+            IntrinsicValue::RegexReplace,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        task_import_type(
+                            primitive_import_type(BuiltinType::Text),
+                            primitive_import_type(BuiltinType::Text),
+                        ),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.regex", "replaceAll") => Some(intrinsic_import_value(
+            IntrinsicValue::RegexReplaceAll,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    arrow_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        task_import_type(
+                            primitive_import_type(BuiltinType::Text),
+                            primitive_import_type(BuiltinType::Text),
+                        ),
+                    ),
+                ),
             ),
         )),
         // I18n intrinsics
