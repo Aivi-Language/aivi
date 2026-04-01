@@ -42,7 +42,8 @@ type GameState = {
     humanCount: Int,
     computerCount: Int,
     moveNumber: Int,
-    lastMove: Option Coord
+    lastMove: Option Coord,
+    lastFlips: List Coord
 }
 
 type Candidate = {
@@ -56,12 +57,12 @@ type Event =
   | ComputerTurn
   | Restart
 
-value boardSize = 20
-value lastIndex = 19
-value centerLow = 9
-value centerHigh = 10
+value boardSize = 8
+value lastIndex = 7
+value centerLow = 3
+value centerHigh = 4
 
-value boardIndices = [0..19]
+value boardIndices = [0..7]
 
 value rays = [
     NorthWest,
@@ -76,9 +77,9 @@ value rays = [
 
 value corners = [
     Coord 0 0,
-    Coord 19 0,
-    Coord 0 19,
-    Coord 19 19
+    Coord 7 0,
+    Coord 0 7,
+    Coord 7 7
 ]
 
 type Int -> Int -> Bool
@@ -491,49 +492,39 @@ func resolvePreferredTurn = board preferred preferredMoves=> coordCount preferre
 type (List (List Disc)) -> Turn -> TurnResolution
 func advanceTurn = board preferred=>    resolvePreferredTurn board preferred (legalMoves board (discForTurn preferred))
 
-type (List (List Disc)) -> Int -> (Option Coord) -> Int -> Int -> TurnResolution -> GameState
-func makeState = board moveNumber lastMove humanCount computerCount resolution=>    {
+type (List (List Disc)) -> Int -> (Option Coord) -> (List Coord) -> Int -> Int -> TurnResolution -> GameState
+func makeState = board moveNumber lastMove lastFlips humanCount computerCount resolution=>    {
         board: board,
         status: resolution.status,
         legalMoves: resolution.legalMoves,
         humanCount: humanCount,
         computerCount: computerCount,
         moveNumber: moveNumber,
-        lastMove: lastMove
+        lastMove: lastMove,
+        lastFlips: lastFlips
     }
 
 value initialBoard : (List (List Disc)) =
     [
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Blue, Red, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Red, Blue, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+        [Empty, Empty, Empty, Blue,  Red,   Empty, Empty, Empty],
+        [Empty, Empty, Empty, Red,   Blue,  Empty, Empty, Empty],
+        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+        [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
     ]
 
 value initial : GameState = {
     board: initialBoard,
     status: Active Human,
-    legalMoves: [Coord 9 8, Coord 8 9, Coord 11 10, Coord 10 11],
+    legalMoves: [Coord 3 2, Coord 2 3, Coord 5 4, Coord 4 5],
     humanCount: 2,
     computerCount: 2,
     moveNumber: 0,
-    lastMove: None
+    lastMove: None,
+    lastFlips: []
 }
 
 type Int -> Bool
@@ -602,11 +593,11 @@ type Turn -> GameState -> Int -> Int
 func nextComputerCount = turn state flipCount=> turn ||> Human    -> state.computerCount - flipCount
  ||> Computer -> state.computerCount + flipCount + 1
 
-type GameState -> Turn -> Coord -> Int -> (List (List Disc)) -> GameState
-func applyResolvedBoard = state turn coord flipCount afterBoard=>    makeState afterBoard (state.moveNumber + 1) (Some coord) (nextHumanCount turn state flipCount) (nextComputerCount turn state flipCount) (advanceTurn afterBoard (otherTurn turn))
+type GameState -> Turn -> Coord -> Int -> (List Coord) -> (List (List Disc)) -> GameState
+func applyResolvedBoard = state turn coord flipCount flips afterBoard=>    makeState afterBoard (state.moveNumber + 1) (Some coord) flips (nextHumanCount turn state flipCount) (nextComputerCount turn state flipCount) (advanceTurn afterBoard (otherTurn turn))
 
 type GameState -> Turn -> Coord -> (List Coord) -> GameState
-func applyResolvedTurn = state turn coord flips=> boardAfterFlips state.board (discForTurn turn) coord flips  |> applyResolvedBoard state turn coord (coordCount flips)
+func applyResolvedTurn = state turn coord flips=> boardAfterFlips state.board (discForTurn turn) coord flips  |> applyResolvedBoard state turn coord (coordCount flips) flips
 
 type GameState -> Turn -> Coord -> GameState
 func applyTurnMove = state turn coord=> flipsForMove state.board (discForTurn turn) coord  |> applyResolvedTurn state turn coord
@@ -617,7 +608,7 @@ func handleTryPlace = coord state=> (humanToAct state.status, coordInList coord 
 
 type GameState -> GameState
 func runComputerTurn = state=> bestComputerMove state.board state.legalMoves ||> Some candidate -> applyTurnMove state Computer candidate.coord
- ||> None           -> makeState state.board state.moveNumber state.lastMove state.humanCount state.computerCount (advanceTurn state.board Computer)
+ ||> None           -> makeState state.board state.moveNumber state.lastMove [] state.humanCount state.computerCount (advanceTurn state.board Computer)
 
 type GameState -> GameState
 func handleComputerTurn = state=> computerToAct state.status T|> runComputerTurn state
@@ -661,10 +652,20 @@ func emptyCellLabel = status legalMoves coord=> (coordInList coord legalMoves, h
  ||> (True, False, True) -> "◍"
  ||> _                  -> "·"
 
-type (List (List Disc)) -> Status -> (List Coord) -> Coord -> Text
-func cellLabel = board status legalMoves coord=> discAt board coord ||> Red   -> "🔴"
- ||> Blue  -> "🔵"
- ||> Empty -> emptyCellLabel status legalMoves coord
+type (Option Coord) -> Coord -> Bool
+func isLastMove = lastMove coord=> lastMove ||> Some lc -> sameCoord lc coord
+ ||> None      -> False
+
+type (List (List Disc)) -> Status -> (List Coord) -> (Option Coord) -> (List Coord) -> Coord -> Text
+func cellLabel = board status legalMoves lastMove lastFlips coord=>
+    (discAt board coord, isLastMove lastMove coord, coordInList coord lastFlips) ||>
+        (Red, True, _)   -> "🎯"
+        (Blue, True, _)  -> "💠"
+        (Red, _, True)   -> "🟠"
+        (Blue, _, True)  -> "🟣"
+        (Red, _, _)      -> "🔴"
+        (Blue, _, _)     -> "🔵"
+        (Empty, _, _)    -> emptyCellLabel status legalMoves coord
 
 type GameState -> Coord -> Bool
 func cellEnabled = state coord=> (humanToAct state.status, coordInList coord state.legalMoves) ||> (True, True)  -> True

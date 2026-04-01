@@ -71,16 +71,13 @@ func takeCells = n cells => cells
   |> reduce takeCellStep { remaining: n, cells: [] }
   |> .cells
 
-type Cell -> Cell -> Bool
-func cellEq = a b => a == b
-
 domain Snake over List Cell
     type List Cell -> Snake
     fromCells cells = cells
     type Snake -> Cell
     head snake = getOrElse (Cell 0 0) (listHead snake)
     type Snake -> Cell -> Bool
-    contains snake cell = any (cellEq cell) snake
+    contains snake cell = any (. == cell) snake
     type Snake -> Int
     length snake = listLength snake
     type Snake -> Cell -> Snake
@@ -218,15 +215,38 @@ when keyDown (Key "Space") => event <- Restart
 signal state : Signal GameState = event
  +|> initial step
 
+signal boardText : Signal Text = state
+  |> renderBoard
+
+signal dirLine : Signal Text = state
+  |> .dir
+  |> dirLabel
+
+signal statusLine : Signal Text = state
+  |> .status
+  |> statusLineFor
+
+signal scoreLine : Signal Text = state
+  |> .score
+  |> scoreLineFor
+
+signal gameOver : Signal Bool = state
+  |> .status
+  |> isGameOver
+
+signal finalScoreLine : Signal Text = state
+  |> .score
+  |> finalScoreLineFor
+
 value main =
     <Window title="AIVI Snake">
         <Box orientation="vertical" spacing={8}>
-            <Label text={dirLabel state.dir} />
-            <Label text={scoreLineFor state.score} />
-            <Label text={statusLineFor state.status} />
-            <Label text={renderBoard state} monospace />
-            <show when={isGameOver state.status}>
-                <Label text={finalScoreLineFor state.score} />
+            <Label text={dirLine} />
+            <Label text={scoreLine} />
+            <Label text={statusLine} />
+            <Label text={boardText} monospace />
+            <show when={gameOver}>
+                <Label text={finalScoreLine} />
             </show>
         </Box>
     </Window>

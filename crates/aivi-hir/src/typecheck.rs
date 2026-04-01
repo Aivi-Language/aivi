@@ -3140,11 +3140,11 @@ impl<'a> TypeChecker<'a> {
         argument_types: &[GateType],
         expected_result: &GateType,
     ) -> Option<(Vec<GateType>, Vec<ClassConstraintBinding>)> {
-        if function.parameters.len() != argument_types.len() || function.annotation.is_none() {
+        if function.parameters.len() < argument_types.len() || function.annotation.is_none() {
             return None;
         }
         let mut bindings = PolyTypeBindings::new();
-        let mut instantiated_parameters = Vec::with_capacity(function.parameters.len());
+        let mut instantiated_parameters = Vec::with_capacity(argument_types.len());
         for ((parameter, argument_expr), actual) in function
             .parameters
             .iter()
@@ -3186,23 +3186,60 @@ impl<'a> TypeChecker<'a> {
             );
         }
         let result_annotation = function.annotation?;
-        if let Some(lowered) = self.typing.lower_annotation(result_annotation) {
-            if !lowered.same_shape(expected_result) {
+        if function.parameters.len() == argument_types.len() {
+            // Full application: check result type against expected and collect constraints.
+            if let Some(lowered) = self.typing.lower_annotation(result_annotation) {
+                if !lowered.same_shape(expected_result) {
+                    return None;
+                }
+            } else if !self.typing.match_poly_hir_type(
+                result_annotation,
+                expected_result,
+                &mut bindings,
+            ) {
                 return None;
             }
-        } else if !self.typing.match_poly_hir_type(
-            result_annotation,
-            expected_result,
-            &mut bindings,
-        ) {
-            return None;
+            let constraints = function
+                .context
+                .iter()
+                .map(|constraint| self.typing.class_constraint_binding(*constraint, &bindings))
+                .collect::<Option<Vec<_>>>()?;
+            Some((instantiated_parameters, constraints))
+        } else {
+            // Partial application: build the curried result type from the remaining parameters
+            // and check it against expected_result.
+            let remaining_params = &function.parameters[argument_types.len()..];
+            let remaining_types = remaining_params
+                .iter()
+                .map(|p| {
+                    p.annotation.and_then(|ann| {
+                        self.typing
+                            .lower_annotation(ann)
+                            .or_else(|| self.typing.instantiate_poly_hir_type_partially(ann, &bindings))
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?;
+            let result_ty = self
+                .typing
+                .lower_annotation(result_annotation)
+                .or_else(|| {
+                    self.typing
+                        .instantiate_poly_hir_type_partially(result_annotation, &bindings)
+                })?;
+            let curried_result = self.arrow_type(&remaining_types, &result_ty);
+            if !curried_result.same_shape(expected_result) {
+                return None;
+            }
+            // Collect only constraints whose type parameter is fully resolved.
+            let constraints = function
+                .context
+                .iter()
+                .filter_map(|constraint| {
+                    self.typing.class_constraint_binding(*constraint, &bindings)
+                })
+                .collect::<Vec<_>>();
+            Some((instantiated_parameters, constraints))
         }
-        let constraints = function
-            .context
-            .iter()
-            .map(|constraint| self.typing.class_constraint_binding(*constraint, &bindings))
-            .collect::<Option<Vec<_>>>()?;
-        Some((instantiated_parameters, constraints))
     }
 
     fn arrow_type(&self, parameter_types: &[GateType], result: &GateType) -> GateType {

@@ -9473,6 +9473,103 @@ impl GateType {
         Self::same_shape_inner(self, other, &mut left_to_right, &mut right_to_left)
     }
 
+    /// Substitute every occurrence of `param` with `replacement` throughout this type.
+    pub(crate) fn substitute_type_parameter(
+        &self,
+        param: TypeParameterId,
+        replacement: &GateType,
+    ) -> GateType {
+        self.substitute_type_parameters(&HashMap::from([(param, replacement.clone())]))
+    }
+
+    /// Substitute multiple type parameters simultaneously using the given map.
+    pub(crate) fn substitute_type_parameters(
+        &self,
+        subs: &HashMap<TypeParameterId, GateType>,
+    ) -> GateType {
+        if subs.is_empty() {
+            return self.clone();
+        }
+        match self {
+            Self::TypeParameter { parameter, .. } => subs
+                .get(parameter)
+                .cloned()
+                .unwrap_or_else(|| self.clone()),
+            Self::Primitive(_) => self.clone(),
+            Self::Arrow { parameter, result } => Self::Arrow {
+                parameter: Box::new(parameter.substitute_type_parameters(subs)),
+                result: Box::new(result.substitute_type_parameters(subs)),
+            },
+            Self::List(element) => {
+                Self::List(Box::new(element.substitute_type_parameters(subs)))
+            }
+            Self::Option(element) => {
+                Self::Option(Box::new(element.substitute_type_parameters(subs)))
+            }
+            Self::Signal(element) => {
+                Self::Signal(Box::new(element.substitute_type_parameters(subs)))
+            }
+            Self::Tuple(elements) => Self::Tuple(
+                elements
+                    .iter()
+                    .map(|e| e.substitute_type_parameters(subs))
+                    .collect(),
+            ),
+            Self::Record(fields) => Self::Record(
+                fields
+                    .iter()
+                    .map(|f| GateRecordField {
+                        name: f.name.clone(),
+                        ty: f.ty.substitute_type_parameters(subs),
+                    })
+                    .collect(),
+            ),
+            Self::Map { key, value } => Self::Map {
+                key: Box::new(key.substitute_type_parameters(subs)),
+                value: Box::new(value.substitute_type_parameters(subs)),
+            },
+            Self::Set(element) => {
+                Self::Set(Box::new(element.substitute_type_parameters(subs)))
+            }
+            Self::Result { error, value } => Self::Result {
+                error: Box::new(error.substitute_type_parameters(subs)),
+                value: Box::new(value.substitute_type_parameters(subs)),
+            },
+            Self::Validation { error, value } => Self::Validation {
+                error: Box::new(error.substitute_type_parameters(subs)),
+                value: Box::new(value.substitute_type_parameters(subs)),
+            },
+            Self::Task { error, value } => Self::Task {
+                error: Box::new(error.substitute_type_parameters(subs)),
+                value: Box::new(value.substitute_type_parameters(subs)),
+            },
+            Self::Domain {
+                item,
+                name,
+                arguments,
+            } => Self::Domain {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|a| a.substitute_type_parameters(subs))
+                    .collect(),
+            },
+            Self::OpaqueItem {
+                item,
+                name,
+                arguments,
+            } => Self::OpaqueItem {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|a| a.substitute_type_parameters(subs))
+                    .collect(),
+            },
+        }
+    }
+
     fn same_shape_inner(
         left: &Self,
         right: &Self,
@@ -14538,9 +14635,15 @@ impl<'a> GateTypeContext<'a> {
         let GateType::Arrow { parameter, result } = callee else {
             return None;
         };
-        parameter
-            .same_shape(argument)
-            .then(|| result.as_ref().clone())
+        if parameter.same_shape(argument) {
+            return Some(result.as_ref().clone());
+        }
+        // Polymorphic application: if the parameter is an open type variable, substitute it in
+        // the result to produce a concrete return type without requiring exact structural equality.
+        if let GateType::TypeParameter { parameter: param_id, .. } = parameter.as_ref() {
+            return Some(result.substitute_type_parameter(*param_id, argument));
+        }
+        None
     }
 
     fn apply_function_chain(&self, callee: &GateType, arguments: &[GateType]) -> Option<GateType> {

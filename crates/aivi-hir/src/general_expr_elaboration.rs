@@ -687,6 +687,61 @@ fn substitute_gate_type(
     }
 }
 
+/// Build a TypeParameter substitution map by structurally matching template types (which may
+/// contain TypeParameter nodes) against concrete types. Used to specialize polymorphic callee
+/// types before emitting lambda IR that requires fully-closed types.
+fn collect_type_param_subs(
+    template_params: &[GateType],
+    actual_params: &[GateType],
+) -> HashMap<TypeParameterId, GateType> {
+    let mut subs = HashMap::new();
+    for (template, actual) in template_params.iter().zip(actual_params.iter()) {
+        collect_type_param_subs_inner(template, actual, &mut subs);
+    }
+    subs
+}
+
+fn collect_type_param_subs_inner(
+    template: &GateType,
+    actual: &GateType,
+    subs: &mut HashMap<TypeParameterId, GateType>,
+) {
+    match (template, actual) {
+        (GateType::TypeParameter { parameter, .. }, _) => {
+            subs.entry(*parameter).or_insert_with(|| actual.clone());
+        }
+        (
+            GateType::Arrow {
+                parameter: tp,
+                result: tr,
+            },
+            GateType::Arrow {
+                parameter: ap,
+                result: ar,
+            },
+        ) => {
+            collect_type_param_subs_inner(tp, ap, subs);
+            collect_type_param_subs_inner(tr, ar, subs);
+        }
+        (GateType::List(te), GateType::List(ae))
+        | (GateType::Option(te), GateType::Option(ae))
+        | (GateType::Set(te), GateType::Set(ae))
+        | (GateType::Signal(te), GateType::Signal(ae)) => {
+            collect_type_param_subs_inner(te, ae, subs);
+        }
+        (GateType::Map { key: tk, value: tv }, GateType::Map { key: ak, value: av }) => {
+            collect_type_param_subs_inner(tk, ak, subs);
+            collect_type_param_subs_inner(tv, av, subs);
+        }
+        (GateType::Tuple(te), GateType::Tuple(ae)) => {
+            for (t, a) in te.iter().zip(ae.iter()) {
+                collect_type_param_subs_inner(t, a, subs);
+            }
+        }
+        _ => {}
+    }
+}
+
 struct GeneralExprElaborator<'a> {
     module: &'a Module,
     typing: GateTypeContext<'a>,
@@ -1702,13 +1757,13 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<GateRuntimeExprKind, Vec<GeneralExprBlocker>> {
         let constructor_expectations = self.argument_expectations_from_result(callee, result_ty);
         let inferred_callee = self.typing.infer_expr(callee, env, ambient);
-        let inferred_parameter_types = inferred_callee
+        let inferred_callee_ty = inferred_callee
             .actual_gate_type()
-            .or_else(|| inferred_callee.ty.clone())
-            .and_then(|ty| {
-                self.function_signature(&ty, arguments.len())
-                    .map(|(parameters, _)| parameters)
-            });
+            .or_else(|| inferred_callee.ty.clone());
+        let inferred_parameter_types = inferred_callee_ty.as_ref().and_then(|ty| {
+            self.function_signature(ty, arguments.len())
+                .map(|(parameters, _)| parameters)
+        });
         let argument_expectations = constructor_expectations.or(inferred_parameter_types.clone());
 
         let mut lowered_arguments = Vec::with_capacity(arguments.len());
@@ -1722,9 +1777,23 @@ impl<'a> GeneralExprElaborator<'a> {
             lowered_arguments.push(lowered);
         }
 
-        let callee_expected = inferred_parameter_types
-            .map(|parameters| self.arrow_type(parameters, result_ty.clone()))
-            .unwrap_or_else(|| self.arrow_type(argument_types.clone(), result_ty.clone()));
+        // Build a concrete callee expected type by substituting any open type parameters with
+        // the concrete argument types observed. This prevents open TypeParameter values from
+        // leaking into the lambda IR, which requires fully-closed specialized types.
+        let callee_expected = if let (Some(param_types), Some(callee_ty)) =
+            (&inferred_parameter_types, &inferred_callee_ty)
+        {
+            let subs = collect_type_param_subs(param_types, &argument_types);
+            if subs.is_empty() {
+                self.arrow_type(param_types.clone(), result_ty.clone())
+            } else {
+                substitute_gate_type(callee_ty, &subs)
+            }
+        } else if let Some(parameters) = inferred_parameter_types {
+            self.arrow_type(parameters, result_ty.clone())
+        } else {
+            self.arrow_type(argument_types.clone(), result_ty.clone())
+        };
         let lowered_callee = if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
             if matches!(
                 reference.resolution.as_ref(),
