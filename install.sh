@@ -10,17 +10,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXT_DIR="$REPO_ROOT/tooling/packages/vscode-aivi"
 
-# ── 1. Install aivi-cli via cargo ──────────────────────────────────────────
+# ── 1. Install the CLI crate via cargo ─────────────────────────────────────
 if [[ "${1:-}" == "--debug" ]]; then
-    echo "==> Installing aivi-cli (debug)..."
-    cargo install --path "$REPO_ROOT/crates/aivi-cli" --debug
+    echo "==> Installing aivi CLI (debug)..."
+    cargo install --path "$REPO_ROOT/crates/aivi-cli" --debug --force
 else
-    echo "==> Installing aivi-cli (release)..."
-    cargo install --path "$REPO_ROOT/crates/aivi-cli"
+    echo "==> Installing aivi CLI (release)..."
+    cargo install --path "$REPO_ROOT/crates/aivi-cli" --force
 fi
 
 INSTALL_DIR="${CARGO_HOME:-${HOME}/.cargo}/bin"
-echo "==> Installed aivi-cli → $INSTALL_DIR/aivi-cli"
+echo "==> Installed aivi → $INSTALL_DIR/aivi"
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then
     echo "    NOTE: $INSTALL_DIR is not on your PATH."
@@ -48,7 +48,7 @@ VSCODE_SETTINGS="$REPO_ROOT/.vscode/settings.json"
 mkdir -p "$REPO_ROOT/.vscode"
 cat > "$VSCODE_SETTINGS" <<SETTINGS_EOF
 {
-  "aivi.compiler.path": "$INSTALL_DIR/aivi-cli"
+  "aivi.compiler.path": "$INSTALL_DIR/aivi"
 }
 SETTINGS_EOF
 echo "==> Wrote workspace settings → $VSCODE_SETTINGS"
