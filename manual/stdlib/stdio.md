@@ -5,6 +5,10 @@ Write text to standard output and standard error.
 These functions are useful in CLI-style programs and quick debugging tasks. The current
 runtime writes the text immediately and flushes the stream right away.
 
+Current status: this page documents the **compatibility** stdio surface. The target architecture is
+to keep stdin/stdout/stderr under provider capabilities as host snapshots and sink commands instead
+of exposing a separate global task API.
+
 ## Import
 
 ```aivi

@@ -9,6 +9,10 @@ for sandboxed apps.
 This module currently exports the result and error types used by portal-backed features. The
 stdlib comments also document the source names for several portal operations.
 
+Current status: this is shared vocabulary around a host-service boundary. The target architecture is
+to keep portal interactions under provider capabilities rather than introducing a separate
+task-first portal API family.
+
 ## Import
 
 ```aivi

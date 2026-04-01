@@ -4,6 +4,10 @@ Database records, query payloads, and task aliases.
 
 This module is the data vocabulary for database-backed features. It describes connections, statements, parameters, paging options, and errors. The current stdlib file does not execute queries on its own.
 
+Current status: the database surface is split today between source-backed pieces such as
+`db.connect` / `db.live` and task/query vocabulary documented here. The target architecture is to
+unify both under provider capabilities so connect/live/query/commit belong to one database boundary.
+
 ## Import
 
 ```aivi

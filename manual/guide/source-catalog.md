@@ -9,6 +9,10 @@ Use [Sources](/guide/sources) for the tutorial overview. Use this page when you 
 - which named options are actually supported,
 - and which options are only partially wired or still intentionally limited.
 
+This page documents the **current shipped** source variants. The architectural direction is to
+group them into provider capability families under `@source` so filesystems, databases, HTTP,
+mail, and similar integrations stop exposing separate task-first compatibility modules.
+
 ## Reading the catalog
 
 - Arguments are positional values written after the source kind.
@@ -23,6 +27,25 @@ Use [Sources](/guide/sources) for the tutorial overview. Use this page when you 
 - `window.keyDown` currently decodes to `Text`, a payloadless key sum, or a single text-wrapping key constructor.
 - `dbus.signal` and `dbus.method` currently decode to specific record shapes described below.
 - Scheduler-owned recurrence work is still being tightened across the pipeline, so this page calls out where a contract option exists before the runtime fully executes it.
+
+## Planned unification
+
+The target model keeps this catalog as the low-level provider inventory, but presents those
+providers to user code as unified capability handles:
+
+| Family | Current shipped surface | Planned unified surface |
+| --- | --- | --- |
+| File system | `fs.watch`, `fs.read`, plus `aivi.fs` task helpers | `@source fs ...` capability with `read`, `watch`, `delete`, `rename`, `move`, `copy`, and related commands |
+| HTTP | `http.get`, `http.post`, plus `aivi.http` task helpers | `@source http ...` capability with request operations and provider-owned commands |
+| Database | `db.connect`, `db.live`, plus task-backed query/commit vocabulary | `@source db ...` capability with connection, live-query, query, and commit operations |
+| D-Bus | `dbus.ownName`, `dbus.signal`, `dbus.method`, plus `aivi.dbus` shared types | `@source dbus ...` capability with name ownership, subscriptions, method calls, and related commands |
+| Host context | `env.get`, `process.args`, `process.cwd`, `path.home`/`path.configHome`/related snapshots, plus `aivi.env` helpers | provider capabilities for environment, process context, and runtime directory snapshots |
+| Logging / stdio | `aivi.log`, `aivi.stdio`, and `stdio.read` | provider capabilities with snapshot reads and sink-style commands |
+| Random / resources / desktop services | `aivi.random`, `aivi.gresource`, `aivi.portal`, `aivi.clipboard`, `aivi.image` | provider capabilities with typed reads, commands, and host-service interactions |
+| IMAP / future APIs | mostly shared types today | provider capabilities that follow the same read/watch/command split |
+
+Incoming payloads should decode directly into the target type named by the signal or operation
+result. Raw JSON helper workflows remain compatibility-only and are not the long-term source model.
 
 ## Timers
 

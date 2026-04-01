@@ -5,6 +5,9 @@ Random numbers and random bytes.
 `aivi.random` gives you task-based access to host randomness. On the current Linux runtime,
 the bytes come from `/dev/urandom`.
 
+Current status: this is a **compatibility** host-service surface. The target architecture is to
+treat randomness as another provider capability family rather than a standalone task module.
+
 ## Import
 
 ```aivi

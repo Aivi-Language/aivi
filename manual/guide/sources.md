@@ -6,6 +6,33 @@ Current limitation: source syntax and provider contracts are implemented, but sc
 
 For the current compiler-and-runtime-backed reference, including every built-in source kind and option-level support notes, see the [Built-in Source Catalog](/guide/source-catalog).
 
+## Target architecture
+
+The shipped compiler still exposes some task-first or type-only compatibility modules such as
+`aivi.fs`, `aivi.http`, `aivi.data.json`, `aivi.env`, `aivi.log`, `aivi.stdio`, `aivi.dbus`, and
+part of the database/process surface. The intended direction is to collapse those parallel entry
+points into **provider capabilities under `@source`** so each external system has one boundary.
+
+Illustrative end-state shape:
+
+```aivi
+@source fs projectRoot
+signal files : FsSource
+
+signal config : Signal (Result FsError AppConfig) = files.read configPath
+signal changes : Signal FsEvent = files.watch configPath
+value cleanup : Task FsError Unit = files.delete cachePath
+```
+
+In that model:
+
+- reads, watches, queries, and subscriptions stay source/reactive
+- mutations become explicit provider-owned commands on the same capability
+- incoming data decodes directly into the annotated target type
+- host snapshots such as environment/process/XDG data use the same provider boundary
+- sink-style effects such as logging, stdio writes, D-Bus method calls, and outbound sends do too
+- raw JSON-as-text helper workflows are compatibility paths, not the design target
+
 ## Source-backed signals with `@source`
 
 Today, built-in sources are attached with the `@source` decorator immediately before the signal declaration:

@@ -4,6 +4,10 @@ Types for mailbox syncing, folder summaries, and mail events.
 
 IMAP is the protocol many mail servers use for listing folders and syncing messages. This module defines the shapes an IMAP-backed feature can return. The current stdlib file does not connect to a server on its own.
 
+Current status: this module is mostly shared type vocabulary. When IMAP grows a full external
+surface, the target direction is a unified provider capability under `@source` rather than a second
+task-first API family.
+
 ## Import
 
 ```aivi

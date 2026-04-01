@@ -1953,6 +1953,57 @@ Implemented declaration rules:
 - richer schemas are rejected at declaration time
 - reactive source inputs always count as `sourceEvent` wakeups for any provider; non-reactive custom wakeups must be declared explicitly
 
+### 14.4.1 Planned provider capability unification
+
+The long-term external boundary is **provider capabilities under `@source`**, not parallel module-level
+I/O surfaces. Current task-backed modules such as `aivi.fs`, `aivi.http`, `aivi.data.json`, and the
+task-only half of `aivi.db` remain compatibility surfaces until capability-backed replacements land.
+
+This rule is broader than network/filesystem reads alone. Any stdlib surface that crosses the host
+boundary should eventually belong to one provider capability family:
+
+- request / stream families such as filesystem, HTTP, database, IMAP, D-Bus, sockets, mailbox, and
+  future OpenAPI-style clients
+- host snapshot families such as environment, process context, XDG/path locations, clipboard
+  snapshots, bundled resources, and similar runtime-owned reads
+- sink / command families such as logging, stdio writes, SMTP sends, filesystem mutations, database
+  commits, and other explicit outbound effects
+- entropy / host-service families such as randomness, portals, image loading, and similar
+  one-shot provider interactions
+
+The intended steady-state shape is:
+
+```aivi
+@source fs projectRoot
+signal files : FsSource
+
+signal config : Signal (Result FsError AppConfig) = files.read configPath
+signal changes : Signal FsEvent = files.watch configPath
+value cleanup : Task FsError Unit = files.delete cachePath
+value renameLog : Task FsError Unit = files.rename oldPath newPath
+```
+
+Rules for the unified model:
+
+- the binding introduced by `@source` is a compiler-known provider capability handle such as
+  `FsSource`; it is **not** an ordinary record payload and its members are **not** generic pointwise
+  `Signal` projections
+- provider contracts eventually declare both reactive operations (`read`, `watch`, `query`,
+  `subscribe`) and explicit commands (`delete`, `rename`, `move`, `commit`, `send`, `post`)
+- incoming provider payloads decode directly into the annotated target/member type; malformed or
+  incompatible external data is a source failure and does not enter the graph as user-visible data
+- raw JSON-text manipulation is therefore a legacy compatibility workflow, not the intended external
+  data model
+- `Task E A` remains the one-shot effect carrier, but provider-owned commands invoke it through the
+  provider capability instead of through parallel global I/O modules
+- pure helper modules such as path/text/list stay in the stdlib; only duplicated external boundary
+  modules are candidates for removal
+
+This direction deliberately avoids requiring arbitrary signal-wrapped domain/member application.
+Current language support only guarantees record projection through `Signal` payloads plus narrow
+pointwise lifting for a small set of canonical carriers; provider capabilities keep the external
+surface explicit without inventing a general "signal of API record" runtime model.
+
 ---
 
 ## 15. Effects and `Task`
@@ -3187,6 +3238,10 @@ Added `IntrinsicValue` variants and `RuntimeTaskPlan` entries for basic filesyst
 | `FsReadDir` | `Text -> Task FsError (List Text)` |
 | `FsExists` | `Text -> Task FsError Bool` |
 
+These intrinsics are part of the **current compatibility surface**. The planned steady-state model
+moves filesystem reads, watches, and mutations behind a unified `@source fs ...` capability handle
+instead of exposing separate module-global filesystem tasks.
+
 ### 29.5 AIVI stdlib authoring conventions
 
 The following are genuine authoring conventions for `.aivi` files. Violations of the hard parse/HIR rules produce errors; the rest are style conventions enforced by the formatter.
@@ -3243,6 +3298,9 @@ The following `IntrinsicValue` variants and `RuntimeTaskPlan` entries were added
 
 All catalog entries are under `aivi.fs`.
 
+Like the basic filesystem intrinsics above, these remain compatibility surfaces until provider-owned
+filesystem commands are available through unified source capabilities.
+
 ### 29.8 Path intrinsics
 
 Synchronous, pure path-string intrinsics (no I/O, no `Task`). All catalog entries are under `aivi.path`:
@@ -3293,12 +3351,16 @@ type BytesDecodeError =
 
 ### 29.10 `aivi.data.json`
 
-JSON intrinsics backed by `serde_json` in the CLI runtime. Most operations are async (`Task Text A`); `JsonValidate` is a pure synchronous predicate (`Text -> Bool`) with no `Task` wrapper.
+JSON intrinsics backed by `serde_json` in the CLI runtime. The current executable surface uses
+`Task Text A` compatibility helpers over raw JSON text fragments. This is **not** the long-term
+external boundary: source/provider decode is intended to land directly in typed targets, and
+JSON-as-text manipulation is legacy compatibility work.
+
 Catalog module: `aivi.data.json`.
 
 | Intrinsic | Type | Description |
 |---|---|---|
-| `JsonValidate` | `Text -> Bool` | Pure synchronous predicate; returns `True` for valid JSON, `False` otherwise |
+| `JsonValidate` | `Text -> Task Text Bool` | Validate JSON text and return `True`/`False` in the current task-backed runtime surface |
 | `JsonGet` | `Text -> Text -> Task Text (Option Text)` | Get object field; result is JSON text |
 | `JsonAt` | `Text -> Int -> Task Text (Option Text)` | Get array element; result is JSON text |
 | `JsonKeys` | `Text -> Task Text (List Text)` | Object keys in insertion order |
@@ -3316,4 +3378,6 @@ type JsonError =
 ```
 
 Values returned by `JsonGet` and `JsonAt` are raw JSON text fragments (not decoded), so callers can
-pipe into further JSON operations or decode with typed helpers.
+pipe into further JSON operations or decode with typed helpers. This fragment-oriented workflow is
+kept only for compatibility; new external integration design should prefer provider-owned typed
+decode at the source boundary.

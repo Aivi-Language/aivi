@@ -6,6 +6,10 @@ If you are new to AIVI's desktop integrations, this module is mostly a set of da
 It tells you what clipboard content looks like and how clipboard errors are reported. The
 stdlib comments also describe a reactive clipboard watcher.
 
+Current status: clipboard work already spans both watcher-style and task-style shapes. The target
+architecture is a unified provider capability under `@source` for clipboard snapshots, watches, and
+writes.
+
 ## Import
 
 ```aivi

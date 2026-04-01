@@ -6,6 +6,9 @@ This module does not currently export a concrete image-loading function. Instead
 the value shapes used by image-loading integrations, including the source shape documented in
 the stdlib comments.
 
+Current status: this page describes a host-backed integration vocabulary. The target architecture is
+to treat image loading as another provider capability family with typed decode at the boundary.
+
 ## Import
 
 ```aivi

@@ -13,6 +13,12 @@ Use this page as a map:
 Several modules are intentionally small today, and some are shared type vocabularies rather than
 full runtime clients. Their pages call that out up front so you do not have to guess.
 
+For external systems, a few pages still describe **compatibility** task modules rather than the
+target architecture. The long-term direction is to converge filesystem, HTTP, database, IMAP,
+D-Bus, environment/process context, logging, stdio, randomness, and similar integrations under
+provider capabilities defined through `@source`, with typed decode at the source boundary and
+provider-owned commands for mutations.
+
 After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first are
 [`aivi.option`](/stdlib/option), [`aivi.result`](/stdlib/result), [`aivi.list`](/stdlib/list),
 [`aivi.text`](/stdlib/text), and [`aivi.math`](/stdlib/math).
@@ -59,23 +65,23 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 - [`aivi.text`](/stdlib/text) — text helpers.
 - [`aivi.regex`](/stdlib/regex) — regular-expression matching and replacement.
 - [`aivi.core.bytes`](/stdlib/bytes) — byte buffers.
-- [`aivi.data.json`](/stdlib/json) — JSON values and helpers.
+- [`aivi.data.json`](/stdlib/json) — JSON types plus legacy JSON-as-text compatibility helpers.
 
 ### Time, randomness, and scheduling
 
 - [`aivi.duration`](/stdlib/duration) — typed time spans such as `5sec`.
 - [`aivi.time`](/stdlib/time) — clocks, timestamps, and time formatting helpers.
 - [`aivi.timer`](/stdlib/timer) — marker types for timer-backed signals.
-- [`aivi.random`](/stdlib/random) — random bytes and random integers.
+- [`aivi.random`](/stdlib/random) — host-randomness compatibility tasks.
 
 ### Files, environment, and processes
 
-- [`aivi.fs`](/stdlib/fs) — filesystem events and watcher-related types.
+- [`aivi.fs`](/stdlib/fs) — filesystem types plus compatibility task helpers.
 - [`aivi.path`](/stdlib/path) — checked path values.
-- [`aivi.env`](/stdlib/env) — environment-variable lookups.
-- [`aivi.stdio`](/stdlib/stdio) — write to standard output and standard error.
-- [`aivi.log`](/stdlib/log) — runtime logging helpers.
-- [`aivi.process`](/stdlib/process) — process-related records, results, and errors.
+- [`aivi.env`](/stdlib/env) — environment compatibility lookups.
+- [`aivi.stdio`](/stdlib/stdio) — terminal I/O compatibility commands.
+- [`aivi.log`](/stdlib/log) — runtime logging compatibility commands.
+- [`aivi.process`](/stdlib/process) — process vocabulary plus future capability shapes.
 
 ### Network and services
 
@@ -83,10 +89,10 @@ Some modules in this group are full helpers, and some are shared data shapes for
 The linked pages spell out which functions exist today.
 
 - [`aivi.url`](/stdlib/url) — typed URLs and helpers for their parts.
-- [`aivi.http`](/stdlib/http) — HTTP request helpers.
+- [`aivi.http`](/stdlib/http) — HTTP compatibility request helpers.
 - [`aivi.auth`](/stdlib/auth) — OAuth / PKCE sign-in records and state types.
-- [`aivi.db`](/stdlib/db) — database connections, statements, paging, and errors.
-- [`aivi.imap`](/stdlib/imap) — mailbox folders, sync state, and mail events.
+- [`aivi.db`](/stdlib/db) — database vocabulary plus transitional task/query types.
+- [`aivi.imap`](/stdlib/imap) — mailbox types for current integrations and future source capabilities.
 - [`aivi.smtp`](/stdlib/smtp) — outgoing mail settings, messages, and errors.
 
 ### Desktop, UI, and GNOME
@@ -99,7 +105,7 @@ desktop app together.
 - [`aivi.app.lifecycle`](/stdlib/lifecycle) — lifecycle state, commands, undo state, and in-app notifications.
 - [`aivi.desktop.xdg`](/stdlib/xdg) — standard Linux app directories.
 - [`aivi.portal`](/stdlib/portal) — desktop portal results for file picking, opening URIs, and screenshots.
-- [`aivi.dbus`](/stdlib/dbus) — D-Bus values, calls, signals, and match rules.
+- [`aivi.dbus`](/stdlib/dbus) — D-Bus vocabulary plus transitional source/task shapes.
 - [`aivi.gnome.settings`](/stdlib/settings) — GSettings schema, key, and value types.
 - [`aivi.gnome.onlineAccounts`](/stdlib/onlineAccounts) — desktop account and token records.
 - [`aivi.gnome.notifications`](/stdlib/notifications) — desktop notification payloads and responses.

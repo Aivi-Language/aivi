@@ -4,6 +4,10 @@ Types for outgoing mail configuration and messages.
 
 SMTP is the protocol used to send email. This module defines the records an SMTP-backed feature can work with. The current stdlib file is data only: it does not send a message by itself.
 
+Current status: this page is shared outgoing-mail vocabulary. The target architecture is an SMTP
+provider capability under `@source` so sends belong to the same external-boundary model as other
+provider-owned commands.
+
 ## Import
 
 ```aivi

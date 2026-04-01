@@ -1,6 +1,11 @@
 # aivi.fs
 
-Filesystem operations for reading, writing, and managing files and directories. All functions return `Task Text A` — they are asynchronous and run on worker threads so the UI thread stays responsive.
+Filesystem operations for reading, writing, and managing files and directories. All functions return
+`Task Text A` — they are asynchronous and run on worker threads so the UI thread stays responsive.
+
+Current status: this page documents the **compatibility** filesystem surface that ships today. The
+target architecture is to unify filesystem access under `@source fs ...` provider capabilities so
+reads/watches and commands such as delete/rename/move live behind one external boundary.
 
 Import what you need:
 

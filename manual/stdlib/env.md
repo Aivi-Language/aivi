@@ -6,6 +6,10 @@ All reads return `Task Text A`. In plain language, that means the lookup runs th
 runtime and can fail with a text error message. When a variable may be missing, you get an
 `Option Text`: `Some value` when it exists, or `None` when it does not.
 
+Current status: this is a **compatibility** host-context surface. The target architecture is to
+fold environment reads into provider capabilities under `@source` so environment snapshots follow
+the same external boundary as filesystem, HTTP, and database access.
+
 ## Import
 
 ```aivi

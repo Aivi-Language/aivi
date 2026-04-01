@@ -9,6 +9,10 @@ and other assets that should ship with the app.
 This module currently exports the path type, error type, and task aliases used by
 resource-loading APIs. The stdlib comments also document resource loading source shapes.
 
+Current status: this is shared vocabulary around a host-backed resource provider. The target
+architecture is to keep bundled resource loads under provider capabilities rather than parallel
+task-only APIs.
+
 ## Import
 
 ```aivi

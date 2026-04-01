@@ -4,6 +4,10 @@ Types for D-Bus calls, signals, and values.
 
 D-Bus is the message bus GNOME apps and system services use to talk to each other. This module gives you the data shapes for that conversation. The current stdlib file defines types only; it does not send or receive bus traffic by itself.
 
+Current status: this page is shared vocabulary around the shipped D-Bus source/task surfaces. The
+target architecture is a unified `@source dbus ...` provider capability for name ownership, signal
+subscription, method calls, and related commands.
+
 ## Import
 
 ```aivi

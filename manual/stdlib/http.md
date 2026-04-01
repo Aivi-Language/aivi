@@ -4,6 +4,10 @@ Thin HTTP request helpers for text, bytes, status checks, and simple request bod
 
 This module re-exports basic HTTP functions and adds a few convenience wrappers. In the current stdlib file, request URLs and errors are plain `Text` aliases.
 
+Current status: this is a **compatibility** task surface. The target architecture is to fold HTTP
+requests into provider capabilities under `@source` so request operations and command-style actions
+share one external boundary with typed decode at the source edge.
+
 ## Import
 
 ```aivi

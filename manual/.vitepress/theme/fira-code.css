@@ -5,6 +5,7 @@
 :root {
   --vp-font-family-base: 'Inter', sans-serif;
   --vp-font-family-mono:
+    'Fira Code',
     ui-monospace,
     'SFMono-Regular',
     'SF Mono',
@@ -71,8 +72,8 @@
 .vp-doc pre code,
 .vp-doc div[class*='language-'] code {
   font-family: var(--vp-font-family-mono);
-  font-variant-ligatures: none;
-  font-feature-settings: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: 'calt' 1;
   -webkit-font-smoothing: antialiased;
   font-size: 0.9rem;
   line-height: 1.6;
@@ -83,8 +84,8 @@
 /* Inline code */
 .vp-doc :not(pre) > code {
   font-family: var(--vp-font-family-mono);
-  font-variant-ligatures: none;
-  font-feature-settings: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: 'calt' 1;
   letter-spacing: normal;
   word-spacing: normal;
 }
@@ -93,15 +94,15 @@
 .VPSidebar code,
 .VPNav code {
   font-family: var(--vp-font-family-mono);
-  font-variant-ligatures: none;
-  font-feature-settings: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: 'calt' 1;
 }
 
 /* ── Pipe operator in prose ───────────────────────────────────────────────── */
 .vp-doc .pipe-op {
   font-family: var(--vp-font-family-mono);
-  font-variant-ligatures: none;
-  font-feature-settings: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: 'calt' 1;
   font-size: 0.9em;
 }
 

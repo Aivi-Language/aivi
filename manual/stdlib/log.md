@@ -6,6 +6,9 @@ Runtime logging helpers.
 sink currently writes to standard error, so even `debug` and `info` messages show up on the
 terminal error stream today.
 
+Current status: this is a **compatibility** sink surface. The target architecture is to model
+logging as a provider-owned command capability under `@source`, not as a separate global task API.
+
 ## Import
 
 ```aivi

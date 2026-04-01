@@ -12,6 +12,7 @@
     "vitepress": "^1.6.3"
   },
   "dependencies": {
+    "@fontsource/fira-code": "^5.2.7",
     "@fontsource/inter": "^5.2.5"
   }
 }

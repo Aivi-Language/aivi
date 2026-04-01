@@ -6,6 +6,10 @@ Process-related shared types.
 **not** export a function that starts a process today, so think of this module as a shared
 vocabulary for process work rather than a full process API.
 
+Current status: process work is already split between source-backed runtime pieces and shared types.
+The target architecture is one provider capability family for process context, spawning, streams,
+and commands rather than separate source/task/type-only surfaces.
+
 ## Import
 
 ```aivi

@@ -1,10 +1,14 @@
 # aivi.data.json
 
-JSON parsing, querying, and formatting as async tasks.
+Legacy JSON compatibility helpers.
 
-All JSON operations return `Task Text A` — errors are task failures with a descriptive message.
-The JSON value is always represented as a `Text` fragment (a raw JSON string), so you can
-compose operations without needing a dedicated `Json` type.
+The current executable helpers operate on raw JSON text fragments and return `Task Text A`.
+The stdlib module also carries structural JSON types and predicates, but this page focuses on the
+task-backed helper surface that exists today.
+
+Current status: this is a **compatibility** layer. The target architecture is provider-owned decode
+straight into the annotated signal or operation result type; JSON-as-text workflows are not the
+intended steady state for external data.
 
 ## Import
 
