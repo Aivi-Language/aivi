@@ -1,0 +1,43 @@
+type ImageError =
+  | ImageNotFound Text
+  | ImageDecodeFailed Text
+  | UnsupportedFormat Text
+  | ImageUnavailable
+
+type ImageFormat =
+  | Png
+  | Jpeg
+  | Webp
+  | Svg
+  | Gif
+  | UnknownFormat Text
+
+type ImageSize = {
+    width: Int,
+    height: Int
+}
+
+type ImageMetadata = {
+    format: ImageFormat,
+    size: ImageSize,
+    hasAlpha: Bool
+}
+
+type ImageTask A = (Task ImageError A)
+
+// Image data as typed Bytes (not generic Bytes — carry format info)
+type ImageData = {
+    format: ImageFormat,
+    size: ImageSize,
+    bytes: Bytes
+}
+
+// @source usage:
+// @source image.load "/app/icons/logo.png"
+// signal appLogo : Signal (Result ImageError ImageData)
+//
+// Task usage for one-shot loads:
+// type Text -> Task ImageError ImageData
+// Use loadImage from aivi.gtk (future work — requires GDK texture)
+
+export (ImageError, ImageNotFound, ImageDecodeFailed, UnsupportedFormat, ImageUnavailable, ImageFormat, Png, Jpeg, Webp, Svg, Gif, UnknownFormat, ImageSize, ImageMetadata, ImageTask, ImageData)

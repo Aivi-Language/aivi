@@ -1,0 +1,26 @@
+type ClipboardError =
+  | ClipboardUnavailable
+  | ClipboardEmpty
+  | ClipboardTypeMismatch Text
+  | ClipboardWriteFailed Text
+
+// Typed clipboard content — clipboard always knows what it holds
+type ClipboardContent =
+  | TextContent Text
+  | UriListContent (List Text)
+  | ImageContent Bytes
+  | HtmlContent Text
+  | EmptyClipboard
+
+type ClipboardTask A = (Task ClipboardError A)
+
+type ClipboardWriteTask = (Task ClipboardError Unit)
+
+// @source usage — reactive clipboard watching:
+// @source clipboard.watch
+// signal clipboardContent : Signal (Result ClipboardError ClipboardContent)
+//
+// Task usage for writing (not @source — write is imperative):
+// Use clipboardWrite from aivi.gtk (not available yet — future work)
+
+export (ClipboardError, ClipboardUnavailable, ClipboardEmpty, ClipboardTypeMismatch, ClipboardWriteFailed, ClipboardContent, TextContent, UriListContent, ImageContent, HtmlContent, EmptyClipboard, ClipboardTask, ClipboardWriteTask)

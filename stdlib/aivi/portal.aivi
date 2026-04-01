@@ -1,0 +1,43 @@
+type PortalError =
+  | PortalUnavailable
+  | UserCancelled
+  | PortalPermissionDenied Text
+  | PortalDecodeFailed Text
+
+// Typed portal results
+type PortalFileFilter = {
+    name: Text,
+    patterns: List Text
+}
+
+type PortalFileSelection =
+  | SingleFile Text
+  | MultipleFiles (List Text)
+  | SelectionCancelled
+
+type PortalUriResult =
+  | UriOpened Text
+  | UriOpenCancelled
+  | UriOpenFailed Text
+
+type PortalScreenshotResult =
+  | ScreenshotBytes Bytes
+  | ScreenshotCancelled
+
+type PortalTask A = (Task PortalError A)
+
+// @source usage patterns (documented for users):
+//
+// File chooser (open):
+// @source portal.openFile { filters: [{ name: "AIVI Files", patterns: ["*.aivi"] }] }
+// signal openedFile : Signal (Result PortalError PortalFileSelection)
+//
+// Open URI:
+// @source portal.openUri "https://example.com"
+// signal uriResult : Signal (Result PortalError PortalUriResult)
+//
+// Screenshot:
+// @source portal.screenshot
+// signal screenshot : Signal (Result PortalError PortalScreenshotResult)
+
+export (PortalError, PortalUnavailable, UserCancelled, PortalPermissionDenied, PortalDecodeFailed, PortalFileFilter, PortalFileSelection, SingleFile, MultipleFiles, SelectionCancelled, PortalUriResult, UriOpened, UriOpenCancelled, UriOpenFailed, PortalScreenshotResult, ScreenshotBytes, ScreenshotCancelled, PortalTask)

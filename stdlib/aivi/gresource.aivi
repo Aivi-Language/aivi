@@ -1,0 +1,29 @@
+type ResourceError =
+  | ResourceNotFound Text
+  | ResourceDecodeFailed Text
+  | ResourceUnavailable
+
+// Domain type for GResource paths (e.g. "/com/example/app/style.css")
+domain ResourcePath over Text
+    type Text -> Result ResourceError ResourcePath
+    parse
+    type ResourcePath -> Text
+    unwrap
+
+type ResourceTask A = (Task ResourceError A)
+
+// Standard resource load task types
+type ResourceTextTask = (Task ResourceError Text)
+type ResourceBytesTask = (Task ResourceError Bytes)
+type ResourceListTask = (Task ResourceError (List Text))
+
+// Usage:
+// Resource text (CSS, UI XML):
+//   @source resource.text "/com/example/app/style.css"
+//   signal appCss : Signal (Result ResourceError Text)
+//
+// Resource bytes (PNG icon, binary data):
+//   @source resource.bytes "/com/example/app/icon.png"
+//   signal iconData : Signal (Result ResourceError Bytes)
+
+export (ResourceError, ResourceNotFound, ResourceDecodeFailed, ResourceUnavailable, ResourcePath, ResourceTask, ResourceTextTask, ResourceBytesTask, ResourceListTask)

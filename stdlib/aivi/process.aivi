@@ -1,0 +1,31 @@
+type ProcessError =
+  | SpawnFailed Text
+  | ProcessTimeout
+  | NonZeroExit Int
+  | ProcessProtocolError Text
+
+type ProcessStatus =
+  | Exited Int
+  | Killed
+
+type ProcessOutput = {
+    stdout: Text,
+    stderr: Text,
+    status: ProcessStatus
+}
+
+type ProcessConfig = {
+    command: Text,
+    args: List Text,
+    workingDir: Option Text,
+    env: List (Text, Text),
+    timeoutMs: Option Int
+}
+
+type ProcessTask = (Task ProcessError ProcessOutput)
+
+// @source usage pattern:
+// @source process.run { command: "git", args: ["status"] }
+// signal gitStatus : Signal (Result ProcessError ProcessOutput)
+
+export (ProcessError, SpawnFailed, ProcessTimeout, NonZeroExit, ProcessProtocolError, ProcessStatus, Exited, Killed, ProcessOutput, ProcessConfig, ProcessTask)

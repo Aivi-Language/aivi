@@ -1,0 +1,38 @@
+type SettingsError =
+  | SchemaNotFound Text
+  | KeyNotFound Text
+  | TypeMismatch Text
+  | SettingsUnavailable
+
+// Domain type for GSettings schema IDs (e.g. "org.gnome.desktop.interface")
+domain SettingsSchema over Text
+    type Text -> Result SettingsError SettingsSchema
+    parse
+    type SettingsSchema -> Text
+    unwrap
+
+// Domain type for settings key paths
+domain SettingsKey over Text
+    type Text -> SettingsKey
+    make
+    type SettingsKey -> Text
+    unwrap
+
+// Typed setting values
+type SettingValue =
+  | SettingBool Bool
+  | SettingInt Int
+  | SettingFloat Float
+  | SettingText Text
+  | SettingList (List Text)
+
+type SettingsTask A = (Task SettingsError A)
+
+// @source usage patterns (documented for users):
+// @source gsettings.watch "org.gnome.desktop.interface" "color-scheme"
+// signal colorScheme : Signal (Result SettingsError Text)
+//
+// @source gsettings.watch "org.gnome.desktop.interface" "text-scaling-factor"
+// signal textScale : Signal (Result SettingsError Float)
+
+export (SettingsError, SchemaNotFound, KeyNotFound, TypeMismatch, SettingsUnavailable, SettingsSchema, SettingsKey, SettingValue, SettingBool, SettingInt, SettingFloat, SettingText, SettingList, SettingsTask)
