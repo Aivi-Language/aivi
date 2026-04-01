@@ -20,6 +20,7 @@ mod signal_metadata_elaboration;
 mod source_contract_resolution;
 mod source_lifecycle_elaboration;
 pub mod symbols;
+mod temporal_elaboration;
 mod truthy_falsy_elaboration;
 mod typecheck;
 mod validate;
@@ -116,6 +117,11 @@ pub use source_lifecycle_elaboration::{
     SourceStaleWorkPolicy, SourceTeardownPolicy, elaborate_source_lifecycles,
 };
 pub use symbols::{LspSymbol, LspSymbolKind, extract_symbols};
+pub use temporal_elaboration::{
+    BlockedTemporalStage, DiffStageMode, DiffStagePlan, PreviousStagePlan,
+    TemporalElaborationBlocker, TemporalElaborationReport, TemporalStageElaboration,
+    TemporalStageOutcome, elaborate_temporal_stages,
+};
 pub use truthy_falsy_elaboration::{
     BlockedTruthyFalsyStage, TruthyFalsyBranchKind, TruthyFalsyBranchPlan,
     TruthyFalsyElaborationBlocker, TruthyFalsyElaborationReport, TruthyFalsyStageElaboration,

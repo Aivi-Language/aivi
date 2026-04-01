@@ -11,6 +11,7 @@ use aivi_backend::{
     PipelineId as BackendPipelineId, Program as BackendProgram, RuntimeCallable,
     RuntimeDbConnection, RuntimeRecordField, RuntimeSumValue, RuntimeValue,
     SourceId as BackendSourceId, StageKind as BackendStageKind,
+    TemporalStage as BackendTemporalStage,
 };
 use aivi_core as core;
 use aivi_hir as hir;
@@ -53,6 +54,7 @@ pub fn link_backend_runtime(
         source_bindings: linked.source_bindings,
         task_bindings: linked.task_bindings,
         db_changed_routes: linked.db_changed_routes,
+        temporal_states: BTreeMap::new(),
         db_commit_invalidation_sink: None,
     };
     linked_runtime.prime_db_changed_routes();
@@ -78,6 +80,7 @@ pub struct BackendLinkedRuntime {
     source_bindings: BTreeMap<SourceInstanceId, LinkedSourceBinding>,
     task_bindings: BTreeMap<TaskInstanceId, LinkedTaskBinding>,
     db_changed_routes: Box<[LinkedDbChangedRoute]>,
+    temporal_states: BTreeMap<TemporalStageKey, RuntimeValue>,
     db_commit_invalidation_sink: Option<DbCommitInvalidationSink>,
 }
 
@@ -242,6 +245,7 @@ impl BackendLinkedRuntime {
     pub fn tick(&mut self) -> Result<TickOutcome, BackendRuntimeError> {
         let committed = self.committed_signal_snapshots()?;
         let runtime_committed = materialize_detached_globals(&committed);
+        let mut temporal_states = self.temporal_states.clone();
         let mut evaluator = LinkedDerivedEvaluator {
             backend: self.backend.as_ref(),
             signal_items_by_handle: &self.signal_items_by_handle,
@@ -250,8 +254,11 @@ impl BackendLinkedRuntime {
             reactive_clauses: &self.reactive_clauses,
             linked_recurrence_signals: &self.linked_recurrence_signals,
             committed_signals: &runtime_committed,
+            temporal_states: &mut temporal_states,
         };
-        self.runtime.try_tick(&mut evaluator)
+        let outcome = self.runtime.try_tick(&mut evaluator)?;
+        self.temporal_states = temporal_states;
+        Ok(outcome)
     }
 
     pub fn tick_with_source_lifecycle(
@@ -705,6 +712,12 @@ fn strip_runtime_signal(value: &RuntimeValue) -> &RuntimeValue {
         current = inner.as_ref();
     }
     current
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct TemporalStageKey {
+    pipeline: BackendPipelineId,
+    stage_index: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1663,6 +1676,7 @@ struct LinkedDerivedEvaluator<'a> {
     reactive_clauses: &'a BTreeMap<crate::ReactiveClauseHandle, LinkedReactiveClause>,
     linked_recurrence_signals: &'a BTreeMap<DerivedHandle, LinkedRecurrenceSignal>,
     committed_signals: &'a BTreeMap<BackendItemId, RuntimeValue>,
+    temporal_states: &'a mut BTreeMap<TemporalStageKey, RuntimeValue>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1719,11 +1733,13 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
         let value = evaluator
             .evaluate_item(binding.backend_item, &globals)
             .map_err(|error| self.derived_eval_error(signal, binding.item, error))?;
+        let binding_item = binding.item;
+        let binding_pipeline_ids = binding.pipeline_ids.clone();
 
         self.apply_pipelines(
             signal,
-            binding.item,
-            &binding.pipeline_ids,
+            binding_item,
+            binding_pipeline_ids.as_ref(),
             value,
             &globals,
             &mut evaluator,
@@ -1748,11 +1764,13 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
         let value = evaluator
             .evaluate_item(binding.backend_item, &globals)
             .map_err(|error| self.reactive_seed_eval_error(signal, binding.item, error))?;
+        let binding_item = binding.item;
+        let binding_pipeline_ids = binding.pipeline_ids.clone();
         self.apply_reactive_pipelines(
             signal,
-            binding.item,
+            binding_item,
             ReactivePipelineContext::Seed,
-            &binding.pipeline_ids,
+            binding_pipeline_ids.as_ref(),
             value,
             &globals,
             &mut evaluator,
@@ -1851,14 +1869,16 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
                 }
             },
         };
+        let clause_owner = clause_binding.owner;
+        let clause_pipeline_ids = clause_binding.pipeline_ids.clone();
 
         let globals = self.build_signal_globals(signal_binding.backend_item, &inputs);
         let mut evaluator = KernelEvaluator::new(self.backend);
         self.apply_reactive_pipelines(
             signal,
-            clause_binding.owner,
+            clause_owner,
             ReactivePipelineContext::Body(clause),
-            &clause_binding.pipeline_ids,
+            clause_pipeline_ids.as_ref(),
             value,
             &globals,
             &mut evaluator,
@@ -2007,7 +2027,7 @@ impl LinkedDerivedEvaluator<'_> {
     }
 
     fn apply_pipelines(
-        &self,
+        &mut self,
         signal: DerivedHandle,
         item: hir::ItemId,
         pipeline_ids: &[BackendPipelineId],
@@ -2035,6 +2055,63 @@ impl LinkedDerivedEvaluator<'_> {
                         // Carrier metadata only; the body kernel already computed
                         // the branch result, so we pass the value through unchanged.
                     }
+                    BackendStageKind::Temporal(BackendTemporalStage::Previous { seed, .. }) => {
+                        let key = TemporalStageKey {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        };
+                        let current = value.clone();
+                        value = match self.temporal_states.get(&key).cloned() {
+                            Some(previous) => previous,
+                            None => evaluator
+                                .evaluate_kernel(*seed, None, &[], globals)
+                                .map_err(|error| self.derived_eval_error(signal, item, error))?,
+                        };
+                        self.temporal_states.insert(key, current);
+                    }
+                    BackendStageKind::Temporal(BackendTemporalStage::DiffFunction {
+                        diff, ..
+                    }) => {
+                        let key = TemporalStageKey {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        };
+                        let current = value.clone();
+                        let previous = self
+                            .temporal_states
+                            .get(&key)
+                            .cloned()
+                            .unwrap_or_else(|| current.clone());
+                        let callable = evaluator
+                            .evaluate_kernel(*diff, None, &[], globals)
+                            .map_err(|error| self.derived_eval_error(signal, item, error))?;
+                        value = evaluator
+                            .apply_runtime_callable(
+                                *diff,
+                                callable,
+                                vec![previous, current.clone()],
+                                globals,
+                            )
+                            .map_err(|error| self.derived_eval_error(signal, item, error))?;
+                        self.temporal_states.insert(key, current);
+                    }
+                    BackendStageKind::Temporal(BackendTemporalStage::DiffSeed { seed, .. }) => {
+                        let key = TemporalStageKey {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        };
+                        let current = value.clone();
+                        let previous = match self.temporal_states.get(&key).cloned() {
+                            Some(previous) => previous,
+                            None => evaluator
+                                .evaluate_kernel(*seed, None, &[], globals)
+                                .map_err(|error| self.derived_eval_error(signal, item, error))?,
+                        };
+                        value = evaluator
+                            .subtract_runtime_values(*seed, current.clone(), previous)
+                            .map_err(|error| self.derived_eval_error(signal, item, error))?;
+                        self.temporal_states.insert(key, current);
+                    }
                     BackendStageKind::Fanout(fanout) => {
                         value = self
                             .apply_fanout_stage(signal, item, fanout, value, globals, evaluator)?;
@@ -2049,7 +2126,7 @@ impl LinkedDerivedEvaluator<'_> {
     }
 
     fn apply_reactive_pipelines(
-        &self,
+        &mut self,
         signal: SignalHandle,
         item: hir::ItemId,
         context: ReactivePipelineContext,
@@ -2077,6 +2154,9 @@ impl LinkedDerivedEvaluator<'_> {
                         }
                     }
                     BackendStageKind::TruthyFalsy(_) => {}
+                    BackendStageKind::Temporal(_) => unreachable!(
+                        "reactive temporal stages should be rejected during runtime linking"
+                    ),
                     BackendStageKind::Fanout(fanout) => {
                         value = self.apply_reactive_fanout_stage(
                             signal, item, context, fanout, value, globals, evaluator,
@@ -2593,7 +2673,9 @@ impl<'a> LinkBuilder<'a> {
                     });
                 continue;
             };
-            if !item.pipelines.is_empty() && !self.supported_body_backed_signal_pipelines(item) {
+            if !item.pipelines.is_empty()
+                && !self.supported_body_backed_reactive_signal_pipelines(item)
+            {
                 self.errors
                     .push(BackendRuntimeLinkError::SignalPipelinesNotYetLinked {
                         item: binding.item,
@@ -2775,7 +2857,9 @@ impl<'a> LinkBuilder<'a> {
                 );
                 continue;
             }
-            if !item.pipelines.is_empty() && !self.supported_body_backed_signal_pipelines(item) {
+            if !item.pipelines.is_empty()
+                && !self.supported_body_backed_derived_signal_pipelines(item)
+            {
                 self.errors
                     .push(BackendRuntimeLinkError::SignalPipelinesNotYetLinked {
                         item: binding.item,
@@ -3006,6 +3090,15 @@ impl<'a> LinkBuilder<'a> {
                     }) => {
                         kernels.push(*predicate);
                     }
+                    BackendStageKind::Temporal(BackendTemporalStage::Previous { seed, .. }) => {
+                        kernels.push(*seed);
+                    }
+                    BackendStageKind::Temporal(BackendTemporalStage::DiffFunction { diff, .. }) => {
+                        kernels.push(*diff);
+                    }
+                    BackendStageKind::Temporal(BackendTemporalStage::DiffSeed { seed, .. }) => {
+                        kernels.push(*seed);
+                    }
                     BackendStageKind::Fanout(fanout) => {
                         kernels.push(fanout.map);
                         kernels.extend(fanout.filters.iter().map(|filter| filter.predicate));
@@ -3023,12 +3116,29 @@ impl<'a> LinkBuilder<'a> {
             .collect()
     }
 
-    fn supported_body_backed_signal_pipelines(&self, item: &aivi_backend::Item) -> bool {
+    fn supported_body_backed_derived_signal_pipelines(&self, item: &aivi_backend::Item) -> bool {
         item.body.is_some()
             && item.pipelines.iter().copied().all(|pipeline_id| {
                 let pipeline = &self.backend.pipelines()[pipeline_id];
                 // Recurrence pipelines require scheduler wakeup infrastructure
                 // that is not yet wired; keep them as an explicit boundary.
+                pipeline.recurrence.is_none()
+                    && pipeline.stages.iter().all(|stage| {
+                        matches!(
+                            stage.kind,
+                            BackendStageKind::TruthyFalsy(_)
+                                | BackendStageKind::Gate(BackendGateStage::SignalFilter { .. })
+                                | BackendStageKind::Temporal(_)
+                                | BackendStageKind::Fanout(_)
+                        )
+                    })
+            })
+    }
+
+    fn supported_body_backed_reactive_signal_pipelines(&self, item: &aivi_backend::Item) -> bool {
+        item.body.is_some()
+            && item.pipelines.iter().copied().all(|pipeline_id| {
+                let pipeline = &self.backend.pipelines()[pipeline_id];
                 pipeline.recurrence.is_none()
                     && pipeline.stages.iter().all(|stage| {
                         matches!(
@@ -3195,6 +3305,7 @@ mod tests {
             source_bindings: BTreeMap::new(),
             task_bindings: BTreeMap::from([(instance, binding)]),
             db_changed_routes: Vec::new().into_boxed_slice(),
+            temporal_states: BTreeMap::new(),
             db_commit_invalidation_sink: None,
         }
     }
@@ -4705,6 +4816,95 @@ signal counter : Signal Int =
         assert_eq!(
             linked.runtime().current_value(counter_signal).unwrap(),
             Some(&RuntimeValue::Int(5))
+        );
+    }
+
+    #[test]
+    fn linked_runtime_applies_previous_and_diff_temporal_stages_once_per_publication() {
+        let lowered = lower_text(
+            "runtime-startup-temporal-signal.aivi",
+            r#"
+fun delta:Int = previous:Int current:Int=>    current - previous
+
+provider custom.feed
+    wakeup: providerTrigger
+
+@source custom.feed
+signal score : Signal Int
+
+signal previousScore : Signal Int =
+    score
+     ~|> 0
+
+signal scoreDelta : Signal Int =
+    score
+     -|> 0
+
+signal scoreDeltaFn : Signal Int =
+    score
+     -|> delta
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("temporal derived signals should now link successfully");
+
+        let first = linked
+            .tick_with_source_lifecycle()
+            .expect("initial temporal tick should succeed");
+        assert_eq!(first.source_actions().len(), 1);
+        let port = match &first.source_actions()[0] {
+            LinkedSourceLifecycleAction::Activate { port, .. } => port.clone(),
+            _ => panic!("expected source activation"),
+        };
+
+        let previous_signal = signal_handle(&linked, lowered.hir.module(), "previousScore");
+        let delta_signal = signal_handle(&linked, lowered.hir.module(), "scoreDelta");
+        let delta_fn_signal = signal_handle(&linked, lowered.hir.module(), "scoreDeltaFn");
+
+        port.publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            10,
+        )))
+        .expect("first score publication should queue");
+        linked
+            .tick_with_source_lifecycle()
+            .expect("first temporal publication tick should succeed");
+        assert_eq!(
+            linked.runtime().current_value(previous_signal).unwrap(),
+            Some(&RuntimeValue::Int(0))
+        );
+        assert_eq!(
+            linked.runtime().current_value(delta_signal).unwrap(),
+            Some(&RuntimeValue::Int(10))
+        );
+        assert_eq!(
+            linked.runtime().current_value(delta_fn_signal).unwrap(),
+            Some(&RuntimeValue::Int(0))
+        );
+
+        port.publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            13,
+        )))
+        .expect("second score publication should queue");
+        linked
+            .tick_with_source_lifecycle()
+            .expect("second temporal publication tick should succeed");
+        assert_eq!(
+            linked.runtime().current_value(previous_signal).unwrap(),
+            Some(&RuntimeValue::Int(10))
+        );
+        assert_eq!(
+            linked.runtime().current_value(delta_signal).unwrap(),
+            Some(&RuntimeValue::Int(3))
+        );
+        assert_eq!(
+            linked.runtime().current_value(delta_fn_signal).unwrap(),
+            Some(&RuntimeValue::Int(3))
         );
     }
 

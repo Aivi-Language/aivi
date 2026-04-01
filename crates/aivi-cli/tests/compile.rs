@@ -230,6 +230,70 @@ fn compile_accepts_pattern_armed_reactive_update_program() {
 }
 
 #[test]
+fn compile_accepts_temporal_signal_programs() {
+    let input = TempFile::new(
+        "compile-temporal-signal",
+        "aivi",
+        concat!(
+            "fun delta:Int = previous:Int current:Int=>    current - previous\n",
+            "\n",
+            "provider custom.feed\n",
+            "    wakeup: providerTrigger\n",
+            "\n",
+            "@source custom.feed\n",
+            "signal score : Signal Int\n",
+            "\n",
+            "signal previousScore : Signal Int =\n",
+            "    score\n",
+            "     ~|> 0\n",
+            "\n",
+            "signal scoreDelta : Signal Int =\n",
+            "    score\n",
+            "     -|> 0\n",
+            "\n",
+            "signal scoreDeltaFn : Signal Int =\n",
+            "    score\n",
+            "     -|> delta\n",
+        ),
+    );
+    let output_dir = TempDir::new("compile-temporal-signal");
+    let output_path = output_dir.path().join("temporal-signal.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(input.path())
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
+    assert!(
+        output.status.success(),
+        "expected temporal signal compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata =
+        fs::metadata(&output_path).expect("temporal signal compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "temporal signal object file should not be empty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("codegen: ok"),
+        "expected codegen success in summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("runtime startup/link integration is not available yet"),
+        "expected explicit runtime/link boundary, got stdout: {stdout}"
+    );
+}
+
+#[test]
 fn compile_accepts_source_pattern_reactive_update_program() {
     let input = TempFile::new(
         "compile-source-pattern-reactive-update",

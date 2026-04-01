@@ -45,7 +45,8 @@ pub use module::{
     DomainDecodeSurfaceKind, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item, ItemKind,
     ItemParameter, Module, NonSourceWakeup, Pipe, PipeOrigin, PipeRecurrence, RecurrenceGuard,
     RecurrenceStage, SignalInfo, SourceArgumentValue, SourceInstanceId, SourceNode,
-    SourceOptionBinding, SourceOptionValue, Stage, StageKind, TruthyFalsyBranch, TruthyFalsyStage,
+    SourceOptionBinding, SourceOptionValue, Stage, StageKind, TemporalStage, TruthyFalsyBranch,
+    TruthyFalsyStage,
 };
 pub use ty::{RecordField, Type};
 pub use validate::{ValidationError, ValidationErrors, validate_module};

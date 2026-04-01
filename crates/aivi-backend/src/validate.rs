@@ -8,7 +8,7 @@ use crate::{
         InlinePipeStageKind, KernelExprKind, ParameterRole, ProjectionBase, SubjectRef,
     },
     layout::{LayoutKind, PrimitiveType},
-    program::{DecodeStepKind, GateStage, ItemKind, StageKind},
+    program::{DecodeStepKind, GateStage, ItemKind, StageKind, TemporalStage},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -136,6 +136,10 @@ pub enum ValidationError {
         found: LayoutId,
     },
     TruthyFalsyResultMismatch {
+        pipeline: PipelineId,
+        stage_index: usize,
+    },
+    TemporalStageContractMismatch {
         pipeline: PipelineId,
         stage_index: usize,
     },
@@ -381,6 +385,13 @@ impl fmt::Display for ValidationError {
             } => write!(
                 f,
                 "truthy/falsy stage {stage_index} on pipeline {pipeline} does not preserve one unified result layout"
+            ),
+            Self::TemporalStageContractMismatch {
+                pipeline,
+                stage_index,
+            } => write!(
+                f,
+                "temporal stage {stage_index} on pipeline {pipeline} violates its payload or callable contract"
             ),
             Self::FanoutResultMismatch {
                 pipeline,
@@ -885,6 +896,84 @@ fn validate_pipeline(
                             layout: stage.result_layout,
                             child: payload,
                         });
+                    }
+                }
+            }
+            StageKind::Temporal(temporal) => {
+                match temporal {
+                    TemporalStage::Previous {
+                        payload_layout,
+                        seed,
+                    } => {
+                        validate_kernel_contract(
+                            program,
+                            *seed,
+                            None,
+                            false,
+                            *payload_layout,
+                            errors,
+                        );
+                        if signal_payload_layout(program, stage.input_layout) != Some(*payload_layout)
+                            || signal_payload_layout(program, stage.result_layout)
+                                != Some(*payload_layout)
+                        {
+                            errors.push(ValidationError::TemporalStageContractMismatch {
+                                pipeline: pipeline_id,
+                                stage_index: stage.index,
+                            });
+                        }
+                    }
+                    TemporalStage::DiffFunction {
+                        input_layout,
+                        result_layout,
+                        callable_layout,
+                        diff,
+                    } => {
+                        validate_kernel_contract(
+                            program,
+                            *diff,
+                            None,
+                            false,
+                            *callable_layout,
+                            errors,
+                        );
+                        if signal_payload_layout(program, stage.input_layout) != Some(*input_layout)
+                            || signal_payload_layout(program, stage.result_layout)
+                                != Some(*result_layout)
+                            || !diff_callable_matches(
+                                program,
+                                *callable_layout,
+                                *input_layout,
+                                *result_layout,
+                            )
+                        {
+                            errors.push(ValidationError::TemporalStageContractMismatch {
+                                pipeline: pipeline_id,
+                                stage_index: stage.index,
+                            });
+                        }
+                    }
+                    TemporalStage::DiffSeed {
+                        payload_layout,
+                        seed,
+                    } => {
+                        validate_kernel_contract(
+                            program,
+                            *seed,
+                            None,
+                            false,
+                            *payload_layout,
+                            errors,
+                        );
+                        if signal_payload_layout(program, stage.input_layout) != Some(*payload_layout)
+                            || signal_payload_layout(program, stage.result_layout)
+                                != Some(*payload_layout)
+                        {
+                            errors.push(ValidationError::TemporalStageContractMismatch {
+                                pipeline: pipeline_id,
+                                stage_index: stage.index,
+                            });
+                        }
                     }
                 }
             }
@@ -1431,6 +1520,38 @@ fn is_bool_layout(program: &Program, layout_id: LayoutId) -> bool {
         .layouts()
         .get(layout_id)
         .is_some_and(|layout| matches!(layout.kind, LayoutKind::Primitive(PrimitiveType::Bool)))
+}
+
+fn signal_payload_layout(program: &Program, layout_id: LayoutId) -> Option<LayoutId> {
+    match program.layouts().get(layout_id).map(|layout| &layout.kind) {
+        Some(LayoutKind::Signal { element }) => Some(*element),
+        _ => None,
+    }
+}
+
+fn diff_callable_matches(
+    program: &Program,
+    callable_layout: LayoutId,
+    input_layout: LayoutId,
+    result_layout: LayoutId,
+) -> bool {
+    let Some(LayoutKind::Arrow {
+        parameter: first_parameter,
+        result: nested_result,
+    }) = program.layouts().get(callable_layout).map(|layout| &layout.kind)
+    else {
+        return false;
+    };
+    if *first_parameter != input_layout {
+        return false;
+    }
+    matches!(
+        program.layouts().get(*nested_result).map(|layout| &layout.kind),
+        Some(LayoutKind::Arrow {
+            parameter,
+            result,
+        }) if *parameter == input_layout && *result == result_layout
+    )
 }
 
 fn truthy_falsy_result_layout(program: &Program, layout_id: LayoutId) -> LayoutId {

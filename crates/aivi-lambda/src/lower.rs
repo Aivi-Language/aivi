@@ -9,6 +9,7 @@ use crate::{
     Item,
     LoweringError::*,
     Module, NonSourceWakeup, Parameter, Pipe, PipeRecurrence, RecurrenceStage, Stage, StageKind,
+    TemporalStage,
     analysis::{AnalysisError, capture_free_bindings},
     validate::{ValidationError, validate_module},
 };
@@ -280,6 +281,51 @@ impl<'a> ModuleLowerer<'a> {
                         continue;
                     };
                     StageKind::Fanout(fanout)
+                }
+                core::StageKind::Temporal(core::TemporalStage::Previous { seed_expr }) => {
+                    let Some(seed) = self.lower_closure(
+                        owner,
+                        stage.span,
+                        ClosureKind::PreviousSeed,
+                        None,
+                        Vec::new(),
+                        *seed_expr,
+                        true,
+                        &runtime_names,
+                    ) else {
+                        continue;
+                    };
+                    StageKind::Temporal(TemporalStage::Previous { seed })
+                }
+                core::StageKind::Temporal(core::TemporalStage::DiffFunction { diff_expr }) => {
+                    let Some(diff) = self.lower_closure(
+                        owner,
+                        stage.span,
+                        ClosureKind::DiffFunction,
+                        None,
+                        Vec::new(),
+                        *diff_expr,
+                        true,
+                        &runtime_names,
+                    ) else {
+                        continue;
+                    };
+                    StageKind::Temporal(TemporalStage::DiffFunction { diff })
+                }
+                core::StageKind::Temporal(core::TemporalStage::DiffSeed { seed_expr }) => {
+                    let Some(seed) = self.lower_closure(
+                        owner,
+                        stage.span,
+                        ClosureKind::DiffSeed,
+                        None,
+                        Vec::new(),
+                        *seed_expr,
+                        true,
+                        &runtime_names,
+                    ) else {
+                        continue;
+                    };
+                    StageKind::Temporal(TemporalStage::DiffSeed { seed })
                 }
             };
 

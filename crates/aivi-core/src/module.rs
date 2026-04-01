@@ -274,6 +274,19 @@ impl fmt::Display for Module {
                                 )?;
                             }
                         }
+                        StageKind::Temporal(TemporalStage::Previous { seed_expr }) => {
+                            writeln!(f, "      previous = {}", ExprPrinter::new(self, *seed_expr))?;
+                        }
+                        StageKind::Temporal(TemporalStage::DiffFunction { diff_expr }) => {
+                            writeln!(f, "      diff = {}", ExprPrinter::new(self, *diff_expr))?;
+                        }
+                        StageKind::Temporal(TemporalStage::DiffSeed { seed_expr }) => {
+                            writeln!(
+                                f,
+                                "      diff-seed = {}",
+                                ExprPrinter::new(self, *seed_expr)
+                            )?;
+                        }
                     }
                 }
                 if let Some(recurrence) = &pipe.recurrence {
@@ -389,6 +402,7 @@ pub enum StageKind {
     Gate(GateStage),
     TruthyFalsy(TruthyFalsyStage),
     Fanout(FanoutStage),
+    Temporal(TemporalStage),
 }
 
 impl StageKind {
@@ -397,6 +411,7 @@ impl StageKind {
             Self::Gate(_) => "gate",
             Self::TruthyFalsy(_) => "truthy-falsy",
             Self::Fanout(_) => "fanout",
+            Self::Temporal(_) => "temporal",
         }
     }
 }
@@ -476,6 +491,19 @@ pub struct FanoutJoin {
     pub collection_subject: Type,
     pub runtime_expr: ExprId,
     pub result_type: Type,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TemporalStage {
+    Previous {
+        seed_expr: ExprId,
+    },
+    DiffFunction {
+        diff_expr: ExprId,
+    },
+    DiffSeed {
+        seed_expr: ExprId,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

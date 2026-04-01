@@ -4,18 +4,18 @@ use aivi_base::SourceSpan;
 use aivi_hir::{
     BlockedFanoutSegment, BlockedGateStage, BlockedGeneralExpr as BlockedGeneralExprBody,
     BlockedRecurrenceNode, BlockedSourceDecodeProgram, BlockedSourceLifecycleNode,
-    BlockedTruthyFalsyStage, DecoratorPayload, ExprId as HirExprId, ExprKind as HirExprKind,
-    GateRuntimeExpr, GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStageKind,
-    GateRuntimeProjectionBase, GateRuntimeReference, GateRuntimeTextLiteral,
-    GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch, GateStageOutcome,
-    GeneralExprInstanceMemberElaboration, GeneralExprOutcome, GeneralExprParameter,
-    ImportBindingMetadata, ImportId, ImportValueType, Item as HirItem, ItemId as HirItemId,
-    PatternId as HirPatternId, PipeTransformMode, RecurrenceNodeOutcome,
+    BlockedTemporalStage, BlockedTruthyFalsyStage, DecoratorPayload, ExprId as HirExprId,
+    ExprKind as HirExprKind, GateRuntimeExpr, GateRuntimeExprKind, GateRuntimePipeExpr,
+    GateRuntimePipeStageKind, GateRuntimeProjectionBase, GateRuntimeReference,
+    GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
+    GateStageOutcome, GeneralExprInstanceMemberElaboration, GeneralExprOutcome,
+    GeneralExprParameter, ImportBindingMetadata, ImportId, ImportValueType, Item as HirItem,
+    ItemId as HirItemId, PatternId as HirPatternId, PipeTransformMode, RecurrenceNodeOutcome,
     ResolvedClassMemberDispatch, SourceDecodeProgram, SourceDecodeProgramOutcome,
-    SourceLifecycleNodeOutcome, TermResolution, TruthyFalsyStageOutcome, TypeBinding,
-    TypeConstructorHead, elaborate_fanouts, elaborate_gates, elaborate_general_expressions,
-    elaborate_recurrences, elaborate_source_lifecycles, elaborate_truthy_falsy,
-    generate_source_decode_programs,
+    SourceLifecycleNodeOutcome, TemporalStageOutcome, TermResolution, TruthyFalsyStageOutcome,
+    TypeBinding, TypeConstructorHead, elaborate_fanouts, elaborate_gates,
+    elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
+    elaborate_temporal_stages, elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{
@@ -32,6 +32,7 @@ use crate::{
     SourceOptionBinding, SourceOptionValue, Stage, StageKind, TextLiteral, TextSegment,
     TruthyFalsyBranch, TruthyFalsyStage, Type,
     expr::ExprKind,
+    module::TemporalStage,
     validate::{ValidationError, validate_module},
 };
 
@@ -101,6 +102,13 @@ pub enum LoweringError {
         map_stage_index: usize,
         span: SourceSpan,
         blocked: BlockedFanoutSegment,
+    },
+    BlockedTemporalStage {
+        owner: HirItemId,
+        pipe_expr: HirExprId,
+        stage_index: usize,
+        span: SourceSpan,
+        blocked: BlockedTemporalStage,
     },
     BlockedRecurrence {
         owner: HirItemId,
@@ -224,6 +232,15 @@ impl std::fmt::Display for LoweringError {
             } => write!(
                 f,
                 "typed-core lowering blocked on fanout stage {map_stage_index} for item {owner}: {blocked:?}"
+            ),
+            Self::BlockedTemporalStage {
+                owner,
+                stage_index,
+                blocked,
+                ..
+            } => write!(
+                f,
+                "typed-core lowering blocked on temporal stage {stage_index} for item {owner}: {blocked:?}"
             ),
             Self::BlockedRecurrence {
                 owner,
@@ -844,6 +861,7 @@ impl<'a> ModuleLowerer<'a> {
         self.lower_gate_stages();
         self.lower_truthy_falsy_stages();
         self.lower_fanout_stages();
+        self.lower_temporal_stages();
         self.lower_recurrences();
         self.finalize_pipes()?;
         self.lower_sources()?;
@@ -1392,6 +1410,88 @@ impl<'a> ModuleLowerer<'a> {
                     owner: segment.owner,
                     pipe_expr: segment.pipe_expr,
                     stage_index: segment.map_stage_index,
+                });
+            }
+        }
+    }
+
+    fn lower_temporal_stages(&mut self) {
+        for stage in elaborate_temporal_stages(self.hir).into_stages() {
+            if !self.item_map.contains_key(&stage.owner) {
+                self.errors
+                    .push(LoweringError::UnknownOwner { owner: stage.owner });
+                continue;
+            }
+            let key = PipeKey {
+                owner: stage.owner,
+                pipe_expr: stage.pipe_expr,
+            };
+            let lowered = match stage.outcome {
+                TemporalStageOutcome::Previous(plan) => {
+                    let seed_expr = match self.lower_runtime_expr(stage.owner, &plan.seed_expr) {
+                        Ok(expr) => expr,
+                        Err(error) => {
+                            self.errors.push(error);
+                            continue;
+                        }
+                    };
+                    PendingStage::Lowered {
+                        span: stage.stage_span,
+                        input_subject: Type::lower(&plan.input_subject),
+                        result_subject: Type::lower(&plan.result_subject),
+                        kind: StageKind::Temporal(TemporalStage::Previous { seed_expr }),
+                    }
+                }
+                TemporalStageOutcome::Diff(plan) => {
+                    let kind = match plan.mode {
+                        aivi_hir::DiffStageMode::Function { diff_expr } => {
+                            let diff_expr = match self.lower_runtime_expr(stage.owner, &diff_expr) {
+                                Ok(expr) => expr,
+                                Err(error) => {
+                                    self.errors.push(error);
+                                    continue;
+                                }
+                            };
+                            TemporalStage::DiffFunction { diff_expr }
+                        }
+                        aivi_hir::DiffStageMode::Seed { seed_expr } => {
+                            let seed_expr = match self.lower_runtime_expr(stage.owner, &seed_expr) {
+                                Ok(expr) => expr,
+                                Err(error) => {
+                                    self.errors.push(error);
+                                    continue;
+                                }
+                            };
+                            TemporalStage::DiffSeed { seed_expr }
+                        }
+                    };
+                    PendingStage::Lowered {
+                        span: stage.stage_span,
+                        input_subject: Type::lower(&plan.input_subject),
+                        result_subject: Type::lower(&plan.result_subject),
+                        kind: StageKind::Temporal(kind),
+                    }
+                }
+                TemporalStageOutcome::Blocked(blocked) => {
+                    self.errors.push(LoweringError::BlockedTemporalStage {
+                        owner: stage.owner,
+                        pipe_expr: stage.pipe_expr,
+                        stage_index: stage.stage_index,
+                        span: stage.stage_span,
+                        blocked,
+                    });
+                    continue;
+                }
+            };
+            let builder = match self.pipe_builder(key) {
+                Some(builder) => builder,
+                None => continue,
+            };
+            if builder.stages.insert(stage.stage_index, lowered).is_some() {
+                self.errors.push(LoweringError::DuplicatePipeStage {
+                    owner: stage.owner,
+                    pipe_expr: stage.pipe_expr,
+                    stage_index: stage.stage_index,
                 });
             }
         }

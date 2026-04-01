@@ -206,6 +206,15 @@ impl fmt::Display for Module {
                                 )?;
                             }
                         }
+                        StageKind::Temporal(TemporalStage::Previous { seed }) => {
+                            writeln!(f, "      previous = closure{seed}")?;
+                        }
+                        StageKind::Temporal(TemporalStage::DiffFunction { diff }) => {
+                            writeln!(f, "      diff = closure{diff}")?;
+                        }
+                        StageKind::Temporal(TemporalStage::DiffSeed { seed }) => {
+                            writeln!(f, "      diff-seed = closure{seed}")?;
+                        }
                     }
                 }
                 if let Some(recurrence) = &pipe.recurrence {
@@ -342,6 +351,7 @@ pub enum StageKind {
     Gate(GateStage),
     TruthyFalsy(core::TruthyFalsyStage),
     Fanout(FanoutStage),
+    Temporal(TemporalStage),
 }
 
 impl StageKind {
@@ -350,6 +360,7 @@ impl StageKind {
             Self::Gate(_) => "gate",
             Self::TruthyFalsy(_) => "truthy-falsy",
             Self::Fanout(_) => "fanout",
+            Self::Temporal(_) => "temporal",
         }
     }
 }
@@ -396,6 +407,19 @@ pub struct FanoutJoin {
     pub collection_subject: core::Type,
     pub runtime: ClosureId,
     pub result_type: core::Type,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TemporalStage {
+    Previous {
+        seed: ClosureId,
+    },
+    DiffFunction {
+        diff: ClosureId,
+    },
+    DiffSeed {
+        seed: ClosureId,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -466,6 +490,9 @@ pub enum ClosureKind {
     GateTrue,
     GateFalse,
     SignalFilterPredicate,
+    PreviousSeed,
+    DiffFunction,
+    DiffSeed,
     FanoutMap,
     FanoutFilterPredicate,
     FanoutJoin,
@@ -482,6 +509,9 @@ impl fmt::Display for ClosureKind {
             Self::GateTrue => f.write_str("gate-true"),
             Self::GateFalse => f.write_str("gate-false"),
             Self::SignalFilterPredicate => f.write_str("signal-filter-predicate"),
+            Self::PreviousSeed => f.write_str("previous-seed"),
+            Self::DiffFunction => f.write_str("diff-function"),
+            Self::DiffSeed => f.write_str("diff-seed"),
             Self::FanoutMap => f.write_str("fanout-map"),
             Self::FanoutFilterPredicate => f.write_str("fanout-filter-predicate"),
             Self::FanoutJoin => f.write_str("fanout-join"),

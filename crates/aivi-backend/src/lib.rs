@@ -61,7 +61,7 @@ pub use program::{
     RecurrenceStage, RecurrenceTarget, RecurrenceWakeupKind, SignalInfo, SourceArgumentKernel,
     SourceCancellationPolicy, SourceInstanceId, SourceOptionBinding, SourceOptionKernel,
     SourcePlan, SourceProvider, SourceReplacementPolicy, SourceStaleWorkPolicy,
-    SourceTeardownPolicy, Stage, StageKind, TruthyFalsyBranch, TruthyFalsyStage,
+    SourceTeardownPolicy, Stage, StageKind, TemporalStage, TruthyFalsyBranch, TruthyFalsyStage,
 };
 pub use runtime::{
     DetachedRuntimeValue, EvaluationError, KernelEvaluator, RuntimeCallable, RuntimeConstructor,

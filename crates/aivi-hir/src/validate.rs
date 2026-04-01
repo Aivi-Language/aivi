@@ -13521,7 +13521,11 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    fn function_signature(&self, ty: &GateType, arity: usize) -> Option<(Vec<GateType>, GateType)> {
+    pub(crate) fn function_signature(
+        &self,
+        ty: &GateType,
+        arity: usize,
+    ) -> Option<(Vec<GateType>, GateType)> {
         let mut parameters = Vec::with_capacity(arity);
         let mut current = ty;
         for _ in 0..arity {
@@ -14073,7 +14077,7 @@ impl<'a> GateTypeContext<'a> {
         self.finalize_expr_info(info)
     }
 
-    fn infer_accumulate_stage_info(
+    pub(crate) fn infer_accumulate_stage_info(
         &mut self,
         seed_expr: ExprId,
         step_expr: ExprId,
@@ -14128,6 +14132,107 @@ impl<'a> GateTypeContext<'a> {
         }
 
         info.ty = Some(GateType::Signal(Box::new(seed_ty)));
+        self.finalize_expr_info(info)
+    }
+
+    pub(crate) fn infer_previous_stage_info(
+        &mut self,
+        seed_expr: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let mut info = GateExprInfo::default();
+        let GateType::Signal(input_payload) = subject else {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: self.module.exprs()[seed_expr].span,
+                stage: "~|>",
+                expected: "Signal _".to_owned(),
+                actual: subject.to_string(),
+            });
+            return self.finalize_expr_info(info);
+        };
+
+        let seed_info = self.infer_expr(seed_expr, env, None);
+        let seed_ty = seed_info.actual_gate_type().or(seed_info.ty.clone());
+        info.merge(seed_info);
+        let Some(seed_ty) = seed_ty else {
+            return self.finalize_expr_info(info);
+        };
+        if !seed_ty.same_shape(input_payload.as_ref()) {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: self.module.exprs()[seed_expr].span,
+                stage: "~|>",
+                expected: input_payload.as_ref().to_string(),
+                actual: seed_ty.to_string(),
+            });
+            return self.finalize_expr_info(info);
+        }
+
+        info.ty = Some(GateType::Signal(Box::new(seed_ty)));
+        self.finalize_expr_info(info)
+    }
+
+    pub(crate) fn infer_diff_stage_info(
+        &mut self,
+        diff_expr: ExprId,
+        env: &GateExprEnv,
+        subject: &GateType,
+    ) -> GateExprInfo {
+        let mut info = GateExprInfo::default();
+        let GateType::Signal(input_payload) = subject else {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: self.module.exprs()[diff_expr].span,
+                stage: "-|>",
+                expected: "Signal _".to_owned(),
+                actual: subject.to_string(),
+            });
+            return self.finalize_expr_info(info);
+        };
+
+        let stage_info = self.infer_expr(diff_expr, env, None);
+        let stage_ty = stage_info.actual_gate_type().or(stage_info.ty.clone());
+        info.merge(stage_info);
+        let Some(stage_ty) = stage_ty else {
+            return self.finalize_expr_info(info);
+        };
+
+        if let Some((parameters, result_ty)) = self.function_signature(&stage_ty, 2) {
+            if !parameters[0].same_shape(input_payload.as_ref())
+                || !parameters[1].same_shape(input_payload.as_ref())
+                || result_ty.is_signal()
+            {
+                info.issues.push(GateIssue::InvalidPipeStageInput {
+                    span: self.module.exprs()[diff_expr].span,
+                    stage: "-|>",
+                    expected: format!(
+                        "{} -> {} -> _",
+                        input_payload.as_ref(),
+                        input_payload.as_ref()
+                    ),
+                    actual: stage_ty.to_string(),
+                });
+                return self.finalize_expr_info(info);
+            }
+            info.ty = Some(GateType::Signal(Box::new(result_ty.clone())));
+            return self.finalize_expr_info(info);
+        }
+
+        if stage_ty.same_shape(input_payload.as_ref()) && is_numeric_gate_type(input_payload) {
+            info.ty = Some(GateType::Signal(Box::new(stage_ty)));
+            return self.finalize_expr_info(info);
+        }
+
+        info.issues.push(GateIssue::InvalidPipeStageInput {
+            span: self.module.exprs()[diff_expr].span,
+            stage: "-|>",
+            expected: format!(
+                "{} -> {} -> _  or seeded {}",
+                input_payload.as_ref(),
+                input_payload.as_ref(),
+                input_payload.as_ref()
+            ),
+            actual: stage_ty.to_string(),
+        });
         self.finalize_expr_info(info)
     }
 
@@ -14640,12 +14745,19 @@ impl<'a> GateTypeContext<'a> {
                     stage_index += 1;
                     self.infer_accumulate_stage_info(*seed, *step, &pipe_env, &subject)
                 }
+                PipeStageKind::Previous { expr } => {
+                    stage_index += 1;
+                    self.infer_previous_stage_info(*expr, &pipe_env, &subject)
+                }
+                PipeStageKind::Diff { expr } => {
+                    stage_index += 1;
+                    self.infer_diff_stage_info(*expr, &pipe_env, &subject)
+                }
                 PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
                 | PipeStageKind::RecurStep { .. }
                 | PipeStageKind::Validate { .. }
-                | PipeStageKind::Previous { .. }
-                | PipeStageKind::Diff { .. } => {
+                 => {
                     stage_index += 1;
                     GateExprInfo::default()
                 }

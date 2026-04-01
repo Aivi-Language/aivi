@@ -5236,6 +5236,15 @@ fn kernel_symbol(program: &Program, kernel_id: KernelId, kernel: &Kernel) -> Str
             KernelOriginKind::SignalFilterPredicate { stage_index, .. } => {
                 format!("signal_filter_s{stage_index}")
             }
+            KernelOriginKind::PreviousSeed { stage_index, .. } => {
+                format!("previous_seed_s{stage_index}")
+            }
+            KernelOriginKind::DiffFunction { stage_index, .. } => {
+                format!("diff_function_s{stage_index}")
+            }
+            KernelOriginKind::DiffSeed { stage_index, .. } => {
+                format!("diff_seed_s{stage_index}")
+            }
             KernelOriginKind::FanoutMap { stage_index, .. } => {
                 format!("fanout_map_s{stage_index}")
             }

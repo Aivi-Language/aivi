@@ -1037,6 +1037,37 @@ impl<'a> KernelEvaluator<'a> {
         Ok(result)
     }
 
+    pub fn apply_runtime_callable(
+        &mut self,
+        kernel_id: KernelId,
+        callee: RuntimeValue,
+        arguments: Vec<RuntimeValue>,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        self.apply_callable(
+            kernel_id,
+            KernelExprId::from_raw(0),
+            callee,
+            arguments,
+            globals,
+        )
+    }
+
+    pub fn subtract_runtime_values(
+        &self,
+        kernel_id: KernelId,
+        left: RuntimeValue,
+        right: RuntimeValue,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        self.apply_binary(
+            kernel_id,
+            KernelExprId::from_raw(0),
+            BinaryOperator::Subtract,
+            left,
+            right,
+        )
+    }
+
     fn evaluate_kernel_raw(
         &mut self,
         kernel_id: KernelId,

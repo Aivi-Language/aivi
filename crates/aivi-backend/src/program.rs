@@ -238,6 +238,29 @@ impl fmt::Display for Program {
                                 )?;
                             }
                         }
+                        StageKind::Temporal(TemporalStage::Previous { payload_layout, seed }) => {
+                            writeln!(
+                                f,
+                                "      previous seed=kernel{seed} payload=layout{payload_layout}"
+                            )?;
+                        }
+                        StageKind::Temporal(TemporalStage::DiffFunction {
+                            input_layout,
+                            result_layout,
+                            callable_layout,
+                            diff,
+                        }) => {
+                            writeln!(
+                                f,
+                                "      diff kernel=kernel{diff} callable=layout{callable_layout} input=layout{input_layout} result=layout{result_layout}"
+                            )?;
+                        }
+                        StageKind::Temporal(TemporalStage::DiffSeed { payload_layout, seed }) => {
+                            writeln!(
+                                f,
+                                "      diff-seed seed=kernel{seed} payload=layout{payload_layout}"
+                            )?;
+                        }
                     }
                 }
                 if let Some(recurrence) = &pipeline.recurrence {
@@ -423,6 +446,7 @@ pub enum StageKind {
     Gate(GateStage),
     TruthyFalsy(TruthyFalsyStage),
     Fanout(FanoutStage),
+    Temporal(TemporalStage),
 }
 
 impl StageKind {
@@ -431,6 +455,7 @@ impl StageKind {
             Self::Gate(_) => "gate",
             Self::TruthyFalsy(_) => "truthy-falsy",
             Self::Fanout(_) => "fanout",
+            Self::Temporal(_) => "temporal",
         }
     }
 }
@@ -508,6 +533,24 @@ pub struct FanoutJoin {
     pub kernel: KernelId,
     pub kernel_result_layout: LayoutId,
     pub result_layout: LayoutId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TemporalStage {
+    Previous {
+        payload_layout: LayoutId,
+        seed: KernelId,
+    },
+    DiffFunction {
+        input_layout: LayoutId,
+        result_layout: LayoutId,
+        callable_layout: LayoutId,
+        diff: KernelId,
+    },
+    DiffSeed {
+        payload_layout: LayoutId,
+        seed: KernelId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

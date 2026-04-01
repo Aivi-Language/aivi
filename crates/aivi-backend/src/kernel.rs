@@ -321,6 +321,18 @@ pub enum KernelOriginKind {
         pipeline: PipelineId,
         stage_index: usize,
     },
+    PreviousSeed {
+        pipeline: PipelineId,
+        stage_index: usize,
+    },
+    DiffFunction {
+        pipeline: PipelineId,
+        stage_index: usize,
+    },
+    DiffSeed {
+        pipeline: PipelineId,
+        stage_index: usize,
+    },
     FanoutMap {
         pipeline: PipelineId,
         stage_index: usize,
@@ -373,6 +385,18 @@ impl fmt::Display for KernelOriginKind {
                 pipeline,
                 stage_index,
             } => write!(f, "signal-predicate pipeline{pipeline}[{stage_index}]"),
+            Self::PreviousSeed {
+                pipeline,
+                stage_index,
+            } => write!(f, "previous-seed pipeline{pipeline}[{stage_index}]"),
+            Self::DiffFunction {
+                pipeline,
+                stage_index,
+            } => write!(f, "diff-function pipeline{pipeline}[{stage_index}]"),
+            Self::DiffSeed {
+                pipeline,
+                stage_index,
+            } => write!(f, "diff-seed pipeline{pipeline}[{stage_index}]"),
             Self::FanoutMap {
                 pipeline,
                 stage_index,

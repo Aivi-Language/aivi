@@ -31,5 +31,6 @@ pub use lower::{LoweringError, LoweringErrors, lower_module};
 pub use module::{
     Capture, Closure, ClosureKind, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item, Module,
     NonSourceWakeup, Parameter, Pipe, PipeRecurrence, RecurrenceStage, Stage, StageKind,
+    TemporalStage,
 };
 pub use validate::{ClosureMetadataMismatch, ValidationError, ValidationErrors, validate_module};

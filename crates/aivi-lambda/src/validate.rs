@@ -5,7 +5,7 @@ use aivi_hir::BindingId;
 
 use crate::{
     CaptureId, ClosureId, ClosureKind, GateStage, Item, Module, Parameter, Pipe, RecurrenceStage,
-    Stage, StageKind,
+    Stage, StageKind, TemporalStage,
     analysis::{AnalysisError, capture_free_bindings},
 };
 
@@ -576,6 +576,54 @@ fn validate_stage(
                 Some(payload_type),
                 &[],
                 *core_predicate,
+                errors,
+            );
+        }
+        (
+            StageKind::Temporal(TemporalStage::Previous { seed }),
+            core::StageKind::Temporal(core::TemporalStage::Previous { seed_expr }),
+        ) => {
+            let owner = module.core().pipes()[stage.pipe].owner;
+            validate_expected_closure(
+                module,
+                *seed,
+                owner,
+                ClosureKind::PreviousSeed,
+                None,
+                &[],
+                *seed_expr,
+                errors,
+            );
+        }
+        (
+            StageKind::Temporal(TemporalStage::DiffFunction { diff }),
+            core::StageKind::Temporal(core::TemporalStage::DiffFunction { diff_expr }),
+        ) => {
+            let owner = module.core().pipes()[stage.pipe].owner;
+            validate_expected_closure(
+                module,
+                *diff,
+                owner,
+                ClosureKind::DiffFunction,
+                None,
+                &[],
+                *diff_expr,
+                errors,
+            );
+        }
+        (
+            StageKind::Temporal(TemporalStage::DiffSeed { seed }),
+            core::StageKind::Temporal(core::TemporalStage::DiffSeed { seed_expr }),
+        ) => {
+            let owner = module.core().pipes()[stage.pipe].owner;
+            validate_expected_closure(
+                module,
+                *seed,
+                owner,
+                ClosureKind::DiffSeed,
+                None,
+                &[],
+                *seed_expr,
                 errors,
             );
         }

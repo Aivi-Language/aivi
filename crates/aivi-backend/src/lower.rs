@@ -46,8 +46,9 @@ use crate::{
     RecurrenceWakeupKind, SignalInfo, SourceArgumentKernel, SourceCancellationPolicy,
     SourceInstanceId, SourceOptionBinding, SourceOptionKernel, SourcePlan, SourceProvider,
     SourceReplacementPolicy, SourceStaleWorkPolicy, SourceTeardownPolicy, Stage, StageKind,
-    SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment, TruthyFalsyBranch,
-    TruthyFalsyStage, UnaryOperator, ValidationError, VariantLayout, validate_program,
+    SubjectRef, SuffixedIntegerLiteral, TemporalStage, TextLiteral, TextSegment,
+    TruthyFalsyBranch, TruthyFalsyStage, UnaryOperator, ValidationError, VariantLayout,
+    validate_program,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -108,6 +109,10 @@ pub enum LoweringError {
     MissingInputSubjectContract {
         span: SourceSpan,
     },
+    InvalidTemporalStageContract {
+        pipeline: PipelineId,
+        stage_index: usize,
+    },
     SubjectLayoutMismatch {
         span: SourceSpan,
         expected: LayoutId,
@@ -156,6 +161,13 @@ impl fmt::Display for LoweringError {
             }
             Self::MissingInputSubjectContract { .. } => f.write_str(
                 "backend kernel uses an input subject without an explicit backend contract",
+            ),
+            Self::InvalidTemporalStageContract {
+                pipeline,
+                stage_index,
+            } => write!(
+                f,
+                "backend lowering expected a signal payload contract for temporal pipeline{pipeline}[{stage_index}]"
             ),
             Self::SubjectLayoutMismatch {
                 expected, found, ..
@@ -641,6 +653,58 @@ impl<'a> ProgramLowerer<'a> {
                     })
                     .transpose()?,
             }),
+            lambda::StageKind::Temporal(lambda::TemporalStage::Previous { seed }) => {
+                StageKind::Temporal(TemporalStage::Previous {
+                    payload_layout: self.signal_payload_layout(
+                        pipeline_id,
+                        stage.index,
+                        &stage.input_subject,
+                    )?,
+                    seed: self.lower_kernel(
+                        KernelOriginKind::PreviousSeed {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        },
+                        *seed,
+                    )?,
+                })
+            }
+            lambda::StageKind::Temporal(lambda::TemporalStage::DiffFunction { diff }) => {
+                let input_payload_layout =
+                    self.signal_payload_layout(pipeline_id, stage.index, &stage.input_subject)?;
+                let result_payload_layout =
+                    self.signal_payload_layout(pipeline_id, stage.index, &stage.result_subject)?;
+                let diff = self.lower_kernel(
+                    KernelOriginKind::DiffFunction {
+                        pipeline: pipeline_id,
+                        stage_index: stage.index,
+                    },
+                    *diff,
+                )?;
+                let callable_layout = self.program.kernels()[diff].result_layout;
+                StageKind::Temporal(TemporalStage::DiffFunction {
+                    input_layout: input_payload_layout,
+                    result_layout: result_payload_layout,
+                    callable_layout,
+                    diff,
+                })
+            }
+            lambda::StageKind::Temporal(lambda::TemporalStage::DiffSeed { seed }) => {
+                StageKind::Temporal(TemporalStage::DiffSeed {
+                    payload_layout: self.signal_payload_layout(
+                        pipeline_id,
+                        stage.index,
+                        &stage.input_subject,
+                    )?,
+                    seed: self.lower_kernel(
+                        KernelOriginKind::DiffSeed {
+                            pipeline: pipeline_id,
+                            stage_index: stage.index,
+                        },
+                        *seed,
+                    )?,
+                })
+            }
         };
 
         Ok(Stage {
@@ -650,6 +714,21 @@ impl<'a> ProgramLowerer<'a> {
             result_layout,
             kind,
         })
+    }
+
+    fn signal_payload_layout(
+        &mut self,
+        pipeline_id: PipelineId,
+        stage_index: usize,
+        ty: &core::Type,
+    ) -> Result<LayoutId, LoweringError> {
+        let core::Type::Signal(payload) = ty else {
+            return Err(LoweringError::InvalidTemporalStageContract {
+                pipeline: pipeline_id,
+                stage_index,
+            });
+        };
+        self.intern_core_type(payload.as_ref())
     }
 
     fn lower_recurrence(

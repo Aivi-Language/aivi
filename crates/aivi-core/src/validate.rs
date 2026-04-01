@@ -4,7 +4,7 @@ use crate::{
     DecodeProgram, DecodeProgramId, DecodeStep, DecodeStepId, ExprId, Module, PipeId, SourceId,
     StageId, StageKind,
     expr::{ExprKind, Pattern, PatternKind, PipeStageKind, ProjectionBase, Reference, TextSegment},
-    module::{GateStage, ItemKind},
+    module::{GateStage, ItemKind, TemporalStage},
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -83,6 +83,9 @@ pub enum ValidationError {
         current: crate::ty::Type,
     },
     GatePredicateNotBool {
+        stage: StageId,
+    },
+    TemporalStageTypeMismatch {
         stage: StageId,
     },
     TruthyFalsyResultMismatch {
@@ -250,6 +253,9 @@ impl fmt::Display for ValidationError {
             ),
             Self::GatePredicateNotBool { stage } => {
                 write!(f, "gate stage {stage} does not carry a Bool predicate")
+            }
+            Self::TemporalStageTypeMismatch { stage } => {
+                write!(f, "temporal stage {stage} does not match its declared type contract")
             }
             Self::TruthyFalsyResultMismatch { stage } => {
                 write!(
@@ -810,6 +816,48 @@ fn validate_stage(
                 errors.push(ValidationError::GatePredicateNotBool { stage: stage_id });
             }
         }
+        StageKind::Temporal(temporal) => {
+            let Some(input_payload) = signal_payload_type(&stage.input_subject) else {
+                errors.push(ValidationError::TemporalStageTypeMismatch { stage: stage_id });
+                return;
+            };
+            let Some(result_payload) = signal_payload_type(&stage.result_subject) else {
+                errors.push(ValidationError::TemporalStageTypeMismatch { stage: stage_id });
+                return;
+            };
+            match temporal {
+                TemporalStage::Previous { seed_expr } => {
+                    if !module.exprs().contains(*seed_expr)
+                        || module.exprs()[*seed_expr].ty != *input_payload
+                        || stage.result_subject != stage.input_subject
+                    {
+                        errors.push(ValidationError::TemporalStageTypeMismatch { stage: stage_id });
+                    }
+                }
+                TemporalStage::DiffFunction { diff_expr } => {
+                    let expected = crate::ty::Type::Arrow {
+                        parameter: Box::new(input_payload.clone()),
+                        result: Box::new(crate::ty::Type::Arrow {
+                            parameter: Box::new(input_payload.clone()),
+                            result: Box::new(result_payload.clone()),
+                        }),
+                    };
+                    if !module.exprs().contains(*diff_expr)
+                        || module.exprs()[*diff_expr].ty != expected
+                    {
+                        errors.push(ValidationError::TemporalStageTypeMismatch { stage: stage_id });
+                    }
+                }
+                TemporalStage::DiffSeed { seed_expr } => {
+                    if !module.exprs().contains(*seed_expr)
+                        || module.exprs()[*seed_expr].ty != *input_payload
+                        || stage.result_subject != stage.input_subject
+                    {
+                        errors.push(ValidationError::TemporalStageTypeMismatch { stage: stage_id });
+                    }
+                }
+            }
+        }
         StageKind::TruthyFalsy(pair) => {
             let expected = truthy_falsy_result_type(&stage.input_subject, &stage.result_subject);
             if pair.truthy.result_type != pair.falsy.result_type
@@ -849,6 +897,13 @@ fn validate_stage(
                 errors.push(ValidationError::FanoutResultMismatch { stage: stage_id });
             }
         }
+    }
+}
+
+fn signal_payload_type(ty: &crate::ty::Type) -> Option<&crate::ty::Type> {
+    match ty {
+        crate::ty::Type::Signal(payload) => Some(payload.as_ref()),
+        _ => None,
     }
 }
 
