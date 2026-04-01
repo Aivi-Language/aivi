@@ -2357,11 +2357,11 @@ mod tests {
                 widget.path
                     == vec![
                         "window[0]".to_owned(),
-                        "box[8]".to_owned(),
-                        "box[9]".to_owned(),
+                        "box[2]".to_owned(),
+                        "box[3]".to_owned(),
                     ]
             })
-            .expect("the opening move at row 9 column 10 should be discoverable");
+            .expect("the opening move at row 3 column 4 should be discoverable");
 
         let result = host
             .emit_gtk_event(EmitGtkEventArgs {
@@ -2391,12 +2391,12 @@ mod tests {
             "the click should update the reversi move summary"
         );
 
-        let clicked_cell = widget_snapshot_by_path(&result.gtk, &["window[0]", "box[8]", "box[9]"])
+        let clicked_cell = widget_snapshot_by_path(&result.gtk, &["window[0]", "box[2]", "box[3]"])
             .expect("the clicked board cell should still exist in the GTK snapshot");
         assert_eq!(
             clicked_cell.text.as_deref(),
-            Some("🔴"),
-            "the clicked cell should redraw as the human red disc after hydration settles"
+            Some("🎯"),
+            "the clicked cell should show the last-placed animation while the computer is thinking"
         );
         assert!(
             !clicked_cell.sensitive,
