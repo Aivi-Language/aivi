@@ -19,10 +19,13 @@ function manualBase(): string {
   return normalized
 }
 
+const base = manualBase()
+
 export default defineConfig({
   title: 'AIVI',
   description: 'AIVI Language Manual — a reactive, functional, GTK-first language',
-  base: manualBase(),
+  base,
+  head: [['link', { rel: 'icon', type: 'image/png', href: `${base}aivi-a.png` }]],
 
   markdown: {
     languages: [aiviGrammar as any],

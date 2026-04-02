@@ -4680,9 +4680,10 @@ fun demo:Int = x:Int=> x  |> #before add1 #after
         let lowered = lower_text(
             "typed-core-source-decode.aivi",
             r#"
-domain Duration over Int
+domain Duration over Int = {
     parse : Int -> Result Text Duration
     value : Duration -> Int
+}
 
 @source custom.feed
 signal timeout : Signal Duration
@@ -4867,11 +4868,13 @@ fun add:Int = x:Int y:Int=>    x + y
         let lowered = lower_text(
             "typed-core-recurrence.aivi",
             r#"
-domain Duration over Int
+domain Duration over Int = {
     literal sec : Int -> Duration
+}
 
-domain Retry over Int
+domain Retry over Int = {
     literal times : Int -> Retry
+}
 
 fun step:Int = n:Int=>    n
 
@@ -4916,8 +4919,9 @@ value retried : Task Int Int =
         let lowered = lower_text(
             "typed-core-recurrence-guard.aivi",
             r#"
-domain Duration over Int
+domain Duration over Int = {
     literal sec : Int -> Duration
+}
 
 type Cursor = {
     hasNext: Bool
@@ -5065,14 +5069,16 @@ value traced : Int =
         let lowered = lower_text(
             "typed-core-same-module-instance-member.aivi",
             r#"
-class Semigroup A
+class Semigroup A = {
     append : A -> A -> A
+}
 
 type Blob = Blob Int
 
-instance Semigroup Blob
+instance Semigroup Blob = {
     append left right =
         left
+}
 
 value combined:Blob =
     append (Blob 1) (Blob 2)
@@ -5119,11 +5125,13 @@ value combined:Blob =
         let lowered = lower_text(
             "typed-core-higher-kinded-instance-member.aivi",
             r#"
-class Applicative F
+class Applicative F = {
     pureInt : F Int
+}
 
-instance Applicative Option
+instance Applicative Option = {
     pureInt = Some 1
+}
 
 value chosen:Option Int =
     pureInt
@@ -5534,14 +5542,16 @@ value joinedList:List Int =
         let lowered = lower_text(
             "typed-core-runtime-fragment-instance-member.aivi",
             r#"
-class Semigroup A
+class Semigroup A = {
     append : A -> A -> A
+}
 
 type Blob = Blob Int
 
-instance Semigroup Blob
+instance Semigroup Blob = {
     append left right =
         left
+}
 
 value combined:Blob =
     append (Blob 1) (Blob 2)
@@ -5618,11 +5628,13 @@ signal timeout : Signal Duration
         let lowered = lower_text(
             "typed-core-recurrence.aivi",
             r#"
-domain Duration over Int
+domain Duration over Int = {
     literal sec : Int -> Duration
+}
 
-domain Retry over Int
+domain Retry over Int = {
     literal times : Int -> Retry
+}
 
 fun step:Int = n:Int=>    n
 

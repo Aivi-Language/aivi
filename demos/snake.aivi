@@ -72,6 +72,9 @@ func takeCells = n cells => cells
   |> reduce takeCellStep { remaining: n, cells: [] }
   |> .cells
 
+type Cell -> Cell -> Bool
+func cellEq = a b => a == b
+
 domain Snake over List Cell = {
     type List Cell -> Snake
     fromCells cells = cells
@@ -80,7 +83,7 @@ domain Snake over List Cell = {
     head snake = getOrElse (Cell 0 0) (listHead snake)
 
     type Snake -> Cell -> Bool
-    contains snake cell = any (. == cell) snake
+    contains snake cell = any (cellEq cell) snake
 
     type Snake -> Int
     length snake = listLength snake
