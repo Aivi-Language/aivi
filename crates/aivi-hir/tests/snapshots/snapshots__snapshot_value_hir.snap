@@ -1,5 +1,6 @@
 ---
 source: crates/aivi-hir/tests/snapshots.rs
+assertion_line: 27
 expression: module
 ---
 Module {
@@ -31795,4 +31796,5 @@ Module {
             _marker: PhantomData<fn() -> aivi_hir::ids::ImportId>,
         },
     },
+    _resolution: PhantomData<aivi_hir::hir::Resolved>,
 }

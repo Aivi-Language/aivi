@@ -21,27 +21,28 @@ use crate::{
     PipeExpr, PipeStage, PipeStageKind, ProjectionBase, ReactiveUpdateBodyMode,
     ReactiveUpdateClause, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
     RecordRowRename, RecordRowTransform, RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind,
-    RegexLiteral, ResolutionState, ShowControl, SignalItem, SourceDecorator,
+    RegexLiteral, ResolutionState, Resolved, ShowControl, SignalItem, SourceDecorator,
     SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, TermReference,
     TermResolution, TestDecorator, TextFragment, TextInterpolation, TextLiteral, TextSegment,
     TypeField, TypeId, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeParameterId,
-    TypeReference, TypeResolution, TypeVariant, UnaryOperator, UseItem, ValueItem, WithControl,
+    TypeReference, TypeResolution, TypeVariant, UnaryOperator, Unresolved, UseItem, ValueItem,
+    WithControl,
 };
 
-pub struct LoweringResult {
-    module: Module,
+pub struct LoweringResult<S = Resolved> {
+    module: Module<S>,
     diagnostics: Vec<Diagnostic>,
 }
 
-impl LoweringResult {
-    pub fn new(module: Module, diagnostics: Vec<Diagnostic>) -> Self {
+impl<S> LoweringResult<S> {
+    pub fn new(module: Module<S>, diagnostics: Vec<Diagnostic>) -> Self {
         Self {
             module,
             diagnostics,
         }
     }
 
-    pub fn module(&self) -> &Module {
+    pub fn module(&self) -> &Module<S> {
         &self.module
     }
 
@@ -55,7 +56,7 @@ impl LoweringResult {
             .any(|diagnostic| diagnostic.severity == Severity::Error)
     }
 
-    pub fn into_parts(self) -> (Module, Vec<Diagnostic>) {
+    pub fn into_parts(self) -> (Module<S>, Vec<Diagnostic>) {
         (self.module, self.diagnostics)
     }
 }
@@ -68,14 +69,14 @@ impl LoweringResult {
 pub fn lower_structure(
     module: &syn::Module,
     resolver: Option<&dyn crate::resolver::ImportResolver>,
-) -> LoweringResult {
+) -> LoweringResult<Unresolved> {
     let null_resolver = crate::resolver::NullImportResolver;
     let mut lowerer = Lowerer::new(module.file, resolver.unwrap_or(&null_resolver));
     for item in &module.items {
         lowerer.lower_item(item);
     }
     lowerer.lower_ambient_prelude();
-    LoweringResult::new(lowerer.module, lowerer.diagnostics)
+    LoweringResult::new(lowerer.module.into_unresolved(), lowerer.diagnostics)
 }
 
 /// Resolves all [`ResolutionState::Unresolved`] name references in a
@@ -85,9 +86,12 @@ pub fn lower_structure(
 /// type, and export reference, and validates cluster normalisation. It does
 /// not call any external import resolver — import-binding resolution is
 /// already complete after [`lower_structure`].
-pub fn resolve_imports(module: Module) -> LoweringResult {
+pub fn resolve_imports(module: Module<Unresolved>) -> LoweringResult {
     let null_resolver = crate::resolver::NullImportResolver;
-    let mut lowerer = Lowerer::from_module(module, &null_resolver);
+    // The module is about to be resolved by this function; convert to the
+    // resolved type so the Lowerer can work with it uniformly, then perform
+    // the resolution pass which fills every Unresolved reference in place.
+    let mut lowerer = Lowerer::from_module(module.mark_resolved(), &null_resolver);
     let namespaces = lowerer.build_namespaces();
     lowerer.resolve_module(&namespaces);
     lowerer.validate_cluster_normalization();

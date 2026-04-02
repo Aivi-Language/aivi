@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, marker::PhantomData};
 
 use aivi_base::{FileId, SourceSpan};
 use aivi_typing::{BuiltinSourceProvider, Kind};
@@ -2098,13 +2098,38 @@ pub struct ModuleArenas {
     pub(crate) imports: Arena<ImportId, ImportBinding>,
 }
 
+/// Type-state marker: HIR module has not had name resolution run.
+///
+/// Produced by [`crate::lower_structure`]. Must be passed through
+/// [`crate::resolve_imports`] before validation or type-checking.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Unresolved;
+
+/// Type-state marker: HIR module has been fully name-resolved.
+///
+/// Produced by [`crate::lower_module`], [`crate::lower_module_with_resolver`],
+/// or [`crate::resolve_imports`]. The module is safe to validate and type-check.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Resolved;
+
 /// One validated-or-validatable HIR module boundary.
+///
+/// The type parameter `S` tracks resolution state at compile time:
+/// - `Module<Unresolved>`: freshly structurally-lowered; name references may still
+///   carry [`ResolutionState::Unresolved`]. Calling `validate_module` or
+///   `typecheck_module` on this state is a compile-time error.
+/// - `Module<Resolved>` (= `Module`): all name references have been resolved by
+///   the name-resolution pass. Safe to validate, type-check, and lower further.
+///
+/// The default parameter (`= Resolved`) means all existing code that writes
+/// `Module` without a type argument continues to work unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Module {
+pub struct Module<S = Resolved> {
     pub(crate) file: FileId,
     pub(crate) root_items: Vec<ItemId>,
     pub(crate) ambient_items: Vec<ItemId>,
     pub(crate) arenas: ModuleArenas,
+    _resolution: PhantomData<S>,
 }
 
 /// Error returned when attempting to attach an invalid item as a root.
@@ -2128,12 +2153,17 @@ impl fmt::Display for RootItemError {
 impl Error for RootItemError {}
 
 impl Module {
+    /// Create a new empty resolved module with the given file identity.
+    ///
+    /// The returned module is considered resolved because it contains no items
+    /// and therefore has no unresolved name references.
     pub fn new(file: FileId) -> Self {
         Self {
             file,
             root_items: Vec::new(),
             ambient_items: Vec::new(),
             arenas: ModuleArenas::default(),
+            _resolution: PhantomData,
         }
     }
 
@@ -2142,6 +2172,48 @@ impl Module {
         Self::default()
     }
 
+    /// Re-tag a resolved module as unresolved.
+    ///
+    /// This is the inverse of [`Module::mark_resolved`] and is used internally by
+    /// [`crate::lower_structure`] to correctly type the module it emits — one
+    /// that has been structurally lowered but still contains
+    /// [`ResolutionState::Unresolved`] references.
+    pub(crate) fn into_unresolved(self) -> Module<Unresolved> {
+        Module {
+            file: self.file,
+            root_items: self.root_items,
+            ambient_items: self.ambient_items,
+            arenas: self.arenas,
+            _resolution: PhantomData,
+        }
+    }
+
+    /// Validate this resolved module.
+    pub fn validate(&self, mode: ValidationMode) -> ValidationReport {
+        validate_module(self, mode)
+    }
+}
+
+impl Module<Unresolved> {
+    /// Declare this module fully resolved.
+    ///
+    /// Only call after the name-resolution pass has replaced every
+    /// [`ResolutionState::Unresolved`] reference with its resolved counterpart.
+    /// Calling this prematurely will allow resolved-only operations (validation,
+    /// type-checking, lowering) to run on a module that still has dangling
+    /// references, producing incorrect results or panics.
+    pub fn mark_resolved(self) -> Module<Resolved> {
+        Module {
+            file: self.file,
+            root_items: self.root_items,
+            ambient_items: self.ambient_items,
+            arenas: self.arenas,
+            _resolution: PhantomData,
+        }
+    }
+}
+
+impl<S> Module<S> {
     pub const fn file(&self) -> FileId {
         self.file
     }
@@ -2324,9 +2396,5 @@ impl Module {
 
     pub fn alloc_import(&mut self, import: ImportBinding) -> Result<ImportId, ArenaOverflow> {
         self.arenas.imports.alloc(import)
-    }
-
-    pub fn validate(&self, mode: ValidationMode) -> ValidationReport {
-        validate_module(self, mode)
     }
 }
