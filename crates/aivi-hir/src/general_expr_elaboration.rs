@@ -357,6 +357,14 @@ pub fn elaborate_general_expressions(module: &Module) -> GeneralExprElaborationR
     GeneralExprElaborator::new(&module).build()
 }
 
+/// Elaborate only the ambient-prelude items in `module`, returning a report that contains
+/// solely those items.  Ambient items are excluded from [`elaborate_general_expressions`] so
+/// that call sites that only care about user items are not affected.
+pub fn elaborate_ambient_items(module: &Module) -> GeneralExprElaborationReport {
+    let module = crate::typecheck::elaborate_default_record_fields(module);
+    GeneralExprElaborator::new(&module).build_ambient()
+}
+
 pub fn collect_markup_runtime_expr_sites(
     module: &Module,
     root: ExprId,
@@ -766,19 +774,7 @@ impl<'a> GeneralExprElaborator<'a> {
         let mut domain_members = Vec::new();
         let mut instance_members = Vec::new();
         for (item_id, item) in self.module.items().iter() {
-            let is_ambient = self.module.ambient_items().contains(&item_id);
-            // Skip ambient non-executable items (types, classes, etc.) and ambient
-            // signals. But DO elaborate ambient functions and values — they serve as
-            // the compiled runtime bodies for polymorphic stdlib imports that resolve
-            // through the AmbientValue mechanism (e.g. __aivi_option_getOrElse).
-            if is_ambient {
-                match item {
-                    Item::Value(value) => items.push(self.elaborate_value(item_id, value)),
-                    Item::Function(function) => {
-                        items.push(self.elaborate_function(item_id, function))
-                    }
-                    _ => {}
-                }
+            if self.module.ambient_items().contains(&item_id) {
                 continue;
             }
             match item {
@@ -803,6 +799,21 @@ impl<'a> GeneralExprElaborator<'a> {
             }
         }
         GeneralExprElaborationReport::new(items, domain_members, instance_members)
+    }
+
+    fn build_ambient(mut self) -> GeneralExprElaborationReport {
+        let mut items = Vec::new();
+        for (item_id, item) in self.module.items().iter() {
+            if !self.module.ambient_items().contains(&item_id) {
+                continue;
+            }
+            match item {
+                Item::Value(value) => items.push(self.elaborate_value(item_id, value)),
+                Item::Function(function) => items.push(self.elaborate_function(item_id, function)),
+                _ => {}
+            }
+        }
+        GeneralExprElaborationReport::new(items, Vec::new(), Vec::new())
     }
 
     fn collect_markup_runtime_expr_sites(
@@ -2695,18 +2706,22 @@ impl<'a> GeneralExprElaborator<'a> {
         expected: Option<&GateType>,
     ) -> Result<GateType, Vec<GeneralExprBlocker>> {
         if let Some(expected) = expected {
-            // Only use the expected type as the definitive expression type when it is fully closed
-            // (no open TypeParameters). If it contains TypeParams the IR would get open types,
-            // which the backend rejects.
+            // Pipe expressions always adopt the expected type directly: their inner stages carry
+            // the typing and the outer pipe node is not independently inferred.
+            if matches!(self.module.exprs()[expr_id].kind, ExprKind::Pipe(_)) {
+                return Ok(expected.clone());
+            }
+            // expression_matches works for both closed and open expected types.  For open types
+            // (containing TypeParameters), the type checker treats TypeParameter as a wildcard in
+            // constructor checks (e.g. None : Option(A)) and structural checks (record fields,
+            // empty lists), so `expression_matches` correctly validates these cases.
+            if expression_matches(self.module, expr_id, env, expected) {
+                return Ok(expected.clone());
+            }
             if !expected.has_type_params() {
-                if matches!(self.module.exprs()[expr_id].kind, ExprKind::Pipe(_))
-                    || expression_matches(self.module, expr_id, env, expected)
-                {
-                    return Ok(expected.clone());
-                }
-                // If expression_matches failed (e.g. same_shape rejects TypeParam vs concrete),
-                // check whether the inferred type is a polymorphic template that expected
-                // instantiates.  If so, use the closed expected type so the IR stays closed.
+                // If expression_matches failed for a closed expected type, check whether the
+                // inferred type is a polymorphic template that expected instantiates.  If so, use
+                // the closed expected type so the IR stays closed.
                 let info = self.typing.infer_expr(expr_id, env, ambient);
                 if !info.issues.is_empty() {
                     return Err(self.blockers_from_issues(info.issues));

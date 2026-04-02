@@ -228,12 +228,19 @@ fn explicit_item_exported_name(
             callable_type: None,
             deprecation,
         }),
-        Item::Function(item) => (item.name.text() == exported_name).then(|| ExportedName {
-            name: exported_name.to_owned(),
-            kind: ExportedNameKind::Function,
-            metadata: exported_value_metadata(module, item.annotation),
-            callable_type: exported_function_type(module, item),
-            deprecation,
+        Item::Function(item) => (item.name.text() == exported_name).then(|| {
+            let callable_type = exported_function_type(module, item);
+            let metadata = match &callable_type {
+                Some(ty) => ImportBindingMetadata::Value { ty: ty.clone() },
+                None => ImportBindingMetadata::OpaqueValue,
+            };
+            ExportedName {
+                name: exported_name.to_owned(),
+                kind: ExportedNameKind::Function,
+                metadata,
+                callable_type,
+                deprecation,
+            }
         }),
         Item::Signal(item) => (item.name.text() == exported_name
             && !item.is_source_capability_handle)
@@ -272,13 +279,20 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
             callable_type: None,
             deprecation,
         }),
-        Item::Function(item) => Some(ExportedName {
-            name: item.name.text().to_owned(),
-            kind: ExportedNameKind::Function,
-            metadata: exported_value_metadata(module, item.annotation),
-            callable_type: exported_function_type(module, item),
-            deprecation,
-        }),
+        Item::Function(item) => {
+            let callable_type = exported_function_type(module, item);
+            let metadata = match &callable_type {
+                Some(ty) => ImportBindingMetadata::Value { ty: ty.clone() },
+                None => ImportBindingMetadata::OpaqueValue,
+            };
+            Some(ExportedName {
+                name: item.name.text().to_owned(),
+                kind: ExportedNameKind::Function,
+                metadata,
+                callable_type,
+                deprecation,
+            })
+        }
         Item::Signal(item) => (!item.is_source_capability_handle).then(|| ExportedName {
             name: item.name.text().to_owned(),
             kind: ExportedNameKind::Signal,

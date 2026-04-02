@@ -61,8 +61,8 @@ pub use general_expr_elaboration::{
     BlockedGeneralExpr, GeneralExprBlocker, GeneralExprDomainMemberElaboration,
     GeneralExprElaborationReport, GeneralExprInstanceMemberElaboration, GeneralExprItemElaboration,
     GeneralExprOutcome, GeneralExprParameter, MarkupRuntimeExprSite, MarkupRuntimeExprSiteError,
-    MarkupRuntimeExprSites, collect_markup_runtime_expr_sites, elaborate_general_expressions,
-    elaborate_runtime_expr_with_env,
+    MarkupRuntimeExprSites, collect_markup_runtime_expr_sites, elaborate_ambient_items,
+    elaborate_general_expressions, elaborate_runtime_expr_with_env,
 };
 pub use hir::{
     ApplicativeCluster, ApplicativeSpine, ApplicativeSpineHead, BigIntLiteral, BinaryOperator,

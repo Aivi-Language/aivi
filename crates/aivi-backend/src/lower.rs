@@ -2793,7 +2793,19 @@ impl<'a> ProgramLowerer<'a> {
                             TypeBuildTask::Primitive(PrimitiveType::from_builtin(*builtin)),
                         )),
                         core::Type::TypeParameter { name, .. } => {
-                            return Err(OpenTypeParameter { name: name.clone() });
+                            // Polymorphic functions (e.g. ambient prelude helpers) carry open
+                            // type parameters that the runtime interprets dynamically.  Map each
+                            // type parameter to an erased Domain layout so the kernel can be
+                            // compiled; value_matches_layout accepts any non-signal value for
+                            // Domain layouts, which is safe because call sites are always
+                            // monomorphic by the time they reach the runtime.
+                            tasks.push(Task::Build(
+                                ty.clone(),
+                                TypeBuildTask::Domain {
+                                    name: name.clone(),
+                                    arguments: 0,
+                                },
+                            ));
                         }
                         core::Type::Tuple(elements) => {
                             tasks.push(Task::Build(

@@ -13,7 +13,7 @@ use aivi_hir::{
     PatternId as HirPatternId, PipeTransformMode, RecurrenceNodeOutcome,
     ResolvedClassMemberDispatch, SourceDecodeProgram, SourceDecodeProgramOutcome,
     SourceLifecycleNodeOutcome, TemporalStageOutcome, TermResolution, TruthyFalsyStageOutcome,
-    TypeBinding, TypeConstructorHead, elaborate_fanouts, elaborate_gates,
+    TypeBinding, TypeConstructorHead, elaborate_ambient_items, elaborate_fanouts, elaborate_gates,
     elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
     elaborate_temporal_stages, elaborate_truthy_falsy, generate_source_decode_programs,
 };
@@ -717,37 +717,6 @@ impl<'a> ModuleLowerer<'a> {
             .is_none_or(|included| included.contains(&item))
     }
 
-    /// Seed an ambient prelude function or value item on demand, so that ambient items
-    /// referenced by non-ambient compiled code can receive compiled bodies.
-    fn seed_ambient_item(&mut self, hir_id: HirItemId) -> Option<ItemId> {
-        if let Some(existing) = self.item_map.get(&hir_id).copied() {
-            return Some(existing);
-        }
-        let item = self.hir.items().get(hir_id)?;
-        let (span, name, kind) = match item {
-            HirItem::Value(item) => (item.header.span, item.name.text().into(), ItemKind::Value),
-            HirItem::Function(item) => {
-                (item.header.span, item.name.text().into(), ItemKind::Function)
-            }
-            _ => return None,
-        };
-        let item_id = self
-            .module
-            .items_mut()
-            .alloc(Item {
-                origin: hir_id,
-                span,
-                name,
-                kind,
-                parameters: Vec::new(),
-                body: None,
-                pipes: Vec::new(),
-            })
-            .ok()?;
-        self.item_map.insert(hir_id, item_id);
-        Some(item_id)
-    }
-
     fn debug_label(&self, owner: HirItemId, stage: Option<usize>) -> Box<str> {
         let owner_name = match self.hir.items().get(owner) {
             Some(HirItem::Value(item)) => item.name.text(),
@@ -1002,20 +971,10 @@ impl<'a> ModuleLowerer<'a> {
             ));
         let (items, domain_members, instance_members) = report.into_parts();
         for item in items {
-            let is_ambient = self.hir.ambient_items().contains(&item.owner);
-            if !self.includes_item(item.owner) && !is_ambient {
+            if !self.includes_item(item.owner) {
                 continue;
             }
-            // Ambient items may not have been pre-seeded — seed on demand so their
-            // bodies can be populated and referenced by non-ambient compiled code.
-            let owner = if let Some(existing) = self.item_map.get(&item.owner).copied() {
-                existing
-            } else if is_ambient {
-                let Some(seeded) = self.seed_ambient_item(item.owner) else {
-                    continue;
-                };
-                seeded
-            } else {
+            let Some(owner) = self.item_map.get(&item.owner).copied() else {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: item.owner });
                 continue;
@@ -1072,6 +1031,27 @@ impl<'a> ModuleLowerer<'a> {
                 member.outcome,
             );
         }
+        // Elaborate ambient prelude items separately.  These are polymorphic helpers whose open
+        // types are acceptable at the runtime level (type parameters are erased to Domain layouts
+        // by the backend).  Errors from blocked ambient items are suppressed — see
+        // `lower_general_expr_body`.
+        let ambient_report = elaborate_ambient_items(self.hir);
+        let (ambient_items, _, _) = ambient_report.into_parts();
+        for item in ambient_items {
+            if !self.includes_item(item.owner) {
+                continue;
+            }
+            let Some(owner) = self.item_map.get(&item.owner).copied() else {
+                continue;
+            };
+            self.lower_general_expr_body(
+                item.owner,
+                owner,
+                item.body_expr,
+                item.parameters,
+                item.outcome,
+            );
+        }
     }
 
     fn lower_general_expr_body(
@@ -1109,6 +1089,13 @@ impl<'a> ModuleLowerer<'a> {
                 core_item.body = Some(body);
             }
             GeneralExprOutcome::Blocked(blocked) => {
+                // Ambient prelude items that fail elaboration (e.g. due to open types in
+                // accumulators) are silently skipped: they'll have body=None which is acceptable
+                // because any call-site that reaches them will get a runtime link error rather
+                // than blocking the entire compilation.
+                if self.hir.ambient_items().contains(&hir_owner) {
+                    return;
+                }
                 if !blocked.requires_typed_core_error() {
                     return;
                 }
@@ -2642,6 +2629,7 @@ impl<'a> ModuleLowerer<'a> {
             .get(import)
             .ok_or(LoweringError::UnknownImport { import })?
             .clone();
+        eprintln!("[import] seeding import {:?} `{}` metadata={:?}", import, binding.local_name.text(), std::mem::discriminant(&binding.metadata));
         let (kind, parameters) = self.import_item_shape(import, &binding)?;
         let origin = self.next_synthetic_item_origin()?;
         let body = self.synthesize_import_body(import, origin, &binding, &parameters)?;
@@ -2661,6 +2649,7 @@ impl<'a> ModuleLowerer<'a> {
                 arena: "items",
                 attempted_len: overflow.attempted_len(),
             })?;
+        eprintln!("[import] created core {:?} for import {:?} `{}`", item_id, import, binding.local_name.text());
         self.import_item_map.insert(import, item_id);
         Ok(item_id)
     }

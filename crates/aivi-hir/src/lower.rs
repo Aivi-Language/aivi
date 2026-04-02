@@ -7411,6 +7411,7 @@ fn is_known_module(module: &str) -> bool {
             | "aivi.defaults"
             | "aivi.random"
             | "aivi.stdio"
+            | "aivi.fs"
             | "aivi.db"
             | "aivi.text"
             | "aivi.time"
@@ -7463,6 +7464,69 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.list", "any") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_list_any".into(),
         }),
+        ("aivi.stdio", "stdoutWrite") => Some(intrinsic_import_value(
+            IntrinsicValue::StdoutWrite,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Unit),
+                ),
+            ),
+        )),
+        ("aivi.stdio", "stderrWrite") => Some(intrinsic_import_value(
+            IntrinsicValue::StderrWrite,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Unit),
+                ),
+            ),
+        )),
+        ("aivi.fs", "createDirAll") => Some(intrinsic_import_value(
+            IntrinsicValue::FsCreateDirAll,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Unit),
+                ),
+            ),
+        )),
+        ("aivi.fs", "deleteFile") => Some(intrinsic_import_value(
+            IntrinsicValue::FsDeleteFile,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Unit),
+                ),
+            ),
+        )),
+        ("aivi.fs", "writeText") => Some(intrinsic_import_value(
+            IntrinsicValue::FsWriteText,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    task_import_type(
+                        primitive_import_type(BuiltinType::Text),
+                        primitive_import_type(BuiltinType::Unit),
+                    ),
+                ),
+            ),
+        )),
+        ("aivi.fs", "exists") => Some(intrinsic_import_value(
+            IntrinsicValue::FsExists,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                task_import_type(
+                    primitive_import_type(BuiltinType::Text),
+                    primitive_import_type(BuiltinType::Bool),
+                ),
+            ),
+        )),
         ("aivi.random", "RandomError") => Some(ImportBindingMetadata::TypeConstructor {
             kind: Kind::constructor(0),
         }),
