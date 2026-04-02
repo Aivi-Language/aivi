@@ -1,0 +1,182 @@
+---
+source: crates/aivi-syntax/tests/snapshots.rs
+expression: module
+---
+Module {
+    file: FileId(
+        0,
+    ),
+    items: [
+        Type(
+            NamedItem {
+                base: ItemBase {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
+                                0,
+                            ),
+                            end: ByteIndex(
+                                45,
+                            ),
+                        },
+                    },
+                    token_range: TokenRange {
+                        start: 0,
+                        end: 20,
+                    },
+                    decorators: [],
+                },
+                keyword_span: SourceSpan {
+                    file: FileId(
+                        0,
+                    ),
+                    span: Span {
+                        start: ByteIndex(
+                            0,
+                        ),
+                        end: ByteIndex(
+                            4,
+                        ),
+                    },
+                },
+                name: Some(
+                    Identifier {
+                        text: "Color",
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    5,
+                                ),
+                                end: ByteIndex(
+                                    10,
+                                ),
+                            },
+                        },
+                    },
+                ),
+                type_parameters: [],
+                constraints: [],
+                annotation: None,
+                function_form: Explicit,
+                parameters: [],
+                body: Some(
+                    Type(
+                        Sum(
+                            [
+                                TypeVariant {
+                                    name: Some(
+                                        Identifier {
+                                            text: "Red",
+                                            span: SourceSpan {
+                                                file: FileId(
+                                                    0,
+                                                ),
+                                                span: Span {
+                                                    start: ByteIndex(
+                                                        19,
+                                                    ),
+                                                    end: ByteIndex(
+                                                        22,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    fields: [],
+                                    span: SourceSpan {
+                                        file: FileId(
+                                            0,
+                                        ),
+                                        span: Span {
+                                            start: ByteIndex(
+                                                19,
+                                            ),
+                                            end: ByteIndex(
+                                                22,
+                                            ),
+                                        },
+                                    },
+                                },
+                                TypeVariant {
+                                    name: Some(
+                                        Identifier {
+                                            text: "Green",
+                                            span: SourceSpan {
+                                                file: FileId(
+                                                    0,
+                                                ),
+                                                span: Span {
+                                                    start: ByteIndex(
+                                                        29,
+                                                    ),
+                                                    end: ByteIndex(
+                                                        34,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    fields: [],
+                                    span: SourceSpan {
+                                        file: FileId(
+                                            0,
+                                        ),
+                                        span: Span {
+                                            start: ByteIndex(
+                                                29,
+                                            ),
+                                            end: ByteIndex(
+                                                34,
+                                            ),
+                                        },
+                                    },
+                                },
+                                TypeVariant {
+                                    name: Some(
+                                        Identifier {
+                                            text: "Blue",
+                                            span: SourceSpan {
+                                                file: FileId(
+                                                    0,
+                                                ),
+                                                span: Span {
+                                                    start: ByteIndex(
+                                                        41,
+                                                    ),
+                                                    end: ByteIndex(
+                                                        45,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    fields: [],
+                                    span: SourceSpan {
+                                        file: FileId(
+                                            0,
+                                        ),
+                                        span: Span {
+                                            start: ByteIndex(
+                                                41,
+                                            ),
+                                            end: ByteIndex(
+                                                45,
+                                            ),
+                                        },
+                                    },
+                                },
+                            ],
+                        ),
+                    ),
+                ),
+            },
+        ),
+    ],
+    token_count: 20,
+}

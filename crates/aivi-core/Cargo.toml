@@ -11,6 +11,7 @@ aivi-typing.workspace = true
 
 [dev-dependencies]
 aivi-syntax.workspace = true
+insta.workspace = true
 
 [lints]
 workspace = true

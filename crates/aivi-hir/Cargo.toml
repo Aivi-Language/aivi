@@ -10,6 +10,9 @@ aivi-syntax.workspace = true
 aivi-typing.workspace = true
 regex-syntax.workspace = true
 
+[dev-dependencies]
+insta.workspace = true
+
 [lints]
 workspace = true
 

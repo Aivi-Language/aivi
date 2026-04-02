@@ -1,0 +1,25 @@
+---
+source: crates/aivi-lambda/tests/snapshots.rs
+expression: lambda.pretty()
+---
+func add:
+  params = [x: Int, y: Int]
+  body = closure0
+func __aivi_option_getOrElse:
+func __aivi_list_keepSome:
+func __aivi_list_keepFirst:
+func __aivi_list_lengthStep:
+func __aivi_list_length:
+func __aivi_list_head:
+func __aivi_list_tailState:
+func __aivi_list_tailStep:
+func __aivi_list_tailItems:
+func __aivi_list_tailFromState:
+func __aivi_list_tail:
+func __aivi_list_anyStep:
+func __aivi_list_any:
+func __aivi_binary_eq:
+func __aivi_binary_neq:
+closures:
+  closure0 add owner=0 root=expr2 kind=item-body
+    params = [x:#0:Int, y:#1:Int]

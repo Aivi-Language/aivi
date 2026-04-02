@@ -2475,13 +2475,6 @@ impl Validator<'_> {
         if self.mode != ValidationMode::RequireResolvedNames {
             return;
         }
-        // TODO(perf): `typecheck_module` re-runs full type inference over the entire module from
-        // scratch on every call. Because `validate_module` is invoked once per gate context
-        // construction (and gate contexts are created for every item being elaborated), this makes
-        // elaboration O(n²) in the number of gates: each new `GateTypeContext` starts with an
-        // empty `item_types` cache and must re-infer every reachable item. Fixing this requires
-        // either sharing a single persistent `GateTypeContext` across all elaboration passes, or
-        // memoising the per-module type-check result and reusing it rather than recomputing it.
         self.diagnostics
             .extend(typecheck_module(self.module).into_diagnostics());
     }

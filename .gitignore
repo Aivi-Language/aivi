@@ -2,6 +2,9 @@
 /target
 **/*.rs.bk
 
+# insta snapshot pending reviews
+*.pending.snap
+
 # Node / pnpm
 node_modules/
 .pnpm-store/

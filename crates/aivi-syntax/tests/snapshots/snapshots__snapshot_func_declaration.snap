@@ -1,0 +1,363 @@
+---
+source: crates/aivi-syntax/tests/snapshots.rs
+expression: module
+---
+Module {
+    file: FileId(
+        0,
+    ),
+    items: [
+        Fun(
+            NamedItem {
+                base: ItemBase {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
+                                23,
+                            ),
+                            end: ByteIndex(
+                                50,
+                            ),
+                        },
+                    },
+                    token_range: TokenRange {
+                        start: 12,
+                        end: 30,
+                    },
+                    decorators: [],
+                },
+                keyword_span: SourceSpan {
+                    file: FileId(
+                        0,
+                    ),
+                    span: Span {
+                        start: ByteIndex(
+                            23,
+                        ),
+                        end: ByteIndex(
+                            27,
+                        ),
+                    },
+                },
+                name: Some(
+                    Identifier {
+                        text: "add",
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    28,
+                                ),
+                                end: ByteIndex(
+                                    31,
+                                ),
+                            },
+                        },
+                    },
+                ),
+                type_parameters: [],
+                constraints: [],
+                annotation: Some(
+                    TypeExpr {
+                        kind: Arrow {
+                            parameter: TypeExpr {
+                                kind: Name(
+                                    Identifier {
+                                        text: "Int",
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    5,
+                                                ),
+                                                end: ByteIndex(
+                                                    8,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                ),
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            5,
+                                        ),
+                                        end: ByteIndex(
+                                            8,
+                                        ),
+                                    },
+                                },
+                            },
+                            result: TypeExpr {
+                                kind: Arrow {
+                                    parameter: TypeExpr {
+                                        kind: Name(
+                                            Identifier {
+                                                text: "Int",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            12,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            15,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    12,
+                                                ),
+                                                end: ByteIndex(
+                                                    15,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                    result: TypeExpr {
+                                        kind: Name(
+                                            Identifier {
+                                                text: "Int",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            19,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            22,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    19,
+                                                ),
+                                                end: ByteIndex(
+                                                    22,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                },
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            12,
+                                        ),
+                                        end: ByteIndex(
+                                            22,
+                                        ),
+                                    },
+                                },
+                            },
+                        },
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    5,
+                                ),
+                                end: ByteIndex(
+                                    22,
+                                ),
+                            },
+                        },
+                    },
+                ),
+                function_form: Explicit,
+                parameters: [
+                    FunctionParam {
+                        name: Some(
+                            Identifier {
+                                text: "x",
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            34,
+                                        ),
+                                        end: ByteIndex(
+                                            35,
+                                        ),
+                                    },
+                                },
+                            },
+                        ),
+                        annotation: None,
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    34,
+                                ),
+                                end: ByteIndex(
+                                    35,
+                                ),
+                            },
+                        },
+                    },
+                    FunctionParam {
+                        name: Some(
+                            Identifier {
+                                text: "y",
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            36,
+                                        ),
+                                        end: ByteIndex(
+                                            37,
+                                        ),
+                                    },
+                                },
+                            },
+                        ),
+                        annotation: None,
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    36,
+                                ),
+                                end: ByteIndex(
+                                    37,
+                                ),
+                            },
+                        },
+                    },
+                ],
+                body: Some(
+                    Expr(
+                        Expr {
+                            kind: Binary {
+                                left: Expr {
+                                    kind: Name(
+                                        Identifier {
+                                            text: "x",
+                                            span: SourceSpan {
+                                                file: FileId(
+                                                    0,
+                                                ),
+                                                span: Span {
+                                                    start: ByteIndex(
+                                                        45,
+                                                    ),
+                                                    end: ByteIndex(
+                                                        46,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    span: SourceSpan {
+                                        file: FileId(
+                                            0,
+                                        ),
+                                        span: Span {
+                                            start: ByteIndex(
+                                                45,
+                                            ),
+                                            end: ByteIndex(
+                                                46,
+                                            ),
+                                        },
+                                    },
+                                },
+                                operator: Add,
+                                right: Expr {
+                                    kind: Name(
+                                        Identifier {
+                                            text: "y",
+                                            span: SourceSpan {
+                                                file: FileId(
+                                                    0,
+                                                ),
+                                                span: Span {
+                                                    start: ByteIndex(
+                                                        49,
+                                                    ),
+                                                    end: ByteIndex(
+                                                        50,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    span: SourceSpan {
+                                        file: FileId(
+                                            0,
+                                        ),
+                                        span: Span {
+                                            start: ByteIndex(
+                                                49,
+                                            ),
+                                            end: ByteIndex(
+                                                50,
+                                            ),
+                                        },
+                                    },
+                                },
+                            },
+                            span: SourceSpan {
+                                file: FileId(
+                                    0,
+                                ),
+                                span: Span {
+                                    start: ByteIndex(
+                                        45,
+                                    ),
+                                    end: ByteIndex(
+                                        50,
+                                    ),
+                                },
+                            },
+                        },
+                    ),
+                ),
+            },
+        ),
+    ],
+    token_count: 30,
+}

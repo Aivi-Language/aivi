@@ -1,0 +1,109 @@
+---
+source: crates/aivi-syntax/tests/snapshots.rs
+expression: module
+---
+Module {
+    file: FileId(
+        0,
+    ),
+    items: [
+        Value(
+            NamedItem {
+                base: ItemBase {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
+                                0,
+                            ),
+                            end: ByteIndex(
+                                17,
+                            ),
+                        },
+                    },
+                    token_range: TokenRange {
+                        start: 0,
+                        end: 7,
+                    },
+                    decorators: [],
+                },
+                keyword_span: SourceSpan {
+                    file: FileId(
+                        0,
+                    ),
+                    span: Span {
+                        start: ByteIndex(
+                            0,
+                        ),
+                        end: ByteIndex(
+                            5,
+                        ),
+                    },
+                },
+                name: Some(
+                    Identifier {
+                        text: "answer",
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    6,
+                                ),
+                                end: ByteIndex(
+                                    12,
+                                ),
+                            },
+                        },
+                    },
+                ),
+                type_parameters: [],
+                constraints: [],
+                annotation: None,
+                function_form: Explicit,
+                parameters: [],
+                body: Some(
+                    Expr(
+                        Expr {
+                            kind: Integer(
+                                IntegerLiteral {
+                                    raw: "42",
+                                    span: SourceSpan {
+                                        file: FileId(
+                                            0,
+                                        ),
+                                        span: Span {
+                                            start: ByteIndex(
+                                                15,
+                                            ),
+                                            end: ByteIndex(
+                                                17,
+                                            ),
+                                        },
+                                    },
+                                },
+                            ),
+                            span: SourceSpan {
+                                file: FileId(
+                                    0,
+                                ),
+                                span: Span {
+                                    start: ByteIndex(
+                                        15,
+                                    ),
+                                    end: ByteIndex(
+                                        17,
+                                    ),
+                                },
+                            },
+                        },
+                    ),
+                ),
+            },
+        ),
+    ],
+    token_count: 7,
+}

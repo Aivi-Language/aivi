@@ -28,6 +28,7 @@ aivi-syntax = { path = "crates/aivi-syntax" }
 aivi-typing = { path = "crates/aivi-typing" }
 aivi-query = { path = "crates/aivi-query" }
 aivi-lsp = { path = "crates/aivi-lsp" }
+insta = { version = "1", features = ["ron"] }
 regex-syntax = "0.8.10"
 rustc-hash = "2"
 
