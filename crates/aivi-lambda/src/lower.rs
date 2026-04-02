@@ -14,42 +14,7 @@ use crate::{
     validate::{ValidationError, validate_module},
 };
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct LoweringErrors {
-    errors: Vec<LoweringError>,
-}
-
-impl LoweringErrors {
-    pub fn new(errors: Vec<LoweringError>) -> Self {
-        Self { errors }
-    }
-
-    pub fn errors(&self) -> &[LoweringError] {
-        &self.errors
-    }
-
-    pub fn into_errors(self) -> Vec<LoweringError> {
-        self.errors
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.errors.is_empty()
-    }
-}
-
-impl std::fmt::Display for LoweringErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (index, error) in self.errors.iter().enumerate() {
-            if index > 0 {
-                f.write_str("; ")?;
-            }
-            write!(f, "{error}")?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for LoweringErrors {}
+pub type LoweringErrors = aivi_base::ErrorCollection<LoweringError>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LoweringError {

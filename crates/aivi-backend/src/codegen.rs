@@ -61,42 +61,7 @@ pub struct CompiledKernel {
     pub code_size: usize,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct CodegenErrors {
-    errors: Vec<CodegenError>,
-}
-
-impl CodegenErrors {
-    pub fn new(errors: Vec<CodegenError>) -> Self {
-        Self { errors }
-    }
-
-    pub fn errors(&self) -> &[CodegenError] {
-        &self.errors
-    }
-
-    pub fn into_errors(self) -> Vec<CodegenError> {
-        self.errors
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.errors.is_empty()
-    }
-}
-
-impl fmt::Display for CodegenErrors {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (index, error) in self.errors.iter().enumerate() {
-            if index > 0 {
-                f.write_str("; ")?;
-            }
-            write!(f, "{error}")?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for CodegenErrors {}
+pub type CodegenErrors = aivi_base::ErrorCollection<CodegenError>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CodegenError {

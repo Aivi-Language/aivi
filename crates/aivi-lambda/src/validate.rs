@@ -9,43 +9,6 @@ use crate::{
     analysis::{AnalysisError, capture_free_bindings},
 };
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ValidationErrors {
-    errors: Vec<ValidationError>,
-}
-
-impl ValidationErrors {
-    pub fn new(errors: Vec<ValidationError>) -> Self {
-        Self { errors }
-    }
-
-    pub fn errors(&self) -> &[ValidationError] {
-        &self.errors
-    }
-
-    pub fn into_errors(self) -> Vec<ValidationError> {
-        self.errors
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.errors.is_empty()
-    }
-}
-
-impl std::fmt::Display for ValidationErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (index, error) in self.errors.iter().enumerate() {
-            if index > 0 {
-                f.write_str("; ")?;
-            }
-            write!(f, "{error}")?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for ValidationErrors {}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationError {
     InvalidCoreModule(core::ValidationError),
@@ -306,6 +269,8 @@ impl std::fmt::Display for ValidationError {
 }
 
 impl std::error::Error for ValidationError {}
+
+pub type ValidationErrors = aivi_base::ErrorCollection<ValidationError>;
 
 pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
     let mut errors = Vec::new();
