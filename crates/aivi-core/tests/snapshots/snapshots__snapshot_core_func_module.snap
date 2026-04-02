@@ -1,22 +1,53 @@
 ---
 source: crates/aivi-core/tests/snapshots.rs
+assertion_line: 35
 expression: core.pretty()
 ---
 func add:
   params = [x: Int, y: Int]
   body = #0 Add #1
 func __aivi_option_getOrElse:
+  params = [fallback: A, opt: Option A]
+  body = #3 ||> Some item => #4 ||> None => #2
 func __aivi_list_keepSome:
+  params = [item: A]
+  body = Some #5
 func __aivi_list_keepFirst:
+  params = [found: Option A, item: A]
+  body = #6 T|>[Some] __aivi_list_keepSome _ F|>[None] Some #7
 func __aivi_list_lengthStep:
+  params = [total: Int, item: A]
+  body = #8 Add 1
 func __aivi_list_length:
+  params = [items: List A]
+  body = #10 |> Reduce(List) __aivi_list_lengthStep 0 _
 func __aivi_list_head:
+  params = [items: List A]
+  body = #11 |> Reduce(List) __aivi_list_keepFirst None _
 func __aivi_list_tailState:
+  params = [items: List A, item: A, seenFirst: Bool]
+  body = #14 T|>[True] {seenFirst: True, items: Append(List) #12 [#13]} F|>[False] {seenFirst: True, items: []}
 func __aivi_list_tailStep:
+  params = [state: { seenFirst: Bool, items: List A }, item: A]
+  body = #15 ||> {seenFirst: seenFirst, items: items} => __aivi_list_tailState #18 #16 #17
 func __aivi_list_tailItems:
+  params = [items: List A, seenFirst: Bool]
+  body = #20 T|>[True] Some #19 F|>[False] None
 func __aivi_list_tailFromState:
+  params = [state: { seenFirst: Bool, items: List A }]
+  body = #21 ||> {seenFirst: seenFirst, items: items} => __aivi_list_tailItems #23 #22
 func __aivi_list_tail:
+  params = [items: List A]
+  body = #24 |> Reduce(List) __aivi_list_tailStep {seenFirst: False, items: []} _ |> __aivi_list_tailFromState _
 func __aivi_list_anyStep:
+  params = [predicate: A -> Bool, found: Bool, item: A]
+  body = #26 T|>[True] True F|>[False] #25 #27
 func __aivi_list_any:
+  params = [predicate: A -> Bool, items: List A]
+  body = #29 |> Reduce(List) __aivi_list_anyStep #28 False _
 func __aivi_binary_eq:
+  params = [left: A, right: A]
+  body = #30 Equals #31
 func __aivi_binary_neq:
+  params = [left: A, right: A]
+  body = #32 NotEquals #33

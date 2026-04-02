@@ -2629,7 +2629,6 @@ impl<'a> ModuleLowerer<'a> {
             .get(import)
             .ok_or(LoweringError::UnknownImport { import })?
             .clone();
-        eprintln!("[import] seeding import {:?} `{}` metadata={:?}", import, binding.local_name.text(), std::mem::discriminant(&binding.metadata));
         let (kind, parameters) = self.import_item_shape(import, &binding)?;
         let origin = self.next_synthetic_item_origin()?;
         let body = self.synthesize_import_body(import, origin, &binding, &parameters)?;
@@ -2649,7 +2648,6 @@ impl<'a> ModuleLowerer<'a> {
                 arena: "items",
                 attempted_len: overflow.attempted_len(),
             })?;
-        eprintln!("[import] created core {:?} for import {:?} `{}`", item_id, import, binding.local_name.text());
         self.import_item_map.insert(import, item_id);
         Ok(item_id)
     }

@@ -1,21 +1,52 @@
 ---
 source: crates/aivi-core/tests/snapshots.rs
+assertion_line: 29
 expression: core.pretty()
 ---
 value answer:
   body = 42
 func __aivi_option_getOrElse:
+  params = [fallback: A, opt: Option A]
+  body = #1 ||> Some item => #2 ||> None => #0
 func __aivi_list_keepSome:
+  params = [item: A]
+  body = Some #3
 func __aivi_list_keepFirst:
+  params = [found: Option A, item: A]
+  body = #4 T|>[Some] __aivi_list_keepSome _ F|>[None] Some #5
 func __aivi_list_lengthStep:
+  params = [total: Int, item: A]
+  body = #6 Add 1
 func __aivi_list_length:
+  params = [items: List A]
+  body = #8 |> Reduce(List) __aivi_list_lengthStep 0 _
 func __aivi_list_head:
+  params = [items: List A]
+  body = #9 |> Reduce(List) __aivi_list_keepFirst None _
 func __aivi_list_tailState:
+  params = [items: List A, item: A, seenFirst: Bool]
+  body = #12 T|>[True] {seenFirst: True, items: Append(List) #10 [#11]} F|>[False] {seenFirst: True, items: []}
 func __aivi_list_tailStep:
+  params = [state: { seenFirst: Bool, items: List A }, item: A]
+  body = #13 ||> {seenFirst: seenFirst, items: items} => __aivi_list_tailState #16 #14 #15
 func __aivi_list_tailItems:
+  params = [items: List A, seenFirst: Bool]
+  body = #18 T|>[True] Some #17 F|>[False] None
 func __aivi_list_tailFromState:
+  params = [state: { seenFirst: Bool, items: List A }]
+  body = #19 ||> {seenFirst: seenFirst, items: items} => __aivi_list_tailItems #21 #20
 func __aivi_list_tail:
+  params = [items: List A]
+  body = #22 |> Reduce(List) __aivi_list_tailStep {seenFirst: False, items: []} _ |> __aivi_list_tailFromState _
 func __aivi_list_anyStep:
+  params = [predicate: A -> Bool, found: Bool, item: A]
+  body = #24 T|>[True] True F|>[False] #23 #25
 func __aivi_list_any:
+  params = [predicate: A -> Bool, items: List A]
+  body = #27 |> Reduce(List) __aivi_list_anyStep #26 False _
 func __aivi_binary_eq:
+  params = [left: A, right: A]
+  body = #28 Equals #29
 func __aivi_binary_neq:
+  params = [left: A, right: A]
+  body = #30 NotEquals #31
