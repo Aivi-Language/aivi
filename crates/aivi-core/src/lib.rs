@@ -25,7 +25,7 @@ mod module;
 pub mod ty;
 mod validate;
 
-pub use arena::{Arena, ArenaId, ArenaOverflow};
+pub use arena::{Arena, ArenaId, ArenaOverflow, alloc_or_diag};
 pub use expr::{
     BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,
     BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier, BuiltinFoldableCarrier,
