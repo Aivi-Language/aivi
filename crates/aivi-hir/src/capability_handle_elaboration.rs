@@ -4,8 +4,10 @@ use aivi_base::{Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan};
 use aivi_typing::BuiltinSourceProvider;
 
 use crate::{
-    BuiltinType, Decorator, DecoratorPayload, Expr, ExprId, ExprKind, IntrinsicValue, Item, ItemId,
-    Module, Name, NamePath, NonEmpty, ProjectionBase, ResolutionState, SignalItem, SourceDecorator,
+    BuiltinType, CustomCapabilityCommandSpec, CustomSourceOptionSchema, Decorator,
+    DecoratorPayload, Expr, ExprId, ExprKind, ImportBinding, ImportBindingMetadata,
+    ImportBindingResolution, ImportId, ImportValueType, IntrinsicValue, Item, ItemId, Module, Name,
+    NamePath, NonEmpty, ProjectionBase, RecordExpr, ResolutionState, SignalItem, SourceDecorator,
     SourceProviderRef, TermReference, TermResolution, TypeKind, TypeResolution, ValueItem,
     custom_source_capabilities::{
         CustomSourceCapabilityKind, resolve_custom_source_capability_member,
@@ -61,6 +63,13 @@ struct CapabilityInvocation {
     handle: ItemId,
     member: String,
     arguments: Vec<ExprId>,
+}
+
+#[derive(Clone, Debug)]
+struct CapturedCustomCommandOption {
+    name: Name,
+    annotation: crate::TypeId,
+    value: ExprId,
 }
 
 fn collect_capability_handles(
@@ -494,22 +503,207 @@ fn lower_value_capability_use(
                     None
                 }
                 CustomSourceCapabilityKind::Command => {
-                    diagnostics.push(
-                        Diagnostic::error(format!(
-                            "custom provider capability `{}` is not executable through handle command values yet",
-                            resolved.provider_key
-                        ))
-                        .with_code(code("unsupported-custom-source-capability"))
-                        .with_label(DiagnosticLabel::primary(
-                            invocation.span,
-                            "custom commands still need a generic task runtime before handle values can execute them",
-                        )),
-                    );
-                    None
+                    lower_custom_value_member(module, handle, invocation, &resolved, diagnostics)
                 }
             }
         }
     }
+}
+
+fn lower_custom_value_member(
+    module: &mut Module,
+    handle: &CapabilityHandleBinding,
+    invocation: &CapabilityInvocation,
+    resolved: &crate::custom_source_capabilities::ResolvedCustomSourceCapabilityMember,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ExprId> {
+    let captured_options =
+        captured_custom_command_options(module, handle, resolved.option_schemas.as_slice());
+    let Some(ty) = custom_command_import_type(
+        module,
+        invocation,
+        resolved,
+        captured_options.as_slice(),
+        diagnostics,
+    ) else {
+        return None;
+    };
+    let spec = CustomCapabilityCommandSpec {
+        provider_key: resolved.contract_key.clone(),
+        command: resolved.member.name.text().into(),
+        provider_arguments: resolved.binding_contract.arguments[..resolved.provider_argument_count]
+            .iter()
+            .map(|argument| argument.name.text().into())
+            .collect(),
+        options: captured_options
+            .iter()
+            .map(|option| option.name.text().into())
+            .collect(),
+        arguments: resolved
+            .member_argument_schemas
+            .iter()
+            .map(|argument| argument.name.text().into())
+            .collect(),
+    };
+    let import = alloc_custom_command_import(module, invocation.span, spec, ty);
+    let mut arguments = handle.arguments.clone();
+    arguments.extend(captured_options.iter().map(|option| option.value));
+    arguments.extend(invocation.arguments.iter().copied());
+    Some(build_import_call(
+        module,
+        import,
+        invocation.span,
+        arguments,
+    ))
+}
+
+fn captured_custom_command_options(
+    module: &Module,
+    handle: &CapabilityHandleBinding,
+    option_schemas: &[CustomSourceOptionSchema],
+) -> Vec<CapturedCustomCommandOption> {
+    let Some(options) = handle.options else {
+        return Vec::new();
+    };
+    let ExprKind::Record(RecordExpr { fields }) = &module.exprs()[options].kind else {
+        return Vec::new();
+    };
+    fields
+        .iter()
+        .filter_map(|field| {
+            let schema = option_schemas
+                .iter()
+                .find(|schema| schema.name.text() == field.label.text())?;
+            Some(CapturedCustomCommandOption {
+                name: field.label.clone(),
+                annotation: schema.annotation,
+                value: field.value,
+            })
+        })
+        .collect()
+}
+
+fn custom_command_import_type(
+    module: &Module,
+    invocation: &CapabilityInvocation,
+    resolved: &crate::custom_source_capabilities::ResolvedCustomSourceCapabilityMember,
+    captured_options: &[CapturedCustomCommandOption],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ImportValueType> {
+    let Some(mut ty) = crate::exports::import_value_type(module, resolved.member.annotation) else {
+        diagnostics.push(
+            Diagnostic::error(format!(
+                "capability member `{}` uses a command type that cannot lower through the shared task runtime",
+                invocation.member
+            ))
+            .with_code(code("unsupported-custom-source-capability"))
+            .with_label(DiagnosticLabel::primary(
+                invocation.span,
+                "rewrite this command to use only closed runtime-lowerable argument and task result types",
+            )),
+        );
+        return None;
+    };
+    for option in captured_options.iter().rev() {
+        let Some(parameter) = crate::exports::import_value_type(module, option.annotation) else {
+            diagnostics.push(
+                Diagnostic::error(format!(
+                    "source handle option `{}` cannot flow through the shared custom command runtime",
+                    option.name.text()
+                ))
+                .with_code(code("unsupported-custom-source-capability"))
+                .with_label(DiagnosticLabel::primary(
+                    invocation.span,
+                    "use only closed runtime-lowerable option types on custom command handles",
+                )),
+            );
+            return None;
+        };
+        ty = ImportValueType::Arrow {
+            parameter: Box::new(parameter),
+            result: Box::new(ty),
+        };
+    }
+    for argument in resolved.binding_contract.arguments[..resolved.provider_argument_count]
+        .iter()
+        .rev()
+    {
+        let Some(parameter) = crate::exports::import_value_type(module, argument.annotation) else {
+            diagnostics.push(
+                Diagnostic::error(format!(
+                    "custom provider argument `{}` cannot lower through handle command values yet",
+                    argument.name.text()
+                ))
+                .with_code(code("unsupported-custom-source-capability"))
+                .with_label(DiagnosticLabel::primary(
+                    invocation.span,
+                    "use only closed runtime-lowerable provider argument types on custom command handles",
+                )),
+            );
+            return None;
+        };
+        ty = ImportValueType::Arrow {
+            parameter: Box::new(parameter),
+            result: Box::new(ty),
+        };
+    }
+    Some(ty)
+}
+
+fn alloc_custom_command_import(
+    module: &mut Module,
+    span: SourceSpan,
+    spec: CustomCapabilityCommandSpec,
+    ty: ImportValueType,
+) -> ImportId {
+    let index = module.imports().len();
+    let local_name = Name::new(format!("customCapabilityCommand{index}"), span)
+        .expect("compiler-generated custom command import names should stay valid");
+    module
+        .alloc_import(ImportBinding {
+            span,
+            imported_name: local_name.clone(),
+            local_name,
+            resolution: ImportBindingResolution::Resolved,
+            metadata: ImportBindingMetadata::IntrinsicValue {
+                value: IntrinsicValue::CustomCapabilityCommand(Box::leak(Box::new(spec))),
+                ty,
+            },
+            callable_type: None,
+            deprecation: None,
+        })
+        .expect("capability lowering should fit inside the import arena")
+}
+
+fn build_import_call(
+    module: &mut Module,
+    import: ImportId,
+    span: SourceSpan,
+    arguments: Vec<ExprId>,
+) -> ExprId {
+    let local_name = module.imports()[import].local_name.clone();
+    let path = NamePath::from_vec(vec![local_name])
+        .expect("compiler-generated custom command import paths should stay valid");
+    let callee = module
+        .alloc_expr(Expr {
+            span,
+            kind: ExprKind::Name(TermReference::resolved(
+                path,
+                TermResolution::Import(import),
+            )),
+        })
+        .expect("capability lowering should fit inside the expression arena");
+    if arguments.is_empty() {
+        return callee;
+    }
+    let arguments = NonEmpty::from_vec(arguments)
+        .expect("custom capability command applications always pass at least one argument");
+    module
+        .alloc_expr(Expr {
+            span,
+            kind: ExprKind::Apply { callee, arguments },
+        })
+        .expect("capability lowering should fit inside the expression arena")
 }
 
 fn lower_builtin_signal_member(
@@ -1125,7 +1319,7 @@ fn build_intrinsic_call(
         .alloc_expr(Expr {
             span,
             kind: ExprKind::Name(TermReference::resolved(
-                intrinsic_name_path(intrinsic, span),
+                intrinsic_name_path(intrinsic.clone(), span),
                 TermResolution::IntrinsicValue(intrinsic),
             )),
         })

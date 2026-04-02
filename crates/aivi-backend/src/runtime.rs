@@ -164,6 +164,21 @@ pub struct RuntimeDbCommitPlan {
     pub changed_tables: BTreeSet<Box<str>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RuntimeNamedValue {
+    pub name: Box<str>,
+    pub value: RuntimeValue,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RuntimeCustomCapabilityCommandPlan {
+    pub provider_key: Box<str>,
+    pub command: Box<str>,
+    pub provider_arguments: Box<[RuntimeNamedValue]>,
+    pub options: Box<[RuntimeNamedValue]>,
+    pub arguments: Box<[RuntimeNamedValue]>,
+}
+
 impl fmt::Display for RuntimeDbTaskPlan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -384,6 +399,7 @@ pub enum RuntimeTaskPlan {
         url: Box<str>,
         body: Box<str>,
     },
+    CustomCapabilityCommand(RuntimeCustomCapabilityCommandPlan),
 }
 
 impl fmt::Display for RuntimeTaskPlan {
@@ -452,6 +468,9 @@ impl fmt::Display for RuntimeTaskPlan {
             Self::HttpDelete { url } => write!(f, "http.delete({url})"),
             Self::HttpHead { url } => write!(f, "http.head({url})"),
             Self::HttpPostJson { url, .. } => write!(f, "http.postJson({url})"),
+            Self::CustomCapabilityCommand(plan) => {
+                write!(f, "{}.{}", plan.provider_key, plan.command)
+            }
         }
     }
 }
@@ -3920,6 +3939,9 @@ fn runtime_class_member_value(intrinsic: BuiltinClassMemberIntrinsic) -> Runtime
 fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
     match value {
         IntrinsicValue::TupleConstructor { arity } => arity,
+        IntrinsicValue::CustomCapabilityCommand(spec) => {
+            spec.provider_arguments.len() + spec.options.len() + spec.arguments.len()
+        }
         IntrinsicValue::RandomBytes => 1,
         IntrinsicValue::RandomInt => 2,
         IntrinsicValue::StdoutWrite => 1,
@@ -4098,9 +4120,19 @@ fn evaluate_intrinsic_value(
     value: IntrinsicValue,
     arguments: Vec<RuntimeValue>,
 ) -> Result<RuntimeValue, EvaluationError> {
-    if let IntrinsicValue::TupleConstructor { arity } = value {
-        debug_assert_eq!(arguments.len(), arity);
-        return Ok(RuntimeValue::Tuple(arguments));
+    match &value {
+        IntrinsicValue::TupleConstructor { arity } => {
+            debug_assert_eq!(arguments.len(), *arity);
+            return Ok(RuntimeValue::Tuple(arguments));
+        }
+        IntrinsicValue::CustomCapabilityCommand(spec) => {
+            return Ok(RuntimeValue::Task(
+                RuntimeTaskPlan::CustomCapabilityCommand(runtime_custom_capability_command_plan(
+                    arguments, spec,
+                )),
+            ));
+        }
+        _ => {}
     }
     match (value, arguments.as_slice()) {
         (IntrinsicValue::RandomBytes, [count]) => {
@@ -5147,6 +5179,53 @@ fn evaluate_intrinsic_value(
             Ok(RuntimeValue::Bool(a < b))
         }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
+    }
+}
+
+fn runtime_custom_capability_command_plan(
+    arguments: Vec<RuntimeValue>,
+    spec: &aivi_hir::CustomCapabilityCommandSpec,
+) -> RuntimeCustomCapabilityCommandPlan {
+    let mut arguments = arguments.into_iter().map(strip_signal);
+    let provider_arguments = spec
+        .provider_arguments
+        .iter()
+        .map(|name| RuntimeNamedValue {
+            name: name.clone(),
+            value: arguments
+                .next()
+                .expect("custom capability command provider arguments should stay aligned"),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let options = spec
+        .options
+        .iter()
+        .map(|name| RuntimeNamedValue {
+            name: name.clone(),
+            value: arguments
+                .next()
+                .expect("custom capability command options should stay aligned"),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let command_arguments = spec
+        .arguments
+        .iter()
+        .map(|name| RuntimeNamedValue {
+            name: name.clone(),
+            value: arguments
+                .next()
+                .expect("custom capability command member arguments should stay aligned"),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    RuntimeCustomCapabilityCommandPlan {
+        provider_key: spec.provider_key.clone(),
+        command: spec.command.clone(),
+        provider_arguments,
+        options,
+        arguments: command_arguments,
     }
 }
 

@@ -465,7 +465,7 @@ impl NavigationAnalysis {
                 self.import_definition_targets_for_import_id(db, *import)
             }
             ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => {
-                self.intrinsic_import_targets(db, name, *value)
+                self.intrinsic_import_targets(db, name, value.clone())
             }
             ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => {
                 self.domain_member_targets(*resolution)
@@ -951,9 +951,9 @@ impl NavigationAnalysis {
         let Some((module, import)) = self.find_unique_import_site(|import| {
             import.local_name.text() == local_name
                 && matches!(
-                    import.metadata,
+                    &import.metadata,
                     ImportBindingMetadata::IntrinsicValue { value: candidate, .. }
-                        if candidate == value
+                        if *candidate == value
                 )
         }) else {
             return Vec::new();

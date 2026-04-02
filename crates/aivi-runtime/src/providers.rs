@@ -32,7 +32,9 @@ use crate::{
         ExternalSourceValue, SourceDecodeError, decode_external, encode_runtime_json,
         parse_json_text, validate_supported_program,
     },
-    task_executor::execute_runtime_value_with_stdio,
+    task_executor::{
+        CustomCapabilityCommandExecutor, execute_runtime_value_with_context_with_stdio,
+    },
 };
 
 /// Scheduler-owned mailbox routing table.
@@ -138,6 +140,7 @@ pub struct SourceProviderContext {
     env: Arc<BTreeMap<String, String>>,
     stdin_override: Option<Result<Box<str>, Box<str>>>,
     stdin_text: Arc<OnceLock<Result<Box<str>, Box<str>>>>,
+    custom_capability_command_executor: Option<Arc<dyn CustomCapabilityCommandExecutor>>,
 }
 
 impl Default for SourceProviderContext {
@@ -171,12 +174,27 @@ impl SourceProviderContext {
             env: Arc::new(env),
             stdin_override: None,
             stdin_text: Arc::new(OnceLock::new()),
+            custom_capability_command_executor: None,
         }
     }
 
     pub fn with_stdin_text(mut self, stdin: impl Into<String>) -> Self {
         self.stdin_override = Some(Ok(stdin.into().into_boxed_str()));
         self
+    }
+
+    pub fn with_custom_capability_command_executor(
+        mut self,
+        executor: Arc<dyn CustomCapabilityCommandExecutor>,
+    ) -> Self {
+        self.custom_capability_command_executor = Some(executor);
+        self
+    }
+
+    pub(crate) fn custom_capability_command_executor(
+        &self,
+    ) -> Option<&Arc<dyn CustomCapabilityCommandExecutor>> {
+        self.custom_capability_command_executor.as_ref()
     }
 
     fn args_runtime_value(&self) -> RuntimeValue {
@@ -753,7 +771,13 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbConnect) => {
                 let plan = DbConnectPlan::parse(instance, &self.context, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_db_connect_worker(instance, port, plan, stop.clone());
+                let handle = spawn_db_connect_worker(
+                    instance,
+                    port,
+                    plan,
+                    self.context.clone(),
+                    stop.clone(),
+                );
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -775,7 +799,14 @@ impl SourceProviderManager {
                         unreachable!("start_provider only runs for activate/reconfigure actions")
                     }
                 };
-                let handle = spawn_db_live_worker(instance, port, plan, delay, stop.clone());
+                let handle = spawn_db_live_worker(
+                    instance,
+                    port,
+                    plan,
+                    self.context.clone(),
+                    delay,
+                    stop.clone(),
+                );
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -3401,6 +3432,7 @@ fn spawn_db_connect_worker(
     instance: SourceInstanceId,
     port: DetachedRuntimePublicationPort,
     plan: DbConnectPlan,
+    context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -3410,7 +3442,7 @@ fn spawn_db_connect_worker(
         let Ok(value) = execute_db_connect(instance, &plan) else {
             return;
         };
-        let Ok(value) = execute_runtime_value_with_stdio(value) else {
+        let Ok(value) = execute_runtime_value_with_context_with_stdio(value, &context) else {
             return;
         };
         if stop.load(Ordering::Acquire) || port.is_cancelled() {
@@ -3424,6 +3456,7 @@ fn spawn_db_live_worker(
     instance: SourceInstanceId,
     port: DetachedRuntimePublicationPort,
     plan: DbLivePlan,
+    context: SourceProviderContext,
     delay: Duration,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
@@ -3437,7 +3470,8 @@ fn spawn_db_live_worker(
         if stop.load(Ordering::Acquire) || port.is_cancelled() {
             return;
         }
-        let value = match execute_runtime_value_with_stdio(plan.task.clone()) {
+        let value = match execute_runtime_value_with_context_with_stdio(plan.task.clone(), &context)
+        {
             Ok(value) => value,
             Err(error) => {
                 let Some(result) = &plan.result else {

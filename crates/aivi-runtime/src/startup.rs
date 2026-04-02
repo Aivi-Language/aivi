@@ -23,8 +23,11 @@ use crate::{
     TryDerivedNodeEvaluator,
     graph::{DerivedHandle, OwnerHandle, ReactiveClauseHandle, SignalHandle},
     hir_adapter::{HirCompiledRuntimeExpr, HirRuntimeAssembly, HirRuntimeInstantiationError},
+    providers::SourceProviderContext,
     scheduler::DependencyValues,
-    task_executor::{RuntimeDbCommitInvalidation, execute_runtime_value_with_stdio_effects},
+    task_executor::{
+        RuntimeDbCommitInvalidation, execute_runtime_value_with_context_with_stdio_effects,
+    },
 };
 
 pub fn link_backend_runtime(
@@ -56,6 +59,7 @@ pub fn link_backend_runtime(
         db_changed_routes: linked.db_changed_routes,
         temporal_states: BTreeMap::new(),
         db_commit_invalidation_sink: None,
+        execution_context: SourceProviderContext::current(),
     };
     linked_runtime.prime_db_changed_routes();
     Ok(linked_runtime)
@@ -82,6 +86,7 @@ pub struct BackendLinkedRuntime {
     db_changed_routes: Box<[LinkedDbChangedRoute]>,
     temporal_states: BTreeMap<TemporalStageKey, RuntimeValue>,
     db_commit_invalidation_sink: Option<DbCommitInvalidationSink>,
+    execution_context: SourceProviderContext,
 }
 
 impl BackendLinkedRuntime {
@@ -104,6 +109,10 @@ impl BackendLinkedRuntime {
     ) -> &mut TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram, MovingRuntimeValueStore>
     {
         &mut self.runtime
+    }
+
+    pub fn set_execution_context(&mut self, context: SourceProviderContext) {
+        self.execution_context = context;
     }
 
     pub fn signal_graph(&self) -> &crate::SignalGraph {
@@ -493,6 +502,7 @@ impl BackendLinkedRuntime {
             globals,
             completion,
             db_commit_invalidation_sink: self.db_commit_invalidation_sink.clone(),
+            execution_context: self.execution_context.clone(),
         })
     }
 
@@ -1079,6 +1089,7 @@ struct PreparedTaskExecution {
     globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
     completion: DetachedRuntimeCompletionPort,
     db_commit_invalidation_sink: Option<DbCommitInvalidationSink>,
+    execution_context: SourceProviderContext,
 }
 
 fn execute_task_plan(
@@ -1092,6 +1103,7 @@ fn execute_task_plan(
         globals,
         completion,
         db_commit_invalidation_sink,
+        execution_context,
     } = task;
     if completion.is_cancelled() {
         return Ok(LinkedTaskWorkerOutcome::Cancelled);
@@ -1106,14 +1118,13 @@ fn execute_task_plan(
             backend_item,
             error,
         })?;
-    let outcome = execute_runtime_value_with_stdio_effects(value).map_err(|error| {
-        LinkedTaskWorkerError::TaskExecution {
+    let outcome = execute_runtime_value_with_context_with_stdio_effects(value, &execution_context)
+        .map_err(|error| LinkedTaskWorkerError::TaskExecution {
             instance,
             owner,
             backend_item,
             error,
-        }
-    })?;
+        })?;
     if let Some(invalidation) = outcome.commit_invalidation
         && let Some(sink) = db_commit_invalidation_sink
     {
@@ -3185,13 +3196,55 @@ fn active_when_value(
 mod tests {
     use std::{collections::BTreeMap, sync::Arc};
 
+    use aivi_backend::{RuntimeCustomCapabilityCommandPlan, RuntimeNamedValue};
     use aivi_base::SourceDatabase;
     use aivi_hir::{Item, lower_module as lower_hir_module};
     use aivi_lambda::lower_module as lower_lambda_module;
     use aivi_syntax::parse_module;
 
     use super::*;
-    use crate::{SignalGraphBuilder, TaskRuntimeSpec, TaskSourceRuntime};
+    use crate::{
+        SignalGraphBuilder, TaskRuntimeSpec, TaskSourceRuntime,
+        task_executor::CustomCapabilityCommandExecutor,
+    };
+
+    #[derive(Default)]
+    struct EchoCustomCapabilityCommandExecutor;
+
+    impl CustomCapabilityCommandExecutor for EchoCustomCapabilityCommandExecutor {
+        fn execute(
+            &self,
+            _context: &SourceProviderContext,
+            plan: &RuntimeCustomCapabilityCommandPlan,
+            _stdout: &mut dyn std::io::Write,
+            _stderr: &mut dyn std::io::Write,
+        ) -> Result<RuntimeValue, crate::task_executor::RuntimeTaskExecutionError> {
+            assert_eq!(plan.provider_key.as_ref(), "custom.feed");
+            assert_eq!(plan.command.as_ref(), "delete");
+            assert_eq!(
+                plan.provider_arguments.as_ref(),
+                [RuntimeNamedValue {
+                    name: "root".into(),
+                    value: RuntimeValue::Text("/tmp/demo".into()),
+                }]
+            );
+            assert_eq!(
+                plan.options.as_ref(),
+                [RuntimeNamedValue {
+                    name: "mode".into(),
+                    value: RuntimeValue::Text("sync".into()),
+                }]
+            );
+            assert_eq!(
+                plan.arguments.as_ref(),
+                [RuntimeNamedValue {
+                    name: "arg1".into(),
+                    value: RuntimeValue::Text("config".into()),
+                }]
+            );
+            Ok(RuntimeValue::Text("deleted".into()))
+        }
+    }
 
     struct LoweredStack {
         hir: hir::LoweringResult,
@@ -3309,6 +3362,7 @@ mod tests {
             db_changed_routes: Vec::new().into_boxed_slice(),
             temporal_states: BTreeMap::new(),
             db_commit_invalidation_sink: None,
+            execution_context: SourceProviderContext::current(),
         }
     }
 
@@ -3648,6 +3702,60 @@ value answer : Task Text Int = pure 42
                 .current_value(binding.input.as_signal())
                 .expect("task sink should be readable"),
             Some(&RuntimeValue::Int(42))
+        );
+    }
+
+    #[test]
+    fn linked_runtime_task_workers_execute_custom_capability_commands_through_context() {
+        let lowered = lower_text(
+            "runtime-startup-custom-capability-command-task.aivi",
+            r#"
+type FeedSource = Unit
+
+value mode = "sync"
+
+provider custom.feed
+    argument root: Text
+    option mode: Text
+    command delete : Text -> Task Text Text
+
+@source custom.feed "/tmp/demo" with {
+    mode: mode
+}
+signal feed : FeedSource
+
+value cleanup : Task Text Text = feed.delete "config"
+"#,
+        );
+        let mut linked = manual_task_linked_runtime(&lowered, "cleanup");
+        linked.set_execution_context(
+            SourceProviderContext::current().with_custom_capability_command_executor(Arc::new(
+                EchoCustomCapabilityCommandExecutor,
+            )),
+        );
+        let binding = linked
+            .task_by_owner(item_id(lowered.hir.module(), "cleanup"))
+            .expect("manual task binding should exist")
+            .clone();
+
+        let handle = linked
+            .spawn_task_worker(binding.instance)
+            .expect("task worker should spawn");
+        assert_eq!(
+            handle
+                .join()
+                .expect("task worker thread should join cleanly"),
+            Ok(LinkedTaskWorkerOutcome::Published)
+        );
+
+        let outcome = linked.tick().expect("task publication tick should succeed");
+        assert!(!outcome.is_empty());
+        assert_eq!(
+            linked
+                .runtime()
+                .current_value(binding.input.as_signal())
+                .expect("task sink should be readable"),
+            Some(&RuntimeValue::Text("deleted".into()))
         );
     }
 

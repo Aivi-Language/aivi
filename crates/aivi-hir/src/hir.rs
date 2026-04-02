@@ -257,10 +257,20 @@ pub enum BuiltinTerm {
     Invalid,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CustomCapabilityCommandSpec {
+    pub provider_key: Box<str>,
+    pub command: Box<str>,
+    pub provider_arguments: Box<[Box<str>]>,
+    pub options: Box<[Box<str>]>,
+    pub arguments: Box<[Box<str>]>,
+}
+
 /// Compiler-known stdlib values that lower through dedicated runtime seams.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum IntrinsicValue {
     TupleConstructor { arity: usize },
+    CustomCapabilityCommand(&'static CustomCapabilityCommandSpec),
     RandomInt,
     RandomBytes,
     StdoutWrite,
@@ -424,6 +434,9 @@ impl fmt::Display for IntrinsicValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TupleConstructor { arity } => write!(f, "aivi.core.tuple.ctor{arity}"),
+            Self::CustomCapabilityCommand(spec) => {
+                write!(f, "custom.{}.{}", spec.provider_key, spec.command)
+            }
             Self::RandomInt => f.write_str("aivi.random.randomInt"),
             Self::RandomBytes => f.write_str("aivi.random.randomBytes"),
             Self::StdoutWrite => f.write_str("aivi.stdio.stdoutWrite"),

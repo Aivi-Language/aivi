@@ -2692,7 +2692,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 Ok(GateRuntimeReference::Builtin(*builtin))
             }
             ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => {
-                Ok(GateRuntimeReference::IntrinsicValue(*value))
+                Ok(GateRuntimeReference::IntrinsicValue(value.clone()))
             }
             ResolutionState::Resolved(TermResolution::ClassMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => {

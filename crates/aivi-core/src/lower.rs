@@ -2082,7 +2082,7 @@ impl<'a> ModuleLowerer<'a> {
             }
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::IntrinsicValue(
                 value,
-            )) => Reference::IntrinsicValue(*value),
+            )) => Reference::IntrinsicValue(value.clone()),
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Import(_))
             | aivi_hir::ResolutionState::Resolved(
                 aivi_hir::TermResolution::AmbiguousDomainMembers(_),
@@ -2603,6 +2603,7 @@ impl<'a> ModuleLowerer<'a> {
             .clone();
         let (kind, parameters) = self.import_item_shape(import, &binding)?;
         let origin = self.next_synthetic_item_origin()?;
+        let body = self.synthesize_import_body(import, origin, &binding, &parameters)?;
         let item_id = self
             .module
             .items_mut()
@@ -2612,7 +2613,7 @@ impl<'a> ModuleLowerer<'a> {
                 name: binding.local_name.text().into(),
                 kind,
                 parameters,
-                body: None,
+                body,
                 pipes: Vec::new(),
             })
             .map_err(|overflow| LoweringError::ArenaOverflow {
@@ -2621,6 +2622,71 @@ impl<'a> ModuleLowerer<'a> {
             })?;
         self.import_item_map.insert(import, item_id);
         Ok(item_id)
+    }
+
+    fn synthesize_import_body(
+        &mut self,
+        import: ImportId,
+        owner: HirItemId,
+        binding: &aivi_hir::ImportBinding,
+        parameters: &[ItemParameter],
+    ) -> Result<Option<ExprId>, LoweringError> {
+        let ImportBindingMetadata::IntrinsicValue { value, .. } = &binding.metadata else {
+            return Ok(None);
+        };
+        let callee = self.alloc_expr(
+            owner,
+            binding.span,
+            Expr {
+                span: binding.span,
+                ty: self.lower_import_type(binding.callable_type.as_ref().unwrap_or_else(|| {
+                    match &binding.metadata {
+                        ImportBindingMetadata::IntrinsicValue { ty, .. } => ty,
+                        _ => unreachable!("non-intrinsic imports are filtered above"),
+                    }
+                })),
+                kind: ExprKind::Reference(Reference::IntrinsicValue(value.clone())),
+            },
+        )?;
+        if parameters.is_empty() {
+            return Ok(Some(callee));
+        }
+        let mut current = callee;
+        for parameter in parameters {
+            let argument = self.alloc_expr(
+                owner,
+                parameter.span,
+                Expr {
+                    span: parameter.span,
+                    ty: parameter.ty.clone(),
+                    kind: ExprKind::Reference(Reference::Local(parameter.binding)),
+                },
+            )?;
+            let result_ty = match &self.module.exprs()[current].ty {
+                Type::Arrow { result, .. } => result.as_ref().clone(),
+                _other => {
+                    return Err(LoweringError::UnsupportedImportBinding {
+                        import,
+                        span: binding.span,
+                        name: binding.local_name.text().into(),
+                        reason: "intrinsic import body expected a function before applying a synthetic parameter",
+                    });
+                }
+            };
+            current = self.alloc_expr(
+                owner,
+                binding.span,
+                Expr {
+                    span: binding.span,
+                    ty: result_ty,
+                    kind: ExprKind::Apply {
+                        callee: current,
+                        arguments: vec![argument],
+                    },
+                },
+            )?;
+        }
+        Ok(Some(current))
     }
 
     fn seed_instance_member_item(
@@ -2852,7 +2918,7 @@ impl<'a> ModuleLowerer<'a> {
                                     )?,
                                 GateRuntimeReference::Builtin(term) => Reference::Builtin(*term),
                                 GateRuntimeReference::IntrinsicValue(value) => {
-                                    Reference::IntrinsicValue(*value)
+                                    Reference::IntrinsicValue(value.clone())
                                 }
                             };
                             values.push(self.alloc_expr(

@@ -6478,14 +6478,14 @@ impl<'a> Lowerer<'a> {
         match import_lookup {
             LookupResult::Unique(import) => {
                 let import_binding = &self.module.imports()[import];
-                reference.resolution = match import_binding.metadata {
+                reference.resolution = match &import_binding.metadata {
                     ImportBindingMetadata::BuiltinTerm(builtin) => {
-                        ResolutionState::Resolved(TermResolution::Builtin(builtin))
+                        ResolutionState::Resolved(TermResolution::Builtin(*builtin))
                     }
                     ImportBindingMetadata::IntrinsicValue { value, .. } => {
-                        ResolutionState::Resolved(TermResolution::IntrinsicValue(value))
+                        ResolutionState::Resolved(TermResolution::IntrinsicValue(value.clone()))
                     }
-                    ImportBindingMetadata::AmbientValue { ref name } => {
+                    ImportBindingMetadata::AmbientValue { name } => {
                         match lookup_item(&namespaces.ambient_term_items, name) {
                             LookupResult::Unique(item) => {
                                 ResolutionState::Resolved(TermResolution::Item(item))
@@ -11185,27 +11185,83 @@ value load = feed.read "config"
     }
 
     #[test]
-    fn custom_source_capability_commands_remain_unsupported_in_values() {
+    fn lowers_custom_source_capability_commands_into_typed_runtime_imports() {
         let lowered = lower_text(
             "custom_source_capability_command_value.aivi",
             r#"
 type FeedSource = Unit
 
+value mode = "sync"
+
 provider custom.feed
+    argument root: Text
+    option mode: Text
     command delete : Text -> Task Text Unit
 
-@source custom.feed
+@source custom.feed "/tmp/demo" with {
+    mode: mode
+}
 signal feed : FeedSource
 
 value cleanup : Task Text Unit = feed.delete "config"
 "#,
         );
         assert!(
-            lowered.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(super::code("unsupported-custom-source-capability"))
-            }),
-            "custom capability commands should keep an explicit unsupported diagnostic until the task runtime exists, got diagnostics: {:?}",
+            !lowered.has_errors(),
+            "custom capability commands should lower cleanly: {:?}",
             lowered.diagnostics()
+        );
+        let cleanup = find_value(lowered.module(), "cleanup");
+        let ExprKind::Apply { callee, arguments } = &lowered.module().exprs()[cleanup.body].kind
+        else {
+            panic!("custom capability command values should lower into a runtime application");
+        };
+        let ExprKind::Name(reference) = &lowered.module().exprs()[*callee].kind else {
+            panic!("custom capability command callee should lower to a synthetic import");
+        };
+        let ResolutionState::Resolved(TermResolution::Import(import_id)) = reference.resolution
+        else {
+            panic!("custom capability command callee should resolve through a synthetic import");
+        };
+        assert_eq!(
+            arguments.len(),
+            3,
+            "custom capability commands should apply inherited provider args, handle options, and member args"
+        );
+        let import = &lowered.module().imports()[import_id];
+        let ImportBindingMetadata::IntrinsicValue {
+            value: IntrinsicValue::CustomCapabilityCommand(spec),
+            ..
+        } = &import.metadata
+        else {
+            panic!(
+                "custom capability command imports should carry the shared custom command intrinsic"
+            );
+        };
+        assert_eq!(spec.provider_key.as_ref(), "custom.feed");
+        assert_eq!(spec.command.as_ref(), "delete");
+        assert_eq!(
+            spec.provider_arguments.as_ref(),
+            &["root".into()],
+            "custom capability commands should preserve provider argument names"
+        );
+        assert_eq!(
+            spec.options.as_ref(),
+            &["mode".into()],
+            "custom capability commands should preserve captured handle option names"
+        );
+        assert_eq!(
+            spec.arguments.as_ref(),
+            &["arg1".into()],
+            "custom capability commands should synthesize stable member argument names"
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "custom capability commands should validate against the synthetic import type, got diagnostics: {:?}",
+            report.diagnostics()
         );
     }
 

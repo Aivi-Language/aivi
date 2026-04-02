@@ -379,7 +379,7 @@ fn deprecation_notice(module: &Module, deprecated: &DeprecatedDecorator) -> Depr
     }
 }
 
-fn import_value_type(module: &Module, ty: TypeId) -> Option<ImportValueType> {
+pub(crate) fn import_value_type(module: &Module, ty: TypeId) -> Option<ImportValueType> {
     let type_node = module.types().get(ty)?;
     match &type_node.kind {
         TypeKind::Name(reference) => primitive_import_value_type(reference),

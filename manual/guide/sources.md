@@ -2,7 +2,7 @@
 
 Sources are how AIVI connects the reactive graph to the outside world. Timers, HTTP requests, keyboard events, file watching, and subprocess events are all modeled as source-backed signals.
 
-Current limitation: source syntax, provider contracts, built-in capability-handle lowering, and custom handle operation lowering are implemented, but scheduler-owned recurrence execution is still only partially wired. The forms in this guide reflect what the parser/compiler accept today; more advanced recurrence wakeup behavior and custom handle commands are still explicit work items in the runtime/compiler pipeline.
+Current limitation: source syntax, provider contracts, built-in capability-handle lowering, and direct custom handle operation/command lowering are implemented, but scheduler-owned recurrence execution is still only partially wired. The forms in this guide reflect what the parser/compiler accept today; more advanced recurrence wakeup behavior remains an explicit runtime/compiler work item.
 
 For the current compiler-and-runtime-backed reference, including every built-in source kind and option-level support notes, see the [Built-in Source Catalog](/guide/source-catalog).
 

@@ -7,10 +7,13 @@ use std::{
 };
 
 use aivi_backend::{
-    RuntimeDbCommitPlan, RuntimeDbQueryPlan, RuntimeDbStatement, RuntimeDbTaskPlan, RuntimeFloat,
-    RuntimeMap, RuntimeMapEntry, RuntimeTaskPlan, RuntimeValue,
+    RuntimeCustomCapabilityCommandPlan, RuntimeDbCommitPlan, RuntimeDbQueryPlan,
+    RuntimeDbStatement, RuntimeDbTaskPlan, RuntimeFloat, RuntimeMap, RuntimeMapEntry,
+    RuntimeTaskPlan, RuntimeValue,
 };
 use regex::Regex;
+
+use crate::providers::SourceProviderContext;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeTaskExecutionError {
@@ -32,6 +35,16 @@ impl fmt::Display for RuntimeTaskExecutionError {
 }
 
 impl std::error::Error for RuntimeTaskExecutionError {}
+
+pub trait CustomCapabilityCommandExecutor: Send + Sync {
+    fn execute(
+        &self,
+        context: &SourceProviderContext,
+        plan: &RuntimeCustomCapabilityCommandPlan,
+        stdout: &mut dyn Write,
+        stderr: &mut dyn Write,
+    ) -> Result<RuntimeValue, RuntimeTaskExecutionError>;
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RuntimeDbCommitInvalidation {
@@ -56,6 +69,15 @@ impl RuntimeTaskExecutionOutcome {
 
 pub fn execute_runtime_task_plan(
     plan: RuntimeTaskPlan,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
+    execute_runtime_task_plan_with_context(plan, &SourceProviderContext::current(), stdout, stderr)
+}
+
+pub fn execute_runtime_task_plan_with_context(
+    plan: RuntimeTaskPlan,
+    context: &SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
@@ -440,6 +462,15 @@ pub fn execute_runtime_task_plan(
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(response.into()))
         }
+        RuntimeTaskPlan::CustomCapabilityCommand(plan) => {
+            let Some(executor) = context.custom_capability_command_executor() else {
+                return Err(task_error(format!(
+                    "custom capability command `{}.{}` has no registered executor",
+                    plan.provider_key, plan.command
+                )));
+            };
+            executor.execute(context, &plan, stdout, stderr)
+        }
     }
 }
 
@@ -452,11 +483,18 @@ pub fn execute_runtime_db_task_plan(
 pub fn execute_runtime_task_plan_with_stdio(
     plan: RuntimeTaskPlan,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
+    execute_runtime_task_plan_with_context_with_stdio(plan, &SourceProviderContext::current())
+}
+
+pub fn execute_runtime_task_plan_with_context_with_stdio(
+    plan: RuntimeTaskPlan,
+    context: &SourceProviderContext,
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
     let stdout = std::io::stdout();
     let stderr = std::io::stderr();
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
-    execute_runtime_task_plan(plan, &mut stdout, &mut stderr)
+    execute_runtime_task_plan_with_context(plan, context, &mut stdout, &mut stderr)
 }
 
 pub fn execute_runtime_value(
@@ -464,17 +502,48 @@ pub fn execute_runtime_value(
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_value_with_effects(value, stdout, stderr)?.value)
+    Ok(execute_runtime_value_with_context_effects(
+        value,
+        &SourceProviderContext::current(),
+        stdout,
+        stderr,
+    )?
+    .value)
 }
 
+pub fn execute_runtime_value_with_context(
+    value: RuntimeValue,
+    context: &SourceProviderContext,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
+    Ok(execute_runtime_value_with_context_effects(value, context, stdout, stderr)?.value)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn execute_runtime_value_with_effects(
     value: RuntimeValue,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
+    execute_runtime_value_with_context_effects(
+        value,
+        &SourceProviderContext::current(),
+        stdout,
+        stderr,
+    )
+}
+
+pub(crate) fn execute_runtime_value_with_context_effects(
+    value: RuntimeValue,
+    context: &SourceProviderContext,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
     match value {
         RuntimeValue::Task(plan) => {
-            execute_runtime_task_plan(plan, stdout, stderr).map(RuntimeTaskExecutionOutcome::value)
+            execute_runtime_task_plan_with_context(plan, context, stdout, stderr)
+                .map(RuntimeTaskExecutionOutcome::value)
         }
         RuntimeValue::DbTask(plan) => execute_runtime_db_task_plan_with_effects(plan),
         other => Ok(RuntimeTaskExecutionOutcome::value(other)),
@@ -484,17 +553,36 @@ pub(crate) fn execute_runtime_value_with_effects(
 pub fn execute_runtime_value_with_stdio(
     value: RuntimeValue,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_value_with_stdio_effects(value)?.value)
+    Ok(execute_runtime_value_with_context_with_stdio_effects(
+        value,
+        &SourceProviderContext::current(),
+    )?
+    .value)
 }
 
+pub fn execute_runtime_value_with_context_with_stdio(
+    value: RuntimeValue,
+    context: &SourceProviderContext,
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
+    Ok(execute_runtime_value_with_context_with_stdio_effects(value, context)?.value)
+}
+
+#[allow(dead_code)]
 pub(crate) fn execute_runtime_value_with_stdio_effects(
     value: RuntimeValue,
+) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
+    execute_runtime_value_with_context_with_stdio_effects(value, &SourceProviderContext::current())
+}
+
+pub(crate) fn execute_runtime_value_with_context_with_stdio_effects(
+    value: RuntimeValue,
+    context: &SourceProviderContext,
 ) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
     let stdout = std::io::stdout();
     let stderr = std::io::stderr();
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
-    execute_runtime_value_with_effects(value, &mut stdout, &mut stderr)
+    execute_runtime_value_with_context_effects(value, context, &mut stdout, &mut stderr)
 }
 
 fn task_error(message: impl Into<String>) -> RuntimeTaskExecutionError {
@@ -773,17 +861,58 @@ fn read_os_random_bytes(count: usize) -> Result<Box<[u8]>, RuntimeTaskExecutionE
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet, fs, path::PathBuf};
+    use std::{collections::BTreeSet, fs, path::PathBuf, sync::Arc};
 
     use aivi_backend::{
-        RuntimeDbCommitPlan, RuntimeDbConnection, RuntimeDbQueryPlan, RuntimeDbStatement,
-        RuntimeDbTaskPlan, RuntimeMap, RuntimeMapEntry, RuntimeTaskPlan, RuntimeValue,
+        RuntimeCustomCapabilityCommandPlan, RuntimeDbCommitPlan, RuntimeDbConnection,
+        RuntimeDbQueryPlan, RuntimeDbStatement, RuntimeDbTaskPlan, RuntimeMap, RuntimeMapEntry,
+        RuntimeNamedValue, RuntimeTaskPlan, RuntimeValue,
     };
 
     use super::{
-        RuntimeDbCommitInvalidation, execute_runtime_task_plan, execute_runtime_value,
+        CustomCapabilityCommandExecutor, RuntimeDbCommitInvalidation, execute_runtime_task_plan,
+        execute_runtime_task_plan_with_context, execute_runtime_value,
         execute_runtime_value_with_effects,
     };
+    use crate::SourceProviderContext;
+
+    #[derive(Default)]
+    struct EchoCustomCapabilityCommandExecutor;
+
+    impl CustomCapabilityCommandExecutor for EchoCustomCapabilityCommandExecutor {
+        fn execute(
+            &self,
+            _context: &SourceProviderContext,
+            plan: &RuntimeCustomCapabilityCommandPlan,
+            _stdout: &mut dyn std::io::Write,
+            _stderr: &mut dyn std::io::Write,
+        ) -> Result<RuntimeValue, super::RuntimeTaskExecutionError> {
+            assert_eq!(plan.provider_key.as_ref(), "custom.feed");
+            assert_eq!(plan.command.as_ref(), "delete");
+            assert_eq!(
+                plan.provider_arguments.as_ref(),
+                [RuntimeNamedValue {
+                    name: "root".into(),
+                    value: RuntimeValue::Text("/tmp/demo".into()),
+                }]
+            );
+            assert_eq!(
+                plan.options.as_ref(),
+                [RuntimeNamedValue {
+                    name: "mode".into(),
+                    value: RuntimeValue::Text("sync".into()),
+                }]
+            );
+            assert_eq!(
+                plan.arguments.as_ref(),
+                [RuntimeNamedValue {
+                    name: "arg1".into(),
+                    value: RuntimeValue::Text("config".into()),
+                }]
+            );
+            Ok(RuntimeValue::Text("deleted".into()))
+        }
+    }
 
     fn test_path(prefix: &str) -> PathBuf {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-scratch");
@@ -865,6 +994,68 @@ mod tests {
             error.to_string(),
             "randomInt requires `low <= high`, found low=9 and high=3"
         );
+        assert!(stdout.is_empty());
+        assert!(stderr.is_empty());
+    }
+
+    #[test]
+    fn execute_runtime_task_plan_reports_missing_custom_command_executor() {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let error = execute_runtime_task_plan(
+            RuntimeTaskPlan::CustomCapabilityCommand(RuntimeCustomCapabilityCommandPlan {
+                provider_key: "custom.feed".into(),
+                command: "delete".into(),
+                provider_arguments: Box::new([]),
+                options: Box::new([]),
+                arguments: Box::new([]),
+            }),
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect_err("custom capability commands should fail clearly without a registered executor");
+
+        assert_eq!(
+            error.to_string(),
+            "custom capability command `custom.feed.delete` has no registered executor"
+        );
+    }
+
+    #[test]
+    fn execute_runtime_task_plan_runs_custom_capability_commands_through_registered_executor() {
+        let context = SourceProviderContext::current()
+            .with_custom_capability_command_executor(Arc::new(EchoCustomCapabilityCommandExecutor));
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let value = execute_runtime_task_plan_with_context(
+            RuntimeTaskPlan::CustomCapabilityCommand(RuntimeCustomCapabilityCommandPlan {
+                provider_key: "custom.feed".into(),
+                command: "delete".into(),
+                provider_arguments: vec![RuntimeNamedValue {
+                    name: "root".into(),
+                    value: RuntimeValue::Text("/tmp/demo".into()),
+                }]
+                .into_boxed_slice(),
+                options: vec![RuntimeNamedValue {
+                    name: "mode".into(),
+                    value: RuntimeValue::Text("sync".into()),
+                }]
+                .into_boxed_slice(),
+                arguments: vec![RuntimeNamedValue {
+                    name: "arg1".into(),
+                    value: RuntimeValue::Text("config".into()),
+                }]
+                .into_boxed_slice(),
+            }),
+            &context,
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("custom capability commands should run through the registered executor");
+
+        assert_eq!(value, RuntimeValue::Text("deleted".into()));
         assert!(stdout.is_empty());
         assert!(stderr.is_empty());
     }

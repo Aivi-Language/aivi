@@ -1,6 +1,6 @@
 use crate::{
-    CustomSourceArgumentSchema, CustomSourceCapabilityMember, CustomSourceContractMetadata, Item,
-    Module, Name, TypeKind,
+    CustomSourceArgumentSchema, CustomSourceCapabilityMember, CustomSourceContractMetadata,
+    CustomSourceOptionSchema, Item, Module, Name, TypeKind,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -11,10 +11,14 @@ pub(crate) enum CustomSourceCapabilityKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ResolvedCustomSourceCapabilityMember {
+    pub contract_key: Box<str>,
     pub provider_key: Box<str>,
     pub kind: CustomSourceCapabilityKind,
     pub member: CustomSourceCapabilityMember,
     pub binding_contract: CustomSourceContractMetadata,
+    pub provider_argument_count: usize,
+    pub option_schemas: Vec<CustomSourceOptionSchema>,
+    pub member_argument_schemas: Vec<CustomSourceArgumentSchema>,
 }
 
 pub(crate) fn resolve_custom_source_binding_contract(
@@ -53,10 +57,18 @@ pub(crate) fn resolve_custom_source_capability_member(
     } else {
         return None;
     };
+    let member_argument_schemas = capability_member_argument_schemas(module, &member);
     Some(ResolvedCustomSourceCapabilityMember {
+        contract_key: contract_key.into(),
         provider_key: format!("{contract_key}.{}", member.name.text()).into_boxed_str(),
         kind,
-        binding_contract: derive_custom_source_binding_contract(module, contract, &member),
+        binding_contract: derive_custom_source_binding_contract(
+            contract,
+            member_argument_schemas.as_slice(),
+        ),
+        provider_argument_count: contract.arguments.len(),
+        option_schemas: contract.options.clone(),
+        member_argument_schemas,
         member,
     })
 }
@@ -82,14 +94,13 @@ fn resolve_exact_custom_source_contract<'a>(
 }
 
 fn derive_custom_source_binding_contract(
-    module: &Module,
     contract: &CustomSourceContractMetadata,
-    member: &CustomSourceCapabilityMember,
+    member_argument_schemas: &[CustomSourceArgumentSchema],
 ) -> CustomSourceContractMetadata {
     let mut binding_contract = contract.clone();
     binding_contract
         .arguments
-        .extend(capability_member_argument_schemas(module, member));
+        .extend(member_argument_schemas.iter().cloned());
     binding_contract
 }
 

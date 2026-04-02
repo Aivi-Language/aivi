@@ -53,7 +53,7 @@ use aivi_query::{
 use aivi_runtime::{
     BackendLinkedRuntime, GlibLinkedRuntimeDriver, HirRuntimeAssembly,
     InputHandle as RuntimeInputHandle, Publication, SourceProviderContext, SourceProviderManager,
-    assemble_hir_runtime_with_items, execute_runtime_value, link_backend_runtime,
+    assemble_hir_runtime_with_items, execute_runtime_value_with_context, link_backend_runtime,
 };
 use aivi_syntax::{Formatter, ItemKind, TokenKind, lex_module, parse_module};
 use gtk::{glib, prelude::*};
@@ -905,7 +905,7 @@ fn test_file_with_context(
                 continue;
             }
         };
-        match execute_test_task_value(value, stdout, stderr) {
+        match execute_test_task_value(value, &context, stdout, stderr) {
             Ok(TestTaskOutcome {
                 passed: true,
                 detail,
@@ -1269,8 +1269,9 @@ fn launch_execute(
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<(), String> {
-    let value = evaluate_task_owner_value(path, artifact, context, "`aivi execute`", "`main`")?;
-    execute_main_task_value(value, stdout, stderr)
+    let value =
+        evaluate_task_owner_value(path, artifact, context.clone(), "`aivi execute`", "`main`")?;
+    execute_main_task_value(value, &context, stdout, stderr)
 }
 
 fn evaluate_task_owner_value(
@@ -1358,6 +1359,7 @@ fn settle_execute_sources(
 
 fn execute_main_task_value(
     value: RuntimeValue,
+    context: &SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<(), String> {
@@ -1366,7 +1368,8 @@ fn execute_main_task_value(
             "`aivi execute` expected `main` to evaluate to a task plan, found `{value}`"
         ));
     }
-    let result = execute_runtime_value(value, stdout, stderr).map_err(|error| error.to_string())?;
+    let result = execute_runtime_value_with_context(value, context, stdout, stderr)
+        .map_err(|error| error.to_string())?;
     if result != RuntimeValue::Unit {
         write_output_line(stdout, &result.to_string())?;
     }
@@ -1375,6 +1378,7 @@ fn execute_main_task_value(
 
 fn execute_test_task_value(
     value: RuntimeValue,
+    context: &SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<TestTaskOutcome, String> {
@@ -1383,7 +1387,8 @@ fn execute_test_task_value(
             "`aivi test` expected each `@test` value to evaluate to a task plan, found `{value}`"
         ));
     }
-    let result = execute_runtime_value(value, stdout, stderr).map_err(|error| error.to_string())?;
+    let result = execute_runtime_value_with_context(value, context, stdout, stderr)
+        .map_err(|error| error.to_string())?;
     Ok(match result {
         RuntimeValue::Unit => TestTaskOutcome {
             passed: true,

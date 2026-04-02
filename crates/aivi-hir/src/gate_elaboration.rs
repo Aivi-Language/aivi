@@ -1904,7 +1904,7 @@ fn runtime_reference_for_name(
             Ok(GateRuntimeReference::Builtin(*builtin))
         }
         crate::ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => {
-            Ok(GateRuntimeReference::IntrinsicValue(*value))
+            Ok(GateRuntimeReference::IntrinsicValue(value.clone()))
         }
         crate::ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | crate::ResolutionState::Resolved(TermResolution::ClassMember(_))

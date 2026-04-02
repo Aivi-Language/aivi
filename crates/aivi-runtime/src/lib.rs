@@ -57,6 +57,7 @@ pub use startup::{
     LinkedTaskWorkerError, LinkedTaskWorkerOutcome, link_backend_runtime,
 };
 pub use task_executor::{
-    RuntimeTaskExecutionError, execute_runtime_db_task_plan, execute_runtime_task_plan,
-    execute_runtime_value,
+    CustomCapabilityCommandExecutor, RuntimeTaskExecutionError, execute_runtime_db_task_plan,
+    execute_runtime_task_plan, execute_runtime_task_plan_with_context, execute_runtime_value,
+    execute_runtime_value_with_context,
 };

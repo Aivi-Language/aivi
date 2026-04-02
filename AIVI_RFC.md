@@ -2016,8 +2016,8 @@ Current implementation status:
 - capability-handle anchors are compile-time-only and therefore do not export or assemble as runtime
   graph signals
 - custom provider contracts can already declare capability members; direct custom handle operations
-  now lower to member-qualified custom source bindings, while custom handle commands still need a
-  generic task runtime
+  now lower to member-qualified custom source bindings, and direct custom handle commands now lower
+  through typed synthetic imports into the shared runtime task executor path
 
 This direction deliberately avoids requiring arbitrary signal-wrapped domain/member application.
 Current language support only guarantees record projection through `Signal` payloads plus narrow

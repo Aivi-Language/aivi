@@ -11125,6 +11125,9 @@ impl<'a> GateTypeContext<'a> {
                 }
                 ty
             }
+            IntrinsicValue::CustomCapabilityCommand(_) => {
+                unreachable!("custom capability commands should type through synthetic imports")
+            }
             IntrinsicValue::RandomBytes => arrow(
                 primitive(BuiltinType::Int),
                 task(primitive(BuiltinType::Text), primitive(BuiltinType::Bytes)),
@@ -13534,7 +13537,7 @@ impl<'a> GateTypeContext<'a> {
                 GateExprInfo::default()
             }
             ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => GateExprInfo {
-                ty: Some(self.intrinsic_value_type(*value)),
+                ty: Some(self.intrinsic_value_type(value.clone())),
                 ..GateExprInfo::default()
             },
             ResolutionState::Resolved(TermResolution::Builtin(builtin)) => {
