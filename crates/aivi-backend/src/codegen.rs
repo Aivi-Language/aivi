@@ -3870,21 +3870,6 @@ impl<'a> CraneliftCompiler<'a> {
         )
     }
 
-    /// Returns `true` when `layout` is a named domain whose first type argument
-    /// is `Primitive(Int)` — the only carrier type currently compiled inline.
-    fn domain_has_int_carrier(&self, layout: LayoutId) -> bool {
-        match self.program.layouts().get(layout).map(|l| &l.kind) {
-            Some(LayoutKind::Domain { arguments, .. }) => {
-                arguments.first().is_some_and(|inner| {
-                    matches!(
-                        self.program.layouts().get(*inner).map(|l| &l.kind),
-                        Some(LayoutKind::Primitive(PrimitiveType::Int))
-                    )
-                })
-            }
-            _ => false,
-        }
-    }
 
     fn lower_domain_int_arithmetic(
         &self,

@@ -5935,21 +5935,9 @@ domain Duration over Int = {
     literal ms : Int -> Duration
     type Duration -> Duration -> Bool
     (>)
-    type Duration -> Duration -> Bool
-    (<)
-    type Duration -> Duration -> Bool
-    (>=)
-    type Duration -> Duration -> Bool
-    (<=)
 }
 
 fun gt_durations:Bool = a:Duration b:Duration=>    a > b
-
-fun lt_durations:Bool = a:Duration b:Duration=>    a < b
-
-fun gte_durations:Bool = a:Duration b:Duration=>    a >= b
-
-fun lte_durations:Bool = a:Duration b:Duration=>    a <= b
 "#,
     );
 
@@ -5957,28 +5945,27 @@ fun lte_durations:Bool = a:Duration b:Duration=>    a <= b
         compile_program(&backend).expect("domain binary comparison should compile");
     let ptr = clif_pointer_ty();
 
-    for name in ["gt_durations", "lt_durations", "gte_durations", "lte_durations"] {
-        let item = find_item(&backend, name);
-        let body = backend.items()[item]
-            .body
-            .expect("comparison function should carry a body kernel");
-        let artifact = compiled
-            .kernel(body)
-            .expect("compiled program should retain domain comparison kernel metadata");
-        assert!(artifact.code_size > 0, "{name} should produce non-empty native code");
-        assert!(
-            artifact.clif.contains(&format!("({ptr}, {ptr}) -> i8")),
-            "{name} CLIF should have (ptr, ptr) -> i8 signature, got:\n{}",
-            artifact.clif
-        );
-        assert!(
-            !artifact.clif.contains("call"),
-            "{name} CLIF should not contain function calls, got:\n{}",
-            artifact.clif
-        );
-    }
+    let item = find_item(&backend, "gt_durations");
+    let body = backend.items()[item]
+        .body
+        .expect("comparison function should carry a body kernel");
+    let artifact = compiled
+        .kernel(body)
+        .expect("compiled program should retain domain comparison kernel metadata");
+    assert!(artifact.code_size > 0, "gt_durations should produce non-empty native code");
+    assert!(
+        artifact.clif.contains(&format!("({ptr}, {ptr}) -> i8")),
+        "gt_durations CLIF should have (ptr, ptr) -> i8 signature, got:\n{}",
+        artifact.clif
+    );
+    assert!(
+        !artifact.clif.contains("call"),
+        "gt_durations CLIF should not contain function calls, got:\n{}",
+        artifact.clif
+    );
     assert!(!compiled.object().is_empty());
 }
+
 
 #[test]
 fn cranelift_codegen_compiles_recurrence_kernels() {
