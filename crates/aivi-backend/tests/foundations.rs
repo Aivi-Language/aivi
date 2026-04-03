@@ -5405,27 +5405,47 @@ fun doubled:Int = x:Int =>
 }
 
 #[test]
+fn cranelift_codegen_compiles_patch_replace() {
+    let backend = lower_text(
+        "backend-patch-replace-codegen.aivi",
+        r#"
+type User = { name: Text, age: Int, active: Bool }
+
+fun patch_user:User = u:User =>
+    u <| { age: 42 }
+"#,
+    );
+    let body = backend.items()[find_item(&backend, "patch_user")]
+        .body
+        .expect("patch_user should carry a body kernel");
+    let compiled =
+        compile_program(&backend).expect("patch replace should compile (desugared to record)");
+    let artifact = compiled
+        .kernel(body)
+        .expect("compiled program should retain patch kernel metadata");
+    assert!(artifact.code_size > 0);
+    assert!(!compiled.object().is_empty());
+}
+
+#[test]
 fn cranelift_codegen_compiles_patch_removal() {
-    // Patch removal in a pipe lowered through record construction.
-    // Uses a value body instead of a pipe stage so patch apply is elaborated
-    // at HIR level before general-expression elaboration.
     let backend = lower_text(
         "backend-patch-removal-codegen.aivi",
         r#"
 type User = { name: Text, age: Int, active: Bool }
 
-value user:User = { name: "Ada", age: 36, active: True }
+fun strip_active:{ name: Text, age: Int } = u:User =>
+    u <| { active: - }
 "#,
     );
-    // Verify the record literal compiles
-    let body = backend.items()[find_item(&backend, "user")]
+    let body = backend.items()[find_item(&backend, "strip_active")]
         .body
-        .expect("user should carry a body kernel");
+        .expect("strip_active should carry a body kernel");
     let compiled =
-        compile_program(&backend).expect("record literal should compile");
+        compile_program(&backend).expect("patch removal should compile (desugared to record)");
     let artifact = compiled
         .kernel(body)
-        .expect("compiled program should retain record kernel metadata");
+        .expect("compiled program should retain patch-removal kernel metadata");
     assert!(artifact.code_size > 0);
     assert!(!compiled.object().is_empty());
 }

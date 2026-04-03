@@ -81,8 +81,8 @@ It answers “what checks, executes, runs, or compiles today?” rather than “
 | Previous / diff `~|>` / `-|>` | yes | partial | yes | partial | Full pipeline through core → lambda → backend → runtime; `startup.rs` implements temporal state caching for derived signals. `aivi execute` is one-shot and not a long-lived signal host. Compile accepts temporal signal programs. |
 | Applicative clusters `&|>` | yes | yes | yes | partial | Runtime coverage is strong for builtin carriers, but `Task` is applicative-only and compile still depends on the first-slice builtin table. |
 | Explicit recurrence `@|> ... <|@` | yes | no | partial | partial | Linked-runtime tests prove source-backed recurrence steps, but `syntax.md` already flags this area as cautionary and standalone compile/startup coverage is still narrower. |
-| Structural patch apply / `patch { ... }` | partial | partial | partial | no | The checker accepts useful subsets, including list/map predicates and single-payload constructor focus, but the surface is still partial end to end. |
-| Patch removal `field: -` | yes | yes | yes | no | The checker accepts patch removal and computes the result type via field omission. The runtime elaborator now omits removed fields from the result record construction. Codegen does not cover patch apply in the current slice. |
+| Structural patch apply / `patch { ... }` | partial | partial | partial | partial | The checker accepts useful subsets, including list/map predicates and single-payload constructor focus. Codegen compiles single-segment named Replace and Remove patches (desugared to record construction). Complex selectors and nested patches are not yet supported. |
+| Patch removal `field: -` | yes | yes | yes | yes | The checker accepts patch removal and computes the result type via field omission. The runtime elaborator omits removed fields from the result record. Codegen compiles removal as desugared record construction. |
 
 ## Signals, Tasks, And Sources
 
