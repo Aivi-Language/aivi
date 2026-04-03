@@ -2666,6 +2666,7 @@ struct DbusMethodPlan {
     path: Option<Box<str>>,
     interface: Option<Box<str>>,
     member: Option<Box<str>>,
+    reply_body: Option<Box<str>>,
     output: DbusMessageOutputPlan,
 }
 
@@ -2682,6 +2683,7 @@ impl DbusMethodPlan {
         let mut path = None;
         let mut interface = None;
         let mut member = None;
+        let mut reply_body = None;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "bus" => {
@@ -2724,6 +2726,14 @@ impl DbusMethodPlan {
                         &option.value,
                     )?);
                 }
+                "reply" => {
+                    reply_body = Some(parse_text_option(
+                        instance,
+                        provider,
+                        &option.option_name,
+                        &option.value,
+                    )?);
+                }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
                         instance,
@@ -2741,6 +2751,7 @@ impl DbusMethodPlan {
             path,
             interface,
             member,
+            reply_body,
             output: DbusMessageOutputPlan::parse_method(instance, config)?,
         })
     }
@@ -3385,6 +3396,18 @@ fn spawn_dbus_method_worker(
         let startup = context.with_thread_default(|| {
             install_dbus_stop_timer(&main_loop, &stop, &port);
             let connection = open_dbus_connection(plan.bus, plan.address.as_deref())?;
+            let reply_variant = plan
+                .reply_body
+                .as_deref()
+                .map(|text| {
+                    Variant::parse(None, text).map_err(|err| {
+                        format!(
+                            "dbus.method reply option is not a valid GLib variant: {err}"
+                        )
+                        .into_boxed_str()
+                    })
+                })
+                .transpose()?;
             let output = plan.output.clone();
             let publish_port = port.clone();
             let destination = plan.destination.clone();
@@ -3408,6 +3431,17 @@ fn spawn_dbus_method_worker(
                     return Some(message.clone());
                 }
                 let reply = message.new_method_reply();
+                if let Some(body) = &reply_variant {
+                    eprintln!("[dbus-method-debug] setting reply body: type={} print={}", body.type_(), body.print(true));
+                    reply.set_body(body);
+                    if let Some(actual) = reply.body() {
+                        eprintln!("[dbus-method-debug] reply body after set: type={} print={}", actual.type_(), actual.print(true));
+                    } else {
+                        eprintln!("[dbus-method-debug] reply body after set is None!");
+                    }
+                } else {
+                    eprintln!("[dbus-method-debug] no reply_variant configured");
+                }
                 let _ = connection.send_message(&reply, DBusSendMessageFlags::NONE);
                 if let (Some(path), Some(interface), Some(member)) =
                     (message.path(), message.interface(), message.member())
@@ -5820,6 +5854,109 @@ signal incoming : Signal DbusCall
         expect_text(record_field(&fields, "interface"), "org.aivi.Test");
         expect_text(record_field(&fields, "member"), "ShowWindow");
         expect_text(record_field(&fields, "body"), "('hello', 5)");
+    }
+
+    #[test]
+    fn dbus_method_source_replies_with_configured_body() {
+        if env::var("DBUS_SESSION_BUS_ADDRESS").is_err() {
+            return;
+        }
+        let service_name = format!("org.aivi.RuntimeTestReply{}", std::process::id());
+        let lowered = lower_text(
+            "runtime-provider-dbus-method-reply.aivi",
+            &format!(
+                r#"
+type BusNameFlag =
+  | AllowReplacement
+  | ReplaceExisting
+  | DoNotQueue
+
+type BusNameState =
+  | Owned
+  | Queued
+  | Lost
+
+type DbusCall = {{
+    destination: Text,
+    path: Text,
+    interface: Text,
+    member: Text,
+    body: Text
+}}
+
+@source dbus.ownName "{service_name}"
+signal busState : Signal BusNameState
+
+@source dbus.method "{service_name}" with {{
+    path: "/org/aivi/Test"
+    interface: "org.aivi.Test"
+    member: "GetStatus"
+    reply: "('running', 42)"
+}}
+signal incoming : Signal DbusCall
+"#,
+                service_name = service_name,
+            ),
+        );
+        let assembly =
+            assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let actions = linked
+            .tick_with_source_lifecycle()
+            .expect("linked runtime tick should succeed");
+        let mut providers = SourceProviderManager::new();
+        providers
+            .apply_actions(actions.source_actions())
+            .expect("dbus providers should execute");
+
+        let bus_state_signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "busState"))
+            .expect("busState signal binding should exist")
+            .signal();
+        let owned_deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let bus_state = spin_until(&mut linked, bus_state_signal, Duration::from_millis(50))
+                .expect("dbus.ownName should publish");
+            if matches!(&bus_state, RuntimeValue::Sum(sum) if sum.variant_name.as_ref() == "Owned")
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < owned_deadline,
+                "dbus.ownName should eventually acquire the requested name"
+            );
+        }
+
+        let connection = gio::bus_get_sync(BusType::Session, None::<&gio::Cancellable>)
+            .expect("session bus should be reachable");
+        let reply = connection
+            .call_sync(
+                Some(service_name.as_ref()),
+                "/org/aivi/Test",
+                "org.aivi.Test",
+                "GetStatus",
+                None::<&Variant>,
+                None::<&glib::VariantTy>,
+                gio::DBusCallFlags::NONE,
+                1_000,
+                None::<&gio::Cancellable>,
+            )
+            .expect("dbus.method source should reply with configured body");
+        assert_eq!(
+            reply.n_children(),
+            2,
+            "dbus.method reply should contain the configured body tuple"
+        );
+        let first = reply.child_value(0);
+        assert_eq!(first.get::<String>().unwrap(), "running");
+        let second = reply.child_value(1);
+        assert_eq!(second.get::<i32>().unwrap(), 42);
     }
 
     #[test]

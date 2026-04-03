@@ -868,6 +868,7 @@ fn dbus_method_options() -> &'static [SourceOptionContract] {
             SourceOptionContract::new("path", SourceContractType::text()),
             SourceOptionContract::new("interface", SourceContractType::text()),
             SourceOptionContract::new("member", SourceContractType::text()),
+            SourceOptionContract::new("reply", SourceContractType::text()),
         ]
     })
 }
