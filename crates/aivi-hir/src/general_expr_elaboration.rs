@@ -3371,6 +3371,47 @@ mod tests {
         crate::lower_module(&parsed.module)
     }
 
+    fn lower_text_with_stdlib(path: &str, text: &str) -> crate::LoweringResult {
+        use crate::{ImportModuleResolution, ImportResolver, exports};
+        struct StdlibResolver(PathBuf);
+        impl ImportResolver for StdlibResolver {
+            fn resolve(&self, path: &[&str]) -> ImportModuleResolution {
+                if path.first() != Some(&"aivi") {
+                    return ImportModuleResolution::Missing;
+                }
+                let mut file_path = self.0.clone();
+                for segment in path {
+                    file_path.push(segment);
+                }
+                file_path.set_extension("aivi");
+                let text = match fs::read_to_string(&file_path) {
+                    Ok(t) => t,
+                    Err(_) => return ImportModuleResolution::Missing,
+                };
+                let mut sources = SourceDatabase::new();
+                let file_id = sources.add_file(file_path.to_string_lossy().as_ref(), text.as_str());
+                let parsed = parse_module(&sources[file_id]);
+                if parsed.has_errors() {
+                    return ImportModuleResolution::Missing;
+                }
+                let lowered = crate::lower_module(&parsed.module);
+                ImportModuleResolution::Resolved(exports(lowered.module()))
+            }
+        }
+        let stdlib_root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../stdlib");
+        let resolver = StdlibResolver(stdlib_root);
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, text);
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "general-expression test input should parse: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        crate::lower_module_with_resolver(&parsed.module, Some(&resolver))
+    }
+
     fn lower_fixture(path: &str) -> crate::LoweringResult {
         let text =
             fs::read_to_string(fixture_root().join(path)).expect("fixture should be readable");
@@ -4408,7 +4449,7 @@ fun any:Bool = predicate:(A -> Bool) items:(List A)=>    items
 
     #[test]
     fn snake_demo_general_expressions_lower_cleanly_after_signature_normalization() {
-        let lowered = lower_text(
+        let lowered = lower_text_with_stdlib(
             "demos/snake.aivi",
             include_str!("../../../demos/snake.aivi"),
         );

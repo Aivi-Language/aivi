@@ -3699,7 +3699,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeTransform => {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     if cluster_active {
                         cluster_active = false;
@@ -3716,7 +3716,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Gate { expr }, result_memo)
                 }
@@ -3732,14 +3732,14 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Map { expr }, result_memo)
                 }
                 TokenKind::PipeApply => {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     cluster_active = true;
                     (subject_memo, PipeStageKind::Apply { expr }, result_memo)
@@ -3748,7 +3748,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (
                         subject_memo,
@@ -3760,7 +3760,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::RecurStep { expr }, result_memo)
                 }
@@ -3768,7 +3768,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Tap { expr }, result_memo)
                 }
@@ -3776,7 +3776,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::FanIn { expr }, result_memo)
                 }
@@ -3784,7 +3784,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Truthy { expr }, result_memo)
                 }
@@ -3792,7 +3792,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Falsy { expr }, result_memo)
                 }
@@ -3800,7 +3800,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Validate { expr }, result_memo)
                 }
@@ -3808,7 +3808,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Previous { expr }, result_memo)
                 }
@@ -3822,7 +3822,7 @@ impl<'a> Parser<'a> {
                     let seed =
                         self.parse_atomic_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let step =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (
                         subject_memo,
@@ -3834,7 +3834,7 @@ impl<'a> Parser<'a> {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let expr =
-                        self.parse_range_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Diff { expr }, result_memo)
                 }
