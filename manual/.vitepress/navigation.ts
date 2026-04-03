@@ -107,6 +107,7 @@ const stdlibSections: DocGroup[] = [
     text: 'Time, Randomness & Scheduling',
     collapsed: true,
     items: [
+      { text: 'Dates & Calendar', link: '/stdlib/date' },
       { text: 'Durations', link: '/stdlib/duration' },
       { text: 'Time', link: '/stdlib/time' },
       { text: 'Timers', link: '/stdlib/timer' },

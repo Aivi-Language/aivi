@@ -169,7 +169,7 @@ fn item_to_lsp_symbol(item: &Item, module: &Module) -> Option<LspSymbol> {
                                 None
                             } else {
                                 let parts: Vec<_> =
-                                    v.fields.iter().map(|&f| format_type(module, f)).collect();
+                                    v.fields.iter().map(|f| format_type(module, f.ty)).collect();
                                 Some(format!("({})", parts.join(", ")))
                             };
                             LspSymbol {

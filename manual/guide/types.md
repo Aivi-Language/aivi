@@ -89,18 +89,31 @@ value failedState = Failed "offline"
 
 ## Product types with positional arguments
 
-Constructors can take multiple positional arguments. The argument names come from pattern matching — they are not part of the type declaration itself.
+Constructors can take multiple positional arguments. When a type has a single constructor with fields, the leading `|` is optional:
 
 ```aivi
-type Vec2 =
-  | Vec2 Int Int
+type Vec2 = Vec2 Int Int
 
-type Cell =
-  | Cell Int Int
-
-type Date =
-  | Date Int Int Int
+type Cell = Cell Int Int
 ```
+
+Multi-variant types still use `|`:
+
+```aivi
+type Shape = Circle Int | Rect Int Int
+```
+
+### Named fields
+
+Field labels can be added for documentation and diagnostics. Names are declaration-only metadata — construction stays positional:
+
+```aivi
+type Date = Date year:Year month:Month day:Day
+
+type TimeOfDay = TimeOfDay hour:Hour minute:Minute second:Second
+```
+
+Named and anonymous fields may be mixed, though named fields are recommended for readability when a constructor has more than two fields.
 
 Construction is curried: apply the constructor to each argument left-to-right:
 

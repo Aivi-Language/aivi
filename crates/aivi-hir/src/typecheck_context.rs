@@ -14,7 +14,7 @@ use crate::{
         DomainMemberHandle, DomainMemberKind, DomainMemberResolution, ExprKind,
         ImportBindingMetadata, ImportValueType, IntrinsicValue, Item, Module, Name, NamePath,
         PatternKind, PipeStage, PipeStageKind, PipeTransformMode, ProjectionBase, ResolutionState, TermReference, TermResolution, TextSegment,
-        TypeItemBody, TypeKind, TypeReference, TypeResolution,
+        TypeItemBody, TypeKind, TypeReference, TypeResolution, TypeVariantField,
     },
     ids::{
         BindingId, ClusterId, ExprId, ImportId, ItemId,
@@ -486,7 +486,7 @@ pub fn case_pattern_field_types(
         variant
             .fields
             .iter()
-            .map(|field| typing.lower_hir_type(*field, &substitutions))
+            .map(|field| typing.lower_hir_type(field.ty, &substitutions))
             .collect()
     }
 
@@ -1482,7 +1482,10 @@ impl<'a> GateTypeContext<'a> {
                 },
                 display: variant.name.text().to_owned(),
                 span: Some(variant.span),
-                field_types: self.lower_case_variant_fields(&variant.fields, &substitutions),
+                field_types: self.lower_case_variant_fields(
+                    &variant.fields.iter().map(|f| f.ty).collect::<Vec<_>>(),
+                    &substitutions,
+                ),
             })
             .collect::<Vec<_>>();
         Some(CaseSubjectShape { constructors })
@@ -4673,7 +4676,7 @@ impl<'a> GateTypeContext<'a> {
     pub(crate) fn same_module_constructor(
         &self,
         reference: &TermReference,
-    ) -> Option<(ItemId, String, Vec<TypeParameterId>, Vec<TypeId>)> {
+    ) -> Option<(ItemId, String, Vec<TypeParameterId>, Vec<TypeVariantField>)> {
         let ResolutionState::Resolved(TermResolution::Item(item_id)) =
             reference.resolution.as_ref()
         else {
@@ -4784,7 +4787,7 @@ impl<'a> GateTypeContext<'a> {
         let substitutions = HashMap::new();
         let field_types = fields
             .into_iter()
-            .map(|field| self.lower_hir_type(field, &substitutions))
+            .map(|field| self.lower_hir_type(field.ty, &substitutions))
             .collect::<Option<Vec<_>>>()?;
         let mut ty = GateType::OpaqueItem {
             item: item_id,
@@ -4812,7 +4815,7 @@ impl<'a> GateTypeContext<'a> {
         let mut substitutions = HashMap::new();
         for (field, actual) in fields.iter().zip(argument_types.iter()) {
             let mut item_stack = Vec::new();
-            if !self.match_hir_type(*field, actual, &mut substitutions, &mut item_stack) {
+            if !self.match_hir_type(field.ty, actual, &mut substitutions, &mut item_stack) {
                 return None;
             }
         }
@@ -4846,7 +4849,7 @@ impl<'a> GateTypeContext<'a> {
         let mut substitutions = HashMap::<TypeParameterId, SourceOptionActualType>::new();
         for (field, actual) in fields.iter().zip(argument_actuals.iter()) {
             match validator.source_option_hir_type_matches_actual_type_inner(
-                *field,
+                field.ty,
                 actual,
                 &mut substitutions,
             ) {

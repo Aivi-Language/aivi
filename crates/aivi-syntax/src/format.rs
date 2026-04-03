@@ -162,6 +162,22 @@ impl Formatter {
                 }
             }
             Some(TypeDeclBody::Sum(variants)) => {
+                // Single-variant with fields: format inline without pipe
+                if variants.len() == 1 && !variants[0].fields.is_empty() {
+                    let inline = self.format_variant_inline(&variants[0]);
+                    let line = format!("{header} = {inline}");
+                    if display_width(&line) <= INLINE_LIMIT {
+                        return vec![line];
+                    }
+                    let mut lines = vec![format!("{header} =")];
+                    lines.push(format!(
+                        "{}{}",
+                        spaces(TYPE_VARIANT_INDENT),
+                        inline
+                    ));
+                    return lines;
+                }
+                // Single zero-field variant: keep pipe (disambiguates from alias)
                 if variants.len() == 1 {
                     let mut lines = vec![format!("{header} =")];
                     lines.extend(self.format_sum_block(variants).into_lines());
@@ -1829,7 +1845,11 @@ impl Formatter {
             .unwrap_or_else(|| "_".to_owned());
         for field in &variant.fields {
             rendered.push(' ');
-            rendered.push_str(&self.format_type_inline(field, TYPE_APPLY_PREC + 1));
+            if let Some(label) = &field.label {
+                rendered.push_str(&label.text);
+                rendered.push(':');
+            }
+            rendered.push_str(&self.format_type_inline(&field.ty, TYPE_APPLY_PREC + 1));
         }
         rendered
     }
@@ -3278,8 +3298,7 @@ mod tests {
         assert_eq!(
             formatted,
             concat!(
-                "type Pair =\n",
-                "  | Pair Text Text\n",
+                "type Pair = Pair Text Text\n",
                 "\n",
                 "type SaveState =\n",
                 "  | Saved\n",
@@ -3888,5 +3907,53 @@ value view =
                 fixture.display()
             );
         }
+    }
+
+    #[test]
+    fn formatter_renders_named_fields_inline() {
+        // Short enough to fit inline (≤32 chars)
+        let formatted = format_text("type V2 = V2 x:Int y:Int\n");
+        assert_eq!(formatted, "type V2 = V2 x:Int y:Int\n");
+    }
+
+    #[test]
+    fn formatter_renders_named_fields_multiline_no_pipe() {
+        // Exceeds INLINE_LIMIT, falls back to multi-line without pipe
+        let formatted = format_text("type Date = Date year:Int month:Int day:Int\n");
+        assert_eq!(formatted, "type Date =\n  Date year:Int month:Int day:Int\n");
+    }
+
+    #[test]
+    fn formatter_renders_single_variant_with_fields_inline_no_pipe() {
+        let formatted = format_text("type Vec2 =\n  | Vec2 Int Int\n");
+        assert_eq!(formatted, "type Vec2 = Vec2 Int Int\n");
+    }
+
+    #[test]
+    fn formatter_keeps_pipe_for_multi_variant() {
+        // Multi-variant exceeding inline limit goes to block with pipes
+        let formatted = format_text("type Shape = Circle Int | Rect Int Int\n");
+        assert_eq!(formatted, "type Shape =\n  | Circle Int\n  | Rect Int Int\n");
+    }
+
+    #[test]
+    fn formatter_keeps_multi_variant_inline_when_short() {
+        let formatted = format_text("type AB = A | B\n");
+        assert_eq!(formatted, "type AB = A | B\n");
+    }
+
+    #[test]
+    fn formatter_keeps_pipe_for_zero_field_single_variant() {
+        let formatted = format_text("type Unit =\n  | Unit\n");
+        assert_eq!(
+            formatted,
+            "type Unit =\n  | Unit\n"
+        );
+    }
+
+    #[test]
+    fn formatter_renders_mixed_named_anonymous_fields() {
+        let formatted = format_text("type Pair = Pair first:Text Int\n");
+        assert_eq!(formatted, "type Pair = Pair first:Text Int\n");
     }
 }

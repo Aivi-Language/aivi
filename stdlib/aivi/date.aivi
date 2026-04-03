@@ -1,0 +1,285 @@
+use aivi.text (padStart, fromInt, parseInt, split)
+
+type Year = Int
+
+type Month = Int
+
+type Day = Int
+
+type Hour = Int
+
+type Minute = Int
+
+type Second = Int
+
+type Date = Date year:Year month:Month day:Day
+
+type TimeOfDay = TimeOfDay hour:Hour minute:Minute second:Second
+
+type DateTime = DateTime date:Date time:TimeOfDay
+
+type ZonedDateTime = ZonedDateTime dateTime:DateTime zone:Text
+
+type DayOfWeek =
+  | Monday
+  | Tuesday
+  | Wednesday
+  | Thursday
+  | Friday
+  | Saturday
+  | Sunday
+
+domain DateDelta over Int = {
+    literal dy : Int -> DateDelta
+    literal wk : Int -> DateDelta
+    type Int -> DateDelta
+    days
+    type DateDelta -> Int
+    unwrap
+    type DateDelta -> DateDelta -> DateDelta
+    (+)
+    type DateDelta -> DateDelta -> DateDelta
+    (-)
+    type DateDelta -> Int -> DateDelta
+    (*)
+    type DateDelta -> DateDelta -> Bool
+    (<)
+}
+
+type Date -> Year
+func getYear = date => date
+ ||> Date y _ _ -> y
+
+type Date -> Month
+func getMonth = date => date
+ ||> Date _ m _ -> m
+
+type Date -> Day
+func getDay = date => date
+ ||> Date _ _ d -> d
+
+type TimeOfDay -> Hour
+func getHour = t => t
+ ||> TimeOfDay h _ _ -> h
+
+type TimeOfDay -> Minute
+func getMinute = t => t
+ ||> TimeOfDay _ m _ -> m
+
+type TimeOfDay -> Second
+func getSecond = t => t
+ ||> TimeOfDay _ _ s -> s
+
+type DateTime -> Date
+func getDate = dt => dt
+ ||> DateTime d _ -> d
+
+type DateTime -> TimeOfDay
+func getTime = dt => dt
+ ||> DateTime _ t -> t
+
+type ZonedDateTime -> DateTime
+func getDateTime = zdt => zdt
+ ||> ZonedDateTime dt _ -> dt
+
+type ZonedDateTime -> Text
+func getZone = zdt => zdt
+ ||> ZonedDateTime _ z -> z
+
+type Year -> Bool
+func isLeapYear = year =>
+    (year % 400 == 0) or ((year % 4 == 0) and (year % 100 != 0))
+
+type Year -> Day
+func daysInFeb = year => isLeapYear year
+ T|> 29
+ F|> 28
+
+type Month -> Year -> Day
+func daysInMonthFeb = month year => month == 2
+ T|> daysInFeb year
+ F|> 31
+
+type Month -> Year -> Day
+func daysInMonth = month year => (month == 4 or month == 6 or month == 9 or month == 11)
+ T|> 30
+ F|> daysInMonthFeb month year
+
+type Int -> Text
+func pad2 = n =>
+    padStart 2 "0" (fromInt n)
+
+type Int -> Text
+func pad4 = n =>
+    padStart 4 "0" (fromInt n)
+
+type Date -> Text
+func dateToIso = date => date
+ ||> Date y m d -> "{pad4 y}-{pad2 m}-{pad2 d}"
+
+type TimeOfDay -> Text
+func timeToIso = time => time
+ ||> TimeOfDay h m s -> "{pad2 h}:{pad2 m}:{pad2 s}"
+
+type DateTime -> Text
+func dateTimeToIso = dt => dt
+ ||> DateTime d t -> "{dateToIso d}T{timeToIso t}"
+
+type ZonedDateTime -> Text
+func zonedToIso = zdt => zdt
+ ||> ZonedDateTime dt zone -> "{dateTimeToIso dt}{zone}"
+
+type Date -> Date -> Bool
+func dateEq = a b =>
+    (getYear a == getYear b) and (getMonth a == getMonth b) and (getDay a == getDay b)
+
+type Date -> Date -> Bool
+func dateLtSameYear = a b => getMonth a < getMonth b
+ T|> True
+ F|> (getMonth a == getMonth b) and (getDay a < getDay b)
+
+type Date -> Date -> Bool
+func dateLt = a b => getYear a < getYear b
+ T|> True
+ F|> (getYear a == getYear b) and (dateLtSameYear a b)
+
+type DayOfWeek -> Text
+func dayOfWeekName = dow => dow
+ ||> Monday    -> "Monday"
+ ||> Tuesday   -> "Tuesday"
+ ||> Wednesday -> "Wednesday"
+ ||> Thursday  -> "Thursday"
+ ||> Friday    -> "Friday"
+ ||> Saturday  -> "Saturday"
+ ||> Sunday    -> "Sunday"
+
+type DayOfWeek -> Text
+func dayOfWeekShort = dow => dow
+ ||> Monday    -> "Mon"
+ ||> Tuesday   -> "Tue"
+ ||> Wednesday -> "Wed"
+ ||> Thursday  -> "Thu"
+ ||> Friday    -> "Fri"
+ ||> Saturday  -> "Sat"
+ ||> Sunday    -> "Sun"
+
+type DayOfWeek -> Int
+func dayOfWeekIndex = dow => dow
+ ||> Monday    -> 1
+ ||> Tuesday   -> 2
+ ||> Wednesday -> 3
+ ||> Thursday  -> 4
+ ||> Friday    -> 5
+ ||> Saturday  -> 6
+ ||> Sunday    -> 7
+
+type Date -> TimeOfDay -> DateTime
+func toDateTime = date time =>
+    DateTime date time
+
+type DateTime -> Text -> ZonedDateTime
+func toZoned = dt zone =>
+    ZonedDateTime dt zone
+
+value midnight : TimeOfDay = TimeOfDay 0 0 0
+
+value epoch : Date = Date 1970 1 1
+
+@test
+value date_isLeapYear_2024 : Task Text Bool = pure (isLeapYear 2024)
+
+@test
+value date_isNotLeapYear_2023 : Task Text Bool = pure (not (isLeapYear 2023))
+
+@test
+value date_isLeapYear_2000 : Task Text Bool = pure (isLeapYear 2000)
+
+@test
+value date_isNotLeapYear_1900 : Task Text Bool = pure (not (isLeapYear 1900))
+
+@test
+value date_daysInMonth_feb_leap : Task Text Bool = pure (daysInMonth 2 2024 == 29)
+
+@test
+value date_daysInMonth_feb_normal : Task Text Bool = pure (daysInMonth 2 2023 == 28)
+
+@test
+value date_daysInMonth_jan : Task Text Bool = pure (daysInMonth 1 2024 == 31)
+
+@test
+value date_daysInMonth_apr : Task Text Bool = pure (daysInMonth 4 2024 == 30)
+
+@test
+value date_toIso : Task Text Bool = pure (dateToIso (Date 2024 6 15) == "2024-06-15")
+
+@test
+value date_timeToIso : Task Text Bool = pure (timeToIso (TimeOfDay 14 30 0) == "14:30:00")
+
+@test
+value date_dateTimeToIso : Task Text Bool =
+    pure (dateTimeToIso (DateTime (Date 2024 6 15) (TimeOfDay 14 30 0)) == "2024-06-15T14:30:00")
+
+@test
+value date_getYear : Task Text Bool = pure (getYear (Date 2024 6 15) == 2024)
+
+@test
+value date_getMonth : Task Text Bool = pure (getMonth (Date 2024 6 15) == 6)
+
+@test
+value date_getDay : Task Text Bool = pure (getDay (Date 2024 6 15) == 15)
+
+@test
+value date_dayOfWeekName : Task Text Bool = pure (dayOfWeekName Monday == "Monday")
+
+@test
+value date_dayOfWeekIndex : Task Text Bool = pure (dayOfWeekIndex Friday == 5)
+
+export (
+    Year
+    Month
+    Day
+    Hour
+    Minute
+    Second
+    Date
+    TimeOfDay
+    DateTime
+    ZonedDateTime
+    DayOfWeek
+    DateDelta
+    Monday
+    Tuesday
+    Wednesday
+    Thursday
+    Friday
+    Saturday
+    Sunday
+    getYear
+    getMonth
+    getDay
+    getHour
+    getMinute
+    getSecond
+    getDate
+    getTime
+    getDateTime
+    getZone
+    isLeapYear
+    daysInFeb
+    daysInMonth
+    pad2
+    pad4
+    dateToIso
+    timeToIso
+    dateTimeToIso
+    zonedToIso
+    dateEq
+    dateLt
+    dayOfWeekName
+    dayOfWeekShort
+    dayOfWeekIndex
+    toDateTime
+    toZoned
+    midnight
+    epoch
+)

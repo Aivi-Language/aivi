@@ -519,7 +519,10 @@ impl<'a> Lowerer<'a> {
                         fields: variant
                             .fields
                             .iter()
-                            .map(|field| self.lower_type_expr(field))
+                            .map(|field| crate::hir::TypeVariantField {
+                                label: field.label.as_ref().map(|l| l.text.as_str().into()),
+                                ty: self.lower_type_expr(&field.ty),
+                            })
                             .collect(),
                     })
                     .collect::<Vec<_>>();
@@ -1248,7 +1251,11 @@ impl<'a> Lowerer<'a> {
                 } else {
                     seen_keys.insert(key, member.span);
                 }
-                members.push(self.lower_domain_member(member));
+                members.push(self.lower_domain_member(
+                    member,
+                    item.name.as_ref(),
+                    &item.type_parameters,
+                ));
             }
         }
 
@@ -1261,7 +1268,12 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_domain_member(&mut self, member: &syn::DomainMember) -> DomainMember {
+    fn lower_domain_member(
+        &mut self,
+        member: &syn::DomainMember,
+        domain_name: Option<&syn::Identifier>,
+        domain_type_parameters: &[syn::Identifier],
+    ) -> DomainMember {
         let (kind, name) = match &member.name {
             syn::DomainMemberName::Signature(signature) => match signature {
                 syn::ClassMemberName::Identifier(identifier) => (
@@ -1278,6 +1290,12 @@ impl<'a> Lowerer<'a> {
                 self.make_name(&identifier.text, identifier.span),
             ),
         };
+
+        let uses_self = member
+            .body
+            .as_ref()
+            .is_some_and(|body| body.contains_self_reference());
+
         let annotation = member
             .annotation
             .as_ref()
@@ -1293,11 +1311,50 @@ impl<'a> Lowerer<'a> {
                 );
                 self.placeholder_type(member.span)
             });
-        let parameters = member
-            .parameters
-            .iter()
-            .map(|parameter| self.lower_instance_parameter(parameter))
-            .collect();
+
+        // When `self` is used, prepend `DomainType ->` to the annotation.
+        let annotation = if uses_self {
+            if let Some(domain_id) = domain_name {
+                let domain_type_id =
+                    self.synthesise_domain_self_type(domain_id, domain_type_parameters);
+                self.alloc_type(TypeNode {
+                    span: member.span,
+                    kind: TypeKind::Arrow {
+                        parameter: domain_type_id,
+                        result: annotation,
+                    },
+                })
+            } else {
+                annotation
+            }
+        } else {
+            annotation
+        };
+
+        // Synthesise implicit `self` binding before explicit parameters.
+        let mut parameters: Vec<FunctionParameter> = if uses_self {
+            let self_name = self.make_name("self", member.span);
+            let self_binding = self.alloc_binding(Binding {
+                span: member.span,
+                name: self_name,
+                kind: BindingKind::FunctionParameter,
+            });
+            vec![FunctionParameter {
+                span: member.span,
+                binding: self_binding,
+                annotation: None,
+            }]
+        } else {
+            Vec::new()
+        };
+
+        parameters.extend(
+            member
+                .parameters
+                .iter()
+                .map(|parameter| self.lower_instance_parameter(parameter)),
+        );
+
         let body = member.body.as_ref().map(|body| self.lower_expr(body));
 
         DomainMember {
@@ -1308,6 +1365,43 @@ impl<'a> Lowerer<'a> {
             parameters,
             body,
         }
+    }
+
+    /// Construct an unresolved HIR type for the domain itself, applying type
+    /// parameters when the domain is generic (e.g. `NonEmpty A`).
+    fn synthesise_domain_self_type(
+        &mut self,
+        domain_name: &syn::Identifier,
+        type_parameters: &[syn::Identifier],
+    ) -> TypeId {
+        let name_type = self.alloc_type(TypeNode {
+            span: domain_name.span,
+            kind: TypeKind::Name(TypeReference::unresolved(
+                self.make_path(&[self.make_name(&domain_name.text, domain_name.span)]),
+            )),
+        });
+        if type_parameters.is_empty() {
+            return name_type;
+        }
+        let arguments: Vec<TypeId> = type_parameters
+            .iter()
+            .map(|param| {
+                self.alloc_type(TypeNode {
+                    span: param.span,
+                    kind: TypeKind::Name(TypeReference::unresolved(
+                        self.make_path(&[self.make_name(&param.text, param.span)]),
+                    )),
+                })
+            })
+            .collect();
+        let arguments = NonEmpty::from_vec(arguments).expect("non-empty type parameter list");
+        self.alloc_type(TypeNode {
+            span: domain_name.span,
+            kind: TypeKind::Apply {
+                callee: name_type,
+                arguments,
+            },
+        })
     }
 
     fn lower_source_provider_contract_item(
@@ -5799,7 +5893,7 @@ impl<'a> Lowerer<'a> {
                     TypeItemBody::Sum(variants) => {
                         for variant in variants.iter() {
                             for field in &variant.fields {
-                                self.resolve_type(*field, namespaces, &mut env);
+                                self.resolve_type(field.ty, namespaces, &mut env);
                             }
                         }
                     }

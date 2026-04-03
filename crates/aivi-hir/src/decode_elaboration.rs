@@ -877,11 +877,11 @@ impl<'a> DecodeTypeLowerer<'a> {
     ) -> Result<SumVariant, DecodeTypeLoweringError> {
         let payload = match variant.fields.as_slice() {
             [] => None,
-            [only] => Some(self.lower_type(*only, substitutions, item_stack)?),
+            [only] => Some(self.lower_type(only.ty, substitutions, item_stack)?),
             many => {
                 let mut lowered = Vec::with_capacity(many.len());
-                for field in many.iter().copied() {
-                    lowered.push(self.lower_type(field, substitutions, item_stack)?);
+                for field in many.iter() {
+                    lowered.push(self.lower_type(field.ty, substitutions, item_stack)?);
                 }
                 Some(self.types.tuple(lowered).map_err(|error| {
                     DecodeTypeLoweringError::invalid_shape(variant.span, error.kind().clone())

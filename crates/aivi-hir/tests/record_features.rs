@@ -127,3 +127,48 @@ fn dotted_projection_with_pipe_parses_and_lowers() {
         lowered.diagnostics()
     );
 }
+
+#[test]
+fn named_variant_fields_lower_cleanly() {
+    let lowered = parse_and_lower_text(
+        "named_fields.aivi",
+        "type Date = Date year:Int month:Int day:Int\n\
+         value today = Date 2024 6 15\n",
+    );
+    assert!(
+        !lowered.has_errors(),
+        "named fields should lower cleanly: {:?}",
+        lowered.diagnostics()
+    );
+}
+
+#[test]
+fn named_variant_fields_typecheck() {
+    let report = typecheck_text(
+        "named_fields_tc.aivi",
+        "type Year = Int\n\
+         type Month = Int\n\
+         type Day = Int\n\
+         type Date = Date year:Year month:Month day:Day\n\
+         value today = Date 2024 6 15\n",
+    );
+    assert!(
+        report.diagnostics().is_empty(),
+        "named field type should typecheck cleanly: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn single_variant_without_pipe_parses_and_lowers() {
+    let lowered = parse_and_lower_text(
+        "no_pipe.aivi",
+        "type Vec2 = Vec2 Int Int\n\
+         value origin = Vec2 0 0\n",
+    );
+    assert!(
+        !lowered.has_errors(),
+        "single-variant without pipe should lower cleanly: {:?}",
+        lowered.diagnostics()
+    );
+}

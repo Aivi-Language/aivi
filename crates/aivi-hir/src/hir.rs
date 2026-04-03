@@ -880,7 +880,14 @@ pub enum TypeItemBody {
 pub struct TypeVariant {
     pub span: SourceSpan,
     pub name: Name,
-    pub fields: Vec<TypeId>,
+    pub fields: Vec<TypeVariantField>,
+}
+
+/// A positional field in a constructor variant, with an optional label.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeVariantField {
+    pub label: Option<Box<str>>,
+    pub ty: TypeId,
 }
 
 /// One `val` declaration.

@@ -154,8 +154,8 @@ domain Duration over Int
     literal sec : Int -> Duration
     type Int -> Duration
     millis raw = raw
-    type Duration -> Int
-    value duration = duration
+    type Int
+    value = self
 
 domain Url over Text
     type Text -> Result UrlError Url
@@ -173,7 +173,9 @@ Rules:
 - Callable domain members are declared with a `type TypeExpr` annotation line immediately before the member name line.
 - Callable domain members participate in ordinary term lookup.
 - Callable domain members may include an authored body of the form `name arg1 arg2 = expr` on the same line as the member name.
+- Authored bodies may use the contextual keyword `self` to refer to the domain-typed receiver. When `self` is used, the type annotation omits the domain type from the first position (it is implicit). When `self` is not used, the annotation is the full type.
 - Authored bodies are checked against the carrier view of the current domain, while the public signature remains nominal.
+- Bodyless members keep their full type annotation including the domain type where applicable.
 - Literal suffix declarations remain declaration-only and use `literal name : TypeExpr` syntax.
 - Unary domain methods can also be projected with `value.member`.
 - Domain projection is still explicit member dispatch; it does not imply implicit carrier casts.

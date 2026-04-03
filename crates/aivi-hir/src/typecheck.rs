@@ -2759,7 +2759,7 @@ impl<'a> TypeChecker<'a> {
                     .collect::<HashMap<_, _>>();
                 let Some(field_ty) = self
                     .typing
-                    .lower_hir_type(variant.fields[0], &substitutions)
+                    .lower_hir_type(variant.fields[0].ty, &substitutions)
                 else {
                     self.emit_unknown_patch_constructor(span, constructor, subject);
                     return None;
@@ -3438,7 +3438,7 @@ impl<'a> TypeChecker<'a> {
                         for variant in variants.iter() {
                             for field in &variant.fields {
                                 let Some(lowered) =
-                                    self.typing.lower_hir_type(*field, &substitutions)
+                                    self.typing.lower_hir_type(field.ty, &substitutions)
                                 else {
                                     return Err(format!(
                                         "constructor payloads for `{ty}` could not be lowered for Eq checking"

@@ -2463,7 +2463,7 @@ Construction is explicit. Unwrapping is explicit. Unsafe construction should rem
 
 Callable domain members enter ordinary term lookup when in scope. No projection syntax for domains in v1.
 
-Callable members may also carry authored bodies: place a `type TypeExpr` annotation line immediately before the member name, and write the body on the same line as the name (`name arg1 arg2 = expr`). Those authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
+Callable members may also carry authored bodies: place a `type TypeExpr` annotation line immediately before the member name, and write the body on the same line as the name (`name arg1 arg2 = expr`). Inside authored bodies, the contextual keyword `self` refers to the domain-typed receiver. When `self` appears in the body, the type annotation omits the domain type from its first position (it becomes implicit). When `self` is not used (e.g. constructors), the annotation is the full type. Bodyless members always keep their full annotation. Authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
 
 ### 20.5 Literal suffixes
 

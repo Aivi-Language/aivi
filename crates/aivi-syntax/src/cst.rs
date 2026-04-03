@@ -221,7 +221,18 @@ pub enum TypeExprKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TypeVariant {
     pub name: Option<Identifier>,
-    pub fields: Vec<TypeExpr>,
+    pub fields: Vec<TypeVariantField>,
+    pub span: SourceSpan,
+}
+
+/// A positional field in a constructor variant, with an optional label.
+///
+/// `| Date year:Year month:Month day:Day` has three named fields.
+/// `| Vec2 Int Int` has two anonymous fields.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeVariantField {
+    pub label: Option<Identifier>,
+    pub ty: TypeExpr,
     pub span: SourceSpan,
 }
 
@@ -382,6 +393,109 @@ pub enum BinaryOperator {
 pub struct Expr {
     pub kind: ExprKind,
     pub span: SourceSpan,
+}
+
+impl Expr {
+    /// Returns `true` when the expression tree contains an identifier reference
+    /// named `"self"`, used to detect implicit domain receiver usage.
+    pub fn contains_self_reference(&self) -> bool {
+        expr_contains_self(self)
+    }
+}
+
+fn expr_contains_self(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Name(id) => id.text == "self",
+        ExprKind::Group(inner) => expr_contains_self(inner),
+        ExprKind::Tuple(items) | ExprKind::List(items) | ExprKind::Set(items) => {
+            items.iter().any(expr_contains_self)
+        }
+        ExprKind::Map(map) => map
+            .entries
+            .iter()
+            .any(|e| expr_contains_self(&e.key) || expr_contains_self(&e.value)),
+        ExprKind::Record(rec) => rec
+            .fields
+            .iter()
+            .any(|f| f.value.as_ref().is_some_and(expr_contains_self)),
+        ExprKind::Range { start, end } => {
+            expr_contains_self(start) || expr_contains_self(end)
+        }
+        ExprKind::Projection { base, .. } => expr_contains_self(base),
+        ExprKind::Apply {
+            callee, arguments, ..
+        } => expr_contains_self(callee) || arguments.iter().any(expr_contains_self),
+        ExprKind::Unary { expr, .. } => expr_contains_self(expr),
+        ExprKind::Binary { left, right, .. } => {
+            expr_contains_self(left) || expr_contains_self(right)
+        }
+        ExprKind::ResultBlock(block) => {
+            block
+                .bindings
+                .iter()
+                .any(|b| expr_contains_self(&b.expr))
+                || block.tail.as_deref().is_some_and(expr_contains_self)
+        }
+        ExprKind::PatchApply { target, patch } => {
+            expr_contains_self(target) || patch_contains_self(patch)
+        }
+        ExprKind::PatchLiteral(patch) => patch_contains_self(patch),
+        ExprKind::Pipe(pipe) => {
+            pipe.head.as_deref().is_some_and(expr_contains_self)
+                || pipe.stages.iter().any(|stage| match &stage.kind {
+                    PipeStageKind::Transform { expr }
+                    | PipeStageKind::Gate { expr }
+                    | PipeStageKind::Map { expr }
+                    | PipeStageKind::Apply { expr }
+                    | PipeStageKind::ClusterFinalizer { expr }
+                    | PipeStageKind::RecurStart { expr }
+                    | PipeStageKind::RecurStep { expr }
+                    | PipeStageKind::Tap { expr }
+                    | PipeStageKind::FanIn { expr }
+                    | PipeStageKind::Truthy { expr }
+                    | PipeStageKind::Falsy { expr }
+                    | PipeStageKind::Validate { expr }
+                    | PipeStageKind::Previous { expr }
+                    | PipeStageKind::Diff { expr } => expr_contains_self(expr),
+                    PipeStageKind::Case(arm) => expr_contains_self(&arm.body),
+                    PipeStageKind::Accumulate { seed, step } => {
+                        expr_contains_self(seed) || expr_contains_self(step)
+                    }
+                })
+        }
+        ExprKind::Text(text) => text.segments.iter().any(|seg| {
+            matches!(seg, TextSegment::Interpolation(interp) if expr_contains_self(&interp.expr))
+        }),
+        ExprKind::Markup(node) => markup_contains_self(node),
+        ExprKind::Integer(_)
+        | ExprKind::Float(_)
+        | ExprKind::Decimal(_)
+        | ExprKind::BigInt(_)
+        | ExprKind::SuffixedInteger(_)
+        | ExprKind::Regex(_)
+        | ExprKind::SubjectPlaceholder
+        | ExprKind::AmbientProjection(_)
+        | ExprKind::OperatorSection(_) => false,
+    }
+}
+
+fn patch_contains_self(patch: &PatchBlock) -> bool {
+    patch.entries.iter().any(|entry| {
+        entry.selector.segments.iter().any(|seg| {
+            matches!(seg, PatchSelectorSegment::BracketExpr { expr, .. } if expr_contains_self(expr))
+        }) || match &entry.instruction.kind {
+            PatchInstructionKind::Replace(e) | PatchInstructionKind::Store(e) => {
+                expr_contains_self(e)
+            }
+            PatchInstructionKind::Remove => false,
+        }
+    })
+}
+
+fn markup_contains_self(node: &MarkupNode) -> bool {
+    node.attributes.iter().any(|attr| {
+        matches!(&attr.value, Some(MarkupAttributeValue::Expr(e)) if expr_contains_self(e))
+    }) || node.children.iter().any(markup_contains_self)
 }
 
 /// One `<-` binding inside a `result { ... }` block.

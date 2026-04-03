@@ -3291,7 +3291,7 @@ impl<'a> GeneralExprElaborator<'a> {
         variant
             .fields
             .iter()
-            .map(|field| self.typing.lower_hir_type(*field, &substitutions))
+            .map(|field| self.typing.lower_hir_type(field.ty, &substitutions))
             .collect()
     }
 

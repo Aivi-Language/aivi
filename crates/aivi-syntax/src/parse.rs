@@ -16,7 +16,7 @@ use crate::{
         SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
         SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
         TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody, TypeExpr,
-        TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseImport, UseItem,
+        TypeExprKind, TypeField, TypeVariant, TypeVariantField, UnaryOperator, UseImport, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
@@ -3441,8 +3441,43 @@ impl<'a> Parser<'a> {
         (!variants.is_empty()).then_some(TypeDeclBody::Sum(variants))
     }
 
-    fn parse_type_variant_field(&mut self, cursor: &mut usize, end: usize) -> Option<TypeExpr> {
-        self.parse_type_atom(cursor, end, TypeStop::default())
+    fn parse_type_variant_field(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+    ) -> Option<TypeVariantField> {
+        let field_start = *cursor;
+        // Try named field: `label:Type` (lowercase identifier followed by colon)
+        let checkpoint = *cursor;
+        if let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if self.tokens[index].kind() == TokenKind::Identifier {
+                let ident = self.identifier_from_token(index);
+                if !ident.is_uppercase_initial() {
+                    // Peek ahead for colon
+                    if let Some(colon_index) = self.peek_nontrivia(index + 1, end) {
+                        if self.tokens[colon_index].kind() == TokenKind::Colon {
+                            // Consume label and colon
+                            let label = self.parse_identifier(cursor, end)?;
+                            let _ = self.consume_kind(cursor, end, TokenKind::Colon);
+                            let ty = self.parse_type_atom(cursor, end, TypeStop::default())?;
+                            return Some(TypeVariantField {
+                                label: Some(label),
+                                span: self.source_span_for_range(field_start, *cursor),
+                                ty,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        *cursor = checkpoint;
+        // Fall back to anonymous field
+        let ty = self.parse_type_atom(cursor, end, TypeStop::default())?;
+        Some(TypeVariantField {
+            label: None,
+            span: self.source_span_for_range(field_start, *cursor),
+            ty,
+        })
     }
 
     fn parse_type_expr(

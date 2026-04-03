@@ -98,27 +98,27 @@ domain Snake over List Cell = {
     type List Cell -> Snake
     fromCells cells = cells
 
-    type Snake -> Cell
-    head snake = getOrElse (Cell 0 0) (listHead snake)
+    type Cell
+    head = getOrElse (Cell 0 0) (listHead self)
 
-    type Snake -> Cell -> Bool
-    contains snake cell = any (cellEq cell) snake
+    type Cell -> Bool
+    contains cell = any (cellEq cell) self
 
-    type Snake -> Int
-    length snake = listLength snake
+    type Int
+    length = listLength self
 
-    type Snake -> Cell -> Snake
-    grow snake cell = append [cell] snake
+    type Cell -> Snake
+    grow cell = append [cell] self
 
-    type Snake -> Cell -> Snake
-    move snake cell = takeCells (listLength snake) (append [cell] snake)
+    type Cell -> Snake
+    move cell = takeCells (listLength self) (append [cell] self)
 
-    type Snake -> Direction -> Cell
-    nextHead snake dir = moveDir dir (getOrElse (Cell 0 0) (listHead snake))
+    type Direction -> Cell
+    nextHead dir = moveDir dir (getOrElse (Cell 0 0) (listHead self))
 }
 ```
 
-A domain wraps a carrier type (`List Cell`) with a semantic name (`Snake`) and domain-specific operations. You call these operations with dot notation: `st.snake.head`, `st.snake.contains h`, `st.snake.grow h`.
+A domain wraps a carrier type (`List Cell`) with a semantic name (`Snake`) and domain-specific operations. Inside the body, `self` refers to the domain-typed receiver, so `listHead self` unwraps a `Snake` as the underlying `List Cell`. You call these operations with dot notation: `st.snake.head`, `st.snake.contains h`, `st.snake.grow h`.
 
 The key insight is that outside the domain, you cannot accidentally treat a `Snake` as a raw `List Cell`. The domain boundary prevents mixing up snake-specific logic with general list operations.
 

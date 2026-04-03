@@ -90,20 +90,22 @@ domain Score over Int = {
 
 Each member follows the same rules as a standalone member line — the `= { ... }` form simply groups them together and makes the scope visual.
 
-Authored bodies work inside blocks too:
+Authored bodies work inside blocks too. Inside an authored body, `self` refers to the domain-typed receiver — its type is implicit and omitted from the annotation:
 
 ```aivi
 domain Snake over List Cell = {
     type List Cell -> Snake
     fromCells cells = cells
 
-    type Snake -> Cell
-    head snake = getOrElse (Cell 0 0) (listHead snake)
+    type Cell
+    head = getOrElse (Cell 0 0) (listHead self)
 
-    type Snake -> Int
-    length snake = listLength snake
+    type Int
+    length = listLength self
 }
 ```
+
+`fromCells` is a constructor — it takes a carrier value and wraps it. Since it does not use `self`, its annotation stays explicit. `head` and `length` operate on an existing `Snake`, so they use `self` and their annotations omit `Snake ->` from the first position.
 
 ## Generic domains
 
@@ -124,4 +126,5 @@ This is useful when you want stronger guarantees than the carrier type alone can
 | `(+) : D -> D -> D` | Add an operator |
 | `unwrap : D -> Carrier` | Add a named method |
 | `member : T` + `member x = expr` | Add an authored callable member |
+| `self` | Implicit domain-typed receiver in authored bodies |
 | `domain Name over Carrier = { ... }` | Group domain members in a block |

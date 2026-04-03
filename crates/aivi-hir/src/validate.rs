@@ -930,7 +930,7 @@ impl Validator<'_> {
                                         variant.span,
                                         "type variant",
                                         "variant field type",
-                                        *field,
+                                        field.ty,
                                     );
                                 }
                             }
@@ -1854,7 +1854,7 @@ impl Validator<'_> {
                             for variant in variants.iter() {
                                 for field in &variant.fields {
                                     self.check_expected_type_kind(
-                                        *field,
+                                        field.ty,
                                         &parameters,
                                         "type variant field",
                                     );
@@ -4797,7 +4797,7 @@ impl Validator<'_> {
             parent_item: *item_id,
             parent_name: item.name.text().to_owned(),
             constructor_name: constructor_name.to_owned(),
-            field_types: variant.fields.clone(),
+            field_types: variant.fields.iter().map(|f| f.ty).collect(),
         })
     }
 
@@ -10036,6 +10036,7 @@ value resultLabel =
         variant_name: &str,
         fields: Vec<crate::TypeId>,
     ) -> crate::ItemId {
+        let wrapped_fields = fields.into_iter().map(|ty| crate::hir::TypeVariantField { label: None, ty }).collect();
         module
             .push_item(Item::Type(TypeItem {
                 header: ItemHeader {
@@ -10048,7 +10049,7 @@ value resultLabel =
                     TypeVariant {
                         span: unit_span(),
                         name: name(variant_name),
-                        fields,
+                        fields: wrapped_fields,
                     },
                     Vec::new(),
                 )),
@@ -12620,7 +12621,7 @@ signal login : Signal (Result HttpError Session)
                     TypeVariant {
                         span: unit_span(),
                         name: name("TriggerBox"),
-                        fields: vec![signal_payload],
+                        fields: vec![crate::hir::TypeVariantField { label: None, ty: signal_payload }],
                     },
                     Vec::new(),
                 )),
