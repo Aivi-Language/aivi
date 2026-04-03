@@ -74,17 +74,13 @@ func takeCells = n cells => cells
   |> reduce takeCellStep { remaining: n, cells: [] }
   |> .cells
 
-type Cell -> Cell -> Bool
-func cellEq = a b =>
-    a == b
-
 domain Snake over List Cell = {
     type List Cell -> Snake
     fromCells cells = cells
     type Snake -> Cell
     head snake = getOrElse (Cell 0 0) (listHead snake)
     type Snake -> Cell -> Bool
-    contains snake cell = any (cellEq cell) snake
+    contains snake cell = any (. == cell) snake
     type Snake -> Int
     length snake = listLength snake
     type Snake -> Cell -> Snake
@@ -180,13 +176,18 @@ func appendRow = board row => board == ""
  F|> "{board}\n{row}"
 
 type GameState -> Int -> Int -> Text
-func cellAt = st y x => cellGlyph st x y
+func cellAt = st y x =>
+    cellGlyph st x y
 
 type GameState -> Int -> Text
-func renderRowAt = st y => matrixIndices boardW |> map (cellAt st y) |> joinRow
+func renderRowAt = st y => matrixIndices boardW
+  |> map (cellAt st y)
+  |> joinRow
 
 type GameState -> Text
-func renderBoard = st => matrixIndices boardH |> map (renderRowAt st) |> reduce appendRow ""
+func renderBoard = st => matrixIndices boardH
+  |> map (renderRowAt st)
+  |> reduce appendRow ""
 
 type Status -> Bool
 func isGameOver = .

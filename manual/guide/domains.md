@@ -1,83 +1,89 @@
 # Domains
 
-A duration is not just an integer. A URL is not just a string. A file path is not just text. When you treat them as their raw types, mistakes happen: you pass milliseconds where seconds were expected, or a URL where a file path belongs.
+A score is not just an integer. A player ID is not just an integer either. When you treat them as their raw types, mistakes happen: you pass a score where a player ID was expected, or an ID where a count belongs.
 
 Domains solve this by wrapping a **carrier type** with a **semantic name** and its own operations. The compiler prevents you from mixing them up.
 
 ```aivi
-domain Duration over Int
-domain Url over Text
-domain Path over Text
+domain Score    over Int
+domain PlayerId over Int
+domain Tag      over Text
 
-value timeout : Duration = 5sec
-value endpoint : Url = ...
-value config : Path = ...
+value highScore     : Score    = ...
+value currentPlayer : PlayerId = ...
+value label         : Tag      = ...
 ```
 
-You cannot pass a `Duration` where a `Path` is expected, even though both are backed by primitive types.
+You cannot pass a `Score` where a `PlayerId` is expected, even though both are backed by `Int`.
+
+The standard library already ships [`Duration`](/stdlib/duration), [`Url`](/stdlib/url), and [`Path`](/stdlib/path) as built-in domains — you do not need to declare those yourself.
 
 ## Declaring a domain
 
 ```aivi
-domain Duration over Int
-
-type Builder = Int -> Duration
-
-domain Duration over Int
+domain Score over Int
 ```
 
-This declares a `Duration` domain whose runtime carrier is `Int`.
+This declares a `Score` domain whose runtime carrier is `Int`.
 
 ## Literal suffixes
 
 A domain can define literal suffixes:
 
 ```aivi
-domain Duration over Int
+domain Score over Int = {
+    literal pts : Int -> Score
+}
 
-value delay : Duration = 250ms
+value highScore : Score = 9000pts
 ```
 
 Suffixes must be explicit and unambiguous. In current AIVI they must also be at least two characters long.
 
 ## Operators and named members
 
-Domains can attach operators and named methods:
+Domains can attach operators and named methods inside a block body:
 
 ```aivi
-domain Path over Text
+domain Score over Int = {
+    literal pts  : Int -> Score
+    type Score -> Score -> Score
+    (+)
+    type Score -> Int
+    unwrap
+}
 ```
 
 That lets you write domain-aware expressions such as:
 
 ```aivi
-domain Duration over Int
-
-value total : Duration = 10ms + 5ms
-value raw : Int = unwrap total
+value total : Score = 10pts + 5pts
+value raw   : Int   = unwrap total
 ```
 
-Callable members can also carry authored bodies. Declare the type first, then add an instance-style binding line:
+Callable members can also carry authored bodies. Declare the type first, then add a binding line with the implementation:
 
 ```aivi
-type Builder = Int -> Duration
-
-domain Duration over Int
+domain Score over Int = {
+    type Int -> Score
+    fromRaw raw = raw
+}
 ```
 
-Inside the authored body, the current domain is implemented against its carrier representation. That means `build raw = raw` is valid for `Duration over Int`, while callers still see `build : Int -> Duration`.
+Inside the authored body, the current domain is implemented against its carrier representation. That means `fromRaw raw = raw` is valid for `Score over Int`, while callers still see `fromRaw : Int -> Score`.
 
 ## Block body syntax
 
 When a domain has multiple members, group them inside `= { ... }`:
 
 ```aivi
-domain Duration over Int = {
-    literal ms  : Int -> Duration
-    literal sec : Int -> Duration
-    type Duration -> Duration -> Duration
+domain Score over Int = {
+    literal pts  : Int -> Score
+    type Score -> Score -> Score
     (+)
-    type Duration -> Int
+    type Score -> Score -> Bool
+    (<)
+    type Score -> Int
     unwrap
 }
 ```
@@ -114,7 +120,7 @@ This is useful when you want stronger guarantees than the carrier type alone can
 | Form | Meaning |
 | --- | --- |
 | `domain Name over Carrier` | Declare a domain |
-| `literal ms : Int -> Duration` | Add a literal suffix |
+| `literal pts : Int -> Score` | Add a literal suffix |
 | `(+) : D -> D -> D` | Add an operator |
 | `unwrap : D -> Carrier` | Add a named method |
 | `member : T` + `member x = expr` | Add an authored callable member |

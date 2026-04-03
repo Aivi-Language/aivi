@@ -12,7 +12,7 @@ For class declaration and instance syntax, see [Classes](/guide/classes).
 | Abstraction | Use when... | Example |
 | --- | --- | --- |
 | A concrete type | You know exactly what the data is | `type Score = Int` |
-| A domain | You want a branded wrapper with its own operators | `domain Duration over Int` |
+| A domain | You want a branded wrapper with its own operators | `domain Score over Int` |
 | A class | You want to write generic code over types sharing a capability | `class Eq A` |
 | A higher-kinded class | You want to abstract over containers like `List`, `Option`, `Signal` | `class Functor F` |
 

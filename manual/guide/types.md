@@ -279,17 +279,13 @@ Rules:
 - `Required` removes at most one `Option` layer
 - `Rename` must not produce field-name collisions
 
-The pipe form is only syntax sugar. This:
+The pipe form is only syntax sugar. The type on the left is passed as the final argument to the transform on the right:
 
 ```aivi
-type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
+type UserPublic = Rename { createdAt: created_at } (Omit (isAdmin) User)
 ```
 
-means the same thing as:
-
-```aivi
-type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
-```
+The pipe form is preferred because it reads left-to-right in application order.
 
 ## Summary
 

@@ -95,10 +95,10 @@ If you add a new constructor to `LoadState`, the compiler tells you every place 
 A duration is not just an integer. A URL is not just text. AIVI lets you create **domains** that wrap a carrier type with semantic meaning:
 
 ```aivi
-domain Duration over Int
+use aivi.duration (Duration)
 
 value timeout : Duration = 5sec
-value delay : Duration = 250ms
+value delay   : Duration = 250ms
 ```
 
 You cannot accidentally pass an `Int` where a `Duration` is expected. The compiler catches it. The domain also gives you a place to define operators and conversions that make sense for that concept.

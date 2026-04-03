@@ -136,9 +136,8 @@ type DecodeMode =
 type Map K V =
   | EmptyMap
 
-domain Duration over Int
-
-domain Retry over Int
+use aivi.duration (Duration)
+use aivi.http (Retry)
 
 value authHeaders : Map Text Text = EmptyMap
 
@@ -207,10 +206,10 @@ You can also declare a provider contract. Argument and option declarations still
 surface in HIR so later custom-provider handle lowering can target one provider-owned API:
 
 ```aivi
+use aivi.duration (Duration)
+
 type Mode =
   | Stream
-
-domain Duration over Int
 
 provider custom.feed
     argument path : Text

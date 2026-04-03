@@ -62,12 +62,6 @@ type User = {
 type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 
-That is equivalent to:
-
-```aivi
-type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
-```
-
 Type-level pipes are currently limited to record row transforms such as `Pick`, `Omit`, `Optional`, `Required`, `Defaulted`, and `Rename`.
 
 ## Pattern matching with `||>`
