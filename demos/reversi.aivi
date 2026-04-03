@@ -184,16 +184,16 @@ func finished = .
  ||> _          -> False
 
 type List (List Disc) -> Coord -> Disc
-func discAt = board coord => matrixFromRows board
- ||> Err _  -> Empty
- ||> Ok m   -> matrixAt m (coordX coord) (coordY coord)
-  ||> None   -> Empty
+func discAt = board coord => (matrixFromRows board, coordX coord, coordY coord)
+ ||> (Err _, _, _) -> Empty
+ ||> (Ok m, x, y) -> matrixAt m x y
+  ||> None  -> Empty
   ||> Some d -> d
 
 type List (List Disc) -> Coord -> Disc -> (List (List Disc))
-func setDisc = board coord disc => matrixFromRows board
- ||> Err _  -> board
- ||> Ok m   -> matrixReplaceAt m (coordX coord, coordY coord) disc
+func setDisc = board coord disc => (matrixFromRows board, coordX coord, coordY coord)
+ ||> (Err _, _, _) -> board
+ ||> (Ok m, x, y) -> matrixReplaceAt m (x, y) disc
   ||> None    -> board
   ||> Some nm -> matrixRows nm
 
@@ -652,11 +652,11 @@ func step = event state => event
  ||> ComputerTurn     -> handleComputerTurn state
 
 type Coord -> Text
-func coordLabel = coord => coord
+func coordLabel = .
  ||> Coord x y -> "({x + 1}, {y + 1})"
 
 type Status -> Text
-func statusLabel = status => status
+func statusLabel = .
  ||> Active Human     -> "You are red"
  ||> Active Computer  -> "Blue to move"
  ||> Passed Human     -> "You pass"
@@ -683,7 +683,7 @@ func lastMoveLine = state => state.lastMove
  ||> None       -> "Last move: opening layout"
 
 type Coord -> Text
-func lastMoveAt = coord => coord
+func lastMoveAt = .
  ||> Coord x y -> "Last move: ({x + 1}, {y + 1})"
 
 type Status -> (List Coord) -> Coord -> Text
