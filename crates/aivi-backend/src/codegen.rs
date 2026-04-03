@@ -348,6 +348,7 @@ enum NativeCompareKind {
     Float,
     Decimal,
     BigInt,
+    DomainInt,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -355,6 +356,7 @@ enum NativeArithmeticKind {
     Integer,
     Decimal,
     BigInt,
+    DomainInt,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -842,14 +844,16 @@ impl<'a> CraneliftCompiler<'a> {
                         }
                     }
                     KernelExprKind::SuffixedInteger(_) => {
-                        // Representational domain literals (e.g. `5sec` for
-                        // `domain Duration over Int`) compile as their
-                        // underlying integer carrier value.
-                        if !self.domain_has_int_carrier(expr.layout) {
+                        // Suffixed integer literals (e.g. `5sec`) are always
+                        // representational domain values over Int.  The suffix
+                        // resolves to a domain `literal` member of type
+                        // `Int -> DomainType`, so the carrier is Int by
+                        // construction.
+                        if !self.is_named_domain_layout(expr.layout) {
                             errors.push(self.unsupported_expression(
                                 kernel_id,
                                 expr_id,
-                                "suffixed integer literals require a representational domain with Int carrier for Cranelift compilation",
+                                "suffixed integer literals require a named domain layout for Cranelift compilation",
                             ));
                         }
                     }
@@ -1304,8 +1308,11 @@ impl<'a> CraneliftCompiler<'a> {
                             values.push(builder.ins().iconst(types::I64, value));
                         }
                         KernelExprKind::SuffixedInteger(integer) => {
-                            // Representational domain literal: emit the
-                            // integer carrier value directly.
+                            // Representational domain literal (e.g. `5sec`):
+                            // the carrier is Int, but the layout is Domain
+                            // (by-reference).  Store the integer in a stack
+                            // slot and return the slot pointer, matching the
+                            // by-reference ABI convention.
                             let raw = integer.raw.as_ref();
                             let value = raw.parse::<i64>().map_err(|_| {
                                 CodegenError::InvalidIntegerLiteral {
@@ -1314,7 +1321,17 @@ impl<'a> CraneliftCompiler<'a> {
                                     raw: integer.raw.clone(),
                                 }
                             })?;
-                            values.push(builder.ins().iconst(types::I64, value));
+                            let slot = builder.create_sized_stack_slot(
+                                cranelift_codegen::ir::StackSlotData::new(
+                                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                                    8,
+                                    3, // align = 8 = 2^3
+                                ),
+                            );
+                            let ptr = builder.ins().stack_addr(self.pointer_type(), slot, 0);
+                            let iconst = builder.ins().iconst(types::I64, value);
+                            builder.ins().store(MemFlags::new(), iconst, ptr, 0);
+                            values.push(ptr);
                         }
                         KernelExprKind::Float(float) => {
                             self.require_float_expression(
@@ -1734,6 +1751,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeArithmeticKind::DomainInt => {
+                                    self.lower_domain_int_arithmetic(lhs, rhs, BinaryOperator::Add, builder)
+                                }
                             }
                         }
                         BinaryOperator::Subtract => {
@@ -1754,6 +1774,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     )?;
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
+                                }
+                                NativeArithmeticKind::DomainInt => {
+                                    self.lower_domain_int_arithmetic(lhs, rhs, BinaryOperator::Subtract, builder)
                                 }
                             }
                         }
@@ -1776,6 +1799,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeArithmeticKind::DomainInt => {
+                                    self.lower_domain_int_arithmetic(lhs, rhs, BinaryOperator::Multiply, builder)
+                                }
                             }
                         }
                         BinaryOperator::Divide => {
@@ -1797,6 +1823,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeArithmeticKind::DomainInt => {
+                                    self.lower_domain_int_arithmetic(lhs, rhs, BinaryOperator::Divide, builder)
+                                }
                             }
                         }
                         BinaryOperator::Modulo => {
@@ -1817,6 +1846,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     )?;
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
+                                }
+                                NativeArithmeticKind::DomainInt => {
+                                    self.lower_domain_int_arithmetic(lhs, rhs, BinaryOperator::Modulo, builder)
                                 }
                             }
                         }
@@ -1844,6 +1876,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeCompareKind::DomainInt => {
+                                    self.lower_domain_int_comparison(lhs, rhs, IntCC::SignedGreaterThan, builder)
+                                }
                             }
                         }
                         BinaryOperator::LessThan => {
@@ -1869,6 +1904,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     )?;
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
+                                }
+                                NativeCompareKind::DomainInt => {
+                                    self.lower_domain_int_comparison(lhs, rhs, IntCC::SignedLessThan, builder)
                                 }
                             }
                         }
@@ -1898,6 +1936,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeCompareKind::DomainInt => {
+                                    self.lower_domain_int_comparison(lhs, rhs, IntCC::SignedGreaterThanOrEqual, builder)
+                                }
                             }
                         }
                         BinaryOperator::LessThanOrEqual => {
@@ -1923,6 +1964,9 @@ impl<'a> CraneliftCompiler<'a> {
                                     )?;
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
+                                }
+                                NativeCompareKind::DomainInt => {
+                                    self.lower_domain_int_comparison(lhs, rhs, IntCC::SignedLessThanOrEqual, builder)
                                 }
                             }
                         }
@@ -3446,8 +3490,8 @@ impl<'a> CraneliftCompiler<'a> {
                 ));
             };
 
-            if !self.domain_has_int_carrier(*left_layout)
-                || !self.domain_has_int_carrier(*right_layout)
+            if !self.is_named_domain_layout(*left_layout)
+                || !self.is_named_domain_layout(*right_layout)
             {
                 return Err(self.unsupported_expression(
                     kernel_id,
@@ -3464,7 +3508,7 @@ impl<'a> CraneliftCompiler<'a> {
                 | BinaryOperator::Multiply
                 | BinaryOperator::Divide
                 | BinaryOperator::Modulo => {
-                    if !self.domain_has_int_carrier(result_layout) {
+                    if !self.is_named_domain_layout(result_layout) {
                         return Err(self.unsupported_expression(
                             kernel_id,
                             expr_id,
@@ -3842,6 +3886,47 @@ impl<'a> CraneliftCompiler<'a> {
         }
     }
 
+    fn lower_domain_int_arithmetic(
+        &self,
+        lhs_ptr: Value,
+        rhs_ptr: Value,
+        operator: BinaryOperator,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Value {
+        let lhs = builder.ins().load(types::I64, MemFlags::new(), lhs_ptr, 0);
+        let rhs = builder.ins().load(types::I64, MemFlags::new(), rhs_ptr, 0);
+        let result = match operator {
+            BinaryOperator::Add => builder.ins().iadd(lhs, rhs),
+            BinaryOperator::Subtract => builder.ins().isub(lhs, rhs),
+            BinaryOperator::Multiply => builder.ins().imul(lhs, rhs),
+            BinaryOperator::Divide => builder.ins().sdiv(lhs, rhs),
+            BinaryOperator::Modulo => builder.ins().srem(lhs, rhs),
+            _ => unreachable!("lower_domain_int_arithmetic only handles arithmetic ops"),
+        };
+        let slot = builder.create_sized_stack_slot(
+            cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                8,
+                3,
+            ),
+        );
+        let addr = builder.ins().stack_addr(self.pointer_type(), slot, 0);
+        builder.ins().store(MemFlags::new(), result, addr, 0);
+        addr
+    }
+
+    fn lower_domain_int_comparison(
+        &self,
+        lhs_ptr: Value,
+        rhs_ptr: Value,
+        cc: IntCC,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Value {
+        let lhs = builder.ins().load(types::I64, MemFlags::new(), lhs_ptr, 0);
+        let rhs = builder.ins().load(types::I64, MemFlags::new(), rhs_ptr, 0);
+        builder.ins().icmp(cc, lhs, rhs)
+    }
+
     fn lower_direct_item_call(
         &mut self,
         kernel_id: KernelId,
@@ -4216,6 +4301,10 @@ impl<'a> CraneliftCompiler<'a> {
                 LayoutKind::Primitive(PrimitiveType::BigInt),
                 LayoutKind::Primitive(PrimitiveType::BigInt),
             ) => Ok(NativeArithmeticKind::BigInt),
+            (LayoutKind::Domain { .. }, LayoutKind::Domain { .. }, LayoutKind::Domain { .. }) =>
+            {
+                Ok(NativeArithmeticKind::DomainInt)
+            }
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -4555,6 +4644,10 @@ impl<'a> CraneliftCompiler<'a> {
                 LayoutKind::Primitive(PrimitiveType::BigInt),
                 LayoutKind::Primitive(PrimitiveType::BigInt),
             ) => NativeCompareKind::BigInt,
+            (LayoutKind::Domain { .. }, LayoutKind::Domain { .. }) =>
+            {
+                NativeCompareKind::DomainInt
+            }
             _ => {
                 return Err(self.unsupported_expression(
                     kernel_id,
