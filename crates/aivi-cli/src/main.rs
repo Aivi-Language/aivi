@@ -53,9 +53,10 @@ use aivi_query::{
     parsed_file as query_parsed_file, resolve_v1_entrypoint,
 };
 use aivi_runtime::{
-    BackendLinkedRuntime, GlibLinkedRuntimeDriver, HirRuntimeAssembly,
+    BackendLinkedRuntime, GlibLinkedRuntimeDriver, GlibLinkedRuntimeFailure, HirRuntimeAssembly,
     InputHandle as RuntimeInputHandle, Publication, SourceProviderContext, SourceProviderManager,
     assemble_hir_runtime_with_items, execute_runtime_value_with_context, link_backend_runtime,
+    render_runtime_error,
 };
 use aivi_syntax::{Formatter, ItemKind, TokenKind, lex_module, parse_module};
 use gtk::{glib, prelude::*};

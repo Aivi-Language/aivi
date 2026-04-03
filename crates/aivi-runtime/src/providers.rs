@@ -29,8 +29,8 @@ use crate::{
     CancellationObserver, EvaluatedSourceConfig, LinkedSourceLifecycleAction,
     RuntimeSourceProvider, SourceInstanceId, SourceLifecycleActionKind,
     source_decode::{
-        ExternalSourceValue, SourceDecodeError, decode_external, encode_runtime_json,
-        parse_json_text, validate_supported_program,
+        ExternalSourceValue, SourceDecodeError, SourceDecodeErrorWithPath, decode_external,
+        encode_runtime_json, parse_json_text, validate_supported_program,
     },
     task_executor::{
         CustomCapabilityCommandExecutor, execute_runtime_value_with_context_with_stdio,
@@ -1274,7 +1274,7 @@ impl RequestResultPlan {
         })
     }
 
-    fn success_from_text(&self, text: &str) -> Result<RuntimeValue, SourceDecodeError> {
+    fn success_from_text(&self, text: &str) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
         let payload = match self.success_mode {
             PayloadDecodeMode::Text => ExternalSourceValue::Text(text.into()),
             PayloadDecodeMode::Json => parse_json_text(text)?,
@@ -1821,7 +1821,7 @@ impl NamedEventOutputPlan {
         }
     }
 
-    fn value_for_name(&self, name: &str) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn value_for_name(&self, name: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         match self {
             Self::Text => Ok(Some(RuntimeValue::Text(name.into()))),
             Self::Variants { decode, variants } => {
@@ -2251,29 +2251,29 @@ impl ProcessEventPlan {
         Ok(plan)
     }
 
-    fn spawned_value(&self) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn spawned_value(&self) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(self.spawned.as_ref(), None)
     }
 
-    fn stdout_value(&self, line: &str) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn stdout_value(&self, line: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(
             self.stdout.as_ref(),
             Some(ExternalSourceValue::Text(line.into())),
         )
     }
 
-    fn stderr_value(&self, line: &str) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn stderr_value(&self, line: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(
             self.stderr.as_ref(),
             Some(ExternalSourceValue::Text(line.into())),
         )
     }
 
-    fn exited_value(&self, code: i64) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn exited_value(&self, code: i64) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(self.exited.as_ref(), Some(ExternalSourceValue::Int(code)))
     }
 
-    fn failed_value(&self, message: &str) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn failed_value(&self, message: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(
             self.failed.as_ref(),
             Some(ExternalSourceValue::Text(message.into())),
@@ -2283,7 +2283,7 @@ impl ProcessEventPlan {
     fn stdout_bytes_value(
         &self,
         chunk: Box<[u8]>,
-    ) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    ) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(
             self.stdout.as_ref(),
             Some(ExternalSourceValue::Bytes(chunk)),
@@ -2293,7 +2293,7 @@ impl ProcessEventPlan {
     fn stderr_bytes_value(
         &self,
         chunk: Box<[u8]>,
-    ) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    ) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(
             self.stderr.as_ref(),
             Some(ExternalSourceValue::Bytes(chunk)),
@@ -2304,7 +2304,7 @@ impl ProcessEventPlan {
         &self,
         plan: Option<&ProcessVariantPlan>,
         payload: Option<ExternalSourceValue>,
-    ) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    ) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         let Some(plan) = plan else {
             return Ok(None);
         };
@@ -2459,7 +2459,7 @@ impl WindowKeyOutputPlan {
         }
     }
 
-    fn value_for_key(&self, key: &str) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+    fn value_for_key(&self, key: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         match self {
             Self::Text => Ok(Some(RuntimeValue::Text(key.into()))),
             Self::NamedVariants { decode, variants } => {
@@ -2836,7 +2836,7 @@ impl DbusNameStateOutputPlan {
         }
     }
 
-    fn value_for_state(&self, state: &'static str) -> Result<RuntimeValue, SourceDecodeError> {
+    fn value_for_state(&self, state: &'static str) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
         match self {
             Self::Text => Ok(RuntimeValue::Text(state.into())),
             Self::NamedVariants { decode } => {
@@ -3004,7 +3004,7 @@ impl DbusMessageOutputPlan {
         interface: &str,
         member: &str,
         parameters: &Variant,
-    ) -> Result<RuntimeValue, SourceDecodeError> {
+    ) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
         let raw = self.raw_record(None, path, interface, member, Some(parameters))?;
         decode_external(&self.decode, &raw)
     }
@@ -3016,7 +3016,7 @@ impl DbusMessageOutputPlan {
         interface: &str,
         member: &str,
         parameters: Option<&Variant>,
-    ) -> Result<RuntimeValue, SourceDecodeError> {
+    ) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
         let raw = self.raw_record(Some(destination), path, interface, member, parameters)?;
         decode_external(&self.decode, &raw)
     }
@@ -3028,7 +3028,7 @@ impl DbusMessageOutputPlan {
         interface: &str,
         member: &str,
         parameters: Option<&Variant>,
-    ) -> Result<ExternalSourceValue, SourceDecodeError> {
+    ) -> Result<ExternalSourceValue, SourceDecodeErrorWithPath> {
         let mut record = BTreeMap::new();
         if matches!(self.shape, DbusMessageShape::Method) {
             record.insert(
