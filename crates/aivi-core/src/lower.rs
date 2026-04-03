@@ -2586,6 +2586,7 @@ impl<'a> ModuleLowerer<'a> {
                 ));
             }
             ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::AmbientType

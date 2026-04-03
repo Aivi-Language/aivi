@@ -1,8 +1,8 @@
 use crate::{
-    BuiltinTerm, DecoratorPayload, DeprecatedDecorator, DeprecationNotice, ExportItem,
-    ExportResolution, ImportBindingMetadata, ImportBundleKind, ImportId, ImportRecordField,
-    ImportValueType, Item, ItemId, Module, RecordExpr, ResolutionState, TypeId, TypeItemBody,
-    TypeKind, TypeReference, TypeResolution,
+    BuiltinTerm, DecoratorPayload, DeprecatedDecorator, DeprecationNotice, DomainMemberKind,
+    ExportItem, ExportResolution, ImportBindingMetadata, ImportBundleKind, ImportId,
+    ImportRecordField, ImportValueType, ImportedDomainLiteralSuffix, Item, ItemId, Module,
+    RecordExpr, ResolutionState, TypeId, TypeItemBody, TypeKind, TypeReference, TypeResolution,
 };
 
 /// The kind of an exported name.
@@ -134,6 +134,7 @@ fn re_exported_import_name(
     let import = module.imports().get(import_id)?;
     let kind = match &import.metadata {
         ImportBindingMetadata::TypeConstructor { .. }
+        | ImportBindingMetadata::Domain { .. }
         | ImportBindingMetadata::BuiltinType(_)
         | ImportBindingMetadata::AmbientType => ExportedNameKind::Type,
         _ => ExportedNameKind::Value,
@@ -214,8 +215,22 @@ fn explicit_item_exported_name(
             metadata: if ambient {
                 ImportBindingMetadata::AmbientType
             } else {
-                ImportBindingMetadata::TypeConstructor {
+                let literal_suffixes = item
+                    .members
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, m)| {
+                        (m.kind == DomainMemberKind::Literal
+                            && m.name.text().chars().count() >= 2)
+                            .then(|| ImportedDomainLiteralSuffix {
+                                name: m.name.text().into(),
+                                member_index: i,
+                            })
+                    })
+                    .collect();
+                ImportBindingMetadata::Domain {
                     kind: aivi_typing::Kind::constructor(item.parameters.len()),
+                    literal_suffixes,
                 }
             },
             callable_type: None,
@@ -312,8 +327,24 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
         Item::Domain(item) => Some(ExportedName {
             name: item.name.text().to_owned(),
             kind: ExportedNameKind::Domain,
-            metadata: ImportBindingMetadata::TypeConstructor {
-                kind: aivi_typing::Kind::constructor(item.parameters.len()),
+            metadata: {
+                let literal_suffixes = item
+                    .members
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, m)| {
+                        (m.kind == DomainMemberKind::Literal
+                            && m.name.text().chars().count() >= 2)
+                            .then(|| ImportedDomainLiteralSuffix {
+                                name: m.name.text().into(),
+                                member_index: i,
+                            })
+                    })
+                    .collect();
+                ImportBindingMetadata::Domain {
+                    kind: aivi_typing::Kind::constructor(item.parameters.len()),
+                    literal_suffixes,
+                }
             },
             callable_type: None,
             deprecation,
@@ -659,6 +690,7 @@ fn resolve_type_constructor(
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::AmbientType => None,
         },

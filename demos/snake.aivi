@@ -11,8 +11,7 @@ use aivi.duration (Duration)
 use aivi.matrix (
     Matrix
     MatrixError
-    init
-    rows
+    indices as matrixIndices
 )
 
 type Direction =
@@ -175,15 +174,19 @@ type List Text -> Text
 func joinRow = cells =>
     reduce appendCell "" cells
 
-type Text -> (List Text) -> Text
+type Text -> Text -> Text
 func appendRow = board row => board == ""
- T|> joinRow row
- F|> "{board}\n{joinRow row}"
+ T|> row
+ F|> "{board}\n{row}"
+
+type GameState -> Int -> Int -> Text
+func cellAt = st y x => cellGlyph st x y
+
+type GameState -> Int -> Text
+func renderRowAt = st y => matrixIndices boardW |> map (cellAt st y) |> joinRow
 
 type GameState -> Text
-func renderBoard = st => init boardW boardH (cellGlyph st)
- ||> Err _ -> ""
- ||> Ok m  -> reduce appendRow "" (rows m)
+func renderBoard = st => matrixIndices boardH |> map (renderRowAt st) |> reduce appendRow ""
 
 type Status -> Bool
 func isGameOver = .

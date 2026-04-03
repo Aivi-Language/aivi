@@ -13,7 +13,8 @@ use crate::{
     ExportItem, ExportResolution, Expr, ExprId, ExprKind, FloatLiteral, FragmentControl,
     FunctionItem, FunctionParameter, ImportBinding, ImportBindingMetadata, ImportBindingResolution,
     ImportBundleKind, ImportId, ImportModuleResolution, ImportRecordField, ImportValueType,
-    InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemId,
+    ImportedDomainLiteralSuffix, InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue,
+    Item, ItemHeader, ItemId,
     ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
     MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeId, MarkupNodeKind, MatchControl,
     MockDecorator, Module, Name, NamePath, NonEmpty, PatchBlock, PatchEntry, PatchInstruction,
@@ -4873,6 +4874,22 @@ impl<'a> Lowerer<'a> {
                     *import_id,
                     import.span,
                 ),
+                ImportBindingMetadata::Domain { literal_suffixes, .. } => {
+                    insert_site(
+                        &mut namespaces.type_imports,
+                        import.local_name.text(),
+                        *import_id,
+                        import.span,
+                    );
+                    if !literal_suffixes.is_empty() {
+                        self.register_imported_domain_literal_suffixes(
+                            &import.local_name,
+                            import.span,
+                            &literal_suffixes,
+                            &mut namespaces.literal_suffixes,
+                        );
+                    }
+                }
                 ImportBindingMetadata::Bundle(_) => {}
                 ImportBindingMetadata::Unknown => {
                     self.diagnostics.push(
@@ -4890,6 +4907,108 @@ impl<'a> Lowerer<'a> {
                     continue;
                 }
             }
+        }
+    }
+
+    /// Synthesise a minimal `Item::Domain` stub in the current module so that
+    /// `LiteralSuffixResolution.domain` has a valid `ItemId` to point at.
+    /// The stub is allocated but NOT appended to `root_items`, so it is invisible
+    /// to name resolution and exports — it exists only to satisfy look-up code
+    /// that accesses `module.items()[resolution.domain]` at the type-checking
+    /// and validation layer.
+    fn register_imported_domain_literal_suffixes(
+        &mut self,
+        domain_name: &Name,
+        span: SourceSpan,
+        literal_suffixes: &[ImportedDomainLiteralSuffix],
+        target: &mut HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
+    ) {
+        // Allocate a placeholder carrier type.
+        let carrier = self.alloc_type(TypeNode {
+            span,
+            kind: TypeKind::Name(TypeReference::unresolved(
+                self.make_path(&[self.make_name("Unit", span)]),
+            )),
+        });
+
+        // Build stub members — one per literal suffix, in member_index order.
+        // We need indices stable across the allocated slice, so compute the
+        // max member_index first and pre-fill with placeholder members at
+        // non-suffix positions.
+        let max_index = literal_suffixes
+            .iter()
+            .map(|s| s.member_index)
+            .max()
+            .unwrap_or(0);
+        let mut members: Vec<Option<DomainMember>> = vec![None; max_index + 1];
+        for suffix in literal_suffixes {
+            let annotation = self.alloc_type(TypeNode {
+                span,
+                kind: TypeKind::Name(TypeReference::unresolved(
+                    self.make_path(&[self.make_name("Unit", span)]),
+                )),
+            });
+            members[suffix.member_index] = Some(DomainMember {
+                span,
+                kind: DomainMemberKind::Literal,
+                name: self.make_name(&suffix.name, span),
+                annotation,
+                parameters: Vec::new(),
+                body: None,
+            });
+        }
+        // Fill gaps with placeholder members so member indices are consistent.
+        let members: Vec<DomainMember> = members
+            .into_iter()
+            .enumerate()
+            .map(|(i, m)| m.unwrap_or_else(|| {
+                let annotation = self.alloc_type(TypeNode {
+                    span,
+                    kind: TypeKind::Name(TypeReference::unresolved(
+                        self.make_path(&[self.make_name("Unit", span)]),
+                    )),
+                });
+                DomainMember {
+                    span,
+                    kind: DomainMemberKind::Literal,
+                    name: self.make_name(&format!("__stub_{i}"), span),
+                    annotation,
+                    parameters: Vec::new(),
+                    body: None,
+                }
+            }))
+            .collect();
+
+        let domain_stub = Item::Domain(DomainItem {
+            header: ItemHeader { span, decorators: Vec::new() },
+            name: domain_name.clone(),
+            parameters: Vec::new(),
+            carrier,
+            members: members.clone(),
+        });
+
+        let domain_item_id = self.module.alloc_item(domain_stub).unwrap_or_else(|_| {
+            self.emit_arena_overflow("HIR item arena (imported domain stub)");
+            std::process::exit(1);
+        });
+
+        // Register each literal suffix entry.
+        for (member_index, member) in members.iter().enumerate() {
+            if member.kind != DomainMemberKind::Literal {
+                continue;
+            }
+            if member.name.text().starts_with("__stub_") {
+                continue;
+            }
+            insert_site(
+                target,
+                member.name.text(),
+                LiteralSuffixResolution {
+                    domain: domain_item_id,
+                    member_index,
+                },
+                span,
+            );
         }
     }
 

@@ -13,9 +13,9 @@ use crate::{
     GateRuntimeProjectionBase, GateRuntimeRecordField, GateRuntimeReference,
     GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
     GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, InstanceItem, InstanceMember,
-    IntrinsicValue, Item, ItemId, Module, Name, NamePath, PipeExpr, PipeStageKind, ProjectionBase,
-    ResolutionState, SignalItem, TermReference, TermResolution, TypeItemBody, TypeParameterId,
-    TypeResolution, ValueItem,
+    IntrinsicValue, Item, ItemId, Module, Name, NamePath, PatchInstructionKind,
+    PatchSelectorSegment, PipeExpr, PipeStageKind, ProjectionBase, ResolutionState, SignalItem,
+    TermReference, TermResolution, TypeItemBody, TypeParameterId, TypeResolution, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{expression_matches, resolve_class_member_dispatch, signal_payload_type},
     validate::{
@@ -1473,11 +1473,14 @@ impl<'a> GeneralExprElaborator<'a> {
                     kind: GateRuntimeUnsupportedKind::Markup,
                 }]);
             }
-            ExprKind::PatchApply { .. } | ExprKind::PatchLiteral(_) => {
+            ExprKind::PatchLiteral(_) => {
                 return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
                     span: expr.span,
                     kind: GateRuntimeUnsupportedKind::PatchExpr,
                 }]);
+            }
+            ExprKind::PatchApply { target, patch } => {
+                return self.lower_patch_apply_expr(expr_id, *target, patch, env, ambient, expected);
             }
             _ => {}
         }
@@ -1663,7 +1666,7 @@ impl<'a> GeneralExprElaborator<'a> {
             | ExprKind::Markup(_)
             | ExprKind::PatchApply { .. }
             | ExprKind::PatchLiteral(_) => {
-                unreachable!("unsupported runtime forms should be returned before type inference")
+                unreachable!("patch/regex/markup are handled before type inference")
             }
             ExprKind::Cluster(cluster) => {
                 return self.lower_cluster_expr(expr_id, cluster, env, ambient, expected);
@@ -1772,6 +1775,125 @@ impl<'a> GeneralExprElaborator<'a> {
             span,
             ty: result_ty,
             kind: GateRuntimeExprKind::Projection { base, path },
+        })
+    }
+
+    /// Lower `target <| { f1: v1, f2: v2, ... }` for flat single-field-name Replace patches.
+    ///
+    /// Invariant: only `PatchInstructionKind::Replace` with a single `Named` selector segment
+    /// on a closed record type is supported. Any other patch shape falls back to
+    /// `UnsupportedRuntimeExpr`.
+    fn lower_patch_apply_expr(
+        &mut self,
+        expr_id: ExprId,
+        target: ExprId,
+        patch: &crate::PatchBlock,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        expected: Option<&GateType>,
+    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        let span = self.module.exprs()[expr_id].span;
+
+        // Validate: all patch entries must be simple single-segment Named Replace.
+        for entry in &patch.entries {
+            let single_named = matches!(
+                entry.selector.segments.as_slice(),
+                [PatchSelectorSegment::Named { .. }]
+            );
+            let is_replace = matches!(entry.instruction.kind, PatchInstructionKind::Replace(_));
+            if !single_named || !is_replace {
+                return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                    span,
+                    kind: GateRuntimeUnsupportedKind::PatchExpr,
+                }]);
+            }
+        }
+
+        // Infer the target type — must be a closed record.
+        let target_ty = self.typing.infer_expr(target, env, ambient);
+        let Some(target_gate_ty) = target_ty.actual_gate_type() else {
+            return Err(vec![GeneralExprBlocker::UnknownExprType { span }]);
+        };
+        let GateType::Record(record_fields) = &target_gate_ty else {
+            return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                span,
+                kind: GateRuntimeUnsupportedKind::PatchExpr,
+            }]);
+        };
+
+        // Build a map of patch entries: field_name → replacement ExprId.
+        let patch_map: HashMap<String, ExprId> = patch
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                if let (
+                    [PatchSelectorSegment::Named { name, .. }],
+                    PatchInstructionKind::Replace(value_id),
+                ) = (
+                    entry.selector.segments.as_slice(),
+                    &entry.instruction.kind,
+                ) {
+                    Some((name.text().to_owned(), *value_id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Lower the target expression once so we can project from it.
+        let lowered_target = self.lower_expr(target, env, ambient, Some(&target_gate_ty))?;
+
+        let record_fields = record_fields.clone();
+        let mut result_fields = Vec::with_capacity(record_fields.len());
+        let mut errors: Vec<GeneralExprBlocker> = Vec::new();
+
+        for field in &record_fields {
+            let field_name = field.name.as_str();
+            let field_ty = &field.ty;
+
+            if let Some(replacement_id) = patch_map.get(field_name) {
+                // Patched field: lower the replacement value.
+                match self.lower_expr(*replacement_id, env, ambient, Some(field_ty)) {
+                    Ok(value) => {
+                        let label = Name::new(field_name.to_owned(), span)
+                            .expect("record field names are non-empty");
+                        result_fields.push(GateRuntimeRecordField { label, value });
+                    }
+                    Err(mut errs) => errors.append(&mut errs),
+                }
+            } else {
+                // Unpatched field: project from the lowered target.
+                let label = Name::new(field_name.to_owned(), span)
+                    .expect("record field names are non-empty");
+                let path = NamePath::from_vec(vec![label.clone()])
+                    .expect("single-segment projection paths are always valid");
+                let base = match &lowered_target.kind {
+                    GateRuntimeExprKind::AmbientSubject => GateRuntimeProjectionBase::AmbientSubject,
+                    _ => GateRuntimeProjectionBase::Expr(Box::new(lowered_target.clone())),
+                };
+                let projected = GateRuntimeExpr {
+                    span,
+                    ty: field_ty.clone(),
+                    kind: GateRuntimeExprKind::Projection { base, path },
+                };
+                result_fields.push(GateRuntimeRecordField { label, value: projected });
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+
+        let result_ty = if let Some(exp) = expected {
+            exp.clone()
+        } else {
+            target_gate_ty.clone()
+        };
+
+        Ok(GateRuntimeExpr {
+            span,
+            ty: result_ty,
+            kind: GateRuntimeExprKind::Record(result_fields),
         })
     }
 

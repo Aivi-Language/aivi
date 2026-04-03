@@ -623,10 +623,27 @@ pub enum ImportBindingMetadata {
     TypeConstructor {
         kind: Kind,
     },
+    /// An imported domain type. Carries the kind for type-checking and the set of literal-suffix
+    /// members so importing modules can resolve suffixed integer literals (e.g. `120ms`) without
+    /// re-parsing the source module.
+    Domain {
+        kind: Kind,
+        literal_suffixes: Vec<ImportedDomainLiteralSuffix>,
+    },
     BuiltinType(BuiltinType),
     BuiltinTerm(BuiltinTerm),
     AmbientType,
     Bundle(ImportBundleKind),
+}
+
+/// A literal-suffix member of an imported domain type, carried through the export/import
+/// surface so literal suffixes (e.g. `ms`, `sec`) work in importing modules.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportedDomainLiteralSuffix {
+    /// The suffix name, e.g. `"ms"`.
+    pub name: Box<str>,
+    /// The index of this member in the domain's `members` vec.
+    pub member_index: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

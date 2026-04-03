@@ -7953,6 +7953,7 @@ impl Validator<'_> {
         let import = &self.module.imports()[import_id];
         match &import.metadata {
             ImportBindingMetadata::TypeConstructor { kind } => Some(kind.clone()),
+            ImportBindingMetadata::Domain { kind, .. } => Some(kind.clone()),
             ImportBindingMetadata::BuiltinType(builtin) => Some(builtin_kind(*builtin)),
             ImportBindingMetadata::Value { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }

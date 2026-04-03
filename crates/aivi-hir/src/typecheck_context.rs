@@ -2072,6 +2072,7 @@ impl<'a> GateTypeContext<'a> {
                 Some(self.lower_import_value_type(ty))
             }
             ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::BuiltinType(_)

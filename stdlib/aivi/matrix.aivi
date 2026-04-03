@@ -138,4 +138,5 @@ func replaceAt = matrix coord value => coord
  ||> (x, y) -> replaceAtCoords matrix x y value
 
 export (MatrixError, NegativeWidth, NegativeHeight, RaggedRows,
-        Matrix, init, fromRows, width, height, rows, row, at, replaceAt)
+        Matrix, init, fromRows, width, height, rows, row, at, replaceAt,
+        indices)

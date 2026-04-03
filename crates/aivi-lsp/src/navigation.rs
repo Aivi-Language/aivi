@@ -754,6 +754,7 @@ impl NavigationAnalysis {
         let imported = Self::load(db, target_file);
         match &import_binding.metadata {
             ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::AmbientType => {
                 imported.type_declaration_targets(import_binding.imported_name.text())
