@@ -14,7 +14,7 @@ Our snake game has:
 - Game over when the snake hits a wall or itself
 - A keyboard-driven interface rendered in a GTK window
 
-The entire game is about 260 lines of AIVI. There are no mutable variables, no loops, and no callbacks.
+The entire game is about 230 lines of AIVI. There are no mutable variables, no loops, and no callbacks.
 
 ## Modeling the world with types
 
@@ -178,26 +178,24 @@ If the game is over, return the state unchanged. If running, compute the next he
 ```aivi
 type GameState -> Cell -> GameState
 func advance = st h => outside h or (st.snake.contains h)
-  T|> { snake: st.snake, dir: st.dir, food: st.food,
-        score: st.score, seed: st.seed, status: GameOver }
-  F|> resolveMove st h
+ T|> st <| { status: GameOver }
+ F|> resolveMove st h
 ```
 
 If the new head is outside the board or collides with the snake body, the game is over. Otherwise, resolve the move. The `T|>` / `F|>` pipes branch on a boolean expression.
+
+The `<|` operator applies a structural patch: it copies every field of `st` and replaces only `status`. No mutation occurs — a new `GameState` value is returned with all other fields unchanged.
 
 ### Resolving a move
 
 ```aivi
 type GameState -> Cell -> GameState
 func resolveMove = st h => h == st.food
-  T|> { snake: st.snake.grow h, dir: st.dir,
-        food: spawnFood (nextSeed st.seed),
-        score: st.score + 1, seed: nextSeed st.seed, status: Running }
-  F|> { snake: st.snake.move h, dir: st.dir, food: st.food,
-        score: st.score, seed: nextSeed st.seed, status: Running }
+ T|> st <| { snake: st.snake.grow h, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
+ F|> st <| { snake: st.snake.move h, seed: nextSeed st.seed }
 ```
 
-If the head lands on food, grow the snake and spawn new food. Otherwise, move the snake (grow at the head, drop the tail). Notice how each branch constructs a complete new `GameState` record — there is no mutation.
+If the head lands on food, grow the snake, spawn new food, and increment the score. Otherwise, move the snake and advance the seed. In both cases `<|` copies the unchanged fields — only the named fields are overridden.
 
 ## Sources: connecting to the real world
 
@@ -230,12 +228,12 @@ The `when` clause connects sources to the event signal:
 ```aivi
 signal event : Signal Event
 
-when tick _ => event <- Tick
-when keyDown (Key "ArrowLeft") => event <- Turn West
+when tick _                     => event <- Tick
+when keyDown (Key "ArrowLeft")  => event <- Turn West
 when keyDown (Key "ArrowRight") => event <- Turn East
-when keyDown (Key "ArrowUp") => event <- Turn North
-when keyDown (Key "ArrowDown") => event <- Turn South
-when keyDown (Key "Space") => event <- Restart
+when keyDown (Key "ArrowUp")    => event <- Turn North
+when keyDown (Key "ArrowDown")  => event <- Turn South
+when keyDown (Key "Space")      => event <- Restart
 ```
 
 Each `when` watches a signal for a specific pattern. When `keyDown` receives `Key "ArrowLeft"`, the event signal gets `Turn West`. This is pattern-based routing, not imperative event handling.
@@ -252,30 +250,24 @@ This is the accumulation pipe. It reads: *"start with `initial`, and each time `
 The entire game state lives in this one signal. All other signals derive from it:
 
 ```aivi
-signal boardText = state |> renderBoard
-signal dirLine = state |> .dir |> dirLabel
-signal statusLine = state |> .status |> statusLineFor
-signal scoreLine = state |> .score |> scoreLineFor
-signal gameOver = state |> .status |> isGameOver
+signal boardText   = state |> renderBoard
+signal dirLine     = state |> .dir |> dirLabel
+signal statusLine  = state |> .status |> statusLineFor
+signal scoreLine   = state |> .score |> scoreLineFor
+signal gameOver    = state |> .status |> isGameOver
 ```
 
 Each derived signal projects a piece of state and transforms it. When `state` changes, all of these recompute automatically.
 
-## Rendering with text
+The `=` signs are aligned: consecutive `signal` declarations of the same kind read like a table.
 
-The board renders as text using `reduce` — AIVI's replacement for loops:
+## Rendering with Matrix
 
-```aivi
-type GameState -> Int -> Text
-func renderRow = st y => boardColumns
-  |> reduce (rowTextStep st y) ""
-```
-
-`boardColumns` is `[0..29]`, a range. `reduce` folds each column index into a text string using `rowTextStep`, which looks up the cell glyph:
+The board renders as text using `aivi.matrix`. Instead of explicit range loops, we build a `Matrix Text` from the game state and fold it into a string:
 
 ```aivi
 type GameState -> Int -> Int -> Text
-func cellGlyph = st y x =>
+func cellGlyph = st x y =>
     (Cell x y == st.snake.head, st.snake.contains (Cell x y), Cell x y == st.food)
   ||> (True, _, _)          -> "@"
   ||> (_, True, _)          -> "o"
@@ -284,6 +276,28 @@ func cellGlyph = st y x =>
 ```
 
 This matches on a **triple of booleans** — is this cell the head, a body segment, or food? Every combination is covered.
+
+`init` builds the matrix by calling `cellGlyph st x y` for every coordinate. `rows` exposes the result as `List (List Text)`, which we fold into a newline-separated string:
+
+```aivi
+type Text -> Text -> Text
+func appendCell = row cell => "{row}{cell}"
+
+type (List Text) -> Text
+func joinRow = cells => reduce appendCell "" cells
+
+type Text -> (List Text) -> Text
+func appendRow = board row => board == ""
+ T|> joinRow row
+ F|> "{board}\n{joinRow row}"
+
+type GameState -> Text
+func renderBoard = st => init boardW boardH (cellGlyph st)
+ ||> Err _ -> ""
+ ||> Ok m  -> reduce appendRow "" (rows m)
+```
+
+`init boardW boardH (cellGlyph st)` returns `Result MatrixError (Matrix Text)`. Because both dimensions are positive constants the `Err` branch is unreachable, but the type system requires it. The `Ok` branch folds rows using `appendRow`.
 
 ## The UI
 
@@ -335,13 +349,15 @@ Every arrow is a declared dependency. The runtime propagates changes through the
 | **Closed types** | `Direction`, `Status`, `Event` — every case must be handled |
 | **Pattern matching** | Every function branches with `\|\|>`, `T\|>`, `F\|>` |
 | **Pure functions** | `step`, `advance`, `resolveMove` — no mutation, no side effects |
+| **Patch** | `<|` copies a record updating only named fields |
 | **Domains** | `Snake` wraps `List Cell` with domain-specific operations |
 | **Domain literals** | `120ms` — type-safe duration with suffix syntax |
 | **Signals** | `state`, `boardText`, `scoreLine` — the reactive graph |
 | **Sources** | `timer.every`, `window.keyDown` — external input boundaries |
 | **Event routing** | `when` clauses connect sources to events |
 | **Accumulation** | `+\|>` folds events into state over time |
-| **Reduce** | Replaces loops for rendering rows and the board |
+| **Matrix** | `aivi.matrix.init` + `rows` builds and renders the board grid |
+| **Reduce** | Folds matrix rows and cells into rendered text |
 | **Markup** | `<Window>`, `<Label>`, `<show>` — type-checked GTK UI |
 
 The game has zero mutable variables, zero loops, and zero callbacks. The entire architecture is a declared dependency graph with pure functions at every node.

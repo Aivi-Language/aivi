@@ -87,6 +87,56 @@ value readyState = Loaded "Ada"
 value failedState = Failed "offline"
 ```
 
+## Product types with positional arguments
+
+Constructors can take multiple positional arguments. The argument names come from pattern matching — they are not part of the type declaration itself.
+
+```aivi
+type Vec2 =
+  | Vec2 Int Int
+
+type Cell =
+  | Cell Int Int
+
+type Date =
+  | Date Int Int Int
+```
+
+Construction is curried: apply the constructor to each argument left-to-right:
+
+```aivi
+value origin = Vec2 0 0
+value corner = Vec2 10 20
+value today  = Date 2024 6 15
+```
+
+Under-application is legal — a partially applied constructor is a function:
+
+```aivi
+value mkRow  = Cell 5
+value cell   = mkRow 3
+```
+
+Pattern matching gives each positional field a name at the use site:
+
+```aivi
+type Vec2 -> Vec2 -> Vec2
+func addVec = a b => (a, b)
+  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)
+
+type Cell -> Int
+func cellX = .
+  ||> Cell x _ -> x
+
+type Cell -> Int
+func cellY = .
+  ||> Cell _ y -> y
+```
+
+Use `_` for fields you do not need. The constructor name must appear in every arm that matches it.
+
+Multi-argument constructors differ from records: their fields are **positional** and **anonymous**. Records carry named fields; product constructors carry ordered slots. Use records when field names aid readability; use product constructors for compact, well-understood tuples like coordinates or identifiers.
+
 ## Matching typed values
 
 Because constructors are part of the type, pattern matching stays precise:

@@ -8,6 +8,8 @@ use aivi.option (getOrElse)
 
 use aivi.duration (Duration)
 
+use aivi.matrix (Matrix, MatrixError, init, rows)
+
 type Direction =
   | North
   | South
@@ -34,8 +36,6 @@ type SnakeTakeState = {
 
 value boardW = 30
 value boardH = 20
-value boardColumns = [0..29]
-value boardRows = [0..19]
 value seed0 = 2463534242
 
 type Direction -> Direction
@@ -91,7 +91,7 @@ domain Snake over List Cell = {
 
     type Snake -> Cell -> Snake
     move snake cell = takeCells (listLength snake) (append [cell] snake)
-    
+
     type Snake -> Direction -> Cell
     nextHead snake dir = moveDir dir (getOrElse (Cell 0 0) (listHead snake))
 }
@@ -143,7 +143,7 @@ func handleTurn = d st => st.status
 type Direction -> GameState -> GameState
 func applyTurn = d st => d == opposite st.dir
  T|> st
- F|> { snake: st.snake, dir: d, food: st.food, score: st.score, seed: st.seed, status: st.status }
+ F|> st <| { dir: d }
 
 type GameState -> GameState
 func handleTick = st => st.status
@@ -152,37 +152,36 @@ func handleTick = st => st.status
 
 type GameState -> Cell -> GameState
 func advance = st h => outside h or (st.snake.contains h)
- T|> { snake: st.snake, dir: st.dir, food: st.food, score: st.score, seed: st.seed, status: GameOver }
+ T|> st <| { status: GameOver }
  F|> resolveMove st h
 
 type GameState -> Cell -> GameState
 func resolveMove = st h => h == st.food
- T|> { snake: st.snake.grow h, dir: st.dir, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed, status: Running }
- F|> { snake: st.snake.move h, dir: st.dir, food: st.food, score: st.score, seed: nextSeed st.seed, status: Running }
+ T|> st <| { snake: st.snake.grow h, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
+ F|> st <| { snake: st.snake.move h, seed: nextSeed st.seed }
 
 type GameState -> Int -> Int -> Text
-func cellGlyph = st y x => (Cell x y == st.snake.head, st.snake.contains (Cell x y), Cell x y == st.food)
+func cellGlyph = st x y => (Cell x y == st.snake.head, st.snake.contains (Cell x y), Cell x y == st.food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
  ||> (False, False, False) -> "·"
 
-type GameState -> Int -> Text -> Int -> Text
-func rowTextStep = st y text x =>
-    "{text}{cellGlyph st y x}"
+type Text -> Text -> Text
+func appendCell = row cell => "{row}{cell}"
 
-type GameState -> Int -> Text
-func renderRow = st y => boardColumns
-  |> reduce (rowTextStep st y) ""
+type (List Text) -> Text
+func joinRow = cells => reduce appendCell "" cells
 
-type GameState -> Text -> Int -> Text
-func boardTextStep = st text y => text == ""
- T|> renderRow st y
- F|> "{text}\n{renderRow st y}"
+type Text -> (List Text) -> Text
+func appendRow = board row => board == ""
+ T|> joinRow row
+ F|> "{board}\n{joinRow row}"
 
 type GameState -> Text
-func renderBoard = st => boardRows
-  |> reduce (boardTextStep st) ""
+func renderBoard = st => init boardW boardH (cellGlyph st)
+ ||> Err _ -> ""
+ ||> Ok m  -> reduce appendRow "" (rows m)
 
 type Status -> Bool
 func isGameOver = .
@@ -214,38 +213,23 @@ signal keyDown : Signal Key
 
 signal event : Signal Event
 
-when tick _ => event <- Tick
-when keyDown (Key "ArrowLeft") => event <- Turn West
+when tick _                     => event <- Tick
+when keyDown (Key "ArrowLeft")  => event <- Turn West
 when keyDown (Key "ArrowRight") => event <- Turn East
-when keyDown (Key "ArrowUp") => event <- Turn North
-when keyDown (Key "ArrowDown") => event <- Turn South
-when keyDown (Key "Space") => event <- Restart
+when keyDown (Key "ArrowUp")    => event <- Turn North
+when keyDown (Key "ArrowDown")  => event <- Turn South
+when keyDown (Key "Space")      => event <- Restart
 
 signal state : Signal GameState = event
  +|> initial step
 
-signal boardText : Signal Text = state
-  |> renderBoard
+signal boardText   = state |> renderBoard
+signal dirLine     = state |> .dir |> dirLabel
+signal statusLine  = state |> .status |> statusLineFor
+signal scoreLine   = state |> .score |> scoreLineFor
+signal gameOver    = state |> .status |> isGameOver
 
-signal dirLine : Signal Text = state
-  |> .dir
-  |> dirLabel
-
-signal statusLine : Signal Text = state
-  |> .status
-  |> statusLineFor
-
-signal scoreLine : Signal Text = state
-  |> .score
-  |> scoreLineFor
-
-signal gameOver : Signal Bool = state
-  |> .status
-  |> isGameOver
-
-signal finalScoreLine : Signal Text = state
-  |> .score
-  |> finalScoreLineFor
+signal finalScoreLine = state |> .score |> finalScoreLineFor
 
 value main =
     <Window title="AIVI Snake">
