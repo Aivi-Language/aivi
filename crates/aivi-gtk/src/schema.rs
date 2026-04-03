@@ -5,6 +5,8 @@ pub enum GtkConcreteEventPayload {
     Unit,
     Bool,
     Text,
+    F64,
+    I64,
 }
 
 impl GtkConcreteEventPayload {
@@ -13,6 +15,8 @@ impl GtkConcreteEventPayload {
             Self::Unit => "Unit",
             Self::Bool => "Bool",
             Self::Text => "Text",
+            Self::F64 => "Float",
+            Self::I64 => "Int",
         }
     }
 
@@ -21,6 +25,8 @@ impl GtkConcreteEventPayload {
             Self::Unit => "`Signal Unit`",
             Self::Bool => "`Signal Bool`",
             Self::Text => "`Signal Text`",
+            Self::F64 => "`Signal Float`",
+            Self::I64 => "`Signal Int`",
         }
     }
 }
@@ -40,6 +46,8 @@ pub enum GtkConcreteWidgetKind {
     Switch,
     CheckButton,
     ToggleButton,
+    SpinButton,
+    Scale,
     Image,
     Spinner,
     ProgressBar,
@@ -63,6 +71,8 @@ impl GtkConcreteWidgetKind {
             Self::Switch => "Switch",
             Self::CheckButton => "CheckButton",
             Self::ToggleButton => "ToggleButton",
+            Self::SpinButton => "SpinButton",
+            Self::Scale => "Scale",
             Self::Image => "Image",
             Self::Spinner => "Spinner",
             Self::ProgressBar => "ProgressBar",
@@ -126,6 +136,9 @@ pub enum GtkBoolPropertySetter {
     SwitchActive,
     CheckButtonActive,
     ToggleButtonActive,
+    SpinButtonWrap,
+    SpinButtonNumeric,
+    ScaleDrawValue,
     SpinnerSpinning,
     RevealerRevealed,
 }
@@ -148,6 +161,7 @@ pub enum GtkTextPropertySetter {
     ImageResourcePath,
     ProgressBarText,
     RevealerTransitionType,
+    ScaleOrientation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -161,12 +175,22 @@ pub enum GtkI64PropertySetter {
     HeightRequest,
     ImagePixelSize,
     RevealerTransitionDuration,
+    SpinButtonDigits,
+    ScaleDigits,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GtkF64PropertySetter {
     WidgetOpacity,
     ProgressBarFraction,
+    SpinButtonValue,
+    SpinButtonMin,
+    SpinButtonMax,
+    SpinButtonStep,
+    ScaleValue,
+    ScaleMin,
+    ScaleMax,
+    ScaleStep,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -185,7 +209,8 @@ impl GtkPropertySetter {
             Self::Text(
                 GtkTextPropertySetter::BoxOrientation
                 | GtkTextPropertySetter::PanedOrientation
-                | GtkTextPropertySetter::SeparatorOrientation,
+                | GtkTextPropertySetter::SeparatorOrientation
+                | GtkTextPropertySetter::ScaleOrientation,
             ) => "text naming a valid Orientation value",
             Self::Text(_) => "Text",
             Self::TextOrI64(_) => "Int or integer text",
@@ -210,6 +235,8 @@ pub enum GtkEventSignal {
     SwitchToggled,
     CheckButtonToggled,
     ToggleButtonToggled,
+    SpinButtonValueChanged,
+    ScaleValueChanged,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -845,6 +872,150 @@ const TOGGLE_BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     child_groups: &[],
 };
 
+// ── SpinButton ──────────────────────────────────────────────────────────────
+
+const SPIN_BUTTON_VALUE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "value",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonValue),
+};
+
+const SPIN_BUTTON_MIN_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "min",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonMin),
+};
+
+const SPIN_BUTTON_MAX_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "max",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonMax),
+};
+
+const SPIN_BUTTON_STEP_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "step",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonStep),
+};
+
+const SPIN_BUTTON_DIGITS_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "digits",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::SpinButtonDigits),
+};
+
+const SPIN_BUTTON_WRAP_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "wrap",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::SpinButtonWrap),
+};
+
+const SPIN_BUTTON_NUMERIC_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "numeric",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::SpinButtonNumeric),
+};
+
+const SPIN_BUTTON_VALUE_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onValueChanged",
+    payload: GtkConcreteEventPayload::F64,
+    signal: GtkEventSignal::SpinButtonValueChanged,
+};
+
+const SPIN_BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "SpinButton",
+    kind: GtkConcreteWidgetKind::SpinButton,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        SPIN_BUTTON_VALUE_PROPERTY,
+        SPIN_BUTTON_MIN_PROPERTY,
+        SPIN_BUTTON_MAX_PROPERTY,
+        SPIN_BUTTON_STEP_PROPERTY,
+        SPIN_BUTTON_DIGITS_PROPERTY,
+        SPIN_BUTTON_WRAP_PROPERTY,
+        SPIN_BUTTON_NUMERIC_PROPERTY,
+    ],
+    events: &[SPIN_BUTTON_VALUE_CHANGED_EVENT],
+    default_child_group_override: None,
+    child_groups: &[],
+};
+
+// ── Scale ───────────────────────────────────────────────────────────────────
+
+const SCALE_VALUE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "value",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::ScaleValue),
+};
+
+const SCALE_MIN_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "min",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::ScaleMin),
+};
+
+const SCALE_MAX_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "max",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::ScaleMax),
+};
+
+const SCALE_STEP_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "step",
+    value_shape: GtkPropertyValueShape::F64,
+    setter: GtkPropertySetter::F64(GtkF64PropertySetter::ScaleStep),
+};
+
+const SCALE_DIGITS_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "digits",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::ScaleDigits),
+};
+
+const SCALE_DRAW_VALUE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "drawValue",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ScaleDrawValue),
+};
+
+const SCALE_ORIENTATION_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "orientation",
+    value_shape: GtkPropertyValueShape::Enum(ORIENTATION_VALUE_SHAPE),
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ScaleOrientation),
+};
+
+const SCALE_VALUE_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onValueChanged",
+    payload: GtkConcreteEventPayload::F64,
+    signal: GtkEventSignal::ScaleValueChanged,
+};
+
+const SCALE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "Scale",
+    kind: GtkConcreteWidgetKind::Scale,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        SCALE_VALUE_PROPERTY,
+        SCALE_MIN_PROPERTY,
+        SCALE_MAX_PROPERTY,
+        SCALE_STEP_PROPERTY,
+        SCALE_DIGITS_PROPERTY,
+        SCALE_DRAW_VALUE_PROPERTY,
+        SCALE_ORIENTATION_PROPERTY,
+    ],
+    events: &[SCALE_VALUE_CHANGED_EVENT],
+    default_child_group_override: None,
+    child_groups: &[],
+};
+
 const IMAGE_ICON_NAME_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "iconName",
     value_shape: GtkPropertyValueShape::Text,
@@ -1008,6 +1179,8 @@ const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] = &[
     SWITCH_SCHEMA,
     CHECK_BUTTON_SCHEMA,
     TOGGLE_BUTTON_SCHEMA,
+    SPIN_BUTTON_SCHEMA,
+    SCALE_SCHEMA,
     IMAGE_SCHEMA,
     SPINNER_SCHEMA,
     PROGRESS_BAR_SCHEMA,
@@ -1107,6 +1280,8 @@ mod tests {
                 "Switch",
                 "CheckButton",
                 "ToggleButton",
+                "SpinButton",
+                "Scale",
                 "Image",
                 "Spinner",
                 "ProgressBar",

@@ -16,6 +16,7 @@ use std::{
     rc::Rc,
     sync::{Arc, mpsc as sync_mpsc},
     thread::{self, JoinHandle},
+    time::{Duration, Instant},
 };
 
 #[cfg(unix)]
@@ -23,7 +24,8 @@ use std::os::unix::fs::PermissionsExt;
 
 use aivi_backend::{
     DetachedRuntimeValue, ItemId as BackendItemId, KernelEvaluator, Program as BackendProgram,
-    RuntimeValue, compile_program, lower_module as lower_backend_module, validate_program,
+    RuntimeFloat, RuntimeValue, compile_program, lower_module as lower_backend_module,
+    validate_program,
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
 use aivi_core::{
@@ -468,6 +470,21 @@ impl GtkHostValue for RunHostValue {
     fn from_text(v: &str) -> Self {
         Self(DetachedRuntimeValue::from_runtime_owned(
             RuntimeValue::Text(v.to_owned().into()),
+        ))
+    }
+
+    fn from_f64(v: f64) -> Self {
+        match RuntimeFloat::new(v) {
+            Some(rf) => Self(DetachedRuntimeValue::from_runtime_owned(
+                RuntimeValue::Float(rf),
+            )),
+            None => Self::unit(),
+        }
+    }
+
+    fn from_i64(v: i64) -> Self {
+        Self(DetachedRuntimeValue::from_runtime_owned(
+            RuntimeValue::Int(v),
         ))
     }
 
@@ -1341,6 +1358,9 @@ fn settle_execute_sources(
     linked: &mut BackendLinkedRuntime,
     providers: &mut SourceProviderManager,
 ) -> Result<(), String> {
+    // Phase 1: process all source lifecycle actions (activations, reconfigurations)
+    // until the graph is stable.  This handles immediate sources completely and
+    // spawns worker threads for asynchronous sources.
     loop {
         let outcome = linked.tick_with_source_lifecycle().map_err(|error| {
             format!("failed to tick linked runtime for `aivi execute`: {error}")
@@ -1352,9 +1372,47 @@ fn settle_execute_sources(
                 format!("failed to apply source lifecycle actions for `aivi execute`: {error}")
             })?;
         if !had_source_actions && linked.queued_message_count() == 0 {
+            break;
+        }
+    }
+
+    // Phase 2: if any worker-thread sources were spawned (HTTP, FS, Timer, etc.),
+    // wait for them to publish at least once before returning.  Immediate sources
+    // (ProcessArgs, ProcessCwd, EnvGet, …) never create thread handles so this
+    // phase is skipped entirely for programs that only use immediate sources.
+    if !providers.has_unfinished_worker_threads() {
+        return Ok(());
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(50));
+
+        // Tick to drain publications that arrived from worker threads and
+        // keep settling until the graph is stable again.
+        loop {
+            let outcome = linked.tick_with_source_lifecycle().map_err(|error| {
+                format!("failed to tick linked runtime for `aivi execute`: {error}")
+            })?;
+            let had_source_actions = !outcome.source_actions().is_empty();
+            providers
+                .apply_actions(outcome.source_actions())
+                .map_err(|error| {
+                    format!(
+                        "failed to apply source lifecycle actions for `aivi execute`: {error}"
+                    )
+                })?;
+            if !had_source_actions && linked.queued_message_count() == 0 {
+                break;
+            }
+        }
+
+        if !providers.has_unfinished_worker_threads() {
             return Ok(());
         }
     }
+
+    Ok(())
 }
 
 fn execute_main_task_value(
@@ -2178,6 +2236,8 @@ fn signal_accepts_event_payload(
         GtkConcreteEventPayload::Unit => type_is_builtin(module, payload_ty, BuiltinType::Unit),
         GtkConcreteEventPayload::Bool => type_is_builtin(module, payload_ty, BuiltinType::Bool),
         GtkConcreteEventPayload::Text => type_is_builtin(module, payload_ty, BuiltinType::Text),
+        GtkConcreteEventPayload::F64 => type_is_builtin(module, payload_ty, BuiltinType::Float),
+        GtkConcreteEventPayload::I64 => type_is_builtin(module, payload_ty, BuiltinType::Int),
     }
 }
 
