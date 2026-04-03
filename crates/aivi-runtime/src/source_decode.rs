@@ -14,6 +14,7 @@ pub enum ExternalSourceValue {
     Int(i64),
     Float(RuntimeFloat),
     Text(Box<str>),
+    Bytes(Box<[u8]>),
     List(Vec<ExternalSourceValue>),
     Record(BTreeMap<Box<str>, ExternalSourceValue>),
     Variant {
@@ -413,26 +414,29 @@ fn decode_literal_scalar<T>(
 }
 
 fn decode_bytes_scalar(value: &ExternalSourceValue) -> Result<RuntimeValue, SourceDecodeError> {
-    let ExternalSourceValue::List(values) = value else {
-        return Err(type_mismatch("byte array", value));
-    };
-    let mut bytes = Vec::with_capacity(values.len());
-    for (index, value) in values.iter().enumerate() {
-        let ExternalSourceValue::Int(value) = value else {
-            return Err(SourceDecodeError::InvalidBytesElementKind {
-                index,
-                found: value_kind(value),
-            });
-        };
-        let Ok(byte) = u8::try_from(*value) else {
-            return Err(SourceDecodeError::InvalidByteValue {
-                index,
-                value: *value,
-            });
-        };
-        bytes.push(byte);
+    match value {
+        ExternalSourceValue::Bytes(bytes) => Ok(RuntimeValue::Bytes(bytes.clone())),
+        ExternalSourceValue::List(values) => {
+            let mut bytes = Vec::with_capacity(values.len());
+            for (index, value) in values.iter().enumerate() {
+                let ExternalSourceValue::Int(value) = value else {
+                    return Err(SourceDecodeError::InvalidBytesElementKind {
+                        index,
+                        found: value_kind(value),
+                    });
+                };
+                let Ok(byte) = u8::try_from(*value) else {
+                    return Err(SourceDecodeError::InvalidByteValue {
+                        index,
+                        value: *value,
+                    });
+                };
+                bytes.push(byte);
+            }
+            Ok(RuntimeValue::Bytes(bytes.into_boxed_slice()))
+        }
+        _ => Err(type_mismatch("byte array", value)),
     }
-    Ok(RuntimeValue::Bytes(bytes.into_boxed_slice()))
 }
 
 fn decode_step(
@@ -721,6 +725,7 @@ fn value_kind(value: &ExternalSourceValue) -> &'static str {
         ExternalSourceValue::Int(_) => "integer",
         ExternalSourceValue::Float(_) => "float",
         ExternalSourceValue::Text(_) => "text",
+        ExternalSourceValue::Bytes(_) => "bytes",
         ExternalSourceValue::List(_) => "list",
         ExternalSourceValue::Record(_) => "record",
         ExternalSourceValue::Variant { .. } => "variant",

@@ -97,7 +97,6 @@ exports(module: &Module) -> ExportedNames
 | `hir::unknown-projection-field` | Projection field name not found on the record type |
 | `hir::unknown-record-row-field` | Record row spread references a field that does not exist |
 | `hir::unresolved-name` | Name could not be resolved in scope |
-| `hir::unsupported-patch-remove` | `patch remove` is not supported on this type |
 
 ## RFC reference
 

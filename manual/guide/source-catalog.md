@@ -56,8 +56,8 @@ longer part of the public external boundary.
 | Option | Type | Current support |
 | --- | --- | --- |
 | `immediate` | `Bool` | Supported. Publishes once immediately before the repeating cadence starts. |
-| `jitter` | `Duration` | Accepted by the source contract, but the runtime still reports this option as not executed yet. |
-| `coalesce` | `Bool` | Supported only as `True`. Omitting it keeps the default non-coalescing behavior; explicitly setting `False` is currently rejected. |
+| `jitter` | `Duration` | Supported. Adds a random positive offset (from 0 up to the jitter value) to each tick interval. The jitter must not exceed the base interval. |
+| `coalesce` | `Bool` | Supported. `True` (default) coalesces missed ticks into a single event per sleep cycle. `False` fires all overdue ticks individually. |
 | `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
 
 **Notes**
@@ -87,7 +87,7 @@ Uses the same option surface and current limitations as `timer.every`, but fires
 | `refreshOn` | `Signal B` | Supported as an explicit trigger option. |
 | `refreshEvery` | `Duration` | Supported as polling cadence input. |
 | `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
-| `body` | `A` | **Not supported for `http.get`**. The runtime rejects it. |
+| `body` | `A` | Supported. Sends the value as the request body (text or JSON-encoded). While uncommon, RFC 9110 permits request bodies on GET. |
 
 **Notes**
 
@@ -113,7 +113,7 @@ Uses the same option surface as `http.get`, plus:
 | Option | Type | Current support |
 | --- | --- | --- |
 | `events` | `List FsWatchEvent` | Supported. Defaults to `Created`, `Changed`, and `Deleted` when omitted. |
-| `recursive` | `Bool` | The contract accepts it, but recursive watching is not executed yet. Omitting it or setting `False` keeps the current non-recursive behavior. |
+| `recursive` | `Bool` | Supported. When `True`, watches all files in the directory tree. When `False` (default), watches only the specified path. |
 
 **Notes**
 
@@ -146,7 +146,7 @@ Uses the same option surface as `http.get`, plus:
 | `decode` | `DecodeMode` | Supported through the decode pipeline. |
 | `buffer` | `Int` | Supported. |
 | `reconnect` | `Bool` | Supported. |
-| `heartbeat` | `Duration` | Accepted by the source contract, but the runtime still rejects it as not executed yet. |
+| `heartbeat` | `Duration` | Supported. Spawns a keepalive writer thread that periodically sends a newline to prevent idle timeouts. |
 | `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
 
 **Notes**
@@ -162,8 +162,8 @@ Uses the same option surface as `http.get`, plus:
 | --- | --- | --- |
 | `decode` | `DecodeMode` | Supported through the decode pipeline. |
 | `buffer` | `Int` | Supported. |
-| `reconnect` | `Bool` | Present in the contract, but not executed yet. |
-| `heartbeat` | `Duration` | Present in the contract, but not executed yet. |
+| `reconnect` | `Bool` | Supported. When `True`, the subscriber retries after a disconnection. |
+| `heartbeat` | `Duration` | Supported. Publishes periodic `Unit` heartbeat events at the specified interval. |
 | `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
 
 **Notes**
@@ -182,15 +182,15 @@ The second positional argument, when present, is a `List Text`.
 | --- | --- | --- |
 | `cwd` | `Path` | Supported. |
 | `env` | `Map Text Text` | Supported. |
-| `stdout` | `StreamMode` | `Ignore` and `Lines` are supported. `Bytes` is still rejected. |
-| `stderr` | `StreamMode` | `Ignore` and `Lines` are supported. `Bytes` is still rejected. |
+| `stdout` | `StreamMode` | Supported. `Ignore` discards output, `Lines` publishes text lines, `Bytes` publishes raw byte chunks. |
+| `stderr` | `StreamMode` | Supported. `Ignore` discards output, `Lines` publishes text lines, `Bytes` publishes raw byte chunks. |
 | `restartOn` | `Signal A` | Supported as an explicit trigger option. |
 
 **Notes**
 
 - The output type must currently be a sum-shaped `ProcessEvent`-style signal.
 - Recognized event variants are `Spawned`, `Stdout`, `Stderr`, `Exited`, and `Failed`.
-- `stdout: Lines` requires a `Stdout` variant in the output type, and `stderr: Lines` requires a `Stderr` variant.
+- `stdout: Lines` or `stdout: Bytes` requires a `Stdout` variant in the output type, and `stderr: Lines` or `stderr: Bytes` requires a `Stderr` variant.
 
 ### Immediate host-context sources
 
@@ -235,8 +235,8 @@ These built-ins publish one host-context snapshot when the source starts. They d
 | --- | --- | --- |
 | `refreshOn` | `Signal B` | Supported through the existing source reconfiguration lifecycle, including pre-elaborated `.changed` projections. |
 | `debounce` | `Duration` | Supported for refresh reconfiguration; activation still loads immediately. |
-| `optimistic` | `Bool` | Only the default `False` is accepted in this slice; optimistic patching is still pending. |
-| `onRollback` | `Signal DbError` | Not executed yet; provider startup rejects this option in the current slice. |
+| `optimistic` | `Bool` | Supported. When `True`, the provider may publish the previous known-good value immediately while the query runs. Default: `False`. |
+| `onRollback` | `Signal DbError` | Supported as a lifecycle option. The runtime accepts this signal reference for rollback notification when an optimistic update is reverted. |
 | `activeWhen` | `Signal Bool` | Supported through the existing source activation lifecycle. |
 
 **Notes**
@@ -247,7 +247,7 @@ These built-ins publish one host-context snapshot when the source starts. They d
 - Successful `db.commit` tasks now advance matching input-backed `.changed` signals using the current `Connection.database` path plus changed table names, so `db.live refreshOn` paths refresh automatically after commits.
 - `refreshOn` is the whole refresh boundary in the current slice. A `users.changed` projection is accepted, but it is still just an explicit trigger signal routed through that same path.
 - `commit()` now drives `TableRef.changed`-style refreshes automatically when the commit plan names the changed tables and the table handle resolves to the same normalized `Connection.database` path.
-- Invalidation is still coarse at the table level in this slice. Row-scoped `watch`, `optimistic`, and rollback behavior remain future work.
+- Invalidation is still coarse at the table level in this slice. Row-scoped `watch` behavior remains future work.
 
 ## GTK input
 
@@ -257,9 +257,9 @@ These built-ins publish one host-context snapshot when the source starts. They d
 
 | Option | Type | Current support |
 | --- | --- | --- |
-| `capture` | `Bool` | Present in the contract, but the runtime currently only accepts the default `False`. |
+| `capture` | `Bool` | Supported. When `True`, the event controller uses the capture propagation phase. Default: `False`. |
 | `repeat` | `Bool` | Supported. |
-| `focusOnly` | `Bool` | Present in the contract, but the runtime currently only accepts the default `True`. |
+| `focusOnly` | `Bool` | Supported. When `False`, key events are captured even when the window is not focused. Default: `True`. |
 
 **Notes**
 

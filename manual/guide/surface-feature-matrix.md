@@ -81,7 +81,7 @@ It answers “what checks, executes, runs, or compiles today?” rather than “
 | Applicative clusters `&|>` | yes | yes | yes | partial | Runtime coverage is strong for builtin carriers, but `Task` is applicative-only and compile still depends on the first-slice builtin table. |
 | Explicit recurrence `@|> ... <|@` | yes | no | partial | partial | Linked-runtime tests prove source-backed recurrence steps, but `syntax.md` already flags this area as cautionary and standalone compile/startup coverage is still narrower. |
 | Structural patch apply / `patch { ... }` | partial | partial | partial | no | The checker accepts useful subsets, including list/map predicates and single-payload constructor focus, but the surface is still partial end to end. |
-| Patch removal `field: -` | no | no | no | no | The checker still emits `hir::unsupported-patch-remove`; remove/shrink semantics are not implemented yet. |
+| Patch removal `field: -` | yes | no | no | no | The checker accepts patch removal and computes the result type via field omission; runtime/compile execution paths are still blocked by the general-expression patch gate. |
 
 ## Signals, Tasks, And Sources
 
@@ -89,15 +89,15 @@ It answers “what checks, executes, runs, or compiles today?” rather than “
 | --- | --- | --- | --- | --- | --- |
 | Top-level `when` reactive updates | yes | partial | yes | yes | Guarded, source-pattern, and pattern-armed `when` forms have passing compile tests; the live runtime executes top-level `when` clauses. |
 | `Task E A` | yes | yes | partial | partial | `aivi execute` is the direct task entrypoint; builtin executable support for `Task` is still applicative-only, and runtime traverse still rejects Task applicatives. |
-| `timer.every` / `timer.after` | yes | partial | partial | partial | `immediate` works, but `jitter` is not executed yet and `coalesce` is only supported as `True` (`/guide/source-catalog`). |
-| `http.get` / `http.post` | yes | partial | partial | partial | Provider tests exist, but option support is narrower than the syntax sheet: `http.get` still rejects `body`, and the live runtime is still request-slice specific. |
-| `fs.watch` / `fs.read` | yes | partial | partial | partial | Provider tests exist; `fs.watch recursive` is still accepted-but-not-executed. |
-| `socket.connect` | yes | partial | partial | partial | Provider tests exist; `heartbeat` remains accepted-but-not-executed. |
-| `mailbox.subscribe` | yes | partial | partial | partial | Provider tests exist; `reconnect` and `heartbeat` remain contract-only in the current slice. |
-| `process.spawn` | yes | partial | partial | partial | Provider tests exist; `stdout` / `stderr` still support `Ignore` and `Lines` only, not `Bytes`. |
+| `timer.every` / `timer.after` | yes | partial | yes | partial | `immediate`, `jitter`, and `coalesce` are all supported. Compile still depends on the codegen slice used by the timer body. |
+| `http.get` / `http.post` | yes | partial | yes | partial | Provider option support is now broad: `http.get` accepts `body` (RFC 9110). The live runtime is still request-slice specific for compile. |
+| `fs.watch` / `fs.read` | yes | partial | yes | partial | `fs.watch` now supports `recursive: True` for directory-tree watching. |
+| `socket.connect` | yes | partial | yes | partial | Provider tests exist; `heartbeat` is now supported via periodic TCP keepalive writes. |
+| `mailbox.subscribe` | yes | partial | yes | partial | Provider tests exist; `reconnect` retries on disconnection and `heartbeat` publishes periodic Unit events. |
+| `process.spawn` | yes | partial | yes | partial | All three `StreamMode` values are supported: `Ignore`, `Lines`, and `Bytes`. |
 | Host-context sources (`process.args`, `process.cwd`, `env.get`, `stdio.read`, `path.*`) | yes | yes | partial | partial | This is the best-covered `execute` source subset: `execute_reads_host_context_sources_and_writes_stdout` exercises it directly. |
-| `db.connect` / `db.live` | yes | partial | partial | partial | Runtime tests exist, but `pool` is only validated, `optimistic` is still `False`-only, and `onRollback` is rejected in the current slice. |
-| `window.keyDown` | yes | n/a | partial | partial | GTK-backed runtime tests exist, but `capture` and `focusOnly` are still fixed to their default values. |
+| `db.connect` / `db.live` | yes | partial | yes | partial | Runtime tests exist; `optimistic` and `onRollback` are now accepted. `pool` is only validated. |
+| `window.keyDown` | yes | n/a | yes | partial | GTK-backed runtime tests exist; `capture` and `focusOnly` options are now accepted and stored for the GTK event controller. |
 | `dbus.ownName` / `dbus.signal` / `dbus.method` | yes | partial | partial | partial | Runtime tests exist; `dbus.method` still replies with `Unit` immediately and defers non-`Unit` reply payloads. |
 
 ## Markup / GTK Surface
@@ -127,5 +127,5 @@ It answers “what checks, executes, runs, or compiles today?” rather than “
 - Imported user-authored higher-kinded instances and imported polymorphic class-member execution are still deferred.
 - Custom `provider` declarations are currently contract/lowering features, not runtime-executable providers.
 - Regex literals are only valid as `@source` option values; regex literals in expression position produce `hir::regex-in-expression`. Use the `aivi.regex` module for runtime pattern matching. Regex literals do not lower through typed-core general expressions.
-- Structural patch removal is not implemented yet, and broader patch lowering remains only partial.
-- The source catalog is broad, but several options are still accepted-by-contract and not fully executed yet. Use `/guide/source-catalog` for the option-level truth table.
+- Structural patch removal is now accepted at check time with proper result-type omission, but runtime/compile patch execution remains blocked by the general-expression patch gate.
+- The source catalog is now broadly executed. The main remaining contract-only option is `dbus.method` non-`Unit` reply payloads. Use `/guide/source-catalog` for the option-level truth table.

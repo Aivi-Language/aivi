@@ -31,4 +31,3 @@ pub const TYPE_MISMATCH: DiagnosticCode = DiagnosticCode::new("hir", "type-misma
 pub const UNKNOWN_PROJECTION_FIELD: DiagnosticCode = DiagnosticCode::new("hir", "unknown-projection-field");
 pub const UNKNOWN_RECORD_ROW_FIELD: DiagnosticCode = DiagnosticCode::new("hir", "unknown-record-row-field");
 pub const UNRESOLVED_NAME: DiagnosticCode = DiagnosticCode::new("hir", "unresolved-name");
-pub const UNSUPPORTED_PATCH_REMOVE: DiagnosticCode = DiagnosticCode::new("hir", "unsupported-patch-remove");

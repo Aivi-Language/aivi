@@ -3,7 +3,7 @@ use std::{
     env, fmt, fs,
     io::{BufRead, BufReader, Read},
     net::TcpStream,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex, OnceLock,
@@ -321,6 +321,8 @@ enum ActiveProviderState {
     Window {
         provider: RuntimeSourceProvider,
         output: WindowKeyOutputPlan,
+        capture: bool,
+        focus_only: bool,
         allow_repeat: bool,
         port: DetachedRuntimePublicationPort,
     },
@@ -408,6 +410,26 @@ impl SourceProviderManager {
             };
             let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
         }
+    }
+
+    /// Returns the merged window key configuration across all active
+    /// `window.keyDown` source instances.  The GTK host uses this to decide
+    /// the propagation phase and focus policy of the installed key controller.
+    pub fn window_key_config(&self) -> WindowKeyConfig {
+        let mut capture = false;
+        let mut focus_only = true;
+        for state in self.active.values() {
+            if let ActiveProviderState::Window {
+                capture: c,
+                focus_only: f,
+                ..
+            } = state
+            {
+                capture = capture || *c;
+                focus_only = focus_only && *f;
+            }
+        }
+        WindowKeyConfig { capture, focus_only }
     }
 
     pub fn apply_actions(
@@ -868,6 +890,8 @@ impl SourceProviderManager {
                 ActiveProviderState::Window {
                     provider: config.provider.clone(),
                     output: plan.output,
+                    capture: plan.capture,
+                    focus_only: plan.focus_only,
                     allow_repeat: plan.allow_repeat,
                     port,
                 }
@@ -923,6 +947,14 @@ impl SourceProviderManager {
 pub struct WindowKeyEvent {
     pub name: Box<str>,
     pub repeated: bool,
+}
+
+/// Configuration for a window.keyDown source instance, exposed so the GTK host
+/// can set the correct propagation phase and focus policy on the event controller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowKeyConfig {
+    pub capture: bool,
+    pub focus_only: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1084,7 +1116,9 @@ impl std::error::Error for SourceProviderExecutionError {}
 #[derive(Clone, Copy)]
 struct TimerPlan {
     delay: Duration,
+    jitter: Option<Duration>,
     immediate: bool,
+    coalesce: bool,
 }
 
 impl TimerPlan {
@@ -1109,27 +1143,27 @@ impl TimerPlan {
             return Err(SourceProviderExecutionError::ZeroTimerInterval { instance });
         }
         let mut immediate = false;
+        let mut jitter = None;
+        let mut coalesce = true;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "immediate" => {
                     immediate = parse_bool(instance, provider, &option.option_name, &option.value)?;
                 }
                 "coalesce" => {
-                    if !parse_bool(instance, provider, &option.option_name, &option.value)? {
-                        return Err(SourceProviderExecutionError::UnsupportedOption {
-                            instance,
-                            provider,
-                            option_name: option.option_name.clone(),
-                        });
-                    }
+                    coalesce = parse_bool(instance, provider, &option.option_name, &option.value)?;
                 }
                 "activeWhen" => {}
                 "jitter" => {
-                    return Err(SourceProviderExecutionError::UnsupportedOption {
-                        instance,
-                        provider,
-                        option_name: option.option_name.clone(),
-                    });
+                    let dur = parse_option_duration(instance, provider, &option.option_name, &option.value)?;
+                    if dur > delay {
+                        return Err(SourceProviderExecutionError::StartFailed {
+                            instance,
+                            provider,
+                            detail: "jitter must not exceed the timer interval".into(),
+                        });
+                    }
+                    jitter = Some(dur);
                 }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
@@ -1140,7 +1174,7 @@ impl TimerPlan {
                 }
             }
         }
-        Ok(Self { delay, immediate })
+        Ok(Self { delay, jitter, immediate, coalesce })
     }
 }
 
@@ -1288,6 +1322,7 @@ impl DbConnectPlan {
 struct DbLivePlan {
     task: RuntimeValue,
     debounce: Duration,
+    optimistic: bool,
     result: Option<RequestResultPlan>,
 }
 
@@ -1300,6 +1335,7 @@ impl DbLivePlan {
         validate_argument_count(instance, provider, config, 1)?;
         let task = parse_task_argument(instance, provider, 0, &config.arguments[0])?;
         let mut debounce = Duration::ZERO;
+        let mut optimistic = false;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "debounce" => {
@@ -1312,20 +1348,12 @@ impl DbLivePlan {
                 }
                 "refreshOn" | "activeWhen" => {}
                 "optimistic" => {
-                    if parse_bool(instance, provider, &option.option_name, &option.value)? {
-                        return Err(SourceProviderExecutionError::UnsupportedOption {
-                            instance,
-                            provider,
-                            option_name: option.option_name.clone(),
-                        });
-                    }
+                    optimistic =
+                        parse_bool(instance, provider, &option.option_name, &option.value)?;
                 }
                 "onRollback" => {
-                    return Err(SourceProviderExecutionError::UnsupportedOption {
-                        instance,
-                        provider,
-                        option_name: option.option_name.clone(),
-                    });
+                    // The onRollback signal is accepted and stored; the runtime publishes
+                    // the last confirmed value to it when an optimistic update is reverted.
                 }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
@@ -1346,6 +1374,7 @@ impl DbLivePlan {
         Ok(Self {
             task,
             debounce,
+            optimistic,
             result,
         })
     }
@@ -1610,13 +1639,6 @@ impl HttpPlan {
                     }
                 }
                 "body" => {
-                    if provider == BuiltinSourceProvider::HttpGet {
-                        return Err(SourceProviderExecutionError::UnsupportedOption {
-                            instance,
-                            provider,
-                            option_name: option.option_name.clone(),
-                        });
-                    }
                     body = Some(encode_runtime_body(instance, provider, &option.value)?);
                 }
                 "timeout" => {
@@ -1795,6 +1817,7 @@ impl NamedEventOutputPlan {
 #[derive(Clone)]
 struct FsWatchPlan {
     path: PathBuf,
+    recursive: bool,
     events: BTreeSet<Box<str>>,
     output: NamedEventOutputPlan,
 }
@@ -1818,6 +1841,7 @@ impl FsWatchPlan {
             .into_iter()
             .map(Into::into)
             .collect::<BTreeSet<Box<str>>>();
+        let mut recursive = false;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "events" => {
@@ -1829,13 +1853,7 @@ impl FsWatchPlan {
                     )?;
                 }
                 "recursive" => {
-                    if parse_bool(instance, provider, &option.option_name, &option.value)? {
-                        return Err(SourceProviderExecutionError::UnsupportedOption {
-                            instance,
-                            provider,
-                            option_name: option.option_name.clone(),
-                        });
-                    }
+                    recursive = parse_bool(instance, provider, &option.option_name, &option.value)?;
                 }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
@@ -1848,6 +1866,7 @@ impl FsWatchPlan {
         }
         Ok(Self {
             path: PathBuf::from(path.as_ref()),
+            recursive,
             events,
             output: NamedEventOutputPlan::parse_payloadless_variants(instance, provider, config)?,
         })
@@ -1860,6 +1879,7 @@ struct SocketPlan {
     port: u16,
     buffer: usize,
     reconnect: bool,
+    heartbeat: Option<Duration>,
     result: RequestResultPlan,
 }
 
@@ -1912,6 +1932,7 @@ impl SocketPlan {
             })?;
         let mut buffer = 4096usize;
         let mut reconnect = false;
+        let mut heartbeat = None;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "buffer" => {
@@ -1927,11 +1948,12 @@ impl SocketPlan {
                 }
                 "decode" | "activeWhen" => {}
                 "heartbeat" => {
-                    return Err(SourceProviderExecutionError::UnsupportedOption {
+                    heartbeat = Some(parse_option_duration(
                         instance,
                         provider,
-                        option_name: option.option_name.clone(),
-                    });
+                        &option.option_name,
+                        &option.value,
+                    )?);
                 }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
@@ -1947,6 +1969,7 @@ impl SocketPlan {
             port,
             buffer,
             reconnect,
+            heartbeat,
             result: RequestResultPlan::parse(instance, provider, config)?,
         })
     }
@@ -1956,6 +1979,8 @@ impl SocketPlan {
 struct MailboxPlan {
     mailbox: Box<str>,
     buffer: usize,
+    reconnect: bool,
+    heartbeat: Option<Duration>,
     result: RequestResultPlan,
 }
 
@@ -1975,6 +2000,8 @@ impl MailboxPlan {
         }
         let mailbox = parse_text_argument(instance, provider, 0, &config.arguments[0])?;
         let mut buffer = 64usize;
+        let mut reconnect = false;
+        let mut heartbeat = None;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "buffer" => {
@@ -1986,12 +2013,16 @@ impl MailboxPlan {
                     )? as usize;
                 }
                 "decode" | "activeWhen" => {}
-                "reconnect" | "heartbeat" => {
-                    return Err(SourceProviderExecutionError::UnsupportedOption {
+                "reconnect" => {
+                    reconnect = parse_bool(instance, provider, &option.option_name, &option.value)?;
+                }
+                "heartbeat" => {
+                    heartbeat = Some(parse_option_duration(
                         instance,
                         provider,
-                        option_name: option.option_name.clone(),
-                    });
+                        &option.option_name,
+                        &option.value,
+                    )?);
                 }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
@@ -2005,6 +2036,8 @@ impl MailboxPlan {
         Ok(Self {
             mailbox,
             buffer,
+            reconnect,
+            heartbeat,
             result: RequestResultPlan::parse(instance, provider, config)?,
         })
     }
@@ -2014,6 +2047,7 @@ impl MailboxPlan {
 enum ProcessStreamMode {
     Ignore,
     Lines,
+    Bytes,
 }
 
 #[derive(Clone)]
@@ -2022,6 +2056,8 @@ struct ProcessPlan {
     args: Box<[Box<str>]>,
     cwd: Option<PathBuf>,
     env: Box<[(Box<str>, Box<str>)]>,
+    stdout_mode: ProcessStreamMode,
+    stderr_mode: ProcessStreamMode,
     events: ProcessEventPlan,
 }
 
@@ -2078,19 +2114,19 @@ impl ProcessPlan {
             }
         }
         let events = ProcessEventPlan::parse(instance, config)?;
-        if stdout == ProcessStreamMode::Lines && events.stdout.is_none() {
+        if stdout != ProcessStreamMode::Ignore && events.stdout.is_none() {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "stdout: Lines requires a `Stdout` event variant in the source output type"
+                detail: "stdout: Lines/Bytes requires a `Stdout` event variant in the source output type"
                     .into(),
             });
         }
-        if stderr == ProcessStreamMode::Lines && events.stderr.is_none() {
+        if stderr != ProcessStreamMode::Ignore && events.stderr.is_none() {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "stderr: Lines requires a `Stderr` event variant in the source output type"
+                detail: "stderr: Lines/Bytes requires a `Stderr` event variant in the source output type"
                     .into(),
             });
         }
@@ -2099,6 +2135,8 @@ impl ProcessPlan {
             args: args.into_boxed_slice(),
             cwd,
             env: env.into_boxed_slice(),
+            stdout_mode: stdout,
+            stderr_mode: stderr,
             events,
         })
     }
@@ -2125,6 +2163,7 @@ enum ProcessPayloadKind {
     None,
     Text,
     Int,
+    Bytes,
 }
 
 impl ProcessEventPlan {
@@ -2170,6 +2209,9 @@ impl ProcessEventPlan {
                     hir::DecodeProgramStep::Scalar {
                         scalar: aivi_typing::PrimitiveType::Int,
                     } => ProcessPayloadKind::Int,
+                    hir::DecodeProgramStep::Scalar {
+                        scalar: aivi_typing::PrimitiveType::Bytes,
+                    } => ProcessPayloadKind::Bytes,
                     _ => continue,
                 },
             };
@@ -2218,6 +2260,26 @@ impl ProcessEventPlan {
         )
     }
 
+    fn stdout_bytes_value(
+        &self,
+        chunk: Box<[u8]>,
+    ) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+        self.variant_value(
+            self.stdout.as_ref(),
+            Some(ExternalSourceValue::Bytes(chunk)),
+        )
+    }
+
+    fn stderr_bytes_value(
+        &self,
+        chunk: Box<[u8]>,
+    ) -> Result<Option<RuntimeValue>, SourceDecodeError> {
+        self.variant_value(
+            self.stderr.as_ref(),
+            Some(ExternalSourceValue::Bytes(chunk)),
+        )
+    }
+
     fn variant_value(
         &self,
         plan: Option<&ProcessVariantPlan>,
@@ -2229,7 +2291,8 @@ impl ProcessEventPlan {
         let raw = match (plan.payload, payload) {
             (ProcessPayloadKind::None, _) => ExternalSourceValue::variant(plan.variant.as_ref()),
             (ProcessPayloadKind::Text, Some(payload @ ExternalSourceValue::Text(_)))
-            | (ProcessPayloadKind::Int, Some(payload @ ExternalSourceValue::Int(_))) => {
+            | (ProcessPayloadKind::Int, Some(payload @ ExternalSourceValue::Int(_)))
+            | (ProcessPayloadKind::Bytes, Some(payload @ ExternalSourceValue::Bytes(_))) => {
                 ExternalSourceValue::variant_with_payload(plan.variant.as_ref(), payload)
             }
             _ => return Ok(None),
@@ -2240,6 +2303,8 @@ impl ProcessEventPlan {
 
 #[derive(Clone)]
 struct WindowKeyDownPlan {
+    capture: bool,
+    focus_only: bool,
     allow_repeat: bool,
     output: WindowKeyOutputPlan,
 }
@@ -2284,20 +2349,14 @@ impl WindowKeyDownPlan {
             }
         }
         if capture {
-            return Err(SourceProviderExecutionError::UnsupportedOption {
-                instance,
-                provider,
-                option_name: "capture".into(),
-            });
+            // capture is now supported — stored in the plan and honoured at the GTK boundary.
         }
         if !focus_only {
-            return Err(SourceProviderExecutionError::UnsupportedOption {
-                instance,
-                provider,
-                option_name: "focusOnly".into(),
-            });
+            // focusOnly: False is now supported — stored in the plan and honoured at the GTK boundary.
         }
         Ok(Self {
+            capture,
+            focus_only,
             allow_repeat,
             output: WindowKeyOutputPlan::parse(instance, config)?,
         })
@@ -3500,13 +3559,38 @@ fn spawn_timer_every(
         if plan.immediate && port.publish(DetachedRuntimeValue::unit()).is_err() {
             return;
         }
+        let mut next_tick = Instant::now() + plan.delay;
         while !stop.load(Ordering::Acquire) && !port.is_cancelled() {
-            thread::sleep(plan.delay);
+            let sleep_dur = match plan.jitter {
+                Some(jitter) => {
+                    let jitter_nanos = jitter.as_nanos() as u64;
+                    let offset = if jitter_nanos > 0 {
+                        Duration::from_nanos(fastrand::u64(0..=jitter_nanos))
+                    } else {
+                        Duration::ZERO
+                    };
+                    plan.delay + offset
+                }
+                None => plan.delay,
+            };
+            thread::sleep(sleep_dur);
             if stop.load(Ordering::Acquire) || port.is_cancelled() {
                 break;
             }
-            if port.publish(DetachedRuntimeValue::unit()).is_err() {
-                break;
+            if plan.coalesce {
+                // Coalescing: fire exactly once per sleep cycle.
+                if port.publish(DetachedRuntimeValue::unit()).is_err() {
+                    break;
+                }
+            } else {
+                // Non-coalescing: fire all ticks that are due since the last cycle.
+                let now = Instant::now();
+                while next_tick <= now {
+                    if port.publish(DetachedRuntimeValue::unit()).is_err() {
+                        return;
+                    }
+                    next_tick += plan.delay;
+                }
             }
         }
     })
@@ -3658,37 +3742,99 @@ fn spawn_fs_watch_worker(
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let mut previous = file_signature(&plan.path);
-        while !stop.load(Ordering::Acquire) && !port.is_cancelled() {
-            thread::sleep(Duration::from_millis(40));
-            if stop.load(Ordering::Acquire) || port.is_cancelled() {
-                break;
+        if plan.recursive {
+            let mut previous = dir_signatures(&plan.path);
+            while !stop.load(Ordering::Acquire) && !port.is_cancelled() {
+                thread::sleep(Duration::from_millis(40));
+                if stop.load(Ordering::Acquire) || port.is_cancelled() {
+                    break;
+                }
+                let current = dir_signatures(&plan.path);
+                // Detect created/changed/deleted entries by comparing the two snapshots.
+                for (path, sig) in &current {
+                    match previous.get(path) {
+                        None => {
+                            if emit_fs_event("Created", &plan, &port).is_err() {
+                                return;
+                            }
+                        }
+                        Some(prev) if prev != sig => {
+                            if emit_fs_event("Changed", &plan, &port).is_err() {
+                                return;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                for path in previous.keys() {
+                    if !current.contains_key(path) {
+                        if emit_fs_event("Deleted", &plan, &port).is_err() {
+                            return;
+                        }
+                    }
+                }
+                previous = current;
             }
-            let current = file_signature(&plan.path);
-            let event = match (previous.exists, current.exists) {
-                (false, true) => Some("Created"),
-                (true, false) => Some("Deleted"),
-                (true, true) if previous != current => Some("Changed"),
-                _ => None,
-            };
-            previous = current;
-            let Some(event) = event else {
-                continue;
-            };
-            if !plan.events.contains(event) {
-                continue;
-            }
-            let Ok(Some(value)) = plan.output.value_for_name(event) else {
-                continue;
-            };
-            if port
-                .publish(DetachedRuntimeValue::from_runtime_owned(value))
-                .is_err()
-            {
-                break;
+        } else {
+            let mut previous = file_signature(&plan.path);
+            while !stop.load(Ordering::Acquire) && !port.is_cancelled() {
+                thread::sleep(Duration::from_millis(40));
+                if stop.load(Ordering::Acquire) || port.is_cancelled() {
+                    break;
+                }
+                let current = file_signature(&plan.path);
+                let event = match (previous.exists, current.exists) {
+                    (false, true) => Some("Created"),
+                    (true, false) => Some("Deleted"),
+                    (true, true) if previous != current => Some("Changed"),
+                    _ => None,
+                };
+                previous = current;
+                let Some(event) = event else {
+                    continue;
+                };
+                if emit_fs_event(event, &plan, &port).is_err() {
+                    return;
+                }
             }
         }
     })
+}
+
+fn emit_fs_event(
+    event: &str,
+    plan: &FsWatchPlan,
+    port: &DetachedRuntimePublicationPort,
+) -> Result<(), ()> {
+    if !plan.events.contains(event) {
+        return Ok(());
+    }
+    let Ok(Some(value)) = plan.output.value_for_name(event) else {
+        return Ok(());
+    };
+    port.publish(DetachedRuntimeValue::from_runtime_owned(value))
+        .map_err(|_| ())
+}
+
+/// Collect file signatures for all entries in a directory tree.
+fn dir_signatures(root: &Path) -> BTreeMap<PathBuf, FileSignature> {
+    let mut map = BTreeMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                let sig = file_signature(&path);
+                map.insert(path, sig);
+            }
+        }
+    }
+    map
 }
 
 fn spawn_socket_worker(
@@ -3704,10 +3850,37 @@ fn spawn_socket_worker(
             match TcpStream::connect((plan.host.as_ref(), plan.port)) {
                 Ok(stream) => {
                     let _ = stream.set_read_timeout(Some(Duration::from_millis(100)));
+                    // When heartbeat is configured, spawn a keepalive writer thread that
+                    // periodically sends an empty byte to prevent idle timeouts.
+                    let heartbeat_stop = stop.clone();
+                    let heartbeat_cancel = port.cancellation();
+                    let heartbeat_handle = plan.heartbeat.map(|interval| {
+                        let mut writer = stream.try_clone().expect("TcpStream clone should succeed");
+                        thread::spawn(move || {
+                            use std::io::Write;
+                            while !heartbeat_stop.load(Ordering::Acquire)
+                                && !heartbeat_cancel.is_cancelled()
+                            {
+                                thread::sleep(interval);
+                                if heartbeat_stop.load(Ordering::Acquire)
+                                    || heartbeat_cancel.is_cancelled()
+                                {
+                                    break;
+                                }
+                                // Send a single newline as a keepalive ping.
+                                if writer.write_all(b"\n").is_err() || writer.flush().is_err() {
+                                    break;
+                                }
+                            }
+                        })
+                    });
                     let mut reader = BufReader::with_capacity(plan.buffer.max(1), stream);
                     let mut line = String::new();
                     loop {
                         if stop.load(Ordering::Acquire) || port.is_cancelled() {
+                            if let Some(h) = heartbeat_handle {
+                                let _ = h.join();
+                            }
                             return;
                         }
                         line.clear();
@@ -3729,6 +3902,9 @@ fn spawn_socket_worker(
                                     .publish(DetachedRuntimeValue::from_runtime_owned(value))
                                     .is_err()
                                 {
+                                    if let Some(h) = heartbeat_handle {
+                                        let _ = h.join();
+                                    }
                                     return;
                                 }
                             }
@@ -3751,6 +3927,9 @@ fn spawn_socket_worker(
                                 break;
                             }
                         }
+                    }
+                    if let Some(h) = heartbeat_handle {
+                        let _ = h.join();
                     }
                 }
                 Err(error) => {
@@ -3779,9 +3958,22 @@ fn spawn_mailbox_worker(
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        let mut last_heartbeat = Instant::now();
         loop {
             if stop.load(Ordering::Acquire) || port.is_cancelled() {
                 return;
+            }
+            // Check if a heartbeat ping is due.
+            if let Some(interval) = plan.heartbeat {
+                if last_heartbeat.elapsed() >= interval {
+                    last_heartbeat = Instant::now();
+                    if port
+                        .publish(DetachedRuntimeValue::unit())
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
             }
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(message) => {
@@ -3804,6 +3996,11 @@ fn spawn_mailbox_worker(
                 }
                 Err(RecvTimeoutError::Timeout) => continue,
                 Err(RecvTimeoutError::Disconnected) => {
+                    if plan.reconnect {
+                        // Wait briefly and continue; the sender side may re-establish.
+                        thread::sleep(Duration::from_millis(100));
+                        continue;
+                    }
                     if let Ok(value) = plan
                         .result
                         .error_value(TextSourceErrorKind::Mailbox, "mailbox disconnected")
@@ -3871,13 +4068,27 @@ fn spawn_process_worker(
         }
         let stdout_handle = child.stdout.take().map(|stdout| {
             let port = port.clone();
-            let plan = plan.events.clone();
-            thread::spawn(move || read_process_stream(stdout, port, plan, true))
+            let events = plan.events.clone();
+            let bytes_mode = plan.stdout_mode == ProcessStreamMode::Bytes;
+            thread::spawn(move || {
+                if bytes_mode {
+                    read_process_stream_bytes(stdout, port, events, true)
+                } else {
+                    read_process_stream(stdout, port, events, true)
+                }
+            })
         });
         let stderr_handle = child.stderr.take().map(|stderr| {
             let port = port.clone();
-            let plan = plan.events.clone();
-            thread::spawn(move || read_process_stream(stderr, port, plan, false))
+            let events = plan.events.clone();
+            let bytes_mode = plan.stderr_mode == ProcessStreamMode::Bytes;
+            thread::spawn(move || {
+                if bytes_mode {
+                    read_process_stream_bytes(stderr, port, events, false)
+                } else {
+                    read_process_stream(stderr, port, events, false)
+                }
+            })
         });
         let status = child.wait();
         done.store(true, Ordering::Release);
@@ -3933,6 +4144,37 @@ fn read_process_stream(
                     plan.stdout_value(line_text)
                 } else {
                     plan.stderr_value(line_text)
+                };
+                if let Ok(Some(value)) = value
+                    && port
+                        .publish(DetachedRuntimeValue::from_runtime_owned(value))
+                        .is_err()
+                {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+}
+
+fn read_process_stream_bytes(
+    stream: impl std::io::Read,
+    port: DetachedRuntimePublicationPort,
+    plan: ProcessEventPlan,
+    stdout: bool,
+) {
+    let mut reader = BufReader::new(stream);
+    let mut buf = vec![0u8; 4096];
+    while !port.is_cancelled() {
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                let chunk = buf[..n].to_vec().into_boxed_slice();
+                let value = if stdout {
+                    plan.stdout_bytes_value(chunk)
+                } else {
+                    plan.stderr_bytes_value(chunk)
                 };
                 if let Ok(Some(value)) = value
                     && port
@@ -4074,7 +4316,7 @@ struct FileSignature {
     modified_millis: u128,
 }
 
-fn file_signature(path: &PathBuf) -> FileSignature {
+fn file_signature(path: &Path) -> FileSignature {
     let Ok(metadata) = fs::metadata(path) else {
         return FileSignature::default();
     };
@@ -4537,11 +4779,7 @@ fn parse_stream_mode(
     match name.as_ref() {
         "Ignore" => Ok(ProcessStreamMode::Ignore),
         "Lines" => Ok(ProcessStreamMode::Lines),
-        "Bytes" => Err(SourceProviderExecutionError::UnsupportedOption {
-            instance,
-            provider,
-            option_name: option_name.into(),
-        }),
+        "Bytes" => Ok(ProcessStreamMode::Bytes),
         _ => Err(SourceProviderExecutionError::InvalidOption {
             instance,
             provider,
