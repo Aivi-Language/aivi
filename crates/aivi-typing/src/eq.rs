@@ -6,57 +6,33 @@ pub enum Class {
     Eq,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TypeId(u32);
+/// Define a crate-local u32-backed ID type with `from_index(usize)` / `index()` helpers.
+///
+/// These IDs are not backed by `ArenaId` because `aivi-typing` has zero external dependencies by
+/// design. They follow the same structural pattern but stay private to internal table indexing.
+macro_rules! define_typing_id {
+    ($vis:vis $name:ident, $overflow_msg:literal) => {
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        $vis struct $name(u32);
 
-impl TypeId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("type arena overflow"))
-    }
+        impl $name {
+            fn from_index(index: usize) -> Self {
+                Self(index.try_into().expect($overflow_msg))
+            }
 
-    fn index(self) -> usize {
-        self.0 as usize
-    }
+            fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+    };
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TypeParameterId(u32);
+pub(crate) use define_typing_id;
 
-impl TypeParameterId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("type parameter table overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct ExternalTypeId(u32);
-
-impl ExternalTypeId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("external type table overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct EqPlanId(u32);
-
-impl EqPlanId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("eq plan table overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
+define_typing_id!(pub TypeId, "type arena overflow");
+define_typing_id!(pub TypeParameterId, "type parameter table overflow");
+define_typing_id!(pub ExternalTypeId, "external type table overflow");
+define_typing_id!(pub EqPlanId, "eq plan table overflow");
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct FieldName(Box<str>);
@@ -559,6 +535,9 @@ pub enum EqDerivationErrorKind {
     OpenSum {
         ty: TypeId,
     },
+    RecursiveType {
+        ty: TypeId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -591,19 +570,22 @@ impl EqDeriver {
         let mut walker = crate::walker::StructuralWalker::new(Frame::Enter(subject));
         let mut path = Vec::new();
         let mut steps = Vec::new();
+        let mut ancestors = BTreeSet::new();
 
         while let Some(frame) = walker.next_frame() {
             match frame {
-                // TODO(mu-types): This deriver traverses the TypeStore graph purely by following
-                // TypeId references stored in each TypeNode. If a recursive type (mu-type) is ever
-                // introduced — e.g. a self-referential record or an explicit Mu(TypeId) node — the
-                // loop will revisit the same node indefinitely and either infinite-loop or overflow
-                // the stack. Handling mu-types correctly requires either (a) tracking a visited-set
-                // of TypeIds and failing / short-circuiting on back-edges, or (b) an explicit
-                // Mu/Recurse encoding in TypeNode that the deriver can recognise and treat as
-                // already-derived via an assumed coinductive witness.
-                Frame::Enter(ty) => match types.node(ty) {
-                    TypeNode::Primitive(scalar) => match scalar {
+                Frame::Enter(ty) => {
+                    if !ancestors.insert(ty) {
+                        return Err(EqDerivationError {
+                            head,
+                            path: path.clone(),
+                            kind: EqDerivationErrorKind::RecursiveType { ty },
+                        });
+                    }
+                    match types.node(ty) {
+                    TypeNode::Primitive(scalar) => {
+                        ancestors.remove(&ty);
+                        match scalar {
                         // Bytes is excluded from structural Eq derivation because byte sequences
                         // have no canonical structural equality in the source language: two Bytes
                         // values wrapping the same content from different allocations are
@@ -630,8 +612,10 @@ impl EqDeriver {
                                 },
                             ));
                         }
-                    },
+                        }
+                    }
                     TypeNode::Reference(reference) => {
+                        ancestors.remove(&ty);
                         if context.contains(*reference) {
                             walker.push_assembled(push_step(
                                 &mut steps,
@@ -741,16 +725,19 @@ impl EqDeriver {
                         schedule_child(&mut walker, *value, EqPathSegment::ValidationValue);
                         schedule_child(&mut walker, *error, EqPathSegment::ValidationError);
                     }
-                },
+                    }
+                }
                 Frame::PushPath(segment) => path.push(segment),
                 Frame::PopPath => {
                     path.pop().expect("unbalanced derivation path frame");
                 }
                 Frame::ExitTuple { ty, arity } => {
+                    ancestors.remove(&ty);
                     let elements = walker.take_tail(arity);
                     walker.push_assembled(push_step(&mut steps, EqStep::Tuple { ty, elements }));
                 }
                 Frame::ExitRecord { ty, field_names } => {
+                    ancestors.remove(&ty);
                     let witnesses = walker.take_tail(field_names.len());
                     let fields = field_names
                         .into_iter()
@@ -760,6 +747,7 @@ impl EqDeriver {
                     walker.push_assembled(push_step(&mut steps, EqStep::Record { ty, fields }));
                 }
                 Frame::ExitSum { ty, variants } => {
+                    ancestors.remove(&ty);
                     let payload_count = variants
                         .iter()
                         .filter(|variant| variant.has_payload)
@@ -779,18 +767,22 @@ impl EqDeriver {
                     walker.push_assembled(push_step(&mut steps, EqStep::Sum { ty, variants }));
                 }
                 Frame::ExitDomain { ty } => {
+                    ancestors.remove(&ty);
                     let carrier = walker.pop_one();
                     walker.push_assembled(push_step(&mut steps, EqStep::Domain { ty, carrier }));
                 }
                 Frame::ExitList { ty } => {
+                    ancestors.remove(&ty);
                     let element = walker.pop_one();
                     walker.push_assembled(push_step(&mut steps, EqStep::List { ty, element }));
                 }
                 Frame::ExitOption { ty } => {
+                    ancestors.remove(&ty);
                     let element = walker.pop_one();
                     walker.push_assembled(push_step(&mut steps, EqStep::Option { ty, element }));
                 }
                 Frame::ExitResult { ty } => {
+                    ancestors.remove(&ty);
                     let mut parts = walker.take_tail(2).into_iter();
                     let error = parts.next().expect("missing result error witness");
                     let value = parts.next().expect("missing result value witness");
@@ -798,6 +790,7 @@ impl EqDeriver {
                         .push_assembled(push_step(&mut steps, EqStep::Result { ty, error, value }));
                 }
                 Frame::ExitValidation { ty } => {
+                    ancestors.remove(&ty);
                     let mut parts = walker.take_tail(2).into_iter();
                     let error = parts.next().expect("missing validation error witness");
                     let value = parts.next().expect("missing validation value witness");

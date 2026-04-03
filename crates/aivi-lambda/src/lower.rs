@@ -11,6 +11,7 @@ use crate::{
     Module, NonSourceWakeup, Parameter, Pipe, PipeRecurrence, RecurrenceStage, Stage, StageKind,
     TemporalStage,
     analysis::{AnalysisError, capture_free_bindings},
+    module::parameter_name_map,
     validate::{ValidationError, validate_module},
 };
 
@@ -565,13 +566,6 @@ impl<'a> ModuleLowerer<'a> {
             .captures = capture_ids;
         Some(closure_id)
     }
-}
-
-fn parameter_name_map(parameters: &[core::ItemParameter]) -> BTreeMap<BindingId, Box<str>> {
-    parameters
-        .iter()
-        .map(|parameter| (parameter.binding, parameter.name.clone()))
-        .collect()
 }
 
 fn core_to_lambda_parameters(params: &[core::ItemParameter]) -> Vec<Parameter> {

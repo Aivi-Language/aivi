@@ -29,6 +29,9 @@ mod typecheck;
 mod typecheck_context;
 mod validate;
 
+#[cfg(test)]
+pub(crate) mod test_support;
+
 pub use arena::{Arena, ArenaId, ArenaOverflow};
 pub use decode_elaboration::{
     BlockedSourceDecodeNode, SourceDecodeDomainBinding, SourceDecodeElaborationBlocker,

@@ -550,41 +550,11 @@ fn program_step_id(id: DecodePlanId) -> DecodeProgramStepId {
 
 #[cfg(test)]
 mod tests {
-    use aivi_base::SourceDatabase;
-    use aivi_syntax::parse_module;
-
     use super::{
         DomainDecodeSurfaceKind, SourceDecodeProgramBlocker, SourceDecodeProgramOutcome,
         generate_source_decode_programs,
     };
-    use crate::{Item, lower_module};
-
-    fn lower_text(path: &str, text: &str) -> crate::LoweringResult {
-        let mut sources = SourceDatabase::new();
-        let file_id = sources.add_file(path, text);
-        let parsed = parse_module(&sources[file_id]);
-        assert!(
-            !parsed.has_errors(),
-            "fixture {path} should parse before HIR lowering: {:?}",
-            parsed.all_diagnostics().collect::<Vec<_>>()
-        );
-        lower_module(&parsed.module)
-    }
-
-    fn item_name(module: &crate::Module, item_id: crate::ItemId) -> &str {
-        match &module.items()[item_id] {
-            Item::Type(item) => item.name.text(),
-            Item::Value(item) => item.name.text(),
-            Item::Function(item) => item.name.text(),
-            Item::Signal(item) => item.name.text(),
-            Item::Class(item) => item.name.text(),
-            Item::Domain(item) => item.name.text(),
-            Item::SourceProviderContract(_)
-            | Item::Instance(_)
-            | Item::Use(_)
-            | Item::Export(_) => "<anonymous>",
-        }
-    }
+    use crate::test_support::{item_name, lower_text};
 
     #[test]
     fn generates_nested_domain_surface_steps_for_structural_payloads() {

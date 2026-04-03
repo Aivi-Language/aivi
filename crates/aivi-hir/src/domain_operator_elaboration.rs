@@ -139,27 +139,13 @@ pub(crate) fn binary_operator_text(operator: BinaryOperator) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use aivi_base::SourceDatabase;
-    use aivi_syntax::parse_module;
-
+    use crate::test_support::lower_text;
     use crate::{
-        ExprKind, Item, lower_module,
+        ExprKind, Item,
         validate::{GateExprEnv, GateTypeContext},
     };
 
     use super::*;
-
-    fn lower_text(path: &str, text: &str) -> crate::LoweringResult {
-        let mut sources = SourceDatabase::new();
-        let file_id = sources.add_file(path, text);
-        let parsed = parse_module(&sources[file_id]);
-        assert!(
-            !parsed.has_errors(),
-            "domain-operator fixture should parse before HIR lowering: {:?}",
-            parsed.all_diagnostics().collect::<Vec<_>>()
-        );
-        lower_module(&parsed.module)
-    }
 
     fn match_value_binary(path: &str, text: &str, value_name: &str) -> DomainBinaryOperatorMatch {
         let lowered = lower_text(path, text);

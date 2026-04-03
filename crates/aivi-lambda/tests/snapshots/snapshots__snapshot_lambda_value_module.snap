@@ -1,23 +1,84 @@
 ---
 source: crates/aivi-lambda/tests/snapshots.rs
+assertion_line: 32
 expression: lambda.pretty()
 ---
 value answer:
   body = closure0
 func __aivi_option_getOrElse:
+  params = [fallback: A, opt: Option A]
+  body = closure1
 func __aivi_list_keepSome:
+  params = [item: A]
+  body = closure2
 func __aivi_list_keepFirst:
+  params = [found: Option A, item: A]
+  body = closure3
 func __aivi_list_lengthStep:
+  params = [total: Int, item: A]
+  body = closure4
 func __aivi_list_length:
+  params = [items: List A]
+  body = closure5
 func __aivi_list_head:
+  params = [items: List A]
+  body = closure6
 func __aivi_list_tailState:
+  params = [items: List A, item: A, seenFirst: Bool]
+  body = closure7
 func __aivi_list_tailStep:
+  params = [state: { seenFirst: Bool, items: List A }, item: A]
+  body = closure8
 func __aivi_list_tailItems:
+  params = [items: List A, seenFirst: Bool]
+  body = closure9
 func __aivi_list_tailFromState:
+  params = [state: { seenFirst: Bool, items: List A }]
+  body = closure10
 func __aivi_list_tail:
+  params = [items: List A]
+  body = closure11
 func __aivi_list_anyStep:
+  params = [predicate: A -> Bool, found: Bool, item: A]
+  body = closure12
 func __aivi_list_any:
+  params = [predicate: A -> Bool, items: List A]
+  body = closure13
 func __aivi_binary_eq:
+  params = [left: A, right: A]
+  body = closure14
 func __aivi_binary_neq:
+  params = [left: A, right: A]
+  body = closure15
 closures:
   closure0 answer owner=0 root=expr0 kind=item-body
+  closure1 __aivi_option_getOrElse owner=1 root=expr4 kind=item-body
+    params = [fallback:#0:A, opt:#1:Option A]
+  closure2 __aivi_list_keepSome owner=2 root=expr7 kind=item-body
+    params = [item:#3:A]
+  closure3 __aivi_list_keepFirst owner=3 root=expr15 kind=item-body
+    params = [found:#4:Option A, item:#5:A]
+  closure4 __aivi_list_lengthStep owner=4 root=expr18 kind=item-body
+    params = [total:#6:Int, item:#7:A]
+  closure5 __aivi_list_length owner=5 root=expr25 kind=item-body
+    params = [items:#8:List A]
+  closure6 __aivi_list_head owner=6 root=expr32 kind=item-body
+    params = [items:#9:List A]
+  closure7 __aivi_list_tailState owner=7 root=expr44 kind=item-body
+    params = [items:#10:List A, item:#11:A, seenFirst:#12:Bool]
+  closure8 __aivi_list_tailStep owner=8 root=expr51 kind=item-body
+    params = [state:#13:{ seenFirst: Bool, items: List A }, item:#14:A]
+  closure9 __aivi_list_tailItems owner=9 root=expr57 kind=item-body
+    params = [items:#17:List A, seenFirst:#18:Bool]
+  closure10 __aivi_list_tailFromState owner=10 root=expr63 kind=item-body
+    params = [state:#19:{ seenFirst: Bool, items: List A }]
+  closure11 __aivi_list_tail owner=11 root=expr75 kind=item-body
+    params = [items:#22:List A]
+  closure12 __aivi_list_anyStep owner=12 root=expr81 kind=item-body
+    params = [predicate:#23:A -> Bool, found:#24:Bool, item:#25:A]
+  closure13 __aivi_list_any owner=13 root=expr90 kind=item-body
+    params = [predicate:#26:A -> Bool, items:#27:List A]
+  closure14 __aivi_binary_eq owner=14 root=expr93 kind=item-body
+    params = [left:#28:A, right:#29:A]
+  closure15 __aivi_binary_neq owner=15 root=expr96 kind=item-body
+    params = [left:#30:A, right:#31:A]

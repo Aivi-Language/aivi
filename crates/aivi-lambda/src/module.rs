@@ -1,10 +1,44 @@
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use aivi_base::SourceSpan;
 use aivi_core::{self as core, Arena};
 use aivi_hir::{BindingId, ExprId as HirExprId};
 
 use crate::{CaptureId, ClosureId};
+
+/// Build a binding→name map from any parameter slice where each element exposes
+/// `binding: BindingId` and `name: Box<str>`. Used by both lowering and validation.
+pub(crate) fn parameter_name_map<P: HasBindingName>(
+    parameters: &[P],
+) -> BTreeMap<BindingId, Box<str>> {
+    parameters
+        .iter()
+        .map(|p| (p.binding(), p.name().into()))
+        .collect()
+}
+
+pub(crate) trait HasBindingName {
+    fn binding(&self) -> BindingId;
+    fn name(&self) -> &str;
+}
+
+impl HasBindingName for Parameter {
+    fn binding(&self) -> BindingId {
+        self.binding
+    }
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl HasBindingName for core::ItemParameter {
+    fn binding(&self) -> BindingId {
+        self.binding
+    }
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module {

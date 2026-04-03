@@ -7,6 +7,7 @@ use crate::{
     CaptureId, ClosureId, ClosureKind, GateStage, Item, Module, Parameter, Pipe, RecurrenceStage,
     Stage, StageKind, TemporalStage,
     analysis::{AnalysisError, capture_free_bindings},
+    module::parameter_name_map,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -838,13 +839,6 @@ fn validate_closure(
             });
         }
     }
-}
-
-fn parameter_name_map(parameters: &[Parameter]) -> BTreeMap<BindingId, Box<str>> {
-    parameters
-        .iter()
-        .map(|parameter| (parameter.binding, parameter.name.clone()))
-        .collect()
 }
 
 fn parameters_mirror(lambda: &[Parameter], core: &[core::ItemParameter]) -> bool {

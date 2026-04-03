@@ -34,6 +34,48 @@ impl fmt::Display for ArenaOverflow {
 
 impl Error for ArenaOverflow {}
 
+/// Define a u32-backed arena ID type implementing [`ArenaId`], `Display`, and standard derives.
+///
+/// # Example
+///
+/// ```ignore
+/// aivi_base::define_arena_id!(NodeId);
+/// aivi_base::define_arena_id!(EdgeId);
+/// ```
+#[macro_export]
+macro_rules! define_arena_id {
+    ($vis:vis $name:ident) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        $vis struct $name(u32);
+
+        impl $name {
+            pub const fn from_raw(raw: u32) -> Self {
+                Self(raw)
+            }
+
+            pub const fn as_raw(self) -> u32 {
+                self.0
+            }
+        }
+
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl $crate::ArenaId for $name {
+            fn from_raw(raw: u32) -> Self {
+                Self(raw)
+            }
+
+            fn as_raw(self) -> u32 {
+                self.0
+            }
+        }
+    };
+}
+
 /// Allocate a value into a typed [`Arena`], or push an error via a local `arena_overflow` helper
 /// and return early from the enclosing function.
 ///
@@ -142,26 +184,9 @@ impl<Id: ArenaId, T> Index<Id> for Arena<Id, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Arena, ArenaId};
+    use super::Arena;
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-    struct TestId(u32);
-
-    impl std::fmt::Display for TestId {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.0)
-        }
-    }
-
-    impl ArenaId for TestId {
-        fn from_raw(raw: u32) -> Self {
-            Self(raw)
-        }
-
-        fn as_raw(self) -> u32 {
-            self.0
-        }
-    }
+    crate::define_arena_id!(TestId);
 
     #[test]
     fn allocates_sequential_ids() {
@@ -186,5 +211,45 @@ mod tests {
             .map(|(id, value)| (id.as_raw(), *value))
             .collect::<Vec<_>>();
         assert_eq!(collected, vec![(0, 3), (1, 8)]);
+    }
+
+    #[test]
+    fn contains_checks_valid_and_invalid_ids() {
+        let mut arena = Arena::<TestId, &str>::new();
+        let id = arena.alloc("x").expect("allocation should fit");
+        assert!(arena.contains(id));
+        assert!(!arena.contains(TestId::from_raw(99)));
+    }
+
+    #[test]
+    fn get_returns_none_for_out_of_bounds() {
+        let arena = Arena::<TestId, i32>::new();
+        assert_eq!(arena.get(TestId::from_raw(0)), None);
+    }
+
+    #[test]
+    fn len_and_is_empty() {
+        let mut arena = Arena::<TestId, i32>::new();
+        assert!(arena.is_empty());
+        assert_eq!(arena.len(), 0);
+
+        let _ = arena.alloc(1).unwrap();
+        assert!(!arena.is_empty());
+        assert_eq!(arena.len(), 1);
+    }
+
+    #[test]
+    fn index_operator_returns_value() {
+        let mut arena = Arena::<TestId, &str>::new();
+        let id = arena.alloc("hello").unwrap();
+        assert_eq!(arena[id], "hello");
+    }
+
+    #[test]
+    fn arena_overflow_display_is_descriptive() {
+        let overflow = super::ArenaOverflow { attempted_len: 42 };
+        let msg = format!("{overflow}");
+        assert!(msg.contains("42"));
+        assert!(msg.contains("overflow"));
     }
 }

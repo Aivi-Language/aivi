@@ -39,44 +39,11 @@ impl fmt::Display for Kind {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TypeConstructorId(u32);
+use crate::eq::define_typing_id;
 
-impl TypeConstructorId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("type constructor table overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct KindParameterId(u32);
-
-impl KindParameterId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("kind parameter table overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct KindExprId(u32);
-
-impl KindExprId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("kind expression arena overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-}
+define_typing_id!(pub TypeConstructorId, "type constructor table overflow");
+define_typing_id!(pub KindParameterId, "kind parameter table overflow");
+define_typing_id!(pub KindExprId, "kind expression arena overflow");
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TypeConstructor {

@@ -13,6 +13,7 @@ use std::{error::Error, fmt};
 
 use crate::eq::{
     Closedness, FieldName, PrimitiveType, TypeId, TypeNode, TypeReference, TypeStore, VariantName,
+    define_typing_id,
 };
 
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Hash)]
@@ -31,18 +32,9 @@ impl DecodeMode {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct DecodePlanId(u32);
+define_typing_id!(pub DecodePlanId, "decode plan table overflow");
 
 impl DecodePlanId {
-    fn from_index(index: usize) -> Self {
-        Self(index.try_into().expect("decode plan table overflow"))
-    }
-
-    fn index(self) -> usize {
-        self.0 as usize
-    }
-
     pub fn as_usize(self) -> usize {
         self.index()
     }
@@ -210,6 +202,9 @@ impl fmt::Display for DecodePlanningError {
             DecodePlanningErrorKind::OpenSum { .. } => {
                 f.write_str("decode planning requires sums to stay closed")
             }
+            DecodePlanningErrorKind::RecursiveType { .. } => {
+                f.write_str("decode planning detected a recursive type cycle")
+            }
         }
     }
 }
@@ -226,6 +221,9 @@ pub enum DecodePlanningErrorKind {
         ty: TypeId,
     },
     OpenSum {
+        ty: TypeId,
+    },
+    RecursiveType {
         ty: TypeId,
     },
 }
@@ -248,11 +246,6 @@ pub enum DecodePathSegment {
 pub struct DecodePlanner;
 
 impl DecodePlanner {
-    // SAFETY NOTE: This planner assumes the type graph is acyclic.
-    // If the type store ever supports recursive (mu) types, this function will
-    // infinite-loop. When recursive type support is added, a visited-set must
-    // be threaded through the traversal to detect and break cycles.
-    // See CODE_REVIEW.md §3 (decode.rs problem #9).
     pub fn plan(
         types: &TypeStore,
         subject: TypeId,
@@ -261,11 +254,21 @@ impl DecodePlanner {
         let mut walker = crate::walker::StructuralWalker::new(Frame::Enter(subject));
         let mut path = Vec::new();
         let mut steps = Vec::new();
+        let mut ancestors = std::collections::BTreeSet::new();
 
         while let Some(frame) = walker.next_frame() {
             match frame {
-                Frame::Enter(ty) => match types.node(ty) {
+                Frame::Enter(ty) => {
+                    if !ancestors.insert(ty) {
+                        return Err(DecodePlanningError {
+                            subject,
+                            path: path.clone(),
+                            kind: DecodePlanningErrorKind::RecursiveType { ty },
+                        });
+                    }
+                    match types.node(ty) {
                     TypeNode::Primitive(scalar) => {
+                        ancestors.remove(&ty);
                         walker.push_assembled(push_step(
                             &mut steps,
                             DecodeStep::IntrinsicScalar {
@@ -275,6 +278,7 @@ impl DecodePlanner {
                         ));
                     }
                     TypeNode::Reference(reference) => {
+                        ancestors.remove(&ty);
                         return Err(DecodePlanningError {
                             subject,
                             path: path.clone(),
@@ -384,12 +388,14 @@ impl DecodePlanner {
                         schedule_child(&mut walker, *value, DecodePathSegment::ValidationValue);
                         schedule_child(&mut walker, *error, DecodePathSegment::ValidationError);
                     }
-                },
+                    }
+                }
                 Frame::PushPath(segment) => path.push(segment),
                 Frame::PopPath => {
                     path.pop().expect("unbalanced decode-planning path frame");
                 }
                 Frame::ExitTuple { ty, arity } => {
+                    ancestors.remove(&ty);
                     let elements = walker.take_tail(arity);
                     walker
                         .push_assembled(push_step(&mut steps, DecodeStep::Tuple { ty, elements }));
@@ -399,6 +405,7 @@ impl DecodePlanner {
                     fields,
                     extra_fields,
                 } => {
+                    ancestors.remove(&ty);
                     let schemas = walker.take_tail(fields.len());
                     let fields = fields
                         .into_iter()
@@ -423,6 +430,7 @@ impl DecodePlanner {
                     variants,
                     strategy,
                 } => {
+                    ancestors.remove(&ty);
                     let payload_count = variants
                         .iter()
                         .filter(|variant| variant.has_payload)
@@ -449,6 +457,7 @@ impl DecodePlanner {
                     ));
                 }
                 Frame::ExitDomain { ty, rule } => {
+                    ancestors.remove(&ty);
                     let carrier = walker.pop_one();
                     walker.push_assembled(push_step(
                         &mut steps,
@@ -456,15 +465,18 @@ impl DecodePlanner {
                     ));
                 }
                 Frame::ExitList { ty } => {
+                    ancestors.remove(&ty);
                     let element = walker.pop_one();
                     walker.push_assembled(push_step(&mut steps, DecodeStep::List { ty, element }));
                 }
                 Frame::ExitOption { ty } => {
+                    ancestors.remove(&ty);
                     let element = walker.pop_one();
                     walker
                         .push_assembled(push_step(&mut steps, DecodeStep::Option { ty, element }));
                 }
                 Frame::ExitResult { ty } => {
+                    ancestors.remove(&ty);
                     let mut parts = walker.take_tail(2).into_iter();
                     let error = parts.next().expect("missing result error schema");
                     let value = parts.next().expect("missing result value schema");
@@ -474,6 +486,7 @@ impl DecodePlanner {
                     ));
                 }
                 Frame::ExitValidation { ty } => {
+                    ancestors.remove(&ty);
                     let mut parts = walker.take_tail(2).into_iter();
                     let error = parts.next().expect("missing validation error schema");
                     let value = parts.next().expect("missing validation value schema");
