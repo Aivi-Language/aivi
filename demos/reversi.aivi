@@ -105,15 +105,15 @@ func smallerInt = left right =>
     left < right
 
 type Coord -> Int
-func coordX = coord => coord
+func coordX = .
  ||> Coord x _ -> x
 
 type Coord -> Int
-func coordY = coord => coord
+func coordY = .
  ||> Coord _ y -> y
 
 type Coord -> Int
-func coordId = coord => coord
+func coordId = .
  ||> Coord x y -> y * boardSize + x
 
 type Coord -> Coord -> Bool
@@ -121,7 +121,7 @@ func sameCoord = target coord =>
     target == coord
 
 type Coord -> Bool
-func onBoard = coord => coord
+func onBoard = .
  ||> Coord x y -> x >= 0 and x < boardSize and y >= 0 and y < boardSize
 
 type Int -> Int -> Coord
@@ -140,64 +140,62 @@ func stepRay = ray coord => (ray, coord)
  ||> (SouthEast, Coord x y) -> Coord (x + 1) (y + 1)
 
 type Turn -> Disc
-func discForTurn = turn => turn
+func discForTurn = .
  ||> Human    -> Red
  ||> Computer -> Blue
 
 type Turn -> Turn
-func otherTurn = turn => turn
+func otherTurn = .
  ||> Human    -> Computer
  ||> Computer -> Human
 
 type Disc -> Disc
-func otherDisc = disc => disc
+func otherDisc = .
  ||> Red   -> Blue
  ||> Blue  -> Red
  ||> Empty -> Empty
 
 type Turn -> Text
-func turnLabel = turn => turn
+func turnLabel = .
  ||> Human    -> "Red (you)"
  ||> Computer -> "Blue (computer)"
 
 type Outcome -> Text
-func outcomeText = outcome => outcome
+func outcomeText = .
  ||> HumanWins    -> "You won"
  ||> ComputerWins -> "Blue won"
  ||> Draw         -> "Draw"
 
 type Status -> Bool
-func humanToAct = status => status
+func humanToAct = .
  ||> Active Human    -> True
  ||> Passed Computer -> True
  ||> _               -> False
 
 type Status -> Bool
-func computerToAct = status => status
+func computerToAct = .
  ||> Active Computer -> True
  ||> Passed Human    -> True
  ||> _               -> False
 
 type Status -> Bool
-func finished = status => status
+func finished = .
  ||> Finished _ -> True
  ||> _          -> False
 
 type List (List Disc) -> Coord -> Disc
-func discAt = board coord => coord
- ||> Coord x y -> matrixFromRows board
- ||> Err _     -> Empty
- ||> Ok m      -> matrixAt m x y
- ||> None      -> Empty
- ||> Some d    -> d
+func discAt = board coord => matrixFromRows board
+ ||> Err _  -> Empty
+ ||> Ok m   -> matrixAt m (coordX coord) (coordY coord)
+  ||> None   -> Empty
+  ||> Some d -> d
 
 type List (List Disc) -> Coord -> Disc -> (List (List Disc))
-func setDisc = board coord disc => coord
- ||> Coord x y -> matrixFromRows board
- ||> Err _     -> board
- ||> Ok m      -> matrixReplaceAt m (x, y) disc
- ||> None      -> board
- ||> Some nm   -> matrixRows nm
+func setDisc = board coord disc => matrixFromRows board
+ ||> Err _  -> board
+ ||> Ok m   -> matrixReplaceAt m (coordX coord, coordY coord) disc
+  ||> None    -> board
+  ||> Some nm -> matrixRows nm
 
 type Disc -> (List (List Disc)) -> Coord -> (List (List Disc))
 func setManyStep = disc board coord =>
@@ -519,19 +517,19 @@ func cornerCoord = coord =>
     coordInList coord corners
 
 type Coord -> Bool
-func cornerBand = coord => coord
+func cornerBand = .
  ||> Coord x y -> (x <= 1 or x >= lastIndex - 1) and (y <= 1 or y >= lastIndex - 1)
 
 type Coord -> Bool
-func edgeCoord = coord => coord
+func edgeCoord = .
  ||> Coord x y -> x == 0 or x == lastIndex or y == 0 or y == lastIndex
 
 type Coord -> Bool
-func innerRing = coord => coord
+func innerRing = .
  ||> Coord x y -> oneFromEdge x or oneFromEdge y
 
 type Coord -> Bool
-func secondRing = coord => coord
+func secondRing = .
  ||> Coord x y -> twoFromEdge x or twoFromEdge y
 
 type Coord -> Int
