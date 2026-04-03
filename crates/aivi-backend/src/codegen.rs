@@ -842,13 +842,26 @@ impl<'a> CraneliftCompiler<'a> {
                         // Zero-field sum constructors are handled as static sum singletons.
                         // Multi-field constructors are only supported as callees in Apply.
                     }
+                    KernelExprKind::List(elements) => {
+                        for elem in elements {
+                            work.push(*elem);
+                        }
+                    }
+                    KernelExprKind::Set(elements) => {
+                        for elem in elements {
+                            work.push(*elem);
+                        }
+                    }
+                    KernelExprKind::Map(entries) => {
+                        for entry in entries {
+                            work.push(entry.key);
+                            work.push(entry.value);
+                        }
+                    }
                     KernelExprKind::DomainMember(_)
                     | KernelExprKind::BuiltinClassMember(_)
                     | KernelExprKind::Builtin(_)
-                    | KernelExprKind::SuffixedInteger(_)
-                    | KernelExprKind::List(_)
-                    | KernelExprKind::Map(_)
-                    | KernelExprKind::Set(_) => {
+                    | KernelExprKind::SuffixedInteger(_) => {
                         errors.push(self.unsupported_expression(
                             kernel_id,
                             expr_id,
@@ -1045,6 +1058,18 @@ impl<'a> CraneliftCompiler<'a> {
             },
             BuildRuntimeText {
                 expr_id: KernelExprId,
+            },
+            BuildRuntimeList {
+                expr_id: KernelExprId,
+                count: usize,
+            },
+            BuildRuntimeSet {
+                expr_id: KernelExprId,
+                count: usize,
+            },
+            BuildRuntimeMap {
+                expr_id: KernelExprId,
+                count: usize,
             },
             BuildPipeStage {
                 pipe_expr: KernelExprId,
@@ -1395,6 +1420,34 @@ impl<'a> CraneliftCompiler<'a> {
                                 for field in fields.iter().rev() {
                                     tasks.push(Task::Visit(field.value));
                                 }
+                            }
+                        }
+                        KernelExprKind::List(elements) => {
+                            tasks.push(Task::BuildRuntimeList {
+                                expr_id,
+                                count: elements.len(),
+                            });
+                            for elem in elements.iter().rev() {
+                                tasks.push(Task::Visit(*elem));
+                            }
+                        }
+                        KernelExprKind::Set(elements) => {
+                            tasks.push(Task::BuildRuntimeSet {
+                                expr_id,
+                                count: elements.len(),
+                            });
+                            for elem in elements.iter().rev() {
+                                tasks.push(Task::Visit(*elem));
+                            }
+                        }
+                        KernelExprKind::Map(entries) => {
+                            tasks.push(Task::BuildRuntimeMap {
+                                expr_id,
+                                count: entries.len(),
+                            });
+                            for entry in entries.iter().rev() {
+                                tasks.push(Task::Visit(entry.value));
+                                tasks.push(Task::Visit(entry.key));
                             }
                         }
                         KernelExprKind::Builtin(BuiltinTerm::True) => {
@@ -2273,6 +2326,161 @@ impl<'a> CraneliftCompiler<'a> {
                     let concat_func = self.declare_text_concat_func(kernel_id, builder)?;
                     let count_val = builder.ins().iconst(types::I64, n_segs as i64);
                     let call = builder.ins().call(concat_func, &[count_val, array_ptr]);
+                    let result = builder.inst_results(call)[0];
+                    values.push(result);
+                }
+                Task::BuildRuntimeList { expr_id, count } => {
+                    let mut element_values: Vec<Value> = (0..count)
+                        .map(|_| values.pop().expect("list element value"))
+                        .collect();
+                    element_values.reverse();
+
+                    let elem_abi = {
+                        let layout = kernel.exprs()[expr_id].layout;
+                        let LayoutKind::List { element } =
+                            &self.program.layouts()[layout].kind.clone()
+                        else {
+                            return Err(self.unsupported_expression(
+                                kernel_id,
+                                expr_id,
+                                "BuildRuntimeList requires List layout",
+                            ));
+                        };
+                        self.field_abi_shape(kernel_id, *element, "list element")?
+                    };
+                    let stride = elem_abi.size.max(1);
+                    let array_size = (count as u32) * stride;
+                    let array_slot =
+                        builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                            array_size.max(8),
+                            elem_abi.align.max(1).ilog2() as u8,
+                        ));
+                    let array_ptr = builder.ins().stack_addr(self.pointer_type(), array_slot, 0);
+                    for (i, elem_val) in element_values.iter().enumerate() {
+                        builder.ins().store(
+                            MemFlags::new(),
+                            *elem_val,
+                            array_ptr,
+                            (i as u32 * stride) as i32,
+                        );
+                    }
+
+                    let list_func = self.declare_list_new_func(kernel_id, builder)?;
+                    let count_val = builder.ins().iconst(types::I64, count as i64);
+                    let stride_val = builder.ins().iconst(types::I64, stride as i64);
+                    let call =
+                        builder
+                            .ins()
+                            .call(list_func, &[count_val, array_ptr, stride_val]);
+                    let result = builder.inst_results(call)[0];
+                    values.push(result);
+                }
+                Task::BuildRuntimeSet { expr_id, count } => {
+                    let mut element_values: Vec<Value> = (0..count)
+                        .map(|_| values.pop().expect("set element value"))
+                        .collect();
+                    element_values.reverse();
+
+                    let elem_abi = {
+                        let layout = kernel.exprs()[expr_id].layout;
+                        let LayoutKind::Set { element } =
+                            &self.program.layouts()[layout].kind.clone()
+                        else {
+                            return Err(self.unsupported_expression(
+                                kernel_id,
+                                expr_id,
+                                "BuildRuntimeSet requires Set layout",
+                            ));
+                        };
+                        self.field_abi_shape(kernel_id, *element, "set element")?
+                    };
+                    let stride = elem_abi.size.max(1);
+                    let array_size = (count as u32) * stride;
+                    let array_slot =
+                        builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                            array_size.max(8),
+                            elem_abi.align.max(1).ilog2() as u8,
+                        ));
+                    let array_ptr = builder.ins().stack_addr(self.pointer_type(), array_slot, 0);
+                    for (i, elem_val) in element_values.iter().enumerate() {
+                        builder.ins().store(
+                            MemFlags::new(),
+                            *elem_val,
+                            array_ptr,
+                            (i as u32 * stride) as i32,
+                        );
+                    }
+
+                    let set_func = self.declare_set_new_func(kernel_id, builder)?;
+                    let count_val = builder.ins().iconst(types::I64, count as i64);
+                    let stride_val = builder.ins().iconst(types::I64, stride as i64);
+                    let call =
+                        builder
+                            .ins()
+                            .call(set_func, &[count_val, array_ptr, stride_val]);
+                    let result = builder.inst_results(call)[0];
+                    values.push(result);
+                }
+                Task::BuildRuntimeMap { expr_id, count } => {
+                    let mut kv_values: Vec<Value> = (0..count * 2)
+                        .map(|_| values.pop().expect("map key/value"))
+                        .collect();
+                    kv_values.reverse();
+
+                    let (key_abi, val_abi) = {
+                        let layout = kernel.exprs()[expr_id].layout;
+                        let LayoutKind::Map { key, value } =
+                            &self.program.layouts()[layout].kind.clone()
+                        else {
+                            return Err(self.unsupported_expression(
+                                kernel_id,
+                                expr_id,
+                                "BuildRuntimeMap requires Map layout",
+                            ));
+                        };
+                        (
+                            self.field_abi_shape(kernel_id, *key, "map key")?,
+                            self.field_abi_shape(kernel_id, *value, "map value")?,
+                        )
+                    };
+                    let key_stride = key_abi.size.max(1);
+                    let val_stride = val_abi.size.max(1);
+                    let entry_stride = key_stride + val_stride;
+                    let array_size = (count as u32) * entry_stride;
+                    let align = key_abi.align.max(val_abi.align).max(1);
+                    let array_slot =
+                        builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                            array_size.max(8),
+                            align.ilog2() as u8,
+                        ));
+                    let array_ptr = builder.ins().stack_addr(self.pointer_type(), array_slot, 0);
+                    for i in 0..count {
+                        let base_offset = (i as u32) * entry_stride;
+                        builder.ins().store(
+                            MemFlags::new(),
+                            kv_values[i * 2],
+                            array_ptr,
+                            base_offset as i32,
+                        );
+                        builder.ins().store(
+                            MemFlags::new(),
+                            kv_values[i * 2 + 1],
+                            array_ptr,
+                            (base_offset + key_stride) as i32,
+                        );
+                    }
+
+                    let map_func = self.declare_map_new_func(kernel_id, builder)?;
+                    let count_val = builder.ins().iconst(types::I64, count as i64);
+                    let key_size_val = builder.ins().iconst(types::I64, key_stride as i64);
+                    let val_size_val = builder.ins().iconst(types::I64, val_stride as i64);
+                    let call = builder.ins().call(
+                        map_func,
+                        &[count_val, array_ptr, key_size_val, val_size_val],
+                    );
                     let result = builder.inst_results(call)[0];
                     values.push(result);
                 }
@@ -5065,6 +5273,94 @@ impl<'a> CraneliftCompiler<'a> {
             let mut sig = self.module.make_signature();
             sig.params.push(AbiParam::new(types::I64));
             sig.params.push(AbiParam::new(self.pointer_type()));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
+    /// `aivi_list_new(count: i64, elements_ptr: ptr, element_size: i64) -> ptr`
+    fn declare_list_new_func(
+        &mut self,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let sym = "aivi_list_new";
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
+            sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(self.pointer_type()));
+            sig.params.push(AbiParam::new(types::I64));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
+    /// `aivi_set_new(count: i64, elements_ptr: ptr, element_size: i64) -> ptr`
+    fn declare_set_new_func(
+        &mut self,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let sym = "aivi_set_new";
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
+            sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(self.pointer_type()));
+            sig.params.push(AbiParam::new(types::I64));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
+    /// `aivi_map_new(count: i64, entries_ptr: ptr, key_size: i64, value_size: i64) -> ptr`
+    fn declare_map_new_func(
+        &mut self,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let sym = "aivi_map_new";
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
+            sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(self.pointer_type()));
+            sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(types::I64));
             sig.returns.push(AbiParam::new(self.pointer_type()));
             let fid = self
                 .module

@@ -5319,3 +5319,64 @@ value activateUser: Task Text Unit =
         }))
     );
 }
+
+#[test]
+fn cranelift_codegen_compiles_list_literal() {
+    let backend = lower_text(
+        "backend-list-literal-codegen.aivi",
+        "value nums:List Int = [1, 2, 3]\n",
+    );
+    let body = backend.items()[find_item(&backend, "nums")]
+        .body
+        .expect("nums should carry a body kernel");
+    let compiled =
+        compile_program(&backend).expect("list literal should compile");
+    let artifact = compiled
+        .kernel(body)
+        .expect("compiled program should retain list kernel metadata");
+    assert!(artifact.code_size > 0);
+    assert!(
+        artifact
+            .clif
+            .contains(&format!("() -> {}", clif_pointer_ty()))
+    );
+    assert!(!compiled.object().is_empty());
+}
+
+#[test]
+fn cranelift_codegen_compiles_set_literal() {
+    let backend = lower_text(
+        "backend-set-literal-codegen.aivi",
+        r#"value tags:Set Text = Set ["news", "featured"]
+"#,
+    );
+    let body = backend.items()[find_item(&backend, "tags")]
+        .body
+        .expect("tags should carry a body kernel");
+    let compiled =
+        compile_program(&backend).expect("set literal should compile");
+    let artifact = compiled
+        .kernel(body)
+        .expect("compiled program should retain set kernel metadata");
+    assert!(artifact.code_size > 0);
+    assert!(!compiled.object().is_empty());
+}
+
+#[test]
+fn cranelift_codegen_compiles_map_literal() {
+    let backend = lower_text(
+        "backend-map-literal-codegen.aivi",
+        r#"value headers:Map Text Text = Map { "Accept": "application/json", "Host": "example.com" }
+"#,
+    );
+    let body = backend.items()[find_item(&backend, "headers")]
+        .body
+        .expect("headers should carry a body kernel");
+    let compiled =
+        compile_program(&backend).expect("map literal should compile");
+    let artifact = compiled
+        .kernel(body)
+        .expect("compiled program should retain map kernel metadata");
+    assert!(artifact.code_size > 0);
+    assert!(!compiled.object().is_empty());
+}

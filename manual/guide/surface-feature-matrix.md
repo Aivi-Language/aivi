@@ -57,8 +57,8 @@ It answers “what checks, executes, runs, or compiles today?” rather than “
 | Domain suffix literals (`250ms`, `10sec`, `3min`) | yes | yes | yes | partial | Surface and runtime support are real; compile still depends on the domain-member/codegen subset. |
 | Text interpolation | yes | yes | yes | partial | Static text interpolation compiles. Dynamic interpolation still relies on `Reduce(List)` / `Append(List)` lowering which remains outside the current codegen slice. |
 | Regex literals | partial | no | no | no | Regex literals in expression position produce `hir::regex-in-expression`; the only valid use is as `@source` option values (e.g. `pattern: rx"..."` in an HTTP or filesystem source). Use the `aivi.regex` module for runtime pattern matching. |
-| Record / tuple / list literals | yes | yes | yes | partial | Runtime support is broad; compile only covers part of the aggregate lowering space. |
-| `Map { ... }` / `Set [ ... ]` literals | yes | yes | yes | no | The checker/runtime know these literals, but codegen still rejects remaining collection lowering in the first Cranelift slice. |
+| Record / tuple / list literals | yes | yes | yes | partial | Runtime support is broad; compile covers scalar/by-reference aggregates and list literals via runtime constructor calls. |
+| `Map { ... }` / `Set [ ... ]` literals | yes | yes | yes | partial | Compile emits runtime constructor calls (`aivi_list_new`, `aivi_set_new`, `aivi_map_new`); element evaluation and stack marshalling are code-generated. |
 | Type-level record row transforms (`Pick`, `Omit`, `Rename`, `Optional`, `Required`, `Defaulted`) | yes | yes | yes | yes | These are type-surface features; once checking succeeds, the later runtime/compile path sees the elaborated shape. |
 | `Default` and record omission | yes | yes | yes | partial | Omission elaborates in the checker, but the resulting record-heavy runtime values still inherit aggregate codegen limits. |
 | Record shorthand | yes | yes | yes | partial | Checked and runtime-backed; compile inherits record/aggregate narrowing. |
@@ -123,7 +123,7 @@ It answers “what checks, executes, runs, or compiles today?” rather than “
 
 ## Biggest Gaps
 
-- `compile` is still a first-slice AOT boundary. It emits object code only and explicitly rejects remaining aggregate/collection lowering (`Map`/`Set`/`List` literals), fan-out stages, debug stages, and dynamic text interpolation relying on `Reduce(List)`/`Append(List)`.
+- `compile` is a first-slice AOT boundary. It emits object code with runtime constructor imports for collection literals (`aivi_list_new`/`aivi_set_new`/`aivi_map_new`). Fan-out stages, debug stages, and dynamic text interpolation relying on `Reduce(List)`/`Append(List)` remain outside the codegen slice.
 - Inline-pipe `Case`, `TruthyFalsy`, and `Tap` stages now have Cranelift emission code but coverage is still narrower than the runtime pattern/carrier set.
 - `Previous`/`Diff` temporal stages work end to end for derived signals in the live runtime. General-expression contexts still block them (by design: temporal state requires a signal host).
 - Imported user-authored higher-kinded instances and imported polymorphic class-member execution are still deferred.
