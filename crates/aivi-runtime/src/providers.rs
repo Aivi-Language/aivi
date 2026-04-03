@@ -440,6 +440,21 @@ impl SourceProviderManager {
         WindowKeyConfig { capture, focus_only }
     }
 
+    /// Returns `true` when at least one worker thread spawned by this manager
+    /// is still running (i.e. has not yet finished).  Immediate sources that
+    /// publish synchronously during activation never create thread handles, so
+    /// this returns `false` for programs that only use immediate sources.
+    pub fn has_unfinished_worker_threads(&self) -> bool {
+        let handles = self
+            .thread_handles
+            .lock()
+            .expect("thread_handles mutex should not be poisoned");
+        handles
+            .values()
+            .flat_map(|v| v.iter())
+            .any(|h| !h.is_finished())
+    }
+
     pub fn apply_actions(
         &mut self,
         actions: &[LinkedSourceLifecycleAction],
