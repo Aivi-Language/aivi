@@ -326,6 +326,316 @@ type Eq A => A -> A -> Bool
 func __aivi_binary_neq = left right =>
     left != right
 
+type NonEmptyList A =
+  | MkNEL A (List A)
+
+type A -> (NonEmptyList A)
+func __aivi_nel_singleton = item =>
+    MkNEL item []
+
+type A -> (NonEmptyList A) -> (NonEmptyList A)
+func __aivi_nel_cons = item nel => nel
+    ||> MkNEL h t -> MkNEL item (append [h] t)
+
+type NonEmptyList A -> A
+func __aivi_nel_head = nel => nel
+    ||> MkNEL h ignored -> h
+
+type NonEmptyList A -> (List A)
+func __aivi_nel_toList = nel => nel
+    ||> MkNEL h t -> append [h] t
+
+type A -> (List A) -> (NonEmptyList A)
+func __aivi_nel_fromHeadTail = h t =>
+    MkNEL h t
+
+type Int -> A -> Int
+func __aivi_nel_lengthStep = acc ignored =>
+    acc + 1
+
+type (List A) -> Int
+func __aivi_nel_tailLength = t => t
+    |> reduce __aivi_nel_lengthStep 1
+
+type NonEmptyList A -> Int
+func __aivi_nel_length = nel => nel
+    ||> MkNEL ignored t -> __aivi_nel_tailLength t
+
+type (List A) -> (Option A) -> (List A)
+func __aivi_nel_initAppendPrev = items prev => prev
+    ||> Some p -> append items [p]
+    ||> None   -> items
+
+type (List A) -> (Option A) -> A -> (List A, Option A)
+func __aivi_nel_initAccum = items prev item =>
+    (__aivi_nel_initAppendPrev items prev, Some item)
+
+type (List A, Option A) -> A -> (List A, Option A)
+func __aivi_nel_initStep = state item => state
+    ||> (items, prev) -> __aivi_nel_initAccum items prev item
+
+func __aivi_nel_initExtract:(List A) = state:(List A, Option A) => state
+    ||> (items, prev) -> items
+
+type NonEmptyList A -> (List A)
+func __aivi_nel_init = nel => nel
+    ||> MkNEL h t ->
+        append [h] t
+          |> reduce __aivi_nel_initStep ([], None)
+          |> __aivi_nel_initExtract
+
+type (A -> B) -> (Option A) -> (Option B)
+func __aivi_option_map = transform opt => opt
+    ||> Some item -> Some (transform item)
+    ||> None      -> None
+
+type (A -> Bool) -> Bool -> A -> Bool
+func __aivi_list_containsStep = eq found item => found
+    T|> True
+    F|> eq item
+
+type (A -> A -> Bool) -> A -> (List A) -> Bool
+func __aivi_list_contains = eq target items => items
+    |> reduce (__aivi_list_containsStep (eq target)) False
+
+type (A -> B) -> (List B) -> A -> (List B)
+func __aivi_list_mapStep = transform acc item =>
+    append acc [transform item]
+
+type (A -> B) -> (List A) -> (List B)
+func __aivi_list_map = transform items => items
+    |> reduce (__aivi_list_mapStep transform) []
+
+type (A -> List B) -> (List B) -> A -> (List B)
+func __aivi_list_flatMapStep = transform acc item =>
+    append acc (transform item)
+
+type (A -> List B) -> (List A) -> (List B)
+func __aivi_list_flatMap = transform items => items
+    |> reduce (__aivi_list_flatMapStep transform) []
+
+type (A -> Bool) -> (List A) -> A -> (List A)
+func __aivi_list_filterAppend = predicate acc item => predicate item
+    T|> append acc [item]
+    F|> acc
+
+type (A -> Bool) -> (List A) -> (List A)
+func __aivi_list_filter = predicate items => items
+    |> reduce (__aivi_list_filterAppend predicate) []
+
+type (A -> Bool) -> Int -> A -> Int
+func __aivi_list_countStep = predicate acc item => predicate item
+    T|> acc + 1
+    F|> acc
+
+type (A -> Bool) -> (List A) -> Int
+func __aivi_list_count = predicate items => items
+    |> reduce (__aivi_list_countStep predicate) 0
+
+type Int -> Int -> Int
+func __aivi_list_sumStep = acc item =>
+    acc + item
+
+type (List Int) -> Int
+func __aivi_list_sum = items => items
+    |> reduce __aivi_list_sumStep 0
+
+type (A -> A -> Bool) -> A -> A -> (Option A)
+func __aivi_list_maxPick = gt item prev => gt item prev
+    T|> Some item
+    F|> Some prev
+
+type (A -> A -> Bool) -> (Option A) -> A -> (Option A)
+func __aivi_list_maximumStep = gt best item => best
+    ||> None     -> Some item
+    ||> Some prev -> __aivi_list_maxPick gt item prev
+
+type (A -> A -> Bool) -> (List A) -> (Option A)
+func __aivi_list_maximum = gt items => items
+    |> reduce (__aivi_list_maximumStep gt) None
+
+type Int -> (List Int) -> (List Int)
+func __aivi_list_rangeDesc = current acc => current < 0
+    T|> acc
+    F|> __aivi_list_rangeDesc (current - 1) (append [current] acc)
+
+type Int -> (List Int)
+func __aivi_list_range = n => n <= 0
+    T|> []
+    F|> __aivi_list_rangeDesc (n - 1) []
+
+type Text -> Text -> Text -> (Bool, Text)
+func __aivi_text_joinFirst = sep result item =>
+    (False, item)
+
+type Text -> Text -> Text -> (Bool, Text)
+func __aivi_text_joinNext = sep result item =>
+    (False, append (append result sep) item)
+
+type Bool -> Text -> Text -> Text -> (Bool, Text)
+func __aivi_text_joinPick = isFirst sep result item => isFirst
+    T|> __aivi_text_joinFirst sep result item
+    F|> __aivi_text_joinNext sep result item
+
+type Text -> (Bool, Text) -> Text -> (Bool, Text)
+func __aivi_text_joinStep = sep state item => state
+    ||> (isFirst, result) -> __aivi_text_joinPick isFirst sep result item
+
+type (Bool, Text) -> Text
+func __aivi_text_joinExtract = state => state
+    ||> (isFirst, result) -> result
+
+type Text -> (List Text) -> Text
+func __aivi_text_join = sep items => items
+    |> reduce (__aivi_text_joinStep sep) (True, "")
+    |> __aivi_text_joinExtract
+
+type Matrix A =
+  | MkMatrix Int Int (List (List A))
+
+type MatrixError =
+  | NegativeWidth Int
+  | NegativeHeight Int
+  | RaggedRows Int Int Int
+
+type (Matrix A) -> (List (List A))
+func __aivi_matrix_rows = matrix => matrix
+    ||> MkMatrix w h data -> data
+
+type (Matrix A) -> Int
+func __aivi_matrix_width = matrix => matrix
+    ||> MkMatrix w h data -> w
+
+type (Matrix A) -> Int
+func __aivi_matrix_height = matrix => matrix
+    ||> MkMatrix w h data -> h
+
+type Bool -> Int -> A -> (Int, Option A)
+func __aivi_listAt_match = matches idx item => matches
+    T|> (idx + 1, Some item)
+    F|> (idx + 1, None)
+
+type Int -> Int -> (Option A) -> A -> (Int, Option A)
+func __aivi_listAt_check = target idx found item => found
+    ||> Some already -> (idx + 1, Some already)
+    ||> None -> __aivi_listAt_match (idx == target) idx item
+
+type Int -> (Int, Option A) -> A -> (Int, Option A)
+func __aivi_listAt_step = target state item => state
+    ||> (idx, found) -> __aivi_listAt_check target idx found item
+
+type (Int, Option A) -> (Option A)
+func __aivi_listAt_extract = state => state
+    ||> (idx, found) -> found
+
+type Int -> (List A) -> (Option A)
+func __aivi_listAt = target items => items
+    |> reduce (__aivi_listAt_step target) (0, None)
+    |> __aivi_listAt_extract
+
+type (Option A) -> Int -> (Option A)
+func __aivi_matrix_atRow = rowOpt x => rowOpt
+    ||> Some row -> __aivi_listAt x row
+    ||> None     -> None
+
+type (Matrix A) -> Int -> Int -> (Option A)
+func __aivi_matrix_at = matrix x y => matrix
+    ||> MkMatrix w h data ->
+        __aivi_matrix_atRow (__aivi_listAt y data) x
+
+type Bool -> A -> (List A) -> A -> (Int, List A)
+func __aivi_listReplace_pick = matches newVal result item => matches
+    T|> (1, append result [newVal])
+    F|> (1, append result [item])
+
+type Int -> A -> Int -> (List A) -> A -> (Int, List A)
+func __aivi_listReplace_check = target newVal idx result item =>
+    __aivi_listReplace_pick (idx == target) newVal result item
+
+type Int -> A -> (Int, List A) -> A -> (Int, List A)
+func __aivi_listReplace_step = target newVal state item => state
+    ||> (idx, result) -> __aivi_listReplace_check target newVal idx result item
+
+type (Int, List A) -> (List A)
+func __aivi_listReplace_extract = state => state
+    ||> (idx, result) -> result
+
+type Int -> A -> (List A) -> (List A)
+func __aivi_listReplace = target newVal items => items
+    |> reduce (__aivi_listReplace_step target newVal) (0, [])
+    |> __aivi_listReplace_extract
+
+type Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
+func __aivi_matrix_doReplace = x y w h data value =>
+    __aivi_listAt y data
+        ||> Some row -> Some (MkMatrix w h (__aivi_listReplace y (__aivi_listReplace x value row) data))
+        ||> None     -> None
+
+type Bool -> Bool -> Bool -> Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
+func __aivi_matrix_boundsCheck = xOk yOk xLt yLt x y w h data value => xOk
+    T|> __aivi_matrix_boundsCheck2 yOk xLt yLt x y w h data value
+    F|> None
+
+type Bool -> Bool -> Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
+func __aivi_matrix_boundsCheck2 = yOk xLt yLt x y w h data value => yOk
+    T|> __aivi_matrix_boundsCheck3 xLt yLt x y w h data value
+    F|> None
+
+type Bool -> Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
+func __aivi_matrix_boundsCheck3 = xLt yLt x y w h data value => xLt
+    T|> __aivi_matrix_boundsCheck4 yLt x y w h data value
+    F|> None
+
+type Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
+func __aivi_matrix_boundsCheck4 = yLt x y w h data value => yLt
+    T|> __aivi_matrix_doReplace x y w h data value
+    F|> None
+
+type (Matrix A) -> Int -> Int -> A -> (Option (Matrix A))
+func __aivi_matrix_replaceCoord = matrix x y value => matrix
+    ||> MkMatrix w h data -> __aivi_matrix_boundsCheck (x >= 0) (y >= 0) (x < w) (y < h) x y w h data value
+
+type (Matrix A) -> (Int, Int) -> A -> (Option (Matrix A))
+func __aivi_matrix_replaceAt = matrix coord value => coord
+    ||> (x, y) -> __aivi_matrix_replaceCoord matrix x y value
+
+type Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
+func __aivi_matrix_validateFirstRow = rowIdx expectedWidth row =>
+    (1, __aivi_list_length row, None)
+
+type Bool -> Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
+func __aivi_matrix_validateLengthMatch = matches rowIdx expectedWidth row => matches
+    T|> (rowIdx + 1, expectedWidth, None)
+    F|> (rowIdx + 1, expectedWidth, Some (RaggedRows rowIdx expectedWidth (__aivi_list_length row)))
+
+type Bool -> Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
+func __aivi_matrix_validateSubsequentRow = isFirst rowIdx expectedWidth row => isFirst
+    T|> __aivi_matrix_validateFirstRow rowIdx expectedWidth row
+    F|> __aivi_matrix_validateLengthMatch (__aivi_list_length row == expectedWidth) rowIdx expectedWidth row
+
+type (Option MatrixError) -> Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
+func __aivi_matrix_validateRow = prevError rowIdx expectedWidth row => prevError
+    ||> Some e -> (rowIdx + 1, expectedWidth, Some e)
+    ||> None -> __aivi_matrix_validateSubsequentRow (rowIdx == 0) rowIdx expectedWidth row
+
+type (Int, Int, Option MatrixError) -> (List A) -> (Int, Int, Option MatrixError)
+func __aivi_matrix_fromRowsStep = state row => state
+    ||> (rowIdx, width, error) -> __aivi_matrix_validateRow error rowIdx width row
+
+type (Option MatrixError) -> Int -> Int -> (List (List A)) -> (Result MatrixError (Matrix A))
+func __aivi_matrix_fromRowsDecide = error rowCount width inputRows => error
+    ||> Some e -> Err e
+    ||> None   -> Ok (MkMatrix width rowCount inputRows)
+
+type (List (List A)) -> (Int, Int, Option MatrixError) -> (Result MatrixError (Matrix A))
+func __aivi_matrix_fromRowsFinish = inputRows state => state
+    ||> (rowCount, width, error) -> __aivi_matrix_fromRowsDecide error rowCount width inputRows
+
+type (List (List A)) -> (Result MatrixError (Matrix A))
+func __aivi_matrix_fromRows = inputRows => inputRows
+    |> reduce __aivi_matrix_fromRowsStep (0, 0, None)
+    |> __aivi_matrix_fromRowsFinish inputRows
+
 "#;
 
 const MAX_COMPILE_TIME_RANGE_ELEMENTS: u64 = 4096;
@@ -1802,7 +2112,11 @@ impl<'a> Lowerer<'a> {
                     if let Some(metadata) =
                         known_import_metadata(module_name, imported_name.text())
                     {
-                        if matches!(metadata, ImportBindingMetadata::AmbientValue { .. }) {
+                        if matches!(
+                            metadata,
+                            ImportBindingMetadata::AmbientValue { .. }
+                                | ImportBindingMetadata::AmbientType
+                        ) {
                             return (ImportBindingResolution::Resolved, metadata, None, None);
                         }
                     }
@@ -7702,6 +8016,10 @@ fn is_known_module(module: &str) -> bool {
             | "aivi.regex"
             | "aivi.http"
             | "aivi.bigint"
+            | "aivi.nonEmpty"
+            | "aivi.matrix"
+            | "aivi.option"
+            | "aivi.list"
     )
 }
 
@@ -8741,6 +9059,83 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 ),
             ),
         )),
+        // NonEmptyList ambient types and values
+        ("aivi.nonEmpty", "NonEmptyList") => Some(ImportBindingMetadata::AmbientType),
+        ("aivi.nonEmpty", "singleton") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_singleton".into(),
+        }),
+        ("aivi.nonEmpty", "head") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_head".into(),
+        }),
+        ("aivi.nonEmpty", "cons") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_cons".into(),
+        }),
+        ("aivi.nonEmpty", "length") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_length".into(),
+        }),
+        ("aivi.nonEmpty", "toList") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_toList".into(),
+        }),
+        ("aivi.nonEmpty", "init") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_init".into(),
+        }),
+        ("aivi.nonEmpty", "fromHeadTail") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_nel_fromHeadTail".into(),
+        }),
+        // Option ambient values
+        ("aivi.option", "map") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_option_map".into(),
+        }),
+        // List ambient values
+        ("aivi.list", "contains") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_contains".into(),
+        }),
+        ("aivi.list", "map") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_map".into(),
+        }),
+        ("aivi.list", "flatMap") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_flatMap".into(),
+        }),
+        ("aivi.list", "filter") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_filter".into(),
+        }),
+        ("aivi.list", "count") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_count".into(),
+        }),
+        ("aivi.list", "sum") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_sum".into(),
+        }),
+        ("aivi.list", "maximum") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_maximum".into(),
+        }),
+        // Text ambient values
+        ("aivi.text", "join") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_text_join".into(),
+        }),
+        // Matrix ambient types and values
+        ("aivi.matrix", "Matrix") => Some(ImportBindingMetadata::AmbientType),
+        ("aivi.matrix", "MatrixError") => Some(ImportBindingMetadata::AmbientType),
+        ("aivi.matrix", "indices") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_range".into(),
+        }),
+        ("aivi.matrix", "fromRows") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_fromRows".into(),
+        }),
+        ("aivi.matrix", "at") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_at".into(),
+        }),
+        ("aivi.matrix", "replaceAt") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_replaceAt".into(),
+        }),
+        ("aivi.matrix", "rows") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_rows".into(),
+        }),
+        ("aivi.matrix", "width") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_width".into(),
+        }),
+        ("aivi.matrix", "height") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_height".into(),
+        }),
         _ => None,
     }
 }

@@ -301,8 +301,13 @@ impl<'a> ProgramLowerer<'a> {
     fn check_global_item_cycles(&self) -> Result<(), LoweringError> {
         // Build an adjacency map: for each core item that has a body, collect the set of
         // other core items directly referenced in its closure expressions.
+        // Ambient prelude items (__aivi_*) are runtime-interpreted and may be recursive,
+        // so they are excluded from the cycle check.
         let mut adjacency: HashMap<core::ItemId, Vec<core::ItemId>> = HashMap::new();
         for (core_id, item) in self.lambda.items().iter() {
+            if item.name.starts_with("__aivi_") {
+                continue;
+            }
             let Some(body_closure_id) = item.body else {
                 adjacency.entry(core_id).or_default();
                 continue;

@@ -635,6 +635,23 @@ impl GateType {
         }
     }
 
+    /// Extract the canonical name and arguments from a user-defined type variant
+    /// (Domain, OpaqueItem, OpaqueImport). Returns None for builtin/primitive types.
+    fn named_type_parts(&self) -> Option<(&str, &[GateType])> {
+        match self {
+            Self::Domain {
+                name, arguments, ..
+            }
+            | Self::OpaqueItem {
+                name, arguments, ..
+            }
+            | Self::OpaqueImport {
+                name, arguments, ..
+            } => Some((name.as_str(), arguments.as_slice())),
+            _ => None,
+        }
+    }
+
     pub(crate) fn same_shape(&self, other: &Self) -> bool {
         let mut left_to_right = HashMap::new();
         let mut right_to_left = HashMap::new();
@@ -849,16 +866,12 @@ impl GateType {
                 _ => false,
             },
             Self::Domain {
-                item: ti,
+                name: tname,
                 arguments: targs,
                 ..
-            } => match self {
-                Self::Domain {
-                    item: si,
-                    arguments: sargs,
-                    ..
-                } => {
-                    si == ti
+            } => match self.named_type_parts() {
+                Some((sname, sargs)) => {
+                    sname == tname
                         && sargs.len() == targs.len()
                         && sargs
                             .iter()
@@ -868,16 +881,12 @@ impl GateType {
                 _ => false,
             },
             Self::OpaqueItem {
-                item: ti,
                 arguments: targs,
+                name: tname,
                 ..
-            } => match self {
-                Self::OpaqueItem {
-                    item: si,
-                    arguments: sargs,
-                    ..
-                } => {
-                    si == ti
+            } => match self.named_type_parts() {
+                Some((sname, sargs)) => {
+                    sname == tname
                         && sargs.len() == targs.len()
                         && sargs
                             .iter()
@@ -887,16 +896,12 @@ impl GateType {
                 _ => false,
             },
             Self::OpaqueImport {
-                import: ti,
+                name: tname,
                 arguments: targs,
                 ..
-            } => match self {
-                Self::OpaqueImport {
-                    import: si,
-                    arguments: sargs,
-                    ..
-                } => {
-                    si == ti
+            } => match self.named_type_parts() {
+                Some((sname, sargs)) => {
+                    sname == tname
                         && sargs.len() == targs.len()
                         && sargs
                             .iter()
@@ -1008,16 +1013,12 @@ impl GateType {
                 _ => false,
             },
             Self::Domain {
-                item: ti,
+                name: tname,
                 arguments: targs,
                 ..
-            } => match self {
-                Self::Domain {
-                    item: si,
-                    arguments: sargs,
-                    ..
-                } => {
-                    si == ti
+            } => match self.named_type_parts() {
+                Some((sname, sargs)) => {
+                    sname == tname
                         && sargs.len() == targs.len()
                         && sargs
                             .iter()
@@ -1027,16 +1028,12 @@ impl GateType {
                 _ => false,
             },
             Self::OpaqueItem {
-                item: ti,
                 arguments: targs,
+                name: tname,
                 ..
-            } => match self {
-                Self::OpaqueItem {
-                    item: si,
-                    arguments: sargs,
-                    ..
-                } => {
-                    si == ti
+            } => match self.named_type_parts() {
+                Some((sname, sargs)) => {
+                    sname == tname
                         && sargs.len() == targs.len()
                         && sargs
                             .iter()
@@ -1046,16 +1043,12 @@ impl GateType {
                 _ => false,
             },
             Self::OpaqueImport {
-                import: ti,
+                name: tname,
                 arguments: targs,
                 ..
-            } => match self {
-                Self::OpaqueImport {
-                    import: si,
-                    arguments: sargs,
-                    ..
-                } => {
-                    si == ti
+            } => match self.named_type_parts() {
+                Some((sname, sargs)) => {
+                    sname == tname
                         && sargs.len() == targs.len()
                         && sargs
                             .iter()
@@ -1188,16 +1181,25 @@ impl GateType {
             (
                 Self::Domain {
                     item: left_item,
+                    name: left_name,
                     arguments: left_arguments,
-                    ..
                 },
                 Self::Domain {
                     item: right_item,
+                    name: right_name,
                     arguments: right_arguments,
-                    ..
                 },
-            )
-            | (
+            ) => {
+                (left_item == right_item || left_name == right_name)
+                    && left_arguments.len() == right_arguments.len()
+                    && left_arguments
+                        .iter()
+                        .zip(right_arguments.iter())
+                        .all(|(left, right)| {
+                            Self::same_shape_inner(left, right, left_to_right, right_to_left)
+                        })
+            }
+            (
                 Self::OpaqueItem {
                     item: left_item,
                     arguments: left_arguments,
@@ -1239,7 +1241,20 @@ impl GateType {
                             Self::same_shape_inner(left, right, left_to_right, right_to_left)
                         })
             }
-            _ => false,
+            // Cross-variant name-based equivalence: Domain, OpaqueItem, and
+            // OpaqueImport all represent the same logical type when their canonical
+            // names and argument shapes agree.  This covers ambient-prelude types
+            // versus stdlib-imported types across all variant combinations.
+            _ => match (left.named_type_parts(), right.named_type_parts()) {
+                (Some((ln, la)), Some((rn, ra))) => {
+                    ln == rn
+                        && la.len() == ra.len()
+                        && la.iter().zip(ra.iter()).all(|(l, r)| {
+                            Self::same_shape_inner(l, r, left_to_right, right_to_left)
+                        })
+                }
+                _ => false,
+            },
         }
     }
 
@@ -4339,7 +4354,9 @@ impl<'a> GateTypeContext<'a> {
                 let Some((actual_head, actual_arguments)) = actual.constructor_view() else {
                     return false;
                 };
-                expected_head == actual_head
+                let heads_match = expected_head == actual_head
+                    || self.constructor_heads_same_name(&expected_head, actual);
+                heads_match
                     && actual_arguments.len() >= arguments.len()
                     && arguments.iter().zip(actual_arguments.iter()).all(
                         |(argument, actual_argument)| {
@@ -4442,6 +4459,31 @@ impl<'a> GateTypeContext<'a> {
                     arguments: arguments.to_vec(),
                 })
             }
+        }
+    }
+
+    /// Check whether an expected TypeConstructorHead matches an actual GateType
+    /// by canonical name, handling cross-variant cases (Item vs Import).
+    fn constructor_heads_same_name(
+        &self,
+        expected: &TypeConstructorHead,
+        actual: &GateType,
+    ) -> bool {
+        let expected_name = match expected {
+            TypeConstructorHead::Item(item_id) => {
+                Some(item_type_name(&self.module.items()[*item_id]))
+            }
+            TypeConstructorHead::Import(import_id) => self
+                .module
+                .imports()
+                .get(*import_id)
+                .map(|imp| imp.imported_name.text().to_owned()),
+            TypeConstructorHead::Builtin(_) => None,
+        };
+        let actual_name = actual.named_type_parts().map(|(n, _)| n);
+        match (expected_name, actual_name) {
+            (Some(en), Some(an)) => en == an,
+            _ => false,
         }
     }
 

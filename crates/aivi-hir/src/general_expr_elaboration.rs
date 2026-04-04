@@ -1497,9 +1497,36 @@ impl<'a> GeneralExprElaborator<'a> {
             ExprKind::PatchApply { target, patch } => {
                 return self.lower_patch_apply_expr(expr_id, *target, patch, env, ambient, expected);
             }
+            ExprKind::Cluster(cluster) => {
+                return self.lower_cluster_expr(expr_id, *cluster, env, ambient, expected);
+            }
             _ => {}
         }
-        let ty = self.expr_type(expr_id, env, ambient, expected)?;
+        let ty = match self.expr_type(expr_id, env, ambient, expected) {
+            Ok(ty) => ty,
+            Err(original_err) => {
+                // For Apply expressions where expr_type fails (e.g. polymorphic callee
+                // with argument types that can't be inferred), try direct apply lowering
+                // using the concrete expected result type to drive argument expectations.
+                if let ExprKind::Apply {
+                    callee, arguments, ..
+                } = &expr.kind
+                {
+                    if let Some(result_ty) = expected {
+                        if let Ok(kind) = self.lower_apply_expr(
+                            expr_id, *callee, arguments, env, ambient, result_ty,
+                        ) {
+                            return Ok(GateRuntimeExpr {
+                                span: expr.span,
+                                ty: result_ty.clone(),
+                                kind,
+                            });
+                        }
+                    }
+                }
+                return Err(original_err);
+            }
+        };
         let kind = match expr.kind {
             ExprKind::Name(reference) => GateRuntimeExprKind::Reference(
                 self.runtime_reference_for_name(expr.span, &reference, &ty)?,
@@ -1692,11 +1719,9 @@ impl<'a> GeneralExprElaborator<'a> {
             )?),
             ExprKind::Markup(_)
             | ExprKind::PatchApply { .. }
-            | ExprKind::PatchLiteral(_) => {
-                unreachable!("patch/markup are handled before type inference")
-            }
-            ExprKind::Cluster(cluster) => {
-                return self.lower_cluster_expr(expr_id, cluster, env, ambient, expected);
+            | ExprKind::PatchLiteral(_)
+            | ExprKind::Cluster(_) => {
+                unreachable!("patch/markup/cluster are handled before type inference")
             }
         };
         Ok(GateRuntimeExpr {
@@ -1955,8 +1980,22 @@ impl<'a> GeneralExprElaborator<'a> {
             .actual_gate_type()
             .or_else(|| inferred_callee.ty.clone());
         let inferred_parameter_types = inferred_callee_ty.as_ref().and_then(|ty| {
-            self.function_signature(ty, arguments.len())
-                .map(|(parameters, _)| parameters)
+            let (parameters, inferred_result) = self.function_signature(ty, arguments.len())?;
+            // When the callee is polymorphic but the concrete result type is known,
+            // pre-substitute TypeParameters so argument expectations are concrete.
+            if !result_ty.has_type_params() && inferred_result.has_type_params() {
+                let subs =
+                    collect_type_param_subs(&[inferred_result], &[result_ty.clone()]);
+                if !subs.is_empty() {
+                    return Some(
+                        parameters
+                            .iter()
+                            .map(|p| substitute_gate_type(p, &subs))
+                            .collect(),
+                    );
+                }
+            }
+            Some(parameters)
         });
         let argument_expectations = constructor_expectations.or(inferred_parameter_types.clone());
 
@@ -2751,10 +2790,72 @@ impl<'a> GeneralExprElaborator<'a> {
                 span: self.module.exprs()[expr_id].span,
             }]);
         };
-        let cluster_ty = self.expr_type(expr_id, env, ambient, expected)?;
+        let cluster_ty = match self.expr_type(expr_id, env, ambient, expected) {
+            Ok(ty) => ty,
+            Err(original_err) => {
+                // Cluster type inference failed (e.g. members have mismatched applicative
+                // kinds). Try interpreting as a plain function application before giving up.
+                let spine = cluster.normalized_spine();
+                if let crate::ApplicativeSpineHead::Expr(callee) = spine.pure_head() {
+                    let args: Vec<ExprId> = spine.apply_arguments().collect();
+                    if let Ok(arguments) = crate::NonEmpty::from_vec(args) {
+                        if let Some(result_ty) = expected.cloned() {
+                            if let Ok(kind) = self.lower_apply_expr(
+                                expr_id, callee, &arguments, env, ambient, &result_ty,
+                            ) {
+                                return Ok(GateRuntimeExpr {
+                                    span: cluster.span,
+                                    ty: result_ty,
+                                    kind,
+                                });
+                            }
+                        }
+                    }
+                }
+                return Err(original_err);
+            }
+        };
+
+        // When the cluster type is not an applicative carrier (List, Option, Result, …),
+        // the cluster is a plain function/constructor call — lower it as a direct Apply
+        // instead of going through the Applicative pure/apply encoding.
+        if self.applicative_payload_type(&cluster_ty).is_none() {
+            let spine = cluster.normalized_spine();
+            let callee_expr = match spine.pure_head() {
+                crate::ApplicativeSpineHead::Expr(callee) => callee,
+                crate::ApplicativeSpineHead::TupleConstructor(_arity) => {
+                    let args: Vec<ExprId> = spine.apply_arguments().collect();
+                    let mut lowered_args = Vec::with_capacity(args.len());
+                    for arg in &args {
+                        lowered_args.push(self.lower_expr(*arg, env, ambient, None)?);
+                    }
+                    let element_types: Vec<GateType> =
+                        lowered_args.iter().map(|a| a.ty.clone()).collect();
+                    return Ok(GateRuntimeExpr {
+                        span: cluster.span,
+                        ty: GateType::Tuple(element_types),
+                        kind: GateRuntimeExprKind::Tuple(lowered_args),
+                    });
+                }
+            };
+            let args_vec: Vec<ExprId> = spine.apply_arguments().collect();
+            let arguments = crate::NonEmpty::from_vec(args_vec).map_err(|_| {
+                vec![GeneralExprBlocker::UnknownExprType {
+                    span: cluster.span,
+                }]
+            })?;
+            let kind =
+                self.lower_apply_expr(expr_id, callee_expr, &arguments, env, ambient, &cluster_ty)?;
+            return Ok(GateRuntimeExpr {
+                span: cluster.span,
+                ty: cluster_ty,
+                kind,
+            });
+        }
+
         let result_payload = self
             .applicative_payload_type(&cluster_ty)
-            .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: cluster.span }])?;
+            .expect("applicative_payload_type checked above");
         let spine = cluster.normalized_spine();
         let members = spine.apply_arguments().collect::<Vec<_>>();
         let mut member_payloads = Vec::with_capacity(members.len());
@@ -2999,11 +3100,22 @@ impl<'a> GeneralExprElaborator<'a> {
         if !info.issues.is_empty() {
             return Err(self.blockers_from_issues(info.issues));
         }
-        info.actual_gate_type().or(info.ty).ok_or_else(|| {
-            vec![GeneralExprBlocker::UnknownExprType {
-                span: self.module.exprs()[expr_id].span,
-            }]
-        })
+        info.actual_gate_type()
+            .or(info.ty)
+            .or_else(|| {
+                // When the expected type carries open type parameters (typical for ambient prelude
+                // items) and inference cannot determine a concrete type, trust the propagated
+                // expected type.  This is safe because the HIR type-checker already validated these
+                // expressions against their annotations.
+                expected
+                    .filter(|e| e.has_type_params())
+                    .cloned()
+            })
+            .ok_or_else(|| {
+                vec![GeneralExprBlocker::UnknownExprType {
+                    span: self.module.exprs()[expr_id].span,
+                }]
+            })
     }
 
     fn runtime_reference_for_name(

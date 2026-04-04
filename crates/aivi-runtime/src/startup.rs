@@ -3014,6 +3014,10 @@ impl<'a> LinkBuilder<'a> {
                         required.insert(item_id);
                     }
                     _ => {
+                        if item.name.starts_with("__aivi_") {
+                            // Ambient prelude items are runtime-interpreted, not compiled.
+                            continue;
+                        }
                         if let Some(body) = item.body {
                             kernel_queue.push(body);
                         } else {
@@ -3050,6 +3054,9 @@ impl<'a> LinkBuilder<'a> {
                         required.insert(*item_id);
                     }
                     _ => {
+                        if item.name.starts_with("__aivi_") {
+                            continue;
+                        }
                         let Some(body) = item.body else {
                             self.errors
                                 .push(BackendRuntimeLinkError::MissingItemBodyForGlobal {
@@ -3086,6 +3093,9 @@ impl<'a> LinkBuilder<'a> {
                         required.insert(*item_id);
                     }
                     _ => {
+                        if item.name.starts_with("__aivi_") {
+                            continue;
+                        }
                         let Some(body) = item.body else {
                             self.errors
                                 .push(BackendRuntimeLinkError::MissingItemBodyForGlobal {

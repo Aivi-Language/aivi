@@ -3701,7 +3701,14 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         let report = elaborate_general_expressions(hir);
         let completeness_errors = validate_general_expr_report_completeness(hir, &report, |_| true);
         let (items, domain_members, instance_members) = report.into_parts();
-        let report_by_owner = items.into_iter().map(|item| (item.owner, item)).collect();
+        let mut report_by_owner: HashMap<HirItemId, _> = items.into_iter().map(|item| (item.owner, item)).collect();
+        // Ambient prelude items are elaborated separately; merge their results so
+        // runtime fragments that reference ambient functions can lower them.
+        let ambient_report = elaborate_ambient_items(hir);
+        let (ambient_items, _, _) = ambient_report.into_parts();
+        for item in ambient_items {
+            report_by_owner.entry(item.owner).or_insert(item);
+        }
         let domain_member_reports = domain_members
             .into_iter()
             .map(|item| {
@@ -3845,6 +3852,12 @@ impl<'a> RuntimeFragmentLowerer<'a> {
             return;
         }
         let Some(report) = self.report_by_owner.get(&owner).cloned() else {
+            let is_ambient = self.lowerer.hir.ambient_items().contains(&owner);
+            if is_ambient {
+                // Ambient items are elaborated separately; just seed them without a body.
+                self.seed_hir_item(owner);
+                return;
+            }
             self.lowerer
                 .errors
                 .push(LoweringError::UnknownOwner { owner });
@@ -4099,7 +4112,13 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
     fn new(hir: &'a aivi_hir::Module, fragment: &'a RuntimeFragmentSpec) -> Self {
         let (items, domain_members, instance_members) =
             elaborate_general_expressions(hir).into_parts();
-        let report_by_owner = items.into_iter().map(|item| (item.owner, item)).collect();
+        let mut report_by_owner: HashMap<HirItemId, _> = items.into_iter().map(|item| (item.owner, item)).collect();
+        // Include ambient prelude items so fragment dependency collection can
+        // transitively walk through ambient function bodies.
+        let (ambient_items, _, _) = elaborate_ambient_items(hir).into_parts();
+        for item in ambient_items {
+            report_by_owner.entry(item.owner).or_insert(item);
+        }
         let domain_member_reports = domain_members
             .into_iter()
             .map(|item| {
