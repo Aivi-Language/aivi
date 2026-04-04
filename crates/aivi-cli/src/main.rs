@@ -29,8 +29,8 @@ use aivi_backend::{
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
 use aivi_core::{
-    IncludedItems, RuntimeFragmentSpec, lower_module_with_items as lower_core_module_with_items,
-    lower_runtime_fragment, lower_runtime_module_with_items, runtime_fragment_included_items,
+    IncludedItems, RuntimeFragmentSpec, lower_runtime_fragment,
+    lower_runtime_module_with_items, runtime_fragment_included_items,
     validate_module as validate_core_module,
 };
 use aivi_gtk::{
@@ -3395,7 +3395,17 @@ fn compile_file(path: &Path, output: Option<&Path>) -> Result<ExitCode, String> 
     let hir_module = lowered.module();
     let production_items = production_item_ids(hir_module);
     let excluded_test_items = hir_module.items().iter().count() - production_items.len();
-    let core = match lower_core_module_with_items(hir_module, &production_items) {
+    let excluded_markup_items = production_items
+        .iter()
+        .filter(|item_id| {
+            matches!(
+                hir_module.items().get(**item_id),
+                Some(Item::Value(value))
+                    if matches!(hir_module.exprs()[value.body].kind, ExprKind::Markup(_))
+            )
+        })
+        .count();
+    let core = match lower_runtime_module_with_items(hir_module, &production_items) {
         Ok(core) => core,
         Err(errors) => {
             print_stage_errors(CompileStage::TypedCoreLowering, errors.errors());
@@ -3458,11 +3468,13 @@ fn compile_file(path: &Path, output: Option<&Path>) -> Result<ExitCode, String> 
     );
     let hir_item_count = hir_module.items().iter().count();
     println!(
-        "  HIR: ok ({} item{}, {} `@test` item{} excluded from production lowering)",
+        "  HIR: ok ({} item{}, {} `@test` item{} excluded, {} markup item{} excluded)",
         hir_item_count,
         plural_suffix(hir_item_count),
         excluded_test_items,
-        plural_suffix(excluded_test_items)
+        plural_suffix(excluded_test_items),
+        excluded_markup_items,
+        plural_suffix(excluded_markup_items)
     );
     let core_item_count = core.items().iter().count();
     println!(
