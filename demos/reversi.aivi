@@ -628,7 +628,7 @@ func applyHumanMoveWithFlips = state coord flips =>
         moveNumber: state.moveNumber + 1,
         lastMove: Some coord,
         lastFlips: flips,
-        animState: HumanFlash coord flips 0
+        animState: Idle
     }
 
 type GameState -> Coord -> GameState
