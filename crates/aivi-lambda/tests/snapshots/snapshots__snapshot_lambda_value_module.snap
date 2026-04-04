@@ -1,5 +1,6 @@
 ---
 source: crates/aivi-lambda/tests/snapshots.rs
+assertion_line: 32
 expression: lambda.pretty()
 ---
 value answer:
@@ -191,7 +192,7 @@ func __aivi_matrix_at:
   params = [matrix: Matrix A, x: Int, y: Int]
   body = closure62
 func __aivi_listReplace_pick:
-  params = [matches: Bool, newVal: A, result: List A, item: A]
+  params = [matches: Bool, newVal: A, idx: Int, result: List A, item: A]
   body = closure63
 func __aivi_listReplace_check:
   params = [target: Int, newVal: A, idx: Int, result: List A, item: A]
@@ -376,43 +377,43 @@ closures:
     params = [rowOpt:#161:Option List A, x:#162:Int]
   closure62 __aivi_matrix_at owner=62 root=expr469 kind=item-body
     params = [matrix:#164:Matrix A, x:#165:Int, y:#166:Int]
-  closure63 __aivi_listReplace_pick owner=63 root=expr485 kind=item-body
-    params = [matches:#170:Bool, newVal:#171:A, result:#172:List A, item:#173:A]
-  closure64 __aivi_listReplace_check owner=64 root=expr493 kind=item-body
-    params = [target:#174:Int, newVal:#175:A, idx:#176:Int, result:#177:List A, item:#178:A]
-  closure65 __aivi_listReplace_step owner=65 root=expr502 kind=item-body
-    params = [target:#179:Int, newVal:#180:A, state:#181:(Int, List A), item:#182:A]
-  closure66 __aivi_listReplace_extract owner=66 root=expr505 kind=item-body
-    params = [state:#185:(Int, List A)]
-  closure67 __aivi_listReplace owner=67 root=expr520 kind=item-body
-    params = [target:#188:Int, newVal:#189:A, items:#190:List A]
-  closure68 __aivi_matrix_doReplace owner=68 root=expr541 kind=item-body
-    params = [x:#191:Int, y:#192:Int, w:#193:Int, h:#194:Int, data:#195:List List A, value:#196:A]
-  closure69 __aivi_matrix_boundsCheck owner=69 root=expr555 kind=item-body
-    params = [xOk:#198:Bool, yOk:#199:Bool, xLt:#200:Bool, yLt:#201:Bool, x:#202:Int, y:#203:Int, w:#204:Int, h:#205:Int, data:#206:List List A, value:#207:A]
-  closure70 __aivi_matrix_boundsCheck2 owner=70 root=expr568 kind=item-body
-    params = [yOk:#208:Bool, xLt:#209:Bool, yLt:#210:Bool, x:#211:Int, y:#212:Int, w:#213:Int, h:#214:Int, data:#215:List List A, value:#216:A]
-  closure71 __aivi_matrix_boundsCheck3 owner=71 root=expr580 kind=item-body
-    params = [xLt:#217:Bool, yLt:#218:Bool, x:#219:Int, y:#220:Int, w:#221:Int, h:#222:Int, data:#223:List List A, value:#224:A]
-  closure72 __aivi_matrix_boundsCheck4 owner=72 root=expr591 kind=item-body
-    params = [yLt:#225:Bool, x:#226:Int, y:#227:Int, w:#228:Int, h:#229:Int, data:#230:List List A, value:#231:A]
-  closure73 __aivi_matrix_replaceCoord owner=73 root=expr613 kind=item-body
-    params = [matrix:#232:Matrix A, x:#233:Int, y:#234:Int, value:#235:A]
-  closure74 __aivi_matrix_replaceAt owner=74 root=expr621 kind=item-body
-    params = [matrix:#239:Matrix A, coord:#240:(Int, Int), value:#241:A]
-  closure75 __aivi_matrix_validateFirstRow owner=75 root=expr627 kind=item-body
-    params = [rowIdx:#244:Int, expectedWidth:#245:Int, row:#246:List A]
-  closure76 __aivi_matrix_validateLengthMatch owner=76 root=expr649 kind=item-body
-    params = [matches:#247:Bool, rowIdx:#248:Int, expectedWidth:#249:Int, row:#250:List A]
-  closure77 __aivi_matrix_validateSubsequentRow owner=77 root=expr666 kind=item-body
-    params = [isFirst:#251:Bool, rowIdx:#252:Int, expectedWidth:#253:Int, row:#254:List A]
-  closure78 __aivi_matrix_validateRow owner=78 root=expr684 kind=item-body
-    params = [prevError:#255:Option MatrixError, rowIdx:#256:Int, expectedWidth:#257:Int, row:#258:List A]
-  closure79 __aivi_matrix_fromRowsStep owner=79 root=expr692 kind=item-body
-    params = [state:#260:(Int, Int, Option MatrixError), row:#261:List A]
-  closure80 __aivi_matrix_fromRowsDecide owner=80 root=expr704 kind=item-body
-    params = [error:#265:Option MatrixError, rowCount:#266:Int, width:#267:Int, inputRows:#268:List List A]
-  closure81 __aivi_matrix_fromRowsFinish owner=81 root=expr712 kind=item-body
-    params = [inputRows:#270:List List A, state:#271:(Int, Int, Option MatrixError)]
-  closure82 __aivi_matrix_fromRows owner=82 root=expr726 kind=item-body
-    params = [inputRows:#275:List List A]
+  closure63 __aivi_listReplace_pick owner=63 root=expr489 kind=item-body
+    params = [matches:#170:Bool, newVal:#171:A, idx:#172:Int, result:#173:List A, item:#174:A]
+  closure64 __aivi_listReplace_check owner=64 root=expr498 kind=item-body
+    params = [target:#175:Int, newVal:#176:A, idx:#177:Int, result:#178:List A, item:#179:A]
+  closure65 __aivi_listReplace_step owner=65 root=expr507 kind=item-body
+    params = [target:#180:Int, newVal:#181:A, state:#182:(Int, List A), item:#183:A]
+  closure66 __aivi_listReplace_extract owner=66 root=expr510 kind=item-body
+    params = [state:#186:(Int, List A)]
+  closure67 __aivi_listReplace owner=67 root=expr525 kind=item-body
+    params = [target:#189:Int, newVal:#190:A, items:#191:List A]
+  closure68 __aivi_matrix_doReplace owner=68 root=expr546 kind=item-body
+    params = [x:#192:Int, y:#193:Int, w:#194:Int, h:#195:Int, data:#196:List List A, value:#197:A]
+  closure69 __aivi_matrix_boundsCheck owner=69 root=expr560 kind=item-body
+    params = [xOk:#199:Bool, yOk:#200:Bool, xLt:#201:Bool, yLt:#202:Bool, x:#203:Int, y:#204:Int, w:#205:Int, h:#206:Int, data:#207:List List A, value:#208:A]
+  closure70 __aivi_matrix_boundsCheck2 owner=70 root=expr573 kind=item-body
+    params = [yOk:#209:Bool, xLt:#210:Bool, yLt:#211:Bool, x:#212:Int, y:#213:Int, w:#214:Int, h:#215:Int, data:#216:List List A, value:#217:A]
+  closure71 __aivi_matrix_boundsCheck3 owner=71 root=expr585 kind=item-body
+    params = [xLt:#218:Bool, yLt:#219:Bool, x:#220:Int, y:#221:Int, w:#222:Int, h:#223:Int, data:#224:List List A, value:#225:A]
+  closure72 __aivi_matrix_boundsCheck4 owner=72 root=expr596 kind=item-body
+    params = [yLt:#226:Bool, x:#227:Int, y:#228:Int, w:#229:Int, h:#230:Int, data:#231:List List A, value:#232:A]
+  closure73 __aivi_matrix_replaceCoord owner=73 root=expr618 kind=item-body
+    params = [matrix:#233:Matrix A, x:#234:Int, y:#235:Int, value:#236:A]
+  closure74 __aivi_matrix_replaceAt owner=74 root=expr626 kind=item-body
+    params = [matrix:#240:Matrix A, coord:#241:(Int, Int), value:#242:A]
+  closure75 __aivi_matrix_validateFirstRow owner=75 root=expr632 kind=item-body
+    params = [rowIdx:#245:Int, expectedWidth:#246:Int, row:#247:List A]
+  closure76 __aivi_matrix_validateLengthMatch owner=76 root=expr654 kind=item-body
+    params = [matches:#248:Bool, rowIdx:#249:Int, expectedWidth:#250:Int, row:#251:List A]
+  closure77 __aivi_matrix_validateSubsequentRow owner=77 root=expr671 kind=item-body
+    params = [isFirst:#252:Bool, rowIdx:#253:Int, expectedWidth:#254:Int, row:#255:List A]
+  closure78 __aivi_matrix_validateRow owner=78 root=expr689 kind=item-body
+    params = [prevError:#256:Option MatrixError, rowIdx:#257:Int, expectedWidth:#258:Int, row:#259:List A]
+  closure79 __aivi_matrix_fromRowsStep owner=79 root=expr697 kind=item-body
+    params = [state:#261:(Int, Int, Option MatrixError), row:#262:List A]
+  closure80 __aivi_matrix_fromRowsDecide owner=80 root=expr709 kind=item-body
+    params = [error:#266:Option MatrixError, rowCount:#267:Int, width:#268:Int, inputRows:#269:List List A]
+  closure81 __aivi_matrix_fromRowsFinish owner=81 root=expr717 kind=item-body
+    params = [inputRows:#271:List List A, state:#272:(Int, Int, Option MatrixError)]
+  closure82 __aivi_matrix_fromRows owner=82 root=expr731 kind=item-body
+    params = [inputRows:#276:List List A]

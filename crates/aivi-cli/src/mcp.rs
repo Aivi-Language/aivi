@@ -36,6 +36,10 @@ pub(super) fn run_mcp(mut args: impl Iterator<Item = OsString>) -> Result<ExitCo
     let mut requested_view = None;
 
     while let Some(argument) = args.next() {
+        if argument == "--help" || argument == "-h" {
+            return super::print_help(Some(std::ffi::OsStr::new("mcp")));
+        }
+
         if argument == OsString::from("--path") {
             let path = args
                 .next()

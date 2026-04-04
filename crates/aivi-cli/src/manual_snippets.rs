@@ -88,6 +88,10 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
     let mut write = false;
 
     while let Some(argument) = args.next() {
+        if argument == OsString::from("--help") || argument == OsString::from("-h") {
+            return super::print_help(Some(std::ffi::OsStr::new("manual-snippets")));
+        }
+
         if argument == OsString::from("--write") {
             write = true;
             continue;

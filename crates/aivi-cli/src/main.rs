@@ -58,7 +58,7 @@ use aivi_runtime::{
     assemble_hir_runtime_with_items, execute_runtime_value_with_context, link_backend_runtime,
     render_runtime_error,
 };
-use aivi_syntax::{Formatter, ItemKind, TokenKind, lex_module, parse_module};
+use aivi_syntax::{Formatter, lex_module, parse_module};
 use gtk::{glib, prelude::*};
 
 fn main() -> ExitCode {
@@ -80,8 +80,22 @@ fn run() -> Result<ExitCode, String> {
         return Ok(ExitCode::from(2));
     };
 
+    if first == "--help" || first == "-h" || first == "help" {
+        let subcommand = args.next();
+        return print_help(subcommand.as_deref());
+    }
+
+    if first == "--version" || first == "-V" {
+        println!("aivi {}", env!("CARGO_PKG_VERSION"));
+        return Ok(ExitCode::SUCCESS);
+    }
+
     if first == OsString::from("check") {
-        return check_file(&take_path(args)?);
+        let path_arg = take_path_or_help(args)?;
+        return match path_arg {
+            PathOrHelp::Help => print_help(Some(std::ffi::OsStr::new("check"))),
+            PathOrHelp::Path(p) => check_file(&p),
+        };
     }
 
     if first == OsString::from("compile") {
@@ -105,7 +119,11 @@ fn run() -> Result<ExitCode, String> {
     }
 
     if first == OsString::from("lex") {
-        return lex_file(&take_path(args)?);
+        let path_arg = take_path_or_help(args)?;
+        return match path_arg {
+            PathOrHelp::Help => print_help(Some(std::ffi::OsStr::new("lex"))),
+            PathOrHelp::Path(p) => lex_file(&p),
+        };
     }
 
     if first == OsString::from("lsp") {
@@ -128,10 +146,34 @@ fn run() -> Result<ExitCode, String> {
     check_file(&PathBuf::from(first))
 }
 
+enum PathOrHelp {
+    Path(PathBuf),
+    Help,
+}
+
+fn take_path_or_help(mut args: impl Iterator<Item = OsString>) -> Result<PathOrHelp, String> {
+    let arg = args
+        .next()
+        .ok_or_else(|| "expected a path argument".to_owned())?;
+    if arg == "--help" || arg == "-h" {
+        return Ok(PathOrHelp::Help);
+    }
+    let path = PathBuf::from(arg);
+    if !path.exists() {
+        eprintln!("error: file not found: {}", path.display());
+        std::process::exit(2);
+    }
+    Ok(PathOrHelp::Path(path))
+}
+
 fn run_fmt(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     let Some(next) = args.next() else {
         return Err("expected a path or --stdin/--check argument after `fmt`".to_owned());
     };
+
+    if next == "--help" || next == "-h" {
+        return print_help(Some(std::ffi::OsStr::new("fmt")));
+    }
 
     if next == OsString::from("--stdin") {
         return format_stdin();
@@ -147,23 +189,16 @@ fn run_fmt(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String>
     format_file(&PathBuf::from(next))
 }
 
-fn take_path(mut args: impl Iterator<Item = OsString>) -> Result<PathBuf, String> {
-    let path = args
-        .next()
-        .map(PathBuf::from)
-        .ok_or_else(|| "expected a path argument".to_owned())?;
-    if !path.exists() {
-        eprintln!("error: file not found: {}", path.display());
-        std::process::exit(2);
-    }
-    Ok(path)
-}
+
 
 fn run_compile(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     let path = args
         .next()
         .map(PathBuf::from)
         .ok_or_else(|| "expected a path argument after `compile`".to_owned())?;
+    if path == PathBuf::from("--help") || path == PathBuf::from("-h") {
+        return print_help(Some(std::ffi::OsStr::new("compile")));
+    }
     if !path.exists() {
         eprintln!("error: file not found: {}", path.display());
         std::process::exit(2);
@@ -171,6 +206,9 @@ fn run_compile(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Str
     let mut output = None;
 
     while let Some(argument) = args.next() {
+        if argument == "--help" || argument == "-h" {
+            return print_help(Some(std::ffi::OsStr::new("compile")));
+        }
         if argument == OsString::from("-o") || argument == OsString::from("--output") {
             let artifact = args
                 .next()
@@ -196,6 +234,9 @@ fn run_build(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
         .next()
         .map(PathBuf::from)
         .ok_or_else(|| "expected a path argument after `build`".to_owned())?;
+    if path == PathBuf::from("--help") || path == PathBuf::from("-h") {
+        return print_help(Some(std::ffi::OsStr::new("build")));
+    }
     if !path.exists() {
         eprintln!("error: file not found: {}", path.display());
         std::process::exit(2);
@@ -204,6 +245,9 @@ fn run_build(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
     let mut requested_view = None;
 
     while let Some(argument) = args.next() {
+        if argument == "--help" || argument == "-h" {
+            return print_help(Some(std::ffi::OsStr::new("build")));
+        }
         if argument == OsString::from("-o") || argument == OsString::from("--output") {
             let bundle = args
                 .next()
@@ -251,6 +295,10 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
     let mut requested_view = None;
 
     while let Some(argument) = args.next() {
+        if argument == "--help" || argument == "-h" {
+            return print_help(Some(std::ffi::OsStr::new("run")));
+        }
+
         if argument == OsString::from("--path") {
             let path = args
                 .next()
@@ -308,6 +356,9 @@ fn run_execute(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Str
         .next()
         .map(PathBuf::from)
         .ok_or_else(|| "expected a path argument after `execute`".to_owned())?;
+    if path == PathBuf::from("--help") || path == PathBuf::from("-h") {
+        return print_help(Some(std::ffi::OsStr::new("execute")));
+    }
     let mut program_args = Vec::new();
     let mut accepting_program_args = false;
 
@@ -315,6 +366,9 @@ fn run_execute(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Str
         if accepting_program_args {
             program_args.push(argument.to_string_lossy().into_owned());
             continue;
+        }
+        if argument == "--help" || argument == "-h" {
+            return print_help(Some(std::ffi::OsStr::new("execute")));
         }
         if argument == OsString::from("--") {
             accepting_program_args = true;
@@ -334,6 +388,9 @@ fn run_test(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String
         .next()
         .map(PathBuf::from)
         .ok_or_else(|| "expected a path argument after `test`".to_owned())?;
+    if path == PathBuf::from("--help") || path == PathBuf::from("-h") {
+        return print_help(Some(std::ffi::OsStr::new("test")));
+    }
     if let Some(argument) = args.next() {
         return Err(format!(
             "unexpected test argument `{}`",
@@ -3998,7 +4055,10 @@ fn format_check(paths: &[PathBuf]) -> Result<ExitCode, String> {
     }
 }
 
-fn run_lsp(_args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
+fn run_lsp(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
+    if args.any(|a| a == "--help" || a == "-h") {
+        return print_help(Some(std::ffi::OsStr::new("lsp")));
+    }
     tokio::runtime::Runtime::new()
         .map_err(|e| format!("failed to create tokio runtime: {e}"))?
         .block_on(aivi_lsp::run())
@@ -4007,40 +4067,284 @@ fn run_lsp(_args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
 }
 
 fn print_usage() {
-    eprintln!(
-        "usage:\n  aivi <path>\n  aivi check <path>\n  aivi compile <path> [-o <object>]\n  aivi build <path> -o <bundle> [--view <name>]\n  aivi run [<path>] [--path <path>] [--view <name>]\n  aivi mcp [--path <path>] [--view <name>]\n  aivi execute <path> [-- args...]\n  aivi test <path>\n  aivi lex <path>\n  aivi fmt <path>\n  aivi fmt --stdin\n  aivi fmt --check [path...]\n  aivi manual-snippets [--root <manual-dir>] [--todo <report.json>] [--write]\n  aivi lsp"
-    );
-    eprintln!(
-        "commands:\n  check            Lex, parse, lower, and validate a module through HIR\n  compile          Lower through typed core, typed lambda, backend, and Cranelift codegen\n  build            Package a runnable bundle directory around the live GTK/runtime path\n  run              Launch the current live GTK runtime path (implicit `<workspace>/main.aivi` when no path is given)\n  mcp              Start the stdio MCP server for launching and inspecting the current app\n  execute          Evaluate a top-level `value main : Task ...` without GTK\n  test             Discover and execute workspace `@test value ... : Task ...` declarations\n  lex              Dump the lossless token stream\n  fmt              Canonically format the supported surface subset\n  manual-snippets  Scan fenced ```aivi blocks in markdown, format them, and emit a TODO report\n  lsp              Start the language server"
-    );
-    eprintln!(
-        "milestone-2 surface items: {:?}",
-        [
-            ItemKind::Type,
-            ItemKind::Value,
-            ItemKind::Signal,
-            ItemKind::Class,
-            ItemKind::Instance,
-            ItemKind::Domain,
-            ItemKind::SourceProviderContract,
-            ItemKind::Use,
-            ItemKind::Export,
-        ]
-    );
-    eprintln!(
-        "core pipe operators: {:?}",
-        [
-            TokenKind::PipeTransform,
-            TokenKind::PipeGate,
-            TokenKind::PipeCase,
-            TokenKind::PipeMap,
-            TokenKind::PipeApply,
-            TokenKind::PipeRecurStart,
-            TokenKind::PipeRecurStep,
-            TokenKind::PipeTap,
-            TokenKind::PipeFanIn,
-        ]
-    );
+    eprint!("{}", format_main_help());
+}
+
+pub(crate) fn print_help(subcommand: Option<&std::ffi::OsStr>) -> Result<ExitCode, String> {
+    match subcommand.map(|s| s.to_string_lossy().into_owned()) {
+        None => {
+            print!("{}", format_main_help());
+        }
+        Some(name) if name == "help" => {
+            print!("{}", format_main_help());
+        }
+        Some(name) => match format_subcommand_help(&name) {
+            Some(text) => print!("{text}"),
+            None => {
+                return Err(format!(
+                    "unknown command '{name}'. Run `aivi help` to see all commands."
+                ));
+            }
+        },
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn format_main_help() -> String {
+    format!(
+        "\
+aivi {} — a purely functional, reactive, GTK-first language
+
+USAGE:
+    aivi <command> [options]
+    aivi <path>                     Shorthand for `aivi check <path>`
+
+COMMANDS:
+    check <path>                    Type-check a module through HIR
+    compile <path> [-o <object>]    Compile a module to native object code
+    build <path> -o <dir> [opts]    Package a runnable GTK app bundle
+    run [path] [opts]               Launch a live GTK app
+    execute <path> [-- args...]     Run a headless Task program
+    test <path>                     Run @test declarations in a workspace
+    lex <path>                      Dump the lossless token stream
+    fmt <path|--stdin|--check>      Format AIVI source code
+    lsp                             Start the language server (stdio)
+    mcp [opts]                      Start the MCP introspection server (stdio)
+    manual-snippets [opts]          Validate and format manual code blocks
+    help [command]                  Show help for a command
+
+OPTIONS:
+    -h, --help                      Show this help message
+    -V, --version                   Show version
+
+Run `aivi help <command>` for detailed information about a specific command.
+",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+fn format_subcommand_help(name: &str) -> Option<String> {
+    let text = match name {
+        "check" => "\
+aivi check — type-check a module through HIR
+
+USAGE:
+    aivi check <path>
+
+ARGS:
+    <path>              Path to an .aivi source file or workspace entry
+
+DESCRIPTION:
+    Lexes, parses, lowers, and validates a module through the full HIR
+    pipeline. Reports any syntax errors, name resolution failures, or
+    type errors as diagnostics. Exits with code 0 on success, 1 on
+    diagnostic errors.
+",
+        "compile" => "\
+aivi compile — compile a module to native object code
+
+USAGE:
+    aivi compile <path> [-o <object>]
+
+ARGS:
+    <path>              Path to an .aivi source file
+
+OPTIONS:
+    -o, --output <object>
+            Path for the output object file. When omitted, the object
+            is written to a default location derived from the input path.
+
+DESCRIPTION:
+    Lowers the module through typed core, typed lambda IR, backend IR,
+    and Cranelift codegen to produce a native object file. Includes all
+    compiler stages from parsing through machine code generation.
+",
+        "build" => "\
+aivi build — package a runnable GTK app bundle
+
+USAGE:
+    aivi build <path> -o <directory> [--view <name>]
+
+ARGS:
+    <path>              Path to an .aivi source file or workspace entry
+
+OPTIONS:
+    -o, --output <directory>    (required)
+            Output directory for the packaged bundle. The directory will
+            contain everything needed to run the application.
+
+    --view <name>
+            Dot-separated module path to the view entry point
+            (e.g. \"app.main\"). When omitted, uses the default view.
+
+DESCRIPTION:
+    Compiles a GTK/libadwaita application and packages it into a
+    self-contained bundle directory. The bundle includes compiled code,
+    runtime assets, and the necessary metadata to launch the app.
+",
+        "run" => "\
+aivi run — launch a live GTK app
+
+USAGE:
+    aivi run [<path>] [--path <path>] [--view <name>]
+
+ARGS:
+    [<path>]            Path to an .aivi source file or workspace entry.
+                        When omitted, resolves to <workspace>/main.aivi.
+
+OPTIONS:
+    --path <path>
+            Explicit path to the entry file. Alternative to the
+            positional argument.
+
+    --view <name>
+            Dot-separated module path to the view entry point
+            (e.g. \"app.main\"). When omitted, uses the default view.
+
+DESCRIPTION:
+    Compiles and immediately launches a GTK/libadwaita application with
+    the full reactive runtime, signal engine, source providers, and
+    live widget tree. The app runs until the window is closed.
+",
+        "execute" => "\
+aivi execute — run a headless Task program
+
+USAGE:
+    aivi execute <path> [-- args...]
+
+ARGS:
+    <path>              Path to an .aivi source file containing a
+                        top-level `value main : Task ...` declaration.
+
+    [-- args...]        Arguments passed to the program. Everything
+                        after `--` is forwarded as program arguments.
+
+DESCRIPTION:
+    Evaluates a top-level Task value without GTK or the widget runtime.
+    Useful for command-line tools, scripts, and batch processing written
+    in AIVI. The program receives arguments via a ProcessArgs source.
+",
+        "test" => "\
+aivi test — run @test declarations in a workspace
+
+USAGE:
+    aivi test <path>
+
+ARGS:
+    <path>              Path to an .aivi source file or workspace entry
+
+DESCRIPTION:
+    Discovers all `@test value ... : Task ...` declarations in the
+    workspace and executes them. Each test runs in isolation. Reports
+    pass/fail status for each test and exits with code 0 if all tests
+    pass, 1 if any test fails.
+",
+        "lex" => "\
+aivi lex — dump the lossless token stream
+
+USAGE:
+    aivi lex <path>
+
+ARGS:
+    <path>              Path to an .aivi source file
+
+DESCRIPTION:
+    Lexes the source file and prints every token in the lossless token
+    stream, including whitespace and comments. Useful for debugging the
+    lexer and inspecting tokenization behavior.
+",
+        "fmt" => "\
+aivi fmt — format AIVI source code
+
+USAGE:
+    aivi fmt <path>
+    aivi fmt --stdin
+    aivi fmt --check [path...]
+
+ARGS:
+    <path>              Path to an .aivi source file. The formatted
+                        output is written to stdout.
+
+OPTIONS:
+    --stdin             Read source code from stdin and write the
+                        formatted output to stdout.
+
+    --check [path...]   Check whether files are already formatted.
+                        Exits with code 0 if all files are formatted,
+                        1 if any file would change. Does not modify
+                        files. When no paths are given, does nothing.
+
+DESCRIPTION:
+    Canonically formats AIVI source code. The formatter preserves
+    semantics while normalizing whitespace, indentation, and layout.
+    Files with parse errors are left unchanged.
+",
+        "lsp" => "\
+aivi lsp — start the language server
+
+USAGE:
+    aivi lsp
+
+DESCRIPTION:
+    Starts the AIVI language server using the Language Server Protocol
+    over stdio. Provides diagnostics, completion, hover, semantic
+    tokens, formatting, go-to-definition, document symbols, and code
+    lens capabilities to connected editors.
+
+    Typically launched automatically by the VSCode extension or other
+    LSP-compatible editors.
+",
+        "mcp" => "\
+aivi mcp — start the MCP introspection server
+
+USAGE:
+    aivi mcp [--path <path>] [--view <name>]
+
+OPTIONS:
+    --path <path>
+            Path to the .aivi source file or workspace entry.
+            When omitted, resolves to <workspace>/main.aivi.
+
+    --view <name>
+            Dot-separated module path to the view entry point
+            (e.g. \"app.main\"). When omitted, uses the default view.
+
+DESCRIPTION:
+    Starts a Model Context Protocol server over stdio for live app
+    introspection. Provides tools to launch the app, inspect signals
+    and sources, capture the GTK widget tree, emit synthetic events,
+    and publish source values — enabling AI-assisted development and
+    testing workflows.
+",
+        "manual-snippets" => "\
+aivi manual-snippets — validate and format manual code blocks
+
+USAGE:
+    aivi manual-snippets [--root <dir>] [--todo <report.json>] [--write]
+
+OPTIONS:
+    --root <dir>
+            Root directory containing markdown files to scan.
+            Defaults to \"manual\".
+
+    --todo <report.json>
+            Path for a JSON report of unresolved or failing code
+            blocks. When omitted, no report file is written.
+
+    --write
+            Rewrite markdown files in place with formatted code
+            blocks. Without this flag, the command is read-only
+            and only reports issues.
+
+DESCRIPTION:
+    Scans fenced ```aivi code blocks in markdown documentation files,
+    validates that they parse and type-check, formats them canonically,
+    and optionally rewrites the files. Produces a TODO report of blocks
+    that need manual attention.
+",
+        _ => return None,
+    };
+    Some(text.to_owned())
 }
 
 #[cfg(test)]

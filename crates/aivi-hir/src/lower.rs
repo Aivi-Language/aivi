@@ -544,14 +544,14 @@ func __aivi_matrix_at = matrix x y => matrix
     ||> MkMatrix w h data ->
         __aivi_matrix_atRow (__aivi_listAt y data) x
 
-type Bool -> A -> (List A) -> A -> (Int, List A)
-func __aivi_listReplace_pick = matches newVal result item => matches
-    T|> (1, append result [newVal])
-    F|> (1, append result [item])
+type Bool -> A -> Int -> (List A) -> A -> (Int, List A)
+func __aivi_listReplace_pick = matches newVal idx result item => matches
+    T|> (idx + 1, append result [newVal])
+    F|> (idx + 1, append result [item])
 
 type Int -> A -> Int -> (List A) -> A -> (Int, List A)
 func __aivi_listReplace_check = target newVal idx result item =>
-    __aivi_listReplace_pick (idx == target) newVal result item
+    __aivi_listReplace_pick (idx == target) newVal idx result item
 
 type Int -> A -> (Int, List A) -> A -> (Int, List A)
 func __aivi_listReplace_step = target newVal state item => state
