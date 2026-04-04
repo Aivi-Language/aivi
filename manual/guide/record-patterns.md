@@ -32,9 +32,20 @@ See [Pattern Matching](/guide/pattern-matching) for full pattern syntax includin
 When a record contains nested records, dotted paths reach into the structure without writing nested patterns manually:
 
 ```aivi
-type City = { name: Text, population: Int }
-type Address = { city: City, street: Text }
-type User = { name: Text, address: Address }
+type City = {
+    name: Text,
+    population: Int
+}
+
+type Address = {
+    city: City,
+    street: Text
+}
+
+type User = {
+    name: Text,
+    address: Address
+}
 
 type User -> Text
 func cityName = .
@@ -44,7 +55,7 @@ func cityName = .
 `{ address.city.name }` is sugar for nested patterns:
 
 ```aivi
-||> { address: { city: { name } } } -> name
+# <unparseable item>
 ```
 
 The leaf segment (`name`) becomes the bound variable. This works at any depth:
@@ -76,7 +87,7 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = { score: . } >= 100
+func isTopScore = .score >= 100
 ```
 
 This is sugar for:
@@ -95,14 +106,15 @@ Dotted paths combine with the projection form to reach into nested structures:
 
 ```aivi
 type User -> Text
-func getCityName = { address.city.name: . }
+func getCityName = .address.city.name
 ```
 
 This extracts `address.city.name` from the input and makes it available for downstream pipes:
 
 ```aivi
 type User -> Text
-func upperCityName = { address.city.name: . } |> toUpperCase
+func upperCityName = .address.city.name
+  |> toUpperCase
 ```
 
 ## Projection in pipes
@@ -111,18 +123,18 @@ Projection expressions work naturally as pipe stages:
 
 ```aivi
 value uppercasedCity = user
- |> { address.city.name: . }
- |> toUpperCase
+  |> { address.city.name: . }
+  |> toUpperCase
 ```
 
 This is equivalent to the `.field` ambient projection form, but for deeper paths:
 
 ```aivi
 value uppercasedCity = user
- |> .address
- |> .city
- |> .name
- |> toUpperCase
+  |> .address
+  |> .city
+  |> .name
+  |> toUpperCase
 ```
 
 ## Patch removal
@@ -137,13 +149,13 @@ type Full = {
 }
 
 type Full -> { name: Text, email: Text }
-func stripDebug = . <| { debug: - }
+func stripDebug = .
 ```
 
 Removal can target nested fields using selectors:
 
 ```aivi
-state <| { users[.role == "guest"].token: - }
+# <unparseable item>
 ```
 
 See [Values & Functions § Structural patches](/guide/values-and-functions#structural-patches) for more on the `<|` operator and patch selectors.

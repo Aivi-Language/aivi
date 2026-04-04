@@ -130,29 +130,37 @@ This is especially useful when a later step should only run for values that pass
 
 For `Signal A`, the same operator keeps the `Signal A` carrier and filters out updates whose predicate fails.
 
-## `when` is not a pipe
+## Signal merge is not a pipe
 
-Reactive update clauses use a separate top-level form:
+Signal merge syntax lives alongside pipes but is **not** a pipe operator. Merging source signals
+into a new signal uses `|` to list sources, then `||>` arms with `=>` to discriminate by source and
+pattern. See the [Signals guide](/guide/signals#signal-merge-and-reactive-arms) for full details.
 
 ```aivi
-signal left = 20
-signal right = 22
-signal total = 0
-signal ready = True
+type Key = Key Text
 
-when ready => total <- left + right
-when tick _ => total <- left + right
+type Event = Tick | Turn Text
+
+@source timer.every 120ms
+signal tick : Signal Unit
+
+@source window.keyDown
+signal keyDown : Signal Key
+
+signal event : Signal Event = tick | keyDown
+  ||> tick _ => Tick
+  ||> keyDown (Key "ArrowUp") => Turn "up"
+  ||> _ => Tick
 ```
 
 This is different from `?|>` and the rest of pipe algebra:
 
-- `when` does not live inside a pipe spine
-- `when` targets an existing signal explicitly
-- `when` can match a named signal emission with `when <signal> <pattern> => ...`
+- merge bodies use `=>` (fat arrow), pipe case arms use `->` (thin arrow)
+- merge targets the declaring signal, not a flowing subject
 - the body has no ambient subject such as `.`
-- `when` is for event-driven commits, while pipes are for left-to-right expression flow
+- merge is for event-driven composition, while pipes are for left-to-right expression flow
 
-If you can describe the logic as “take this current value and keep transforming it”, use pipes. If you mean “when this guard fires, commit a value into that signal”, use `when`.
+If you can describe the logic as "take this current value and keep transforming it", use pipes. If you mean "combine events from different sources into one signal", use signal merge.
 
 ## Previous-value pipe `~|>`
 
@@ -176,22 +184,176 @@ signal scoreDelta = score
  -|> 0
 ```
 
-## Other accepted pipe forms
+## Tap `|`
 
-The current parser/compiler also accept these pipe-stage forms:
+The tap pipe observes the current subject without changing it. The tap expression runs (useful
+for logging or side effects), but the subject flows through unchanged:
 
-| Operator | Meaning |
-| --- | --- |
-| `\|` | Tap / observe while preserving the current subject |
-| `*\|>` | Map / fan-out |
-| `<\|*` | Fan-out join |
-| `&\|>` | Applicative cluster stage |
-| `!\|>` | Validation stage |
-| `+\|>` | Stateful accumulation |
-| `@\|>` | Explicit recurrence start |
-| `<\|@` | Explicit recurrence step |
+```aivi
+type Text -> Text
+func greet = name =>
+    "Hello, {name}"
 
-Some of these advanced stages still have narrower validation/runtime coverage than the core `|>`, `||>`, `?|>`, `T|>`, `F|>`, `~|>`, and `-|>` forms. In particular, `+|>` now lowers through the recurrence path for signal accumulation, while more exotic applicative/validation combinations still have the narrower executable slice documented in the RFC.
+value result = "Ada"
+  | log "processing"
+  |> greet
+```
+
+The log call fires, but the subject remains `"Ada"` for the next stage.
+
+## Map / fan-out `*|>`
+
+`*|>` maps a function over each element of a collection:
+
+```aivi
+type User = {
+    name: Text,
+    email: Text
+}
+
+value users : List User = [
+    {
+        name: "Ada",
+        email: "ada@example.com"
+    },
+    {
+        name: "Grace",
+        email: "grace@example.com"
+    }
+]
+
+value emails : List Text = users
+ *|> .email
+```
+
+This reads: *"for each user, extract the email."* The result is a `List Text`.
+
+For `Signal (List A)`, fan-out lifts pointwise — each tick maps the function across the current
+list:
+
+```aivi
+signal userList : Signal (List User) = [
+    {
+        name: "Ada",
+        email: "ada@example.com"
+    }
+]
+
+signal emailList : Signal (List Text) = userList
+ *|> .email
+```
+
+`*|>` is pure mapping only. It does not flatten nested collections or sequence tasks.
+
+## Fan-out join `<|*`
+
+`<|*` reduces the collection produced by the immediately preceding `*|>`:
+
+```aivi
+type User = {
+    name: Text,
+    email: Text,
+    score: Int
+}
+
+value users : List User = [
+    {
+        name: "Ada",
+        email: "ada@example.com",
+        score: 90
+    },
+    {
+        name: "Grace",
+        email: "grace@example.com",
+        score: 85
+    }
+]
+
+value totalScore : Int = users
+ *|> .score
+ <|* sum
+```
+
+The fan-out extracts scores, then the join sums them. `<|*` may only appear immediately after `*|>`.
+
+## Applicative cluster `&|>`
+
+`&|>` combines independent values under the same applicative constructor. All cluster members
+must share the same outer wrapper — `Option`, `Result`, `Validation`, `Signal`, `Task`, or `List`.
+
+A typical use is combining several validations:
+
+```aivi
+type ValidatedUser = {
+    name: Text,
+    email: Text,
+    age: Int
+}
+
+type Text -> Validation (List Text) Text
+func validateName = name =>
+
+type Text -> Validation (List Text) Text
+func validateEmail = email =>
+
+type Text -> Validation (List Text) Int
+func validateAge = ageText => ageText
+  |> parseInt
+ T|> .
+ F|> Invalid ["Age must be a number"]
+
+value draft = unit
+ &|> validateName "Ada"
+ &|> validateEmail "ada@example.com"
+ &|> validateAge "30"
+  |> ValidatedUser
+```
+
+If all three succeed, the finalizer (`ValidatedUser`) receives their unwrapped values. If any fail,
+the errors accumulate (because `Validation` is applicative, not monadic).
+
+When no explicit finalizer appears, the cluster defaults to a tuple.
+
+## Validation `!|>`
+
+`!|>` runs a validation function that must return `Result` or `Validation`. If the validation
+fails, the error propagates:
+
+```aivi
+type Text -> Result Text Text
+func nonEmpty = text =>
+
+value checked : Result Text Text = "hello"
+ !|> nonEmpty
+```
+
+## Accumulation `+|>`
+
+`+|>` folds signal events into state over time. It takes a seed and a step function:
+
+```aivi
+type Event =
+  | Increment
+  | Decrement
+  | Reset
+
+type Event -> Int -> Int
+func step = event count => event
+ ||> Increment -> count + 1
+ ||> Decrement -> count - 1
+ ||> Reset     -> 0
+
+signal event : Signal Event = keyDown
+  ||> Key "ArrowUp" => Increment
+  ||> Key "ArrowDown" => Decrement
+  ||> _ => Increment
+
+signal count = event
+ +|> 0 step
+```
+
+This reads: *"start at 0; each time `event` fires, apply `step` to compute the next value."*
+The accumulation is managed by the signal engine — there are no mutable variables.
 
 ## One important rule: no nested pipes
 

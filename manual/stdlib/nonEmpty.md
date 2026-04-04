@@ -25,7 +25,7 @@ The primary non-empty list type used throughout the standard library, including 
 
 ```aivi
 type NonEmptyList A =
-  | MkNEL A (List A)
+  MkNEL A (List A)
 ```
 
 Construct values using `singleton`, `cons`, or `fromList`.

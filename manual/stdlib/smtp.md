@@ -173,7 +173,8 @@ func describeSmtpError = error => error
 ## `SmtpTask`
 
 ```aivi
-type SmtpTask = Task SmtpError Unit
+type SmtpTask =
+  Task SmtpError Unit
 ```
 
 Alias for a send operation that either completes successfully or fails with `SmtpError`. A successful SMTP task returns `Unit`, so the important outcome is completion rather than a payload.

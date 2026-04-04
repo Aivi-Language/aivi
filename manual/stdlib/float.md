@@ -109,7 +109,7 @@ func roundTrip = n =>
 Negates a float. AIVI has no prefix minus on literals, so `negate` fills that gap.
 
 ```aivi
-negate : Float -> Float
+# <unparseable item>
 ```
 
 ```aivi
@@ -127,8 +127,7 @@ func flipSign = n =>
 Return the larger or smaller of two floats.
 
 ```aivi
-max : Float -> Float -> Float
-min : Float -> Float -> Float
+# <unparseable item>
 ```
 
 ```aivi
@@ -149,7 +148,7 @@ func boundedProgress = progress =>
 Clamps a value to the inclusive range `[lo, hi]`.
 
 ```aivi
-clamp : Float -> Float -> Float -> Float
+# <unparseable item>
 ```
 
 ```aivi
@@ -167,7 +166,7 @@ func normalizedVolume = raw =>
 Linear interpolation between `a` and `b`. `lerp a b 0.0` returns `a`, `lerp a b 1.0` returns `b`.
 
 ```aivi
-lerp : Float -> Float -> Float -> Float
+# <unparseable item>
 ```
 
 ```aivi
@@ -185,7 +184,7 @@ func blend = from to t =>
 Returns `-1.0`, `0.0`, or `1.0` depending on the sign of `n`.
 
 ```aivi
-sign : Float -> Float
+# <unparseable item>
 ```
 
 ```aivi
@@ -203,7 +202,7 @@ func moveDirection = velocity =>
 Returns `True` if `n` is in the closed interval `[lo, hi]`.
 
 ```aivi
-between : Float -> Float -> Float -> Bool
+# <unparseable item>
 ```
 
 ```aivi
@@ -219,9 +218,7 @@ func isValidRatio = ratio =>
 ## Predicates
 
 ```aivi
-isZero     : Float -> Bool
-isPositive : Float -> Bool
-isNegative : Float -> Bool
+# <unparseable item>
 ```
 
 ```aivi
@@ -248,7 +245,7 @@ func signum = n => isPositive n
 Multiplies a float by itself.
 
 ```aivi
-square : Float -> Float
+# <unparseable item>
 ```
 
 ```aivi
@@ -270,8 +267,7 @@ func distanceSquared = dx dy =>
 Convert between degrees and radians.
 
 ```aivi
-toRadians : Float -> Float
-toDegrees : Float -> Float
+# <unparseable item>
 ```
 
 ```aivi

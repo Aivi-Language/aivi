@@ -39,6 +39,7 @@ use aivi.http (
 signal api : HttpSource
 
 signal users : Signal (HttpResponse (List User)) = api.get "/users"
+
 value healthCheck : Task Text Text = api.get "/health"
 value healthStatus : Task Text Int = api.getStatus "/health"
 ```

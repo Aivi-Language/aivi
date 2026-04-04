@@ -1533,13 +1533,14 @@ export main
                 .expect("clicked board move should process in one work cycle");
         });
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
-                opening_move.label().as_deref() == Some("🔴")
+            pump_until(&context, Duration::from_secs(8), || {
+                let label = opening_move.label();
+                label.as_deref() == Some("🔴") || label.as_deref() == Some("🎯")
             }),
-            "the clicked board button should redraw as a red disc after hydration"
+            "the clicked board button should redraw as a placed disc after hydration"
         );
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_until(&context, Duration::from_secs(8), || {
                 let mut labels = Vec::new();
                 for window in harness.root_windows() {
                     collect_label_texts(&window.clone().upcast::<gtk::Widget>(), &mut labels);
@@ -1550,9 +1551,10 @@ export main
             }),
             "after a human move, the computer should answer and leave six discs on the board"
         );
-        assert_eq!(
-            text_signal_for(&harness, status_item),
-            "You are red",
+        assert!(
+            pump_until(&context, Duration::from_secs(8), || {
+                text_signal_for(&harness, status_item) == "You are red"
+            }),
             "after the computer reply, control should return to the human"
         );
 

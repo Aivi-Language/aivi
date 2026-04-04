@@ -26,8 +26,7 @@ use aivi.validation (
 A type alias for a non-empty list of errors. Used as the error carrier in `zipValidation`.
 
 ```aivi
-type Errors E =
-  | NonEmptyList E
+type Errors E = NonEmptyList E
 ```
 
 `Errors E` guarantees at least one error is present when a validation fails. Import `NonEmptyList` from `aivi.nonEmpty` to construct values of this type.

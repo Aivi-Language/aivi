@@ -232,8 +232,7 @@ value openCommand : AppCommand = {
     shortcut: Some "Ctrl+O"
 }
 
-value openRequested : AppEvent =
-    CommandRequested openCommand
+value openRequested : AppEvent = CommandRequested openCommand
 ```
 
 ## Example — route app events to text

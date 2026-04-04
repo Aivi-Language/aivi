@@ -249,9 +249,11 @@ func describeBusError = error => error
 ## `DbusCallResult` and `DbusTask`
 
 ```aivi
-type DbusCallResult = Result DbusError (List DbusValue)
+type DbusCallResult =
+  Result DbusError (List DbusValue)
 
-type DbusTask A = Task DbusError A
+type DbusTask A =
+  Task DbusError A
 ```
 
 Use `DbusCallResult` when you want the raw values returned by a method call. Use `DbusTask A` when a higher-level helper decodes those values into some application type `A`.

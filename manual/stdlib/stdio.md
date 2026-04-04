@@ -24,6 +24,7 @@ use aivi.stdio (
 signal console : StdioSource
 
 signal stdinText : Signal Text = console.read
+
 value prompt : Task Text Unit = console.stdoutWrite "Name: "
 value failure : Task Text Unit = console.stderrWrite "Missing config\n"
 ```

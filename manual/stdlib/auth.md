@@ -65,10 +65,7 @@ func githubPkce = authEndpoint tokenEndpoint =>
         clientId: "desktop-client",
         authEndpoint: authEndpoint,
         tokenEndpoint: tokenEndpoint,
-        scopes: [
-            "read:user",
-            "user:email"
-        ],
+        scopes: ["read:user", "user:email"],
         redirectPort: 43123
     }
 ```

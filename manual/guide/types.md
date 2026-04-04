@@ -67,8 +67,7 @@ type Direction =
   | Left
   | Right
 
-type UserId =
-  | UserId Int
+type UserId = UserId Int
 
 value facing = Left
 value currentUser = UserId 7
@@ -100,7 +99,9 @@ type Cell = Cell Int Int
 Multi-variant types still use `|`:
 
 ```aivi
-type Shape = Circle Int | Rect Int Int
+type Shape =
+  | Circle Int
+  | Rect Int Int
 ```
 
 ### Named fields
@@ -108,9 +109,11 @@ type Shape = Circle Int | Rect Int Int
 Field labels can be added for documentation and diagnostics. Names are declaration-only metadata — construction stays positional:
 
 ```aivi
-type Date = Date year:Year month:Month day:Day
+type Date =
+  Date year:Year month:Month day:Day
 
-type TimeOfDay = TimeOfDay hour:Hour minute:Minute second:Second
+type TimeOfDay =
+  TimeOfDay hour:Hour minute:Minute second:Second
 ```
 
 Named and anonymous fields may be mixed, though named fields are recommended for readability when a constructor has more than two fields.
@@ -120,14 +123,14 @@ Construction is curried: apply the constructor to each argument left-to-right:
 ```aivi
 value origin = Vec2 0 0
 value corner = Vec2 10 20
-value today  = Date 2024 6 15
+value today = Date 2024 6 15
 ```
 
 Under-application is legal — a partially applied constructor is a function:
 
 ```aivi
-value mkRow  = Cell 5
-value cell   = mkRow 3
+value mkRow = Cell 5
+value cell = mkRow 3
 ```
 
 Pattern matching gives each positional field a name at the use site:
@@ -135,15 +138,15 @@ Pattern matching gives each positional field a name at the use site:
 ```aivi
 type Vec2 -> Vec2 -> Vec2
 func addVec = a b => (a, b)
-  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)
+ ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)
 
 type Cell -> Int
 func cellX = .
-  ||> Cell x _ -> x
+ ||> Cell x _ -> x
 
 type Cell -> Int
 func cellY = .
-  ||> Cell _ y -> y
+ ||> Cell _ y -> y
 ```
 
 Use `_` for fields you do not need. The constructor name must appear in every arm that matches it.
@@ -295,7 +298,7 @@ Rules:
 The pipe form is only syntax sugar. The type on the left is passed as the final argument to the transform on the right:
 
 ```aivi
-type UserPublic = Rename { createdAt: created_at } (Omit (isAdmin) User)
+type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 
 The pipe form is preferred because it reads left-to-right in application order.

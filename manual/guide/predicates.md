@@ -7,7 +7,7 @@ Predicates are inline filter expressions used inside patch selectors and collect
 A predicate appears inside square brackets and uses dot-prefixed field access:
 
 ```aivi
-[.active == True]
+# <unparseable item>
 ```
 
 The dot (`.`) refers to the current element being tested. The expression must evaluate to `Bool`.
@@ -25,7 +25,6 @@ type User = {
 
 type { users: List User } -> { users: List User }
 func promoteActive = .
- <| { users[.active == True].role: "admin" }
 ```
 
 This updates the `role` field only for users where `.active` is `True`. Non-matching users are left unchanged.
@@ -44,11 +43,14 @@ Predicates support the same comparison operators as regular expressions:
 The dot prefix accesses fields on each element:
 
 ```aivi
-type Item = { name: Text, price: Int, inStock: Bool }
+type Item = {
+    name: Text,
+    price: Int,
+    inStock: Bool
+}
 
 type { items: List Item } -> { items: List Item }
 func discountExpensive = .
- <| { items[.price >= 50].price: halve }
 ```
 
 ## Selectors
@@ -69,17 +71,7 @@ Selectors are the path expressions inside patch braces that determine what to up
 Examples of chaining:
 
 ```aivi
-// update all prices in a list
-{ items[*].price: double }
-
-// update prices of in-stock items only
-{ items[.inStock == True].price: double }
-
-// nested record field
-{ profile.address.city: toUpperCase }
-
-// focus through an Option
-{ config.Some.retries: increment }
+# <unparseable item>
 ```
 
 ## Constructor focus
@@ -93,7 +85,9 @@ type Config = {
 }
 
 value bumpRetries : (Config -> Config) =
-    patch { retries.Some: increment }
+    patch {
+        retries.Some: increment,
+    }
 ```
 
 If the value does not match the constructor (e.g. it is `None`), the patch leaves it unchanged.
@@ -108,7 +102,9 @@ type Counter = {
 }
 
 value setStep : (Counter -> Counter) =
-    patch { step: := increment }
+    patch {
+        step: := increment,
+    }
 ```
 
 Without `:=`, the function would be called during patch application. With `:=`, the function itself becomes the new field value.

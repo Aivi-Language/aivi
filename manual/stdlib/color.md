@@ -66,7 +66,7 @@ type Theme = {
 ### argb
 
 ```aivi
-argb : Int -> Color
+# <unparseable item>
 ```
 
 Construct a `Color` from one packed ARGB integer. This is the low-level constructor exposed
@@ -75,7 +75,7 @@ by the module today.
 ### unwrap
 
 ```aivi
-unwrap : Color -> Int
+# <unparseable item>
 ```
 
 Extract the packed integer again.
@@ -83,10 +83,7 @@ Extract the packed integer again.
 ### red / green / blue / alpha
 
 ```aivi
-red : Color -> Int
-green : Color -> Int
-blue : Color -> Int
-alpha : Color -> Int
+# <unparseable item>
 ```
 
 Read one channel from a color.
@@ -94,10 +91,7 @@ Read one channel from a color.
 ### withAlpha / withRed / withGreen / withBlue
 
 ```aivi
-withAlpha : Color -> Int -> Color
-withRed : Color -> Int -> Color
-withGreen : Color -> Int -> Color
-withBlue : Color -> Int -> Color
+# <unparseable item>
 ```
 
 Return a new color with one channel replaced.
@@ -105,9 +99,7 @@ Return a new color with one channel replaced.
 ```aivi
 use aivi.color (Color)
 
-type Theme = {
-    accent: Color
-}
+type Theme = { accent: Color }
 
 type Theme -> Color
 func dimAccent = theme =>
@@ -117,7 +109,7 @@ func dimAccent = theme =>
 ### blend
 
 ```aivi
-blend : Color -> Color -> Float -> Color
+# <unparseable item>
 ```
 
 Blend two colors together. The `Float` controls how far the result moves from the first

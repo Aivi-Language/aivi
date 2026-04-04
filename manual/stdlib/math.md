@@ -23,7 +23,7 @@ use aivi.math (
 Returns the absolute value of an integer.
 
 ```aivi
-abs : Int -> Int
+# <unparseable item>
 ```
 
 ```aivi
@@ -41,7 +41,7 @@ func distance = a b =>
 Negates an integer: `negate n` is equivalent to `0 - n`.
 
 ```aivi
-negate : Int -> Int
+# <unparseable item>
 ```
 
 ```aivi
@@ -59,7 +59,7 @@ func flipSign = n =>
 Returns the sign of an integer as `-1`, `0`, or `1`.
 
 ```aivi
-sign : Int -> Int
+# <unparseable item>
 ```
 
 ```aivi
@@ -77,7 +77,7 @@ func direction = velocity =>
 Returns `True` if the integer is divisible by 2.
 
 ```aivi
-isEven : Int -> Bool
+# <unparseable item>
 ```
 
 ```aivi
@@ -97,7 +97,7 @@ func evensOnly = numbers =>
 Returns `True` if the integer is not divisible by 2.
 
 ```aivi
-isOdd : Int -> Bool
+# <unparseable item>
 ```
 
 ```aivi
@@ -117,7 +117,7 @@ func oddsOnly = numbers =>
 Multiplies an integer by itself.
 
 ```aivi
-square : Int -> Int
+# <unparseable item>
 ```
 
 ```aivi
@@ -135,7 +135,7 @@ func areaOfSquare = side =>
 Constrains a value to lie within `[low, high]`. If `n < low`, returns `low`; if `n > high`, returns `high`; otherwise returns `n`.
 
 ```aivi
-clamp : Int -> Int -> Int -> Int
+# <unparseable item>
 ```
 
 ```aivi
@@ -153,7 +153,7 @@ func normalizedVolume = raw =>
 Returns `True` if `n` is within the inclusive range `[low, high]`.
 
 ```aivi
-between : Int -> Int -> Int -> Bool
+# <unparseable item>
 ```
 
 ```aivi
@@ -171,7 +171,7 @@ func isValidAge = age =>
 Returns `True` if `divisor` evenly divides `n` (i.e. `n % divisor == 0`).
 
 ```aivi
-divides : Int -> Int -> Bool
+# <unparseable item>
 ```
 
 ```aivi

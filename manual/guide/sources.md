@@ -26,13 +26,18 @@ vocabularies, but they no longer expose parallel effectful entry points.
 Current shape:
 
 ```aivi
-use aivi.fs (FsSource, FsError, FsEvent)
+use aivi.fs (
+    FsSource
+    FsError
+    FsEvent
+)
 
 @source fs projectRoot
 signal files : FsSource
 
 signal config : Result FsError AppConfig = files.read configPath
 signal changes : FsEvent = files.watch configPath
+
 value cleanup : Task Text Unit = files.delete "cache.txt"
 ```
 
@@ -52,7 +57,10 @@ The compiler lowers those forms onto the existing built-in source providers, tas
 pure host-context intrinsics:
 
 ```aivi
-use aivi.fs (FsSource, FsError)
+use aivi.fs (
+    FsSource
+    FsError
+)
 
 signal projectRoot : Text = "/tmp/demo"
 
@@ -60,6 +68,7 @@ signal projectRoot : Text = "/tmp/demo"
 signal files : FsSource
 
 signal config : Result FsError Text = files.read "config.json"
+
 value cleanup = files.delete "cache.txt"
 ```
 
@@ -102,8 +111,7 @@ That defines `tick` as a timer-driven signal.
 ## Window input
 
 ```aivi
-type Key =
-  | Key Text
+type Key = Key Text
 
 @source window.keyDown with {
     repeat: False,
@@ -137,6 +145,7 @@ type Map K V =
   | EmptyMap
 
 use aivi.duration (Duration)
+
 use aivi.http (Retry)
 
 value authHeaders : Map Text Text = EmptyMap

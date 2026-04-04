@@ -43,11 +43,7 @@ value previewVisible = True
 
 value view =
     <Window title="Preview">
-        <Button
-            label="Blue"
-            animateOpacity={True}
-            opacity={previewOpacity previewVisible}
-        />
+        <Button label="Blue" animateOpacity={True} opacity={previewOpacity previewVisible} />
     </Window>
 ```
 
@@ -80,8 +76,7 @@ type Item = {
     title: Text
 }
 
-type Screen =
-  | Ready (List Item)
+type Screen = Ready (List Item)
 
 value screen =
     Ready [

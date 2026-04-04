@@ -28,7 +28,7 @@ class Eq A = {
 
 class Display A = {
     display : A -> Text
-    label   : A -> Text
+    label : A -> Text
 }
 ```
 
@@ -93,8 +93,7 @@ Instances provide the implementation for a concrete type:
 ```aivi
 class Eq A
 
-type Blob =
-  | Blob Bytes
+type Blob = Blob Bytes
 
 type Blob -> Blob -> Bool
 func blobEquals = left right =>
@@ -110,8 +109,7 @@ A class can expose named operations instead of operators:
 ```aivi
 class Compare A
 
-type Label =
-  | Label Text
+type Label = Label Text
 
 instance Compare Label
 ```

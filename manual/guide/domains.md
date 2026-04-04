@@ -5,13 +5,15 @@ A score is not just an integer. A player ID is not just an integer either. When 
 Domains solve this by wrapping a **carrier type** with a **semantic name** and its own operations. The compiler prevents you from mixing them up.
 
 ```aivi
-domain Score    over Int
-domain PlayerId over Int
-domain Tag      over Text
+domain Score over Int
 
-value highScore     : Score    = 9000
+domain PlayerId over Int
+
+domain Tag over Text
+
+value highScore : Score = 9000
 value currentPlayer : PlayerId = 7
-value label         : Tag      = "featured"
+value label : Tag = "featured"
 ```
 
 You cannot pass a `Score` where a `PlayerId` is expected, even though both are backed by `Int`.
@@ -46,7 +48,7 @@ Domains can attach operators and named methods inside a block body:
 
 ```aivi
 domain Score over Int = {
-    literal pts  : Int -> Score
+    literal pts : Int -> Score
     type Score -> Score -> Score
     (+)
     type Score -> Int
@@ -58,7 +60,7 @@ That lets you write domain-aware expressions such as:
 
 ```aivi
 value total : Score = 10pts + 5pts
-value raw   : Int   = unwrap total
+value raw : Int = unwrap total
 ```
 
 Callable members can also carry authored bodies. Declare the type first, then add a binding line with the implementation:
@@ -78,7 +80,7 @@ When a domain has multiple members, group them inside `= { ... }`:
 
 ```aivi
 domain Score over Int = {
-    literal pts  : Int -> Score
+    literal pts : Int -> Score
     type Score -> Score -> Score
     (+)
     type Score -> Score -> Bool
@@ -96,10 +98,8 @@ Authored bodies work inside blocks too. Inside an authored body, `self` refers t
 domain Snake over List Cell = {
     type List Cell -> Snake
     fromCells cells = cells
-
     type Cell
     head = getOrElse (Cell 0 0) (listHead self)
-
     type Int
     length = listLength self
 }

@@ -33,6 +33,7 @@ signal files : FsSource
 
 signal config : Signal (Result FsError Text) = files.read "config.json"
 signal changes : Signal FsEvent = files.watch "config.json"
+
 value configExists : Task Text Bool = files.exists "config.json"
 value backupBytes : Task Text Bytes = files.readBytes "backup.bin"
 value saveBackup : Task Text Unit = files.writeText "backup.txt" "ok"

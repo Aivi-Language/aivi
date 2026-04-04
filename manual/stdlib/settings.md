@@ -66,8 +66,7 @@ Checked schema identifier such as `"org.gnome.desktop.interface"`.
 ```aivi
 use aivi.gnome.settings (SettingsSchema)
 
-value interfaceSchema : Result SettingsError SettingsSchema =
-    parse "org.gnome.desktop.interface"
+value interfaceSchema : Result SettingsError SettingsSchema = parse "org.gnome.desktop.interface"
 ```
 
 ### SettingsKey
@@ -88,8 +87,7 @@ Wrapped key name such as `"color-scheme"`.
 ```aivi
 use aivi.gnome.settings (SettingsKey)
 
-value colorSchemeKey : SettingsKey =
-    make "color-scheme"
+value colorSchemeKey : SettingsKey = make "color-scheme"
 ```
 
 ### SettingValue

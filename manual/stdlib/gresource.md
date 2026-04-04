@@ -74,8 +74,7 @@ bundled app resources.
 ```aivi
 use aivi.gresource (ResourcePath)
 
-value cssPath : Result ResourceError ResourcePath =
-    parse "/com/example/app/style.css"
+value cssPath : Result ResourceError ResourcePath = parse "/com/example/app/style.css"
 ```
 
 ### ResourceTask

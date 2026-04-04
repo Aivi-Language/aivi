@@ -37,6 +37,7 @@ use aivi.log (
 signal logger : LogSource
 
 value started : Task LogError Unit = logger.emit levelInfo "Started"
+
 value slowQuery : Task LogError Unit =
     logger.emitContext levelWarn "Slow query" [
         kv "mailbox" "primary"

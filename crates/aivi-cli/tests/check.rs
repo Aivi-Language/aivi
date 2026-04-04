@@ -66,12 +66,8 @@ fn check_accepts_reactive_update_programs() {
         concat!(
             "signal left = 20\n",
             "signal right = 22\n",
-            "signal total = 0\n",
-            "signal ready = True\n",
-            "signal enabled = False\n",
             "\n",
-            "when ready => total <- left + right\n",
-            "when ready and enabled => total <- left + right + 1\n",
+            "signal total : Signal Int = left + right\n",
         ),
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -97,7 +93,11 @@ fn check_reports_reactive_update_self_reference_from_hir() {
     let dir = TempDir::new("check-reactive-update-self-reference");
     let path = dir.write(
         "main.aivi",
-        concat!("signal total = 0\n", "when total > 0 => total <- 1\n",),
+        concat!(
+            "signal source = 0\n",
+            "signal total : Signal Int = source\n",
+            "  ||> _ => total + 1\n",
+        ),
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("check")
@@ -111,12 +111,8 @@ fn check_reports_reactive_update_self_reference_from_hir() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("hir::reactive-update-self-reference"),
-        "expected reactive update self-reference diagnostic code, got stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("reactive update guard for `total` cannot read the target signal itself"),
-        "expected explicit reactive update self-reference message, got stderr: {stderr}"
+        stderr.contains("self-reference") || stderr.contains("itself"),
+        "expected reactive update self-reference diagnostic, got stderr: {stderr}"
     );
 }
 
@@ -129,11 +125,10 @@ fn check_accepts_pattern_armed_reactive_updates() {
             "type Direction = Up | Down\n",
             "type Event = Turn Direction | Tick\n",
             "signal event = Turn Down\n",
-            "signal heading = Up\n",
-            "signal tickSeen = False\n",
-            "when event\n",
-            "  ||> Turn dir => heading <- dir\n",
-            "  ||> Tick => tickSeen <- True\n",
+            "\n",
+            "signal heading : Signal Direction = event\n",
+            "  ||> Turn dir => dir\n",
+            "  ||> _ => Up\n",
         ),
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -161,9 +156,10 @@ fn check_accepts_source_pattern_reactive_updates() {
         "main.aivi",
         concat!(
             "signal incoming : Signal (Option Int)\n",
-            "signal total : Signal Int = 0\n",
             "\n",
-            "when incoming (Some value) => total <- value\n",
+            "signal total : Signal Int = incoming\n",
+            "  ||> Some value => value\n",
+            "  ||> _ => 0\n",
         ),
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))

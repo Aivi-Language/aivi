@@ -86,7 +86,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 
 | Surface form | Check | Execute | Run | Compile | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Top-level `when` reactive updates | yes | yes | yes | yes | Guarded, source-pattern, and pattern-armed `when` forms all compile and run. `aivi execute` fires `when` clauses once for initial signal values (correct one-shot semantics). |
+| Signal merge reactive arms | yes | yes | yes | yes | Signal merge with `||>` arms replaces the former `when` clause syntax. Guarded, source-pattern, and pattern-armed forms all compile and run. `aivi execute` fires once for initial signal values (correct one-shot semantics). |
 | `Task E A` | yes | yes | yes | yes | `aivi execute` is the direct task entrypoint. Runtime supports full applicative traverse for Task carriers. Codegen emits task metadata through the standard emission path. |
 | `timer.every` / `timer.after` | yes | yes | yes | yes | `immediate`, `jitter`, and `coalesce` options are all supported. `aivi execute` fires once for the initial tick (correct one-shot semantics). Codegen emits source binding metadata. |
 | `http.get` / `http.post` | yes | yes | yes | yes | Provider option support is broad: `http.get` accepts `body` (RFC 9110). `aivi execute` performs one request/response cycle (correct one-shot semantics). Codegen emits source binding metadata. |

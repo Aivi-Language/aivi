@@ -74,10 +74,17 @@ use aivi.date (
 ### Product types
 
 ```aivi
-type Date = Date year:Year month:Month day:Day
-type TimeOfDay = TimeOfDay hour:Hour minute:Minute second:Second
-type DateTime = DateTime date:Date time:TimeOfDay
-type ZonedDateTime = ZonedDateTime dateTime:DateTime zone:Text
+type Date =
+  Date year:Year month:Month day:Day
+
+type TimeOfDay =
+  TimeOfDay hour:Hour minute:Minute second:Second
+
+type DateTime =
+  DateTime date:Date time:TimeOfDay
+
+type ZonedDateTime =
+  ZonedDateTime dateTime:DateTime zone:Text
 ```
 
 Construction is positional:
@@ -92,7 +99,14 @@ value utcNow = ZonedDateTime now "+00:00"
 ### DayOfWeek
 
 ```aivi
-type DayOfWeek = Monday | Tuesday | Wednesday | Thursday | Friday | Saturday | Sunday
+type DayOfWeek =
+  | Monday
+  | Tuesday
+  | Wednesday
+  | Thursday
+  | Friday
+  | Saturday
+  | Sunday
 ```
 
 ## DateDelta domain
@@ -141,9 +155,7 @@ domain DateDelta over Int
 | `daysInMonth` | `Month → Year → Day` | Number of days in a given month |
 
 ```aivi
-isLeapYear 2024         -- True
-daysInMonth 2 2024      -- 29
-daysInMonth 11 2024     -- 30
+# <unparseable item>
 ```
 
 ## Formatting
@@ -156,8 +168,7 @@ daysInMonth 11 2024     -- 30
 | `zonedToIso` | `ZonedDateTime → Text` | `"2024-06-15T14:30:00+00:00"` |
 
 ```aivi
-dateToIso (Date 2024 6 15)                              -- "2024-06-15"
-dateTimeToIso (DateTime (Date 2024 6 15) (TimeOfDay 14 30 0))  -- "2024-06-15T14:30:00"
+# <unparseable item>
 ```
 
 ## Comparison
@@ -207,9 +218,8 @@ use aivi.date (
 )
 
 value birthday = Date 1990 3 14
-value label = dateToIso birthday                        -- "1990-03-14"
-value feb = daysInMonth 2 2024                          -- 29
-
+value label = dateToIso birthday
+value feb = daysInMonth 2 2024
 value meeting = toDateTime (Date 2024 12 25) midnight
 value utcMeeting = toZoned meeting "+00:00"
 ```

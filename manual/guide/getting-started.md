@@ -14,7 +14,7 @@ AIVI does not have `if`/`else`, `for` loops, mutable variables, or null. Instead
 | `for` loops | Collection combinators: `map`, `filter`, `reduce` |
 | Mutable variables | Signals — reactive values in a dependency graph |
 | Null | `Option` — explicit presence or absence |
-| Callbacks / event handlers | Sources and `when` clauses |
+| Callbacks / event handlers | Sources and signal merge |
 
 If this sounds unusual, [Thinking in AIVI](/guide/thinking-in-aivi) explains the mental model shift in detail.
 

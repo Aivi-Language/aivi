@@ -24,8 +24,8 @@ This is not a limitation — it is a simplification. When everything is an expre
 ```aivi
 type Int -> Text
 func classify = . >= 50
-  T|> "pass"
-  F|> "fail"
+ T|> "pass"
+ F|> "fail"
 ```
 
 ### Values do not change
@@ -33,9 +33,16 @@ func classify = . >= 50
 Once a value is bound, it stays that way. There is no reassignment, no mutation, no `let` versus `const` distinction. If you need a modified version of something, you create a new value:
 
 ```aivi
-type User = { name: Text, score: Int }
+type User = {
+    name: Text,
+    score: Int
+}
 
-value alice : User = { name: "Alice", score: 10 }
+value alice : User = {
+    name: "Alice",
+    score: 10
+}
+
 value promoted : User = alice <| { score: . + 5 }
 ```
 
@@ -83,9 +90,9 @@ type LoadState =
 
 type LoadState -> Text
 func describe = .
-  ||> Loading      -> "Loading..."
-  ||> Ready data   -> "Got: {data}"
-  ||> Failed error -> "Error: {error}"
+ ||> Loading      -> "Loading..."
+ ||> Ready data   -> "Got: {data}"
+ ||> Failed error -> "Error: {error}"
 ```
 
 If you add a new constructor to `LoadState`, the compiler tells you every place that needs updating. You cannot forget a case.
@@ -98,7 +105,7 @@ A duration is not just an integer. A URL is not just text. AIVI lets you create 
 use aivi.duration (Duration)
 
 value timeout : Duration = 5sec
-value delay   : Duration = 250ms
+value delay : Duration = 250ms
 ```
 
 You cannot accidentally pass an `Int` where a `Duration` is expected. The compiler catches it. The domain also gives you a place to define operators and conversions that make sense for that concept.

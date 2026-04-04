@@ -21,6 +21,7 @@ use aivi.env (
 signal environment : EnvSource
 
 signal shell : Signal (Option Text) = environment.get "SHELL"
+
 value xdgVars : Task Text (List EnvEntry) = environment.list "XDG_"
 ```
 

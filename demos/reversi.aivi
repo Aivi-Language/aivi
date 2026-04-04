@@ -753,6 +753,11 @@ func isLastMove = lastMove coord => lastMove
  ||> Some lc -> sameCoord lc coord
  ||> None    -> False
 
+type Option Coord -> Coord -> Status -> (Option Text)
+func lastMovePlacedLabel = lastMove coord status => (computerToAct status, isLastMove lastMove coord)
+ ||> (True, True) -> Some "🎯"
+ ||> _            -> None
+
 type Int -> Bool
 func animStoneVisible = tick =>
     tick % previewBlinkCycleTicks < previewBlinkVisibleTicks
@@ -828,8 +833,13 @@ func baseCellLabel = board status legalMoves lastMove lastFlips coord => discAt 
  ||> Blue  -> "🔵"
  ||> Empty -> emptyCellLabel status legalMoves coord
 
+type AnimState -> (Option Coord) -> Status -> Coord -> (Option Text)
+func overlayLabel = animState lastMove status coord => previewLabel animState coord
+ ||> Some label -> Some label
+ ||> None       -> lastMovePlacedLabel lastMove coord status
+
 type List (List Disc) -> Status -> (List Coord) -> (Option Coord) -> (List Coord) -> AnimState -> Coord -> Text
-func cellLabel = board status legalMoves lastMove lastFlips animState coord => previewLabel animState coord
+func cellLabel = board status legalMoves lastMove lastFlips animState coord => overlayLabel animState lastMove status coord
  ||> Some label -> label
  ||> None       -> baseCellLabel board status legalMoves lastMove lastFlips coord
 

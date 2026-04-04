@@ -57,7 +57,7 @@ values elsewhere in your program.
 ### `millis`
 
 ```aivi
-millis : Int -> Duration
+# <unparseable item>
 ```
 
 Build a duration from a raw millisecond count.
@@ -74,7 +74,7 @@ value shortDelay : Duration = millis 150
 ### `trySeconds`
 
 ```aivi
-trySeconds : Int -> Result DurationError Duration
+# <unparseable item>
 ```
 
 A safe constructor for whole seconds. Use this when you want construction to report a
@@ -93,7 +93,7 @@ value pollInterval : Result DurationError Duration = trySeconds 10
 ## `unwrap`
 
 ```aivi
-unwrap : Duration -> Int
+# <unparseable item>
 ```
 
 Extract the raw `Int` carrier. In this module the direct constructor is `millis`, so this is

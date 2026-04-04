@@ -116,7 +116,10 @@ use aivi.db (DbRow)
 value sampleRow : DbRow = {
     entries: [
         { key: "id", value: "7" },
-        { key: "email", value: "ada@example.com" }
+        {
+            key: "email",
+            value: "ada@example.com"
+        }
     ]
 }
 ```
@@ -265,11 +268,11 @@ use aivi.db (
 
 type DbError -> Text
 func describeDbError = error => error
- ||> SchemaMismatch msg     -> "schema mismatch: {msg}"
- ||> QueryFailed msg        -> "query failed: {msg}"
+ ||> SchemaMismatch msg      -> "schema mismatch: {msg}"
+ ||> QueryFailed msg         -> "query failed: {msg}"
  ||> ConstraintViolation msg -> "constraint violation: {msg}"
- ||> NestedTransaction      -> "nested transactions are not supported"
- ||> ConnectionFailed msg   -> "connection failed: {msg}"
+ ||> NestedTransaction       -> "nested transactions are not supported"
+ ||> ConnectionFailed msg    -> "connection failed: {msg}"
 ```
 
 ---
@@ -296,10 +299,190 @@ value loadUsersQuery : DbStatement = {
     arguments: []
 }
 
-value loadUsers : Task Text (List DbRow) =
-    database.query loadUsersQuery
+value loadUsers : Task Text (List DbRow) = database.query loadUsersQuery
 ```
 
 The source-backed side of the family stays on `db.connect` / `db.live`. On-demand database work
 uses handle members such as `database.query ...` and `database.commit ...`, which return ordinary
 `Task Text ...` values on the current command path.
+
+---
+
+## Reactive queries with `db.live`
+
+`db.live` turns a SQL query into a reactive signal that automatically refreshes when the
+underlying data changes. This is the primary pattern for database-driven UIs in AIVI.
+
+### Connecting and querying
+
+```aivi
+use aivi.db (
+    DbSource
+    DbError
+    Connection
+    DbRow
+    DbStatement
+    DbParam
+)
+
+value conn : Connection = {
+    database: "data/todos.db"
+}
+
+@source db conn
+signal database : DbSource
+
+value loadTodos : DbStatement = {
+    sql: "select id, title, done from todos order by id",
+    arguments: []
+}
+
+@source db.live loadTodos with {
+    refreshOn: database
+}
+signal todos : Signal (Result DbError (List DbRow))
+```
+
+The `db.live` source runs the query on a worker thread and republishes whenever `refreshOn`
+fires. After a successful `database.commit`, the runtime automatically advances matching
+`.changed` signals, which triggers the refresh.
+
+### Inserting a row
+
+```aivi
+type Text -> DbParam
+func textParam = value =>
+    {
+        kind: "text",
+        bool: None,
+        int: None,
+        float: None,
+        decimal: None,
+        bigInt: None,
+        text: Some value,
+        bytes: None
+    }
+
+type Text -> DbStatement
+func insertTodo = title =>
+    {
+        sql: "insert into todos (title, done) values (?, 0)",
+        arguments: [textParam title]
+    }
+
+value addTask : Task Text Unit = database.commit (insertTodo "Buy groceries")
+```
+
+After the commit succeeds, `db.live` signals with `refreshOn: database` automatically re-query.
+
+### Updating and deleting
+
+```aivi
+type Int -> DbParam
+func intParam = value =>
+    {
+        kind: "int",
+        bool: None,
+        int: Some value,
+        float: None,
+        decimal: None,
+        bigInt: None,
+        text: None,
+        bytes: None
+    }
+
+type Int -> DbStatement
+func markDone = id =>
+    {
+        sql: "update todos set done = 1 where id = ?",
+        arguments: [intParam id]
+    }
+
+type Int -> DbStatement
+func deleteTodo = id =>
+    {
+        sql: "delete from todos where id = ?",
+        arguments: [intParam id]
+    }
+```
+
+### Putting it together
+
+A minimal reactive todo list:
+
+```aivi
+use aivi.db (
+    DbSource
+    DbError
+    Connection
+    DbRow
+    DbStatement
+    DbParam
+)
+
+type Text -> DbParam
+func textParam = value =>
+    {
+        kind: "text",
+        bool: None,
+        int: None,
+        float: None,
+        decimal: None,
+        bigInt: None,
+        text: Some value,
+        bytes: None
+    }
+
+type Int -> DbParam
+func intParam = value =>
+    {
+        kind: "int",
+        bool: None,
+        int: Some value,
+        float: None,
+        decimal: None,
+        bigInt: None,
+        text: None,
+        bytes: None
+    }
+
+value conn : Connection = {
+    database: "data/todos.db"
+}
+
+@source db conn
+signal database : DbSource
+
+value listQuery : DbStatement = {
+    sql: "select id, title, done from todos order by id",
+    arguments: []
+}
+
+@source db.live listQuery with {
+    refreshOn: database
+}
+signal todoRows : Signal (Result DbError (List DbRow))
+
+signal todoCount : Signal Text
+
+value main =
+    <Window title="Todos">
+        <Box orientation="vertical" spacing={8}>
+            <Label text={todoCount} />
+        </Box>
+    </Window>
+
+export main
+```
+
+The data flow:
+
+```
+db.connect  →  database handle
+                    ↓
+db.live     →  todoRows signal (auto-refreshes after commits)
+                    ↓
+                todoCount derives from todoRows
+                    ↓
+                <Label> updates automatically
+```

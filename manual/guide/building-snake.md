@@ -161,22 +161,16 @@ The snake is a non-empty list of cells, but we want richer operations than a pla
 domain Snake over NonEmptyList Cell = {
     type NonEmptyList Cell -> Snake
     fromCells cells = cells
-
     type Cell
     head = nelHead self
-
     type Cell -> Bool
     contains cell = listContains cellEq cell (nelToList self)
-
     type Int
     length = nelLength self
-
     type Cell -> Snake
     grow cell = nelCons cell self
-
     type Cell -> Snake
     move cell = nelFromHeadTail cell (nelInit self)
-
     type Direction -> Cell
     nextHead dir = moveDir dir (nelHead self)
 }
@@ -305,28 +299,30 @@ The timer fires every 120 milliseconds. `120ms` is a **domain suffix literal** �
 
 The keyboard source captures key presses without repeat, so holding a key does not flood the game with events.
 
-## Routing events with `when`
+## Merging sources into events
 
-The `when` clause connects sources to the event signal:
+Signal merge syntax lists the source signals separated by `|`, then `||>` arms discriminate by
+source name and payload pattern:
 
 ```aivi
-signal event : Signal Event
-
-when tick _                     => event <- Tick
-when keyDown (Key "ArrowLeft")  => event <- Turn West
-when keyDown (Key "ArrowRight") => event <- Turn East
-when keyDown (Key "ArrowUp")    => event <- Turn North
-when keyDown (Key "ArrowDown")  => event <- Turn South
-when keyDown (Key "Space")      => event <- Restart
+signal event : Signal Event = tick | keyDown
+  ||> tick _ => Tick
+  ||> keyDown (Key "ArrowLeft") => Turn West
+  ||> keyDown (Key "ArrowRight") => Turn East
+  ||> keyDown (Key "ArrowUp") => Turn North
+  ||> keyDown (Key "ArrowDown") => Turn South
+  ||> keyDown (Key "Space") => Restart
 ```
 
-Each `when` watches a signal for a specific pattern. When `keyDown` receives `Key "ArrowLeft"`, the event signal gets `Turn West`. This is pattern-based routing, not imperative event handling.
+Each arm names a source signal from the merge list, matches a pattern on its payload, and produces
+the event value. When `keyDown` receives `Key "ArrowLeft"`, the event signal gets `Turn West`.
+This is declarative routing, not imperative event handling.
 
 ## Accumulating state with `+|>`
 
 ```aivi
 signal state : GameState = event
-  +|> initial step
+ +|> initial step
 ```
 
 This is the accumulation pipe. It reads: *"start with `initial`, and each time `event` fires, apply `step` to compute the next `GameState`."*
@@ -334,12 +330,28 @@ This is the accumulation pipe. It reads: *"start with `initial`, and each time `
 The entire game state lives in this one signal. All other signals derive from it:
 
 ```aivi
-signal boardText   = state |> renderBoard
-signal dirLine     = state |> .dir |> dirLabel
-signal statusLine  = state |> .status |> statusLineFor
-signal scoreLine   = state |> .score |> scoreLineFor
-signal gameOver    = state |> .status |> isGameOver
-signal finalScoreLine = state |> .score |> finalScoreLineFor
+signal boardText = state
+  |> renderBoard
+
+signal dirLine = state
+  |> .dir
+  |> dirLabel
+
+signal statusLine = state
+  |> .status
+  |> statusLineFor
+
+signal scoreLine = state
+  |> .score
+  |> scoreLineFor
+
+signal gameOver = state
+  |> .status
+  |> isGameOver
+
+signal finalScoreLine = state
+  |> .score
+  |> finalScoreLineFor
 ```
 
 Each derived signal projects a piece of state and transforms it. When `state` changes, all of these recompute automatically.
@@ -436,7 +448,7 @@ Timer (120ms)  ──→  tick signal
                          ↓
 Keyboard  ──→  keyDown signal
                     ↓
-          when clauses route to event signal
+          signal merge routes to event signal
                     ↓
           +|> accumulates into state signal
                     ↓
@@ -461,7 +473,7 @@ Every arrow is a declared dependency. The runtime propagates changes through the
 | **Domain literals** | `120ms` — type-safe duration with suffix syntax |
 | **Signals** | `state`, `boardText`, `scoreLine` — the reactive graph |
 | **Sources** | `timer.every`, `window.keyDown` — external input boundaries |
-| **Event routing** | `when` clauses connect sources to events |
+| **Event routing** | Signal merge connects sources to events |
 | **Accumulation** | `+\|>` folds events into state over time |
 | **Text interpolation** | `"Score: {.}"` — inline formatting with pipe subject |
 | **Imports** | `use aivi.nonEmpty (...)` — named imports with `as` renaming |

@@ -45,7 +45,7 @@ use aivi.url (
 ## `parse`
 
 ```aivi
-parse : Text -> Result UrlError Url
+# <unparseable item>
 ```
 
 Use this when URL text comes from config, user input, or another external source.
@@ -57,14 +57,13 @@ use aivi.url (
     parse
 )
 
-value apiBase : Result UrlError Url =
-    parse "https://api.example.com/v1/users?page=1"
+value apiBase : Result UrlError Url = parse "https://api.example.com/v1/users?page=1"
 ```
 
 ## `unwrap`
 
 ```aivi
-unwrap : Url -> Text
+# <unparseable item>
 ```
 
 Convert a typed URL back to raw text.
@@ -109,7 +108,7 @@ key/value pairs for you.
 ### `withPath`
 
 ```aivi
-withPath : Url -> Text -> Url
+# <unparseable item>
 ```
 
 Return a new `Url` with a different path.
@@ -117,7 +116,7 @@ Return a new `Url` with a different path.
 ### `withQuery`
 
 ```aivi
-withQuery : Url -> Text -> Url
+# <unparseable item>
 ```
 
 Return a new `Url` with a different query string.

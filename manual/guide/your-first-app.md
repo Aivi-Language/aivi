@@ -113,8 +113,7 @@ This is **pure** — no mutation, no side effects. It takes the current state an
 We need events to come from somewhere. AIVI uses **sources** to connect the reactive graph to the outside world:
 
 ```aivi
-type Key =
-  | Key Text
+type Key = Key Text
 
 @source window.keyDown with {
     repeat: False
@@ -124,17 +123,19 @@ signal keyDown : Signal Key
 
 `@source window.keyDown` declares that `keyDown` receives keyboard events from the GTK window. The `Key` type wraps the key name as text.
 
-Now we route specific keys to events:
+Now we route specific keys to events using signal merge:
 
 ```aivi
-signal event : Signal Event
-
-when keyDown (Key "ArrowUp") => event <- Increment
-when keyDown (Key "ArrowDown") => event <- Decrement
-when keyDown (Key "Space") => event <- Reset
+signal event : Signal Event = keyDown
+  ||> Key "ArrowUp" => Increment
+  ||> Key "ArrowDown" => Decrement
+  ||> Key "Space" => Reset
+  ||> _ => Increment
 ```
 
-Each `when` clause watches a signal for a specific pattern. When a matching key arrives, it writes the corresponding event into the `event` signal.
+The signal merge lists `keyDown` as its source, then each `||>` arm matches a pattern on the
+key payload and produces an event. When a matching key arrives, the corresponding event appears
+in the `event` signal.
 
 ## Step 8: Accumulating state
 
@@ -142,7 +143,7 @@ The `+|>` pipe folds events into state over time:
 
 ```aivi
 signal count = event
-  +|> 0 step
+ +|> 0 step
 ```
 
 This reads: *"start count at 0, and each time event fires, apply `step` to get the next value."* The accumulation is managed by the signal system — there are no mutable variables.
@@ -157,8 +158,7 @@ type Event =
   | Decrement
   | Reset
 
-type Key =
-  | Key Text
+type Key = Key Text
 
 type Int -> Text
 func formatCount = n =>
@@ -175,14 +175,14 @@ func step = event count => event
 }
 signal keyDown : Signal Key
 
-signal event : Signal Event
-
-when keyDown (Key "ArrowUp") => event <- Increment
-when keyDown (Key "ArrowDown") => event <- Decrement
-when keyDown (Key "Space") => event <- Reset
+signal event : Signal Event = keyDown
+  ||> Key "ArrowUp" => Increment
+  ||> Key "ArrowDown" => Decrement
+  ||> Key "Space" => Reset
+  ||> _ => Increment
 
 signal count = event
-  +|> 0 step
+ +|> 0 step
 
 signal label = count
   |> formatCount
@@ -209,7 +209,7 @@ Let us trace the concepts this small app introduced:
 | **Types** | `Event` sum type, `Key` wrapper, function signatures |
 | **Signals** | `count`, `label`, `event`, `keyDown` — the reactive graph |
 | **Sources** | `@source window.keyDown` — external input boundary |
-| **Pattern matching** | `||>` in `step`, pattern matching in `when` clauses |
+| **Pattern matching** | `||>` in `step`, signal merge arms route keys to events |
 | **Pipes** | `|>` to transform, `+|>` to accumulate |
 | **Markup** | `<Window>`, `<Box>`, `<Label>` — type-checked GTK widgets |
 | **Reactivity** | `label` recomputes when `count` changes, automatically |
@@ -219,7 +219,7 @@ Let us trace the concepts this small app introduced:
 ```
 Keyboard → @source window.keyDown → keyDown signal
                                           ↓
-                              when clauses route to event signal
+                              signal merge routes to event signal
                                           ↓
                               +|> accumulates into count signal
                                           ↓

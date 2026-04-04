@@ -55,7 +55,7 @@ type MatrixError =
 ## `init`
 
 ```aivi
-init : Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
+# <unparseable item>
 ```
 
 `init width height build` calls `build x y` for every zero-based coordinate in the rectangle.
@@ -70,21 +70,20 @@ use aivi.matrix (
 )
 
 type Int -> Int -> Int
-func seatNumber x y =>
+func seatNumber = x y =>
     x + y * 100
 
-value seats : Result MatrixError (Matrix Int) =
-    init 3 2 seatNumber
+value seats : Result MatrixError (Matrix Int) = init 3 2 seatNumber
 
 value middleSeat : Result MatrixError (Option Int) = seats
- ||> Err error  -> Err error
- ||> Ok matrix  -> Ok (at matrix 1 1)
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (at matrix 1 1)
 ```
 
 ## `fromRows`
 
 ```aivi
-fromRows : List (List A) -> Result MatrixError (Matrix A)
+# <unparseable item>
 ```
 
 Use `fromRows` when you already have nested lists and want to verify that every row has the same
@@ -107,11 +106,7 @@ value board : Result MatrixError (Matrix Text) =
 ## Dimensions and access
 
 ```aivi
-width : Matrix A -> Int
-height : Matrix A -> Int
-rows : Matrix A -> List (List A)
-row : Matrix A -> Int -> Option (List A)
-at : Matrix A -> Int -> Int -> Option A
+# <unparseable item>
 ```
 
 `width` and `height` report the current rectangular shape. `row` and `at` return `None` when the
@@ -129,7 +124,7 @@ use aivi.matrix (
 )
 
 type Int -> Int -> Int
-func cell x y =>
+func cell = x y =>
     x + y * 10
 
 value board : Result MatrixError (Matrix Int) = init 4 3 cell
@@ -154,7 +149,7 @@ value corner : Result MatrixError (Option Int) = board
 ## `replaceAt`
 
 ```aivi
-replaceAt : Matrix A -> (Int, Int) -> A -> Option (Matrix A)
+# <unparseable item>
 ```
 
 `replaceAt` returns `Some updatedMatrix` when both coordinates are in bounds, otherwise `None`.
@@ -168,7 +163,7 @@ use aivi.matrix (
 )
 
 type Int -> Int -> Bool
-func isWall x y =>
+func isWall = x y =>
     x == 0 or y == 0
 
 value board : Result MatrixError (Matrix Bool) = init 3 3 isWall

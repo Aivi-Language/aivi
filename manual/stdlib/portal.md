@@ -107,9 +107,9 @@ use aivi.portal (
 
 type PortalFileSelection -> Text
 func selectionSummary = selection => selection
- ||> SingleFile path      -> path
- ||> MultipleFiles paths  -> "Several files selected"
- ||> SelectionCancelled   -> "No file selected"
+ ||> SingleFile path     -> path
+ ||> MultipleFiles paths -> "Several files selected"
+ ||> SelectionCancelled  -> "No file selected"
 ```
 
 ### PortalUriResult
@@ -153,9 +153,7 @@ Generic alias for portal-related tasks.
 The stdlib module comments document the following source-backed patterns:
 
 ```aivi
-@source portal.openFile {
-    filters: [{ name: "AIVI Files", patterns: ["*.aivi"] }]
-}
+@source portal.openFile { filters: [{ name: "AIVI Files", patterns: ["*.aivi"] }] }
 signal openedFile : Signal (Result PortalError PortalFileSelection)
 
 @source portal.openUri "https://example.com"

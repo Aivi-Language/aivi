@@ -127,7 +127,7 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = { score: . } >= 100
+func isTopScore = .score >= 100
 
 value topScore =
     isTopScore {
@@ -141,8 +141,7 @@ value topScore =
 Tuples let you match several values at once:
 
 ```aivi
-type Point =
-  | Point Int Int
+type Point = Point Int Int
 
 type Direction =
   | Up
@@ -171,8 +170,7 @@ Patterns can be nested as deeply as the value requires:
 ```aivi
 type Inner = A | B
 
-type Outer =
-  | Outer Inner
+type Outer = Outer Inner
 
 type Outer -> Text
 func describeOuter = .

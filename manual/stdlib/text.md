@@ -83,17 +83,17 @@ use aivi.text (
     parseIntOrElse
 )
 
-value title : Text =
-    capitalize (trim "  aivi  ")
+value title : Text = capitalize (trim "  aivi  ")
 
 value csv : Text =
-    join "," ["Ada", "Grace", "Linus"]
+    join "," [
+        "Ada",
+        "Grace",
+        "Linus"
+    ]
 
-value count : Int =
-    parseIntOrElse 0 "42"
-
-value rows : List Text =
-    lines "a\nb\nc"
+value count : Int = parseIntOrElse 0 "42"
+value rows : List Text = lines "a\nb\nc"
 ```
 
 ## Current limits

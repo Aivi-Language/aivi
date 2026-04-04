@@ -95,7 +95,7 @@ value newMail : Notification = {
 
 ```aivi
 type NotificationError =
-  | NotificationFailed Text
+  NotificationFailed Text
 ```
 
 Notification delivery failed, with a backend-provided message.

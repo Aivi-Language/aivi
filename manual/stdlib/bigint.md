@@ -87,8 +87,7 @@ Friendly alias names such as `parse`, `plus`, `minus`, `times`, `dividedBy`, `re
 ### fromInt / fromInteger
 
 ```aivi
-fromInt : Int -> BigInt
-fromInteger : Int -> BigInt
+# <unparseable item>
 ```
 
 Convert a normal machine-sized `Int` into `BigInt`. Use this when you want to move into
@@ -103,8 +102,7 @@ value startCount = fromInt 42
 ### fromText / parse
 
 ```aivi
-fromText : Text -> Option BigInt
-parse : Text -> Option BigInt
+# <unparseable item>
 ```
 
 Parse decimal text into `BigInt`. Surrounding whitespace is ignored. Returns `None` when the text
@@ -119,7 +117,7 @@ value customerId = fromText "90071992547409931234567890"
 ### toInt
 
 ```aivi
-toInt : BigInt -> Option Int
+# <unparseable item>
 ```
 
 Try to convert a `BigInt` back to plain `Int`. Returns `Some n` when the value fits in `Int`, or
@@ -137,7 +135,7 @@ func toMachineInt = raw =>
 ### toText
 
 ```aivi
-toText : BigInt -> Text
+# <unparseable item>
 ```
 
 Render a `BigInt` as decimal text. This is the easiest way to show a large number in the UI or
@@ -155,8 +153,7 @@ value rendered = toText (factorial 30)
 ### add / plus
 
 ```aivi
-add : BigInt -> BigInt -> BigInt
-plus : BigInt -> BigInt -> BigInt
+# <unparseable item>
 ```
 
 Add two `BigInt` values.
@@ -164,8 +161,7 @@ Add two `BigInt` values.
 ### sub / minus
 
 ```aivi
-sub : BigInt -> BigInt -> BigInt
-minus : BigInt -> BigInt -> BigInt
+# <unparseable item>
 ```
 
 Subtract the right value from the left.
@@ -173,8 +169,7 @@ Subtract the right value from the left.
 ### mul / times
 
 ```aivi
-mul : BigInt -> BigInt -> BigInt
-times : BigInt -> BigInt -> BigInt
+# <unparseable item>
 ```
 
 Multiply two `BigInt` values.
@@ -182,8 +177,7 @@ Multiply two `BigInt` values.
 ### div / dividedBy
 
 ```aivi
-div : BigInt -> BigInt -> Option BigInt
-dividedBy : BigInt -> BigInt -> Option BigInt
+# <unparseable item>
 ```
 
 Integer division. Any remainder is discarded. Returns `None` when the divisor is zero.
@@ -200,8 +194,7 @@ value maybePages = div (fromInt 120) (fromInt 10)
 ### bigMod / remainder
 
 ```aivi
-bigMod : BigInt -> BigInt -> Option BigInt
-remainder : BigInt -> BigInt -> Option BigInt
+# <unparseable item>
 ```
 
 Return the remainder after integer division. Returns `None` when the divisor is zero.
@@ -209,8 +202,7 @@ Return the remainder after integer division. Returns `None` when the divisor is 
 ### pow / raiseTo
 
 ```aivi
-pow : BigInt -> Int -> BigInt
-raiseTo : BigInt -> Int -> BigInt
+# <unparseable item>
 ```
 
 Raise a `BigInt` to a whole-number power. The exponent is a normal `Int`. Negative exponents are
@@ -219,8 +211,7 @@ currently treated as `0`, so the result is `1`.
 ### neg / negate
 
 ```aivi
-neg : BigInt -> BigInt
-negate : BigInt -> BigInt
+# <unparseable item>
 ```
 
 Flip the sign of a `BigInt`.
@@ -228,8 +219,7 @@ Flip the sign of a `BigInt`.
 ### bigAbs / absolute
 
 ```aivi
-bigAbs : BigInt -> BigInt
-absolute : BigInt -> BigInt
+# <unparseable item>
 ```
 
 Return the absolute value of a `BigInt`.
@@ -237,7 +227,7 @@ Return the absolute value of a `BigInt`.
 ### cmp
 
 ```aivi
-cmp : BigInt -> BigInt -> Int
+# <unparseable item>
 ```
 
 Compare two `BigInt` values. The result is `-1` when the left value is smaller, `0` when both
@@ -246,8 +236,7 @@ values are equal, and `1` when the left value is larger.
 ### bigEq / equals
 
 ```aivi
-bigEq : BigInt -> BigInt -> Bool
-equals : BigInt -> BigInt -> Bool
+# <unparseable item>
 ```
 
 Check whether two `BigInt` values are exactly equal.
@@ -255,8 +244,7 @@ Check whether two `BigInt` values are exactly equal.
 ### gt / greaterThan
 
 ```aivi
-gt : BigInt -> BigInt -> Bool
-greaterThan : BigInt -> BigInt -> Bool
+# <unparseable item>
 ```
 
 Return `True` when the left value is greater than the right value.
@@ -264,8 +252,7 @@ Return `True` when the left value is greater than the right value.
 ### lt / lessThan
 
 ```aivi
-lt : BigInt -> BigInt -> Bool
-lessThan : BigInt -> BigInt -> Bool
+# <unparseable item>
 ```
 
 Return `True` when the left value is less than the right value.
@@ -273,8 +260,7 @@ Return `True` when the left value is less than the right value.
 ### greaterOrEqual / lessOrEqual
 
 ```aivi
-greaterOrEqual : BigInt -> BigInt -> Bool
-lessOrEqual : BigInt -> BigInt -> Bool
+# <unparseable item>
 ```
 
 Inclusive comparison helpers built from the basic comparison functions.
@@ -282,9 +268,7 @@ Inclusive comparison helpers built from the basic comparison functions.
 ### zero / one / negOne
 
 ```aivi
-zero : BigInt
-one : BigInt
-negOne : BigInt
+# <unparseable item>
 ```
 
 Ready-made `BigInt` constants for common starting values.
@@ -292,9 +276,7 @@ Ready-made `BigInt` constants for common starting values.
 ### isZero / isPositive / isNegative
 
 ```aivi
-isZero : BigInt -> Bool
-isPositive : BigInt -> Bool
-isNegative : BigInt -> Bool
+# <unparseable item>
 ```
 
 Small sign-check helpers for common conditions.
@@ -302,7 +284,7 @@ Small sign-check helpers for common conditions.
 ### factorial
 
 ```aivi
-factorial : Int -> BigInt
+# <unparseable item>
 ```
 
 Compute `n!` as a `BigInt`. `factorial 0` returns `one`, and negative input currently also returns

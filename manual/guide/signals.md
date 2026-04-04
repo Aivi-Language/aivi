@@ -95,8 +95,7 @@ signal total : Signal Int = ready
 ```aivi
 type Event = Tick | Turn Text
 
-type Key =
-  | Key Text
+type Key = Key Text
 
 @source timer.every 120ms
 signal tick : Signal Unit
@@ -126,6 +125,35 @@ signal event : Signal Event = tick | keyDown
 Use signal merge when you want event-shaped reactive commits. Use pipes when you want to transform the current subject flowing through one expression spine.
 
 Self-reference: the declaring signal cannot read itself from its own arm bodies.
+
+### A practical example: form validation
+
+Signal merge shines when several user inputs feed one "form state" signal:
+
+```aivi
+type Key = Key Text
+
+type FormField =
+  | Name Text
+  | Email Text
+  | Submit
+
+@source window.keyDown
+signal keyDown : Signal Key
+
+signal nameInput : Signal Text = "Ada"
+signal emailInput : Signal Text = "ada@example.com"
+signal submitClick : Signal Unit
+
+signal formEvent : Signal FormField = nameInput | emailInput | submitClick
+  ||> nameInput name => Name name
+  ||> emailInput email => Email email
+  ||> submitClick _ => Submit
+  ||> _ => Name ""
+```
+
+Each source feeds the same `FormField` signal. Downstream derivations can pattern-match
+the field type to update the form UI or trigger validation.
 
 ## Previous and diff
 
@@ -168,3 +196,60 @@ signal namePair = {
 | `signal count = 21` | Reactive graph node |
 
 Use `value` when something does not participate in reactive recomputation. Use `signal` when it should.
+
+## Putting it together
+
+Here is a small reactive timer that demonstrates the full signal lifecycle — sources feeding a
+merge, accumulation folding events into state, and derivations driving the UI:
+
+```aivi
+type Event = Tick | Reset
+
+type Key = Key Text
+
+@source timer.every 1sec
+signal tick : Signal Unit
+
+@source window.keyDown
+signal keyDown : Signal Key
+
+signal event : Signal Event = tick | keyDown
+  ||> tick _ => Tick
+  ||> keyDown (Key "Space") => Reset
+  ||> _ => Tick
+
+type Event -> Int -> Int
+func step = event count => event
+ ||> Tick  -> count + 1
+ ||> Reset -> 0
+
+signal elapsed = event
+ +|> 0 step
+
+signal label = elapsed
+  |> formatInt
+
+value main =
+    <Window title="Timer">
+        <Label text={label} />
+    </Window>
+
+export main
+```
+
+```
+timer.every  ──→  tick signal
+                       ↓
+keyboard     ──→  keyDown signal
+                       ↓
+              signal merge routes to event
+                       ↓
+              +|> accumulates into elapsed
+                       ↓
+              |> formats into label
+                       ↓
+              <Label text={label} /> updates
+```
+
+Every arrow is a declared dependency. There are no hidden subscriptions, no manual wiring, and
+no callbacks.

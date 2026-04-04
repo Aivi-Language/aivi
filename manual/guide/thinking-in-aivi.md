@@ -58,10 +58,10 @@ type Direction =
 
 type Direction -> Text
 func label = .
-  ||> North -> "up"
-  ||> South -> "down"
-  ||> East  -> "right"
-  ||> West  -> "left"
+ ||> North -> "up"
+ ||> South -> "down"
+ ||> East  -> "right"
+ ||> West  -> "left"
 ```
 
 The compiler checks that you have handled every case. If you add a fifth direction, every function that matches on `Direction` will need updating — and the compiler will tell you where.
@@ -91,9 +91,7 @@ func subTier = . >= 50
  F|> "bronze"
 
 type Int -> Text
-func tier = isGold
- T|> "gold"
- F|> subTier .
+func tier = isGold =>
 ```
 
 ## There are no loops — use collection combinators
@@ -214,13 +212,14 @@ type Event =
 
 type Event -> Int -> Int
 func step = event count => event
-  ||> Increment -> count + 1
-  ||> Decrement -> count - 1
-  ||> Reset     -> 0
+ ||> Increment -> count + 1
+ ||> Decrement -> count - 1
+ ||> Reset     -> 0
 
 signal events : Signal Event
+
 signal count = events
-  +|> 0 step
+ +|> 0 step
 ```
 
 This declares: *"count starts at 0, and each time an event arrives, apply `step` to get the next value."* The state is managed by the signal system, not by a mutable variable.

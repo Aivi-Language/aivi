@@ -145,10 +145,10 @@ use aivi.imap (
 
 type ImapEvent -> Text
 func describeEvent = event => event
- ||> NewMessage _             -> "new message"
- ||> MessageFlagChanged _ _   -> "message flag changed"
- ||> FolderChanged name       -> "folder changed: {name}"
- ||> SyncCompleted            -> "sync completed"
+ ||> NewMessage _           -> "new message"
+ ||> MessageFlagChanged _ _ -> "message flag changed"
+ ||> FolderChanged name     -> "folder changed: {name}"
+ ||> SyncCompleted          -> "sync completed"
 ```
 
 ---
@@ -181,10 +181,10 @@ use aivi.imap (
 
 type ImapError -> Text
 func describeImapError = error => error
- ||> ImapAuthFailed         -> "authentication failed"
+ ||> ImapAuthFailed           -> "authentication failed"
  ||> ImapConnectionFailed msg -> "connection failed: {msg}"
- ||> FolderNotFound name    -> "folder not found: {name}"
- ||> ImapProtocolError msg  -> "IMAP protocol error: {msg}"
+ ||> FolderNotFound name      -> "folder not found: {name}"
+ ||> ImapProtocolError msg    -> "IMAP protocol error: {msg}"
 ```
 
 ---
@@ -192,7 +192,8 @@ func describeImapError = error => error
 ## `ImapTask`
 
 ```aivi
-type ImapTask A = Task ImapError A
+type ImapTask A =
+  Task ImapError A
 ```
 
 Alias for background IMAP work that either returns `A` or fails with `ImapError`.
