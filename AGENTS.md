@@ -140,6 +140,117 @@ Every bug fix should state:
 - which test now locks it down,
 - whether a missing abstraction caused it.
 
+## Feature delivery workflow
+
+A feature is not done until every affected artifact is updated. Use the conditional dependency graph below to determine which steps apply. Skip steps whose trigger condition does not match your change.
+
+### Artifact inventory
+
+| Artifact | Location | Trigger |
+| --- | --- | --- |
+| Parser / CST | `crates/aivi-syntax/` | New syntax forms, keywords, operators |
+| HIR / name resolution | `crates/aivi-hir/` | New declarations, type forms, elaboration |
+| Type system | `crates/aivi-typing/` | New type rules, kinds, constraints |
+| Core desugaring | `crates/aivi-core/` | New core IR forms, lowering rules |
+| Lambda IR | `crates/aivi-lambda/` | Closure/lambda changes |
+| Backend / codegen | `crates/aivi-backend/` | Cranelift emission changes |
+| Runtime | `crates/aivi-runtime/` | Signal engine, scheduler, sources, GC |
+| GTK bridge | `crates/aivi-gtk/` | Widget catalog, event routing, markup |
+| Query layer | `crates/aivi-query/` | Salsa database, incremental queries |
+| LSP server | `crates/aivi-lsp/` | Diagnostics, completion, hover, semantic tokens, formatting, go-to-def, symbols, code lens |
+| CLI | `crates/aivi-cli/` | Commands: `check`, `run`, `execute`, `compile`, `build`, `test`, `fmt`, `lsp`, `mcp`, `manual-snippets` |
+| MCP server | `crates/aivi-cli/src/mcp.rs` | Live app introspection tools (signals, sources, GTK tree, events) |
+| VSCode extension | `tooling/packages/vscode-aivi/` | LSP client, commands, configuration |
+| TextMate grammar | `tooling/packages/vscode-aivi/syntaxes/aivi.tmLanguage.json` | New keywords, operators, syntax patterns |
+| Snippets | `tooling/packages/vscode-aivi/snippets/aivi.json` | New common declaration or expression patterns |
+| Manual (guide) | `manual/guide/*.md` | Feature documentation, examples |
+| Manual (stdlib) | `manual/stdlib/*.md` | Standard library API reference |
+| Stdlib | `stdlib/` | Standard library `.aivi` source files |
+| Fixtures | `fixtures/frontend/` | Frontend pipeline test fixtures |
+| Surface feature matrix | `manual/guide/surface-feature-matrix.md` | Implementation status truth table |
+
+### Dependency chains by change category
+
+#### Core language change (syntax, types, semantics)
+
+1. Implement in the affected compiler crate(s) — only touch layers the change requires: parser → HIR → typing → core → lambda → backend.
+2. Add or update tests in the affected crate(s) (unit, snapshot, expectation).
+3. If new syntax form or keyword: update TextMate grammar (`syntaxes/aivi.tmLanguage.json`).
+4. If new syntax form or keyword: update LSP semantic tokens (`crates/aivi-lsp/src/semantic_tokens.rs`).
+5. If new completable form: update LSP completion (`crates/aivi-lsp/src/completion.rs`).
+6. If new hoverable form: update LSP hover (`crates/aivi-lsp/src/hover.rs`).
+7. If commonly used pattern: add VSCode snippet (`snippets/aivi.json`).
+8. Run `aivi manual-snippets --root manual` to verify and fix all manual code blocks.
+9. Update the relevant `manual/guide/` page(s).
+10. Update `manual/guide/surface-feature-matrix.md` status columns.
+
+#### Runtime or source provider change
+
+1. Implement in `crates/aivi-runtime/`.
+2. Add runtime tests (scheduler stress, signal propagation, source lifecycle).
+3. If new source provider: update `manual/guide/source-catalog.md`.
+4. If new source provider: check whether MCP `list_sources` / `set_source_mode` / `publish_source_value` schemas need updates in `crates/aivi-cli/src/mcp.rs`.
+5. If source changes affect live introspection: verify MCP tool behavior end to end.
+6. Run `aivi manual-snippets --root manual`.
+7. Update `manual/guide/surface-feature-matrix.md`.
+
+#### GTK or widget catalog change
+
+1. Implement in `crates/aivi-gtk/`.
+2. Add GTK integration tests.
+3. If new widget or event signal: verify MCP `snapshot_gtk_tree` / `find_widgets` / `emit_gtk_event` output reflects the change.
+4. If new event signal type: update `manual/guide/markup.md`.
+5. Run `aivi manual-snippets --root manual`.
+6. Update `manual/guide/surface-feature-matrix.md`.
+
+#### Stdlib change
+
+1. Implement in `stdlib/*.aivi`.
+2. Verify via `crates/aivi-cli/tests/check.rs` or backend foundation tests.
+3. Update `manual/stdlib/<module>.md`.
+4. Run `aivi manual-snippets --root manual` to verify stdlib doc code blocks.
+5. If new common pattern: add VSCode snippet.
+
+#### LSP-only change (diagnostics, code actions, new capabilities)
+
+1. Implement in `crates/aivi-lsp/`.
+2. Add LSP tests (`crates/aivi-lsp/tests/lsp_*.rs`).
+3. If new LSP capability: update VSCode extension client options or commands (`tooling/packages/vscode-aivi/src/`).
+4. If new command: register in `commands.ts` and add to `package.json` `contributes.commands`.
+
+#### Documentation-only change
+
+1. Edit the relevant `manual/guide/*.md` or `manual/stdlib/*.md`.
+2. Run `aivi manual-snippets --root manual` to verify all AIVI code blocks parse and check cleanly.
+3. Fix any broken snippets reported by the tool.
+
+### Verification checkpoints
+
+After every feature delivery, confirm:
+
+```sh
+# Build the compiler
+cargo build --bin aivi
+
+# Test affected crates (substitute the crates you touched)
+cargo test -p <affected-crates>
+
+# Verify all manual code blocks parse/check
+./tooling/check-manual-aivi-snippets.sh
+```
+
+If the LSP was changed:
+
+```sh
+cargo test -p aivi-lsp
+```
+
+If the VSCode extension was changed:
+
+```sh
+cd tooling && pnpm install && pnpm -F vscode-aivi build
+```
+
 ## How to work
 
 For non-trivial work:
