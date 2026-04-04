@@ -127,8 +127,7 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = .
- ||> { score } -> score >= 100
+func isTopScore = { score: . } >= 100
 
 value topScore =
     isTopScore {

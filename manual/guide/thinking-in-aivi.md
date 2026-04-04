@@ -43,8 +43,8 @@ In AIVI, branching is done through the values themselves. For boolean conditions
 ```aivi
 type Int -> Text
 func classify = . >= 50
-  T|> "pass"
-  F|> "fail"
+ T|> "pass"
+ F|> "fail"
 ```
 
 For richer choices, use pattern matching with `||>`:
@@ -73,21 +73,27 @@ When you need multiple conditions, compute each one and combine them:
 ```aivi
 type Int -> Bool -> Text
 func describe = score active => (score > 50, active)
-  ||> (True, True)   -> "active high scorer"
-  ||> (True, False)  -> "inactive high scorer"
-  ||> (False, True)  -> "active low scorer"
-  ||> (False, False) -> "inactive low scorer"
+ ||> (True, True)   -> "active high scorer"
+ ||> (True, False)  -> "inactive high scorer"
+ ||> (False, True)  -> "active low scorer"
+ ||> (False, False) -> "inactive low scorer"
 ```
 
-Or use a pipe chain that builds up from simpler checks:
+Or decompose into named helpers:
 
 ```aivi
+type Int -> Bool
+func isGold = . >= 90
+
 type Int -> Text
-func tier = . >= 90
-  T|> "gold"
-  F|> . >= 50
-    T|> "silver"
-    F|> "bronze"
+func subTier = . >= 50
+ T|> "silver"
+ F|> "bronze"
+
+type Int -> Text
+func tier = isGold
+ T|> "gold"
+ F|> subTier .
 ```
 
 ## There are no loops — use collection combinators
@@ -106,10 +112,10 @@ AIVI uses the same ideas, but as pipes:
 
 ```aivi
 type Int -> Int
-func double = n => n * 2
+func double = . * 2
 
 type Int -> Bool
-func isEven = n => n % 2 == 0
+func isEven = . % 2 == 0
 
 value numbers = [1, 2, 3, 4, 5]
 

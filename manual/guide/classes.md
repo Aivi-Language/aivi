@@ -50,13 +50,19 @@ class Named A
 
 class Displayed A
 
-class Logged A
+class Logged A = {
+    with Named A
+    with Displayed A
+}
 ```
 
-Multiple superclasses are listed as separate `with` lines:
+Multiple superclasses are listed as separate `with` lines.
 
 ```aivi
-class CacheKey A
+class CacheKey A = {
+    with Eq A
+    with Hashable A
+}
 ```
 
 ## Parameter constraints
@@ -64,7 +70,9 @@ class CacheKey A
 Use `require` inside the class body to constrain a type parameter. This documents that any type substituted for that parameter must satisfy the given class.
 
 ```aivi
-class Container A
+class Container A = {
+    require Eq A
+}
 ```
 
 ## Using class-backed operators
@@ -142,5 +150,5 @@ Classes let generic code talk about capability instead of one hard-coded type. T
 | `with Functor F` | Declare a superclass in the class body |
 | `require Eq A` | Constrain a class type parameter |
 | `instance Eq Blob` | Implement a class for one concrete type |
-| `Eq K -> Bool` | Require `K` to have `Eq` in a function annotation |
+| `type Eq K => K -> K -> Bool` | Require `K` to have `Eq` in a function annotation |
 | `class Name A = { ... }` | Group class members in a block |

@@ -258,7 +258,7 @@ func negate = n =>
 
 | Form | Example |
 | --- | --- |
-| Value | `value answer:Int = 42` |
+| Value | `value answer : Int = 42` |
 | Function | `type Int -> Int -> Int` / `func add = x y => x + y` |
 | Function call | `add 3 4` |
 | Partial application | `value double = multiply 2` |

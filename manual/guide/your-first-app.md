@@ -101,9 +101,9 @@ Now we write a function that takes an event and the current count, and produces 
 ```aivi
 type Event -> Int -> Int
 func step = event count => event
-  ||> Increment -> count + 1
-  ||> Decrement -> count - 1
-  ||> Reset     -> 0
+ ||> Increment -> count + 1
+ ||> Decrement -> count - 1
+ ||> Reset     -> 0
 ```
 
 This is **pure** — no mutation, no side effects. It takes the current state and an event, and returns the new state. The `||>` operator pattern-matches on the event, and the compiler checks that all three constructors are covered.
@@ -166,9 +166,9 @@ func formatCount = n =>
 
 type Event -> Int -> Int
 func step = event count => event
-  ||> Increment -> count + 1
-  ||> Decrement -> count - 1
-  ||> Reset     -> 0
+ ||> Increment -> count + 1
+ ||> Decrement -> count - 1
+ ||> Reset     -> 0
 
 @source window.keyDown with {
     repeat: False

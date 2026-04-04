@@ -325,7 +325,7 @@ Each `when` watches a signal for a specific pattern. When `keyDown` receives `Ke
 ## Accumulating state with `+|>`
 
 ```aivi
-signal state : Signal GameState = event
+signal state : GameState = event
   +|> initial step
 ```
 

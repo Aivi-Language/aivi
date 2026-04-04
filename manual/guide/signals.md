@@ -63,11 +63,11 @@ value seed : User = {
     email: "ada@example.com"
 }
 
-signal sessions : Signal Session = {
+signal sessions : Session = {
     user: seed
 }
 
-signal activeUsers : Signal User = sessions
+signal activeUsers : User = sessions
   |> .user
  ?|> .active
 ```

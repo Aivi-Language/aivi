@@ -9,9 +9,9 @@ domain Score    over Int
 domain PlayerId over Int
 domain Tag      over Text
 
-value highScore     : Score    = ...
-value currentPlayer : PlayerId = ...
-value label         : Tag      = ...
+value highScore     : Score    = 9000
+value currentPlayer : PlayerId = 7
+value label         : Tag      = "featured"
 ```
 
 You cannot pass a `Score` where a `PlayerId` is expected, even though both are backed by `Int`.

@@ -31,8 +31,8 @@ use aivi.fs (FsSource, FsError, FsEvent)
 @source fs projectRoot
 signal files : FsSource
 
-signal config : Signal (Result FsError AppConfig) = files.read configPath
-signal changes : Signal FsEvent = files.watch configPath
+signal config : Result FsError AppConfig = files.read configPath
+signal changes : FsEvent = files.watch configPath
 value cleanup : Task Text Unit = files.delete "cache.txt"
 ```
 
@@ -54,12 +54,12 @@ pure host-context intrinsics:
 ```aivi
 use aivi.fs (FsSource, FsError)
 
-signal projectRoot : Signal Text = "/tmp/demo"
+signal projectRoot : Text = "/tmp/demo"
 
 @source fs projectRoot
 signal files : FsSource
 
-signal config : Signal (Result FsError Text) = files.read "config.json"
+signal config : Result FsError Text = files.read "config.json"
 value cleanup = files.delete "cache.txt"
 ```
 
