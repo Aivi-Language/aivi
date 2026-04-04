@@ -55,7 +55,7 @@ pub(crate) fn type_constructor_arity(head: TypeConstructorHead, module: &Module)
         },
         TypeConstructorHead::Import(import_id) => {
             match &module.imports()[import_id].metadata {
-                ImportBindingMetadata::TypeConstructor { kind }
+                ImportBindingMetadata::TypeConstructor { kind, .. }
                 | ImportBindingMetadata::Domain { kind, .. } => kind.arity(),
                 _ => 0,
             }
@@ -6656,6 +6656,33 @@ impl<'a> GateTypeContext<'a> {
             GateType::Domain {
                 item, arguments, ..
             } => self.project_domain_member_step(*item, arguments, subject, segment, path),
+            GateType::OpaqueImport { import, .. } => {
+                // Look up the import binding. If it is a TypeConstructor that carried
+                // record field metadata at export time, resolve the field projection
+                // using those fields so that `value.field` works in typed-core markup.
+                let import_fields = match &self.module.imports()[*import].metadata {
+                    ImportBindingMetadata::TypeConstructor {
+                        fields: Some(fields),
+                        ..
+                    } => {
+                        fields
+                            .iter()
+                            .map(|f| GateRecordField {
+                                name: f.name.to_string(),
+                                ty: self.lower_import_value_type(&f.ty),
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                    _ => {
+                        return Err(GateIssue::InvalidProjection {
+                            span: path.span(),
+                            path: name_path_text(path),
+                            subject: subject.to_string(),
+                        });
+                    }
+                };
+                self.project_record_field_step(&import_fields, false, subject, segment, path)
+            }
             _ => Err(GateIssue::InvalidProjection {
                 span: path.span(),
                 path: name_path_text(path),

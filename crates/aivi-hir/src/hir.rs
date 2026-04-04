@@ -622,6 +622,9 @@ pub enum ImportBindingMetadata {
     },
     TypeConstructor {
         kind: Kind,
+        /// Record fields when the exported type is a record alias, enabling
+        /// cross-module field projection (`thread.subject`) in typed-core.
+        fields: Option<Vec<ImportRecordField>>,
     },
     /// An imported domain type. Carries the kind for type-checking and the set of literal-suffix
     /// members so importing modules can resolve suffixed integer literals (e.g. `120ms`) without

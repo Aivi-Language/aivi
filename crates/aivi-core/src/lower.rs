@@ -525,6 +525,10 @@ struct ModuleLowerer<'a> {
     decode_by_owner: HashMap<ItemId, DecodeProgramId>,
     next_synthetic_item_origin_raw: u32,
     next_synthetic_binding_raw: u32,
+    // Base index of the HIR item arena; used to assign deterministic synthetic origins
+    // to signal imports so that both this lowerer and the runtime assembly builder
+    // independently derive the same HirItemId for the same import.
+    hir_item_count: u32,
     errors: Vec<LoweringError>,
 }
 
@@ -688,8 +692,14 @@ impl<'a> ModuleLowerer<'a> {
     fn new_internal(hir: &'a aivi_hir::Module, included_items: Option<HashSet<HirItemId>>) -> Self {
         let debug_items = collect_debug_items(hir, included_items.as_ref());
         let mock_overrides = collect_mock_overrides(hir, included_items.as_ref());
-        let next_synthetic_item_origin_raw =
+        let hir_item_count =
             u32::try_from(hir.items().iter().count()).expect("HIR item count should fit in u32");
+        let hir_import_count =
+            u32::try_from(hir.imports().iter().count()).expect("HIR import count should fit in u32");
+        // Reserve [hir_item_count, hir_item_count + hir_import_count) for deterministic
+        // signal import origins (one slot per import by ImportId). The sequential counter
+        // for all other synthetic items starts after this reserved range.
+        let next_synthetic_item_origin_raw = hir_item_count + hir_import_count;
         let next_synthetic_binding_raw = u32::try_from(hir.bindings().iter().count())
             .expect("HIR binding count should fit in u32");
         Self {
@@ -707,6 +717,7 @@ impl<'a> ModuleLowerer<'a> {
             decode_by_owner: HashMap::new(),
             next_synthetic_item_origin_raw,
             next_synthetic_binding_raw,
+            hir_item_count,
             errors: Vec::new(),
         }
     }
@@ -867,6 +878,12 @@ impl<'a> ModuleLowerer<'a> {
         self.finalize_pipes()?;
         self.lower_sources()?;
         self.lower_decode_programs()?;
+
+        // Eagerly seed stub Input signal items for all workspace Signal imports so that
+        // cross-module signals appear in the compiled backend. This allows markup expressions
+        // that reference imported signals to find them during fragment compilation and
+        // ensures the runtime assembly has signal handles for all required globals.
+        self.seed_all_signal_import_stubs();
 
         if !self.errors.is_empty() {
             return Err(LoweringErrors::new(self.errors));
@@ -2648,7 +2665,21 @@ impl<'a> ModuleLowerer<'a> {
             .ok_or(LoweringError::UnknownImport { import })?
             .clone();
         let (kind, parameters) = self.import_item_shape(import, &binding)?;
-        let origin = self.next_synthetic_item_origin()?;
+        // Use a deterministic synthetic origin for Signal imports so that the runtime assembly
+        // builder can independently derive the same HirItemId for the same import without
+        // coordination: signal import N gets hir_item_count + N.
+        let origin = if matches!(kind, ItemKind::Signal(_)) {
+            HirItemId::from_raw(
+                self.hir_item_count
+                    .checked_add(import.as_raw())
+                    .ok_or(LoweringError::ArenaOverflow {
+                        arena: "deterministic signal import origins",
+                        attempted_len: usize::MAX,
+                    })?,
+            )
+        } else {
+            self.next_synthetic_item_origin()?
+        };
         let body = self.synthesize_import_body(import, origin, &binding, &parameters)?;
         let item_id = self
             .module
@@ -2668,6 +2699,32 @@ impl<'a> ModuleLowerer<'a> {
             })?;
         self.import_item_map.insert(import, item_id);
         Ok(item_id)
+    }
+
+    /// Eagerly seeds stub Input signal items for all workspace Signal import bindings.
+    /// These stubs have no body (body=None), making them Input signals that can receive
+    /// published values at runtime. The deterministic synthetic origin ensures the runtime
+    /// assembly builder produces matching HirItemIds for the same imports.
+    fn seed_all_signal_import_stubs(&mut self) {
+        let signal_import_ids: Vec<ImportId> = self
+            .hir
+            .imports()
+            .iter()
+            .filter_map(|(import_id, binding)| {
+                let is_workspace_signal = matches!(
+                    &binding.metadata,
+                    ImportBindingMetadata::Value {
+                        ty: ImportValueType::Signal(_)
+                    }
+                );
+                is_workspace_signal.then_some(import_id)
+            })
+            .collect();
+        for import_id in signal_import_ids {
+            // Ignore errors — these are best-effort stubs. If the import fails
+            // (e.g., already seeded or shape error), skip it silently.
+            let _ = self.seed_import_item(import_id);
+        }
     }
 
     fn synthesize_import_body(
