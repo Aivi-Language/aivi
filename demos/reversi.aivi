@@ -803,18 +803,23 @@ func flashCellOpacity = placed flips tick coord => (sameCoord placed coord, coor
  ||> (False, True) -> flippedStoneOpacity tick
  ||> _             -> 1.0
 
+type (List Coord) -> Int -> Coord -> Float
+func computerFlashOpacity = flips tick coord => coordInList coord flips
+ T|> flippedStoneOpacity tick
+ F|> 1.0
+
 type AnimState -> Coord -> Float
 func cellOpacity = animState coord => animState
  ||> Previewing animCoord _ tick       -> previewOpacityForCoord animCoord tick coord
  ||> HumanFlash placed flips tick      -> flashCellOpacity placed flips tick coord
- ||> ComputerFlash placed flips tick   -> flashCellOpacity placed flips tick coord
+ ||> ComputerFlash _ flips tick        -> computerFlashOpacity flips tick coord
  ||> _                                 -> 1.0
 
 type AnimState -> Coord -> Bool
 func cellAnimateOpacity = animState coord => animState
  ||> Previewing animCoord _ _       -> sameCoord animCoord coord
  ||> HumanFlash placed flips _      -> sameCoord placed coord or coordInList coord flips
- ||> ComputerFlash placed flips _   -> sameCoord placed coord or coordInList coord flips
+ ||> ComputerFlash _ flips _        -> coordInList coord flips
  ||> _                              -> False
 
 type List (List Disc) -> Status -> (List Coord) -> (Option Coord) -> (List Coord) -> Coord -> Text
