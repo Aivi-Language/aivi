@@ -80,12 +80,14 @@ func __aivi_nel_initAccum:
   params = [items: List A, prev: Option A, item: A]
   body = (__aivi_nel_initAppendPrev #54 #55, Some #56)
 func __aivi_nel_initStep:
-  params = [state: List A, item: Option A]
+  params = [state: (List A, Option A), item: A]
   body = #57 ||> (items, prev) => __aivi_nel_initAccum #59 #60 #58
 func __aivi_nel_initExtract:
   params = [state: (List A, Option A)]
   body = #61 ||> (items, prev) => #62
 func __aivi_nel_init:
+  params = [nel: NonEmptyList A]
+  body = #64 ||> MkNEL h t => Append(List) [#65] #66 |> Reduce(List) __aivi_nel_initStep ([], None) _ |> __aivi_nel_initExtract _
 func __aivi_option_map:
   params = [transform: A -> B, opt: Option A]
   body = #68 ||> Some item => Some #67 #69 ||> None => None
@@ -183,7 +185,7 @@ func __aivi_listAt:
   params = [target: Int, items: List A]
   body = #160 |> Reduce(List) __aivi_listAt_step #159 (0, None) _ |> __aivi_listAt_extract _
 func __aivi_matrix_atRow:
-  params = [rowOpt: Option A, x: Int]
+  params = [rowOpt: Option List A, x: Int]
   body = #161 ||> Some row => __aivi_listAt #162 #163 ||> None => None
 func __aivi_matrix_at:
   params = [matrix: Matrix A, x: Int, y: Int]

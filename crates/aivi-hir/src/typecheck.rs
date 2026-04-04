@@ -4984,7 +4984,7 @@ fun compare:Bool = left:Blob right:Blob =>
     require Eq A
     same : A -> A -> Bool
 }
-fun delegated:Container A -> Bool = left:A right:A =>
+fun delegated:Container A => Bool = left:A right:A =>
     left == right
 instance Container Text = {
     same left right = left == right
@@ -5007,7 +5007,7 @@ value sameText:Bool = delegated "Ada" "Grace"
     require Eq A
     same : A -> A -> Bool
 }
-fun delegated:Container A -> Bool = left:A right:A =>
+fun delegated:Container A => Bool = left:A right:A =>
     left == right
 "#,
         );

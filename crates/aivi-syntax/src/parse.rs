@@ -5755,9 +5755,6 @@ impl<'a> Parser<'a> {
 
     fn consume_constraint_separator(&self, cursor: &mut usize, end: usize) -> bool {
         self.consume_kind(cursor, end, TokenKind::Arrow).is_some()
-            || self
-                .consume_kind(cursor, end, TokenKind::ThinArrow)
-                .is_some()
     }
 
     fn negative_numeric_literal_token(&self, minus_index: usize, end: usize) -> Option<usize> {
@@ -7653,8 +7650,8 @@ instance Eq Blob = {
             r#"class Functor F = {
     map : (A -> B) -> F A -> F B
 }
-fun same:Eq A -> Bool = v:A => v == v
-instance Eq A -> Eq (Option A) = {
+fun same:Eq A => Bool = v:A => v == v
+instance Eq A => Eq (Option A) = {
     (==) left right = True
 }
 "#,

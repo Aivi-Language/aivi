@@ -2235,9 +2235,15 @@ impl<'a> GateTypeContext<'a> {
                         return None;
                     }
                     let body = item.body?;
-                    Some(GateType::Signal(Box::new(
-                        self.infer_expr(body, &GateExprEnv::default(), None).ty?,
-                    )))
+                    let body_ty =
+                        self.infer_expr(body, &GateExprEnv::default(), None).ty?;
+                    // Signal pipe propagation already wraps the body type in
+                    // Signal; avoid double-wrapping Signal(Signal(T)).
+                    Some(if matches!(body_ty, GateType::Signal(_)) {
+                        body_ty
+                    } else {
+                        GateType::Signal(Box::new(body_ty))
+                    })
                 }),
             Item::Type(_)
             | Item::Class(_)
@@ -2280,7 +2286,13 @@ impl<'a> GateTypeContext<'a> {
                     let body_actual = self
                         .infer_expr(body, &GateExprEnv::default(), None)
                         .actual()?;
-                    Some(SourceOptionActualType::Signal(Box::new(body_actual)))
+                    // Signal pipe propagation already wraps the body actual in
+                    // Signal; avoid double-wrapping Signal(Signal(T)).
+                    Some(if matches!(body_actual, SourceOptionActualType::Signal(_)) {
+                        body_actual
+                    } else {
+                        SourceOptionActualType::Signal(Box::new(body_actual))
+                    })
                 }),
             Item::Type(_)
             | Item::Class(_)

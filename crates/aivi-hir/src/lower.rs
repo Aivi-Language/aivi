@@ -183,7 +183,7 @@ class Monoid A = {
 class Traversable T = {
     with Functor T
     with Foldable T
-    traverse : Applicative G -> (A -> G B) -> T A -> G (T B)
+    traverse : Applicative G => (A -> G B) -> T A -> G (T B)
 }
 
 class Profunctor P = {
@@ -374,7 +374,8 @@ type (List A, Option A) -> A -> (List A, Option A)
 func __aivi_nel_initStep = state item => state
     ||> (items, prev) -> __aivi_nel_initAccum items prev item
 
-func __aivi_nel_initExtract:(List A) = state:(List A, Option A) => state
+type (List A, Option A) -> (List A)
+func __aivi_nel_initExtract = state => state
     ||> (items, prev) -> items
 
 type NonEmptyList A -> (List A)
@@ -533,7 +534,7 @@ func __aivi_listAt = target items => items
     |> reduce (__aivi_listAt_step target) (0, None)
     |> __aivi_listAt_extract
 
-type (Option A) -> Int -> (Option A)
+type (Option (List A)) -> Int -> (Option A)
 func __aivi_matrix_atRow = rowOpt x => rowOpt
     ||> Some row -> __aivi_listAt x row
     ||> None     -> None
@@ -12003,7 +12004,7 @@ value joinedEmails:Text =
     fn preserves_real_class_constraints_while_normalizing_function_signatures() {
         let lowered = lower_text(
             "standalone-function-signature-with-constraint.aivi",
-            "type Setoid Text -> Text -> Bool\n\
+            "type Setoid Text => Text -> Bool\n\
              func same = text=> True\n",
         );
         assert!(
