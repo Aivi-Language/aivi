@@ -10,6 +10,7 @@
 mod db;
 mod entry;
 mod inputs;
+mod manifest;
 mod queries;
 mod workspace;
 
