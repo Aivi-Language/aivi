@@ -3278,7 +3278,7 @@ impl<'a> GeneralExprElaborator<'a> {
     }
 
     fn runtime_reference_for_name(
-        &self,
+        &mut self,
         span: SourceSpan,
         reference: &TermReference,
         expected: &GateType,
@@ -3324,7 +3324,11 @@ impl<'a> GeneralExprElaborator<'a> {
                 }])
             }
             ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
-                Err(vec![GeneralExprBlocker::UnknownExprType { span }])
+                if let Some(import_id) = self.typing.select_hoisted_import(reference, Some(expected)) {
+                    Ok(GateRuntimeReference::Import(import_id))
+                } else {
+                    Err(vec![GeneralExprBlocker::UnknownExprType { span }])
+                }
             }
             ResolutionState::Unresolved => Err(vec![GeneralExprBlocker::UnknownExprType { span }]),
         }

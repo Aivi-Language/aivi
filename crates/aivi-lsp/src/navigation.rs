@@ -255,7 +255,7 @@ impl NavigationAnalysis {
                         }
                     );
                 }
-                Item::SourceProviderContract(_) => {}
+                Item::SourceProviderContract(_) | Item::Hoist(_) => {}
             }
         }
 

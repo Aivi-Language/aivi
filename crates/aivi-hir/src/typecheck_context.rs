@@ -3277,6 +3277,46 @@ impl<'a> GateTypeContext<'a> {
         })
     }
 
+    pub(crate) fn hoisted_import_candidates(
+        &self,
+        reference: &TermReference,
+    ) -> Option<Vec<ImportId>> {
+        match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(candidates)) => {
+                Some(candidates.iter().copied().collect())
+            }
+            _ => None,
+        }
+    }
+
+    /// Try to select a unique hoisted import candidate by comparing each
+    /// candidate's value type against `expected`.  Returns the resolved
+    /// `GateRuntimeReference::Import` on success, or the diagnostic
+    /// context on failure.
+    pub(crate) fn select_hoisted_import(
+        &mut self,
+        reference: &TermReference,
+        expected: Option<&GateType>,
+    ) -> Option<ImportId> {
+        let candidates = self.hoisted_import_candidates(reference)?;
+        let mut matches = Vec::new();
+        for import_id in candidates {
+            if let Some(ty) = self.import_value_type(import_id) {
+                let fits = match expected {
+                    Some(expected) => ty.same_shape(expected),
+                    None => true,
+                };
+                if fits {
+                    matches.push(import_id);
+                }
+            }
+        }
+        match matches.len() {
+            1 => matches.pop(),
+            _ => None,
+        }
+    }
+
     pub(crate) fn select_class_member_call(
         &mut self,
         reference: &TermReference,
@@ -5137,9 +5177,30 @@ impl<'a> GateTypeContext<'a> {
                 ..GateExprInfo::default()
             },
             ResolutionState::Resolved(TermResolution::ClassMember(_))
-            | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
-            | ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
+            | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => {
                 GateExprInfo::default()
+            }
+            ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(candidates)) => {
+                // Without a known expected type, try to provide a type hint if all
+                // candidates share the same type shape (e.g. all are `List A -> Bool`
+                // with different concrete `A`s — uncommon but helpful for error messages).
+                // Disambiguation with actual expected type happens in runtime_reference_for_name.
+                let types: Vec<_> = candidates
+                    .iter()
+                    .filter_map(|id| self.import_value_type(*id))
+                    .collect();
+                let common_ty = if types.len() == candidates.len()
+                    && types.windows(2).all(|w| w[0].same_shape(&w[1]))
+                {
+                    types.into_iter().next()
+                } else {
+                    None
+                };
+                GateExprInfo {
+                    contains_signal: common_ty.as_ref().is_some_and(GateType::is_signal),
+                    ty: common_ty,
+                    ..GateExprInfo::default()
+                }
             }
             ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => GateExprInfo {
                 ty: Some(self.intrinsic_value_type(value.clone())),

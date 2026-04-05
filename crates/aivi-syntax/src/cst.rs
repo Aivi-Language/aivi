@@ -1084,6 +1084,7 @@ impl Item {
             Item::SourceProviderContract(item) => &mut item.base,
             Item::Use(item) => &mut item.base,
             Item::Export(item) => &mut item.base,
+            Item::Hoist(item) => &mut item.base,
             Item::Error(item) => &mut item.base,
         }
     }

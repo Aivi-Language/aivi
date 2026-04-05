@@ -96,6 +96,60 @@ A practical order is:
 
 That ordering is not required by the language, but it keeps modules easy to scan.
 
+## Making names globally available with `hoist`
+
+`hoist` makes an entire module's exports available project-wide, without needing `use` in every file.
+
+```aivi
+hoist aivi.list
+```
+
+After this declaration (typically placed in a shared module like `aivi.aivi`), every file in the project can use `map`, `filter`, `length`, etc. from `aivi.list` without importing them explicitly.
+
+### Kind filters
+
+Hoist only specific kinds of exports:
+
+```aivi
+hoist aivi.list (func, value)
+```
+
+Valid kind filters: `func`, `value`, `signal`, `type`, `domain`, `class`.
+
+### Hiding specific names
+
+Suppress individual names from the hoist:
+
+```aivi
+hoist aivi.list hiding (head, tail)
+```
+
+Combine kind filters and hiding:
+
+```aivi
+hoist aivi.list (func) hiding (foldr, foldl)
+```
+
+### Name disambiguation
+
+When two hoisted modules export the same name (e.g. `map` from both `aivi.list` and `aivi.option`), the compiler resolves the correct one from type context:
+
+```aivi
+# <unparseable item>
+
+value doubled
+```
+
+If the type context is insufficient, the compiler reports an error and suggests using `hiding` to exclude one of the conflicting names.
+
+### Priority order
+
+```
+local definitions > use imports > hoisted globals > ambient prelude
+```
+
+`use` imports always win over `hoist` for the same name, so you can always override a hoisted name locally.
+
 ## Summary
 
 | Form | Meaning |
@@ -104,3 +158,6 @@ That ordering is not required by the language, but it keeps modules easy to scan
 | `use module (name as localName)` | Import one name under a local alias |
 | `export name` | Export one name |
 | `export (a, b, c)` | Export several names |
+| `hoist module` | Make all module exports globally available |
+| `hoist module (func, value)` | Hoist only selected kinds |
+| `hoist module hiding (a, b)` | Hoist all except named items |
