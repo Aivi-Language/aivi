@@ -89,13 +89,10 @@ domain Snake over NonEmptyList Cell = {
     move cell = nelFromHeadTail cell (nelInit self)
     type Direction -> Cell
     nextHead dir = moveDir dir (nelHead self)
-    type List Cell
-    cells = nelToList self
 }
 
 type GameState = {
     snake: Snake,
-    body: List Cell,
     dir: Direction,
     food: Cell,
     score: Int,
@@ -118,7 +115,6 @@ value initialSnake = fromCells (nelCons (Cell 6 10) (nelCons (Cell 5 10) (single
 
 value initial : GameState = {
     snake: initialSnake,
-    body: initialSnake.cells,
     dir: East,
     food: spawnFood seed0,
     score: 0,
@@ -159,27 +155,27 @@ func resolveMove = st h => h == st.food
 
 type GameState -> Cell -> GameState
 func resolveMoveGrow = st h =>
-    st <| { snake: st.snake.grow h, body: (st.snake.grow h).cells, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
+    st <| { snake: st.snake.grow h, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
 
 type GameState -> Cell -> GameState
 func resolveMoveStep = st h =>
-    st <| { snake: st.snake.move h, body: (st.snake.move h).cells, seed: nextSeed st.seed }
+    st <| { snake: st.snake.move h, seed: nextSeed st.seed }
 
-type GameState -> Int -> Int -> Text
-func cellGlyph = st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) st.body, Cell x y == st.food)
+type List Cell -> GameState -> Int -> Int -> Text
+func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
  ||> (False, False, False) -> "·"
 
-type GameState -> Int -> Text
-func renderRowAt = st y => matrixIndices boardW
-  |> map (cellGlyph st y)
+type List Cell -> GameState -> Int -> Text
+func renderRowAt = body st y => matrixIndices boardW
+  |> map (cellGlyph body st y)
   |> concat
 
 type GameState -> Text
 func renderBoard = st => matrixIndices boardH
-  |> map (renderRowAt st)
+  |> map (renderRowAt (nelToList st.snake.carrier) st)
   |> join "\n"
 
 type Status -> Bool
