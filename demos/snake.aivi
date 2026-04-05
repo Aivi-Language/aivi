@@ -4,7 +4,6 @@ use aivi.nonEmpty (
     head as nelHead
     cons as nelCons
     length as nelLength
-    toList as nelToList
     init as nelInit
     fromHeadTail as nelFromHeadTail
 )
@@ -80,7 +79,7 @@ domain Snake over NonEmptyList Cell = {
     type Cell
     head = nelHead self
     type Cell -> Bool
-    contains cell = listContains cellEq cell (nelToList self)
+    contains cell = listContains cellEq cell self.carrier
     type Int
     length = nelLength self
     type Cell -> Snake
@@ -175,7 +174,7 @@ func renderRowAt = body st y => matrixIndices boardW
 
 type GameState -> Text
 func renderBoard = st => matrixIndices boardH
-  |> map (renderRowAt (nelToList st.snake.carrier) st)
+  |> map (renderRowAt st.snake.carrier.carrier st)
   |> join "\n"
 
 type Status -> Bool
