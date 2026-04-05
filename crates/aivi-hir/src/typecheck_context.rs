@@ -4925,14 +4925,29 @@ impl<'a> GateTypeContext<'a> {
                 let mut info = self.infer_expr(callee, env, ambient);
                 let mut current = info.ty.clone();
                 for argument in arguments.iter() {
-                    let argument_info = self.infer_expr(*argument, env, ambient);
-                    let argument_ty = argument_info.ty.clone();
+                    // Extract the expected parameter type from the current Arrow type.
+                    // This lets constructors like `None` / `Some` / `Ok` resolve when
+                    // the callee's parameter type is known, mirroring the import path.
+                    let (param_ty, fallback_result) = match &current {
+                        Some(GateType::Arrow { parameter, result }) => {
+                            (Some(parameter.as_ref().clone()), Some(result.as_ref().clone()))
+                        }
+                        _ => (None, None),
+                    };
+                    let argument_info =
+                        self.infer_expr(*argument, env, param_ty.as_ref().or(ambient));
+                    // If inference returns no type, fall back to the parameter type so the
+                    // Arrow chain can still be advanced (same strategy as import path).
+                    let argument_ty = argument_info
+                        .actual_gate_type()
+                        .or(argument_info.ty.clone())
+                        .or_else(|| param_ty.clone());
                     info.merge(argument_info);
                     current = match (current.as_ref(), argument_ty.as_ref()) {
-                        (Some(callee_ty), Some(argument_ty)) => {
-                            self.apply_function(callee_ty, argument_ty)
-                        }
-                        _ => None,
+                        (Some(callee_ty), Some(argument_ty)) => self
+                            .apply_function(callee_ty, argument_ty)
+                            .or(fallback_result),
+                        _ => fallback_result,
                     };
                 }
                 info.ty = current;

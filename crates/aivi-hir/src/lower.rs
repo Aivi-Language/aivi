@@ -637,6 +637,74 @@ func __aivi_matrix_fromRows = inputRows => inputRows
     |> reduce __aivi_matrix_fromRowsStep (0, 0, None)
     |> __aivi_matrix_fromRowsFinish inputRows
 
+type (A -> Bool) -> A -> (Option A)
+func __aivi_list_findTry = predicate item => predicate item
+    T|> Some item
+    F|> None
+
+type (A -> Bool) -> (Option A) -> A -> (Option A)
+func __aivi_list_findStep = predicate acc item => acc
+    ||> Some v -> Some v
+    ||> None   -> __aivi_list_findTry predicate item
+
+type (A -> Bool) -> (List A) -> (Option A)
+func __aivi_list_find = predicate items => items
+    |> reduce (__aivi_list_findStep predicate) None
+
+type Int -> Int -> (List A) -> A -> (Int, List A)
+func __aivi_list_takeHelp = n count acc item => count >= n
+    T|> (count, acc)
+    F|> (count + 1, append acc [item])
+
+type Int -> (Int, List A) -> A -> (Int, List A)
+func __aivi_list_takeStep = n state item => state
+    ||> (count, acc) -> __aivi_list_takeHelp n count acc item
+
+type (Int, List A) -> (List A)
+func __aivi_list_takeExtract = state => state
+    ||> (_, acc) -> acc
+
+type Int -> (List A) -> (List A)
+func __aivi_list_take = n items => items
+    |> reduce (__aivi_list_takeStep n) (0, [])
+    |> __aivi_list_takeExtract
+
+type (A -> A -> Bool) -> A -> A -> (List A) -> (Bool, List A)
+func __aivi_list_sortByInsertFalse = cmp newItem current acc => cmp newItem current
+    T|> (True, append (append acc [newItem]) [current])
+    F|> (False, append acc [current])
+
+type (A -> A -> Bool) -> A -> (Bool, List A) -> A -> (Bool, List A)
+func __aivi_list_sortByInsertStep = cmp newItem state current => state
+    ||> (True, acc) -> (True, append acc [current])
+    ||> (False, acc) -> __aivi_list_sortByInsertFalse cmp newItem current acc
+
+type (A -> A -> Bool) -> A -> (Bool, List A) -> (List A)
+func __aivi_list_sortByInsertFinish = cmp newItem state => state
+    ||> (True, result) -> result
+    ||> (False, acc) -> append acc [newItem]
+
+type (A -> A -> Bool) -> A -> (List A) -> (List A)
+func __aivi_list_sortByInsert = cmp newItem sorted => sorted
+    |> reduce (__aivi_list_sortByInsertStep cmp newItem) (False, [])
+    |> __aivi_list_sortByInsertFinish cmp newItem
+
+type (A -> A -> Bool) -> (List A) -> A -> (List A)
+func __aivi_list_sortByStep = cmp sorted item =>
+    __aivi_list_sortByInsert cmp item sorted
+
+type (A -> A -> Bool) -> (List A) -> (List A)
+func __aivi_list_sortBy = cmp items => items
+    |> reduce (__aivi_list_sortByStep cmp) []
+
+type Text -> Bool
+func __aivi_text_isEmpty = text => text == ""
+
+type Text -> Bool
+func __aivi_text_nonEmpty = text => text == ""
+    T|> False
+    F|> True
+
 "#;
 
 const MAX_COMPILE_TIME_RANGE_ELEMENTS: u64 = 4096;
@@ -987,6 +1055,7 @@ impl<'a> Lowerer<'a> {
             body,
             reactive_updates,
             signal_dependencies: Vec::new(),
+            import_signal_dependencies: Vec::new(),
             source_metadata: None,
             is_source_capability_handle: false,
         }
@@ -9061,6 +9130,28 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         // Text ambient values
         ("aivi.text", "join") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_text_join".into(),
+        }),
+        ("aivi.text", "lower") => Some(intrinsic_import_value(
+            IntrinsicValue::TextToLower,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                primitive_import_type(BuiltinType::Text),
+            ),
+        )),
+        ("aivi.text", "isEmpty") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_text_isEmpty".into(),
+        }),
+        ("aivi.text", "nonEmpty") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_text_nonEmpty".into(),
+        }),
+        ("aivi.list", "find") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_find".into(),
+        }),
+        ("aivi.list", "take") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_take".into(),
+        }),
+        ("aivi.list", "sortBy") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_sortBy".into(),
         }),
         // Matrix ambient types and values
         ("aivi.matrix", "Matrix") => Some(ImportBindingMetadata::AmbientType),

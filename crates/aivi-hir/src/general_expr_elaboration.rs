@@ -799,8 +799,14 @@ impl<'a> GeneralExprElaborator<'a> {
                 continue;
             }
             match item {
-                Item::Value(value) => items.push(self.elaborate_value(item_id, value)),
-                Item::Function(function) => items.push(self.elaborate_function(item_id, function)),
+                Item::Value(value) => {
+                    let r = self.elaborate_value(item_id, value);
+                    items.push(r);
+                }
+                Item::Function(function) => {
+                    let r = self.elaborate_function(item_id, function);
+                    items.push(r);
+                }
                 Item::Signal(signal) => {
                     if let Some(item) = self.elaborate_signal(item_id, signal) {
                         items.push(item);

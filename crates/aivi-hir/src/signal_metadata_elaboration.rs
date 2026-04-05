@@ -4,10 +4,10 @@ use aivi_typing::SourceOptionWakeupCause;
 
 use crate::{
     ApplicativeSpineHead, ClusterId, ControlNode, ControlNodeId, CustomSourceContractMetadata,
-    DecoratorPayload, ExprId, ExprKind, Item, ItemId, MarkupAttributeValue, MarkupNodeId,
-    MarkupNodeKind, Module, PatternId, PatternKind, PipeStageKind, ProjectionBase, ResolutionState,
-    SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata, SourceProviderRef,
-    TermResolution, TextSegment,
+    DecoratorPayload, ExprId, ExprKind, ImportBindingMetadata, ImportId, ImportValueType, Item,
+    ItemId, MarkupAttributeValue, MarkupNodeId, MarkupNodeKind, Module, PatternId, PatternKind,
+    PipeStageKind, ProjectionBase, ResolutionState, SignalItem, SourceDecorator,
+    SourceLifecycleDependencies, SourceMetadata, SourceProviderRef, TermResolution, TextSegment,
 };
 
 /// Populates `signal_dependencies` and `source_metadata` on every
@@ -20,14 +20,16 @@ pub fn populate_signal_metadata(module: &mut Module) {
         .map(|(item_id, _)| item_id)
         .collect::<Vec<_>>();
     for item_id in item_ids {
-        let (signal_dependencies, source_metadata) = match &module.items()[item_id] {
-            Item::Signal(item) => compute_signal_metadata(module, item),
-            _ => continue,
-        };
+        let (signal_dependencies, import_signal_dependencies, source_metadata) =
+            match &module.items()[item_id] {
+                Item::Signal(item) => compute_signal_metadata(module, item),
+                _ => continue,
+            };
         let Some(Item::Signal(item)) = module.arenas.items.get_mut(item_id) else {
             continue;
         };
         item.signal_dependencies = signal_dependencies;
+        item.import_signal_dependencies = import_signal_dependencies;
         item.source_metadata = source_metadata;
     }
 }
@@ -56,9 +58,9 @@ where
 fn compute_signal_metadata(
     module: &Module,
     item: &SignalItem,
-) -> (Vec<ItemId>, Option<SourceMetadata>) {
+) -> (Vec<ItemId>, Vec<ImportId>, Option<SourceMetadata>) {
     if item.is_source_capability_handle {
-        return (Vec::new(), None);
+        return (Vec::new(), Vec::new(), None);
     }
     let source = item.header.decorators.iter().find_map(|decorator_id| {
         let decorator = &module.decorators()[*decorator_id];
@@ -93,7 +95,8 @@ fn compute_signal_metadata(
             work.push(DependencyWork::Expr(options));
         }
     }
-    let signal_dependencies = collect_signal_dependencies(module, work);
+    let (signal_dependencies, import_signal_dependencies) =
+        collect_all_signal_dependencies(module, work);
     let source_metadata = source.map(|source| {
         let source_dependencies = source_dependencies.unwrap_or_default();
         let provider = SourceProviderRef::from_path(source.provider.as_ref());
@@ -107,7 +110,7 @@ fn compute_signal_metadata(
             signal_dependencies: source_dependencies,
         }
     });
-    (signal_dependencies, source_metadata)
+    (signal_dependencies, import_signal_dependencies, source_metadata)
 }
 
 fn compute_source_lifecycle_dependencies(
@@ -195,8 +198,34 @@ enum DependencyWork {
     Item(ItemId),
 }
 
-fn collect_signal_dependencies(module: &Module, mut work: Vec<DependencyWork>) -> Vec<ItemId> {
-    let mut dependencies = HashSet::new();
+/// Collects both item-based and import-based signal dependencies from expressions.
+/// Returns `(item_signal_deps, import_signal_deps)`.
+fn collect_all_signal_dependencies(
+    module: &Module,
+    work: Vec<DependencyWork>,
+) -> (Vec<ItemId>, Vec<ImportId>) {
+    let (item_deps, import_deps) = collect_signal_deps_internal(module, work);
+    let mut item_deps: Vec<_> = item_deps.into_iter().collect();
+    item_deps.sort();
+    let mut import_deps: Vec<_> = import_deps.into_iter().collect();
+    import_deps.sort();
+    (item_deps, import_deps)
+}
+
+fn collect_signal_dependencies(module: &Module, work: Vec<DependencyWork>) -> Vec<ItemId> {
+    let (item_deps, _) = collect_signal_deps_internal(module, work);
+    let mut signal_dependencies: Vec<_> = item_deps.into_iter().collect();
+    signal_dependencies.sort();
+    signal_dependencies
+}
+
+/// Core traversal: returns (item_signal_deps, import_signal_deps).
+fn collect_signal_deps_internal(
+    module: &Module,
+    mut work: Vec<DependencyWork>,
+) -> (HashSet<ItemId>, HashSet<ImportId>) {
+    let mut item_deps: HashSet<ItemId> = HashSet::new();
+    let mut import_deps: HashSet<ImportId> = HashSet::new();
     let mut seen_exprs = HashSet::new();
     let mut seen_patterns = HashSet::new();
     let mut seen_markups = HashSet::new();
@@ -212,18 +241,30 @@ fn collect_signal_dependencies(module: &Module, mut work: Vec<DependencyWork>) -
                 }
                 match &module.exprs()[expr_id].kind {
                     ExprKind::Name(reference) => {
-                        if let ResolutionState::Resolved(TermResolution::Item(item_id)) =
-                            reference.resolution
-                        {
-                            match &module.items()[item_id] {
-                                Item::Signal(_) => {
-                                    dependencies.insert(item_id);
+                        match &reference.resolution {
+                            ResolutionState::Resolved(TermResolution::Item(item_id)) => {
+                                match &module.items()[*item_id] {
+                                    Item::Signal(_) => {
+                                        item_deps.insert(*item_id);
+                                    }
+                                    Item::Value(_) | Item::Function(_) => {
+                                        work.push(DependencyWork::Item(*item_id));
+                                    }
+                                    _ => {}
                                 }
-                                Item::Value(_) | Item::Function(_) => {
-                                    work.push(DependencyWork::Item(item_id));
-                                }
-                                _ => {}
                             }
+                            ResolutionState::Resolved(TermResolution::Import(import_id)) => {
+                                let import = &module.imports()[*import_id];
+                                if matches!(
+                                    &import.metadata,
+                                    ImportBindingMetadata::Value {
+                                        ty: ImportValueType::Signal(_)
+                                    }
+                                ) {
+                                    import_deps.insert(*import_id);
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     ExprKind::Integer(_)
@@ -502,9 +543,7 @@ fn collect_signal_dependencies(module: &Module, mut work: Vec<DependencyWork>) -
         }
     }
 
-    let mut signal_dependencies = dependencies.into_iter().collect::<Vec<_>>();
-    signal_dependencies.sort();
-    signal_dependencies
+    (item_deps, import_deps)
 }
 
 fn normalize_dependency_list(dependencies: &mut Vec<ItemId>) {

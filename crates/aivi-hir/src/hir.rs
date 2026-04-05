@@ -952,6 +952,9 @@ pub struct SignalItem {
     pub body: Option<ExprId>,
     pub reactive_updates: Vec<ReactiveUpdateClause>,
     pub signal_dependencies: Vec<ItemId>,
+    /// Signal dependencies that come from imported workspace module signals
+    /// (resolved as `TermResolution::Import` rather than `TermResolution::Item`).
+    pub import_signal_dependencies: Vec<ImportId>,
     pub source_metadata: Option<SourceMetadata>,
     pub is_source_capability_handle: bool,
 }

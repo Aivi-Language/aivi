@@ -3091,6 +3091,7 @@ impl<'a> LinkBuilder<'a> {
                 let item = &self.backend.items()[*item_id];
                 match item.kind {
                     BackendItemKind::Signal(_) => {
+                        eprintln!("[DEBUG req-sig] owner={owner:?} item={item_id:?} name={}", item.name);
                         required.insert(*item_id);
                     }
                     _ => {

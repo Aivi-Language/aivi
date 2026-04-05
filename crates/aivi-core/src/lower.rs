@@ -393,9 +393,21 @@ pub fn lower_runtime_module_with_workspace<'a>(
         .filter(|item_id| !is_markup_value(hir, *item_id))
         .collect::<HashSet<_>>();
     let mut lowerer = ModuleLowerer::new_internal(hir, Some(included_items));
+    // Workspace module origins must not overlap with the entry module's origin range:
+    //   [0, hir_item_count)                 — entry module real item origins
+    //   [hir_item_count, next_synthetic)     — entry module signal import stub origins
+    //   [next_synthetic, ...)               — entry module synthetic item origins
+    // By starting workspace origins at next_synthetic_item_origin_raw, each workspace
+    // module receives a non-overlapping origin slice above the entry module's reserved range.
+    // After all workspace modules are compiled, we advance next_synthetic_item_origin_raw
+    // to ws_origin_base so that the entry module's own synthetic items (domain members, pipes,
+    // etc.) start above all workspace module items and don't collide with them.
+    lowerer.ws_origin_base = lowerer.next_synthetic_item_origin_raw;
     for (name, ws_hir) in workspace_hirs {
         lowerer.compile_workspace_module(name, ws_hir)?;
     }
+    // Advance the entry module's synthetic item counter past all workspace-allocated origins.
+    lowerer.next_synthetic_item_origin_raw = lowerer.ws_origin_base;
     lowerer.build()
 }
 
@@ -560,6 +572,14 @@ struct ModuleLowerer<'a> {
     // Maps ImportId → module name string for the currently active HIR.
     // Rebuilt whenever self.hir changes (entry module or a workspace module).
     import_to_module: HashMap<ImportId, Box<str>>,
+    // Per-module offset added to HIR item IDs when assigning origins in seed_items and
+    // seed_instance_member_item. Zero for the entry module; set to a workspace-module-specific
+    // base when compiling workspace modules to prevent origin collisions across modules.
+    item_origin_offset: u32,
+    // Monotonically advancing base for workspace module origin space assignments.
+    // NOT saved/restored in compile_workspace_module — persists across all workspace modules
+    // so each module receives a non-overlapping origin range.
+    ws_origin_base: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -739,13 +759,20 @@ impl<'a> ModuleLowerer<'a> {
     /// name → ItemId map so that entry-module imports can resolve to the real items.
     ///
     /// The method saves and restores all HIR-specific state so that entry-module
-    /// compilation is unaffected.  Only `self.module` (the shared item arena) and
-    /// `self.workspace_name_maps` grow permanently.
+    /// compilation is unaffected.  Only `self.module` (the shared item arena),
+    /// `self.workspace_name_maps`, and `self.ws_origin_base` grow permanently.
     fn compile_workspace_module(
         &mut self,
         module_name: &str,
         ws_hir: &'a aivi_hir::Module,
     ) -> Result<(), LoweringErrors> {
+        // ── Claim a non-overlapping origin slice for this workspace module ────
+        // ws_origin_base is persistent (not saved/restored); each workspace module
+        // receives a unique origin range so its items never collide with entry-module
+        // items (which use raw HIR item IDs 0..hir_item_count) or with items from
+        // other workspace modules.
+        let module_origin_base = self.ws_origin_base;
+
         // ── Save all HIR-specific state ──────────────────────────────────────
         let saved_hir = self.hir;
         let saved_included_items = self.included_items.take();
@@ -762,6 +789,7 @@ impl<'a> ModuleLowerer<'a> {
         let saved_hir_item_count = self.hir_item_count;
         let saved_next_synthetic = self.next_synthetic_item_origin_raw;
         let saved_next_binding = self.next_synthetic_binding_raw;
+        let saved_item_origin_offset = self.item_origin_offset;
 
         // ── Set up for workspace module ──────────────────────────────────────
         let ws_item_count =
@@ -783,13 +811,22 @@ impl<'a> ModuleLowerer<'a> {
         self.debug_items = collect_debug_items(ws_hir, None);
         self.mock_overrides = collect_mock_overrides(ws_hir, None);
         self.hir_item_count = ws_item_count;
-        self.next_synthetic_item_origin_raw = ws_item_count + ws_import_count;
+        // Seed items for this workspace module use origins starting at module_origin_base.
+        // Synthetic items (domain members, non-signal imports) follow immediately after
+        // the reserved [module_origin_base, module_origin_base + ws_item_count + ws_import_count) slice.
+        self.item_origin_offset = module_origin_base;
+        self.next_synthetic_item_origin_raw = module_origin_base + ws_item_count + ws_import_count;
         self.next_synthetic_binding_raw = ws_binding_count;
         self.import_to_module = Self::make_import_to_module_map(ws_hir);
 
         // ── Compile workspace module items ───────────────────────────────────
         self.seed_items()?;
         self.lower_general_exprs();
+
+        // ── Advance ws_origin_base past everything this module may have used ─
+        // next_synthetic_item_origin_raw now points to the high-water mark of all
+        // origins consumed by this module (real items, signal stubs, synthetics).
+        self.ws_origin_base = self.next_synthetic_item_origin_raw;
 
         // ── Save name → ItemId map for this workspace module ─────────────────
         let name_map: HashMap<Box<str>, ItemId> = ws_hir
@@ -824,6 +861,8 @@ impl<'a> ModuleLowerer<'a> {
         self.hir_item_count = saved_hir_item_count;
         self.next_synthetic_item_origin_raw = saved_next_synthetic;
         self.next_synthetic_binding_raw = saved_next_binding;
+        self.item_origin_offset = saved_item_origin_offset;
+        // NOTE: ws_origin_base is intentionally NOT restored — it must persist.
 
         Ok(())
     }
@@ -860,6 +899,8 @@ impl<'a> ModuleLowerer<'a> {
             errors: Vec::new(),
             workspace_name_maps: HashMap::new(),
             import_to_module: HashMap::new(),
+            item_origin_offset: 0,
+            ws_origin_base: 0,
         }
     }
 
@@ -1081,7 +1122,11 @@ impl<'a> ModuleLowerer<'a> {
                 .module
                 .items_mut()
                 .alloc(Item {
-                    origin: hir_id,
+                    // Add item_origin_offset to make workspace module origins non-overlapping
+                    // with entry module origins (which use the raw 0-based HIR item IDs).
+                    origin: HirItemId::from_raw(
+                        hir_id.as_raw().saturating_add(self.item_origin_offset),
+                    ),
                     span,
                     name,
                     kind,
@@ -2887,17 +2932,23 @@ impl<'a> ModuleLowerer<'a> {
             .clone();
 
         // If this import resolves to a pre-compiled workspace module item, reuse it
-        // directly instead of creating a bodyless stub.
-        if let Some(module_name) = self.import_to_module.get(&import) {
-            if let Some(name_map) = self.workspace_name_maps.get(module_name.as_ref()) {
-                if let Some(&core_item_id) = name_map.get(binding.imported_name.text()) {
-                    self.import_item_map.insert(import, core_item_id);
-                    return Ok(core_item_id);
+        // directly instead of creating a bodyless stub. Signal imports are excluded:
+        // they must always use the deterministic synthetic formula (hir_item_count + import_id)
+        // so the origin matches what the runtime assembly builder independently derives for
+        // signal lookup. Using the workspace item's origin (which has a different base) would
+        // break the assembly → backend item mapping in startup.rs index_origins.
+        let (kind, parameters) = self.import_item_shape(import, &binding)?;
+        if !matches!(kind, ItemKind::Signal(_)) {
+            if let Some(module_name) = self.import_to_module.get(&import) {
+                if let Some(name_map) = self.workspace_name_maps.get(module_name.as_ref()) {
+                    if let Some(&core_item_id) = name_map.get(binding.imported_name.text()) {
+                        self.import_item_map.insert(import, core_item_id);
+                        return Ok(core_item_id);
+                    }
                 }
             }
         }
 
-        let (kind, parameters) = self.import_item_shape(import, &binding)?;
         // Use a deterministic synthetic origin for Signal imports so that the runtime assembly
         // builder can independently derive the same HirItemId for the same import without
         // coordination: signal import N gets hir_item_count + N.
@@ -3156,8 +3207,19 @@ impl<'a> ModuleLowerer<'a> {
         } else {
             ItemKind::Function
         };
+        // Each instance member needs a unique synthetic origin so the backend linker
+        // can build a 1:1 HIR-item → backend-item index. Using the instance's HIR item
+        // ID would collide: the instance itself also gets that origin from seed_items,
+        // and multiple members of the same instance would share it too.
+        let origin = match self.next_synthetic_item_origin() {
+            Ok(id) => id,
+            Err(overflow) => {
+                self.errors.push(overflow);
+                return None;
+            }
+        };
         let item_id = match self.module.items_mut().alloc(Item {
-            origin: instance,
+            origin,
             span: member.span,
             name: format!(
                 "instance#{}::member#{}::{}",

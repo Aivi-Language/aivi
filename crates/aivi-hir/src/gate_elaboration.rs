@@ -1951,10 +1951,12 @@ fn runtime_reference_for_name(
         crate::ResolutionState::Resolved(TermResolution::IntrinsicValue(value)) => {
             Ok(GateRuntimeReference::IntrinsicValue(value.clone()))
         }
+        crate::ResolutionState::Resolved(TermResolution::Import(import_id)) => {
+            Ok(GateRuntimeReference::Import(*import_id))
+        }
         crate::ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | crate::ResolutionState::Resolved(TermResolution::ClassMember(_))
         | crate::ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
-        | crate::ResolutionState::Resolved(TermResolution::Import(_))
         | crate::ResolutionState::Unresolved => {
             Err(GateElaborationBlocker::UnknownRuntimeExprType { span })
         }
