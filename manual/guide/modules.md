@@ -96,19 +96,45 @@ A practical order is:
 
 That ordering is not required by the language, but it keeps modules easy to scan.
 
-## Making names globally available with `hoist`
+## Publishing names project-wide with `hoist`
 
-`hoist` makes an entire module's exports available project-wide, without needing `use` in every file.
+`hoist` is an **outward declaration**: the module that writes it is *donating* another module's exports to the project-wide namespace. Every other `.aivi` file in the project can then use those names directly, without any `use` statement.
 
 ```aivi
-hoist aivi.list
+hoist libs.types.ids
+hoist libs.types.mail
+hoist libs.types.contact
 ```
 
-After this declaration (typically placed in a shared module like `aivi.aivi`), every file in the project can use `map`, `filter`, `length`, etc. from `aivi.list` without importing them explicitly.
+Any file in the project can then use `AccountId`, `Message`, `Contact`, etc. without any `use` statement.
+To show the contrast — a consuming file needs no imports at all:
+
+```text
+// apps/ui/view.aivi — no use or hoist needed here
+type AccountId -> Text -> Widget
+func accountLabel = id label => ...
+```
+
+### The stdlib prelude
+
+The AIVI standard library's root module (`aivi.aivi`) already hoists the core modules:
+
+```
+hoist aivi.list
+hoist aivi.option
+hoist aivi.result
+hoist aivi.text
+hoist aivi.math
+hoist aivi.bool
+hoist aivi.pair
+hoist aivi.order
+```
+
+This means `map`, `filter`, `length`, `getOrElse`, `isOk`, and the rest of those modules are available in every AIVI project without any `use` declaration. You never need to write `hoist aivi.list` yourself.
 
 ### Kind filters
 
-Hoist only specific kinds of exports:
+When you only want to publish specific kinds of exports:
 
 ```aivi
 hoist aivi.list (func, value)
@@ -132,15 +158,17 @@ hoist aivi.list (func) hiding (foldr, foldl)
 
 ### Name disambiguation
 
-When two hoisted modules export the same name (e.g. `map` from both `aivi.list` and `aivi.option`), the compiler resolves the correct one from type context:
+When two hoisted modules export the same name (e.g. `map` from both `aivi.list` and `aivi.option`), the compiler picks the right one from type context:
 
 ```aivi
-# <unparseable item>
+value numbers = [1, 2, 3]
+value doubled = numbers ||> map (\n => n * 2)
 
-value doubled
+value maybeName = Some "Alice"
+value greeting = maybeName ||> map (\name => name)
 ```
 
-If the type context is insufficient, the compiler reports an error and suggests using `hiding` to exclude one of the conflicting names.
+If the type context is insufficient, the compiler reports an error and suggests using `hiding` to exclude the conflicting name from one of the hoisted modules.
 
 ### Priority order
 
@@ -148,16 +176,16 @@ If the type context is insufficient, the compiler reports an error and suggests 
 local definitions > use imports > hoisted globals > ambient prelude
 ```
 
-`use` imports always win over `hoist` for the same name, so you can always override a hoisted name locally.
+`use` always wins over `hoist` for the same name, so you can override a hoisted name locally for a specific file.
 
 ## Summary
 
 | Form | Meaning |
 | --- | --- |
-| `use module (names)` | Import selected names |
+| `use module (names)` | Import selected names into this file |
 | `use module (name as localName)` | Import one name under a local alias |
-| `export name` | Export one name |
-| `export (a, b, c)` | Export several names |
-| `hoist module` | Make all module exports globally available |
-| `hoist module (func, value)` | Hoist only selected kinds |
-| `hoist module hiding (a, b)` | Hoist all except named items |
+| `export name` | Export one name to importers |
+| `export (a, b, c)` | Export several names to importers |
+| `hoist module` | Publish all module exports to the whole project |
+| `hoist module (func, value)` | Publish only selected kinds project-wide |
+| `hoist module hiding (a, b)` | Publish all except named items project-wide |
