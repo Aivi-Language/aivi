@@ -16,6 +16,7 @@
 //! tables, and global dependencies, then lowers the subset of runtime-kernel ABI contracts that
 //! are already backend-owned into real Cranelift functions and object bytes.
 
+pub mod cache;
 mod codegen;
 mod gc;
 mod ids;
@@ -29,6 +30,7 @@ mod validate;
 
 pub use aivi_core::{Arena, ArenaId, ArenaOverflow};
 pub use codegen::{CodegenError, CodegenErrors, CompiledKernel, CompiledProgram, compile_program};
+pub use cache::compile_program_cached;
 pub use gc::{
     CommittedValueStore, InlineCommittedValueStore, MovingRuntimeValueStore, RuntimeGcHandle,
 };
