@@ -89,10 +89,13 @@ domain Snake over NonEmptyList Cell = {
     move cell = nelFromHeadTail cell (nelInit self)
     type Direction -> Cell
     nextHead dir = moveDir dir (nelHead self)
+    type List Cell
+    cells = nelToList self
 }
 
 type GameState = {
     snake: Snake,
+    body: List Cell,
     dir: Direction,
     food: Cell,
     score: Int,
@@ -111,8 +114,11 @@ func dirLabel = .
  ||> East  -> "Right"
  ||> West  -> "Left"
 
+value initialSnake = fromCells (nelCons (Cell 6 10) (nelCons (Cell 5 10) (singleton (Cell 4 10))))
+
 value initial : GameState = {
-    snake: fromCells (nelCons (Cell 6 10) (nelCons (Cell 5 10) (singleton (Cell 4 10)))),
+    snake: initialSnake,
+    body: initialSnake.cells,
     dir: East,
     food: spawnFood seed0,
     score: 0,
@@ -148,11 +154,19 @@ func advance = st h => outside h or (st.snake.contains h)
 
 type GameState -> Cell -> GameState
 func resolveMove = st h => h == st.food
- T|> st <| { snake: st.snake.grow h, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
- F|> st <| { snake: st.snake.move h, seed: nextSeed st.seed }
+ T|> resolveMoveGrow st h
+ F|> resolveMoveStep st h
+
+type GameState -> Cell -> GameState
+func resolveMoveGrow = st h =>
+    st <| { snake: st.snake.grow h, body: (st.snake.grow h).cells, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
+
+type GameState -> Cell -> GameState
+func resolveMoveStep = st h =>
+    st <| { snake: st.snake.move h, body: (st.snake.move h).cells, seed: nextSeed st.seed }
 
 type GameState -> Int -> Int -> Text
-func cellGlyph = st y x => (Cell x y == st.snake.head, st.snake.contains (Cell x y), Cell x y == st.food)
+func cellGlyph = st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) st.body, Cell x y == st.food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"

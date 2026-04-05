@@ -8012,6 +8012,12 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.list", "any") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_list_any".into(),
         }),
+        ("aivi.list", "at") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_listAt".into(),
+        }),
+        ("aivi.list", "replaceAt") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_listReplace".into(),
+        }),
         ("aivi.stdio", "stdoutWrite") => Some(intrinsic_import_value(
             IntrinsicValue::StdoutWrite,
             arrow_import_type(
