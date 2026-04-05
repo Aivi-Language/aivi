@@ -434,6 +434,51 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
     let cwd = env::current_dir().map_err(|error| {
         format!("failed to determine current directory for `aivi run`: {error}")
     })?;
+
+    // When no explicit path or --app was given and the manifest defines multiple
+    // [[app]] entries, launch every app as a separate subprocess so each gets its
+    // own GTK main loop.
+    if requested_path.is_none() && requested_app.is_none() {
+        let workspace_root = aivi_query::discover_workspace_root_from_directory(&cwd);
+        if let Ok(manifest) = aivi_query::parse_manifest(&workspace_root) {
+            if manifest.apps.len() > 1 {
+                let exe = env::current_exe().map_err(|e| {
+                    format!("failed to locate aivi executable: {e}")
+                })?;
+                let mut children: Vec<std::process::Child> = manifest
+                    .apps
+                    .iter()
+                    .map(|app| {
+                        let mut cmd = std::process::Command::new(&exe);
+                        cmd.arg("run").arg("--app").arg(&app.name);
+                        if let Some(view) = requested_view.as_deref().or(app.view.as_deref()) {
+                            cmd.arg("--view").arg(view);
+                        }
+                        cmd.spawn().map_err(|e| {
+                            format!("failed to spawn `aivi run --app {}`: {e}", app.name)
+                        })
+                    })
+                    .collect::<Result<_, _>>()?;
+                let mut any_failed = false;
+                for child in &mut children {
+                    match child.wait() {
+                        Ok(status) if !status.success() => any_failed = true,
+                        Err(e) => {
+                            eprintln!("error waiting for child process: {e}");
+                            any_failed = true;
+                        }
+                        _ => {}
+                    }
+                }
+                return Ok(if any_failed {
+                    ExitCode::FAILURE
+                } else {
+                    ExitCode::SUCCESS
+                });
+            }
+        }
+    }
+
     let resolved = resolve_run_entrypoint(&cwd, requested_path.as_deref(), requested_app.as_deref())?;
     let view = requested_view
         .as_deref()
