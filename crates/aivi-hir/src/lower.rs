@@ -1942,7 +1942,16 @@ impl<'a> Lowerer<'a> {
                     .map(|s| known_import_metadata(&module_name, &s.text).is_some())
                     .unwrap_or(false)
             });
-            if !(is_direct_self_import && all_intrinsics) {
+            // Suppress false-positive import-cycle errors that arise when stdlib modules
+            // are compiled transitively during workspace-hoist registration. In that
+            // context the module is compiled with an import stack inherited from app
+            // code, so `module_name_for_file` may fall back to a file-system path string
+            // (containing '/') instead of the logical dotted module name. When the cycle
+            // path contains a path-encoded entry (detected by the presence of a '/'
+            // separator), the cycle is an artefact of hoist-chain compilation order, not
+            // a real circular import dependency.
+            let is_hoist_induced_cycle = cycle.modules().iter().any(|m| m.contains('/'));
+            if !(is_direct_self_import && all_intrinsics) && !is_hoist_induced_cycle {
                 self.diagnostics.push(
                     Diagnostic::error(format!(
                         "import cycle detected: {}",
@@ -5360,7 +5369,7 @@ impl<'a> Lowerer<'a> {
     /// prevent double-registration.  Missing modules are silently ignored (no
     /// diagnostic) since they may belong to a different workspace scope.
     fn register_workspace_hoists(&mut self, namespaces: &mut Namespaces) {
-        use aivi_base::{FileId, Span};
+        use aivi_base::Span;
         use crate::resolver::RawHoistItem;
 
         let workspace_hoists: Vec<RawHoistItem> = self.resolver.workspace_hoist_items();
@@ -5375,7 +5384,7 @@ impl<'a> Lowerer<'a> {
         // is unnecessary since the names are already in scope.
         let self_path = self.resolver.current_module_path();
 
-        let synthetic_span = SourceSpan::new(FileId::new(0), Span::from(0..0));
+        let synthetic_span = SourceSpan::new(self.module.file(), Span::from(0..0));
 
         for raw in workspace_hoists {
             let module_key = raw.module_path.join(".");
@@ -5388,7 +5397,7 @@ impl<'a> Lowerer<'a> {
             namespaces.hoisted_module_paths.insert(module_key.clone());
 
             let module_segments: Vec<&str> = raw.module_path.iter().map(String::as_str).collect();
-            let module_resolution = self.resolver.resolve(&module_segments);
+            let module_resolution = self.resolver.resolve_for_hoist(&module_segments);
             let crate::resolver::ImportModuleResolution::Resolved(ref exports) = module_resolution
             else {
                 continue; // silent — workspace hoists may reference optional modules

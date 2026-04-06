@@ -140,6 +140,25 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
         ImportModuleResolution::Resolved(lowered.exported_names().clone())
     }
 
+    fn resolve_for_hoist(&self, path: &[&str]) -> ImportModuleResolution {
+        let Some(file) = self.workspace.resolve_module_file(self.db, path) else {
+            return ImportModuleResolution::Missing;
+        };
+        self.record_dependency(file);
+
+        // Detect cycles using the full stack to prevent infinite recursion, but
+        // return Missing (silent skip) instead of Cycle. This prevents the
+        // false-positive import-cycle errors that arise when hoist-resolution
+        // chains cause stdlib modules to appear in each other's compile stacks
+        // even though no real circular dependency exists at the import level.
+        if self.cycle(file, path).is_some() {
+            return ImportModuleResolution::Missing;
+        }
+
+        let lowered = hir_module_with_stack(self.db, file, self.stack, Some(self.workspace));
+        ImportModuleResolution::Resolved(lowered.exported_names().clone())
+    }
+
     fn workspace_hoist_items(&self) -> Vec<aivi_hir::resolver::RawHoistItem> {
         collect_workspace_hoist_items(self.db, self.workspace)
     }

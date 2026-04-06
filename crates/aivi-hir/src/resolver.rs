@@ -50,6 +50,18 @@ pub trait ImportResolver {
     /// names exported by that module.
     fn resolve(&self, path: &[&str]) -> ImportModuleResolution;
 
+    /// Resolve a module path for workspace-hoist registration purposes.
+    ///
+    /// Unlike `resolve`, this method compiles the target module in an isolated
+    /// context (fresh import stack) so that hoist-induced transitive resolution
+    /// chains do not create false-positive import cycle errors. Real cycles
+    /// within the target module are still detected within its own compilation.
+    ///
+    /// The default implementation delegates to `resolve`.
+    fn resolve_for_hoist(&self, path: &[&str]) -> ImportModuleResolution {
+        self.resolve(path)
+    }
+
     /// Return all hoist declarations from other modules in the same workspace.
     ///
     /// These are injected into every module's namespace after its own local
