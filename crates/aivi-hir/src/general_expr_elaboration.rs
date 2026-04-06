@@ -2160,11 +2160,26 @@ impl<'a> GeneralExprElaborator<'a> {
 
         let mut lowered_arguments = Vec::with_capacity(arguments.len());
         let mut argument_types = Vec::with_capacity(arguments.len());
+        let mut accumulated_subs: HashMap<TypeParameterId, GateType> = HashMap::new();
         for (index, argument) in arguments.iter().enumerate() {
-            let expected = argument_expectations
+            let base_expected = argument_expectations
                 .as_ref()
                 .and_then(|types| types.get(index));
-            let lowered = self.lower_expr(*argument, env, ambient, expected)?;
+            let expected = base_expected.map(|e| {
+                if accumulated_subs.is_empty() {
+                    e.clone()
+                } else {
+                    substitute_gate_type(e, &accumulated_subs)
+                }
+            });
+            let lowered = self.lower_expr(*argument, env, ambient, expected.as_ref())?;
+            // After lowering each argument, collect type-parameter bindings from the observed
+            // concrete type so that remaining argument expectations can be specialized.
+            if let Some(param_types) = &inferred_parameter_types {
+                if let Some(param_ty) = param_types.get(index) {
+                    collect_type_param_subs_inner(param_ty, &lowered.ty, &mut accumulated_subs);
+                }
+            }
             argument_types.push(lowered.ty.clone());
             lowered_arguments.push(lowered);
         }
@@ -3248,11 +3263,7 @@ impl<'a> GeneralExprElaborator<'a> {
                         return Ok(expected.clone());
                     }
                 }
-                return info.actual_gate_type().or(info.ty).ok_or_else(|| {
-                    vec![GeneralExprBlocker::UnknownExprType {
-                        span: self.module.exprs()[expr_id].span,
-                    }]
-                });
+                return Ok(info.actual_gate_type().or(info.ty).unwrap_or_else(|| expected.clone()));
             }
         }
         let info = self.typing.infer_expr(expr_id, env, ambient);
@@ -3960,44 +3971,7 @@ mod tests {
     }
 
     fn lower_text_with_stdlib(path: &str, text: &str) -> crate::LoweringResult {
-        use crate::{ImportModuleResolution, ImportResolver, exports};
-        struct StdlibResolver(PathBuf);
-        impl ImportResolver for StdlibResolver {
-            fn resolve(&self, path: &[&str]) -> ImportModuleResolution {
-                if path.first() != Some(&"aivi") {
-                    return ImportModuleResolution::Missing;
-                }
-                let mut file_path = self.0.clone();
-                for segment in path {
-                    file_path.push(segment);
-                }
-                file_path.set_extension("aivi");
-                let text = match fs::read_to_string(&file_path) {
-                    Ok(t) => t,
-                    Err(_) => return ImportModuleResolution::Missing,
-                };
-                let mut sources = SourceDatabase::new();
-                let file_id = sources.add_file(file_path.to_string_lossy().as_ref(), text.as_str());
-                let parsed = parse_module(&sources[file_id]);
-                if parsed.has_errors() {
-                    return ImportModuleResolution::Missing;
-                }
-                let lowered = crate::lower_module(&parsed.module);
-                ImportModuleResolution::Resolved(exports(lowered.module()))
-            }
-        }
-        let stdlib_root =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../stdlib");
-        let resolver = StdlibResolver(stdlib_root);
-        let mut sources = SourceDatabase::new();
-        let file_id = sources.add_file(path, text);
-        let parsed = parse_module(&sources[file_id]);
-        assert!(
-            !parsed.has_errors(),
-            "general-expression test input should parse: {:?}",
-            parsed.all_diagnostics().collect::<Vec<_>>()
-        );
-        crate::lower_module_with_resolver(&parsed.module, Some(&resolver))
+        crate::test_support::lower_text_with_stdlib(path, text)
     }
 
     fn lower_fixture(path: &str) -> crate::LoweringResult {

@@ -800,7 +800,13 @@ impl<'a> ModuleLowerer<'a> {
             u32::try_from(ws_hir.bindings().iter().count()).expect("HIR binding count fits u32");
 
         self.hir = ws_hir;
-        self.included_items = None;
+        let ws_non_markup: HashSet<HirItemId> = ws_hir
+            .items()
+            .iter()
+            .filter(|(item_id, _)| !is_markup_value(ws_hir, *item_id))
+            .map(|(item_id, _)| item_id)
+            .collect();
+        self.included_items = Some(ws_non_markup);
         self.item_map = HashMap::new();
         self.import_item_map = HashMap::new();
         self.domain_member_item_map = HashMap::new();
@@ -808,8 +814,8 @@ impl<'a> ModuleLowerer<'a> {
         self.pipe_builders = BTreeMap::new();
         self.source_by_owner = HashMap::new();
         self.decode_by_owner = HashMap::new();
-        self.debug_items = collect_debug_items(ws_hir, None);
-        self.mock_overrides = collect_mock_overrides(ws_hir, None);
+        self.debug_items = collect_debug_items(ws_hir, self.included_items.as_ref());
+        self.mock_overrides = collect_mock_overrides(ws_hir, self.included_items.as_ref());
         self.hir_item_count = ws_item_count;
         // Seed items for this workspace module use origins starting at module_origin_base.
         // Synthetic items (domain members, non-signal imports) follow immediately after

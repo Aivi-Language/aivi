@@ -2441,6 +2441,28 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
+    /// Like `import_value_type`, but also resolves `AmbientValue` imports by
+    /// looking up the prelude item they reference.  Used in pipe stage inference
+    /// where we need the type of functions like `list.map` (which is registered
+    /// as `AmbientValue { name: "__aivi_list_map" }` rather than carrying an
+    /// explicit `ImportValueType`).
+    pub(crate) fn import_value_type_with_ambient(&mut self, import_id: ImportId) -> Option<GateType> {
+        if let Some(ty) = self.import_value_type(import_id) {
+            return Some(ty);
+        }
+        // For AmbientValue imports, look up the prelude item by name.
+        let ambient_name: String = match &self.module.imports()[import_id].metadata {
+            ImportBindingMetadata::AmbientValue { name } => name.to_string(),
+            _ => return None,
+        };
+        let item_id = self.module.items().iter().find_map(|(id, item)| match item {
+            Item::Function(f) if f.name.text() == ambient_name => Some(id),
+            Item::Value(v) if v.name.text() == ambient_name => Some(id),
+            _ => None,
+        })?;
+        self.item_value_type(item_id)
+    }
+
     pub(crate) fn lower_import_value_type(&self, ty: &ImportValueType) -> GateType {
         match ty {
             ImportValueType::Primitive(builtin) => GateType::Primitive(*builtin),
@@ -3301,9 +3323,9 @@ impl<'a> GateTypeContext<'a> {
         let candidates = self.hoisted_import_candidates(reference)?;
         let mut matches = Vec::new();
         for import_id in candidates {
-            if let Some(ty) = self.import_value_type(import_id) {
+            if let Some(ty) = self.import_value_type_with_ambient(import_id) {
                 let fits = match expected {
-                    Some(expected) => ty.same_shape(expected),
+                    Some(expected) => expected.fits_template(&ty),
                     None => true,
                 };
                 if fits {
@@ -5720,6 +5742,27 @@ impl<'a> GateTypeContext<'a> {
             });
         }
 
+        // Handle Import and AmbiguousHoistedImports: try to find a unique import candidate
+        // by walking its curried Arrow type through explicit args then the ambient subject.
+        // This covers hoisted prelude functions like `list.map`, `option.map`, etc.
+        let import_candidates: Option<Vec<ImportId>> = match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::Import(id)) => Some(vec![*id]),
+            ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(ids)) => {
+                Some(ids.iter().copied().collect())
+            }
+            _ => None,
+        };
+        if let Some(candidates) = import_candidates {
+            return self.match_import_pipe_function_signature(
+                callee_expr,
+                candidates,
+                explicit_arguments,
+                env,
+                ambient,
+                expected_result,
+            );
+        }
+
         let explicit_argument_types = explicit_arguments
             .iter()
             .map(|argument| {
@@ -5853,6 +5896,121 @@ impl<'a> GateTypeContext<'a> {
             return None;
         }
         matches.pop()
+    }
+
+    /// Match a pipe stage body against import-backed functions (single `Import` or
+    /// `AmbiguousHoistedImports`). Walks each candidate's curried Arrow type through
+    /// the explicit argument types and then the ambient subject type. Returns the unique
+    /// `PipeFunctionSignatureMatch` when exactly one candidate matches.
+    fn match_import_pipe_function_signature(
+        &mut self,
+        callee_expr: ExprId,
+        import_candidates: Vec<ImportId>,
+        explicit_arguments: Vec<ExprId>,
+        env: &GateExprEnv,
+        ambient: &GateType,
+        expected_result: Option<&GateType>,
+    ) -> Option<PipeFunctionSignatureMatch> {
+        let explicit_arg_types: Vec<Option<GateType>> = explicit_arguments
+            .iter()
+            .map(|arg| {
+                let info = self.infer_expr(*arg, env, Some(ambient));
+                info.actual_gate_type().or(info.ty)
+            })
+            .collect();
+
+        let mut result_matches: Vec<(Vec<GateType>, GateType)> = Vec::new();
+
+        for import_id in import_candidates {
+            let Some(import_ty) = self.import_value_type_with_ambient(import_id) else {
+                continue;
+            };
+            if !matches!(import_ty, GateType::Arrow { .. }) {
+                continue;
+            }
+
+            let mut current = import_ty;
+            let mut param_types: Vec<GateType> = Vec::new();
+            let mut ok = true;
+
+            for arg_ty_opt in &explicit_arg_types {
+                match arg_ty_opt {
+                    Some(arg_ty) => {
+                        let Some(next) = self.apply_function(&current, arg_ty) else {
+                            ok = false;
+                            break;
+                        };
+                        // Record the concrete parameter type (substituting any TypeParams
+                        // with the concrete argument type).
+                        let concrete_param = match &current {
+                            GateType::Arrow { parameter, .. } => {
+                                if parameter.has_type_params() {
+                                    arg_ty.clone()
+                                } else {
+                                    *parameter.clone()
+                                }
+                            }
+                            _ => {
+                                ok = false;
+                                break;
+                            }
+                        };
+                        param_types.push(concrete_param);
+                        current = next;
+                    }
+                    None => {
+                        // Unknown arg type — advance past this Arrow position.
+                        let GateType::Arrow { parameter, result } = current else {
+                            ok = false;
+                            break;
+                        };
+                        param_types.push(*parameter);
+                        current = *result;
+                    }
+                }
+            }
+
+            if !ok {
+                continue;
+            }
+
+            let Some(result_ty) = self.apply_function(&current, ambient) else {
+                continue;
+            };
+
+            if let Some(expected) = expected_result {
+                if !result_ty.same_shape(expected) {
+                    continue;
+                }
+            }
+
+            let concrete_ambient_param = match current {
+                GateType::Arrow { parameter, .. } => {
+                    if parameter.has_type_params() {
+                        ambient.clone()
+                    } else {
+                        *parameter
+                    }
+                }
+                _ => continue,
+            };
+            param_types.push(concrete_ambient_param);
+            result_matches.push((param_types, result_ty));
+        }
+
+        if result_matches.len() != 1 {
+            return None;
+        }
+
+        let (parameter_types, result_type) = result_matches.pop().unwrap();
+        let n_explicit = explicit_arguments.len();
+        Some(PipeFunctionSignatureMatch {
+            callee_expr,
+            explicit_arguments,
+            signal_payload_arguments: vec![false; n_explicit],
+            parameter_types,
+            result_type,
+        })
     }
 
     pub(crate) fn match_pipe_unannotated_function_signature(
@@ -6117,11 +6275,97 @@ impl<'a> GateTypeContext<'a> {
                 });
                 info.ty = None;
             }
+        } else if info.ty.is_none() && info.issues.is_empty() {
+            // Fallback: try to infer the result type for import-backed pipe stages
+            // (e.g. `|> map f` where `map` is an ambiguous hoisted import).  The
+            // earlier paths only handle same-module functions and class members; this
+            // path covers the import / hoisted-import case by walking the Arrow chain
+            // of each candidate import and returning the unique matching result.
+            if let Some(result_ty) = self.infer_import_apply_pipe_result(expr_id, env, &ambient) {
+                info.ty = Some(result_ty);
+                transform_mode = PipeTransformMode::Apply;
+            }
         }
         PipeBodyInference {
             info,
             transform_mode,
         }
+    }
+
+    /// Try to infer the result type of a pipe stage that is an imported function
+    /// applied to explicit arguments, with the pipe subject as the last argument.
+    /// Handles both a single resolved import and `AmbiguousHoistedImports`,
+    /// returning the unique result when exactly one candidate successfully type-checks.
+    fn infer_import_apply_pipe_result(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        ambient: &GateType,
+    ) -> Option<GateType> {
+        let (callee_expr, explicit_arguments) = self.flatten_apply_expr(expr_id);
+
+        // Collect candidate import IDs from the callee resolution (owned Vec to free the borrow).
+        let candidates: Vec<ImportId> = {
+            let ExprKind::Name(reference) = &self.module.exprs()[callee_expr].kind else {
+                return None;
+            };
+            match reference.resolution.as_ref() {
+                ResolutionState::Resolved(TermResolution::Import(id)) => vec![*id],
+                ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(ids)) => {
+                    ids.iter().copied().collect()
+                }
+                _ => return None,
+            }
+        };
+
+        // Infer types for explicit arguments (needs &mut self, safe because candidates is owned).
+        let explicit_arg_types: Vec<Option<GateType>> = explicit_arguments
+            .iter()
+            .map(|arg| {
+                let arg_info = self.infer_expr(*arg, env, None);
+                arg_info.actual_gate_type().or(arg_info.ty)
+            })
+            .collect();
+
+        // For each candidate: walk the Arrow chain through explicit args, then apply ambient.
+        let mut results = Vec::new();
+        for import_id in candidates {
+            let import_ty = match self.import_value_type_with_ambient(import_id) {
+                Some(ty) if matches!(ty, GateType::Arrow { .. }) => ty,
+                _ => continue,
+            };
+            let mut current = import_ty;
+            let mut ok = true;
+            for arg_ty_opt in &explicit_arg_types {
+                match arg_ty_opt {
+                    Some(arg_ty) => match self.apply_function(&current, arg_ty) {
+                        Some(next) => current = next,
+                        None => {
+                            ok = false;
+                            break;
+                        }
+                    },
+                    None => {
+                        // Unknown arg type — advance past the Arrow parameter.
+                        match current {
+                            GateType::Arrow { result, .. } => current = *result,
+                            _ => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if !ok {
+                continue;
+            }
+            if let Some(result_ty) = self.apply_function(&current, ambient) {
+                results.push(result_ty);
+            }
+        }
+
+        if results.len() == 1 { results.pop() } else { None }
     }
 
     pub(crate) fn infer_pipe_body(

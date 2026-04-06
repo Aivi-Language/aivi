@@ -6,6 +6,7 @@ use aivi_syntax::parse_module;
 use crate::{
     ImportModuleResolution, ImportResolver, Item, ItemId, Module, exports, lower_module,
     lower_module_with_resolver,
+    resolver::RawHoistItem,
 };
 
 pub fn fixture_root() -> PathBuf {
@@ -64,6 +65,39 @@ impl ImportResolver for StdlibResolver {
         }
         let lowered = lower_module(&parsed.module);
         ImportModuleResolution::Resolved(exports(lowered.module()))
+    }
+
+    fn workspace_hoist_items(&self) -> Vec<RawHoistItem> {
+        let aivi_dir = self.stdlib_root.join("aivi");
+        let Ok(entries) = fs::read_dir(&aivi_dir) else {
+            return vec![];
+        };
+        let mut hoists = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("aivi") {
+                continue;
+            }
+            let text = match fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            // A file declares a self-hoist when its first non-empty line is `hoist`.
+            let first_line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+            if first_line.trim() != "hoist" {
+                continue;
+            }
+            let stem = match path.file_stem().and_then(|s| s.to_str()) {
+                Some(s) => s.to_owned(),
+                None => continue,
+            };
+            hoists.push(RawHoistItem {
+                module_path: vec!["aivi".to_owned(), stem],
+                kind_filters: vec![],
+                hiding: vec![],
+            });
+        }
+        hoists
     }
 }
 
