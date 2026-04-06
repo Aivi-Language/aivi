@@ -24,6 +24,13 @@ thread_local! {
     static SUPPRESS_HOISTS: Cell<bool> = const { Cell::new(false) };
 }
 
+// When true, hir_module_with_stack skips storing computed HIR in the
+// database cache.  This is set during the hoist warmup pass so that
+// modules compiled with incomplete hoists do not pollute the cache.
+thread_local! {
+    static WARMUP_PASS: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Result of lowering a source file to HIR.
 #[derive(Clone, Debug)]
 pub struct HirModuleResult {
@@ -166,11 +173,12 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
             return ImportModuleResolution::Resolved(cached.exported_names().clone());
         }
 
-        // Inside a hoist cascade (SUPPRESS_HOISTS is true), do NOT trigger
-        // new compilations — only return cached results.  This prevents the
-        // recursive cascade while still allowing modules compiled earlier in
-        // the iteration order to contribute their exports.
-        if SUPPRESS_HOISTS.with(|f| f.get()) {
+        // Inside a hoist cascade (SUPPRESS_HOISTS is true), suppress NEW
+        // compilations of *project* modules only.  Stdlib modules (path
+        // starts with "aivi") have no project dependencies and compile
+        // cleanly in any order, so they are always allowed through.
+        let is_stdlib = matches!(path.first(), Some(&"aivi"));
+        if !is_stdlib && SUPPRESS_HOISTS.with(|f| f.get()) {
             return ImportModuleResolution::Missing;
         }
 
@@ -182,15 +190,15 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
         }
 
         // Compile the hoisted module with an *empty* import stack and with
-        // SUPPRESS_HOISTS set.  Inside that compilation, nested
-        // resolve_for_hoist calls will only return cached results (no
-        // further compilations).  The hoist module uses explicit `use` for
-        // cross-dependencies; any previously-compiled (cached) hoist
-        // modules' exports are also available.
+        // SUPPRESS_HOISTS set for project modules.  Temporarily clear
+        // WARMUP_PASS so the hoist module's result IS cached — these are
+        // the modules we're trying to warm up.
         HOIST_COMPILING.with(|set| { set.borrow_mut().insert(file_id); });
-        SUPPRESS_HOISTS.with(|f| f.set(true));
+        let was_suppressed = SUPPRESS_HOISTS.with(|f| f.replace(true));
+        let was_warmup = WARMUP_PASS.with(|f| f.replace(false));
         let lowered = hir_module_with_stack(self.db, file, &[], Some(self.workspace));
-        SUPPRESS_HOISTS.with(|f| f.set(false));
+        WARMUP_PASS.with(|f| f.set(was_warmup));
+        SUPPRESS_HOISTS.with(|f| f.set(was_suppressed));
         HOIST_COMPILING.with(|set| { set.borrow_mut().remove(&file_id); });
 
         ImportModuleResolution::Resolved(lowered.exported_names().clone())
@@ -206,7 +214,30 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
 }
 
 /// Lower the given source file to HIR and memoise the result by file revision.
+///
+/// Entry-point modules (those compiled directly, not via import) get a two-pass
+/// treatment: the first pass is a "warmup" that triggers the hoist cascade,
+/// populating the cache for all hoist modules.  No HIR results are cached
+/// during this warmup (WARMUP_PASS flag).  The second pass compiles with a
+/// complete set of hoisted names available from the cache.
 pub fn hir_module(db: &RootDatabase, file: SourceFile) -> Arc<HirModuleResult> {
+    // Fast path: already compiled.
+    let parsed = parsed_file(db, file);
+    if db.cached_hir(file, parsed.revision()).is_some() {
+        return hir_module_with_stack(db, file, &[], None);
+    }
+
+    // Warmup pass: compile with WARMUP_PASS=true so that NO modules get
+    // their HIR cached.  The hoist cascade still runs resolve_for_hoist
+    // which compiles hoist modules — those results are cached because
+    // resolve_for_hoist temporarily clears WARMUP_PASS for its direct
+    // compilations.  Transitively imported non-hoist modules are NOT cached.
+    WARMUP_PASS.with(|f| f.set(true));
+    let _ = hir_module_with_stack(db, file, &[], None);
+    WARMUP_PASS.with(|f| f.set(false));
+
+    // Real pass: all hoist modules are now cached; the entry module and
+    // its transitive imports will see the complete set of workspace hoists.
     hir_module_with_stack(db, file, &[], None)
 }
 
@@ -261,6 +292,12 @@ fn hir_module_with_stack(
             symbols,
             exported_names,
         });
+
+        // During the warmup pass, do NOT cache the result — it was compiled
+        // with incomplete hoists and must not pollute the real compilation.
+        if WARMUP_PASS.with(|f| f.get()) {
+            return computed;
+        }
 
         if let Some(current) = db.store_hir(file, computed.revision(), computed) {
             return current;
