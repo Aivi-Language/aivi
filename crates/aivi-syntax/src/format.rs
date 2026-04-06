@@ -3425,16 +3425,12 @@ value view =
                 "    literal ms : Int -> Duration\n",
                 "    type Duration -> Int -> Duration\n",
                 "    (*)\n",
-                "    type Duration -> Int\n",
-                "    unwrap\n",
                 "}\n",
                 "\n",
                 "domain Path over Text = {\n",
                 "    literal root : Text -> Path\n",
                 "    type Path -> Text -> Path\n",
                 "    (/)\n",
-                "    type Path -> Text\n",
-                "    unwrap\n",
                 "}\n",
             )
         );
