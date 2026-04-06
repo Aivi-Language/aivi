@@ -21,6 +21,8 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [cli.md](cli.md) | CLI commands: check, run, compile, fmt, lsp, mcp |
 | [stdlib.md](stdlib.md) | Standard library modules overview |
 
+| [demo-audit.md](demo-audit.md) | Snake & Reversi audit — issues found and fixed |
+
 ## Log
 
 See [log.md](log.md) for a chronological record of wiki activity.

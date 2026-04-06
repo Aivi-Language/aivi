@@ -66,6 +66,8 @@ domain Snake over NonEmptyList Cell = {
     contains cell = listContains cellEq cell (toList self)
     type Int
     length = nelLength self
+    type List Cell
+    cells = toList self
     type Cell -> Snake
     grow cell = cons cell self
     type Cell -> Snake
@@ -136,9 +138,13 @@ func resolveMove = st h => h == st.food
  T|> resolveMoveGrow st h
  F|> resolveMoveStep st h
 
+type GameState -> Cell -> Int -> GameState
+func resolveMoveGrowWithSeed = st h newSeed =>
+    st <| { snake: st.snake.grow h, food: spawnFood newSeed, score: st.score + 1, seed: newSeed }
+
 type GameState -> Cell -> GameState
 func resolveMoveGrow = st h =>
-    st <| { snake: st.snake.grow h, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
+    resolveMoveGrowWithSeed st h (nextSeed st.seed)
 
 type GameState -> Cell -> GameState
 func resolveMoveStep = st h =>
@@ -158,7 +164,7 @@ func renderRowAt = body st y => indices boardW
 
 type GameState -> Text
 func renderBoard = st => indices boardH
-  |> map (renderRowAt (toList st.snake.carrier) st)
+  |> map (renderRowAt st.snake.cells st)
   |> join "\n"
 
 type Status -> Bool

@@ -555,26 +555,26 @@ type Coord -> Int
 func finalCandidateScore = coord =>
     positionalWeight coord * 12
 
-type Coord -> Candidate
-func buildCandidate = coord =>
+type Coord -> Int -> Candidate
+func buildCandidateWithFlips = coord flipCount =>
     {
         coord: coord,
-        flips: 0,
+        flips: flipCount,
         score: finalCandidateScore coord
     }
 
 type List (List Disc) -> Coord -> Candidate
 func candidateForCoord = board coord =>
-    buildCandidate coord
+    buildCandidateWithFlips coord (listLength (flipsForMove board (discForTurn Computer) coord))
 
 type Candidate -> Candidate -> Bool
-func betterCandidate = left right =>
+func candidateLessThan = left right =>
     left.score < right.score or (left.score == right.score and left.flips < right.flips) or (left.score == right.score and left.flips == right.flips and coordId left.coord > coordId right.coord)
 
 type List (List Disc) -> (List Coord) -> (Option Candidate)
 func bestComputerMove = board moves => moves
   |> listMap (candidateForCoord board)
-  |> listMaximum betterCandidate
+  |> listMaximum candidateLessThan
 
 type Turn -> GameState -> Int -> Int
 func nextHumanCount = turn state flipCount => turn
@@ -605,21 +605,11 @@ func handleTryPlace = coord state => (humanToAct state.status, coordInList coord
 
 type GameState -> AnimState -> GameState
 func setAnimState = state animState =>
-    {
-        board: state.board,
-        status: state.status,
-        legalMoves: state.legalMoves,
-        humanCount: state.humanCount,
-        computerCount: state.computerCount,
-        moveNumber: state.moveNumber,
-        lastMove: state.lastMove,
-        lastFlips: state.lastFlips,
-        animState: animState
-    }
+    state <| { animState: animState }
 
 type GameState -> Coord -> (List Coord) -> GameState
 func applyHumanMoveWithFlips = state coord flips =>
-    {
+    state <| {
         board: boardAfterFlips state.board (discForTurn Human) coord flips,
         status: Active Computer,
         legalMoves: [],
@@ -637,15 +627,12 @@ func applyHumanMove = state coord => flipsForMove state.board (discForTurn Human
 
 type GameState -> (List (List Disc)) -> AnimState -> GameState
 func computerAnimState = state board animState =>
-    {
+    state <| {
         board: board,
         status: Active Computer,
         legalMoves: [],
         humanCount: countDisc Red board,
         computerCount: countDisc Blue board,
-        moveNumber: state.moveNumber,
-        lastMove: state.lastMove,
-        lastFlips: state.lastFlips,
         animState: animState
     }
 
@@ -851,7 +838,7 @@ func cellEnabled = state coord => (humanToAct state.status, coordInList coord st
 signal placeCoord : Signal Coord
 signal restartClick : Signal Unit
 
-@source timer.every 100
+@source timer.every 100ms
 signal computerTick : Signal Unit
 
 signal event : Signal Event = computerTick | placeCoord | restartClick
