@@ -254,6 +254,108 @@ keyboard     ──→  keyDown signal
 Every arrow is a declared dependency. There are no hidden subscriptions, no manual wiring, and
 no callbacks.
 
+## Tracking async state
+
+When a signal is backed by an async source — an HTTP request, a file read, a database query — you
+often need to know more than just the latest `Result`. You want to know: *is it still loading? did
+it ever succeed? is there an error right now?*
+
+`aivi.async.AsyncTracker` gives you exactly that. It is a plain record type:
+
+```aivi
+type AsyncTracker E A = {
+    pending: Bool,    // True until the first result arrives
+    done: Option A,   // last successful value, or None before first success
+    error: Option E   // last error, or None when no error
+}
+```
+
+Combine it with `+|>` to turn any `Result`-producing signal into a tracker signal:
+
+```aivi
+use aivi.async (AsyncTracker, step)
+use aivi.http (HttpError, HttpSource)
+
+type User = { id: Int, name: Text }
+
+@source http "https://api.example.com"
+signal api : HttpSource
+
+signal rawUsers : Signal (Result HttpError (List User)) = api.get "/users"
+
+value initialUsers : AsyncTracker HttpError (List User) = {
+    pending: True,
+    done: None,
+    error: None
+}
+
+signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
+  +|> initialUsers step
+```
+
+Because `AsyncTracker` is a record, the three fields become independent signal projections:
+
+```aivi
+// users.pending : Signal Bool
+// users.done    : Signal (Option (List User))
+// users.error   : Signal (Option HttpError)
+```
+
+This is the `sig.pending`, `sig.done`, `sig.error` pattern — no magic, just record projection
+on the tracker payload. Use them anywhere a `Signal Bool` or `Signal (Option A)` is expected:
+
+```aivi
+value main =
+    <Window title="Users">
+        <Box>
+            {users.pending T|> <Spinner />}
+            {users.error
+             ||> None     -> <Box />
+             ||> Some err -> <Label text="Failed to load" />
+            }
+            {users.done
+             ||> None       -> <Label text="No data yet" />
+             ||> Some items -> <Label text="{items}" />
+            }
+        </Box>
+    </Window>
+
+export main
+```
+
+**Stale-while-revalidate:** when a retry fails after a previous success, `done` keeps the last
+successful value. `error` shows the failure. The UI can show both at once without any extra logic.
+
+### Fire once when done
+
+A common need is to fire a side-effect exactly once — log a metric, navigate away, cache the
+result — when a signal first succeeds. AIVI's accumulation operator gives you this without special
+syntax:
+
+```aivi
+// A Bool that becomes True on the first success and never resets
+type Bool -> Option A -> Bool
+func trackFirstDone = hasFired newDone =>
+    hasFired
+    ||> True  -> True
+    ||> False -> newDone
+        ||> None   -> False
+        ||> Some _ -> True
+
+signal firstLoadDone : Signal Bool = users.done
+  +|> False trackFirstDone
+```
+
+`firstLoadDone` is `False` until `users.done` is first `Some`, then `True` forever. Gate any
+follow-up source with `activeWhen: firstLoadDone` to fire it exactly once.
+
+::: tip
+A dedicated `@effect` decorator and a `doOnce` pipe combinator are planned to make this a
+first-class one-liner.
+:::
+
+See [`aivi.async`](/stdlib/async) for the full `AsyncTracker` reference.
+
 ---
 
 **See also:** [Sources](sources.md) — how external data enters the reactive graph · [Source Catalog](source-catalog.md) — built-in `@source` providers and configuration

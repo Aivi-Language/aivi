@@ -117,3 +117,21 @@ Fanout is the mechanism for distributing a container (e.g. `List`) of signals in
 In the runtime, `HirRuntimeAssembly` carries `HirSignalBindingKind::Fanout` bindings.
 
 *See also: [runtime.md](runtime.md), [architecture.md](architecture.md)*
+
+## AsyncTracker pattern
+
+**Source**: `stdlib/aivi/async.aivi`, `manual/stdlib/async.md`
+
+When a signal is backed by an async source (`Result E A`), the lifecycle has three observable states: loading, done, and error. `AsyncTracker E A` is a plain record type that captures all three:
+
+```
+type AsyncTracker E A = { pending: Bool, done: Option A, error: Option E }
+```
+
+Used with `+|>` accumulation: the seed is `{ pending: True, done: None, error: None }` and `async.step` drives state transitions on each new `Result`. Because the payload is a record, the three fields become first-class signal projections:
+
+- `sig.pending : Signal Bool` — True until first result arrives
+- `sig.done : Signal (Option A)` — last successful value (stale-while-revalidate: preserved on subsequent errors)
+- `sig.error : Signal (Option E)` — current error, or None
+
+**Fire-once idiom**: accumulate a `Bool` that flips to `True` on first `done` and never resets. Use it as `activeWhen` on a follow-up source. A dedicated `@effect` / `doOnce` pipe is planned.

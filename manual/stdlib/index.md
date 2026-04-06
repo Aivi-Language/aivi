@@ -31,6 +31,7 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | Module | Description | Key exports |
 | --- | --- | --- |
 | [aivi.prelude](prelude.md) | Convenience re-exports and built-in types | `Option`, `Result`, `Signal`, `Eq`, `Ord`, `Functor` |
+| [aivi.async](async.md) | Async operation lifecycle tracker | `AsyncTracker`, `step`, `isPending`, `isDone`, `isFailed` |
 | [aivi.option](option.md) | Values that may be missing | `map`, `withDefault`, `andThen`, `fromResult` |
 | [aivi.result](result.md) | Success-or-error values | `map`, `mapErr`, `andThen`, `onOk`, `onErr` |
 | [aivi.validation](validation.md) | Accumulating validation for independent inputs | `zipValidation`, `andThen`, `onValid`, `onInvalid` |

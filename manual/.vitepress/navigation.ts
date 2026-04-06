@@ -30,41 +30,78 @@ const guideSections: DocGroup[] = [
     items: [
       { text: 'Why AIVI?', link: '/guide/why-aivi' },
       { text: 'What is AIVI?', link: '/guide/getting-started' },
-      { text: 'Thinking in AIVI', link: '/guide/thinking-in-aivi' },
-    ],
-  },
-  {
-    text: 'Tutorials',
-    collapsed: false,
-    items: [
       { text: 'Your First App', link: '/guide/your-first-app' },
-      { text: 'Building Snake', link: '/guide/building-snake' },
     ],
   },
   {
-    text: 'Language Guide',
+    text: 'Story 1 — Functional Programming',
     collapsed: false,
     items: [
+      { text: 'Thinking in AIVI', link: '/guide/thinking-in-aivi' },
       { text: 'Values & Functions', link: '/guide/values-and-functions' },
       { text: 'Types', link: '/guide/types' },
+    ],
+  },
+  {
+    text: 'Story 2 — Pipe Algebra',
+    collapsed: false,
+    items: [
+      { text: 'Pipes & Operators', link: '/guide/pipes' },
       { text: 'Pattern Matching', link: '/guide/pattern-matching' },
       { text: 'Record Patterns', link: '/guide/record-patterns' },
       { text: 'Predicates & Selectors', link: '/guide/predicates' },
-      { text: 'Pipes & Operators', link: '/guide/pipes' },
+    ],
+  },
+  {
+    text: 'Story 3 — Domains',
+    collapsed: false,
+    items: [
+      { text: 'Domains', link: '/guide/domains' },
+    ],
+  },
+  {
+    text: 'Story 4 — Signals & Reactivity',
+    collapsed: false,
+    items: [
       { text: 'Signals', link: '/guide/signals' },
       { text: 'Sources', link: '/guide/sources' },
+    ],
+  },
+  {
+    text: 'Story 5 — GTK & Markup',
+    collapsed: false,
+    items: [
       { text: 'Markup & UI', link: '/guide/markup' },
     ],
   },
   {
-    text: 'Advanced',
+    text: 'External Integrations',
     collapsed: false,
     items: [
-      { text: 'Domains', link: '/guide/domains' },
+      { text: 'Integration Patterns', link: '/guide/integrations' },
+      { text: 'Source Catalog', link: '/guide/source-catalog' },
+    ],
+  },
+  {
+    text: 'Abstractions',
+    collapsed: true,
+    items: [
       { text: 'Classes', link: '/guide/classes' },
       { text: 'Typeclasses & HKTs', link: '/guide/typeclasses' },
       { text: 'Modules', link: '/guide/modules' },
-      { text: 'Source Catalog', link: '/guide/source-catalog' },
+    ],
+  },
+  {
+    text: 'Examples',
+    collapsed: false,
+    items: [
+      { text: 'Building Snake', link: '/guide/building-snake' },
+    ],
+  },
+  {
+    text: 'Reference',
+    collapsed: true,
+    items: [
       { text: 'Surface Feature Matrix', link: '/guide/surface-feature-matrix' },
     ],
   },
@@ -75,6 +112,7 @@ const stdlibSections: DocGroup[] = [
     text: 'Core Values & Collections',
     collapsed: true,
     items: [
+      { text: 'Async Tracker', link: '/stdlib/async' },
       { text: 'Boolean Logic', link: '/stdlib/bool' },
       { text: 'Optional Values', link: '/stdlib/option' },
       { text: 'Result Values', link: '/stdlib/result' },
@@ -168,9 +206,9 @@ export const sidebar: DefaultTheme.SidebarMulti = {
   '/guide/': [
     ...guideSections.map(group),
     group({
-      text: 'Reference',
-      collapsed: false,
-      items: [{ text: 'Standard Library Overview', link: '/stdlib/' }],
+      text: 'Standard Library',
+      collapsed: true,
+      items: [{ text: 'Overview', link: '/stdlib/' }],
     }),
   ],
   '/stdlib/': [
@@ -191,8 +229,9 @@ export const sidebar: DefaultTheme.SidebarMulti = {
       collapsed: false,
       items: [
         { text: 'Guide', link: '/guide/why-aivi' },
-        { text: 'Standard Library Overview', link: '/stdlib/' },
+        { text: 'Standard Library', link: '/stdlib/' },
       ],
     }),
   ],
 }
+
