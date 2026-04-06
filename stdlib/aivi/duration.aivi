@@ -1,3 +1,5 @@
+hoist
+
 type DurationError = Text
 
 domain Duration over Int = {
