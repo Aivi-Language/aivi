@@ -1,26 +1,8 @@
 # aivi.prelude
 
-The `aivi.prelude` module is AIVI's convenience layer — it re-exports the most commonly used functions from across the standard library so you can access them all from a single import.
+The `aivi.prelude` module is AIVI's convenience layer — it re-exports the most commonly used functions from across the standard library.
 
-It also serves as the source of built-in types and type classes such as `Int`, `Bool`, `Text`, `List`, `Option`, `Result`, and type class constraints like `Eq`, `Ord`, `Functor`, and more.
-
-## Usage
-
-```aivi
-use aivi.prelude (
-    Int
-    Bool
-    Text
-    List
-    getOrElse
-    withDefault
-    length
-    head
-    min
-    max
-    join
-)
-```
+Because `aivi.prelude` declares `hoist`, all of its exports are automatically available in every AIVI file. You do not need a `use aivi.prelude (...)` declaration. Types like `Int`, `Bool`, `Text`, `List`, `Option`, `Result`, and type class constraints like `Eq`, `Ord`, `Functor`, and more are simply in scope everywhere.
 
 ## Built-in Types
 
@@ -65,14 +47,6 @@ For the current higher-kinded hierarchy, the executable builtin carrier matrix, 
 ## Option Functions
 
 ```aivi
-use aivi.prelude (
-    getOrElse
-    isSome
-    isNone
-    mapOption
-    filterOption
-)
-
 value name : Option Text = Some "Ada"
 value displayName : Text = getOrElse "guest" name
 value hasName : Bool = isSome name
@@ -81,12 +55,6 @@ value hasName : Bool = isSome name
 ## Result Functions
 
 ```aivi
-use aivi.prelude (
-    withDefault
-    isOk
-    isErr
-)
-
 value age : Result Text Int = Ok 30
 value ageValue : Int = withDefault 0 age
 value succeeded : Bool = isOk age
@@ -95,15 +63,6 @@ value succeeded : Bool = isOk age
 ## List Functions
 
 ```aivi
-use aivi.prelude (
-    length
-    head
-    isEmpty
-    nonEmpty
-    reverse
-    take
-)
-
 value items : List Text = [
     "Ada",
     "Grace",
@@ -118,12 +77,6 @@ value empty : Bool = isEmpty []
 ## Order Functions
 
 ```aivi
-use aivi.prelude (
-    min
-    max
-    minOf
-)
-
 type Int -> Int -> Bool
 func earlier = a b =>
     a < b
@@ -142,11 +95,6 @@ value leastOf : Int =
 ## Text Functions
 
 ```aivi
-use aivi.prelude (
-    join
-    surround
-)
-
 value csv : Text =
     join ", " [
         "Ada",
@@ -167,14 +115,6 @@ value wrapped : Text = surround "(" ")" "AIVI"
 ## Math Functions
 
 ```aivi
-use aivi.prelude (
-    abs
-    negate
-    isEven
-    clamp
-    between
-)
-
 value absolute : Int = abs (-5)
 value flipped : Int = negate 7
 value even : Bool = isEven 4
@@ -185,12 +125,6 @@ value inRange : Bool = between 1 10 5
 ## Bool Functions
 
 ```aivi
-use aivi.prelude (
-    not
-    xor
-    implies
-)
-
 value inverted : Bool = not True
 value exclusive : Bool = xor True False
 ```
@@ -198,12 +132,6 @@ value exclusive : Bool = xor True False
 ## Pair Functions
 
 ```aivi
-use aivi.prelude (
-    fst
-    snd
-    swap
-)
-
 value pair : (Int, Text) = (
     42,
     "hello"
