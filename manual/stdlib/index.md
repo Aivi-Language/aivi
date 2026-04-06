@@ -1,5 +1,10 @@
 # Standard Library
 
+> **This is the reference sidecar.** Reach for it when you need to know what a specific module
+> exports. If you are still learning the language, start with the
+> [Language Guide](/guide/README) — the five stories there are the language itself.
+> The stdlib is the toolbox you reach for once you know what you want to build.
+
 The AIVI standard library is the set of modules that ships with the language. Some names, such
 as `Option`, `Result`, `Signal`, and `Task`, are built in. Most other tools live in named modules
 that you import with `use`.

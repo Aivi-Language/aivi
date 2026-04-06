@@ -5,10 +5,10 @@ use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
     BigIntLiteral, BinaryOperator, BindingId, BuiltinTerm, ClassMemberResolution, ClusterId,
-    DecimalLiteral, DomainMemberHandle, ExprId, ExprKind, FloatLiteral, IntegerLiteral,
-    IntrinsicValue, Item, ItemId, Module, Name, NamePath, PatternId, PipeExpr, PipeStageKind,
-    PipeTransformMode, ProjectionBase, SuffixedIntegerLiteral, TermReference, TermResolution,
-    TextFragment, TextSegment, UnaryOperator,
+    DecimalLiteral, DomainMemberHandle, ExprId, ExprKind, FloatLiteral, ImportBindingMetadata,
+    ImportId, IntegerLiteral, IntrinsicValue, Item, ItemId, Module, Name, NamePath, PatternId,
+    PipeExpr, PipeStageKind, PipeTransformMode, ProjectionBase, SuffixedIntegerLiteral,
+    TermReference, TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     typecheck::resolve_class_member_dispatch,
     validate::{
@@ -1929,6 +1929,18 @@ fn inferred_runtime_expr(
     Ok((expr, ty))
 }
 
+fn ambient_item_for_import(module: &Module, import_id: ImportId) -> Option<ItemId> {
+    let binding = module.imports().get(import_id)?;
+    let ImportBindingMetadata::AmbientValue { name } = &binding.metadata else {
+        return None;
+    };
+    module.ambient_items().iter().copied().find(|&id| match &module.items()[id] {
+        Item::Function(f) => f.name.text() == name.as_ref(),
+        Item::Value(v) => v.name.text() == name.as_ref(),
+        _ => false,
+    })
+}
+
 fn runtime_reference_for_name(
     module: &Module,
     span: SourceSpan,
@@ -1953,7 +1965,11 @@ fn runtime_reference_for_name(
             Ok(GateRuntimeReference::IntrinsicValue(value.clone()))
         }
         crate::ResolutionState::Resolved(TermResolution::Import(import_id)) => {
-            Ok(GateRuntimeReference::Import(*import_id))
+            if let Some(item_id) = ambient_item_for_import(module, *import_id) {
+                Ok(GateRuntimeReference::Item(item_id))
+            } else {
+                Ok(GateRuntimeReference::Import(*import_id))
+            }
         }
         crate::ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | crate::ResolutionState::Resolved(TermResolution::ClassMember(_))

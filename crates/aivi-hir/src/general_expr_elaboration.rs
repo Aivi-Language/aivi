@@ -12,10 +12,11 @@ use crate::{
     GateRuntimeExprKind, GateRuntimePipeExpr, GateRuntimePipeStage, GateRuntimePipeStageKind,
     GateRuntimeProjectionBase, GateRuntimeRecordField, GateRuntimeReference,
     GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch,
-    GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, InstanceItem, InstanceMember,
-    IntrinsicValue, Item, ItemId, Module, Name, NamePath, PatchInstructionKind,
-    PatchSelectorSegment, PipeExpr, PipeStageKind, PipeTransformMode, ProjectionBase, ResolutionState, SignalItem,
-    TermReference, TermResolution, TypeItemBody, TypeParameterId, TypeResolution, ValueItem,
+    GateRuntimeUnsupportedKind, GateRuntimeUnsupportedPipeStageKind, ImportBindingMetadata,
+    ImportId, InstanceItem, InstanceMember, IntrinsicValue, Item, ItemId, Module, Name, NamePath,
+    PatchInstructionKind, PatchSelectorSegment, PipeExpr, PipeStageKind, PipeTransformMode,
+    ProjectionBase, ResolutionState, SignalItem, TermReference, TermResolution, TypeItemBody,
+    TypeParameterId, TypeResolution, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{expression_matches, resolve_class_member_dispatch, signal_payload_type},
     validate::{
@@ -24,6 +25,20 @@ use crate::{
         truthy_falsy_pair_stages,
     },
 };
+
+/// Resolve an `AmbientValue` import to the corresponding ambient prelude item.
+/// Returns `None` if the import is not an `AmbientValue` or the named item was not found.
+fn ambient_item_for_import(module: &Module, import_id: ImportId) -> Option<ItemId> {
+    let binding = module.imports().get(import_id)?;
+    let ImportBindingMetadata::AmbientValue { name } = &binding.metadata else {
+        return None;
+    };
+    module.ambient_items().iter().copied().find(|&id| match &module.items()[id] {
+        Item::Function(f) => f.name.text() == name.as_ref(),
+        Item::Value(v) => v.name.text() == name.as_ref(),
+        _ => false,
+    })
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GeneralExprElaborationReport {
@@ -3321,7 +3336,11 @@ impl<'a> GeneralExprElaborator<'a> {
                     .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span }])
             }
             ResolutionState::Resolved(TermResolution::Import(import)) => {
-                Ok(GateRuntimeReference::Import(*import))
+                if let Some(item_id) = ambient_item_for_import(self.module, *import) {
+                    Ok(GateRuntimeReference::Item(item_id))
+                } else {
+                    Ok(GateRuntimeReference::Import(*import))
+                }
             }
             ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(candidates)) => {
                 Err(vec![GeneralExprBlocker::AmbiguousDomainMember {
@@ -3336,7 +3355,11 @@ impl<'a> GeneralExprElaborator<'a> {
             }
             ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
                 if let Some(import_id) = self.typing.select_hoisted_import(reference, Some(expected)) {
-                    Ok(GateRuntimeReference::Import(import_id))
+                    if let Some(item_id) = ambient_item_for_import(self.module, import_id) {
+                        Ok(GateRuntimeReference::Item(item_id))
+                    } else {
+                        Ok(GateRuntimeReference::Import(import_id))
+                    }
                 } else {
                     Err(vec![GeneralExprBlocker::UnknownExprType { span }])
                 }
