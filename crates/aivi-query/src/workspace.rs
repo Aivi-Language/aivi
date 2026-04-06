@@ -169,7 +169,13 @@ pub fn discover_workspace_root_from_directory(path: &Path) -> PathBuf {
 
     for ancestor in start.ancestors() {
         if ancestor.join("aivi.toml").is_file() {
-            return ancestor.to_path_buf();
+            // When the ancestor is "" (empty), normalize to "." so
+            // fs::read_dir and other Path operations work correctly.
+            return if ancestor.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                ancestor.to_path_buf()
+            };
         }
     }
 
@@ -187,7 +193,16 @@ pub fn discover_workspace_root(path: &Path) -> PathBuf {
 }
 
 fn module_name_for_path(root: &Path, path: &Path) -> Option<String> {
-    let relative = path.strip_prefix(root).ok()?;
+    // Canonicalize both paths so that relative roots like "." resolve correctly
+    // against relative file paths (e.g., "libs/foo.aivi" vs ".").
+    let abs_root = root.canonicalize().ok();
+    let abs_path = path.canonicalize().ok();
+    let relative = match (&abs_root, &abs_path) {
+        (Some(ar), Some(ap)) => ap.strip_prefix(ar).ok().map(|p| p.to_path_buf()),
+        _ => None,
+    }
+    .or_else(|| path.strip_prefix(root).ok().map(|p| p.to_path_buf()))?;
+
     if relative.extension()?.to_str()? != "aivi" {
         return None;
     }

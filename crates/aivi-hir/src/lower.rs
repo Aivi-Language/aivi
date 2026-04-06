@@ -5405,12 +5405,18 @@ impl<'a> Lowerer<'a> {
 
         let synthetic_span = SourceSpan::new(self.module.file(), Span::from(0..0));
 
+        let debug_hoist = std::env::var("AIVI_DEBUG_HOIST").is_ok();
+        if debug_hoist {
+            eprintln!("[hoist] module={:?} found {} workspace hoists", self_path, workspace_hoists.len());
+        }
         for raw in workspace_hoists {
             let module_key = raw.module_path.join(".");
             if Some(&module_key) == self_path.as_ref() {
+                if debug_hoist { eprintln!("[hoist]   skip self: {module_key}"); }
                 continue; // self-hoist: skip for this module, still propagates to others
             }
             if namespaces.hoisted_module_paths.contains(&module_key) {
+                if debug_hoist { eprintln!("[hoist]   skip dup: {module_key}"); }
                 continue;
             }
             namespaces.hoisted_module_paths.insert(module_key.clone());
@@ -5419,9 +5425,14 @@ impl<'a> Lowerer<'a> {
             let module_resolution = self.resolver.resolve_for_hoist(&module_segments);
             let crate::resolver::ImportModuleResolution::Resolved(ref exports) = module_resolution
             else {
+                if debug_hoist { eprintln!("[hoist]   MISS: {module_key} (not resolved)"); }
                 continue; // silent — workspace hoists may reference optional modules
             };
 
+            if debug_hoist {
+                let names: Vec<&str> = exports.names.iter().map(|n| n.name.as_str()).collect();
+                eprintln!("[hoist]   OK: {module_key} -> {} exports: {:?}", names.len(), &names[..names.len().min(10)]);
+            }
             self.register_hoist_exports(
                 &module_key,
                 exports,

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::{Cell, RefCell}, collections::HashSet, sync::Arc};
 
 use aivi_base::Diagnostic;
 use aivi_hir::{
@@ -9,6 +9,20 @@ use aivi_hir::{
 use aivi_syntax::Formatter;
 
 use crate::{RootDatabase, SourceFile, queries::parsed_file, workspace::Workspace};
+
+// Track which modules are currently being compiled for hoist resolution.
+// This prevents re-entrant compilation of the same module during the
+// hoist cascade, which would cache an incomplete result.
+thread_local! {
+    static HOIST_COMPILING: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
+}
+
+// When true, workspace_hoist_items() returns an empty list, breaking
+// the recursive hoist cascade.  Hoist modules must use explicit `use`
+// for their cross-dependencies and do NOT rely on workspace hoists.
+thread_local! {
+    static SUPPRESS_HOISTS: Cell<bool> = const { Cell::new(false) };
+}
 
 /// Result of lowering a source file to HIR.
 #[derive(Clone, Debug)]
@@ -146,16 +160,39 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
         };
         self.record_dependency(file);
 
-        // Detect cycles using the full stack to prevent infinite recursion, but
-        // return Missing (silent skip) instead of Cycle. This prevents the
-        // false-positive import-cycle errors that arise when hoist-resolution
-        // chains cause stdlib modules to appear in each other's compile stacks
-        // even though no real circular dependency exists at the import level.
-        if self.cycle(file, path).is_some() {
+        // Fast path: if the module is already compiled, return cached exports.
+        let parsed = parsed_file(self.db, file);
+        if let Some(cached) = self.db.cached_hir(file, parsed.revision()) {
+            return ImportModuleResolution::Resolved(cached.exported_names().clone());
+        }
+
+        // Inside a hoist cascade (SUPPRESS_HOISTS is true), do NOT trigger
+        // new compilations — only return cached results.  This prevents the
+        // recursive cascade while still allowing modules compiled earlier in
+        // the iteration order to contribute their exports.
+        if SUPPRESS_HOISTS.with(|f| f.get()) {
             return ImportModuleResolution::Missing;
         }
 
-        let lowered = hir_module_with_stack(self.db, file, self.stack, Some(self.workspace));
+        // Cycle detection via the module-level HOIST_COMPILING set.
+        let file_id = file.id;
+        let already = HOIST_COMPILING.with(|set| set.borrow().contains(&file_id));
+        if already {
+            return ImportModuleResolution::Missing;
+        }
+
+        // Compile the hoisted module with an *empty* import stack and with
+        // SUPPRESS_HOISTS set.  Inside that compilation, nested
+        // resolve_for_hoist calls will only return cached results (no
+        // further compilations).  The hoist module uses explicit `use` for
+        // cross-dependencies; any previously-compiled (cached) hoist
+        // modules' exports are also available.
+        HOIST_COMPILING.with(|set| { set.borrow_mut().insert(file_id); });
+        SUPPRESS_HOISTS.with(|f| f.set(true));
+        let lowered = hir_module_with_stack(self.db, file, &[], Some(self.workspace));
+        SUPPRESS_HOISTS.with(|f| f.set(false));
+        HOIST_COMPILING.with(|set| { set.borrow_mut().remove(&file_id); });
+
         ImportModuleResolution::Resolved(lowered.exported_names().clone())
     }
 
@@ -284,15 +321,28 @@ fn collect_workspace_hoist_items(
     db: &RootDatabase,
     workspace: &Workspace,
 ) -> Vec<aivi_hir::resolver::RawHoistItem> {
+    let debug_hoist = std::env::var("AIVI_DEBUG_HOIST").is_ok();
     let mut result = Vec::new();
     let mut seen = rustc_hash::FxHashSet::default();
 
     // Scan every .aivi file in the project directory tree.
-    for file in workspace.all_project_files(db) {
+    let project_files = workspace.all_project_files(db);
+    if debug_hoist {
+        eprintln!("[hoist-scan] found {} project files", project_files.len());
+    }
+    for file in project_files {
         if seen.insert(file.id) {
             if let Some(module_name) = workspace.module_name_for_file(db, file) {
                 let parsed = parsed_file(db, file);
+                let before = result.len();
                 collect_hoists_from_module(parsed.cst(), &module_name, &mut result);
+                if debug_hoist {
+                    let found = result.len() - before;
+                    let has_hoist = parsed.cst().items.iter().any(|i| matches!(i, aivi_syntax::cst::Item::Hoist(_)));
+                    eprintln!("[hoist-scan]   project: {module_name} (has_hoist_in_cst={has_hoist}, collected={found})");
+                }
+            } else if debug_hoist {
+                eprintln!("[hoist-scan]   project: {} (no module name)", file.path(db).display());
             }
         }
     }
@@ -309,6 +359,9 @@ fn collect_workspace_hoist_items(
         }
     }
 
+    if debug_hoist {
+        eprintln!("[hoist-scan] total hoists collected: {}", result.len());
+    }
     result
 }
 
