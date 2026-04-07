@@ -498,8 +498,8 @@ mod tests {
     #[test]
     fn contextually_inferable_unannotated_functions_do_not_become_errors() {
         let (source, _, _, summaries) = parse(
-            "func keepNone = opt => None\n\
-             value chosen:Option Int = keepNone None\n",
+            "func keep = value => value\n\
+             value chosen:Int = keep 1\n",
         );
         let diagnostics = collect_type_annotation_diagnostics(&summaries, &source);
 

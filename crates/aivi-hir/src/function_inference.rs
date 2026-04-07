@@ -27,6 +27,9 @@ struct InferenceSlot {
 
 impl InferenceSlot {
     fn record(&mut self, candidate: GateType) -> bool {
+        if self.conflict {
+            return false;
+        }
         match self.ty.as_ref() {
             None => {
                 self.ty = Some(candidate);
@@ -36,7 +39,7 @@ impl InferenceSlot {
             Some(_) => {
                 self.conflict = true;
                 self.ty = None;
-                false
+                true
             }
         }
     }
@@ -169,7 +172,6 @@ pub(crate) fn infer_same_module_function_types(module: &Module) -> HashMap<ItemI
             module,
             &function_ids,
             seeded_item_types.clone(),
-            &function_set,
         );
         for evidence in call_evidence {
             let Some(state) = states.get_mut(&evidence.item_id) else {
@@ -204,27 +206,44 @@ fn collect_call_evidence(
     module: &Module,
     function_ids: &[ItemId],
     seeded_item_types: HashMap<ItemId, GateType>,
-    function_set: &HashSet<ItemId>,
 ) -> Vec<FunctionCallEvidence> {
-    let mut typing = GateTypeContext::with_seeded_item_types(module, seeded_item_types, true);
-    let mut evidence = Vec::new();
+    let mut typing =
+        GateTypeContext::with_seeded_item_types(module, seeded_item_types.clone(), false);
     for item_id in function_ids {
         let Item::Function(function) = &module.items()[*item_id] else {
             continue;
         };
-        evidence.extend(collect_body_evidence(
-            module,
-            &mut typing,
-            function.body,
-            &GateExprEnv::default(),
-            function_set,
-        ));
+        let parameter_types = seeded_item_types
+            .get(item_id)
+            .and_then(|ty| parameter_types_from_signature(ty, function.parameters.len()));
+        let mut env = GateExprEnv::default();
+        for (index, parameter) in function.parameters.iter().enumerate() {
+            let parameter_ty = parameter
+                .annotation
+                .and_then(|annotation| typing.lower_open_annotation(annotation))
+                .or_else(|| {
+                    parameter_types
+                        .as_ref()
+                        .and_then(|types| types.get(index).cloned())
+                });
+            if let Some(parameter_ty) = parameter_ty {
+                env.locals.insert(parameter.binding, parameter_ty);
+            }
+        }
+        let _ = typing.infer_expr(function.body, &env, None);
     }
-    evidence.extend(typing.take_function_call_evidence());
+    let mut evidence = typing.take_function_call_evidence();
     evidence.extend(
         typing
             .take_function_signature_evidence()
             .into_iter()
+            .filter(|evidence| {
+                !evidence.result_type.has_type_params()
+                    && evidence
+                        .parameter_types
+                        .iter()
+                        .all(|parameter| !parameter.has_type_params())
+            })
             .map(|evidence| FunctionCallEvidence {
                 item_id: evidence.item_id,
                 argument_types: evidence.parameter_types,
@@ -240,7 +259,7 @@ fn collect_contextual_signature_evidence(
     seeded_item_types: HashMap<ItemId, GateType>,
     function_set: &HashSet<ItemId>,
 ) -> Vec<FunctionSignatureEvidence> {
-    let typing = GateTypeContext::with_seeded_item_types(module, seeded_item_types, true);
+    let typing = GateTypeContext::with_seeded_item_types(module, seeded_item_types, false);
     crate::typecheck::collect_contextual_function_signature_evidence(
         module,
         function_ids,
@@ -249,12 +268,25 @@ fn collect_contextual_signature_evidence(
     )
 }
 
+fn parameter_types_from_signature(ty: &GateType, arity: usize) -> Option<Vec<GateType>> {
+    let mut current = ty;
+    let mut parameter_types = Vec::with_capacity(arity);
+    for _ in 0..arity {
+        let GateType::Arrow { parameter, result } = current else {
+            return None;
+        };
+        parameter_types.push(parameter.as_ref().clone());
+        current = result.as_ref();
+    }
+    Some(parameter_types)
+}
+
 fn infer_body_results(
     module: &Module,
     states: &mut HashMap<ItemId, FunctionInferenceState>,
     seeded_item_types: HashMap<ItemId, GateType>,
 ) -> bool {
-    let mut typing = GateTypeContext::with_seeded_item_types(module, seeded_item_types, true);
+    let mut typing = GateTypeContext::with_seeded_item_types(module, seeded_item_types, false);
     let mut changed = false;
     for (item_id, state) in states.iter_mut() {
         if state.result_slot.value().is_some() {
@@ -277,340 +309,4 @@ fn infer_body_results(
         changed |= state.result_slot.record(result_ty);
     }
     changed
-}
-
-fn collect_body_evidence(
-    module: &Module,
-    typing: &mut GateTypeContext<'_>,
-    expr_id: crate::ExprId,
-    env: &GateExprEnv,
-    function_set: &HashSet<ItemId>,
-) -> Vec<FunctionCallEvidence> {
-    let mut evidence = Vec::new();
-    let expr = &module.exprs()[expr_id];
-    if let crate::hir::ExprKind::Apply { callee, arguments } = &expr.kind
-        && let crate::hir::ExprKind::Name(reference) = &module.exprs()[*callee].kind
-        && let crate::ResolutionState::Resolved(crate::TermResolution::Item(item_id)) =
-            reference.resolution.as_ref()
-        && function_set.contains(item_id)
-    {
-        let argument_types = arguments
-            .iter()
-            .map(|argument| {
-                let info = typing.infer_expr(*argument, env, None);
-                info.actual_gate_type().or(info.ty)
-            })
-            .collect::<Option<Vec<_>>>();
-        let result_type = typing.infer_expr(expr_id, env, None).actual_gate_type();
-        if let Some(argument_types) = argument_types {
-            evidence.push(FunctionCallEvidence {
-                item_id: *item_id,
-                argument_types,
-                result_type,
-            });
-        }
-    }
-
-    match &expr.kind {
-        crate::hir::ExprKind::Name(_)
-        | crate::hir::ExprKind::Int(_)
-        | crate::hir::ExprKind::Float(_)
-        | crate::hir::ExprKind::Decimal(_)
-        | crate::hir::ExprKind::BigInt(_)
-        | crate::hir::ExprKind::Bool(_)
-        | crate::hir::ExprKind::Text(_)
-        | crate::hir::ExprKind::TemplateText { .. }
-        | crate::hir::ExprKind::ImportValue(_)
-        | crate::hir::ExprKind::Hole => {}
-        crate::hir::ExprKind::Unary { expr, .. } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *expr,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::Binary { left, right, .. } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *left,
-                env,
-                function_set,
-            ));
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *right,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::Apply { callee, arguments } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *callee,
-                env,
-                function_set,
-            ));
-            for argument in arguments.iter() {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    *argument,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::Lambda { body, .. } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *body,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::SignalMethod {
-            receiver, argument, ..
-        } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *receiver,
-                env,
-                function_set,
-            ));
-            if let Some(argument) = argument {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    *argument,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::Record(record) => {
-            for field in &record.fields {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    field.value,
-                    env,
-                    function_set,
-                ));
-            }
-            if let Some(base) = record.base {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    base,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::RecordFieldAccess { record, .. } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *record,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::Tuple(items)
-        | crate::hir::ExprKind::List(items)
-        | crate::hir::ExprKind::Set(items) => {
-            for item in items.iter() {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    *item,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::Map(map) => {
-            for entry in &map.entries {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    entry.key,
-                    env,
-                    function_set,
-                ));
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    entry.value,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::Case(case) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                case.subject,
-                env,
-                function_set,
-            ));
-            for arm in &case.arms {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    arm.body,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::Let(let_expr) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                let_expr.value,
-                env,
-                function_set,
-            ));
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                let_expr.body,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::If(if_expr) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                if_expr.condition,
-                env,
-                function_set,
-            ));
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                if_expr.then_branch,
-                env,
-                function_set,
-            ));
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                if_expr.else_branch,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::Pipe(pipe) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                pipe.head,
-                env,
-                function_set,
-            ));
-            for stage in &pipe.stages {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    stage.body,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-        crate::hir::ExprKind::Parenthesized(inner)
-        | crate::hir::ExprKind::Group(inner)
-        | crate::hir::ExprKind::Signal(inner)
-        | crate::hir::ExprKind::SignalValue(inner)
-        | crate::hir::ExprKind::SignalPrevious(inner) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *inner,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::ForLoop(loop_expr) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                loop_expr.sequence,
-                env,
-                function_set,
-            ));
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                loop_expr.body,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::WhileLoop(loop_expr) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                loop_expr.condition,
-                env,
-                function_set,
-            ));
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                loop_expr.body,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::Assignment(assignment) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                assignment.value,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::DomainMemberAccess { base, .. } => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                *base,
-                env,
-                function_set,
-            ));
-        }
-        crate::hir::ExprKind::ReactiveBlock(block) => {
-            evidence.extend(collect_body_evidence(
-                module,
-                typing,
-                block.subject,
-                env,
-                function_set,
-            ));
-            for arm in &block.arms {
-                evidence.extend(collect_body_evidence(
-                    module,
-                    typing,
-                    arm.body,
-                    env,
-                    function_set,
-                ));
-            }
-        }
-    }
-
-    evidence
 }

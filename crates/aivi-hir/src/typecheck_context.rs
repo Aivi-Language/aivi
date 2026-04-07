@@ -1651,7 +1651,7 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    fn arrow_parameter_types(&self, ty: &GateType, arity: usize) -> Option<Vec<GateType>> {
+    fn arrow_parameter_types(ty: &GateType, arity: usize) -> Option<Vec<GateType>> {
         let mut current = ty;
         let mut parameter_types = Vec::with_capacity(arity);
         for _ in 0..arity {
@@ -1664,7 +1664,7 @@ impl<'a> GateTypeContext<'a> {
         Some(parameter_types)
     }
 
-    fn arrow_result_type(&self, ty: &GateType, arity: usize) -> Option<GateType> {
+    fn arrow_result_type(ty: &GateType, arity: usize) -> Option<GateType> {
         let mut current = ty;
         for _ in 0..arity {
             let GateType::Arrow { result, .. } = current else {
@@ -2400,9 +2400,10 @@ impl<'a> GateTypeContext<'a> {
                             {
                                 return None;
                             }
-                            let inferred = self.inferred_function_types().get(&item_id)?;
+                            let inferred =
+                                self.inferred_function_types().get(&item_id).cloned()?;
                             let parameter_types =
-                                self.arrow_parameter_types(inferred, item.parameters.len())?;
+                                Self::arrow_parameter_types(&inferred, item.parameters.len())?;
                             parameter_types.get(parameters.len())?.clone()
                         }
                     };
@@ -2416,9 +2417,11 @@ impl<'a> GateTypeContext<'a> {
                         if self.allow_function_inference
                             && supports_same_module_function_inference(item)
                         {
-                            self.inferred_function_types()
+                            let inferred = self
+                                .inferred_function_types()
                                 .get(&item_id)
-                                .and_then(|ty| self.arrow_result_type(ty, item.parameters.len()))
+                                .cloned();
+                            inferred.and_then(|ty| Self::arrow_result_type(&ty, item.parameters.len()))
                         } else {
                             self.infer_expr(item.body, &env, None).ty
                         }
@@ -5161,6 +5164,10 @@ impl<'a> GateTypeContext<'a> {
                             argument_info.actual_gate_type().or(argument_info.ty)
                         })
                         .collect::<Option<Vec<_>>>()
+                    && argument_types
+                        .iter()
+                        .all(|argument_ty| !argument_ty.has_type_params())
+                    && current.as_ref().is_none_or(|result_ty| !result_ty.has_type_params())
                 {
                     self.record_function_call_evidence(FunctionCallEvidence {
                         item_id,

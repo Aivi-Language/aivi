@@ -75,9 +75,9 @@ Local same-module functions can sometimes be inferred from nearby usage even wit
 `type` line:
 
 ```aivi
-func keepNone = opt => None
+func keep = value => value
 
-value chosen : Option Int = keepNone None
+value chosen : Int = keep 1
 ```
 
 This first slice is intentionally conservative. It only infers same-module monomorphic `func`

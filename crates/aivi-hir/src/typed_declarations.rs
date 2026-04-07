@@ -328,21 +328,18 @@ mod tests {
     #[test]
     fn unannotated_function_signatures_infer_from_typed_callsites() {
         let declarations = typed_declarations(
-            "func keepNone = opt => None\n\
-             value chosen:Option Int = keepNone None\n",
+            "func keep = value => value\n\
+             value chosen:Int = keep 1\n",
         );
-        let keep_none = declarations
+        let keep = declarations
             .iter()
-            .find(|declaration| declaration.name == "keepNone")
-            .expect("expected typed declaration for `keepNone`");
+            .find(|declaration| declaration.name == "keep")
+            .expect("expected typed declaration for `keep`");
 
-        assert_eq!(keep_none.kind, TypedDeclarationKind::Function);
-        assert_eq!(keep_none.declared_type, None);
-        assert_eq!(
-            keep_none.inferred_type.as_deref(),
-            Some("Option Int -> Option Int")
-        );
-        assert_eq!(keep_none.annotation_matches_inferred, None);
+        assert_eq!(keep.kind, TypedDeclarationKind::Function);
+        assert_eq!(keep.declared_type, None);
+        assert_eq!(keep.inferred_type.as_deref(), Some("Int -> Int"));
+        assert_eq!(keep.annotation_matches_inferred, None);
     }
 
     #[test]

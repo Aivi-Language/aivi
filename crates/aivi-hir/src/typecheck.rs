@@ -311,17 +311,12 @@ enum ResultBindingShape {
 
 pub(crate) fn collect_contextual_function_signature_evidence(
     module: &Module,
-    function_ids: &[ItemId],
+    _function_ids: &[ItemId],
     typing: GateTypeContext<'_>,
     function_set: &HashSet<ItemId>,
 ) -> Vec<FunctionSignatureEvidence> {
     let mut checker = TypeChecker::with_typing(module, typing);
-    for item_id in function_ids {
-        let Item::Function(function) = &module.items()[*item_id] else {
-            continue;
-        };
-        checker.check_function_item(*item_id, function);
-    }
+    checker.run();
     checker
         .typing
         .take_function_signature_evidence()
@@ -1990,6 +1985,13 @@ impl<'a> TypeChecker<'a> {
         parameter_types: &[GateType],
         result_type: &GateType,
     ) {
+        if result_type.has_type_params()
+            || parameter_types
+                .iter()
+                .any(|parameter| parameter.has_type_params())
+        {
+            return;
+        }
         self.typing
             .record_function_signature_evidence(FunctionSignatureEvidence {
                 item_id,
