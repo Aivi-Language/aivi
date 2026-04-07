@@ -10,6 +10,10 @@ use aivi_typing::{
 
 use crate::{
     domain_operator_elaboration::{binary_operator_text, select_domain_binary_operator},
+    function_inference::{
+        FunctionCallEvidence, FunctionSignatureEvidence, infer_same_module_function_types,
+        supports_same_module_function_inference,
+    },
     hir::{
         ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClassMemberResolution,
         CustomSourceRecurrenceWakeup, DomainMemberHandle, DomainMemberKind, DomainMemberResolution,
@@ -1555,6 +1559,10 @@ pub(crate) struct GateTypeContext<'a> {
     module: &'a Module,
     item_types: HashMap<ItemId, Option<GateType>>,
     item_actuals: HashMap<ItemId, Option<SourceOptionActualType>>,
+    inferred_function_types: Option<HashMap<ItemId, GateType>>,
+    function_call_evidence: Vec<FunctionCallEvidence>,
+    function_signature_evidence: Vec<FunctionSignatureEvidence>,
+    allow_function_inference: bool,
 }
 
 impl<'a> GateTypeContext<'a> {
@@ -1563,7 +1571,63 @@ impl<'a> GateTypeContext<'a> {
             module,
             item_types: HashMap::new(),
             item_actuals: HashMap::new(),
+            inferred_function_types: None,
+            function_call_evidence: Vec::new(),
+            function_signature_evidence: Vec::new(),
+            allow_function_inference: true,
         }
+    }
+
+    pub(crate) fn new_for_function_inference(module: &'a Module) -> Self {
+        Self {
+            module,
+            item_types: HashMap::new(),
+            item_actuals: HashMap::new(),
+            inferred_function_types: Some(HashMap::new()),
+            function_call_evidence: Vec::new(),
+            function_signature_evidence: Vec::new(),
+            allow_function_inference: false,
+        }
+    }
+
+    pub(crate) fn with_seeded_item_types(
+        module: &'a Module,
+        item_types: HashMap<ItemId, GateType>,
+        allow_function_inference: bool,
+    ) -> Self {
+        Self {
+            module,
+            item_types: item_types.into_iter().map(|(item_id, ty)| (item_id, Some(ty))).collect(),
+            item_actuals: HashMap::new(),
+            inferred_function_types: Some(HashMap::new()),
+            function_call_evidence: Vec::new(),
+            function_signature_evidence: Vec::new(),
+            allow_function_inference,
+        }
+    }
+
+    fn inferred_function_types(&mut self) -> &HashMap<ItemId, GateType> {
+        self.inferred_function_types
+            .get_or_insert_with(|| infer_same_module_function_types(self.module))
+    }
+
+    pub(crate) fn record_function_call_evidence(&mut self, evidence: FunctionCallEvidence) {
+        self.function_call_evidence.push(evidence);
+    }
+
+    pub(crate) fn take_function_call_evidence(&mut self) -> Vec<FunctionCallEvidence> {
+        std::mem::take(&mut self.function_call_evidence)
+    }
+
+    pub(crate) fn record_function_signature_evidence(
+        &mut self,
+        evidence: FunctionSignatureEvidence,
+    ) {
+        self.function_signature_evidence.push(evidence);
+    }
+
+    pub(crate) fn take_function_signature_evidence(&mut self) -> Vec<FunctionSignatureEvidence> {
+        std::mem::take(&mut self.function_signature_evidence)
     }
 
     pub(crate) fn fanout_carrier(&self, subject: &GateType) -> Option<FanoutCarrier> {
@@ -1582,6 +1646,30 @@ impl<'a> GateTypeContext<'a> {
             GateType::Signal(inner) => Self::truthy_falsy_ordinary_subject_plan(inner),
             other => Self::truthy_falsy_ordinary_subject_plan(other),
         }
+    }
+
+    fn arrow_parameter_types(&self, ty: &GateType, arity: usize) -> Option<Vec<GateType>> {
+        let mut current = ty;
+        let mut parameter_types = Vec::with_capacity(arity);
+        for _ in 0..arity {
+            let GateType::Arrow { parameter, result } = current else {
+                return None;
+            };
+            parameter_types.push(parameter.as_ref().clone());
+            current = result.as_ref();
+        }
+        Some(parameter_types)
+    }
+
+    fn arrow_result_type(&self, ty: &GateType, arity: usize) -> Option<GateType> {
+        let mut current = ty;
+        for _ in 0..arity {
+            let GateType::Arrow { result, .. } = current else {
+                return None;
+            };
+            current = result.as_ref();
+        }
+        Some(current.clone())
     }
 
     pub(crate) fn truthy_falsy_ordinary_subject_plan(
@@ -2301,15 +2389,39 @@ impl<'a> GateTypeContext<'a> {
                 let mut env = GateExprEnv::default();
                 let mut parameters = Vec::with_capacity(item.parameters.len());
                 for parameter in &item.parameters {
-                    let annotation = parameter.annotation?;
-                    let parameter_ty = self.lower_open_annotation(annotation)?;
+                    let parameter_ty = match parameter.annotation {
+                        Some(annotation) => self.lower_open_annotation(annotation)?,
+                        None => {
+                            if !self.allow_function_inference
+                                || !supports_same_module_function_inference(item)
+                            {
+                                return None;
+                            }
+                            let inferred = self.inferred_function_types().get(&item_id)?;
+                            let parameter_types = self.arrow_parameter_types(
+                                inferred,
+                                item.parameters.len(),
+                            )?;
+                            parameter_types.get(parameters.len())?.clone()
+                        }
+                    };
                     env.locals.insert(parameter.binding, parameter_ty.clone());
                     parameters.push(parameter_ty);
                 }
                 let result = item
                     .annotation
                     .and_then(|annotation| self.lower_open_annotation(annotation))
-                    .or_else(|| self.infer_expr(item.body, &env, None).ty)?;
+                    .or_else(|| {
+                        if self.allow_function_inference
+                            && supports_same_module_function_inference(item)
+                        {
+                            self.inferred_function_types()
+                                .get(&item_id)
+                                .and_then(|ty| self.arrow_result_type(ty, item.parameters.len()))
+                        } else {
+                            self.infer_expr(item.body, &env, None).ty
+                        }
+                    })?;
                 let mut ty = result;
                 for parameter in parameters.into_iter().rev() {
                     ty = GateType::Arrow {
@@ -4971,6 +5083,7 @@ impl<'a> GateTypeContext<'a> {
                 info
             }
             ExprKind::Apply { callee, arguments } => {
+                let mut same_module_function_item = None;
                 if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
                     if let Some(info) = self
                         .infer_builtin_constructor_apply_expr(reference, &arguments, env, ambient)
@@ -4991,6 +5104,13 @@ impl<'a> GateTypeContext<'a> {
                         reference, &arguments, env, ambient,
                     ) {
                         return self.finalize_expr_info(info);
+                    }
+                    if let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+                        reference.resolution.as_ref()
+                        && let Item::Function(function) = &self.module.items()[*item_id]
+                        && supports_same_module_function_inference(function)
+                    {
+                        same_module_function_item = Some(*item_id);
                     }
                     if let Some(info) = self
                         .infer_polymorphic_function_apply_expr(reference, &arguments, env, ambient)
@@ -5031,6 +5151,21 @@ impl<'a> GateTypeContext<'a> {
                             .or(fallback_result),
                         _ => fallback_result,
                     };
+                }
+                if let Some(item_id) = same_module_function_item
+                    && let Some(argument_types) = arguments
+                        .iter()
+                        .map(|argument| {
+                            let argument_info = self.infer_expr(*argument, env, None);
+                            argument_info.actual_gate_type().or(argument_info.ty)
+                        })
+                        .collect::<Option<Vec<_>>>()
+                {
+                    self.record_function_call_evidence(FunctionCallEvidence {
+                        item_id,
+                        argument_types,
+                        result_type: current.clone(),
+                    });
                 }
                 info.ty = current;
                 info
@@ -6110,6 +6245,19 @@ impl<'a> GateTypeContext<'a> {
             && !result_type.same_shape(expected)
         {
             return None;
+        }
+
+        if let ExprKind::Name(reference) = &self.module.exprs()[callee_expr].kind
+            && let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+                reference.resolution.as_ref()
+            && let Item::Function(function_item) = &self.module.items()[*item_id]
+            && supports_same_module_function_inference(function_item)
+        {
+            self.record_function_signature_evidence(FunctionSignatureEvidence {
+                item_id: *item_id,
+                parameter_types: parameter_types.clone(),
+                result_type: result_type.clone(),
+            });
         }
 
         Some(PipeFunctionSignatureMatch {

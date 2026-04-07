@@ -1720,7 +1720,21 @@ export main
             "the first move should promptly hand control to the AI and expose its planned target"
         );
         assert!(
-            pump_until(&context, Duration::from_millis(500), || {
+            pump_until(&context, Duration::from_millis(100), || {
+                harness.root_windows().iter().any(|window| {
+                    find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "○").is_some()
+                })
+            }),
+            "the board should surface the AI preview while the human animation is still running"
+        );
+        assert!(
+            !pump_until(&context, Duration::from_millis(200), || {
+                text_signal_for(&harness, status_item) == "Your turn"
+            }),
+            "the AI reply should wait for the human animation window instead of landing immediately"
+        );
+        assert!(
+            pump_until(&context, Duration::from_millis(800), || {
                 text_signal_for(&harness, status_item) == "Your turn"
                     && text_signal_for(&harness, last_move_item).starts_with("Computer plays")
             }),

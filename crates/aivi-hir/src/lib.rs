@@ -11,6 +11,7 @@ mod decode_generation;
 mod domain_operator_elaboration;
 pub mod exports;
 mod fanout_elaboration;
+mod function_inference;
 mod gate_elaboration;
 mod general_expr_elaboration;
 mod hir;

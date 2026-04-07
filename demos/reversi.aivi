@@ -394,10 +394,7 @@ func snapshotAiTarget = snapshot => snapshotAiPending snapshot
 
 type Matrix Disc -> Move -> Option HumanAnimation
 func humanAnimationFromMove = board move => move
- ||> Place Human coord -> Some {
-     placed: coord,
-     changed: append [coord] (flipsForMove board Human coord)
- }
+ ||> Place Human coord -> Some { placed: coord, changed: append [coord] (flipsForMove board Human coord) }
  ||> _                 -> None
 
 type Move -> List Move -> List Move
@@ -410,11 +407,8 @@ func historyBeforeLast = history =>
 
 type List Move -> Option HumanAnimation
 func humanAnimationFromHistory = history => lastMoveOf history
- ||> Some (Place Human coord) -> Some {
-     placed: coord,
-     changed: append [coord] (flipsForMove (boardFromHistory (historyBeforeLast history)) Human coord)
- }
- ||> _                       -> None
+ ||> Some move -> humanAnimationFromMove (boardFromHistory (historyBeforeLast history)) move
+ ||> None      -> None
 
 type Option HumanAnimation -> Bool
 func hasHumanAnimation = animation => animation
@@ -456,10 +450,7 @@ func stepBlinkState = state => state.current
 
 type AnimationEvent -> AnimationState -> AnimationState
 func stepAnimationState = event state => event
- ||> StartAnimation animation -> {
-     current: Some animation,
-     blinkTicks: 0
- }
+ ||> StartAnimation animation -> { current: Some animation, blinkTicks: 0 }
  ||> StepAnimation            -> stepBlinkState state
  ||> ClearAnimation           -> idleAnimationState
 
@@ -591,14 +582,12 @@ func changedAt = animation coord =>
     coordEq animation.placed coord or listContains coordEq coord animation.changed
 
 type AnimationState -> HumanAnimation -> Coord -> Float
-func restingAnimatedOpacity = state animation coord =>
-    coordEq animation.placed coord and not (blinkVisible state)
+func restingAnimatedOpacity = state animation coord => coordEq animation.placed coord and not (blinkVisible state)
  T|> 0.25
  F|> 1.0
 
 type AnimationState -> HumanAnimation -> Coord -> Float
-func flashingOpacityAt = state animation coord =>
-    flashRunning state and changedAt animation coord
+func flashingOpacityAt = state animation coord => flashRunning state and changedAt animation coord
  T|> 0.35
  F|> restingAnimatedOpacity state animation coord
 
@@ -611,7 +600,7 @@ type Int -> Int -> CellView
 func fillCellView = x y =>
     defaultCellView
 
-value emptyCellViews : Matrix CellView = matrixFilled boardSize boardSize fillCellView
+value emptyCellViews = matrixFilled boardSize boardSize fillCellView
 
 type Snapshot -> Option Coord -> AnimationState -> Int -> Int -> CellView
 func buildCellView = snapshot preview animation x y =>
@@ -659,10 +648,10 @@ signal animationDone : Signal Unit
 
 signal animationEvent : Signal AnimationEvent = animationTrigger | blinkTick | animationDone | restartClick
   ||> animationTrigger (Some animation) => StartAnimation animation
-  ||> blinkTick _                       => StepAnimation
-  ||> animationDone _                   => ClearAnimation
-  ||> restartClick _                    => ClearAnimation
-  ||> _                                 => ClearAnimation
+  ||> blinkTick _ => StepAnimation
+  ||> animationDone _ => ClearAnimation
+  ||> restartClick _ => ClearAnimation
+  ||> _ => ClearAnimation
 
 signal animationState : Signal AnimationState = animationEvent
  +|> idleAnimationState stepAnimationState

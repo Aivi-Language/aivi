@@ -2,12 +2,12 @@ use std::fmt::Write;
 
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
-    DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FunctionParam,
-    FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, MapExpr, MapExprEntry,
-    MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock, PatchEntry,
-    PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern,
-    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr,
-    RecordField, RecordPatternField, ResultBinding, ResultBlockExpr, SignalMergeBody,
+    DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FromEntry, FromItem,
+    FunctionParam, FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, MapExpr,
+    MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock,
+    PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment,
+    Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
+    RecordExpr, RecordField, RecordPatternField, ResultBinding, ResultBlockExpr, SignalMergeBody,
     SignalReactiveArm, SourceDecorator, SourceProviderContractItem, SourceProviderContractMember,
     SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextInterpolation, TextLiteral,
     TextSegment, TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator,
@@ -100,6 +100,7 @@ impl Formatter {
             Item::Fun(item) => lines.extend(self.format_fun_item(item)),
             Item::Value(item) => lines.extend(self.format_value_item("value", item)),
             Item::Signal(item) => lines.extend(self.format_signal_item(item)),
+            Item::From(item) => lines.extend(self.format_from_item(item)),
             Item::Class(item) => lines.extend(self.format_class_item(item)),
             Item::Instance(item) => lines.extend(self.format_instance_item(item)),
             Item::Domain(item) => lines.extend(self.format_domain_item(item)),
@@ -283,6 +284,37 @@ impl Formatter {
             );
         }
         lines
+    }
+
+    fn format_from_item(&self, item: &FromItem) -> Vec<String> {
+        let mut lines = vec![match &item.source {
+            Some(source) => format!("from {} = {{", self.format_expr_inline(source, 0)),
+            None => "from = {".to_owned(),
+        }];
+        for entry in &item.entries {
+            lines.extend(self.format_from_entry(entry));
+        }
+        lines.push("}".to_owned());
+        lines
+    }
+
+    fn format_from_entry(&self, entry: &FromEntry) -> Vec<String> {
+        match &entry.body {
+            Some(body) => {
+                let block = self.format_expr_block(body, false);
+                let block = if block.is_inline() {
+                    Block::inline(format!(
+                        "{}: {}",
+                        entry.name.text,
+                        block.inline_text().expect("inline entry block")
+                    ))
+                } else {
+                    block.prefixed(&format!("{}: ", entry.name.text))
+                };
+                block.indented(INDENT_WIDTH).into_lines()
+            }
+            None => vec![format!("{}{}:", spaces(INDENT_WIDTH), entry.name.text)],
+        }
     }
 
     fn format_signal_reactive_arm(&self, arm: &SignalReactiveArm) -> Vec<String> {
@@ -3866,6 +3898,25 @@ value view =
                 "  ||> tick _ => Tick\n",
                 "  ||> keyDown (Key \"ArrowUp\") => Turn North\n",
                 "  ||> _ => Tick\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_from_signal_fanout_entries() {
+        let formatted = format_text(
+            "from state={\nboardText:renderBoard\ndirLine:.dir|>dirLabel\ngameOver:.status\n||>Running->False\n||>GameOver->True\n}\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "from state = {\n",
+                "    boardText: renderBoard\n",
+                "    dirLine: .dir |> dirLabel\n",
+                "    gameOver: .status\n",
+                "    ||> Running -> False\n",
+                "    ||> GameOver -> True\n",
+                "}\n",
             )
         );
     }

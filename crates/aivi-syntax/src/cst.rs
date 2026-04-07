@@ -917,6 +917,23 @@ pub struct UseItem {
     pub imports: Vec<UseImport>,
 }
 
+/// One entry inside a `from source = { ... }` fan-out block.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FromEntry {
+    pub name: Identifier,
+    pub body: Option<Expr>,
+    pub span: SourceSpan,
+}
+
+/// `from source = { name: expr ... }` sugar for grouped derived signals.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FromItem {
+    pub base: ItemBase,
+    pub keyword_span: SourceSpan,
+    pub source: Option<Expr>,
+    pub entries: Vec<FromEntry>,
+}
+
 /// `export` declaration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExportItem {
@@ -1019,6 +1036,7 @@ pub enum Item {
     Fun(NamedItem),
     Value(NamedItem),
     Signal(NamedItem),
+    From(FromItem),
     Class(NamedItem),
     Instance(InstanceItem),
     Domain(DomainItem),
@@ -1036,6 +1054,7 @@ pub enum ItemKind {
     Fun,
     Value,
     Signal,
+    From,
     Class,
     Instance,
     Domain,
@@ -1053,6 +1072,7 @@ impl Item {
             Item::Fun(_) => ItemKind::Fun,
             Item::Value(_) => ItemKind::Value,
             Item::Signal(_) => ItemKind::Signal,
+            Item::From(_) => ItemKind::From,
             Item::Class(_) => ItemKind::Class,
             Item::Instance(_) => ItemKind::Instance,
             Item::Domain(_) => ItemKind::Domain,
@@ -1071,6 +1091,7 @@ impl Item {
             | Item::Value(item)
             | Item::Signal(item)
             | Item::Class(item) => &item.base,
+            Item::From(item) => &item.base,
             Item::Instance(item) => &item.base,
             Item::Domain(item) => &item.base,
             Item::SourceProviderContract(item) => &item.base,
@@ -1096,6 +1117,7 @@ impl Item {
             | Item::Value(item)
             | Item::Signal(item)
             | Item::Class(item) => &mut item.base,
+            Item::From(item) => &mut item.base,
             Item::Instance(item) => &mut item.base,
             Item::Domain(item) => &mut item.base,
             Item::SourceProviderContract(item) => &mut item.base,

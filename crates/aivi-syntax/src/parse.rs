@@ -5,15 +5,15 @@ use crate::{
         BigIntLiteral, BinaryOperator, ClassBody, ClassMember, ClassMemberName, ClassRequireDecl,
         ClassWithDecl, DecimalLiteral, Decorator, DecoratorArguments, DecoratorPayload, DomainBody,
         DomainItem, DomainMember, DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind,
-        FloatLiteral, FunctionParam, FunctionSurfaceForm, Identifier, InstanceBody, InstanceItem,
-        InstanceMember, IntegerLiteral, Item, ItemBase, MapExpr, MapExprEntry, MarkupAttribute,
-        MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName,
-        PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector,
-        PatchSelectorSegment, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage,
-        PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField,
-        RegexLiteral, ResultBinding, ResultBlockExpr, SignalMergeBody, SignalReactiveArm,
-        SourceDecorator, SourceProviderContractBody, SourceProviderContractFieldValue,
-        SourceProviderContractItem, SourceProviderContractMember,
+        FloatLiteral, FromEntry, FromItem, FunctionParam, FunctionSurfaceForm, Identifier,
+        InstanceBody, InstanceItem, InstanceMember, IntegerLiteral, Item, ItemBase, MapExpr,
+        MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem,
+        NamedItemBody, OperatorName, PatchBlock, PatchEntry, PatchInstruction,
+        PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern, PatternKind,
+        PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
+        RecordExpr, RecordField, RecordPatternField, RegexLiteral, ResultBinding, ResultBlockExpr,
+        SignalMergeBody, SignalReactiveArm, SourceDecorator, SourceProviderContractBody,
+        SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
         SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
         TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeCompanionMember, TypeDeclBody,
         TypeExpr, TypeExprKind, TypeField, TypeSumBody, TypeVariant, TypeVariantField,
@@ -232,6 +232,7 @@ impl<'a> Parser<'a> {
             TokenKind::SignalKw => {
                 Item::Signal(self.parse_signal_item(base, keyword_index, end, "signal declaration"))
             }
+            TokenKind::FromKw => Item::From(self.parse_from_item(base, keyword_index, end)),
             TokenKind::ClassKw => Item::Class(self.parse_class_item(base, keyword_index, end)),
             TokenKind::InstanceKw => {
                 Item::Instance(self.parse_instance_item(base, keyword_index, end))
@@ -669,6 +670,163 @@ impl<'a> Parser<'a> {
             parameters: Vec::new(),
             body,
         }
+    }
+
+    fn parse_from_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> FromItem {
+        let mut cursor = keyword_index + 1;
+        let equals_index = self.find_top_level_equals(cursor, end);
+        let source_end = equals_index.unwrap_or(end);
+
+        let mut source_cursor = cursor;
+        let source = self.parse_expr(&mut source_cursor, source_end, ExprStop::default());
+        match &source {
+            Some(_) => {
+                if let Some(trailing_index) = self.next_significant_in_range(source_cursor, source_end)
+                {
+                    self.diagnostics.push(
+                        Diagnostic::error("`from` source must contain exactly one expression")
+                            .with_primary_label(
+                                self.source_span_of_token(trailing_index),
+                                "this token is outside the shared source expression",
+                            ),
+                    );
+                }
+            }
+            None => {
+                self.diagnostics.push(
+                    Diagnostic::error("`from` declaration is missing its shared source expression")
+                        .with_code(MISSING_FROM_SOURCE)
+                        .with_primary_label(
+                            self.source_span_of_token(keyword_index),
+                            "expected a source expression such as `state` after `from`",
+                        )
+                        .with_help("syntax: from <signal-expr> = { derivedName: expr }"),
+                );
+            }
+        }
+        cursor = equals_index.map_or(source_cursor, |index| index + 1);
+
+        let open_brace = self.consume_kind(&mut cursor, end, TokenKind::LBrace);
+        let entries = if let Some(open_brace) = open_brace {
+            let inner_end = self.find_matching_brace(open_brace, end).unwrap_or(end);
+            let mut entries_cursor = open_brace + 1;
+            let entries = self.parse_from_entries(&mut entries_cursor, inner_end);
+            cursor = inner_end.saturating_add(1);
+            entries
+        } else {
+            self.diagnostics.push(
+                Diagnostic::error("`from` declaration is missing its fan-out body")
+                    .with_code(MISSING_FROM_OPEN_BRACE)
+                    .with_primary_label(
+                        self.source_span_of_token(equals_index.unwrap_or(keyword_index)),
+                        "expected `{` to open the grouped derived signals",
+                    )
+                    .with_help("syntax: from <signal-expr> = { derivedName: expr }"),
+            );
+            Vec::new()
+        };
+
+        FromItem {
+            base,
+            keyword_span: self.source_span_of_token(keyword_index),
+            source,
+            entries,
+        }
+    }
+
+    fn parse_from_entries(&mut self, cursor: &mut usize, end: usize) -> Vec<FromEntry> {
+        let Some(first_index) = self.peek_nontrivia(*cursor, end) else {
+            return Vec::new();
+        };
+        if !self.tokens[first_index].line_start() {
+            return Vec::new();
+        }
+        let entry_indent = self.line_indent_of_token(first_index);
+        let mut entries = Vec::new();
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if !self.starts_from_entry(index, end, entry_indent) {
+                break;
+            }
+            let entry_end = self
+                .find_next_from_entry_start(index + 1, end, entry_indent)
+                .unwrap_or(end);
+            entries.push(self.parse_from_entry(index, entry_end));
+            *cursor = entry_end;
+        }
+        entries
+    }
+
+    fn starts_from_entry(&self, index: usize, end: usize, entry_indent: usize) -> bool {
+        let token = self.tokens[index];
+        token.kind() == TokenKind::Identifier
+            && token.line_start()
+            && self.line_indent_of_token(index) == entry_indent
+            && self.peek_kind(index + 1, end) == Some(TokenKind::Colon)
+    }
+
+    fn parse_from_entry(&mut self, start: usize, end: usize) -> FromEntry {
+        let mut cursor = start;
+        let name = self.parse_identifier(&mut cursor, end).unwrap_or_else(|| Identifier {
+            text: "<missing>".to_owned(),
+            span: self.source_span_of_token(start),
+        });
+        let _ = self.consume_kind(&mut cursor, end, TokenKind::Colon);
+        let body = self.parse_expr(&mut cursor, end, ExprStop::default());
+        match &body {
+            Some(_) => {
+                if let Some(trailing_index) = self.next_significant_in_range(cursor, end) {
+                    self.diagnostics.push(
+                        Diagnostic::error("`from` entry body must contain exactly one expression")
+                            .with_primary_label(
+                                self.source_span_of_token(trailing_index),
+                                "this token is outside the derived signal body",
+                            ),
+                    );
+                }
+            }
+            None => {
+                self.diagnostics.push(
+                    Diagnostic::error("`from` entry is missing its derived expression")
+                        .with_code(MISSING_FROM_ENTRY_BODY)
+                        .with_primary_label(
+                            name.span,
+                            format!("expected an expression after `{}:`", name.text),
+                        ),
+                );
+            }
+        }
+
+        FromEntry {
+            name,
+            body,
+            span: self.source_span_for_range(start, end),
+        }
+    }
+
+    fn find_next_from_entry_start(
+        &self,
+        from: usize,
+        end: usize,
+        entry_indent: usize,
+    ) -> Option<usize> {
+        let mut depth = 0usize;
+        for index in from..end {
+            let token = self.tokens[index];
+            if token.kind().is_trivia() {
+                continue;
+            }
+            if depth == 0 && self.starts_from_entry(index, end, entry_indent) {
+                return Some(index);
+            }
+            match token.kind() {
+                TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                    depth = depth.saturating_sub(1)
+                }
+                TokenKind::LParen | TokenKind::LBrace | TokenKind::LBracket => depth += 1,
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Parse a signal body after `=`. This may be:
@@ -5743,6 +5901,23 @@ impl<'a> Parser<'a> {
         None
     }
 
+    fn find_top_level_equals(&self, start: usize, end: usize) -> Option<usize> {
+        let mut depth = 0usize;
+        let mut scan = start;
+        while let Some(index) = self.peek_nontrivia(scan, end) {
+            match self.tokens[index].kind() {
+                TokenKind::LParen | TokenKind::LBrace | TokenKind::LBracket => depth += 1,
+                TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                    depth = depth.saturating_sub(1)
+                }
+                TokenKind::Equals if depth == 0 => return Some(index),
+                _ => {}
+            }
+            scan = index + 1;
+        }
+        None
+    }
+
     fn parameter_annotation_end(&self, start: usize, end: usize) -> usize {
         let Some(body_arrow) = self.find_last_same_line_arrow(start, end) else {
             return end;
@@ -7473,6 +7648,47 @@ signal direction: Signal Direction = keyDown
         assert!(
             matches!(step.kind, ExprKind::Name(ref identifier) if identifier.text == "updateDirection")
         );
+    }
+
+    #[test]
+    fn parser_builds_from_signal_fanout_entries() {
+        let (_, parsed) = load(
+            r#"from state = {
+    boardText: renderBoard
+    dirLine: .dir |> dirLabel
+    gameOver: .status
+        ||> Running -> False
+        ||> GameOver -> True
+}
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "{:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        assert_eq!(parsed.module.items.len(), 1);
+
+        let Item::From(item) = &parsed.module.items[0] else {
+            panic!("expected from item");
+        };
+        assert!(matches!(
+            item.source.as_ref().map(|expr| &expr.kind),
+            Some(ExprKind::Name(name)) if name.text == "state"
+        ));
+        assert_eq!(item.entries.len(), 3);
+        assert_eq!(item.entries[0].name.text, "boardText");
+        assert_eq!(item.entries[1].name.text, "dirLine");
+        assert_eq!(item.entries[2].name.text, "gameOver");
+        assert!(matches!(
+            item.entries[1].body.as_ref().map(|expr| &expr.kind),
+            Some(ExprKind::Pipe(_))
+        ));
+        assert!(matches!(
+            item.entries[2].body.as_ref().map(|expr| &expr.kind),
+            Some(ExprKind::Pipe(_))
+        ));
     }
 
     #[test]

@@ -45,6 +45,12 @@ pub const MISSING_DOMAIN_OVER: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-domain-over");
 pub const MISSING_EXPORT_NAME: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-export-name");
+pub const MISSING_FROM_ENTRY_BODY: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-from-entry-body");
+pub const MISSING_FROM_OPEN_BRACE: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-from-open-brace");
+pub const MISSING_FROM_SOURCE: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-from-source");
 pub const MISSING_INSTANCE_CLASS: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-instance-class");
 pub const MISSING_INSTANCE_MEMBER_BODY: DiagnosticCode =

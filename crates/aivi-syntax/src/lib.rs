@@ -11,9 +11,9 @@ pub mod parse;
 pub use cst::{
     BigIntLiteral, BinaryOperator, ClassBody, ClassMember, ClassMemberName, DecimalLiteral,
     Decorator, DecoratorArguments, DecoratorPayload, DomainBody, DomainItem, DomainMember,
-    DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind, FloatLiteral, FunctionParam,
-    HoistItem, HoistKindFilter, Identifier, InstanceBody, InstanceItem, InstanceMember,
-    IntegerLiteral, Item, ItemBase, ItemKind, MapExpr, MapExprEntry, MarkupAttribute,
+    DomainMemberName, ErrorItem, ExportItem, Expr, ExprKind, FloatLiteral, FromEntry, FromItem,
+    FunctionParam, HoistItem, HoistKindFilter, Identifier, InstanceBody, InstanceItem,
+    InstanceMember, IntegerLiteral, Item, ItemBase, ItemKind, MapExpr, MapExprEntry, MarkupAttribute,
     MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName, PatchBlock,
     PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment,
     Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath,
