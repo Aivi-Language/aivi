@@ -86,3 +86,12 @@ Hardened the GLib runtime adapter so async wake-driven draining can no longer ru
 - `crates/aivi-runtime/src/glib_adapter.rs`: both `GlibSchedulerShared` and `GlibLinkedRuntimeShared` now apply a fixed 32-tick async wake budget, yield between ticks, and reschedule another GLib callback when work remains
 - Explicit synchronous drains (`queue_publication_now`, `tick_now`) still run until idle
 - Added stress coverage for long worker-publication chains and linked-runtime stop safety after a queued follow-up callback
+
+## [2026-04-07] ingest | From signal fan-out sugar
+
+Implemented top-level `from source = { ... }` syntax for grouped derived signals.
+
+- `crates/aivi-syntax/`: lexer/CST/parser/formatter support for `from` items and indentation-aware entry parsing
+- `crates/aivi-hir/src/lower.rs`: `from` lowers into ordinary synthetic `Signal` items by piping the shared source into each entry body
+- `crates/aivi-lsp/src/semantic_tokens.rs`, `tooling/packages/vscode-aivi/syntaxes/aivi.tmLanguage.json`, `tooling/packages/vscode-aivi/snippets/aivi.json`: editor keyword highlighting and snippet support
+- `manual/guide/building-snake.md`, `demos/snake.aivi`, `syntax.md`, `manual/guide/surface-feature-matrix.md`: user-facing docs and demo updated to use/document the sugar

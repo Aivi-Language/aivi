@@ -24,6 +24,15 @@
     "body": ["signal ${1:name} =", "    ${2:expr}"],
     "description": "Declare a signal"
   },
+  "Signal fan-out from": {
+    "prefix": "fromsig",
+    "body": [
+      "from ${1:state} = {",
+      "    ${2:view}: ${3:.field |> transform}",
+      "}"
+    ],
+    "description": "Declare multiple derived signals from one shared source signal"
+  },
   "HTTP source signal": {
     "prefix": "source-http",
     "body": [

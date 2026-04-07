@@ -314,34 +314,20 @@ signal state : GameState = event
 
 This is the accumulation pipe. It reads: *"start with `initial`, and each time `event` fires, apply `step` to compute the next `GameState`."*
 
-The entire game state lives in this one signal. All other signals derive from it:
+The entire game state lives in this one signal. All other view signals can fan out from it:
 
 ```aivi
-signal boardText = state
-  |> renderBoard
-
-signal dirLine = state
-  |> .dir
-  |> dirLabel
-
-signal statusLine = state
-  |> .status
-  |> statusLineFor
-
-signal scoreLine = state
-  |> .score
-  |> scoreLineFor
-
-signal gameOver = state
-  |> .status
-  |> isGameOver
-
-signal finalScoreLine = state
-  |> .score
-  |> finalScoreLineFor
+from state = {
+    boardText: renderBoard
+    dirLine: .dir |> dirLabel
+    statusLine: .status |> statusLineFor
+    scoreLine: .score |> scoreLineFor
+    gameOver: .status |> isGameOver
+    finalScoreLine: .score |> finalScoreLineFor
+}
 ```
 
-Each derived signal projects a piece of state and transforms it. When `state` changes, all of these recompute automatically.
+Each entry projects a piece of state and transforms it into a named derived signal. When `state` changes, all of these recompute automatically.
 
 ## Rendering with text and indices
 

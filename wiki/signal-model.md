@@ -30,6 +30,30 @@ A `signal` declaration:
 - has a **seed value** (the initial state)
 - optionally has a **merge body** (reactive arms that update the value when sources fire)
 
+## `from` Signal Fan-Out Sugar
+
+`from` is surface sugar for defining several derived signals from one shared upstream signal:
+
+```aivi
+from state = {
+    boardText: renderBoard
+    dirLine: .dir |> dirLabel
+    gameOver: .status
+        ||> Running -> False
+        ||> GameOver -> True
+}
+```
+
+Semantics:
+
+- Each entry lowers to an ordinary top-level `signal`.
+- The shared source is piped into each entry body.
+- Headless pipe entries such as `.dir |> dirLabel` become `state |> .dir |> dirLabel`.
+- Plain expressions such as `renderBoard` become `state |> renderBoard`.
+- Entry boundaries are indentation-sensitive: a peer `name:` line starts a new derived signal; deeper-indented lines stay attached to the current entry.
+
+**Source**: `crates/aivi-syntax/src/parse.rs` (`parse_from_item`, `parse_from_entries`), `crates/aivi-hir/src/lower.rs` (`lower_from_item`, `prepend_from_source`)
+
 ## Signal Merge Syntax
 
 The `when` keyword was removed. Signal merge uses a pipe-case style:

@@ -81,7 +81,9 @@ pub fn diagnostic_kind(summary: &TypedDeclarationSummary) -> Option<TypeAnnotati
         summary.has_explicit_constraints,
         summary.annotation_is_independently_inferable,
     ) {
-        (Some(_), Some(_), Some(true), false, true) => Some(TypeAnnotationDiagnosticKind::Unnecessary),
+        (Some(_), Some(_), Some(true), false, true) => {
+            Some(TypeAnnotationDiagnosticKind::Unnecessary)
+        }
         (Some(_), Some(_), Some(false), _, _) => Some(TypeAnnotationDiagnosticKind::Mismatched),
         (None, None, _, _, _) => Some(TypeAnnotationDiagnosticKind::Missing),
         _ => None,
@@ -173,7 +175,9 @@ fn code_action_for_summary(
     changes.insert(uri.clone(), vec![edit]);
 
     let title = match kind {
-        TypeAnnotationDiagnosticKind::Unnecessary => "Remove unnecessary type annotation".to_owned(),
+        TypeAnnotationDiagnosticKind::Unnecessary => {
+            "Remove unnecessary type annotation".to_owned()
+        }
         TypeAnnotationDiagnosticKind::Mismatched => {
             "Replace annotation with inferred type".to_owned()
         }
@@ -285,8 +289,11 @@ fn annotation_is_independently_inferable(
 ) -> bool {
     match kind {
         aivi_hir::TypedDeclarationKind::Value | aivi_hir::TypedDeclarationKind::Signal => true,
-        aivi_hir::TypedDeclarationKind::Function => item
-            .is_some_and(|item| item.parameters.iter().all(|parameter| parameter.annotation.is_some())),
+        aivi_hir::TypedDeclarationKind::Function => item.is_some_and(|item| {
+            item.parameters
+                .iter()
+                .all(|parameter| parameter.annotation.is_some())
+        }),
     }
 }
 
@@ -308,8 +315,9 @@ fn annotation_site(
         });
     }
 
-    let colon_start = inline_annotation_colon_start(source.text(), coverage.span().start().as_usize())
-        .unwrap_or_else(|| coverage.span().start().as_usize());
+    let colon_start =
+        inline_annotation_colon_start(source.text(), coverage.span().start().as_usize())
+            .unwrap_or_else(|| coverage.span().start().as_usize());
     let removal_start = inline_annotation_removal_start(source.text(), colon_start);
     Some(TypeAnnotationSite {
         style: TypeAnnotationStyle::Inline,
@@ -421,7 +429,8 @@ mod tests {
             "annotation test input should lower cleanly: {:?}",
             lowered.diagnostics()
         );
-        let summaries = collect_typed_declaration_summaries(lowered.module(), &parsed.module, &source);
+        let summaries =
+            collect_typed_declaration_summaries(lowered.module(), &parsed.module, &source);
         (source, parsed.module, lowered.into_parts().0, summaries)
     }
 
@@ -484,6 +493,25 @@ mod tests {
             .expect("expected missing type annotation diagnostic");
 
         assert_eq!(diagnostic.severity, Some(DiagnosticSeverity::ERROR));
+    }
+
+    #[test]
+    fn contextually_inferable_unannotated_functions_do_not_become_errors() {
+        let (source, _, _, summaries) = parse(
+            "func keepNone = opt => None\n\
+             value chosen:Option Int = keepNone None\n",
+        );
+        let diagnostics = collect_type_annotation_diagnostics(&summaries, &source);
+
+        assert!(
+            diagnostics.iter().all(|diagnostic| {
+                diagnostic.code
+                    != Some(NumberOrString::String(
+                        MISSING_TYPE_ANNOTATION_CODE.to_owned(),
+                    ))
+            }),
+            "expected contextual inference to suppress missing type annotation diagnostics, got {diagnostics:?}"
+        );
     }
 
     #[test]

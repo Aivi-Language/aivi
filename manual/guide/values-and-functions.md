@@ -59,7 +59,7 @@ func add = x y =>
 value total = add 3 4
 ```
 
-Function signatures live on a preceding `type` line, and the `func` header keeps parameters unannotated.
+Function signatures can live on a preceding `type` line, and the `func` header keeps parameters unannotated.
 
 ```aivi
 type Text -> Text
@@ -68,6 +68,22 @@ func greet = name =>
 
 value greetingText = greet "Ada"
 ```
+
+## Contextual function inference
+
+Local same-module functions can sometimes be inferred from nearby usage even without a standalone
+`type` line:
+
+```aivi
+func keepNone = opt => None
+
+value chosen : Option Int = keepNone None
+```
+
+This first slice is intentionally conservative. It only infers same-module monomorphic `func`
+declarations when nearby callsites, partial applications, parameter annotations, or result
+expectations provide enough information to prove one concrete signature. Underconstrained helpers
+like `func id = x => x` still need an explicit `type` line.
 
 ## Multiple parameters
 

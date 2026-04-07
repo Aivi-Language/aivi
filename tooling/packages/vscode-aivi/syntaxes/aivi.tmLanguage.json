@@ -133,6 +133,7 @@
         { "include": "#fun-signature" },
         { "include": "#value-signature" },
         { "include": "#signal-signature" },
+        { "include": "#from-signature" },
         { "include": "#source-signature" },
         { "include": "#result-signature" },
         { "include": "#view-signature" },
@@ -219,6 +220,14 @@
       "patterns": [
         { "include": "#assignment-type-annotation" }
       ]
+    },
+
+    "from-signature": {
+      "begin": "\\b(from)\\b",
+      "beginCaptures": {
+        "1": { "name": "keyword.declaration.from.aivi" }
+      },
+      "end": "$"
     },
 
     "source-signature": {
@@ -391,6 +400,13 @@
           }
         },
         {
+          "comment": "from source = { ... } — grouped derived signal declaration",
+          "match": "\\b(from)\\b",
+          "captures": {
+            "1": { "name": "keyword.declaration.from.aivi" }
+          }
+        },
+        {
           "comment": "source name — source-backed signal declaration",
           "match": "\\b(source)\\s+([a-z_][a-zA-Z0-9_]*)",
           "captures": {
@@ -501,7 +517,7 @@
       "patterns": [
         {
           "comment": "lowercase call heads followed by arguments",
-          "match": "(?<![@.])\\b(?!(?:func|fun|value|signal|source|result|type|class|instance|domain|provider|use|export|hoist|with|require|when|as|pattern|of|on|key)\\b)([a-z_][a-zA-Z0-9_]*)\\b(?=\\s+(?:[#a-z_][a-zA-Z0-9_]*|\\(|\\[|\\{|\\\"|-?\\d|<))",
+          "match": "(?<![@.])\\b(?!(?:func|fun|value|signal|from|source|result|type|class|instance|domain|provider|use|export|hoist|with|require|when|as|pattern|of|on|key)\\b)([a-z_][a-zA-Z0-9_]*)\\b(?=\\s+(?:[#a-z_][a-zA-Z0-9_]*|\\(|\\[|\\{|\\\"|-?\\d|<))",
           "captures": {
             "1": { "name": "entity.name.function.call.aivi" }
           }

@@ -301,7 +301,23 @@ impl Formatter {
     fn format_from_entry(&self, entry: &FromEntry) -> Vec<String> {
         match &entry.body {
             Some(body) => {
-                let block = self.format_expr_block(body, false);
+                let inline = format!("{}: {}", entry.name.text, self.format_expr_inline(body, 0));
+                if display_width(&inline) <= INLINE_LIMIT {
+                    return vec![format!("{}{}", spaces(INDENT_WIDTH), inline)];
+                }
+
+                if let ExprKind::Pipe(pipe) = &body.kind {
+                    if let Some(lines) =
+                        self.format_pipe_with_head_lines(&format!("{}:", entry.name.text), pipe)
+                    {
+                        return lines
+                            .into_iter()
+                            .map(|line| format!("{}{}", spaces(INDENT_WIDTH), line))
+                            .collect();
+                    }
+                }
+
+                let block = self.format_expr_block(body, true);
                 let block = if block.is_inline() {
                     Block::inline(format!(
                         "{}: {}",
@@ -3914,8 +3930,8 @@ value view =
                 "    boardText: renderBoard\n",
                 "    dirLine: .dir |> dirLabel\n",
                 "    gameOver: .status\n",
-                "    ||> Running -> False\n",
-                "    ||> GameOver -> True\n",
+                "     ||> Running  -> False\n",
+                "     ||> GameOver -> True\n",
                 "}\n",
             )
         );

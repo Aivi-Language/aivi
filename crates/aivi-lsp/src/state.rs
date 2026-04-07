@@ -31,7 +31,9 @@ impl ServerConfig {
                 .inlay_hints_max_length
                 .unwrap_or(defaults.inlay_hints_max_length)
                 .max(4),
-            code_lens_enabled: options.code_lens_enabled.unwrap_or(defaults.code_lens_enabled),
+            code_lens_enabled: options
+                .code_lens_enabled
+                .unwrap_or(defaults.code_lens_enabled),
         }
     }
 }

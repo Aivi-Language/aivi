@@ -95,6 +95,8 @@ value raySteps = listTailOrEmpty boardIndices
 value emptyCoords : List Coord = []
 value emptyHistory : List Move = []
 value blinkTicksBeforeFlash = 5
+value placedBlinkOpacity = 0.7
+value flipFlashOpacity = 0.55
 
 value defaultCellView = {
     label: "·",
@@ -583,12 +585,12 @@ func changedAt = animation coord =>
 
 type AnimationState -> HumanAnimation -> Coord -> Float
 func restingAnimatedOpacity = state animation coord => coordEq animation.placed coord and not (blinkVisible state)
- T|> 0.25
+ T|> placedBlinkOpacity
  F|> 1.0
 
 type AnimationState -> HumanAnimation -> Coord -> Float
 func flashingOpacityAt = state animation coord => flashRunning state and changedAt animation coord
- T|> 0.35
+ T|> flipFlashOpacity
  F|> restingAnimatedOpacity state animation coord
 
 type AnimationState -> Coord -> Float

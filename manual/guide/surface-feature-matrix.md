@@ -31,7 +31,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 
 | Surface form | Check | Execute | Run | Compile | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `value` / `func` | yes | yes | yes | yes | Core declaration surface is stable; later rows capture body-specific gaps. |
+| `value` / `func` | yes | yes | yes | yes | Core declaration surface is stable; same-module monomorphic `func` items also support contextual signature inference from nearby use sites. |
 | `type` aliases, records, sums, and brace-bodied sum companions | yes | yes | yes | yes | Closed ADTs, companion helpers, and records are broadly accepted across the pipeline. Companion members lower as ordinary callable items. |
 | `class` / `instance` | yes | yes | yes | yes | Builtins, same-module, and imported user-authored instances all resolve. Cross-module instance resolution follows the `ImportedInstance` dispatch path through `ClassMemberImplementation`. |
 | `domain` declarations and member lookup | yes | yes | yes | yes | Runtime foundation tests cover domain operators and authored members. Codegen supports domain suffix literals, domain member access, and representational pointer forwarding for domain-typed values. |
@@ -88,6 +88,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 | Surface form | Check | Execute | Run | Compile | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Signal merge reactive arms | yes | yes | yes | yes | Signal merge with `||>` arms replaces the former `when` clause syntax. Guarded, source-pattern, and pattern-armed forms all compile and run. `aivi execute` fires once for initial signal values (correct one-shot semantics). |
+| Signal fan-out `from state = { ... }` | yes | yes | yes | yes | Surface sugar only. Each entry lowers to an ordinary derived `signal`, so runtime and codegen behavior stay unchanged. |
 | `Task E A` | yes | yes | yes | yes | `aivi execute` is the direct task entrypoint. Runtime supports full applicative traverse for Task carriers. Codegen emits task metadata through the standard emission path. |
 | `timer.every` / `timer.after` | yes | yes | yes | yes | `immediate`, `jitter`, and `coalesce` options are all supported. `aivi execute` fires once for the initial tick (correct one-shot semantics). Codegen emits source binding metadata. |
 | `http.get` / `http.post` | yes | yes | yes | yes | Provider option support is broad: `http.get` accepts `body` (RFC 9110). `aivi execute` performs one request/response cycle (correct one-shot semantics). Codegen emits source binding metadata. |

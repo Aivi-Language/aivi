@@ -30,7 +30,8 @@ pub async fn hover(params: HoverParams, state: Arc<ServerState>) -> Option<Hover
     {
         for target in &targets {
             let target_analysis = crate::analysis::FileAnalysis::load(&state.db, target.file());
-            if let Some(declaration) = target_analysis.typed_declaration_for_name_span(target.span) {
+            if let Some(declaration) = target_analysis.typed_declaration_for_name_span(target.span)
+            {
                 return Some(hover_for_typed_declaration(
                     declaration,
                     &target_analysis.source,
@@ -64,10 +65,16 @@ fn hover_for_typed_declaration(
             kind_label, declaration.name, inferred, declared
         ),
         (Some(inferred), _, _) => {
-            format!("```aivi\n{} {} : {}\n```", kind_label, declaration.name, inferred)
+            format!(
+                "```aivi\n{} {} : {}\n```",
+                kind_label, declaration.name, inferred
+            )
         }
         (None, Some(declared), _) => {
-            format!("```aivi\n{} {} : {}\n```", kind_label, declaration.name, declared)
+            format!(
+                "```aivi\n{} {} : {}\n```",
+                kind_label, declaration.name, declared
+            )
         }
         (None, None, _) => format!("```aivi\n{} {}\n```", kind_label, declaration.name),
     };

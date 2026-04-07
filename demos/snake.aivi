@@ -206,28 +206,14 @@ signal event : Signal Event = tick | keyDown
 signal state : Signal GameState = event
  +|> initial step
 
-signal boardText = state
-  |> renderBoard
-
-signal dirLine = state
-  |> .dir
-  |> dirLabel
-
-signal statusLine = state
-  |> .status
-  |> statusLineFor
-
-signal scoreLine = state
-  |> .score
-  |> scoreLineFor
-
-signal gameOver = state
-  |> .status
-  |> isGameOver
-
-signal finalScoreLine = state
-  |> .score
-  |> finalScoreLineFor
+from state = {
+    boardText: renderBoard
+    dirLine: .dir |> dirLabel
+    statusLine: .status |> statusLineFor
+    scoreLine: .score |> scoreLineFor
+    gameOver: .status |> isGameOver
+    finalScoreLine: .score |> finalScoreLineFor
+}
 
 value main =
     <Window title="AIVI Snake">

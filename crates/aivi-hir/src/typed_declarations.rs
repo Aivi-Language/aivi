@@ -64,7 +64,9 @@ fn value_info(
     item: &ValueItem,
     typing: &mut GateTypeContext<'_>,
 ) -> TypedDeclarationInfo {
-    let declared = item.annotation.and_then(|annotation| typing.lower_annotation(annotation));
+    let declared = item
+        .annotation
+        .and_then(|annotation| typing.lower_annotation(annotation));
     let inferred = infer_value_type(item, typing);
 
     TypedDeclarationInfo {
@@ -86,7 +88,7 @@ fn function_info(
     typing: &mut GateTypeContext<'_>,
 ) -> TypedDeclarationInfo {
     let declared = declared_function_signature(item, typing);
-    let inferred = infer_function_signature(item, typing);
+    let inferred = infer_function_signature(item_id, item, typing);
 
     TypedDeclarationInfo {
         item_id,
@@ -109,7 +111,9 @@ fn signal_info(
     item: &SignalItem,
     typing: &mut GateTypeContext<'_>,
 ) -> TypedDeclarationInfo {
-    let declared = item.annotation.and_then(|annotation| typing.lower_annotation(annotation));
+    let declared = item
+        .annotation
+        .and_then(|annotation| typing.lower_annotation(annotation));
     let inferred = infer_signal_type(item, typing);
 
     TypedDeclarationInfo {
@@ -134,24 +138,20 @@ fn infer_value_type(item: &ValueItem, typing: &mut GateTypeContext<'_>) -> Optio
 }
 
 fn infer_function_signature(
+    item_id: ItemId,
     item: &FunctionItem,
     typing: &mut GateTypeContext<'_>,
 ) -> Option<FunctionSignature> {
-    let mut env = GateExprEnv::default();
+    let mut current = typing.item_value_type(item_id)?;
     let mut parameters = Vec::with_capacity(item.parameters.len());
-    for parameter in &item.parameters {
-        let annotation = parameter.annotation?;
-        let parameter_ty = typing.lower_open_annotation(annotation)?;
-        env.locals.insert(parameter.binding, parameter_ty.clone());
-        parameters.push(parameter_ty);
+    for _ in &item.parameters {
+        let GateType::Arrow { parameter, result } = current else {
+            return None;
+        };
+        parameters.push(*parameter);
+        current = *result;
     }
-
-    let info = typing.infer_expr(item.body, &env, None);
-    if !info.issues.is_empty() {
-        return None;
-    }
-    let result = info.actual_gate_type().or(info.ty)?;
-    Some(FunctionSignature::new(Vec::new(), parameters, result))
+    Some(FunctionSignature::new(Vec::new(), parameters, current))
 }
 
 fn infer_signal_type(item: &SignalItem, typing: &mut GateTypeContext<'_>) -> Option<GateType> {
@@ -180,7 +180,11 @@ fn declared_function_signature(
     let parameters = item
         .parameters
         .iter()
-        .map(|parameter| parameter.annotation.and_then(|annotation| typing.lower_open_annotation(annotation)))
+        .map(|parameter| {
+            parameter
+                .annotation
+                .and_then(|annotation| typing.lower_open_annotation(annotation))
+        })
         .collect::<Option<Vec<_>>>()?;
     let result = item
         .annotation
@@ -319,6 +323,46 @@ mod tests {
         assert_eq!(id.declared_type, None);
         assert_eq!(id.inferred_type, None);
         assert_eq!(id.annotation_matches_inferred, None);
+    }
+
+    #[test]
+    fn unannotated_function_signatures_infer_from_typed_callsites() {
+        let declarations = typed_declarations(
+            "func keepNone = opt => None\n\
+             value chosen:Option Int = keepNone None\n",
+        );
+        let keep_none = declarations
+            .iter()
+            .find(|declaration| declaration.name == "keepNone")
+            .expect("expected typed declaration for `keepNone`");
+
+        assert_eq!(keep_none.kind, TypedDeclarationKind::Function);
+        assert_eq!(keep_none.declared_type, None);
+        assert_eq!(
+            keep_none.inferred_type.as_deref(),
+            Some("Option Int -> Option Int")
+        );
+        assert_eq!(keep_none.annotation_matches_inferred, None);
+    }
+
+    #[test]
+    fn unannotated_function_signatures_infer_from_partial_application_results() {
+        let declarations = typed_declarations(
+            "func keepLeft = left right => left\n\
+             value chooser:(Int -> Int) = keepLeft 1\n",
+        );
+        let keep_left = declarations
+            .iter()
+            .find(|declaration| declaration.name == "keepLeft")
+            .expect("expected typed declaration for `keepLeft`");
+
+        assert_eq!(keep_left.kind, TypedDeclarationKind::Function);
+        assert_eq!(keep_left.declared_type, None);
+        assert_eq!(
+            keep_left.inferred_type.as_deref(),
+            Some("Int -> Int -> Int")
+        );
+        assert_eq!(keep_left.annotation_matches_inferred, None);
     }
 
     #[test]

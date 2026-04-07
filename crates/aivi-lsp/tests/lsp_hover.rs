@@ -2,8 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use aivi_lsp::{documents::open_document, hover::hover, state::ServerState};
 use tower_lsp::lsp_types::{
-    Hover, HoverContents, HoverParams, Position, TextDocumentIdentifier, TextDocumentPositionParams,
-    Url,
+    Hover, HoverContents, HoverParams, Position, TextDocumentIdentifier,
+    TextDocumentPositionParams, Url,
 };
 
 fn test_uri(name: &str) -> Url {

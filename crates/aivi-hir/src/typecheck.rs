@@ -4,6 +4,7 @@ use aivi_base::{Diagnostic, DiagnosticCode, SourceSpan};
 
 use crate::{
     domain_operator_elaboration::select_domain_binary_operator,
+    function_inference::{FunctionSignatureEvidence, supports_same_module_function_inference},
     hir::{
         BinaryOperator, BuiltinTerm, BuiltinType, ClassMemberResolution, DomainMember, ExprKind,
         FunctionItem, ImportBindingMetadata, ImportBundleKind, InstanceItem, InstanceMember, Item,
@@ -308,6 +309,27 @@ enum ResultBindingShape {
     Unknown,
 }
 
+pub(crate) fn collect_contextual_function_signature_evidence(
+    module: &Module,
+    function_ids: &[ItemId],
+    typing: GateTypeContext<'_>,
+    function_set: &HashSet<ItemId>,
+) -> Vec<FunctionSignatureEvidence> {
+    let mut checker = TypeChecker::with_typing(module, typing);
+    for item_id in function_ids {
+        let Item::Function(function) = &module.items()[*item_id] else {
+            continue;
+        };
+        checker.check_function_item(*item_id, function);
+    }
+    checker
+        .typing
+        .take_function_signature_evidence()
+        .into_iter()
+        .filter(|evidence| function_set.contains(&evidence.item_id))
+        .collect()
+}
+
 impl<'a> TypeChecker<'a> {
     fn new(module: &'a Module) -> Self {
         let (option_default_in_scope, imported_default_values) =
@@ -315,6 +337,22 @@ impl<'a> TypeChecker<'a> {
         Self {
             module,
             typing: GateTypeContext::new(module),
+            diagnostics: Vec::new(),
+            option_default_in_scope,
+            imported_default_values,
+            default_record_elisions: Vec::new(),
+            pending_eq_constraints: Vec::new(),
+            eq_constrained_parameters: HashSet::new(),
+            in_scope_class_constraints: Vec::new(),
+        }
+    }
+
+    fn with_typing(module: &'a Module, typing: GateTypeContext<'a>) -> Self {
+        let (option_default_in_scope, imported_default_values) =
+            Self::collect_default_imports(module);
+        Self {
+            module,
+            typing,
             diagnostics: Vec::new(),
             option_default_in_scope,
             imported_default_values,
@@ -335,7 +373,7 @@ impl<'a> TypeChecker<'a> {
         for (item_id, item) in items {
             match item {
                 Item::Value(item) => self.check_value_item(&item),
-                Item::Function(item) => self.check_function_item(&item),
+                Item::Function(item) => self.check_function_item(item_id, &item),
                 Item::Signal(item) => self.check_signal_item(&item),
                 Item::Instance(item) => self.check_instance_item(&item),
                 Item::Domain(item) => self.check_domain_item(item_id, &item),
@@ -434,22 +472,34 @@ impl<'a> TypeChecker<'a> {
         );
     }
 
-    fn check_function_item(&mut self, item: &FunctionItem) {
+    fn check_function_item(&mut self, item_id: ItemId, item: &FunctionItem) {
         let context = self.constraint_bindings(&item.context, &PolyTypeBindings::new());
         self.with_class_constraint_scope(context, |this| {
+            let inferred_signature = supports_same_module_function_inference(item)
+                .then(|| this.typing.item_value_type(item_id))
+                .flatten();
+            let inferred_parts = inferred_signature
+                .as_ref()
+                .and_then(|ty| this.expected_function_signature(ty, item.parameters.len()));
             let mut env = GateExprEnv::default();
-            for parameter in &item.parameters {
-                let Some(annotation) = parameter.annotation else {
-                    continue;
-                };
-                let Some(parameter_ty) = this.typing.lower_open_annotation(annotation) else {
+            for (index, parameter) in item.parameters.iter().enumerate() {
+                let Some(parameter_ty) = parameter
+                    .annotation
+                    .and_then(|annotation| this.typing.lower_open_annotation(annotation))
+                    .or_else(|| {
+                        inferred_parts
+                            .as_ref()
+                            .and_then(|(parameter_types, _)| parameter_types.get(index).cloned())
+                    })
+                else {
                     continue;
                 };
                 env.locals.insert(parameter.binding, parameter_ty);
             }
             let expected = item
                 .annotation
-                .and_then(|annotation| this.typing.lower_open_annotation(annotation));
+                .and_then(|annotation| this.typing.lower_open_annotation(annotation))
+                .or_else(|| inferred_parts.as_ref().map(|(_, result)| result.clone()));
             this.check_expr(item.body, &env, expected.as_ref(), &mut Vec::new());
         });
     }
@@ -1802,15 +1852,23 @@ impl<'a> TypeChecker<'a> {
         else {
             return None;
         };
-        let (parameters, annotated, body) = match &self.module.items()[*item_id] {
+        let (parameters, result_annotation, body, inferable) = match &self.module.items()[*item_id]
+        {
             Item::Function(item) => (
                 item.parameters.clone(),
-                item.annotation.is_some(),
+                item.annotation,
                 item.body,
+                supports_same_module_function_inference(item),
             ),
             _ => return None,
         };
-        if annotated || value_stack.contains(item_id) {
+        if !inferable
+            || (result_annotation.is_some()
+                && parameters
+                    .iter()
+                    .all(|parameter| parameter.annotation.is_some()))
+            || value_stack.contains(item_id)
+        {
             return None;
         }
         let (parameter_types, result_expected) =
@@ -1831,6 +1889,16 @@ impl<'a> TypeChecker<'a> {
                     .insert(parameter.binding, expected_parameter_ty.clone());
             }
         }
+        if let Some(annotation) = result_annotation {
+            let Some(result_ty) = self.typing.lower_open_annotation(annotation) else {
+                return None;
+            };
+            if !result_ty.same_shape(&result_expected) {
+                self.emit_type_mismatch(reference.span(), &result_expected, &result_ty);
+                return Some(false);
+            }
+        }
+        self.record_function_signature_evidence(*item_id, &parameter_types, &result_expected);
         value_stack.push(*item_id);
         let result = self.check_expr(body, &env, Some(&result_expected), value_stack);
         let popped = value_stack.pop();
@@ -1869,6 +1937,65 @@ impl<'a> TypeChecker<'a> {
             current = result.as_ref();
         }
         Some((parameter_types, current.clone()))
+    }
+
+    fn contextual_same_module_function_signature(
+        &mut self,
+        function: &FunctionItem,
+        argument_types: &[GateType],
+        expected: &GateType,
+    ) -> Option<(Vec<GateType>, GateType)> {
+        if !supports_same_module_function_inference(function) {
+            return None;
+        }
+        if function.annotation.is_some()
+            && function
+                .parameters
+                .iter()
+                .all(|parameter| parameter.annotation.is_some())
+        {
+            return None;
+        }
+        let remaining_arity = function
+            .parameters
+            .len()
+            .checked_sub(argument_types.len())?;
+        let (remaining_parameter_types, result_type) =
+            self.expected_function_signature(expected, remaining_arity)?;
+        let mut parameter_types = argument_types.to_vec();
+        parameter_types.extend(remaining_parameter_types);
+        if parameter_types.len() != function.parameters.len() {
+            return None;
+        }
+        for (parameter, parameter_ty) in function.parameters.iter().zip(parameter_types.iter()) {
+            if let Some(annotation) = parameter.annotation {
+                let annotation_ty = self.typing.lower_open_annotation(annotation)?;
+                if !annotation_ty.same_shape(parameter_ty) {
+                    return None;
+                }
+            }
+        }
+        if let Some(annotation) = function.annotation {
+            let annotation_ty = self.typing.lower_open_annotation(annotation)?;
+            if !annotation_ty.same_shape(&result_type) {
+                return None;
+            }
+        }
+        Some((parameter_types, result_type))
+    }
+
+    fn record_function_signature_evidence(
+        &mut self,
+        item_id: ItemId,
+        parameter_types: &[GateType],
+        result_type: &GateType,
+    ) {
+        self.typing
+            .record_function_signature_evidence(FunctionSignatureEvidence {
+                item_id,
+                parameter_types: parameter_types.to_vec(),
+                result_type: result_type.clone(),
+            });
     }
 
     fn check_builtin_constructor_name(
@@ -2121,6 +2248,17 @@ impl<'a> TypeChecker<'a> {
                 return None;
             };
             argument_types.push(argument_ty);
+        }
+        if let Some((parameter_types, result_type)) =
+            self.contextual_same_module_function_signature(&function, &argument_types, expected)
+        {
+            self.record_function_signature_evidence(*item_id, &parameter_types, &result_type);
+            for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
+                if !self.check_expr(*argument, env, Some(parameter), value_stack) {
+                    return Some(false);
+                }
+            }
+            return Some(true);
         }
         let Some((matched_parameters, constraints)) =
             self.match_function_constraints(&function, arguments, &argument_types, expected)
@@ -5349,6 +5487,35 @@ signal total : Signal Int = ready
         assert!(
             report.is_ok(),
             "expected unannotated function application to typecheck from expected result, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_propagates_contextual_inference_through_same_module_helpers() {
+        let report = typecheck_text(
+            "function-helper-contextual-inference.aivi",
+            "fun keep = value => value\n\
+             fun relay = value => keep value\n\
+             value chosen:(Option Int -> Option Int) = relay\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected same-module helper inference to typecheck, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn typecheck_accepts_partial_application_from_expected_arrow() {
+        let report = typecheck_text(
+            "function-partial-application-expected-arrow.aivi",
+            "fun keepLeft = left right => left\n\
+             value chooser:(Int -> Int) = keepLeft 1\n",
+        );
+        assert!(
+            report.is_ok(),
+            "expected partial application to typecheck from expected arrow, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

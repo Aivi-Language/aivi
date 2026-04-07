@@ -1244,6 +1244,30 @@ mod tests {
         None
     }
 
+    fn count_buttons_by_label(widget: &gtk::Widget, label: &str) -> usize {
+        let own_count = widget
+            .clone()
+            .downcast::<gtk::Button>()
+            .ok()
+            .and_then(|button| (button.label().as_deref() == Some(label)).then_some(1))
+            .unwrap_or(0);
+        let mut child = widget.first_child();
+        let mut child_count = 0;
+        while let Some(current) = child {
+            child_count += count_buttons_by_label(&current, label);
+            child = current.next_sibling();
+        }
+        own_count + child_count
+    }
+
+    fn button_label_count_for(harness: &super::RunSessionHarness, label: &str) -> usize {
+        harness
+            .root_windows()
+            .iter()
+            .map(|window| count_buttons_by_label(&window.clone().upcast::<gtk::Widget>(), label))
+            .sum()
+    }
+
     #[test]
     fn main_context_request_queue_preserves_submission_order() {
         let queue = MainContextRequestQueue::new();
@@ -1705,6 +1729,7 @@ export main
         harness
             .present_root_windows()
             .expect("presenting the reversi window should release startup-held timers");
+        let opening_red_count = button_label_count_for(&harness, "🔴");
 
         let opening_move = harness
             .root_windows()
@@ -1712,6 +1737,12 @@ export main
             .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
+        assert!(
+            pump_until(&context, Duration::from_millis(100), || {
+                button_label_count_for(&harness, "🔴") > opening_red_count
+            }),
+            "clicking a legal move should put the new red stone on the board right away"
+        );
         assert!(
             pump_until(&context, Duration::from_millis(100), || {
                 text_signal_for(&harness, status_item) == "Computer is choosing..."

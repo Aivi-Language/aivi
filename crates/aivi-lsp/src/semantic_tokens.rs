@@ -34,6 +34,7 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
         TokenKind::FuncKw
         | TokenKind::ValueKw
         | TokenKind::SignalKw
+        | TokenKind::FromKw
         | TokenKind::ClassKw
         | TokenKind::InstanceKw
         | TokenKind::DomainKw
@@ -246,6 +247,11 @@ mod tests {
     #[test]
     fn leaves_type_keyword_to_textmate() {
         assert_eq!(token_type_index(TokenKind::TypeKw), None);
+    }
+
+    #[test]
+    fn treats_from_as_a_keyword() {
+        assert_eq!(token_type_index(TokenKind::FromKw), Some(IDX_KEYWORD));
     }
 
     #[test]

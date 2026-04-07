@@ -26,9 +26,9 @@ mod source_lifecycle_elaboration;
 pub mod symbols;
 mod temporal_elaboration;
 mod truthy_falsy_elaboration;
-mod typed_declarations;
 mod typecheck;
 mod typecheck_context;
+mod typed_declarations;
 mod validate;
 
 #[cfg(test)]
@@ -143,13 +143,13 @@ pub use truthy_falsy_elaboration::{
     TruthyFalsyElaborationBlocker, TruthyFalsyElaborationReport, TruthyFalsyStageElaboration,
     TruthyFalsyStageOutcome, TruthyFalsyStagePlan, elaborate_truthy_falsy,
 };
-pub use typed_declarations::{
-    TypedDeclarationInfo, TypedDeclarationKind, collect_typed_declarations,
-};
 pub use typecheck::{
     ClassMemberImplementation, ConstraintClass, ResolvedClassMemberDispatch, TypeCheckReport,
     TypeConstraint, apply_defaults, elaborate_default_record_fields, signal_payload_type,
     typecheck_module,
+};
+pub use typed_declarations::{
+    TypedDeclarationInfo, TypedDeclarationKind, collect_typed_declarations,
 };
 pub use validate::{
     GateRecordField, GateType, TypeBinding, TypeConstructorBinding, TypeConstructorHead,

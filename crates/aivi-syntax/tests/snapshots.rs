@@ -33,6 +33,14 @@ fn snapshot_signal_declaration() {
 }
 
 #[test]
+fn snapshot_from_signal_fanout() {
+    let module = parse(
+        "from state = {\n    boardText: renderBoard\n    gameOver: .status\n        ||> Running -> False\n        ||> GameOver -> True\n}",
+    );
+    insta::assert_debug_snapshot!(module);
+}
+
+#[test]
 fn snapshot_type_sum() {
     let module = parse("type Color =\n    | Red\n    | Green\n    | Blue");
     insta::assert_debug_snapshot!(module);

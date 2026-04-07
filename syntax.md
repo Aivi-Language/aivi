@@ -46,6 +46,7 @@ Allowed top-level forms:
 - `value`
 - `func`
 - `signal`
+- `from`
 - `use`
 - `export`
 - `provider`
@@ -212,6 +213,26 @@ Rules:
 - Body-less annotated `signal name : Signal T` creates an input signal.
 - `value` must not depend on signals.
 - Signals can depend on signals and pure helpers.
+
+### 2.6.1 `from` signal fan-out sugar
+
+```aivi
+from state = {
+    boardText: renderBoard
+    dirLine: .dir |> dirLabel
+    gameOver: .status
+        ||> Running -> False
+        ||> GameOver -> True
+}
+```
+
+Rules:
+
+- `from source = { ... }` creates one derived `signal` per entry.
+- Each entry body is desugared as if `source` were piped into it.
+- `label: renderBoard` becomes `signal label = source |> renderBoard`.
+- `label: .dir |> dirLabel` becomes `signal label = source |> .dir |> dirLabel`.
+- Deeper-indented continuation lines belong to the current entry, so `||>` pipe-case arms stay inside that derived signal body.
 
 ### 2.7 `@source`
 

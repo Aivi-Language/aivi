@@ -10,8 +10,8 @@ use crate::{
         MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem,
         NamedItemBody, OperatorName, PatchBlock, PatchEntry, PatchInstruction,
         PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern, PatternKind,
-        PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
-        RecordExpr, RecordField, RecordPatternField, RegexLiteral, ResultBinding, ResultBlockExpr,
+        PipeCaseArm, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr,
+        RecordField, RecordPatternField, RegexLiteral, ResultBinding, ResultBlockExpr,
         SignalMergeBody, SignalReactiveArm, SourceDecorator, SourceProviderContractBody,
         SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
         SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
@@ -681,7 +681,8 @@ impl<'a> Parser<'a> {
         let source = self.parse_expr(&mut source_cursor, source_end, ExprStop::default());
         match &source {
             Some(_) => {
-                if let Some(trailing_index) = self.next_significant_in_range(source_cursor, source_end)
+                if let Some(trailing_index) =
+                    self.next_significant_in_range(source_cursor, source_end)
                 {
                     self.diagnostics.push(
                         Diagnostic::error("`from` source must contain exactly one expression")
@@ -710,9 +711,7 @@ impl<'a> Parser<'a> {
         let entries = if let Some(open_brace) = open_brace {
             let inner_end = self.find_matching_brace(open_brace, end).unwrap_or(end);
             let mut entries_cursor = open_brace + 1;
-            let entries = self.parse_from_entries(&mut entries_cursor, inner_end);
-            cursor = inner_end.saturating_add(1);
-            entries
+            self.parse_from_entries(&mut entries_cursor, inner_end)
         } else {
             self.diagnostics.push(
                 Diagnostic::error("`from` declaration is missing its fan-out body")
@@ -766,10 +765,12 @@ impl<'a> Parser<'a> {
 
     fn parse_from_entry(&mut self, start: usize, end: usize) -> FromEntry {
         let mut cursor = start;
-        let name = self.parse_identifier(&mut cursor, end).unwrap_or_else(|| Identifier {
-            text: "<missing>".to_owned(),
-            span: self.source_span_of_token(start),
-        });
+        let name = self
+            .parse_identifier(&mut cursor, end)
+            .unwrap_or_else(|| Identifier {
+                text: "<missing>".to_owned(),
+                span: self.source_span_of_token(start),
+            });
         let _ = self.consume_kind(&mut cursor, end, TokenKind::Colon);
         let body = self.parse_expr(&mut cursor, end, ExprStop::default());
         match &body {

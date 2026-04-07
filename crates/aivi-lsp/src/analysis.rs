@@ -92,9 +92,9 @@ mod tests {
     use super::FileAnalysis;
     use std::sync::Arc;
 
+    use crate::type_annotations::TypedDeclarationSummary;
     use aivi_base::{ByteIndex, FileId, LspPosition, SourceSpan, Span};
     use aivi_hir::{LspSymbol, LspSymbolKind};
-    use crate::type_annotations::TypedDeclarationSummary;
 
     fn symbol(name: &str, span: std::ops::Range<usize>, children: Vec<LspSymbol>) -> LspSymbol {
         let span = SourceSpan::new(FileId::new(0), Span::from(span));

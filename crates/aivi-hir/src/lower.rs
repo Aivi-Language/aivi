@@ -930,6 +930,13 @@ impl<'a> Lowerer<'a> {
             return;
         }
 
+        if let syn::Item::From(item) = item {
+            for signal in self.lower_from_item(item) {
+                self.store_item(Item::Signal(signal), ambient);
+            }
+            return;
+        }
+
         let lowered = match item {
             syn::Item::Fun(item) => Some(Item::Function(self.lower_function_item(item))),
             syn::Item::Value(item) => Some(Item::Value(self.lower_value_item(item))),
@@ -947,6 +954,9 @@ impl<'a> Lowerer<'a> {
             }
             syn::Item::Type(_) => {
                 unreachable!("type items are handled before single-item lowering")
+            }
+            syn::Item::From(_) => {
+                unreachable!("from items are handled before single-item lowering")
             }
             syn::Item::Error(item) => {
                 self.emit_error(
@@ -1176,6 +1186,102 @@ impl<'a> Lowerer<'a> {
             import_signal_dependencies: Vec::new(),
             source_metadata: None,
             is_source_capability_handle: false,
+        }
+    }
+
+    fn lower_from_item(&mut self, item: &syn::FromItem) -> Vec<SignalItem> {
+        item.entries
+            .iter()
+            .map(|entry| self.lower_from_entry_signal(item, entry))
+            .collect()
+    }
+
+    fn lower_from_entry_signal(
+        &mut self,
+        from_item: &syn::FromItem,
+        entry: &syn::FromEntry,
+    ) -> SignalItem {
+        let synthetic = syn::NamedItem {
+            base: syn::ItemBase {
+                span: entry.span,
+                token_range: from_item.base.token_range,
+                decorators: from_item.base.decorators.clone(),
+                leading_comments: Vec::new(),
+            },
+            keyword_span: from_item.keyword_span,
+            name: Some(entry.name.clone()),
+            type_parameters: Vec::new(),
+            constraints: Vec::new(),
+            annotation: None,
+            function_form: syn::cst::FunctionSurfaceForm::Explicit,
+            parameters: Vec::new(),
+            body: Some(syn::NamedItemBody::Expr(self.synthesize_from_entry_body(
+                from_item.source.as_ref(),
+                entry.body.as_ref(),
+                entry.span,
+            ))),
+        };
+        self.lower_signal_item(&synthetic)
+    }
+
+    fn synthesize_from_entry_body(
+        &self,
+        source: Option<&syn::Expr>,
+        body: Option<&syn::Expr>,
+        fallback_span: SourceSpan,
+    ) -> syn::Expr {
+        match (source, body) {
+            (Some(source), Some(body)) => self.prepend_from_source(source, body),
+            (Some(source), None) => source.clone(),
+            (None, Some(body)) => body.clone(),
+            (None, None) => syn::Expr {
+                span: fallback_span,
+                kind: syn::ExprKind::Name(syn::Identifier {
+                    text: "invalid".to_owned(),
+                    span: fallback_span,
+                }),
+            },
+        }
+    }
+
+    fn prepend_from_source(&self, source: &syn::Expr, body: &syn::Expr) -> syn::Expr {
+        let span = source.span.join(body.span).unwrap_or(body.span);
+        match &body.kind {
+            syn::ExprKind::Pipe(pipe) => {
+                let mut pipe = pipe.clone();
+                let mut stages =
+                    Vec::with_capacity(pipe.stages.len() + usize::from(pipe.head.is_some()));
+                if let Some(head) = pipe.head.take() {
+                    let head = *head;
+                    stages.push(syn::PipeStage {
+                        subject_memo: None,
+                        result_memo: None,
+                        span: head.span,
+                        kind: syn::PipeStageKind::Transform { expr: head },
+                    });
+                }
+                stages.extend(pipe.stages);
+                pipe.head = Some(Box::new(source.clone()));
+                pipe.stages = stages;
+                pipe.span = span;
+                syn::Expr {
+                    span,
+                    kind: syn::ExprKind::Pipe(pipe),
+                }
+            }
+            _ => syn::Expr {
+                span,
+                kind: syn::ExprKind::Pipe(syn::PipeExpr {
+                    head: Some(Box::new(source.clone())),
+                    stages: vec![syn::PipeStage {
+                        subject_memo: None,
+                        result_memo: None,
+                        span: body.span,
+                        kind: syn::PipeStageKind::Transform { expr: body.clone() },
+                    }],
+                    span,
+                }),
+            },
         }
     }
 
@@ -11927,6 +12033,52 @@ signal game : Signal Int = stepOnTick tick
             signal_dependency_names(lowered.module(), score),
             vec!["state".to_owned()],
             "nested signal record projections should still trace back to the original upstream signal"
+        );
+    }
+
+    #[test]
+    fn lowers_from_signal_fanout_into_ordinary_signals() {
+        let lowered = lower_text(
+            "from-signal-fanout.aivi",
+            "type Status =\n\
+             \x20 | Running\n\
+             \x20 | GameOver\n\
+             type State = { status: Status, score: Int }\n\
+             signal state : Signal State = { status: Running, score: 0 }\n\
+             from state = {\n\
+             \x20\x20\x20\x20score: .score\n\
+             \x20\x20\x20\x20gameOver: .status\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20||> Running -> False\n\
+             \x20\x20\x20\x20\x20\x20\x20\x20||> GameOver -> True\n\
+             }\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "from signal fanout example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "from signal fanout example should validate cleanly: {:?}",
+            report.diagnostics()
+        );
+
+        let score = find_signal(lowered.module(), "score");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), score),
+            vec!["state".to_owned()],
+            "fan-out entries should lower to ordinary derived signals over the shared source"
+        );
+
+        let game_over = find_signal(lowered.module(), "gameOver");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), game_over),
+            vec!["state".to_owned()],
+            "pipe-case fan-out entries should preserve the upstream signal dependency"
         );
     }
 

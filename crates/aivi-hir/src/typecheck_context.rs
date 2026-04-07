@@ -1597,7 +1597,10 @@ impl<'a> GateTypeContext<'a> {
     ) -> Self {
         Self {
             module,
-            item_types: item_types.into_iter().map(|(item_id, ty)| (item_id, Some(ty))).collect(),
+            item_types: item_types
+                .into_iter()
+                .map(|(item_id, ty)| (item_id, Some(ty)))
+                .collect(),
             item_actuals: HashMap::new(),
             inferred_function_types: Some(HashMap::new()),
             function_call_evidence: Vec::new(),
@@ -2398,10 +2401,8 @@ impl<'a> GateTypeContext<'a> {
                                 return None;
                             }
                             let inferred = self.inferred_function_types().get(&item_id)?;
-                            let parameter_types = self.arrow_parameter_types(
-                                inferred,
-                                item.parameters.len(),
-                            )?;
+                            let parameter_types =
+                                self.arrow_parameter_types(inferred, item.parameters.len())?;
                             parameter_types.get(parameters.len())?.clone()
                         }
                     };

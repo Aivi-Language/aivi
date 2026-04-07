@@ -39,7 +39,9 @@ impl NavigationTarget {
             if sym.selection_span == target_span {
                 return Some(sym);
             }
-            if sym.span.file() == target_span.file() && sym.span.span().contains(target_span.span().start()) {
+            if sym.span.file() == target_span.file()
+                && sym.span.span().contains(target_span.span().start())
+            {
                 if best.as_ref().is_none_or(|b: &aivi_hir::LspSymbol| {
                     sym.span.span().len() < b.span.span().len()
                 }) {
@@ -759,8 +761,7 @@ impl NavigationAnalysis {
         matches!(
             site,
             NavigationSite::TermReference {
-                resolution:
-                    ResolutionState::Resolved(TermResolution::ClassMember(_))
+                resolution: ResolutionState::Resolved(TermResolution::ClassMember(_))
                     | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)),
                 ..
             } | NavigationSite::ClassMemberDecl { .. }
