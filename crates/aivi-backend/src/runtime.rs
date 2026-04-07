@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
     hash::Hash,
+    time::{Duration, Instant},
 };
 
 use indexmap::IndexMap;
@@ -1218,16 +1219,6 @@ struct LastKernelCall {
     result_layout: LayoutId,
 }
 
-pub struct KernelEvaluator<'a> {
-    program: &'a Program,
-    item_cache: BTreeMap<ItemId, RuntimeValue>,
-    item_stack: BTreeSet<ItemId>,
-    /// Ordered evaluation trace: items visited during the current evaluation,
-    /// in the order they were first entered. Used for error rendering.
-    eval_trace: Vec<EvalFrame>,
-    last_kernel_call: Option<LastKernelCall>,
-}
-
 /// A lightweight frame in the evaluation trace.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EvalFrame {
@@ -1239,6 +1230,74 @@ impl fmt::Display for EvalFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "item {} (kernel {})", self.item, self.kernel)
     }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EvaluationCallProfile {
+    pub calls: u64,
+    pub cache_hits: u64,
+    pub total_time: Duration,
+    pub max_time: Duration,
+}
+
+impl EvaluationCallProfile {
+    fn record(&mut self, elapsed: Duration, cache_hit: bool) {
+        self.calls += 1;
+        if cache_hit {
+            self.cache_hits += 1;
+        }
+        self.total_time += elapsed;
+        self.max_time = self.max_time.max(elapsed);
+    }
+
+    fn merge_from(&mut self, other: &Self) {
+        self.calls += other.calls;
+        self.cache_hits += other.cache_hits;
+        self.total_time += other.total_time;
+        self.max_time = self.max_time.max(other.max_time);
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct KernelEvaluationProfile {
+    pub kernels: BTreeMap<KernelId, EvaluationCallProfile>,
+    pub items: BTreeMap<ItemId, EvaluationCallProfile>,
+}
+
+impl KernelEvaluationProfile {
+    fn record_kernel(&mut self, kernel: KernelId, elapsed: Duration, cache_hit: bool) {
+        self.kernels
+            .entry(kernel)
+            .or_default()
+            .record(elapsed, cache_hit);
+    }
+
+    fn record_item(&mut self, item: ItemId, elapsed: Duration, cache_hit: bool) {
+        self.items
+            .entry(item)
+            .or_default()
+            .record(elapsed, cache_hit);
+    }
+
+    pub fn merge_from(&mut self, other: &Self) {
+        for (kernel, profile) in &other.kernels {
+            self.kernels.entry(*kernel).or_default().merge_from(profile);
+        }
+        for (item, profile) in &other.items {
+            self.items.entry(*item).or_default().merge_from(profile);
+        }
+    }
+}
+
+pub struct KernelEvaluator<'a> {
+    program: &'a Program,
+    item_cache: BTreeMap<ItemId, RuntimeValue>,
+    item_stack: BTreeSet<ItemId>,
+    /// Ordered evaluation trace: items visited during the current evaluation,
+    /// in the order they were first entered. Used for error rendering.
+    eval_trace: Vec<EvalFrame>,
+    last_kernel_call: Option<LastKernelCall>,
+    profile: Option<KernelEvaluationProfile>,
 }
 
 /// Sentinel `KernelId` used when applying a closure during task composition (map/chain/join).
@@ -1287,11 +1346,26 @@ impl<'a> KernelEvaluator<'a> {
             item_stack: BTreeSet::new(),
             eval_trace: Vec::new(),
             last_kernel_call: None,
+            profile: None,
         }
+    }
+
+    pub fn new_profiled(program: &'a Program) -> Self {
+        let mut evaluator = Self::new(program);
+        evaluator.profile = Some(KernelEvaluationProfile::default());
+        evaluator
     }
 
     pub fn program(&self) -> &'a Program {
         self.program
+    }
+
+    pub fn profile(&self) -> Option<&KernelEvaluationProfile> {
+        self.profile.as_ref()
+    }
+
+    pub fn profile_snapshot(&self) -> Option<KernelEvaluationProfile> {
+        self.profile.clone()
     }
 
     /// Return the current evaluation trace (items visited, in entry order).
@@ -1359,6 +1433,7 @@ impl<'a> KernelEvaluator<'a> {
         environment: &[RuntimeValue],
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<(RuntimeValue, LayoutId), EvaluationError> {
+        let started_at = self.profile.as_ref().map(|_| Instant::now());
         let kernel = self
             .program
             .kernels()
@@ -1405,13 +1480,20 @@ impl<'a> KernelEvaluator<'a> {
             }
         }
         // Check the single-entry call cache before doing any work.
-        if let Some(ref last) = self.last_kernel_call {
-            if last.kernel_id == kernel_id
-                && last.input_subject.as_ref() == input_subject
-                && last.environment.as_ref() == environment
-            {
-                return Ok((last.result.clone(), last.result_layout));
-            }
+        if let Some((cached_result, cached_layout)) =
+            self.last_kernel_call.as_ref().and_then(|last| {
+                (last.kernel_id == kernel_id
+                    && last.input_subject.as_ref() == input_subject
+                    && last.environment.as_ref() == environment)
+                    .then(|| (last.result.clone(), last.result_layout))
+            })
+        {
+            self.record_kernel_profile(
+                kernel_id,
+                started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                true,
+            );
+            return Ok((cached_result, cached_layout));
         }
         let inline_subjects = vec![None; kernel.inline_subjects.len()];
         let result = self.evaluate_expr(
@@ -1421,7 +1503,13 @@ impl<'a> KernelEvaluator<'a> {
             environment,
             &inline_subjects,
             globals,
-        )?;
+        );
+        self.record_kernel_profile(
+            kernel_id,
+            started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+            false,
+        );
+        let result = result?;
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
             input_subject: input_subject.cloned(),
@@ -1440,8 +1528,14 @@ impl<'a> KernelEvaluator<'a> {
         if let Some(value) = globals.get(&item) {
             return Ok(value.clone());
         }
-        if let Some(value) = self.item_cache.get(&item) {
-            return Ok(value.clone());
+        let started_at = self.profile.as_ref().map(|_| Instant::now());
+        if let Some(value) = self.item_cache.get(&item).cloned() {
+            self.record_item_profile(
+                item,
+                started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                true,
+            );
+            return Ok(value);
         }
         let item_decl = self
             .program
@@ -1460,6 +1554,11 @@ impl<'a> KernelEvaluator<'a> {
             }));
         }
         if !self.item_stack.insert(item) {
+            self.record_item_profile(
+                item,
+                started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                false,
+            );
             return Err(EvaluationError::RecursiveItemEvaluation { item });
         }
         self.eval_trace.push(EvalFrame { item, kernel });
@@ -1470,7 +1569,14 @@ impl<'a> KernelEvaluator<'a> {
                 self.eval_trace.pop();
                 (v, layout)
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                self.record_item_profile(
+                    item,
+                    started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                    false,
+                );
+                return Err(e);
+            }
         };
         let result = match (&item_decl.kind, raw_result) {
             (crate::ItemKind::Signal(_), RuntimeValue::Signal(value))
@@ -1487,8 +1593,25 @@ impl<'a> KernelEvaluator<'a> {
                 found: result,
             });
         };
+        self.record_item_profile(
+            item,
+            started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+            false,
+        );
         self.item_cache.insert(item, result.clone());
         Ok(result)
+    }
+
+    fn record_kernel_profile(&mut self, kernel: KernelId, elapsed: Duration, cache_hit: bool) {
+        if let Some(profile) = &mut self.profile {
+            profile.record_kernel(kernel, elapsed, cache_hit);
+        }
+    }
+
+    fn record_item_profile(&mut self, item: ItemId, elapsed: Duration, cache_hit: bool) {
+        if let Some(profile) = &mut self.profile {
+            profile.record_item(item, elapsed, cache_hit);
+        }
     }
 
     fn evaluate_expr(

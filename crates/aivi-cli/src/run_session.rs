@@ -1025,6 +1025,7 @@ mod tests {
         RunSessionPhase, RunSessionScheduleState, project_run_hydration_globals,
         start_run_session_with_launch_config,
     };
+    use crate::{RunHydrationStaticState, plan_run_hydration_profiled};
     use aivi_backend::{DetachedRuntimeValue, ItemId as BackendItemId, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
@@ -1761,6 +1762,77 @@ export main
             debug_signal_value_for(&harness, "action"),
             debug_signal_value_for(&harness, "session"),
             debug_signal_value_for(&harness, "history"),
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
+    fn reversi_profiled_hydration_reports_fragment_and_kernel_activity() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let path = repo_path("demos/reversi.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let shared = RunHydrationStaticState {
+            view_name: artifact.view_name.clone(),
+            module: artifact.module.clone(),
+            bridge: artifact.bridge.clone(),
+            inputs: artifact.hydration_inputs.clone(),
+        };
+        let status_item = required_signal_item(&artifact, "statusText");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("reversi demo should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the reversi window should release startup-held timers");
+
+        let opening_move = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
+            .expect("reversi board should expose a legal opening move");
+        opening_move.emit_clicked();
+        assert!(
+            pump_until(&context, Duration::from_millis(100), || {
+                text_signal_for(&harness, status_item) == "Computer is choosing..."
+            }),
+            "opening move should quickly reach the AI-thinking state before profiling hydration"
+        );
+
+        let globals = harness.with_access(|access| {
+            access
+                .driver()
+                .current_signal_globals()
+                .expect("signal globals should be readable for hydration profiling")
+        });
+        let (_plan, profile) = plan_run_hydration_profiled(&shared, &globals)
+            .expect("reversi hydration should be profileable from live runtime globals");
+
+        let total_kernel_calls = profile
+            .program_profiles
+            .values()
+            .map(|program| {
+                program
+                    .kernels
+                    .values()
+                    .map(|entry| entry.calls)
+                    .sum::<u64>()
+            })
+            .sum::<u64>();
+        let total_item_calls = profile
+            .program_profiles
+            .values()
+            .map(|program| program.items.values().map(|entry| entry.calls).sum::<u64>())
+            .sum::<u64>();
+
+        assert!(profile.planned_nodes > 0);
+        assert!(profile.evaluated_inputs > 0);
+        assert!(!profile.fragment_profiles.is_empty());
+        assert!(!profile.program_profiles.is_empty());
+        assert!(
+            total_kernel_calls > 0 || total_item_calls > 0,
+            "profile should capture kernel or item activity for live Reversi hydration"
         );
 
         harness.shutdown();

@@ -23,9 +23,9 @@ use std::{
 use std::os::unix::fs::PermissionsExt;
 
 use aivi_backend::{
-    DetachedRuntimeValue, ItemId as BackendItemId, KernelEvaluator, Program as BackendProgram,
-    RuntimeFloat, RuntimeRecordField, RuntimeValue, compile_program_cached,
-    lower_module as lower_backend_module, validate_program,
+    DetachedRuntimeValue, ItemId as BackendItemId, KernelEvaluationProfile, KernelEvaluator,
+    Program as BackendProgram, RuntimeFloat, RuntimeRecordField, RuntimeValue,
+    compile_program_cached, lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
 use aivi_core::{
@@ -1020,6 +1020,114 @@ struct RunHydrationStaticState {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RunHydrationPlan {
     root: HydratedRunNode,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RunHydrationFragmentProfile {
+    program_key: usize,
+    entry_item: BackendItemId,
+    evaluations: u64,
+    total_time: Duration,
+    max_time: Duration,
+}
+
+impl RunHydrationFragmentProfile {
+    fn record(&mut self, elapsed: Duration) {
+        self.evaluations += 1;
+        self.total_time += elapsed;
+        self.max_time = self.max_time.max(elapsed);
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RunHydrationProfile {
+    total_time: Duration,
+    planned_nodes: u64,
+    evaluated_inputs: u64,
+    evaluated_texts: u64,
+    fragment_profiles: BTreeMap<HirExprId, RunHydrationFragmentProfile>,
+    program_profiles: BTreeMap<usize, KernelEvaluationProfile>,
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+enum RunHydrationProfiler {
+    Disabled,
+    Enabled(RunHydrationProfile),
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+impl RunHydrationProfiler {
+    fn disabled() -> Self {
+        Self::Disabled
+    }
+
+    fn enabled() -> Self {
+        Self::Enabled(RunHydrationProfile::default())
+    }
+
+    fn kernel_profiling_enabled(&self) -> bool {
+        matches!(self, Self::Enabled(_))
+    }
+
+    fn record_node(&mut self) {
+        if let Self::Enabled(profile) = self {
+            profile.planned_nodes += 1;
+        }
+    }
+
+    fn record_input(&mut self) {
+        if let Self::Enabled(profile) = self {
+            profile.evaluated_inputs += 1;
+        }
+    }
+
+    fn record_text(&mut self) {
+        if let Self::Enabled(profile) = self {
+            profile.evaluated_texts += 1;
+        }
+    }
+
+    fn record_fragment(&mut self, fragment: &CompiledRunFragment, elapsed: Duration) {
+        let Self::Enabled(profile) = self else {
+            return;
+        };
+        let program_key = Arc::as_ptr(&fragment.program) as usize;
+        let entry = profile
+            .fragment_profiles
+            .entry(fragment.expr)
+            .or_insert_with(|| RunHydrationFragmentProfile {
+                program_key,
+                entry_item: fragment.item,
+                evaluations: 0,
+                total_time: Duration::ZERO,
+                max_time: Duration::ZERO,
+            });
+        entry.record(elapsed);
+    }
+
+    fn finish<'a>(&mut self, total_time: Duration, evaluators: &EvaluatorCache<'a>) {
+        let Self::Enabled(profile) = self else {
+            return;
+        };
+        profile.total_time = total_time;
+        for (program_ptr, evaluator) in evaluators {
+            let Some(kernel_profile) = evaluator.profile_snapshot() else {
+                continue;
+            };
+            profile
+                .program_profiles
+                .entry(*program_ptr as usize)
+                .or_default()
+                .merge_from(&kernel_profile);
+        }
+    }
+
+    fn into_profile(self) -> Option<RunHydrationProfile> {
+        match self {
+            Self::Disabled => None,
+            Self::Enabled(profile) => Some(profile),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3482,17 +3590,43 @@ fn plan_run_hydration(
     shared: &RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
 ) -> Result<RunHydrationPlan, String> {
+    let mut profiler = RunHydrationProfiler::disabled();
+    plan_run_hydration_with_profiler(shared, globals, &mut profiler)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn plan_run_hydration_profiled(
+    shared: &RunHydrationStaticState,
+    globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+) -> Result<(RunHydrationPlan, RunHydrationProfile), String> {
+    let mut profiler = RunHydrationProfiler::enabled();
+    let plan = plan_run_hydration_with_profiler(shared, globals, &mut profiler)?;
+    let profile = profiler
+        .into_profile()
+        .expect("enabled hydration profiler should produce a profile");
+    Ok((plan, profile))
+}
+
+fn plan_run_hydration_with_profiler(
+    shared: &RunHydrationStaticState,
+    globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+    profiler: &mut RunHydrationProfiler,
+) -> Result<RunHydrationPlan, String> {
+    let started_at = Instant::now();
     let runtime_globals = runtime_globals_from_detached(globals);
     let mut evaluators = EvaluatorCache::new();
-    Ok(RunHydrationPlan {
+    let plan = RunHydrationPlan {
         root: plan_run_node(
             shared,
             &runtime_globals,
             &GtkNodeInstance::root(shared.bridge.root()),
             &RuntimeBindingEnv::new(),
             &mut evaluators,
+            profiler,
         )?,
-    })
+    };
+    profiler.finish(started_at.elapsed(), &evaluators);
+    Ok(plan)
 }
 
 fn runtime_globals_from_detached(
@@ -3510,7 +3644,9 @@ fn plan_run_node<'a>(
     instance: &GtkNodeInstance,
     env: &RuntimeBindingEnv,
     evaluators: &mut EvaluatorCache<'a>,
+    profiler: &mut RunHydrationProfiler,
 ) -> Result<HydratedRunNode, String> {
+    profiler.record_node();
     let view_name = shared.view_name.as_ref();
     let node = shared.bridge.node(instance.node.plan).ok_or_else(|| {
         format!(
@@ -3531,6 +3667,7 @@ fn plan_run_node<'a>(
                             setter.input,
                             env,
                             evaluators,
+                            profiler,
                         )?),
                     });
                 }
@@ -3548,6 +3685,7 @@ fn plan_run_node<'a>(
                         event.input,
                         env,
                         evaluators,
+                        profiler,
                     )?),
                 });
             }
@@ -3562,6 +3700,7 @@ fn plan_run_node<'a>(
                     instance.path.clone(),
                     env,
                     evaluators,
+                    profiler,
                 )?,
             })
         }
@@ -3574,6 +3713,7 @@ fn plan_run_node<'a>(
                 instance.path.clone(),
                 env,
                 evaluators,
+                profiler,
             )?,
         }),
         GtkBridgeNodeKind::Show(show) => {
@@ -3583,6 +3723,7 @@ fn plan_run_node<'a>(
                 show.when.input,
                 env,
                 evaluators,
+                profiler,
             )?)
             .ok_or_else(|| {
                 format!(
@@ -3599,6 +3740,7 @@ fn plan_run_node<'a>(
                         decision.input,
                         env,
                         evaluators,
+                        profiler,
                     )?)
                     .ok_or_else(|| {
                         format!(
@@ -3615,6 +3757,7 @@ fn plan_run_node<'a>(
                     instance.path.clone(),
                     env,
                     evaluators,
+                    profiler,
                 )?
             } else {
                 Vec::new().into_boxed_slice()
@@ -3635,6 +3778,7 @@ fn plan_run_node<'a>(
                 each.collection.input,
                 env,
                 evaluators,
+                profiler,
             )?)
             .ok_or_else(|| {
                 format!(
@@ -3660,6 +3804,7 @@ fn plan_run_node<'a>(
                                 path,
                                 &child_env,
                                 evaluators,
+                                profiler,
                             )?,
                         });
                     }
@@ -3685,6 +3830,7 @@ fn plan_run_node<'a>(
                             key_input.input,
                             &child_env,
                             evaluators,
+                            profiler,
                         )?)
                         .ok_or_else(|| {
                             format!(
@@ -3704,6 +3850,7 @@ fn plan_run_node<'a>(
                                 path,
                                 &child_env,
                                 evaluators,
+                                profiler,
                             )?,
                         });
                     }
@@ -3724,6 +3871,7 @@ fn plan_run_node<'a>(
                             &GtkNodeInstance::with_path(empty.empty, instance.path.clone()),
                             env,
                             evaluators,
+                            profiler,
                         )
                     })
                     .transpose()?
@@ -3745,6 +3893,7 @@ fn plan_run_node<'a>(
                 match_node.scrutinee.input,
                 env,
                 evaluators,
+                profiler,
             )?;
             let mut matched = None;
             for (index, branch) in match_node.cases.iter().enumerate() {
@@ -3771,6 +3920,7 @@ fn plan_run_node<'a>(
                     &GtkNodeInstance::with_path(branch.case, instance.path.clone()),
                     &case_env,
                     evaluators,
+                    profiler,
                 )?),
             })
         }
@@ -3783,6 +3933,7 @@ fn plan_run_node<'a>(
                 instance.path.clone(),
                 env,
                 evaluators,
+                profiler,
             )?,
         }),
         GtkBridgeNodeKind::Fragment(fragment) => Ok(HydratedRunNode::Fragment {
@@ -3794,6 +3945,7 @@ fn plan_run_node<'a>(
                 instance.path.clone(),
                 env,
                 evaluators,
+                profiler,
             )?,
         }),
         GtkBridgeNodeKind::With(with_node) => {
@@ -3803,6 +3955,7 @@ fn plan_run_node<'a>(
                 with_node.value.input,
                 env,
                 evaluators,
+                profiler,
             )?;
             let mut child_env = env.clone();
             child_env.insert(with_node.binding, strip_signal_runtime_value(value));
@@ -3816,6 +3969,7 @@ fn plan_run_node<'a>(
                     instance.path.clone(),
                     &child_env,
                     evaluators,
+                    profiler,
                 )?,
             })
         }
@@ -3828,6 +3982,7 @@ fn plan_run_node<'a>(
                 instance.path.clone(),
                 env,
                 evaluators,
+                profiler,
             )?,
         }),
     }
@@ -3840,6 +3995,7 @@ fn plan_run_child_group<'a>(
     path: GtkExecutionPath,
     env: &RuntimeBindingEnv,
     evaluators: &mut EvaluatorCache<'a>,
+    profiler: &mut RunHydrationProfiler,
 ) -> Result<Box<[HydratedRunNode]>, String> {
     let mut children = Vec::with_capacity(roots.len());
     for &root in roots {
@@ -3849,6 +4005,7 @@ fn plan_run_child_group<'a>(
             &GtkNodeInstance::with_path(root, path.clone()),
             env,
             evaluators,
+            profiler,
         )?);
     }
     Ok(children.into_boxed_slice())
@@ -3983,7 +4140,9 @@ fn evaluate_run_input<'a>(
     input: RuntimeInputHandle,
     env: &RuntimeBindingEnv,
     evaluators: &mut EvaluatorCache<'a>,
+    profiler: &mut RunHydrationProfiler,
 ) -> Result<RuntimeValue, String> {
+    profiler.record_input();
     let compiled = inputs.get(&input).ok_or_else(|| {
         format!(
             "missing compiled runtime input {} for live run hydration",
@@ -3992,9 +4151,11 @@ fn evaluate_run_input<'a>(
     })?;
     match compiled {
         CompiledRunInput::Expr(fragment) => {
-            evaluate_compiled_run_fragment(fragment, globals, env, evaluators)
+            evaluate_compiled_run_fragment(fragment, globals, env, evaluators, profiler)
         }
-        CompiledRunInput::Text(text) => evaluate_compiled_run_text(text, globals, env, evaluators),
+        CompiledRunInput::Text(text) => {
+            evaluate_compiled_run_text(text, globals, env, evaluators, profiler)
+        }
     }
 }
 
@@ -4003,7 +4164,9 @@ fn evaluate_compiled_run_fragment<'a>(
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     env: &RuntimeBindingEnv,
     evaluators: &mut EvaluatorCache<'a>,
+    profiler: &mut RunHydrationProfiler,
 ) -> Result<RuntimeValue, String> {
+    let started_at = profiler.kernel_profiling_enabled().then(Instant::now);
     let args = fragment
         .parameters
         .iter()
@@ -4018,9 +4181,14 @@ fn evaluate_compiled_run_fragment<'a>(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let program_ptr = Arc::as_ptr(&fragment.program);
-    let evaluator = evaluators
-        .entry(program_ptr)
-        .or_insert_with(|| KernelEvaluator::new(&fragment.program));
+    let kernel_profiling_enabled = profiler.kernel_profiling_enabled();
+    let evaluator = evaluators.entry(program_ptr).or_insert_with(|| {
+        if kernel_profiling_enabled {
+            KernelEvaluator::new_profiled(&fragment.program)
+        } else {
+            KernelEvaluator::new(&fragment.program)
+        }
+    });
     let required_globals = fragment
         .required_signal_globals
         .iter()
@@ -4039,7 +4207,7 @@ fn evaluate_compiled_run_fragment<'a>(
                 })
         })
         .collect::<Result<BTreeMap<_, _>, _>>()?;
-    if args.is_empty() {
+    let result = if args.is_empty() {
         evaluator
             .evaluate_item(fragment.item, &required_globals)
             .map_err(|error| format!("{error}"))
@@ -4054,7 +4222,11 @@ fn evaluate_compiled_run_fragment<'a>(
         evaluator
             .evaluate_kernel(kernel, None, &args, &required_globals)
             .map_err(|error| format!("{error}"))
+    };
+    if let Some(started_at) = started_at {
+        profiler.record_fragment(fragment, started_at.elapsed());
     }
+    result
 }
 
 fn backend_items_by_hir(
@@ -4083,14 +4255,16 @@ fn evaluate_compiled_run_text<'a>(
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     env: &RuntimeBindingEnv,
     evaluators: &mut EvaluatorCache<'a>,
+    profiler: &mut RunHydrationProfiler,
 ) -> Result<RuntimeValue, String> {
+    profiler.record_text();
     let mut rendered = String::new();
     for segment in &text.segments {
         match segment {
             CompiledRunTextSegment::Text(text) => rendered.push_str(text),
             CompiledRunTextSegment::Interpolation(fragment) => {
                 let value = strip_signal_runtime_value(evaluate_compiled_run_fragment(
-                    fragment, globals, env, evaluators,
+                    fragment, globals, env, evaluators, profiler,
                 )?);
                 if matches!(value, RuntimeValue::Callable(_)) {
                     return Err(format!(
@@ -5273,8 +5447,8 @@ mod tests {
     use super::{
         HydratedRunNode, ResolvedRunEventHandler, ResolvedRunEventPayload, RunHydrationStaticState,
         WorkspaceHirSnapshot, check_file, execute_file_with_context, plan_run_hydration,
-        prepare_execute_artifact, prepare_run_artifact, run_hydration_globals_ready,
-        test_file_with_context,
+        plan_run_hydration_profiled, prepare_execute_artifact, prepare_run_artifact,
+        run_hydration_globals_ready, test_file_with_context,
     };
     use aivi_backend::{DetachedRuntimeValue, RuntimeTaskPlan, RuntimeValue};
     use aivi_base::SourceDatabase;
@@ -5890,6 +6064,32 @@ value view =
         };
         assert_eq!(fragment_props.len(), 1);
         assert_eq!(fragment_props[0].value, RuntimeValue::Text("Alpha".into()));
+    }
+
+    #[test]
+    fn run_hydration_profile_tracks_fragment_and_kernel_activity() {
+        let artifact = prepare_run_from_text("planner-window.aivi", planner_window_source(), None)
+            .expect("planner window should compile for live run hydration");
+        let shared = RunHydrationStaticState {
+            view_name: artifact.view_name.clone(),
+            module: artifact.module.clone(),
+            bridge: artifact.bridge.clone(),
+            inputs: artifact.hydration_inputs.clone(),
+        };
+
+        let (_plan, profile) = plan_run_hydration_profiled(&shared, &BTreeMap::new())
+            .expect("planner window should produce a hydration profile");
+
+        assert!(profile.planned_nodes > 0);
+        assert!(profile.evaluated_inputs > 0);
+        assert!(!profile.fragment_profiles.is_empty());
+        assert!(!profile.program_profiles.is_empty());
+        assert!(
+            profile
+                .program_profiles
+                .values()
+                .any(|program| !program.kernels.is_empty())
+        );
     }
 
     #[test]
