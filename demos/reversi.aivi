@@ -7,6 +7,7 @@ use aivi.list (
     map as listMap
     nonEmpty as listNonEmpty
     sortBy as listSortBy
+    take as listTake
     tailOrEmpty as listTailOrEmpty
 )
 
@@ -20,13 +21,9 @@ use aivi.matrix (
     replaceAt as matrixReplaceAt
 )
 
-use aivi.result (
-    withDefault as resultWithDefault
-)
+use aivi.result (withDefault as resultWithDefault)
 
-type Player =
-  | Human
-  | Computer
+type Player = Human | Computer
 
 type Disc =
   | Empty
@@ -46,9 +43,20 @@ type Event =
   | Click Coord
   | Reset
 
-type TimerControl =
-  | Arm
-  | Disarm
+type HumanAnimation = {
+    placed: Coord,
+    changed: List Coord
+}
+
+type AnimationEvent =
+  | StartAnimation HumanAnimation
+  | StepAnimation
+  | ClearAnimation
+
+type AnimationState = {
+    current: Option HumanAnimation,
+    blinkTicks: Int
+}
 
 type Score = {
     human: Int,
@@ -82,14 +90,24 @@ type Plan = {
 value boardSize = 8
 value lastIndex = boardSize - 1
 value neg1 = 0 - 1
-
-value boardIndices : List Int = matrixIndices boardSize
-value raySteps : List Int = listTailOrEmpty boardIndices
+value boardIndices = matrixIndices boardSize
+value raySteps = listTailOrEmpty boardIndices
 value emptyCoords : List Coord = []
 value emptyHistory : List Move = []
-value defaultCellView : CellView = { label: "·", enabled: False, opacity: 1.0 }
+value blinkTicksBeforeFlash = 5
 
-value directions : List Vector = [
+value defaultCellView = {
+    label: "·",
+    enabled: False,
+    opacity: 1.0
+}
+
+value idleAnimationState : AnimationState = {
+    current: None,
+    blinkTicks: 0
+}
+
+value directions = [
     Delta neg1 neg1,
     Delta 0 neg1,
     Delta 1 neg1,
@@ -108,11 +126,8 @@ func buildInitialDisc = x y => (x, y)
  ||> (4, 3) -> Black
  ||> _      -> Empty
 
-value initialBoardFallback : Matrix Disc =
-    matrixFilled boardSize boardSize buildInitialDisc
-
-value initialBoard : Matrix Disc =
-    resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
+value initialBoardFallback : Matrix Disc = matrixFilled boardSize boardSize buildInitialDisc
+value initialBoard : Matrix Disc = resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
 
 type Player -> Player
 func otherPlayer = .
@@ -161,11 +176,10 @@ type Int -> List Coord
 func coordsInRow = y =>
     listMap (coordAtRow y) boardIndices
 
-value allCoords : List Coord =
-    listFlatMap coordsInRow boardIndices
+value allCoords : List Coord = listFlatMap coordsInRow boardIndices
 
 type Option Disc -> Disc
-func discOrEmpty = opt => opt
+func discOrEmpty = .
  ||> Some disc -> disc
  ||> None      -> Empty
 
@@ -251,8 +265,7 @@ func legalMovesFor = board player =>
     listFilter (legalMoveAt board player) allCoords
 
 type Matrix Disc -> Player -> Coord -> List Coord -> (Matrix Disc)
-func placeWithFlips = board player coord flips =>
-    listLength flips == 0
+func placeWithFlips = board player coord flips => listLength flips == 0
  T|> board
  F|> paintMany (discFor player) (paintDisc (discFor player) board coord) flips
 
@@ -310,8 +323,8 @@ func snapshotGameOver = snapshot =>
 
 type Snapshot -> Bool
 func snapshotPassPending = snapshot => snapshotGameOver snapshot
-  T|> False
-  F|> not (listNonEmpty (snapshotCurrentMoves snapshot)) and listNonEmpty (snapshotOtherMoves snapshot)
+ T|> False
+ F|> not (listNonEmpty (snapshotCurrentMoves snapshot)) and listNonEmpty (snapshotOtherMoves snapshot)
 
 type Snapshot -> Bool
 func snapshotAiPending = snapshot =>
@@ -379,9 +392,76 @@ func snapshotAiTarget = snapshot => snapshotAiPending snapshot
  T|> chooseAiMove snapshot.board snapshot.computerMoves
  F|> None
 
+type Matrix Disc -> Move -> Option HumanAnimation
+func humanAnimationFromMove = board move => move
+ ||> Place Human coord -> Some {
+     placed: coord,
+     changed: append [coord] (flipsForMove board Human coord)
+ }
+ ||> _                 -> None
+
 type Move -> List Move -> List Move
 func appendMove = move history =>
     append history [move]
+
+type List Move -> List Move
+func historyBeforeLast = history =>
+    listTake (listLength history - 1) history
+
+type List Move -> Option HumanAnimation
+func humanAnimationFromHistory = history => lastMoveOf history
+ ||> Some (Place Human coord) -> Some {
+     placed: coord,
+     changed: append [coord] (flipsForMove (boardFromHistory (historyBeforeLast history)) Human coord)
+ }
+ ||> _                       -> None
+
+type Option HumanAnimation -> Bool
+func hasHumanAnimation = animation => animation
+ ||> Some _ -> True
+ ||> None   -> False
+
+type AnimationState -> Bool
+func animationActive = state =>
+    hasHumanAnimation state.current
+
+type AnimationState -> Bool
+func blinkRunning = state =>
+    animationActive state and state.blinkTicks < blinkTicksBeforeFlash
+
+type AnimationState -> Bool
+func flashRunning = state =>
+    animationActive state and not (blinkRunning state)
+
+type AnimationState -> Bool
+func blinkVisible = state =>
+    state.blinkTicks == 0 or state.blinkTicks == 2 or state.blinkTicks == 4 or flashRunning state
+
+type AnimationState -> HumanAnimation -> AnimationState
+func bumpAnimationState = state animation =>
+    {
+        current: Some animation,
+        blinkTicks: state.blinkTicks + 1
+    }
+
+type AnimationState -> HumanAnimation -> AnimationState
+func stepAnimationFromCurrent = state animation => blinkRunning state
+ T|> bumpAnimationState state animation
+ F|> state
+
+type AnimationState -> AnimationState
+func stepBlinkState = state => state.current
+ ||> None                  -> state
+ ||> Some currentAnimation -> stepAnimationFromCurrent state currentAnimation
+
+type AnimationEvent -> AnimationState -> AnimationState
+func stepAnimationState = event state => event
+ ||> StartAnimation animation -> {
+     current: Some animation,
+     blinkTicks: 0
+ }
+ ||> StepAnimation            -> stepBlinkState state
+ ||> ClearAnimation           -> idleAnimationState
 
 type Coord -> Snapshot -> Bool
 func humanCanPlace = coord snapshot =>
@@ -397,14 +477,13 @@ func settleHistory = history =>
     settleHistoryFromSnapshot (snapshotFromHistory history) history
 
 type Coord -> List Move -> List Move
-func clickHistory = coord history =>
-    humanCanPlace coord (snapshotFromHistory history)
- T|> settleHistory (appendMove (Place Human coord) history)
+func clickHistory = coord history => humanCanPlace coord (snapshotFromHistory history)
+ T|> appendMove (Place Human coord) history
  F|> history
 
 type List Move -> List Move
 func commitComputerHistory = history => snapshotAiTarget (snapshotFromHistory history)
- ||> None       -> history
+ ||> None       -> settleHistory history
  ||> Some coord -> settleHistory (appendMove (Place Computer coord) history)
 
 type Event -> List Move -> List Move
@@ -413,15 +492,10 @@ func stepHistory = event history => event
  ||> CommitAi    -> commitComputerHistory history
  ||> Click coord -> clickHistory coord history
 
-type TimerControl -> Bool -> Bool
-func stepTimerEnabled = control enabled => control
- ||> Arm    -> True
- ||> Disarm -> False
-
 type Move -> Text
 func moveLabel = move => move
- ||> Pass player         -> "{playerLabel player} passes"
- ||> Place player coord  -> "{playerLabel player} plays {coordLabel coord}"
+ ||> Pass player        -> "{playerLabel player} passes"
+ ||> Place player coord -> "{playerLabel player} plays {coordLabel coord}"
 
 type Option Move -> Move -> Option Move
 func takeLastMove = current move =>
@@ -479,8 +553,8 @@ func previewLine = opt => opt
 
 type Option Coord -> Int -> Int -> Bool
 func previewAt = opt x y => opt
- ||> None                 -> False
- ||> Some (Coord px py)   -> px == x and py == y
+ ||> None               -> False
+ ||> Some (Coord px py) -> px == x and py == y
 
 type Bool -> Text
 func legalMoveLabel = legal => legal
@@ -497,8 +571,7 @@ func cellKey = y x =>
     y * boardSize + x
 
 type Snapshot -> Option Coord -> Int -> Int -> Text
-func cellLabelAt = snapshot preview x y =>
-    matrixAt snapshot.board x y
+func cellLabelAt = snapshot preview x y => matrixAt snapshot.board x y
  ||> Some Black -> "🔴"
  ||> Some White -> "⚪"
  ||> Some Empty -> emptyCellLabel (listContains coordEq (Coord x y) (snapshotCurrentMoves snapshot)) (previewAt preview x y)
@@ -513,28 +586,44 @@ func cellOpacityAt = preview x y => previewAt preview x y
  T|> 0.55
  F|> 1.0
 
+type HumanAnimation -> Coord -> Bool
+func changedAt = animation coord =>
+    coordEq animation.placed coord or listContains coordEq coord animation.changed
+
+type AnimationState -> HumanAnimation -> Coord -> Float
+func restingAnimatedOpacity = state animation coord =>
+    coordEq animation.placed coord and not (blinkVisible state)
+ T|> 0.25
+ F|> 1.0
+
+type AnimationState -> HumanAnimation -> Coord -> Float
+func flashingOpacityAt = state animation coord =>
+    flashRunning state and changedAt animation coord
+ T|> 0.35
+ F|> restingAnimatedOpacity state animation coord
+
+type AnimationState -> Coord -> Float
+func animatedOpacityAt = state coord => state.current
+ ||> None                  -> 1.0
+ ||> Some currentAnimation -> flashingOpacityAt state currentAnimation coord
+
 type Int -> Int -> CellView
 func fillCellView = x y =>
     defaultCellView
 
-value emptyCellViews : Matrix CellView =
-    matrixFilled boardSize boardSize fillCellView
+value emptyCellViews : Matrix CellView = matrixFilled boardSize boardSize fillCellView
 
-type Snapshot -> Option Coord -> Int -> Int -> CellView
-func buildCellView = snapshot preview x y =>
+type Snapshot -> Option Coord -> AnimationState -> Int -> Int -> CellView
+func buildCellView = snapshot preview animation x y =>
     {
         label: cellLabelAt snapshot preview x y,
         enabled: cellEnabledAt snapshot x y,
-        opacity: cellOpacityAt preview x y
+        opacity: cellOpacityAt preview x y * animatedOpacityAt animation (Coord x y)
     }
 
-type Snapshot -> Option Coord -> Matrix CellView
-func boardCellViews = snapshot preview =>
-    resultWithDefault emptyCellViews (matrixInit boardSize boardSize (buildCellView snapshot preview))
-
-type Snapshot -> Matrix CellView
-func cellViewsFromSnapshot = snapshot =>
-    boardCellViews snapshot (snapshotAiTarget snapshot)
+type Snapshot -> Option Coord -> AnimationState -> Matrix CellView
+func boardCellViews = snapshot preview animation =>
+    resultWithDefault emptyCellViews (matrixInit boardSize boardSize (buildCellView snapshot preview animation))
 
 type Matrix CellView -> Int -> Int -> CellView
 func cellViewAt = cells x y => matrixAt cells x y
@@ -542,67 +631,80 @@ func cellViewAt = cells x y => matrixAt cells x y
  ||> None      -> defaultCellView
 
 signal placeCoord : Signal Coord
-
 signal restartClick : Signal Unit
 
-signal timerControl : Signal TimerControl = placeCoord | restartClick
-  ||> placeCoord _ => Arm
-  ||> restartClick _ => Disarm
-  ||> _ => Arm
+signal animationTrigger : Signal (Option HumanAnimation) = history
+  |> humanAnimationFromHistory
+ ?|> hasHumanAnimation
 
-signal timerEnabled : Signal Bool = timerControl
- +|> False stepTimerEnabled
+signal animationVisible : Signal Bool = animationState
+  |> animationActive
 
-@source timer.after 180ms with {
+signal blinkTimerEnabled : Signal Bool = animationState
+  |> blinkRunning
+
+@source timer.every 70ms with {
     immediate: False,
-    activeWhen: timerEnabled,
-    restartOn: aiTrigger
+    activeWhen: blinkTimerEnabled,
+    coalesce: True
 }
-signal aiReady : Signal Unit
+signal blinkTick : Signal Unit
 
-signal event : Signal Event = aiReady | placeCoord | restartClick
-  ||> aiReady _ => CommitAi
+@source timer.after 480ms with {
+    immediate: False,
+    activeWhen: animationVisible,
+    restartOn: animationTrigger
+}
+signal animationDone : Signal Unit
+
+signal animationEvent : Signal AnimationEvent = animationTrigger | blinkTick | animationDone | restartClick
+  ||> animationTrigger (Some animation) => StartAnimation animation
+  ||> blinkTick _                       => StepAnimation
+  ||> animationDone _                   => ClearAnimation
+  ||> restartClick _                    => ClearAnimation
+  ||> _                                 => ClearAnimation
+
+signal animationState : Signal AnimationState = animationEvent
+ +|> idleAnimationState stepAnimationState
+
+signal event : Signal Event = animationDone | placeCoord | restartClick
+  ||> animationDone _ => CommitAi
   ||> placeCoord coord => Click coord
   ||> restartClick _ => Reset
   ||> _ => CommitAi
 
-signal history : Signal (List Move) = event
+signal history = event
  +|> emptyHistory stepHistory
 
-signal aiTrigger : Signal Snapshot = history
-  |> snapshotFromHistory
-  ?|> snapshotAiPending
-
-signal snapshot : Signal Snapshot = history
+signal snapshot = history
   |> snapshotFromHistory
 
-signal gameOver : Signal Bool = snapshot
+signal gameOver = snapshot
   |> snapshotGameOver
 
-signal aiPreview : Signal (Option Coord) = snapshot
+signal aiPreview = snapshot
   |> snapshotAiTarget
 
-signal cellViews : Signal (Matrix CellView) = snapshot
-  |> cellViewsFromSnapshot
+signal cellViews : Signal (Matrix CellView) = boardCellViews snapshot aiPreview animationState
 
-signal score : Signal Score = snapshot
+signal score = snapshot
   |> .board
   |> countScore
 
-signal statusText : Signal Text = history
+signal statusText = history
   |> statusFromHistory
 
-signal scoreText : Signal Text = score
+signal scoreText = score
   |> scoreLine
 
-signal lastMoveText : Signal Text = history
+signal lastMoveText = history
   |> lastMoveOf
   |> lastMoveLine
 
-signal previewText : Signal Text = aiPreview
+signal previewText = aiPreview
   |> previewLine
 
-signal finalText : Signal Text = score
+signal finalText = score
   |> winnerLine
 
 value main =
@@ -624,17 +726,7 @@ value main =
                         <Box orientation="horizontal" spacing={2}>
                             <each of={boardIndices} as={x} key={cellKey y x}>
                                 <with value={cellViewAt cells x y} as={cell}>
-                                    <Button
-                                        label={cell.label}
-                                        onClick={placeCoord (Coord x y)}
-                                        sensitive={cell.enabled}
-                                        compact
-                                        hasFrame={False}
-                                        animateOpacity={True}
-                                        opacity={cell.opacity}
-                                        widthRequest={56}
-                                        heightRequest={56}
-                                    />
+                                    <Button label={cell.label} onClick={placeCoord (Coord x y)} sensitive={cell.enabled} compact hasFrame={False} animateOpacity={True} opacity={cell.opacity} widthRequest={56} heightRequest={56} />
                                 </with>
                             </each>
                         </Box>
