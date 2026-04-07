@@ -20,6 +20,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [lsp-server.md](lsp-server.md) | Language Server: diagnostics, completion, hover, navigation |
 | [cli.md](cli.md) | CLI commands: check, run, compile, fmt, lsp, mcp, openapi-gen |
 | [stdlib.md](stdlib.md) | Standard library modules overview |
+| [indexed-collections.md](indexed-collections.md) | Indexed list/matrix ergonomics, Matrix HKTs, and deferred indexed-HKT / ADT-body proposals |
 | [openapi-source.md](openapi-source.md) | OpenAPI capability handle: `@source api`, codegen, auth |
 
 | [demo-audit.md](demo-audit.md) | Snake & Reversi audit — issues found and fixed |
@@ -30,4 +31,4 @@ See [log.md](log.md) for a chronological record of wiki activity.
 
 ---
 
-*Last updated: 2026-04-06*
+*Last updated: 2026-04-07*

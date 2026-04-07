@@ -1,6 +1,9 @@
 use aivi.option (
     getOrElse as optionGetOrElse
+    fold as optionFold
+    mapOr as optionMapOr
     isSome as optionIsSome
+    isSomeAnd as optionIsSomeAnd
     isNone as optionIsNone
     map as optionMap
     filter as optionFilter
@@ -29,6 +32,9 @@ use aivi.list (
     head as listHead
     at as listAt
     last as listLast
+    indexed as listIndexed
+    mapWithIndex as listMapWithIndex
+    reduceWithIndex as listReduceWithIndex
     tailOrEmpty as listTailOrEmpty
     isEmpty as listIsEmpty
     nonEmpty as listNonEmpty
@@ -120,6 +126,18 @@ type A -> (Option A) -> A
 func getOrElse = fallback opt =>
     optionGetOrElse fallback opt
 
+type B -> (A -> B) -> (Option A) -> B
+func foldOption = onNone onSome opt =>
+    optionFold onNone onSome opt
+
+type B -> (A -> B) -> (Option A) -> B
+func mapOr = fallback transform opt =>
+    optionMapOr fallback transform opt
+
+type (A -> Bool) -> (Option A) -> Bool
+func isSomeAnd = predicate opt =>
+    optionIsSomeAnd predicate opt
+
 type (A -> B) -> (Option A) -> (Option B)
 func mapOption = transform opt =>
     optionMap transform opt
@@ -180,6 +198,18 @@ type List A -> (Option A)
 func last = items =>
     listLast items
 
+type List A -> (List (Int, A))
+func indexed = items =>
+    listIndexed items
+
+type (Int -> A -> B) -> (List A) -> (List B)
+func mapWithIndex = transform items =>
+    listMapWithIndex transform items
+
+type (B -> Int -> A -> B) -> B -> (List A) -> B
+func reduceWithIndex = step seed items =>
+    listReduceWithIndex step seed items
+
 type List A -> (List A)
 func tailOrEmpty = items =>
     listTailOrEmpty items
@@ -228,9 +258,17 @@ type (A -> Bool) -> (List A) -> Bool
 func all = predicate items =>
     listAll predicate items
 
+type (A -> Bool) -> (List A) -> Int
+func count = predicate items =>
+    listCount predicate items
+
 type (A -> Bool) -> (List A) -> (Option A)
 func find = predicate items =>
     listFind predicate items
+
+type (A -> Option B) -> (List A) -> (Option B)
+func findMap = transform items =>
+    listFindMap transform items
 
 type (A -> A -> Bool) -> A -> A -> A
 func min = compare left right =>
@@ -348,4 +386,4 @@ type A -> (A, A)
 func duplicate = item =>
     pairDuplicate item
 
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, at, last, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, replaceAt, take, drop, sum, contains, any, all, find, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, isSome, isNone, getOrElse, foldOption, mapOr, isSomeAnd, mapOption, filterOption, flatMapOption, zipOptions, withDefault, isOk, isErr, mapResult, foldResult, flatMapResult, length, head, at, last, indexed, mapWithIndex, reduceWithIndex, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, replaceAt, take, drop, sum, contains, any, all, count, find, findMap, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, fst, snd, swap, mapFst, mapSnd, mapPair, duplicate)

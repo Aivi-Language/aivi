@@ -2,10 +2,13 @@ hoist
 
 use aivi.list (
     at as listAt
+    flatten as listFlatten
     head as listHead
     length as listLength
     map as listMap
+    mapWithIndex as listMapWithIndex
     replaceAt as listReplaceAt
+    reduceWithIndex as listReduceWithIndex
 )
 
 use aivi.option (flatMap as optionFlatMap)
@@ -17,6 +20,8 @@ type MatrixError =
 
 type Matrix A =
   | MkMatrix Int Int (List (List A))
+
+type MatrixIndex = (Int, Int)
 
 type RowValidationState = {
     rowIndex: Int,
@@ -98,6 +103,26 @@ type Int -> Int -> (List (List A)) -> Matrix A
 func buildMatrix = width height inputRows =>
     MkMatrix width height inputRows
 
+type (A -> B) -> Matrix A -> Matrix B
+func mapMatrixBase = transform matrix =>
+    MkMatrix (width matrix) (height matrix) (listMap (listMap transform) (rows matrix))
+
+type (B -> A -> B) -> B -> (List A) -> B
+func reduceRow = step seed inputRow =>
+    reduce step seed inputRow
+
+type (B -> A -> B) -> B -> Matrix A -> B
+func reduceMatrixBase = step seed matrix =>
+    reduce (reduceRow step) seed (rows matrix)
+
+instance Functor Matrix = {
+    map = mapMatrixBase
+}
+
+instance Foldable Matrix = {
+    reduce = reduceMatrixBase
+}
+
 type Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
 func init = width height build => validateInitWidth width height build
  ||> Ok builtRows -> Ok (buildMatrix width height builtRows)
@@ -142,11 +167,96 @@ type Matrix A -> (Int, Int) -> A -> (Option (Matrix A))
 func replaceAt = matrix coord value => coord
  ||> (x, y) -> replaceAtCoords matrix x y value
 
+type Int -> Int -> MatrixIndex
+func coord = x y =>
+    (x, y)
+
+type (Int -> Int -> A -> B) -> Int -> Int -> A -> B
+func mapIndexedCell = transform y x item =>
+    transform x y item
+
+type (Int -> Int -> A -> B) -> Int -> (List A) -> (List B)
+func mapIndexedRow = transform y inputRow =>
+    listMapWithIndex (mapIndexedCell transform y) inputRow
+
+type (Int -> Int -> A -> B) -> Matrix A -> Matrix B
+func mapWithIndex = transform matrix =>
+    MkMatrix (width matrix) (height matrix) (listMapWithIndex (mapIndexedRow transform) (rows matrix))
+
+type (B -> Int -> Int -> A -> B) -> Int -> B -> Int -> A -> B
+func reduceIndexedCell = step y acc x item =>
+    step acc x y item
+
+type (B -> Int -> Int -> A -> B) -> B -> Int -> (List A) -> B
+func reduceIndexedRow = step acc y inputRow =>
+    listReduceWithIndex (reduceIndexedCell step y) acc inputRow
+
+type (B -> Int -> Int -> A -> B) -> B -> Matrix A -> B
+func reduceWithIndex = step seed matrix =>
+    listReduceWithIndex (reduceIndexedRow step) seed (rows matrix)
+
+type (List MatrixIndex) -> Int -> Int -> A -> (List MatrixIndex)
+func appendCoord = acc x y item =>
+    append acc [coord x y]
+
+type Matrix A -> (List MatrixIndex)
+func coords = matrix =>
+    reduceWithIndex appendCoord [] matrix
+
+type Int -> Int -> A -> (MatrixIndex, A)
+func matrixEntry = x y item =>
+    (coord x y, item)
+
+type Matrix A -> (List (MatrixIndex, A))
+func entries = matrix =>
+    listFlatten (rows (mapWithIndex matrixEntry matrix))
+
+type (A -> Bool) -> Int -> Int -> Int -> A -> Int
+func countStep = predicate total x y item => predicate item
+ T|> total + 1
+ F|> total
+
+type (A -> Bool) -> Matrix A -> Int
+func count = predicate matrix =>
+    reduceWithIndex (countStep predicate) 0 matrix
+
+type (A -> Bool) -> (List MatrixIndex) -> Int -> Int -> A -> (List MatrixIndex)
+func positionsWhereStep = predicate acc x y item => predicate item
+ T|> append acc [coord x y]
+ F|> acc
+
+type (A -> Bool) -> Matrix A -> (List MatrixIndex)
+func positionsWhere = predicate matrix =>
+    reduceWithIndex (positionsWhereStep predicate) [] matrix
+
+type Matrix A -> Int -> Int -> (A -> A) -> (Option (Matrix A))
+func modifyAtCoords = matrix x y transform => at matrix x y
+ ||> None      -> None
+ ||> Some item -> replaceAtCoords matrix x y (transform item)
+
+type Matrix A -> MatrixIndex -> (A -> A) -> (Option (Matrix A))
+func modifyAt = matrix coord transform => coord
+ ||> (x, y) -> modifyAtCoords matrix x y transform
+
+type Matrix A -> (MatrixIndex, A) -> (Option (Matrix A))
+func replaceManyUpdate = matrix update => update
+ ||> (coord, value) -> replaceAt matrix coord value
+
+type (Option (Matrix A)) -> (MatrixIndex, A) -> (Option (Matrix A))
+func replaceManyStep = current update => current
+ ||> None        -> None
+ ||> Some matrix -> replaceManyUpdate matrix update
+
+type Matrix A -> (List (MatrixIndex, A)) -> (Option (Matrix A))
+func replaceMany = matrix updates =>
+    reduce replaceManyStep (Some matrix) updates
+
 type Int -> Int -> (Int -> Int -> A) -> Matrix A
 func filled = w h build => w < 0 or h < 0
  T|> MkMatrix 0 0 []
  F|> MkMatrix w h (buildRows w h build)
 
 export (MatrixError, NegativeWidth, NegativeHeight, RaggedRows,
-        Matrix, init, fromRows, filled, width, height, rows, row, at, replaceAt,
-        indices)
+        Matrix, MatrixIndex, init, fromRows, filled, width, height, rows, row, at, replaceAt,
+        coord, mapWithIndex, reduceWithIndex, coords, entries, positionsWhere, count, modifyAt,
+        replaceMany, indices)

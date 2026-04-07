@@ -7,6 +7,9 @@ use aivi.option (
     isSome
     isNone
     getOrElse
+    fold
+    mapOr
+    isSomeAnd
     orElse
     flatMap
     flatten
@@ -65,6 +68,61 @@ use aivi.option (getOrElse)
 type Option Text -> Text
 func displayName = opt =>
     getOrElse "Anonymous" opt
+```
+
+---
+
+## fold
+
+Chooses between a fallback value and a `Some` handler.
+
+**Type:** `fallback:B -> onSome:(A -> B) -> opt:(Option A) -> B`
+
+```aivi
+use aivi.option (fold)
+
+type Text -> Text
+func excited = name =>
+    append name "!"
+
+value label : Text = fold "guest" excited (Some "Ada")
+```
+
+---
+
+## mapOr
+
+Maps a `Some` value or returns a fallback directly when the option is `None`.
+
+**Type:** `fallback:B -> transform:(A -> B) -> opt:(Option A) -> B`
+
+```aivi
+use aivi.option (mapOr)
+
+type Int -> Int
+func double = n =>
+    n * 2
+
+value total : Int = mapOr 0 double (Some 21)
+```
+
+---
+
+## isSomeAnd
+
+Returns `True` only when the option is `Some` and the payload satisfies the predicate.
+
+**Type:** `predicate:(A -> Bool) -> opt:(Option A) -> Bool`
+
+```aivi
+use aivi.option (isSomeAnd)
+
+type Int -> Bool
+func isSmall = n =>
+    n < 10
+
+value ok : Bool = isSomeAnd isSmall (Some 3)
+value missing : Bool = isSomeAnd isSmall None
 ```
 
 ---

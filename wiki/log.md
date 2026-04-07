@@ -59,3 +59,13 @@ Added full `@source api` capability handle feature:
 - `manual/guide/surface-feature-matrix.md`: `@source api` row added
 - `fixtures/frontend/milestone-1/valid/sources/petstore.yaml`: Petstore OpenAPI spec fixture
 - `fixtures/frontend/milestone-1/valid/sources/openapi_source.aivi`: API handle fixture
+
+## [2026-04-07] ingest | Indexed collection ergonomics
+
+Added indexed collection ergonomics and aligned the docs with the current higher-kinded execution slice.
+
+- `stdlib/aivi/list.aivi`: `indexed`, `mapWithIndex`, `reduceWithIndex`, `filterMap`
+- `stdlib/aivi/option.aivi`: `fold`, `mapOr`, `isSomeAnd`
+- `stdlib/aivi/matrix.aivi`: `MatrixIndex`, `coord`, indexed traversal/update helpers, user-authored `Functor` / `Foldable` instances
+- `stdlib/aivi/prelude.aivi`: ambient aliases for the new option/list surfaces
+- manual + RFC updated to document imported unary higher-kinded instance execution and to propose indexed HKTs plus ADT bodies as deferred work

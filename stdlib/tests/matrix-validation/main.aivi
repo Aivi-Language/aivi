@@ -1,5 +1,6 @@
 use aivi.matrix (
     Matrix
+    MatrixIndex
     MatrixError
     NegativeWidth
     NegativeHeight
@@ -12,6 +13,15 @@ use aivi.matrix (
     row
     at
     replaceAt
+    coord
+    mapWithIndex
+    reduceWithIndex
+    coords
+    entries
+    positionsWhere
+    count
+    modifyAt
+    replaceMany
 )
 
 use aivi.option (
@@ -22,6 +32,30 @@ use aivi.option (
 type Int -> Int -> Int
 func matrixValue = x y =>
     x + y * 10
+
+type Int -> Int
+func doubleValue = n =>
+    n * 2
+
+type Int -> Int -> Int
+func addValue = total item =>
+    total + item
+
+type Int -> Int -> Int -> Int
+func addPosition = x y item =>
+    item + x + y
+
+type Int -> Int -> Int -> Int -> Int
+func addPositionTotal = total x y item =>
+    total + addPosition x y item
+
+type Int -> Bool
+func isEvenValue = n =>
+    n % 2 == 0
+
+type Int -> Int
+func addHundred = n =>
+    n + 100
 
 type MatrixError -> Bool
 func negativeWidthRejectedError = error => error
@@ -53,6 +87,86 @@ value matrixReplaceOk : Bool = init 3 2 matrixValue
  ||> Err _ -> False
  ||> Ok matrix -> optGetOrElse False (optMap checkReplaced (replaceAt matrix (1, 0) 99))
 
+value matrixFunctorOk : Bool = init 3 2 matrixValue
+ ||> Err _ -> False
+ ||> Ok matrix ->
+        rows (map doubleValue matrix) == [[0, 2, 4], [20, 22, 24]] and
+        reduce addValue 0 matrix == 36
+
+type Matrix Int -> Bool
+func coordsAreExpected = matrix =>
+    coords matrix == [
+        coord 0 0,
+        coord 1 0,
+        coord 2 0,
+        coord 0 1,
+        coord 1 1,
+        coord 2 1
+    ]
+
+type Matrix Int -> Bool
+func entriesAreExpected = matrix =>
+    entries matrix == [
+        (coord 0 0, 0),
+        (coord 1 0, 1),
+        (coord 2 0, 2),
+        (coord 0 1, 10),
+        (coord 1 1, 11),
+        (coord 2 1, 12)
+    ]
+
+type Matrix Int -> Bool
+func indexedMapIsExpected = matrix =>
+    rows (mapWithIndex addPosition matrix) == [[0, 2, 4], [11, 13, 15]]
+
+type Matrix Int -> Bool
+func indexedReduceIsExpected = matrix =>
+    reduceWithIndex addPositionTotal 0 matrix == 45
+
+type Matrix Int -> Bool
+func indexedPositionsAreExpected = matrix =>
+    positionsWhere isEvenValue matrix == [
+        coord 0 0,
+        coord 2 0,
+        coord 0 1,
+        coord 2 1
+    ]
+
+type Matrix Int -> Bool
+func indexedCountIsExpected = matrix =>
+    count isEvenValue matrix == 4
+
+value matrixIndexedOk : Bool = init 3 2 matrixValue
+ ||> Err _ -> False
+ ||> Ok matrix ->
+        coordsAreExpected matrix and
+        entriesAreExpected matrix and
+        indexedMapIsExpected matrix and
+        indexedReduceIsExpected matrix and
+        indexedPositionsAreExpected matrix and
+        indexedCountIsExpected matrix
+
+type (Matrix Int) -> Bool
+func checkModified = updated =>
+    rows updated == [[0, 1, 2], [10, 111, 12]]
+
+type (Matrix Int) -> Bool
+func checkReplaceMany = updated =>
+    rows updated == [[7, 1, 2], [10, 11, 8]]
+
+value matrixModifyOk : Bool = init 3 2 matrixValue
+ ||> Err _ -> False
+ ||> Ok matrix ->
+        optGetOrElse False (optMap checkModified (modifyAt matrix (coord 1 1) addHundred)) and
+        optGetOrElse False (
+            optMap checkReplaceMany (
+                replaceMany matrix [
+                    (coord 0 0, 7),
+                    (coord 2 1, 8)
+                ]
+            )
+        )
+
 value negativeWidthRejected : Bool = init (0 - 1) 2 matrixValue
  ||> Ok _      -> False
  ||> Err error -> negativeWidthRejectedError error
@@ -71,6 +185,18 @@ value matrix_init_uses_coordinates : Task Text Bool =
 @test
 value matrix_replaceAt_updates_one_cell : Task Text Bool =
     pure matrixReplaceOk
+
+@test
+value matrix_supports_functor_and_foldable_ops : Task Text Bool =
+    pure matrixFunctorOk
+
+@test
+value matrix_supports_indexed_helpers : Task Text Bool =
+    pure matrixIndexedOk
+
+@test
+value matrix_supports_modify_and_replaceMany : Task Text Bool =
+    pure matrixModifyOk
 
 @test
 value matrix_init_rejects_negative_width : Task Text Bool =

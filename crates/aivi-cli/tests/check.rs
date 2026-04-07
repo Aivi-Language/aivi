@@ -319,6 +319,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/bundled-collection-stdlib/main.aivi",
         "milestone-2/valid/bundled-root-prelude-stdlib/main.aivi",
         "milestone-2/valid/bundled-phase-two-stdlib/main.aivi",
+        "milestone-2/valid/workspace-imported-higher-kinded-instances/main.aivi",
         "milestone-2/valid/pipe-branch-and-join/main.aivi",
         "milestone-2/valid/pipe-truthy-falsy-carriers/main.aivi",
         "milestone-2/valid/pipe-fanout-carriers/main.aivi",

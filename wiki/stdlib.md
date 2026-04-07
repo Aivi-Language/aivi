@@ -18,10 +18,10 @@ Overview of the AIVI standard library modules. All modules live in `stdlib/aivi/
 
 | Module | Description |
 |--------|-------------|
-| `list` | `List A` — immutable linked list; `Functor`, `Foldable`, `Filterable`, `Traversable` |
+| `list` | `List A` — immutable linked list; `Functor`, `Foldable`, `Filterable`, `Traversable`, plus `indexed` / `mapWithIndex` / `reduceWithIndex` / `filterMap` helpers |
 | `nonEmpty` | `NonEmpty A` — list guaranteed non-empty |
 | `dict` | `Dict K V` — key-value map |
-| `matrix` | `Matrix A` — 2D grid |
+| `matrix` | `Matrix A` — 2D grid with `MatrixIndex`, indexed traversal helpers, and user-authored `Functor` / `Foldable` instances |
 
 **Note**: Generic `==` requires an `Eq` constraint at the definition site. For polymorphic list operations (e.g. `contains`), pass an explicit `eq` comparator function. See `stdlib/aivi/list.aivi`.
 
@@ -108,4 +108,11 @@ Overview of the AIVI standard library modules. All modules live in `stdlib/aivi/
 - `Eq`, `Ord`, `Functor`, `Foldable`, common operators
 - `contains` — takes an explicit `eq` comparator: `contains eq list value`
 
-*See also: [type-system.md](type-system.md), [signal-model.md](signal-model.md)*
+Recent ergonomics additions:
+
+- `aivi.option`: `fold`, `mapOr`, `isSomeAnd`
+- `aivi.list`: `indexed`, `mapWithIndex`, `reduceWithIndex`, `filterMap`
+- `aivi.matrix`: `coord`, `coords`, `entries`, `positionsWhere`, `count`, `modifyAt`, `replaceMany`
+- `aivi.prelude`: ambient `foldOption`, `mapOr`, `isSomeAnd`, `indexed`, `mapWithIndex`, `reduceWithIndex`, `count`, `findMap`
+
+*See also: [indexed-collections.md](indexed-collections.md), [type-system.md](type-system.md), [signal-model.md](signal-model.md)*

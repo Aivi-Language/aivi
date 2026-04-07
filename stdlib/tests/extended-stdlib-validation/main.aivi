@@ -44,12 +44,16 @@ use aivi.list (
     filter
     reverse
     at as listAt
+    indexed
+    mapWithIndex
+    reduceWithIndex
     take
     drop
     takeWhile
     dropWhile
     flatten
     flatMap
+    filterMap as listFilterMap
     replaceAt as listReplaceAt
     zip
     zipWith
@@ -77,6 +81,9 @@ use aivi.option (
     isSome
     isNone
     getOrElse
+    fold as optionFold
+    mapOr
+    isSomeAnd
     map as optionMap
     filter as optionFilter
     zip as optionZip
@@ -236,6 +243,22 @@ type Int -> Int -> Bool
 func smaller = a b =>
     a < b
 
+type Int -> Int -> Bool
+func intEq = left right =>
+    left == right
+
+type Int -> Bool
+func isThree = n =>
+    n == 3
+
+type Int -> Int -> Int
+func addListIndex = index item =>
+    index + item
+
+type Int -> Int -> Int -> Int
+func addIndexedItem = total index item =>
+    total + index + item
+
 value doubled : List Int = map double numbers
 value positives : List Int = filter isPositive numbers
 value reversed : List Int = reverse numbers
@@ -243,16 +266,19 @@ value secondNumber : Option Int = listAt 1 numbers
 value missingNumber : Option Int = listAt 99 numbers
 value replacedNumbers : List Int = listReplaceAt 2 99 numbers
 value unchangedNumbers : List Int = listReplaceAt 99 42 numbers
+value indexedNumbers : List (Int, Int) = indexed numbers
+value numbersPlusIndex : List Int = mapWithIndex addListIndex numbers
+value indexedTotal : Int = reduceWithIndex addIndexedItem 0 numbers
 value firstThree : List Int = take 3 numbers
 value afterTwo : List Int = drop 2 numbers
 value smallOnes : List Int = takeWhile isSmall numbers
 value bigOnes : List Int = dropWhile isSmall numbers
 value total : Int = sum numbers
 value productVal : Int = product numbers
-value maxNum : Option Int = maximum numbers
-value minNum : Option Int = minimum numbers
-value hasThree : Bool = contains 3 numbers
-value threeIndex : Option Int = indexOf 3 numbers
+value maxNum : Option Int = maximum smaller numbers
+value minNum : Option Int = minimum smaller numbers
+value hasThree : Bool = contains intEq 3 numbers
+value threeIndex : Option Int = indexOf isThree numbers
 value anyPos : Bool = any isPositive numbers
 value allPos : Bool = all isPositive numbers
 value countSmall : Int = count isSmall numbers
@@ -269,7 +295,7 @@ value sorted : List Int =
     ]
 
 value onlyUnique : List Int =
-    unique [
+    unique intEq [
         1,
         2,
         1,
@@ -331,12 +357,20 @@ func doubleIfSmall = n => isSmall n
  F|> None
 
 value foundDoubled : Option Int = findMap doubleIfSmall numbers
+value doubledSmallNumbers : List Int = listFilterMap doubleIfSmall numbers
 value presentOpt : Option Int = Some 42
 value absentOpt : Option Int = None
 value hasSome : Bool = isSome presentOpt
 value hasNone : Bool = isNone absentOpt
 value extracted : Int = getOrElse 0 presentOpt
 value defaulted : Int = getOrElse 0 absentOpt
+value foldedSome : Int = optionFold 0 double presentOpt
+value foldedNone : Int = optionFold 0 double absentOpt
+value mappedOrSome : Int = mapOr 0 double presentOpt
+value mappedOrNone : Int = mapOr 0 double absentOpt
+value someSmall : Bool = isSomeAnd isSmall (Some 2)
+value someLarge : Bool = isSomeAnd isSmall (Some 9)
+value noneSmall : Bool = isSomeAnd isSmall absentOpt
 value mappedOpt : Option Int = optionMap double presentOpt
 value filteredOpt : Option Int = optionFilter isSmall (Some 2)
 value zippedOpts : Option (Int, Int) = optionZip presentOpt (Some 7)
@@ -475,17 +509,21 @@ value raggedMatrix : Result MatrixError (Matrix Int) =
         [3]
     ]
 
+type (Matrix Int) -> Bool
+func checkMatrixUpdate = updated =>
+    width updated == 3 and
+    height updated == 2 and
+    at updated 1 1 == Some 99 and
+    rows updated == [[0, 1, 2], [10, 99, 12]]
+
+type Option (Matrix Int) -> Bool
+func matrixUpdateSucceeded = updated => updated
+ ||> None         -> False
+ ||> Some matrix  -> checkMatrixUpdate matrix
+
 value matrixUpdateOk : Result MatrixError Bool = coordinateMatrix
  ||> Err error -> Err error
- ||> Ok matrix -> replaceAt matrix (1, 1) 99
-  ||> None -> Ok False
-  ||> Some updated ->
-        Ok (
-            width updated == 3 and
-            height updated == 2 and
-            at updated 1 1 == Some 99 and
-            rows updated == [[0, 1, 2], [10, 99, 12]]
-        )
+ ||> Ok matrix -> Ok (matrixUpdateSucceeded (replaceAt matrix (1, 1) 99))
 
 @test
 value extended_validation_covers_bool_and_math : Task Text Bool = pure (squareTest == 25)
@@ -497,7 +535,28 @@ value extended_validation_covers_list_ops : Task Text Bool = pure (sorted == [1,
 value extended_validation_covers_list_index_ops : Task Text Bool = pure (secondNumber == Some 2 and missingNumber == None and replacedNumbers == [1, 2, 99, 4, 5] and unchangedNumbers == numbers)
 
 @test
+value extended_validation_covers_indexed_list_ops : Task Text Bool =
+    pure (
+        indexedNumbers == [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)] and
+        numbersPlusIndex == [1, 3, 5, 7, 9] and
+        indexedTotal == 25 and
+        doubledSmallNumbers == [2, 4, 6]
+    )
+
+@test
 value extended_validation_covers_result_ops : Task Text Bool = pure (mappedErrResult == Err "error: not found")
+
+@test
+value extended_validation_covers_option_fold_ops : Task Text Bool =
+    pure (
+        foldedSome == 84 and
+        foldedNone == 0 and
+        mappedOrSome == 84 and
+        mappedOrNone == 0 and
+        someSmall and
+        not someLarge and
+        not noneSmall
+    )
 
 @test
 value extended_validation_covers_order_ops : Task Text Bool = pure (greatestOf == 9)

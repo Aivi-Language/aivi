@@ -198,5 +198,5 @@ language/runtime slice.
 | `Traversable F` | Walking a structure while building effects | `List`, `Option`, `Result`, `Validation` |
 
 This table describes the current executable built-in slice. For the full higher-kinded hierarchy,
-support boundaries, and the current same-module-only limits for user-authored higher-kinded
+support boundaries, and the current imported-unary-instance slice for user-authored higher-kinded
 classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses).

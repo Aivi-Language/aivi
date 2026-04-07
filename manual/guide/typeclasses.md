@@ -73,17 +73,17 @@ If a carrier is not listed here for a class, that class is **not** runtime-backe
 ### Supported end to end today
 
 - Same-module class declarations, including `with` superclasses and `require` constraints
-- Same-module unary `instance` blocks for higher-kinded heads such as `instance Applicative Option`
-- Same-module partially applied heads such as `instance Functor (Result Text)`
-- Same-module references to those instance members, which lower to hidden callable items
+- Unary `instance` blocks for higher-kinded heads such as `instance Applicative Option`
+- Partially applied heads such as `instance Functor (Result Text)`
+- Same-module and imported use of unary higher-kinded members such as `map` and `reduce`, which lower to hidden callable items when the checker can choose concrete evidence
+- Bundled stdlib carriers can rely on this path; `aivi.matrix` exposes ambient `map` / `reduce` through user-authored `Functor` / `Foldable` instances rather than a new builtin carrier
 
 ### Not end to end today
 
-- Imported user-authored instances are still deferred
-- Imported polymorphic class-member execution is still deferred
+- Multi-parameter indexed-style higher-kinded instance heads are not yet proven end to end
 - Declaring a new higher-kinded class or instance does **not** create new builtin runtime support for arbitrary carriers
 
-In practice, user-authored higher-kinded classes and instances are trustworthy today for the current same-module checking and lowering slice, but they are not yet a general cross-module executable evidence system.
+In practice, unary user-authored higher-kinded classes and instances are trustworthy today for imported execution through the current hidden-callable lowering path, but indexed / multi-parameter evidence remains a design frontier rather than a finished executable slice.
 
 ## Related pages
 

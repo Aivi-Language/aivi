@@ -10,6 +10,11 @@ type Partition A = {
     unmatched: List A
 }
 
+type ReduceWithIndexState A B = {
+    index: Int,
+    value: B
+}
+
 type ZipState A B = {
     remaining: List B,
     pairs: List (A, B)
@@ -211,6 +216,43 @@ func mapStep = transform acc item =>
 type (A -> B) -> (List A) -> (List B)
 func map = transform items => items
   |> reduce (mapStep transform) []
+
+type (B -> Int -> A -> B) -> (ReduceWithIndexState A B) -> A -> (ReduceWithIndexState A B)
+func reduceWithIndexStep = step state item =>
+    {
+        index: state.index + 1,
+        value: step state.value state.index item
+    }
+
+type (B -> Int -> A -> B) -> B -> (List A) -> B
+func reduceWithIndex = step seed items => items
+  |> reduce (reduceWithIndexStep step) { index: 0, value: seed }
+  |> .value
+
+type Int -> A -> (Int, A)
+func pairWithIndex = index item =>
+    (index, item)
+
+type (Int -> A -> B) -> (List B) -> Int -> A -> (List B)
+func mapWithIndexStep = transform acc index item =>
+    append acc [transform index item]
+
+type (Int -> A -> B) -> (List A) -> (List B)
+func mapWithIndex = transform items =>
+    reduceWithIndex (mapWithIndexStep transform) [] items
+
+type List A -> (List (Int, A))
+func indexed = items =>
+    mapWithIndex pairWithIndex items
+
+type (A -> Option B) -> (List B) -> A -> (List B)
+func filterMapStep = transform acc item => transform item
+ ||> Some mapped -> append acc [mapped]
+ ||> None        -> acc
+
+type (A -> Option B) -> (List A) -> (List B)
+func filterMap = transform items => items
+  |> reduce (filterMapStep transform) []
 
 type (A -> Bool) -> (List A) -> A -> (List A)
 func filterStep = predicate acc item => predicate item
@@ -490,8 +532,12 @@ export tail
 export tailOrEmpty
 export last
 export map
+export mapWithIndex
+export reduceWithIndex
+export indexed
 export replaceAt
 export filter
+export filterMap
 export flatten
 export flatMap
 export reverse

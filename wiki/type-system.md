@@ -101,6 +101,13 @@ AIVI's stdlib uses higher-kinded type classes for generic data abstractions:
 
 These correspond to the `Builtin*Carrier` types in `crates/aivi-core/src/expr.rs`.
 
+### Current imported-instance slice
+
+- Imported unary user-authored higher-kinded instances are executable today for ordinary member lookup such as `map` and `reduce`
+- This path works through hidden callable lowering, not through expanding the builtin carrier table
+- `aivi.matrix` uses this mechanism to expose ambient `map` / `reduce` via user-authored `Functor` / `Foldable` instances
+- Multi-parameter indexed heads are still a deferred design problem; the current executable evidence path is clearly unary
+
 ## Constraints
 
 Constraint syntax: `ClassName TypeParam => ReturnType`
@@ -109,4 +116,4 @@ Constraint syntax: `ClassName TypeParam => ReturnType`
 - Constraint separator is `=>` (fat arrow). `->` after a constraint name is a parse error.
 - Constraints are checked at definition site.
 
-*See also: [compiler-pipeline.md](compiler-pipeline.md), [signal-model.md](signal-model.md)*
+*See also: [indexed-collections.md](indexed-collections.md), [compiler-pipeline.md](compiler-pipeline.md), [signal-model.md](signal-model.md)*

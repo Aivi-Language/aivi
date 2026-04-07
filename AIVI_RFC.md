@@ -565,6 +565,44 @@ type Option A = None | Some A
 
 Nested constructor patterns are allowed. Exhaustiveness is required for sum matches unless a wildcard is present.
 
+### 6.5.1 Deferred proposal: ADT bodies / companions
+
+Collection-heavy application code often wants a closed ADT together with a small family of total helper
+functions that belong conceptually to that type. Today those helpers must live as nearby top-level
+functions or in a separate module. Domains already have a body form with adjacent member declarations
+and authored bodies; a future closed-ADT companion surface should reuse that feel rather than invent an
+OO-style method system.
+
+Proposed direction:
+
+```aivi
+type Player = {
+    | Human
+    | Computer
+
+    type Player -> Player
+    opponent self = self
+     ||> Human    -> Computer
+     ||> Computer -> Human
+
+    type Player -> Text
+    label self = self
+     ||> Human    -> "You"
+     ||> Computer -> "Computer"
+}
+```
+
+Intended properties:
+
+- constructors remain ordinary closed-sum constructors; no implicit receiver dispatch
+- companion members elaborate to ordinary top-level callable items owned by the type declaration
+- authored bodies reuse the existing domain-body rule: the leading `self` argument is implicit in the
+  type annotation when `self` appears in the body
+- the feature is about colocated total helpers, not methods, mutation, or open-world extension
+
+This is deliberately deferred. The current implementation does **not** support closed-type bodies for
+ordinary ADTs yet.
+
 ## 6.6 Records, tuples, and lists
 
 ```aivi
@@ -685,12 +723,12 @@ Parser-accurate rules:
 - `require` is the implemented keyword; `requires` is not syntax
 - `instance` is the implemented mechanism; `implements` is not syntax
 - constraint prefixes are implemented for function annotations, class-member annotations, and instance heads
-- single constraints use `Constraint -> ...`; multiple constraints use `(C1, C2) -> ...`
+- single constraints use `Constraint => ...`; multiple constraints use `(C1, C2) => ...`
 - function example: `type Eq A => A -> Bool` / `func same = v => ...`
-- instance-head example: `instance Eq A -> Eq (Option A)`
+- instance-head example: `instance Eq A => Eq (Option A)`
 - class declarations do not accept head constraint prefixes; superclass relationships are written only as body-level `with` lines
 - higher-kinded type application uses ordinary left-associative type application syntax: `F A`, `F Int`, `F (A -> B)`, `Result Text A`, `Either L R`
-- parser/formatter plus the current HIR/typechecking/core-lowering slice support same-module user-authored higher-kinded class and instance shapes such as `F Int`, `A -> F A`, and `instance Applicative Option`
+- parser/formatter plus the current HIR/typechecking/core-lowering slice support unary user-authored higher-kinded class and instance shapes such as `F Int`, `A -> F A`, `instance Applicative Option`, and imported unary `map` / `reduce` use across module boundaries when evidence is concrete
 - current constraint-prefix disambiguation is parser-driven: a constraint must parse as a type application whose callee looks like a class name (currently a multi-character identifier such as `Eq`, `Functor`, `Applicative`)
 
 ### 7.1 Resolution rules
@@ -699,8 +737,8 @@ Parser-accurate rules:
 - overlapping instances are not allowed
 - orphan instances are **fully disallowed**
 - instance search is compile-time only
-- user-authored instance lookup is currently same-module only; imported user instances remain deferred
-- unary `instance` blocks with indented member bindings are the implemented surface, including constraint-prefixed instance heads such as `instance Eq A -> Eq (Option A)`; imported user-instance lookup remains deferred
+- user-authored instance lookup is implemented for imported unary heads that lower to hidden callables; multi-parameter indexed heads remain deferred
+- unary `instance` blocks with indented member bindings are the implemented surface, including constraint-prefixed instance heads such as `instance Eq A => Eq (Option A)`; imported unary evidence selection works when the checker can choose one concrete candidate
 - instance bodies are checked directly against the class-member arrow types with explicit local parameter bindings
 
 ### 7.1.1 Overloaded term lookup
@@ -710,7 +748,7 @@ Class members are overloaded term candidates. Ambient-prelude and same-module cl
 Constraints:
 
 - evidence must be concrete enough for checked HIR to choose a member
-- imported polymorphic class-member execution remains deferred
+- imported unary builtin-member execution such as `map` and `reduce` works today; indexed / multi-parameter evidence remains deferred
 - unresolved or multiply valid candidates are diagnosed explicitly
 
 ### 7.1.2 Lowering strategy
@@ -731,7 +769,7 @@ Typed core lowers the builtin runtime-supported class-member surface to intrinsi
 - `compare`
 - structural equality
 
-Same-module instance members lower as hidden callable items per `(instance, member)`. Overloaded references point to those hidden callables.
+Instance members lower as hidden callable items per `(instance, member)`. Overloaded references point to those hidden callables, including imported unary higher-kinded uses when evidence selection is concrete enough.
 
 ### 7.2 Core instances
 
@@ -804,6 +842,42 @@ Normative for lawful instances:
 - `Monad`: left identity, right identity, associativity
 
 The compiler is not required to prove these laws.
+
+### 7.6 Deferred proposal: indexed higher-kinded classes
+
+Current AIVI already benefits from unary higher-kinded abstractions (`Functor`, `Foldable`,
+`Traversable`, `Filterable`), but collection-heavy code still needs module-specific indexed helpers such
+as `list.mapWithIndex` and `matrix.reduceWithIndex`. The missing abstraction is not another matrix-only
+API; it is executable evidence for containers that can expose a stable index type.
+
+Proposed direction:
+
+```aivi
+class FunctorWithIndex F I
+    mapWithIndex : (I -> A -> B) -> F A -> F B
+
+class FoldableWithIndex F I
+    reduceWithIndex : (B -> I -> A -> B) -> B -> F A -> B
+```
+
+Intended examples:
+
+- `instance FunctorWithIndex List Int`
+- `instance FoldableWithIndex List Int`
+- `instance FunctorWithIndex Matrix MatrixIndex`
+- `instance FoldableWithIndex Matrix MatrixIndex`
+
+Why this is deferred:
+
+- the current executable instance path is clearly unary; multi-parameter indexed heads are not yet
+  proven end to end
+- evidence selection and import/export plumbing need a principled story for more than one subject type
+  argument
+- stdlib stopgaps already exist today (`list.indexed`, `list.mapWithIndex`, `list.reduceWithIndex`,
+  `matrix.mapWithIndex`, `matrix.reduceWithIndex`, `matrix.coords`, `matrix.entries`)
+
+The RFC direction is to add indexed HKTs only when multi-parameter instance heads, imported evidence,
+and diagnostics are all coherent together.
 
 ---
 

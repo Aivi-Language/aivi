@@ -42,14 +42,32 @@ These types are always available and can be imported from `aivi.prelude`:
 | `Monoid A` | Semigroup with identity |
 | `Bifunctor F` | Mappable over both type parameters |
 
-For the current higher-kinded hierarchy, the executable builtin carrier matrix, and the current same-module-only limits for user-authored higher-kinded classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses). Parser or checker acceptance alone does not imply executable runtime support.
+For the current higher-kinded hierarchy, the executable builtin carrier matrix, and the current unary imported-instance slice for user-authored higher-kinded classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses). Parser or checker acceptance alone does not imply executable runtime support.
 
 ## Option Functions
 
 ```aivi
+use aivi.prelude (
+    Option
+    Text
+    Bool
+    getOrElse
+    isSome
+    foldOption
+    isSomeAnd
+    textNonEmpty
+)
+
 value name : Option Text = Some "Ada"
 value displayName : Text = getOrElse "guest" name
 value hasName : Bool = isSome name
+
+type Text -> Text
+func punctuate = name =>
+    append name "!"
+
+value foldedName : Text = foldOption "guest" punctuate name
+value checkedName : Bool = isSomeAnd textNonEmpty name
 ```
 
 ## Result Functions
@@ -63,6 +81,17 @@ value succeeded : Bool = isOk age
 ## List Functions
 
 ```aivi
+use aivi.prelude (
+    Int
+    Text
+    Bool
+    List
+    length
+    head
+    isEmpty
+    indexed
+)
+
 value items : List Text = [
     "Ada",
     "Grace",
@@ -72,6 +101,37 @@ value items : List Text = [
 value count : Int = length items
 value first : Option Text = head items
 value empty : Bool = isEmpty []
+value indexedItems : List (Int, Text) = indexed items
+```
+
+```aivi
+use aivi.prelude (
+    Int
+    mapWithIndex
+    reduceWithIndex
+)
+
+type Int -> Int -> Int
+func addIndex = index item =>
+    index + item
+
+type Int -> Int -> Int -> Int
+func addIndexed = total index item =>
+    total + index + item
+
+value adjusted : List Int =
+    mapWithIndex addIndex [
+        10,
+        20,
+        30
+    ]
+
+value indexedTotal : Int =
+    reduceWithIndex addIndexed 0 [
+        10,
+        20,
+        30
+    ]
 ```
 
 ## Order Functions

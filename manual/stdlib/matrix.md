@@ -2,15 +2,16 @@
 
 Rectangular two-dimensional collections.
 
-`aivi.matrix` provides a generic `Matrix A` type for NxM data laid out by zero-based `x` and `y`
-coordinates. It is meant for boards, tiles, seat maps, and other rectangular grids rather than
-numeric linear algebra.
+`aivi.matrix` provides a generic `Matrix A` type for row-major grids addressed by zero-based `x` and `y`
+coordinates. It is meant for boards, seat maps, tiles, and other structured grids rather than numeric
+linear algebra.
 
 ## Import
 
 ```aivi
 use aivi.matrix (
     Matrix
+    MatrixIndex
     MatrixError
     init
     fromRows
@@ -20,6 +21,15 @@ use aivi.matrix (
     row
     at
     replaceAt
+    coord
+    mapWithIndex
+    reduceWithIndex
+    coords
+    entries
+    positionsWhere
+    count
+    modifyAt
+    replaceMany
 )
 ```
 
@@ -27,16 +37,26 @@ use aivi.matrix (
 
 | Name | Type | Description |
 | --- | --- | --- |
-| `Matrix A` | opaque generic type | A rectangular row-major grid of values |
-| `MatrixError` | sum type | Constructor/validation errors |
-| `init` | `Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)` | Build a matrix from `x` and `y` coordinates |
+| `Matrix A` | opaque generic type | A rectangular row-major grid |
+| `MatrixIndex` | opaque coordinate type | The index token used by `coords`, `entries`, `modifyAt`, and `replaceMany` |
+| `coord` | `Int -> Int -> MatrixIndex` | Construct a `MatrixIndex` from zero-based `x` and `y` |
+| `MatrixError` | sum type | Constructor and validation errors |
+| `init` | `Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)` | Build a matrix from coordinates |
 | `fromRows` | `List (List A) -> Result MatrixError (Matrix A)` | Validate an existing nested-list shape |
 | `width` | `Matrix A -> Int` | Number of columns |
 | `height` | `Matrix A -> Int` | Number of rows |
 | `rows` | `Matrix A -> List (List A)` | Expose the row-major carrier |
 | `row` | `Matrix A -> Int -> Option (List A)` | Read one zero-based row |
 | `at` | `Matrix A -> Int -> Int -> Option A` | Read one cell by `x` then `y` |
-| `replaceAt` | `Matrix A -> (Int, Int) -> A -> Option (Matrix A)` | Replace one cell, preserving rectangular shape |
+| `replaceAt` | `Matrix A -> (Int, Int) -> A -> Option (Matrix A)` | Replace one cell using the tuple-shaped compatibility API |
+| `mapWithIndex` | `(Int -> Int -> A -> B) -> Matrix A -> Matrix B` | Map with both `x` and `y` |
+| `reduceWithIndex` | `(B -> Int -> Int -> A -> B) -> B -> Matrix A -> B` | Fold with both `x` and `y` |
+| `coords` | `Matrix A -> List MatrixIndex` | Enumerate every coordinate in row-major order |
+| `entries` | `Matrix A -> List (MatrixIndex, A)` | Enumerate every coordinate/value pair |
+| `positionsWhere` | `(A -> Bool) -> Matrix A -> List MatrixIndex` | Collect the coordinates of matching cells |
+| `count` | `(A -> Bool) -> Matrix A -> Int` | Count matching cells |
+| `modifyAt` | `Matrix A -> MatrixIndex -> (A -> A) -> Option (Matrix A)` | Update one indexed cell with a transform |
+| `replaceMany` | `Matrix A -> List (MatrixIndex, A) -> Option (Matrix A)` | Apply several indexed replacements transactionally |
 
 ## Error type
 
@@ -52,51 +72,27 @@ type MatrixError =
 - `RaggedRows rowIndex expected actual` means `fromRows` found a row whose length did not match the
   first row. `rowIndex` is zero-based.
 
-## `init`
+## `init` and `fromRows`
 
-```aivi
-// <unparseable item>
-```
-
-`init width height build` calls `build x y` for every zero-based coordinate in the rectangle.
-`x` is the column index and `y` is the row index.
-
-```aivi
-use aivi.matrix (
-    Matrix
-    MatrixError
-    init
-    at
-)
-
-type Int -> Int -> Int
-func seatNumber = x y =>
-    x + y * 100
-
-value seats : Result MatrixError (Matrix Int) = init 3 2 seatNumber
-
-value middleSeat : Result MatrixError (Option Int) = seats
- ||> Err error -> Err error
- ||> Ok matrix -> Ok (at matrix 1 1)
-```
-
-## `fromRows`
-
-```aivi
-// <unparseable item>
-```
-
-Use `fromRows` when you already have nested lists and want to verify that every row has the same
+`init width height build` calls `build x y` for every zero-based coordinate in the rectangle. Use
+`fromRows` when you already have nested lists and want AIVI to validate that every row has the same
 length.
 
 ```aivi
 use aivi.matrix (
     Matrix
     MatrixError
+    init
     fromRows
 )
 
-value board : Result MatrixError (Matrix Text) =
+type Int -> Int -> Int
+func seatNumber = x y =>
+    x + y * 100
+
+value built : Result MatrixError (Matrix Int) = init 3 2 seatNumber
+
+value fromExisting : Result MatrixError (Matrix Text) =
     fromRows [
         ["A", "B", "C"],
         ["D", "E", "F"]
@@ -105,12 +101,8 @@ value board : Result MatrixError (Matrix Text) =
 
 ## Dimensions and access
 
-```aivi
-// <unparseable item>
-```
-
-`width` and `height` report the current rectangular shape. `row` and `at` return `None` when the
-requested index is out of bounds.
+`width` and `height` report the current shape. `row` and `at` return `None` when the requested
+coordinate is out of bounds.
 
 ```aivi
 use aivi.matrix (
@@ -129,53 +121,132 @@ func cell = x y =>
 
 value board : Result MatrixError (Matrix Int) = init 4 3 cell
 
-value boardWidth : Result MatrixError Int = board
- ||> Err error -> Err error
- ||> Ok matrix -> Ok (width matrix)
-
-value boardHeight : Result MatrixError Int = board
- ||> Err error -> Err error
- ||> Ok matrix -> Ok (height matrix)
-
-value firstRow : Result MatrixError (Option (List Int)) = board
- ||> Err error -> Err error
- ||> Ok matrix -> Ok (row matrix 0)
-
 value corner : Result MatrixError (Option Int) = board
  ||> Err error -> Err error
  ||> Ok matrix -> Ok (at matrix 3 2)
 ```
 
-## `replaceAt`
+## `Functor` and `Foldable`
 
-```aivi
-// <unparseable item>
-```
-
-`replaceAt` returns `Some updatedMatrix` when both coordinates are in bounds, otherwise `None`.
+`Matrix` participates in the ordinary higher-kinded collection surface. When `aivi.matrix` is in
+scope, ambient `map` and `reduce` work on `Matrix` values through user-authored `Functor` and
+`Foldable` instances.
 
 ```aivi
 use aivi.matrix (
     Matrix
     MatrixError
     init
-    replaceAt
+    rows
 )
 
-type Int -> Int -> Bool
-func isWall = x y =>
-    x == 0 or y == 0
+type Int -> Int
+func double = n =>
+    n * 2
 
-value board : Result MatrixError (Matrix Bool) = init 3 3 isWall
+type Int -> Int -> Int
+func add = total item =>
+    total + item
 
-value patched : Result MatrixError (Option (Matrix Bool)) = board
+type Int -> Int -> Int
+func cell = x y =>
+    x + y * 10
+
+value board : Result MatrixError (Matrix Int) = init 3 2 cell
+
+value doubledRows : Result MatrixError (List (List Int)) = board
  ||> Err error -> Err error
- ||> Ok matrix -> Ok (replaceAt matrix (1, 1) True)
+ ||> Ok matrix -> Ok (rows (map double matrix))
+
+value total : Result MatrixError Int = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (reduce add 0 matrix)
+```
+
+## Indexed traversal and updates
+
+Use `coord` when you need to construct a `MatrixIndex` explicitly. `coords`, `entries`,
+`mapWithIndex`, `reduceWithIndex`, `positionsWhere`, `modifyAt`, and `replaceMany` all use the indexed
+surface.
+
+```aivi
+use aivi.matrix (
+    Matrix
+    MatrixError
+    MatrixIndex
+    coord
+    init
+    rows
+    mapWithIndex
+    reduceWithIndex
+    coords
+    entries
+    positionsWhere
+    count
+    modifyAt
+    replaceMany
+)
+
+type Int -> Int -> Int
+func cell = x y =>
+    x + y * 10
+
+type Int -> Int -> Int -> Int
+func withOffset = x y item =>
+    item + x + y
+
+type Int -> Int -> Int -> Int -> Int
+func sumWithOffset = total x y item =>
+    total + item + x + y
+
+type Int -> Bool
+func isEvenValue = n =>
+    n % 2 == 0
+
+type Int -> Int
+func addHundred = n =>
+    n + 100
+
+value board : Result MatrixError (Matrix Int) = init 3 2 cell
+
+value boardCoords : Result MatrixError (List MatrixIndex) = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (coords matrix)
+
+value boardEntries : Result MatrixError (List (MatrixIndex, Int)) = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (entries matrix)
+
+value offsetRows : Result MatrixError (List (List Int)) = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (rows (mapWithIndex withOffset matrix))
+
+value indexedTotal : Result MatrixError Int = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (reduceWithIndex sumWithOffset 0 matrix)
+
+value evenCoords : Result MatrixError (List MatrixIndex) = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (positionsWhere isEvenValue matrix)
+
+value evenCount : Result MatrixError Int = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (count isEvenValue matrix)
+
+value modified : Result MatrixError (Option (Matrix Int)) = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (modifyAt matrix (coord 1 1) addHundred)
+
+value patched : Result MatrixError (Option (Matrix Int)) = board
+ ||> Err error -> Err error
+ ||> Ok matrix -> Ok (replaceMany matrix [(coord 0 0, 7), (coord 2 1, 8)])
 ```
 
 ## Notes
 
 - Coordinates are zero-based.
 - Matrices are row-major: `rows matrix` returns the carrier as `List (List A)`.
+- `replaceAt` keeps the original tuple-shaped `(Int, Int)` input for compatibility; the newer indexed
+  helper family uses `MatrixIndex` plus `coord`.
 - `init 0 height ...` and `init width 0 ...` are valid and produce empty columns or rows; only
   negative dimensions are rejected.

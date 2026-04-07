@@ -37,6 +37,19 @@ func getOrElse = fallback opt => opt
  ||> Some item -> item
  ||> None      -> fallback
 
+type B -> (A -> B) -> (Option A) -> B
+func fold = onNone onSome opt => opt
+ ||> Some item -> onSome item
+ ||> None      -> onNone
+
+type B -> (A -> B) -> (Option A) -> B
+func mapOr = fallback transform opt =>
+    fold fallback transform opt
+
+type (A -> Bool) -> (Option A) -> Bool
+func isSomeAnd = predicate opt =>
+    fold False predicate opt
+
 type Option A -> (Option A) -> (Option A)
 func orElse = fallback opt => opt
  T|> keepSome
@@ -85,6 +98,9 @@ func fromBool = item b => b
 export isSome
 export isNone
 export getOrElse
+export fold
+export mapOr
+export isSomeAnd
 export orElse
 export flatMap
 export flatten

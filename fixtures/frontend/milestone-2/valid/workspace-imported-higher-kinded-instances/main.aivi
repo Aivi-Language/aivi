@@ -1,0 +1,15 @@
+use shared.box (
+    Box
+    one
+)
+
+type Int -> Int
+func addOne = x =>
+    x + 1
+
+type Int -> Int -> Int
+func add = total item =>
+    total + item
+
+value mapped : Box Int = map addOne one
+value total : Int = reduce add 10 one
