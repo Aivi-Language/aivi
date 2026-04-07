@@ -974,7 +974,7 @@ struct RunValidationBlocker {
 struct CompiledRunFragment {
     expr: HirExprId,
     parameters: Vec<GeneralExprParameter>,
-    program: BackendProgram,
+    program: Arc<BackendProgram>,
     item: BackendItemId,
     required_signal_globals: Vec<CompiledRunSignalGlobal>,
 }
@@ -3469,24 +3469,28 @@ fn compile_run_expr_fragment(
     Ok(CompiledRunFragment {
         expr,
         parameters: site.parameters.clone(),
-        program: backend,
+        program: Arc::new(backend),
         item,
         required_signal_globals,
     })
 }
 
 type RuntimeBindingEnv = BTreeMap<aivi_hir::BindingId, RuntimeValue>;
+type EvaluatorCache<'a> = BTreeMap<*const BackendProgram, KernelEvaluator<'a>>;
+
 fn plan_run_hydration(
     shared: &RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
 ) -> Result<RunHydrationPlan, String> {
     let runtime_globals = runtime_globals_from_detached(globals);
+    let mut evaluators = EvaluatorCache::new();
     Ok(RunHydrationPlan {
         root: plan_run_node(
             shared,
             &runtime_globals,
             &GtkNodeInstance::root(shared.bridge.root()),
             &RuntimeBindingEnv::new(),
+            &mut evaluators,
         )?,
     })
 }
@@ -3500,11 +3504,12 @@ fn runtime_globals_from_detached(
         .collect()
 }
 
-fn plan_run_node(
-    shared: &RunHydrationStaticState,
+fn plan_run_node<'a>(
+    shared: &'a RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     instance: &GtkNodeInstance,
     env: &RuntimeBindingEnv,
+    evaluators: &mut EvaluatorCache<'a>,
 ) -> Result<HydratedRunNode, String> {
     let view_name = shared.view_name.as_ref();
     let node = shared.bridge.node(instance.node.plan).ok_or_else(|| {
@@ -3525,6 +3530,7 @@ fn plan_run_node(
                             globals,
                             setter.input,
                             env,
+                            evaluators,
                         )?),
                     });
                 }
@@ -3541,6 +3547,7 @@ fn plan_run_node(
                         globals,
                         event.input,
                         env,
+                        evaluators,
                     )?),
                 });
             }
@@ -3554,6 +3561,7 @@ fn plan_run_node(
                     &widget.default_children.roots,
                     instance.path.clone(),
                     env,
+                    evaluators,
                 )?,
             })
         }
@@ -3565,6 +3573,7 @@ fn plan_run_node(
                 &group.body.roots,
                 instance.path.clone(),
                 env,
+                evaluators,
             )?,
         }),
         GtkBridgeNodeKind::Show(show) => {
@@ -3573,6 +3582,7 @@ fn plan_run_node(
                 globals,
                 show.when.input,
                 env,
+                evaluators,
             )?)
             .ok_or_else(|| {
                 format!(
@@ -3588,6 +3598,7 @@ fn plan_run_node(
                         globals,
                         decision.input,
                         env,
+                        evaluators,
                     )?)
                     .ok_or_else(|| {
                         format!(
@@ -3603,6 +3614,7 @@ fn plan_run_node(
                     &show.body.roots,
                     instance.path.clone(),
                     env,
+                    evaluators,
                 )?
             } else {
                 Vec::new().into_boxed_slice()
@@ -3622,6 +3634,7 @@ fn plan_run_node(
                 globals,
                 each.collection.input,
                 env,
+                evaluators,
             )?)
             .ok_or_else(|| {
                 format!(
@@ -3646,6 +3659,7 @@ fn plan_run_node(
                                 &each.item_template.roots,
                                 path,
                                 &child_env,
+                                evaluators,
                             )?,
                         });
                     }
@@ -3670,6 +3684,7 @@ fn plan_run_node(
                             globals,
                             key_input.input,
                             &child_env,
+                            evaluators,
                         )?)
                         .ok_or_else(|| {
                             format!(
@@ -3688,6 +3703,7 @@ fn plan_run_node(
                                 &each.item_template.roots,
                                 path,
                                 &child_env,
+                                evaluators,
                             )?,
                         });
                     }
@@ -3707,6 +3723,7 @@ fn plan_run_node(
                             globals,
                             &GtkNodeInstance::with_path(empty.empty, instance.path.clone()),
                             env,
+                            evaluators,
                         )
                     })
                     .transpose()?
@@ -3727,6 +3744,7 @@ fn plan_run_node(
                 globals,
                 match_node.scrutinee.input,
                 env,
+                evaluators,
             )?;
             let mut matched = None;
             for (index, branch) in match_node.cases.iter().enumerate() {
@@ -3752,6 +3770,7 @@ fn plan_run_node(
                     globals,
                     &GtkNodeInstance::with_path(branch.case, instance.path.clone()),
                     &case_env,
+                    evaluators,
                 )?),
             })
         }
@@ -3763,6 +3782,7 @@ fn plan_run_node(
                 &case.body.roots,
                 instance.path.clone(),
                 env,
+                evaluators,
             )?,
         }),
         GtkBridgeNodeKind::Fragment(fragment) => Ok(HydratedRunNode::Fragment {
@@ -3773,6 +3793,7 @@ fn plan_run_node(
                 &fragment.body.roots,
                 instance.path.clone(),
                 env,
+                evaluators,
             )?,
         }),
         GtkBridgeNodeKind::With(with_node) => {
@@ -3781,6 +3802,7 @@ fn plan_run_node(
                 globals,
                 with_node.value.input,
                 env,
+                evaluators,
             )?;
             let mut child_env = env.clone();
             child_env.insert(with_node.binding, strip_signal_runtime_value(value));
@@ -3793,6 +3815,7 @@ fn plan_run_node(
                     &with_node.body.roots,
                     instance.path.clone(),
                     &child_env,
+                    evaluators,
                 )?,
             })
         }
@@ -3804,17 +3827,19 @@ fn plan_run_node(
                 &empty.body.roots,
                 instance.path.clone(),
                 env,
+                evaluators,
             )?,
         }),
     }
 }
 
-fn plan_run_child_group(
-    shared: &RunHydrationStaticState,
+fn plan_run_child_group<'a>(
+    shared: &'a RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     roots: &[aivi_gtk::GtkBridgeNodeRef],
     path: GtkExecutionPath,
     env: &RuntimeBindingEnv,
+    evaluators: &mut EvaluatorCache<'a>,
 ) -> Result<Box<[HydratedRunNode]>, String> {
     let mut children = Vec::with_capacity(roots.len());
     for &root in roots {
@@ -3823,6 +3848,7 @@ fn plan_run_child_group(
             globals,
             &GtkNodeInstance::with_path(root, path.clone()),
             env,
+            evaluators,
         )?);
     }
     Ok(children.into_boxed_slice())
@@ -3951,11 +3977,12 @@ fn apply_run_node(
     }
 }
 
-fn evaluate_run_input(
-    inputs: &BTreeMap<RuntimeInputHandle, CompiledRunInput>,
+fn evaluate_run_input<'a>(
+    inputs: &'a BTreeMap<RuntimeInputHandle, CompiledRunInput>,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     input: RuntimeInputHandle,
     env: &RuntimeBindingEnv,
+    evaluators: &mut EvaluatorCache<'a>,
 ) -> Result<RuntimeValue, String> {
     let compiled = inputs.get(&input).ok_or_else(|| {
         format!(
@@ -3964,15 +3991,18 @@ fn evaluate_run_input(
         )
     })?;
     match compiled {
-        CompiledRunInput::Expr(fragment) => evaluate_compiled_run_fragment(fragment, globals, env),
-        CompiledRunInput::Text(text) => evaluate_compiled_run_text(text, globals, env),
+        CompiledRunInput::Expr(fragment) => {
+            evaluate_compiled_run_fragment(fragment, globals, env, evaluators)
+        }
+        CompiledRunInput::Text(text) => evaluate_compiled_run_text(text, globals, env, evaluators),
     }
 }
 
-fn evaluate_compiled_run_fragment(
-    fragment: &CompiledRunFragment,
+fn evaluate_compiled_run_fragment<'a>(
+    fragment: &'a CompiledRunFragment,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     env: &RuntimeBindingEnv,
+    evaluators: &mut EvaluatorCache<'a>,
 ) -> Result<RuntimeValue, String> {
     let args = fragment
         .parameters
@@ -3987,8 +4017,10 @@ fn evaluate_compiled_run_fragment(
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let item = &fragment.program.items()[fragment.item];
-    let mut evaluator = KernelEvaluator::new(&fragment.program);
+    let program_ptr = Arc::as_ptr(&fragment.program);
+    let evaluator = evaluators
+        .entry(program_ptr)
+        .or_insert_with(|| KernelEvaluator::new(&fragment.program));
     let required_globals = fragment
         .required_signal_globals
         .iter()
@@ -4012,6 +4044,7 @@ fn evaluate_compiled_run_fragment(
             .evaluate_item(fragment.item, &required_globals)
             .map_err(|error| format!("{error}"))
     } else {
+        let item = &fragment.program.items()[fragment.item];
         let kernel = item.body.ok_or_else(|| {
             format!(
                 "compiled runtime fragment {} has no executable body",
@@ -4045,10 +4078,11 @@ fn backend_items_by_hir(
         .collect()
 }
 
-fn evaluate_compiled_run_text(
-    text: &CompiledRunText,
+fn evaluate_compiled_run_text<'a>(
+    text: &'a CompiledRunText,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     env: &RuntimeBindingEnv,
+    evaluators: &mut EvaluatorCache<'a>,
 ) -> Result<RuntimeValue, String> {
     let mut rendered = String::new();
     for segment in &text.segments {
@@ -4056,7 +4090,7 @@ fn evaluate_compiled_run_text(
             CompiledRunTextSegment::Text(text) => rendered.push_str(text),
             CompiledRunTextSegment::Interpolation(fragment) => {
                 let value = strip_signal_runtime_value(evaluate_compiled_run_fragment(
-                    fragment, globals, env,
+                    fragment, globals, env, evaluators,
                 )?);
                 if matches!(value, RuntimeValue::Callable(_)) {
                     return Err(format!(
