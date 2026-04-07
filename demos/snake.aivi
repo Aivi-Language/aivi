@@ -150,21 +150,21 @@ type GameState -> Cell -> GameState
 func resolveMoveStep = st h =>
     st <| { snake: st.snake.move h, seed: nextSeed st.seed }
 
-type List Cell -> GameState -> Int -> Int -> Text
-func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)
+type List Cell -> Cell -> Cell -> Int -> Int -> Text
+func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
  ||> (False, False, False) -> "·"
 
-type List Cell -> GameState -> Int -> Text
-func renderRowAt = body st y => indices boardW
-  |> map (cellGlyph body st y)
+type List Cell -> Cell -> Cell -> Int -> Text
+func renderRowAt = body head food y => indices boardW
+  |> map (cellGlyph body head food y)
   |> concat
 
-type GameState -> Text
-func renderBoard = st => indices boardH
-  |> map (renderRowAt st.snake.cells st)
+type Snake -> Cell -> Text
+func renderBoard = snake food => indices boardH
+  |> map (renderRowAt snake.cells snake.head food)
   |> join "\n"
 
 type Status -> Bool
@@ -207,12 +207,30 @@ signal state : Signal GameState = event
  +|> initial step
 
 from state = {
-    boardText: renderBoard
-    dirLine: .dir |> dirLabel
-    statusLine: .status |> statusLineFor
-    scoreLine: .score |> scoreLineFor
-    gameOver: .status |> isGameOver
-    finalScoreLine: .score |> finalScoreLineFor
+    snake: .snake
+    dir: .dir
+    food: .food
+    score: .score
+    status: .status
+}
+
+signal boardText : Signal Text =
+ &|> snake
+ &|> food
+  |> renderBoard
+
+from dir = {
+    dirLine: dirLabel
+}
+
+from status = {
+    statusLine: statusLineFor
+    gameOver: isGameOver
+}
+
+from score = {
+    scoreLine: scoreLineFor
+    finalScoreLine: finalScoreLineFor
 }
 
 value main =

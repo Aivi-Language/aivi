@@ -314,53 +314,71 @@ signal state : GameState = event
 
 This is the accumulation pipe. It reads: *"start with `initial`, and each time `event` fires, apply `step` to compute the next `GameState`."*
 
-The entire game state lives in this one signal. All other view signals can fan out from it:
+The entire game state still lives in this one signal so each tick remains atomic, but we can fan out stable sub-signals from it so unrelated UI work does not recompute:
 
 ```aivi
 from state = {
-    boardText: renderBoard
-    dirLine: .dir |> dirLabel
-    statusLine: .status |> statusLineFor
-    scoreLine: .score |> scoreLineFor
-    gameOver: .status |> isGameOver
-    finalScoreLine: .score |> finalScoreLineFor
+    snake: .snake
+    dir: .dir
+    food: .food
+    score: .score
+    status: .status
+}
+
+signal boardText : Signal Text =
+ &|> snake
+ &|> food
+  |> renderBoard
+
+from dir = {
+    dirLine: dirLabel
+}
+
+from status = {
+    statusLine: statusLineFor
+    gameOver: isGameOver
+}
+
+from score = {
+    scoreLine: scoreLineFor
+    finalScoreLine: finalScoreLineFor
 }
 ```
 
-Each entry projects a piece of state and transforms it into a named derived signal. When `state` changes, all of these recompute automatically.
+This keeps the reducer where the rules need coherence, but moves rendering and labels onto a finer-grained signal graph. In particular, `boardText` now depends on `snake` and `food`, not on the whole `GameState`, so a pure direction change no longer invalidates the board render path.
 
 ## Rendering with text and indices
 
 The board renders as text. Instead of nested loops, we use `matrixIndices` to generate coordinate sequences and `map` to transform them into glyphs:
 
 ```aivi
-type List Cell -> GameState -> Int -> Int -> Text
-func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)
+type List Cell -> Cell -> Cell -> Int -> Int -> Text
+func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
  ||> (False, False, False) -> "·"
 ```
 
-This matches on a **triple of booleans** — is this cell the head, a body segment, or food? Every combination is covered. The `body` parameter is a pre-computed `List Cell` extracted from the snake via `.carrier` (see below), so the conversion from `NonEmptyList` happens once per frame rather than once per cell.
+This matches on a **triple of booleans** — is this cell the head, a body segment, or food? Every combination is covered. The renderer takes only `snake` and `food`, so direction-only turns do not force a board redraw. The `body` parameter is a pre-computed `List Cell` extracted from the snake once per frame.
 
-Each row is rendered by mapping `cellGlyph body st y` over the column indices, then the rows are joined with newlines:
+Each row is rendered by mapping `cellGlyph body head food y` over the column indices, then the rows are joined with newlines:
 
 ```aivi
-type List Cell -> GameState -> Int -> Text
-func renderRowAt = body st y => indices boardW
-  |> map (cellGlyph body st y)
+type List Cell -> Cell -> Cell -> Int -> Text
+func renderRowAt = body head food y => indices boardW
+  |> map (cellGlyph body head food y)
   |> concat
 
-type GameState -> Text
-func renderBoard = st => indices boardH
-  |> map (renderRowAt (toList st.snake.carrier) st)
+type Snake -> Cell -> Text
+func renderBoard = snake food => indices boardH
+  |> map (renderRowAt snake.cells snake.head food)
   |> join "\n"
 ```
 
-`matrixIndices boardW` produces `[0, 1, 2, ..., 29]`. The pipe maps each index through `cellGlyph body st y` to produce a list of single-character strings, then `concat` joins them without a separator. The outer pipe does the same for rows, joining with newlines.
+`matrixIndices boardW` produces `[0, 1, 2, ..., 29]`. The pipe maps each index through `cellGlyph body head food y` to produce a list of single-character strings, then `concat` joins them without a separator. The outer pipe does the same for rows, joining with newlines.
 
-The expression `st.snake.carrier` uses the built-in `.carrier` accessor to get the `NonEmptyList Cell` from the `Snake` domain, then `toList` converts it to a `List Cell`. This list is computed once in `renderBoard` and threaded through `renderRowAt` and `cellGlyph`, avoiding repeated conversions across all 600 cells.
+The expression `snake.cells` gives us the whole body list once in `renderBoard`, and `snake.head` gives us the head cell once. Those values are threaded through `renderRowAt` and `cellGlyph`, avoiding repeated conversions or unrelated `GameState` reads across all 600 cells.
 
 ### Display helper functions
 
@@ -427,11 +445,12 @@ Keyboard  ──→  keyDown signal
                     ↓
           +|> accumulates into state signal
                     ↓
-          ├── renderBoard  → boardText   → <Label>
+          ├── .snake ─┐
+          ├── .food  ─┴──→ renderBoard  → boardText   → <Label>
           ├── .dir         → dirLine     → <Label>
           ├── .status      → statusLine  → <Label>
           ├── .score       → scoreLine   → <Label>
-          └── isGameOver   → gameOver    → <show>
+          └── .status      → gameOver    → <show>
 ```
 
 Every arrow is a declared dependency. The runtime propagates changes through the graph automatically.
@@ -446,7 +465,7 @@ Every arrow is a declared dependency. The runtime propagates changes through the
 | **Patch** | `<\|` copies a record updating only named fields |
 | **Domains** | `Snake` wraps `NonEmptyList Cell` with domain-specific operations |
 | **Domain literals** | `120ms` — type-safe duration with suffix syntax |
-| **Signals** | `state`, `boardText`, `scoreLine` — the reactive graph |
+| **Signals** | `state`, `snake`, `food`, `boardText`, `scoreLine` — the reactive graph |
 | **Sources** | `timer.every`, `window.keyDown` — external input boundaries |
 | **Event routing** | Signal merge connects sources to events |
 | **Accumulation** | `+\|>` folds events into state over time |
