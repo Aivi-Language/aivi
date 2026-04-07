@@ -1131,6 +1131,21 @@ mod tests {
         })
     }
 
+    fn debug_signal_value_for(harness: &super::RunSessionHarness, name: &str) -> String {
+        harness.with_access(|access| {
+            let driver = access.driver();
+            let graph = driver.signal_graph();
+            let Some((handle, _)) = graph.signals().find(|(_, spec)| spec.name() == name) else {
+                return format!("<missing:{name}>");
+            };
+            match driver.current_signal_value(handle) {
+                Ok(Some(value)) => format!("{value:?}"),
+                Ok(None) => "<none>".to_owned(),
+                Err(error) => format!("<error:{error}>"),
+            }
+        })
+    }
+
     fn board_text_for(
         harness: &super::RunSessionHarness,
         board_item: aivi_backend::ItemId,
@@ -1515,6 +1530,7 @@ export main
 
     #[gtk::test]
     fn reversi_run_session_exposes_human_opening_move() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let path = repo_path("demos/reversi.aivi");
         let artifact = prepare_run_from_path(&path);
         let status_item = required_signal_item(&artifact, "statusText");
@@ -1545,6 +1561,7 @@ export main
 
     #[gtk::test]
     fn reversi_stays_clickable_after_idling_on_human_turn() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let path = repo_path("demos/reversi.aivi");
         let artifact = prepare_run_from_path(&path);
         let last_move_item = required_signal_item(&artifact, "lastMoveText");
@@ -1585,10 +1602,12 @@ export main
 
     #[gtk::test]
     fn reversi_stays_playable_after_the_first_full_turn() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let path = repo_path("demos/reversi.aivi");
         let artifact = prepare_run_from_path(&path);
         let status_item = required_signal_item(&artifact, "statusText");
         let last_move_item = required_signal_item(&artifact, "lastMoveText");
+        let preview_item = required_signal_item(&artifact, "previewText");
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -1614,18 +1633,40 @@ export main
             "the first move should hand control to the AI"
         );
         assert!(
+            text_signal_for(&harness, preview_item).starts_with("Computer is eyeing"),
+            "once the human move lands the AI should already expose its planned target"
+        );
+        assert!(
             pump_until(&context, Duration::from_secs(3), || {
                 text_signal_for(&harness, status_item) == "Your turn"
                     && text_signal_for(&harness, last_move_item).starts_with("Computer plays")
             }),
-            "after the AI reply the game should return to a playable human turn"
+            "after the AI reply the game should return to a playable human turn (status: {}, preview: {}, last move: {}, action: {}, session: {}, history: {})",
+            text_signal_for(&harness, status_item),
+            text_signal_for(&harness, preview_item),
+            text_signal_for(&harness, last_move_item),
+            debug_signal_value_for(&harness, "action"),
+            debug_signal_value_for(&harness, "session"),
+            debug_signal_value_for(&harness, "history"),
         );
 
+        assert!(
+            pump_until(&context, Duration::from_secs(1), || {
+                harness.root_windows().iter().any(|window| {
+                    find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌")
+                        .is_some_and(|button| button.is_sensitive())
+                })
+            }),
+            "after the AI reply the GTK tree should expose a clickable human move"
+        );
         let second_move = harness
             .root_windows()
             .iter()
-            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
-            .expect("reversi should expose another legal human move after the AI reply");
+            .find_map(|window| {
+                find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌")
+                    .filter(|button| button.is_sensitive())
+            })
+            .expect("reversi should expose another clickable human move after the AI reply");
         second_move.emit_clicked();
         harness.with_access(|access| {
             access
@@ -1634,7 +1675,13 @@ export main
         });
         assert!(
             text_signal_for(&harness, last_move_item).starts_with("You plays"),
-            "the second human move should update the move summary instead of crashing"
+            "the second human move should update the move summary instead of crashing (status: {}, preview: {}, last move: {}, action: {}, session: {}, history: {})",
+            text_signal_for(&harness, status_item),
+            text_signal_for(&harness, preview_item),
+            text_signal_for(&harness, last_move_item),
+            debug_signal_value_for(&harness, "action"),
+            debug_signal_value_for(&harness, "session"),
+            debug_signal_value_for(&harness, "history"),
         );
 
         harness.shutdown();

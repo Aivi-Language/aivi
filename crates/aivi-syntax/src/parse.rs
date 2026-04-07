@@ -10,13 +10,14 @@ use crate::{
         MarkupAttributeValue, MarkupNode, Module, NamedItem, NamedItemBody, OperatorName,
         PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector,
         PatchSelectorSegment, Pattern, PatternKind, PipeCaseArm, PipeExpr, PipeStage,
-        PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField,
-        RecordPatternField, RegexLiteral, ResultBinding, ResultBlockExpr, SignalMergeBody,
-        SignalReactiveArm, SourceDecorator, SourceProviderContractBody,
-        SourceProviderContractFieldValue, SourceProviderContractItem, SourceProviderContractMember,
+        PipeStageKind, ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField,
+        RegexLiteral, ResultBinding, ResultBlockExpr, SignalMergeBody, SignalReactiveArm,
+        SourceDecorator, SourceProviderContractBody, SourceProviderContractFieldValue,
+        SourceProviderContractItem, SourceProviderContractMember,
         SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextFragment,
-        TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeDeclBody, TypeExpr,
-        TypeExprKind, TypeField, TypeVariant, TypeVariantField, UnaryOperator, UseImport, UseItem,
+        TextInterpolation, TextLiteral, TextSegment, TokenRange, TypeCompanionMember, TypeDeclBody,
+        TypeExpr, TypeExprKind, TypeField, TypeSumBody, TypeVariant, TypeVariantField,
+        UnaryOperator, UseImport, UseItem,
     },
     lex::{LexedModule, Token, TokenKind, lex_fragment, lex_module},
 };
@@ -580,41 +581,40 @@ impl<'a> Parser<'a> {
                 parameters.push(parameter);
             }
 
-            let body =
-                if let Some(arrow_index) = self.consume_kind(&mut cursor, end, TokenKind::Arrow) {
-                    let body = self.parse_expression_body(
-                        keyword_index,
-                        &mut cursor,
-                        end,
-                        "func declaration",
-                        "func declaration is missing its body after `=>`",
-                        "expected a body expression after `=>`",
+            let body = if let Some(arrow_index) =
+                self.consume_kind(&mut cursor, end, TokenKind::Arrow)
+            {
+                let body = self.parse_expression_body(
+                    keyword_index,
+                    &mut cursor,
+                    end,
+                    "func declaration",
+                    "func declaration is missing its body after `=>`",
+                    "expected a body expression after `=>`",
+                );
+                if parameters.is_empty() {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "func declarations require an explicit parameter before `=>`",
+                        )
+                        .with_code(NULLARY_FUNCTION_DECLARATION)
+                        .with_primary_label(
+                            self.source_span_of_token(arrow_index),
+                            "insert a parameter such as `_` before `=>`",
+                        )
+                        .with_note("ignored unary functions are written as `func name = _ => body`")
+                        .with_help("functions must have at least one parameter"),
                     );
-                    if parameters.is_empty() {
-                        self.diagnostics.push(
-                            Diagnostic::error(
-                                "func declarations require an explicit parameter before `=>`",
-                            )
-                            .with_code(NULLARY_FUNCTION_DECLARATION)
-                            .with_primary_label(
-                                self.source_span_of_token(arrow_index),
-                                "insert a parameter such as `_` before `=>`",
-                            )
-                            .with_note(
-                                "ignored unary functions are written as `func name = _ => body`",
-                            )
-                            .with_help("functions must have at least one parameter"),
-                        );
-                    }
-                    body
-                } else {
-                    self.missing_body_diagnostic(
-                        keyword_index,
-                        "func declaration is missing its body",
-                        "expected `=>` followed by a body expression",
-                    );
-                    None
-                };
+                }
+                body
+            } else {
+                self.missing_body_diagnostic(
+                    keyword_index,
+                    "func declaration is missing its body",
+                    "expected `=>` followed by a body expression",
+                );
+                None
+            };
             (FunctionSurfaceForm::Explicit, parameters, body)
         };
 
@@ -759,7 +759,8 @@ impl<'a> Parser<'a> {
         // Parse the arms.
         let arms = self.parse_signal_reactive_arms(cursor, end);
 
-        let merge_span = self.source_span_for_range(merge_span_start, *cursor.min(&mut end.clone()));
+        let merge_span =
+            self.source_span_for_range(merge_span_start, *cursor.min(&mut end.clone()));
         Some(SignalMergeBody {
             sources,
             arms,
@@ -877,11 +878,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse a single `||> [source] pattern => body` arm.
-    fn parse_signal_reactive_arm(
-        &mut self,
-        arm_start: usize,
-        arm_end: usize,
-    ) -> SignalReactiveArm {
+    fn parse_signal_reactive_arm(&mut self, arm_start: usize, arm_end: usize) -> SignalReactiveArm {
         let mut cursor = arm_start + 1; // skip `||>`
 
         // Determine if this arm has a source prefix: `||> sourceName pattern => body`
@@ -928,10 +925,7 @@ impl<'a> Parser<'a> {
                     self.diagnostics.push(
                         Diagnostic::error("signal reactive arm is missing its body expression")
                             .with_code(MISSING_REACTIVE_UPDATE_ARM_BODY)
-                            .with_primary_label(
-                                arrow_anchor,
-                                "expected an expression after `=>`",
-                            ),
+                            .with_primary_label(arrow_anchor, "expected an expression after `=>`"),
                     );
                     None
                 })
@@ -1001,18 +995,18 @@ impl<'a> Parser<'a> {
         let (body_start, inner_end, brace_syntax) = if has_equals {
             let head_span = self.source_span_of_token(first);
             self.consume_kind(cursor, end, TokenKind::Equals);
-            let lbrace_index =
-                if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace) {
-                    idx
-                } else {
-                    self.diagnostics.push(
-                        Diagnostic::error("class declaration is missing `{` after `=`")
-                            .with_code(MISSING_CLASS_OPEN_BRACE)
-                            .with_primary_label(head_span, "expected `{` to open the class body")
-                            .with_help("expected `{` to open the class body"),
-                    );
-                    return None;
-                };
+            let lbrace_index = if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace)
+            {
+                idx
+            } else {
+                self.diagnostics.push(
+                    Diagnostic::error("class declaration is missing `{` after `=`")
+                        .with_code(MISSING_CLASS_OPEN_BRACE)
+                        .with_primary_label(head_span, "expected `{` to open the class body")
+                        .with_help("expected `{` to open the class body"),
+                );
+                return None;
+            };
             let inner_end = self.find_matching_brace(lbrace_index, end).unwrap_or(end);
             let body_start = *cursor;
             (body_start, inner_end, true)
@@ -1176,18 +1170,18 @@ impl<'a> Parser<'a> {
         let (body_start, inner_end, brace_syntax) = if has_equals {
             let head_span = self.source_span_of_token(first);
             self.consume_kind(cursor, end, TokenKind::Equals);
-            let lbrace_index =
-                if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace) {
-                    idx
-                } else {
-                    self.diagnostics.push(
-                        Diagnostic::error("instance declaration is missing `{` after `=`")
-                            .with_code(MISSING_INSTANCE_OPEN_BRACE)
-                            .with_primary_label(head_span, "expected `{` to open the instance body")
-                            .with_help("expected `{` to open the instance body"),
-                    );
-                    return None;
-                };
+            let lbrace_index = if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace)
+            {
+                idx
+            } else {
+                self.diagnostics.push(
+                    Diagnostic::error("instance declaration is missing `{` after `=`")
+                        .with_code(MISSING_INSTANCE_OPEN_BRACE)
+                        .with_primary_label(head_span, "expected `{` to open the instance body")
+                        .with_help("expected `{` to open the instance body"),
+                );
+                return None;
+            };
             let inner_end = self.find_matching_brace(lbrace_index, end).unwrap_or(end);
             let body_start = *cursor;
             (body_start, inner_end, true)
@@ -1255,18 +1249,18 @@ impl<'a> Parser<'a> {
         let (body_start, inner_end, brace_syntax) = if has_equals {
             let head_span = self.source_span_of_token(first);
             self.consume_kind(cursor, end, TokenKind::Equals);
-            let lbrace_index =
-                if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace) {
-                    idx
-                } else {
-                    self.diagnostics.push(
-                        Diagnostic::error("domain declaration is missing `{` after `=`")
-                            .with_code(MISSING_DOMAIN_OPEN_BRACE)
-                            .with_primary_label(head_span, "expected `{` to open the domain body")
-                            .with_help("expected `{` to open the domain body"),
-                    );
-                    return None;
-                };
+            let lbrace_index = if let Some(idx) = self.consume_kind(cursor, end, TokenKind::LBrace)
+            {
+                idx
+            } else {
+                self.diagnostics.push(
+                    Diagnostic::error("domain declaration is missing `{` after `=`")
+                        .with_code(MISSING_DOMAIN_OPEN_BRACE)
+                        .with_primary_label(head_span, "expected `{` to open the domain body")
+                        .with_help("expected `{` to open the domain body"),
+                );
+                return None;
+            };
             let inner_end = self.find_matching_brace(lbrace_index, end).unwrap_or(end);
             let body_start = *cursor;
             (body_start, inner_end, true)
@@ -2035,7 +2029,10 @@ impl<'a> Parser<'a> {
             cursor = lparen_idx + 1;
             let mut filters = Vec::new();
             loop {
-                if self.consume_kind(&mut cursor, end, TokenKind::RParen).is_some() {
+                if self
+                    .consume_kind(&mut cursor, end, TokenKind::RParen)
+                    .is_some()
+                {
                     break;
                 }
                 match self.parse_identifier(&mut cursor, end) {
@@ -2057,7 +2054,10 @@ impl<'a> Parser<'a> {
         // Optional `hiding (name1, name2, ...)` clause
         let hiding = if self
             .peek_nontrivia(cursor, end)
-            .map(|i| self.tokens[i].kind() == TokenKind::Identifier && self.is_identifier_text(i, "hiding"))
+            .map(|i| {
+                self.tokens[i].kind() == TokenKind::Identifier
+                    && self.is_identifier_text(i, "hiding")
+            })
             .unwrap_or(false)
         {
             let hiding_idx = self.peek_nontrivia(cursor, end).unwrap();
@@ -2071,7 +2071,10 @@ impl<'a> Parser<'a> {
                 cursor = lparen_idx + 1;
                 let mut names = Vec::new();
                 loop {
-                    if self.consume_kind(&mut cursor, end, TokenKind::RParen).is_some() {
+                    if self
+                        .consume_kind(&mut cursor, end, TokenKind::RParen)
+                        .is_some()
+                    {
                         break;
                     }
                     match self.parse_identifier(&mut cursor, end) {
@@ -3321,6 +3324,16 @@ impl<'a> Parser<'a> {
 
     fn parse_type_decl_body(&mut self, cursor: &mut usize, end: usize) -> Option<TypeDeclBody> {
         let index = self.peek_nontrivia(*cursor, end)?;
+        if self.tokens[index].kind() == TokenKind::LBrace {
+            let inner_end = self.find_matching_brace(index, end).unwrap_or(end);
+            if let Some(first_inside) = self.peek_nontrivia(index + 1, inner_end) {
+                if self.tokens[first_inside].kind() == TokenKind::PipeTap {
+                    return self
+                        .parse_sum_type_block_body(cursor, end)
+                        .map(TypeDeclBody::Sum);
+                }
+            }
+        }
         if self.tokens[index].kind() == TokenKind::PipeTap {
             return self.parse_sum_type_body(cursor, end);
         }
@@ -3343,6 +3356,173 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_sum_type_body(&mut self, cursor: &mut usize, end: usize) -> Option<TypeDeclBody> {
+        let start = *cursor;
+        let variants = self.parse_sum_type_variants(cursor, end);
+        (!variants.is_empty()).then_some(TypeDeclBody::Sum(TypeSumBody {
+            variants,
+            companions: Vec::new(),
+            span: self.source_span_for_range(start, *cursor),
+        }))
+    }
+
+    fn parse_sum_type_block_body(&mut self, cursor: &mut usize, end: usize) -> Option<TypeSumBody> {
+        let lbrace = self.consume_kind(cursor, end, TokenKind::LBrace)?;
+        let inner_end = self.find_matching_brace(lbrace, end).unwrap_or(end);
+        let member_indent = self
+            .peek_nontrivia(*cursor, inner_end)
+            .filter(|&index| self.tokens[index].line_start())
+            .map(|index| self.line_indent_of_token(index))
+            .unwrap_or(0);
+        let variants = self.parse_sum_type_variants(cursor, inner_end);
+        if variants.is_empty() {
+            *cursor = inner_end.saturating_add(1);
+            return None;
+        }
+
+        let mut companions = Vec::new();
+        let mut pending_annotation: Option<TypeExpr> = None;
+        let mut pending_colon_member: Option<TypeCompanionMember> = None;
+
+        while let Some(index) = self.peek_nontrivia(*cursor, inner_end) {
+            if self.tokens[index].line_start()
+                && member_indent != 0
+                && self.line_indent_of_token(index) != member_indent
+            {
+                break;
+            }
+            if self.tokens[index].kind() == TokenKind::PipeTap {
+                self.diagnostics.push(
+                    Diagnostic::error("sum constructors must come before companion members")
+                        .with_code(MISSING_DECLARATION_BODY)
+                        .with_primary_label(
+                            self.source_span_of_token(index),
+                            "move this constructor above the companion bindings",
+                        ),
+                );
+                break;
+            }
+            if !self.starts_type_companion_member(index) {
+                break;
+            }
+
+            if self.tokens[index].kind() == TokenKind::TypeKw {
+                if let Some(held) = pending_colon_member.take() {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "type companion member `{}` is missing its binding",
+                            held.name.text
+                        ))
+                        .with_code(MISSING_TYPE_COMPANION_BODY)
+                        .with_primary_label(
+                            held.span,
+                            "expected a binding line after this companion type annotation",
+                        ),
+                    );
+                }
+                *cursor = index + 1;
+                let type_end = self
+                    .find_next_type_companion_member_start(*cursor, inner_end, member_indent)
+                    .unwrap_or(inner_end);
+                let annotation = self
+                    .parse_type_expr(cursor, type_end, TypeStop::default())
+                    .or_else(|| {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "type companion annotation is missing its type after `type`",
+                            )
+                            .with_code(MISSING_TYPE_COMPANION_TYPE)
+                            .with_primary_label(
+                                self.source_span_for_range(index, *cursor),
+                                "expected a type such as `Player -> Text`",
+                            ),
+                        );
+                        None
+                    });
+                *cursor = type_end;
+                pending_annotation = annotation;
+                continue;
+            }
+
+            let before = *cursor;
+            let Some(mut member) =
+                self.parse_type_companion_member(cursor, inner_end, member_indent)
+            else {
+                break;
+            };
+
+            if let Some(annotation) = pending_annotation.take() {
+                member.annotation = Some(annotation);
+            }
+
+            if member.annotation.is_none() {
+                if let Some(held) = pending_colon_member.take() {
+                    if held.name.text == member.name.text {
+                        member.annotation = held.annotation;
+                    } else {
+                        self.diagnostics.push(
+                            Diagnostic::error(format!(
+                                "type companion member `{}` is missing its binding",
+                                held.name.text
+                            ))
+                            .with_code(MISSING_TYPE_COMPANION_BODY)
+                            .with_primary_label(
+                                held.span,
+                                "expected a binding line with the same companion name",
+                            ),
+                        );
+                    }
+                }
+            }
+
+            if member.annotation.is_some() && member.body.is_none() && member.parameters.is_empty()
+            {
+                pending_colon_member = Some(member);
+                if *cursor <= before {
+                    break;
+                }
+                continue;
+            }
+
+            companions.push(member);
+            if *cursor <= before {
+                break;
+            }
+        }
+
+        if let Some(held) = pending_colon_member.take() {
+            self.diagnostics.push(
+                Diagnostic::error(format!(
+                    "type companion member `{}` is missing its binding",
+                    held.name.text
+                ))
+                .with_code(MISSING_TYPE_COMPANION_BODY)
+                .with_primary_label(
+                    held.span,
+                    "expected a binding line after this companion type annotation",
+                ),
+            );
+        }
+
+        if let Some(annotation) = pending_annotation {
+            self.diagnostics.push(
+                Diagnostic::error("type companion annotation has no following member")
+                    .with_code(MISSING_TYPE_COMPANION_NAME)
+                    .with_primary_label(
+                        annotation.span,
+                        "expected a companion binding after this type annotation",
+                    ),
+            );
+        }
+
+        *cursor = inner_end.saturating_add(1);
+        Some(TypeSumBody {
+            variants,
+            companions,
+            span: self.source_span_for_range(lbrace, *cursor),
+        })
+    }
+
+    fn parse_sum_type_variants(&mut self, cursor: &mut usize, end: usize) -> Vec<TypeVariant> {
         let mut variants = Vec::new();
 
         loop {
@@ -3376,7 +3556,110 @@ impl<'a> Parser<'a> {
             }
         }
 
-        (!variants.is_empty()).then_some(TypeDeclBody::Sum(variants))
+        variants
+    }
+
+    fn parse_type_companion_member(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        member_indent: usize,
+    ) -> Option<TypeCompanionMember> {
+        let start = *cursor;
+        let Some(name) = self.parse_identifier(cursor, end) else {
+            self.diagnostics.push(
+                Diagnostic::error("type companion member is missing its name")
+                    .with_code(MISSING_TYPE_COMPANION_NAME)
+                    .with_primary_label(
+                        self.source_span_for_range(start, *cursor),
+                        "expected a companion name such as `label` or `opponent`",
+                    ),
+            );
+            return None;
+        };
+
+        if let Some(colon_idx) = self.peek_nontrivia(*cursor, end) {
+            if self.tokens[colon_idx].kind() == TokenKind::Colon
+                && !self.tokens[colon_idx].line_start()
+            {
+                *cursor = colon_idx + 1;
+                let ann_end = self
+                    .find_next_type_companion_member_start(*cursor, end, member_indent)
+                    .unwrap_or(end);
+                let annotation = self.parse_type_expr(cursor, ann_end, TypeStop::default());
+                *cursor = ann_end;
+                return Some(TypeCompanionMember {
+                    name,
+                    annotation,
+                    parameters: Vec::new(),
+                    body: None,
+                    span: self.source_span_for_range(start, *cursor),
+                });
+            }
+        }
+
+        let mut parameters = Vec::new();
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if self.tokens[index].line_start() {
+                break;
+            }
+            match self.tokens[index].kind() {
+                TokenKind::Identifier => {
+                    parameters.push(self.identifier_from_token(index));
+                    *cursor = index + 1;
+                }
+                TokenKind::Equals => break,
+                _ => break,
+            }
+        }
+
+        let Some(eq_index) = self.consume_kind(cursor, end, TokenKind::Equals) else {
+            self.diagnostics.push(
+                Diagnostic::error("type companion member is missing `=` before its body")
+                    .with_code(MISSING_TYPE_COMPANION_BODY)
+                    .with_primary_label(name.span, "expected `=` followed by an expression body"),
+            );
+            return None;
+        };
+        let equals_span = self.source_span_of_token(eq_index);
+        let member_end = self
+            .find_next_type_companion_member_start(*cursor, end, member_indent)
+            .unwrap_or(end);
+        let body = self
+            .parse_expr(cursor, member_end, ExprStop::default())
+            .or_else(|| {
+                self.diagnostics.push(
+                    Diagnostic::error("type companion member is missing its body after `=`")
+                        .with_code(MISSING_TYPE_COMPANION_BODY)
+                        .with_primary_label(
+                            equals_span,
+                            "expected an expression body for this companion member",
+                        ),
+                );
+                None
+            });
+        if body.is_some() {
+            if let Some(trailing_index) = self.next_significant_in_range(*cursor, member_end) {
+                self.diagnostics.push(
+                    Diagnostic::error(
+                        "type companion member body must contain exactly one expression",
+                    )
+                    .with_code(TRAILING_DECLARATION_BODY_TOKEN)
+                    .with_primary_label(
+                        self.source_span_of_token(trailing_index),
+                        "this token is outside the companion body",
+                    ),
+                );
+            }
+        }
+        *cursor = member_end;
+        Some(TypeCompanionMember {
+            name,
+            annotation: None,
+            parameters,
+            body,
+            span: self.source_span_for_range(start, member_end),
+        })
     }
 
     fn parse_type_variant_field(
@@ -3671,8 +3954,11 @@ impl<'a> Parser<'a> {
             let (subject_memo, stage_kind, result_memo) = match kind {
                 TokenKind::PipeTransform => {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     if cluster_active {
                         cluster_active = false;
@@ -3688,8 +3974,11 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeGate => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Gate { expr }, result_memo)
                 }
@@ -3704,15 +3993,21 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeMap => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Map { expr }, result_memo)
                 }
                 TokenKind::PipeApply => {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     cluster_active = true;
                     (subject_memo, PipeStageKind::Apply { expr }, result_memo)
@@ -3720,8 +4015,11 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeRecurStart => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (
                         subject_memo,
@@ -3732,56 +4030,77 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeRecurStep => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::RecurStep { expr }, result_memo)
                 }
                 TokenKind::PipeTap => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Tap { expr }, result_memo)
                 }
                 TokenKind::PipeFanIn => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::FanIn { expr }, result_memo)
                 }
                 TokenKind::TruthyBranch => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Truthy { expr }, result_memo)
                 }
                 TokenKind::FalsyBranch => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Falsy { expr }, result_memo)
                 }
                 TokenKind::PipeValidate => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Validate { expr }, result_memo)
                 }
                 TokenKind::PipePrevious => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Previous { expr }, result_memo)
                 }
@@ -3794,8 +4113,11 @@ impl<'a> Parser<'a> {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let seed =
                         self.parse_atomic_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
-                    let step =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let step = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (
                         subject_memo,
@@ -3806,8 +4128,11 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeDiff => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr =
-                        self.parse_patch_apply_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
+                    let expr = self.parse_patch_apply_expr(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
                     (subject_memo, PipeStageKind::Diff { expr }, result_memo)
                 }
@@ -4739,7 +5064,9 @@ impl<'a> Parser<'a> {
                 .as_ref()
                 .map(|expr| expr.span.span().end())
                 .unwrap_or_else(|| {
-                    label_path.last().map(|p| p.span.span().end())
+                    label_path
+                        .last()
+                        .map(|p| p.span.span().end())
                         .unwrap_or_else(|| label.span.span().end())
                 });
             fields.push(RecordField {
@@ -5151,7 +5478,9 @@ impl<'a> Parser<'a> {
                 .as_ref()
                 .map(|pattern| pattern.span.span().end())
                 .unwrap_or_else(|| {
-                    label_path.last().map(|p| p.span.span().end())
+                    label_path
+                        .last()
+                        .map(|p| p.span.span().end())
                         .unwrap_or_else(|| label.span.span().end())
                 });
             fields.push(RecordPatternField {
@@ -5883,7 +6212,9 @@ impl<'a> Parser<'a> {
                                     interpolation_span,
                                     "add an expression between `{` and `}`",
                                 )
-                                .with_help("text interpolation expects an expression inside `\\{...}`"),
+                                .with_help(
+                                    "text interpolation expects an expression inside `\\{...}`",
+                                ),
                         );
                         self.push_text_fragment(&mut segments, cursor, interpolation_end, false);
                     } else if let Some(expr) =
@@ -6070,6 +6401,13 @@ impl<'a> Parser<'a> {
         )
     }
 
+    fn starts_type_companion_member(&self, index: usize) -> bool {
+        matches!(
+            self.tokens[index].kind(),
+            TokenKind::Identifier | TokenKind::TypeKw
+        )
+    }
+
     fn find_next_instance_member_start(
         &self,
         from: usize,
@@ -6102,6 +6440,26 @@ impl<'a> Parser<'a> {
                 || !token.line_start()
                 || self.line_indent_of_token(index) != member_indent
                 || !self.starts_domain_member(index)
+            {
+                continue;
+            }
+            return Some(index);
+        }
+        None
+    }
+
+    fn find_next_type_companion_member_start(
+        &self,
+        from: usize,
+        end: usize,
+        member_indent: usize,
+    ) -> Option<usize> {
+        for index in from..end {
+            let token = self.tokens[index];
+            if token.kind().is_trivia()
+                || !token.line_start()
+                || self.line_indent_of_token(index) != member_indent
+                || !self.starts_type_companion_member(index)
             {
                 continue;
             }
@@ -6222,8 +6580,7 @@ impl<'a> Parser<'a> {
             if !token.kind().is_trivia()
                 && token.line_start()
                 && depth == 0
-                && (token.kind() == TokenKind::At
-                    || token.kind().is_top_level_keyword())
+                && (token.kind() == TokenKind::At || token.kind().is_top_level_keyword())
                 && self.is_at_column_zero(index)
             {
                 return Some(index);
@@ -6870,7 +7227,7 @@ export main
 
         match &parsed.module.items[1] {
             Item::Type(item) => match item.type_body() {
-                Some(TypeDeclBody::Sum(variants)) => assert_eq!(variants.len(), 2),
+                Some(TypeDeclBody::Sum(sum)) => assert_eq!(sum.variants.len(), 2),
                 other => panic!("expected sum type body, got {other:?}"),
             },
             other => panic!("expected type item, got {other:?}"),
@@ -6899,6 +7256,40 @@ export main
             }
             other => panic!("expected use item, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parser_builds_sum_type_companions_inside_brace_bodies() {
+        let (_, parsed) = load(
+            r#"type Player = {
+    | Human
+    | Computer
+
+    type Player -> Player
+    opponent self = self
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "{:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let Item::Type(item) = &parsed.module.items[0] else {
+            panic!("expected type item");
+        };
+        let Some(TypeDeclBody::Sum(sum)) = item.type_body() else {
+            panic!("expected sum type body");
+        };
+        assert_eq!(sum.variants.len(), 2);
+        assert_eq!(sum.companions.len(), 1);
+        assert_eq!(sum.companions[0].name.text, "opponent");
+        assert_eq!(sum.companions[0].parameters.len(), 1);
+        assert!(sum.companions[0].annotation.is_some());
+        assert!(sum.companions[0].body.is_some());
     }
 
     #[test]
@@ -8430,7 +8821,11 @@ fun scoreLineFor:Text = "Score: {.}"
     #[test]
     fn parser_builds_hoist_item_with_no_filters() {
         let (_, parsed) = load("hoist\n");
-        assert!(!parsed.has_errors(), "hoist should parse cleanly: {:?}", parsed.all_diagnostics().collect::<Vec<_>>());
+        assert!(
+            !parsed.has_errors(),
+            "hoist should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
         assert_eq!(parsed.module.items.len(), 1);
         let Item::Hoist(hoist) = &parsed.module.items[0] else {
             panic!("expected hoist item");
@@ -8442,7 +8837,11 @@ fun scoreLineFor:Text = "Score: {.}"
     #[test]
     fn parser_builds_hoist_item_with_kind_filters() {
         let (_, parsed) = load("hoist (func, value)\n");
-        assert!(!parsed.has_errors(), "hoist with filters should parse cleanly: {:?}", parsed.all_diagnostics().collect::<Vec<_>>());
+        assert!(
+            !parsed.has_errors(),
+            "hoist with filters should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
         let Item::Hoist(hoist) = &parsed.module.items[0] else {
             panic!("expected hoist item");
         };
@@ -8454,7 +8853,11 @@ fun scoreLineFor:Text = "Score: {.}"
     #[test]
     fn parser_builds_hoist_item_with_hiding_clause() {
         let (_, parsed) = load("hoist hiding (length, head)\n");
-        assert!(!parsed.has_errors(), "hoist with hiding should parse cleanly: {:?}", parsed.all_diagnostics().collect::<Vec<_>>());
+        assert!(
+            !parsed.has_errors(),
+            "hoist with hiding should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
         let Item::Hoist(hoist) = &parsed.module.items[0] else {
             panic!("expected hoist item");
         };
@@ -8467,7 +8870,11 @@ fun scoreLineFor:Text = "Score: {.}"
     #[test]
     fn parser_builds_hoist_item_with_filters_and_hiding() {
         let (_, parsed) = load("hoist (func, value) hiding (map, filter)\n");
-        assert!(!parsed.has_errors(), "hoist with filters and hiding should parse cleanly: {:?}", parsed.all_diagnostics().collect::<Vec<_>>());
+        assert!(
+            !parsed.has_errors(),
+            "hoist with filters and hiding should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
         let Item::Hoist(hoist) = &parsed.module.items[0] else {
             panic!("expected hoist item");
         };

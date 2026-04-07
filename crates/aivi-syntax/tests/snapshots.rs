@@ -37,3 +37,11 @@ fn snapshot_type_sum() {
     let module = parse("type Color =\n    | Red\n    | Green\n    | Blue");
     insta::assert_debug_snapshot!(module);
 }
+
+#[test]
+fn snapshot_type_sum_with_companions() {
+    let module = parse(
+        "type Player = {\n    | Human\n    | Computer\n\n    type Player\n    opponent self = self\n     ||> Human -> Computer\n     ||> Computer -> Human\n}",
+    );
+    insta::assert_debug_snapshot!(module);
+}

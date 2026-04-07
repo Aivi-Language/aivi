@@ -97,6 +97,22 @@ fn record_type_single_field_is_idempotent() {
     assert_idempotent(src);
 }
 
+#[test]
+fn sum_type_with_companion_members_is_idempotent() {
+    let src = "\
+type Player = {
+    | Human
+    | Computer
+
+    type Player
+    opponent self = self
+     ||> Human -> Computer
+     ||> Computer -> Human
+}
+";
+    assert_idempotent(src);
+}
+
 // ---------------------------------------------------------------------------
 // Class declarations
 // ---------------------------------------------------------------------------
@@ -146,8 +162,14 @@ fn line_comments_before_value_are_idempotent() {
 fn multiple_line_comments_before_declaration_are_preserved() {
     let src = "// line one\n// line two\nvalue x = 1\n";
     let output = format_text(src).unwrap();
-    assert!(output.contains("// line one"), "first comment should be preserved");
-    assert!(output.contains("// line two"), "second comment should be preserved");
+    assert!(
+        output.contains("// line one"),
+        "first comment should be preserved"
+    );
+    assert!(
+        output.contains("// line two"),
+        "second comment should be preserved"
+    );
     assert_idempotent(src);
 }
 

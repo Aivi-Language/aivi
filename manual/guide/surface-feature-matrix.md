@@ -32,7 +32,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 | Surface form | Check | Execute | Run | Compile | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `value` / `func` | yes | yes | yes | yes | Core declaration surface is stable; later rows capture body-specific gaps. |
-| `type` aliases, records, and sums | yes | yes | yes | yes | Closed ADTs and records are broadly accepted across the pipeline. |
+| `type` aliases, records, sums, and brace-bodied sum companions | yes | yes | yes | yes | Closed ADTs, companion helpers, and records are broadly accepted across the pipeline. Companion members lower as ordinary callable items. |
 | `class` / `instance` | yes | yes | yes | yes | Builtins, same-module, and imported user-authored instances all resolve. Cross-module instance resolution follows the `ImportedInstance` dispatch path through `ClassMemberImplementation`. |
 | `domain` declarations and member lookup | yes | yes | yes | yes | Runtime foundation tests cover domain operators and authored members. Codegen supports domain suffix literals, domain member access, and representational pointer forwarding for domain-typed values. |
 | Derived `signal name = expr` | yes | yes | yes | yes | The live runtime supports derived signals with reactive re-evaluation. `aivi execute` settles signals once, producing the correct initial derivation. Codegen emits object code for signal body expressions through the standard kernel emission path. |
@@ -41,7 +41,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 | Custom `provider qualified.name` declarations | yes | n/a | yes | yes | Contract checking, lowering, and runtime registration are complete. Custom providers publish an initial Unit value at startup and participate in the standard source lifecycle. `aivi execute` does not use custom providers (Task-only entrypoint). |
 | `use` / `export` for types and constructors | yes | yes | yes | yes | Workspace type imports are covered by passing `run` and `compile` tests. |
 | `hoist module.path` (project-wide namespace) | yes | yes | yes | n/a | Full implementation: syntax, HIR lowering, name resolution, type-directed disambiguation for ambiguous hoisted names. Stdlib migration applied to `stdlib/aivi.aivi`. Kind filters (`func`, `value`, `signal`, `type`, `domain`, `class`) and `hiding` clauses supported. |
-| Imported executable values across modules | yes | yes | yes | yes | Cross-module imports resolve via the import binding system. Imported class instances, plain values, and type constructors all pass through the core lowering pipeline. |
+| Imported executable values across modules | yes | yes | yes | yes | Cross-module imports resolve via the import binding system. Imported class instances, plain values, type constructors, and type-companion functions all pass through the core lowering pipeline. |
 | Top-level markup roots via `value` | yes | n/a | yes | n/a | `run` and `build` treat markup-valued top-level `value`s as the deployment surface. |
 
 ## Types And Literals

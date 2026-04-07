@@ -1,0 +1,521 @@
+---
+source: crates/aivi-syntax/tests/snapshots.rs
+expression: module
+---
+Module {
+    file: FileId(
+        0,
+    ),
+    items: [
+        Type(
+            NamedItem {
+                base: ItemBase {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
+                                0,
+                            ),
+                            end: ByteIndex(
+                                140,
+                            ),
+                        },
+                    },
+                    token_range: TokenRange {
+                        start: 0,
+                        end: 52,
+                    },
+                    decorators: [],
+                    leading_comments: [],
+                },
+                keyword_span: SourceSpan {
+                    file: FileId(
+                        0,
+                    ),
+                    span: Span {
+                        start: ByteIndex(
+                            0,
+                        ),
+                        end: ByteIndex(
+                            4,
+                        ),
+                    },
+                },
+                name: Some(
+                    Identifier {
+                        text: "Player",
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    5,
+                                ),
+                                end: ByteIndex(
+                                    11,
+                                ),
+                            },
+                        },
+                    },
+                ),
+                type_parameters: [],
+                constraints: [],
+                annotation: None,
+                function_form: Explicit,
+                parameters: [],
+                body: Some(
+                    Type(
+                        Sum(
+                            TypeSumBody {
+                                variants: [
+                                    TypeVariant {
+                                        name: Some(
+                                            Identifier {
+                                                text: "Human",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            22,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            27,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        fields: [],
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    22,
+                                                ),
+                                                end: ByteIndex(
+                                                    27,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                    TypeVariant {
+                                        name: Some(
+                                            Identifier {
+                                                text: "Computer",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            34,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            42,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        fields: [],
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    34,
+                                                ),
+                                                end: ByteIndex(
+                                                    42,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                ],
+                                companions: [
+                                    TypeCompanionMember {
+                                        name: Identifier {
+                                            text: "opponent",
+                                            span: SourceSpan {
+                                                file: FileId(
+                                                    0,
+                                                ),
+                                                span: Span {
+                                                    start: ByteIndex(
+                                                        64,
+                                                    ),
+                                                    end: ByteIndex(
+                                                        72,
+                                                    ),
+                                                },
+                                            },
+                                        },
+                                        annotation: Some(
+                                            TypeExpr {
+                                                kind: Name(
+                                                    Identifier {
+                                                        text: "Player",
+                                                        span: SourceSpan {
+                                                            file: FileId(
+                                                                0,
+                                                            ),
+                                                            span: Span {
+                                                                start: ByteIndex(
+                                                                    53,
+                                                                ),
+                                                                end: ByteIndex(
+                                                                    59,
+                                                                ),
+                                                            },
+                                                        },
+                                                    },
+                                                ),
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            53,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            59,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        parameters: [
+                                            Identifier {
+                                                text: "self",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            73,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            77,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ],
+                                        body: Some(
+                                            Expr {
+                                                kind: Pipe(
+                                                    PipeExpr {
+                                                        head: Some(
+                                                            Expr {
+                                                                kind: Name(
+                                                                    Identifier {
+                                                                        text: "self",
+                                                                        span: SourceSpan {
+                                                                            file: FileId(
+                                                                                0,
+                                                                            ),
+                                                                            span: Span {
+                                                                                start: ByteIndex(
+                                                                                    80,
+                                                                                ),
+                                                                                end: ByteIndex(
+                                                                                    84,
+                                                                                ),
+                                                                            },
+                                                                        },
+                                                                    },
+                                                                ),
+                                                                span: SourceSpan {
+                                                                    file: FileId(
+                                                                        0,
+                                                                    ),
+                                                                    span: Span {
+                                                                        start: ByteIndex(
+                                                                            80,
+                                                                        ),
+                                                                        end: ByteIndex(
+                                                                            84,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            },
+                                                        ),
+                                                        stages: [
+                                                            PipeStage {
+                                                                subject_memo: None,
+                                                                result_memo: None,
+                                                                kind: Case(
+                                                                    PipeCaseArm {
+                                                                        pattern: Pattern {
+                                                                            kind: Name(
+                                                                                Identifier {
+                                                                                    text: "Human",
+                                                                                    span: SourceSpan {
+                                                                                        file: FileId(
+                                                                                            0,
+                                                                                        ),
+                                                                                        span: Span {
+                                                                                            start: ByteIndex(
+                                                                                                94,
+                                                                                            ),
+                                                                                            end: ByteIndex(
+                                                                                                99,
+                                                                                            ),
+                                                                                        },
+                                                                                    },
+                                                                                },
+                                                                            ),
+                                                                            span: SourceSpan {
+                                                                                file: FileId(
+                                                                                    0,
+                                                                                ),
+                                                                                span: Span {
+                                                                                    start: ByteIndex(
+                                                                                        94,
+                                                                                    ),
+                                                                                    end: ByteIndex(
+                                                                                        99,
+                                                                                    ),
+                                                                                },
+                                                                            },
+                                                                        },
+                                                                        body: Expr {
+                                                                            kind: Name(
+                                                                                Identifier {
+                                                                                    text: "Computer",
+                                                                                    span: SourceSpan {
+                                                                                        file: FileId(
+                                                                                            0,
+                                                                                        ),
+                                                                                        span: Span {
+                                                                                            start: ByteIndex(
+                                                                                                103,
+                                                                                            ),
+                                                                                            end: ByteIndex(
+                                                                                                111,
+                                                                                            ),
+                                                                                        },
+                                                                                    },
+                                                                                },
+                                                                            ),
+                                                                            span: SourceSpan {
+                                                                                file: FileId(
+                                                                                    0,
+                                                                                ),
+                                                                                span: Span {
+                                                                                    start: ByteIndex(
+                                                                                        103,
+                                                                                    ),
+                                                                                    end: ByteIndex(
+                                                                                        111,
+                                                                                    ),
+                                                                                },
+                                                                            },
+                                                                        },
+                                                                        span: SourceSpan {
+                                                                            file: FileId(
+                                                                                0,
+                                                                            ),
+                                                                            span: Span {
+                                                                                start: ByteIndex(
+                                                                                    94,
+                                                                                ),
+                                                                                end: ByteIndex(
+                                                                                    111,
+                                                                                ),
+                                                                            },
+                                                                        },
+                                                                    },
+                                                                ),
+                                                                span: SourceSpan {
+                                                                    file: FileId(
+                                                                        0,
+                                                                    ),
+                                                                    span: Span {
+                                                                        start: ByteIndex(
+                                                                            90,
+                                                                        ),
+                                                                        end: ByteIndex(
+                                                                            111,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            },
+                                                            PipeStage {
+                                                                subject_memo: None,
+                                                                result_memo: None,
+                                                                kind: Case(
+                                                                    PipeCaseArm {
+                                                                        pattern: Pattern {
+                                                                            kind: Name(
+                                                                                Identifier {
+                                                                                    text: "Computer",
+                                                                                    span: SourceSpan {
+                                                                                        file: FileId(
+                                                                                            0,
+                                                                                        ),
+                                                                                        span: Span {
+                                                                                            start: ByteIndex(
+                                                                                                121,
+                                                                                            ),
+                                                                                            end: ByteIndex(
+                                                                                                129,
+                                                                                            ),
+                                                                                        },
+                                                                                    },
+                                                                                },
+                                                                            ),
+                                                                            span: SourceSpan {
+                                                                                file: FileId(
+                                                                                    0,
+                                                                                ),
+                                                                                span: Span {
+                                                                                    start: ByteIndex(
+                                                                                        121,
+                                                                                    ),
+                                                                                    end: ByteIndex(
+                                                                                        129,
+                                                                                    ),
+                                                                                },
+                                                                            },
+                                                                        },
+                                                                        body: Expr {
+                                                                            kind: Name(
+                                                                                Identifier {
+                                                                                    text: "Human",
+                                                                                    span: SourceSpan {
+                                                                                        file: FileId(
+                                                                                            0,
+                                                                                        ),
+                                                                                        span: Span {
+                                                                                            start: ByteIndex(
+                                                                                                133,
+                                                                                            ),
+                                                                                            end: ByteIndex(
+                                                                                                138,
+                                                                                            ),
+                                                                                        },
+                                                                                    },
+                                                                                },
+                                                                            ),
+                                                                            span: SourceSpan {
+                                                                                file: FileId(
+                                                                                    0,
+                                                                                ),
+                                                                                span: Span {
+                                                                                    start: ByteIndex(
+                                                                                        133,
+                                                                                    ),
+                                                                                    end: ByteIndex(
+                                                                                        138,
+                                                                                    ),
+                                                                                },
+                                                                            },
+                                                                        },
+                                                                        span: SourceSpan {
+                                                                            file: FileId(
+                                                                                0,
+                                                                            ),
+                                                                            span: Span {
+                                                                                start: ByteIndex(
+                                                                                    121,
+                                                                                ),
+                                                                                end: ByteIndex(
+                                                                                    138,
+                                                                                ),
+                                                                            },
+                                                                        },
+                                                                    },
+                                                                ),
+                                                                span: SourceSpan {
+                                                                    file: FileId(
+                                                                        0,
+                                                                    ),
+                                                                    span: Span {
+                                                                        start: ByteIndex(
+                                                                            117,
+                                                                        ),
+                                                                        end: ByteIndex(
+                                                                            138,
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            },
+                                                        ],
+                                                        span: SourceSpan {
+                                                            file: FileId(
+                                                                0,
+                                                            ),
+                                                            span: Span {
+                                                                start: ByteIndex(
+                                                                    80,
+                                                                ),
+                                                                end: ByteIndex(
+                                                                    138,
+                                                                ),
+                                                            },
+                                                        },
+                                                    },
+                                                ),
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            80,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            138,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    64,
+                                                ),
+                                                end: ByteIndex(
+                                                    138,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                ],
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            14,
+                                        ),
+                                        end: ByteIndex(
+                                            140,
+                                        ),
+                                    },
+                                },
+                            },
+                        ),
+                    ),
+                ),
+            },
+        ),
+    ],
+    token_count: 52,
+}

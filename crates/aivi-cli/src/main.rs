@@ -63,6 +63,12 @@ use aivi_runtime::{
 use aivi_syntax::{Formatter, lex_module, parse_module};
 use gtk::{glib, prelude::*};
 
+#[cfg(test)]
+pub(crate) fn gtk_test_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,

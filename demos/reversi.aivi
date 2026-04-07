@@ -12,12 +12,16 @@ use aivi.list (
 
 use aivi.matrix (
     Matrix
-    MatrixError
     at as matrixAt
+    count as matrixCount
+    filled as matrixFilled
     init as matrixInit
     indices as matrixIndices
     replaceAt as matrixReplaceAt
-    rows as matrixRows
+)
+
+use aivi.result (
+    withDefault as resultWithDefault
 )
 
 type Player =
@@ -92,7 +96,6 @@ value aiCommitTicks = 4
 value boardIndices : List Int = matrixIndices boardSize
 value raySteps : List Int = listTailOrEmpty boardIndices
 value emptyCoords : List Coord = []
-value emptyDiscs : List Disc = []
 
 value directions : List Vector = [
     Delta neg1 neg1,
@@ -113,24 +116,11 @@ func buildInitialDisc = x y => (x, y)
  ||> (4, 3) -> Black
  ||> _      -> Empty
 
-value initialBoardFallback : Matrix Disc = MkMatrix boardSize boardSize [
-    [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-    [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-    [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-    [Empty, Empty, Empty, White, Black, Empty, Empty, Empty],
-    [Empty, Empty, Empty, Black, White, Empty, Empty, Empty],
-    [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-    [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-    [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
-]
-
-type Result MatrixError (Matrix Disc) -> (Matrix Disc)
-func unwrapInitialBoard = result => result
- ||> Ok board -> board
- ||> Err _    -> initialBoardFallback
+value initialBoardFallback : Matrix Disc =
+    matrixFilled boardSize boardSize buildInitialDisc
 
 value initialBoard : Matrix Disc =
-    unwrapInitialBoard (matrixInit boardSize boardSize buildInitialDisc)
+    resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
 
 type Player -> Player
 func otherPlayer = .
@@ -324,47 +314,22 @@ func snapshotOtherMoves = snapshot => snapshot.turn
 
 type Snapshot -> Bool
 func snapshotGameOver = snapshot =>
-    coordsEmpty snapshot.humanMoves and coordsEmpty snapshot.computerMoves
+    not (listNonEmpty snapshot.humanMoves or listNonEmpty snapshot.computerMoves)
 
 type Snapshot -> Bool
 func snapshotPassPending = snapshot => snapshotGameOver snapshot
- T|> False
- F|> coordsEmpty (snapshotCurrentMoves snapshot) and coordsNonEmpty (snapshotOtherMoves snapshot)
+  T|> False
+  F|> not (listNonEmpty (snapshotCurrentMoves snapshot)) and listNonEmpty (snapshotOtherMoves snapshot)
 
 type Snapshot -> Bool
 func snapshotAiPending = snapshot =>
-    snapshot.turn == Computer and coordsNonEmpty snapshot.computerMoves
-
-type Matrix Disc -> List Disc
-func boardDiscs = board =>
-    reduce appendDiscs emptyDiscs (matrixRows board)
-
-type List Disc -> List Disc -> List Disc
-func appendDiscs = acc row =>
-    append acc row
-
-type List Coord -> Bool
-func coordsEmpty = coords => listHead coords
- ||> None   -> True
- ||> Some _ -> False
-
-type List Coord -> Bool
-func coordsNonEmpty = coords =>
-    listNonEmpty coords
-
-type Matrix Disc -> Int
-func humanScore = board =>
-    listLength (listFilter isHumanDisc (boardDiscs board))
-
-type Matrix Disc -> Int
-func computerScore = board =>
-    listLength (listFilter isComputerDisc (boardDiscs board))
+    snapshot.turn == Computer and listNonEmpty snapshot.computerMoves
 
 type Matrix Disc -> Score
 func countScore = board =>
     {
-        human: humanScore board,
-        computer: computerScore board
+        human: matrixCount isHumanDisc board,
+        computer: matrixCount isComputerDisc board
     }
 
 type Disc -> Bool
@@ -426,17 +391,21 @@ type Move -> List Move -> List Move
 func appendMove = move history =>
     append history [move]
 
-type List Move -> Int -> List RowView
-func rowViewsFor = history aiTicks =>
-    listMap (rowViewAt (snapshotFromHistory history) (snapshotAiTarget (snapshotFromHistory history)) (blinkOn aiTicks)) boardIndices
+type Snapshot -> Int -> List RowView
+func rowViewsForSnapshot = snapshot aiTicks =>
+    listMap (rowViewAt snapshot (snapshotAiTarget snapshot) (blinkOn aiTicks)) boardIndices
 
-type List Move -> Int -> Session
-func buildSession = history aiTicks =>
+type List Move -> Int -> Snapshot -> Session
+func buildSessionWithSnapshot = history aiTicks snapshot =>
     {
         history: history,
         aiTicks: aiTicks,
-        rows: rowViewsFor history aiTicks
+        rows: rowViewsForSnapshot snapshot aiTicks
     }
+
+type List Move -> Int -> Session
+func buildSession = history aiTicks =>
+    buildSessionWithSnapshot history aiTicks (snapshotFromHistory history)
 
 value initialSession : Session =
     buildSession [] 0
@@ -554,9 +523,9 @@ func statusLine = snapshot score => snapshotGameOver snapshot
  F|> activeStatusLine snapshot
 
 type List Move -> Text
-func statusFromHistory = history => listLength history == 0
- T|> "You are red"
- F|> statusLine (snapshotFromHistory history) (countScore (boardFromHistory history))
+func statusFromHistory = history => listNonEmpty history
+ T|> statusLine (snapshotFromHistory history) (countScore (boardFromHistory history))
+ F|> "You are red"
 
 type Score -> Text
 func scoreLine = score =>
@@ -647,20 +616,8 @@ signal session : Signal Session = action
 signal history : Signal (List Move) = session
   |> .history
 
-signal aiTicks : Signal Int = session
-  |> .aiTicks
-
 signal snapshot : Signal Snapshot = history
   |> snapshotFromHistory
-
-signal board : Signal (Matrix Disc) = snapshot
-  |> .board
-
-signal turn : Signal Player = snapshot
-  |> .turn
-
-signal legalMoves : Signal (List Coord) = snapshot
-  |> snapshotCurrentMoves
 
 signal aiPending : Signal Bool = snapshot
   |> snapshotAiPending
@@ -671,10 +628,8 @@ signal gameOver : Signal Bool = snapshot
 signal aiPreview : Signal (Option Coord) = snapshot
   |> snapshotAiTarget
 
-signal blinkVisible : Signal Bool = aiTicks
-  |> blinkOn
-
-signal score : Signal Score = board
+signal score : Signal Score = snapshot
+  |> .board
   |> countScore
 
 signal statusText : Signal Text = history

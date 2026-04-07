@@ -265,6 +265,11 @@ type A -> (Option A)
 func __aivi_list_keepSome = item =>
     Some item
 
+type A -> Result E A -> A
+func __aivi_result_withDefault = fallback result => result
+    ||> Ok item -> item
+    ||> Err _   -> fallback
+
 type (Option A) -> A -> (Option A)
 func __aivi_list_keepFirst = found item => found
     T|> __aivi_list_keepSome
@@ -700,6 +705,19 @@ func __aivi_matrix_filled = w h build => w < 0 or h < 0
     T|> MkMatrix 0 0 []
     F|> MkMatrix w h (__aivi_matrix_buildRows w h build)
 
+type (A -> Bool) -> Int -> A -> Int
+func __aivi_matrix_countCell = predicate total item => predicate item
+    T|> total + 1
+    F|> total
+
+type (A -> Bool) -> Int -> (List A) -> Int
+func __aivi_matrix_countRow = predicate total row =>
+    reduce (__aivi_matrix_countCell predicate) total row
+
+type (A -> Bool) -> Matrix A -> Int
+func __aivi_matrix_count = predicate matrix =>
+    reduce (__aivi_matrix_countRow predicate) 0 (__aivi_matrix_rows matrix)
+
 type (A -> Bool) -> A -> (Option A)
 func __aivi_list_findTry = predicate item => predicate item
     T|> Some item
@@ -903,8 +921,16 @@ impl<'a> Lowerer<'a> {
             return;
         }
 
+        if let syn::Item::Type(item) = item {
+            let (lowered, companions) = self.lower_type_item(item);
+            self.store_item(Item::Type(lowered), ambient);
+            for companion in companions {
+                self.store_item(Item::Function(companion), ambient);
+            }
+            return;
+        }
+
         let lowered = match item {
-            syn::Item::Type(item) => Some(Item::Type(self.lower_type_item(item))),
             syn::Item::Fun(item) => Some(Item::Function(self.lower_function_item(item))),
             syn::Item::Value(item) => Some(Item::Value(self.lower_value_item(item))),
             syn::Item::Signal(item) => Some(Item::Signal(self.lower_signal_item(item))),
@@ -918,6 +944,9 @@ impl<'a> Lowerer<'a> {
             syn::Item::Hoist(item) => Some(Item::Hoist(self.lower_hoist_item(item))),
             syn::Item::Export(_) => {
                 unreachable!("export items are handled before single-item lowering")
+            }
+            syn::Item::Type(_) => {
+                unreachable!("type items are handled before single-item lowering")
             }
             syn::Item::Error(item) => {
                 self.emit_error(
@@ -944,14 +973,16 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_type_item(&mut self, item: &syn::NamedItem) -> TypeItem {
+    fn lower_type_item(&mut self, item: &syn::NamedItem) -> (TypeItem, Vec<FunctionItem>) {
         let header = self.lower_item_header(&item.base.decorators, ItemKind::Type, item.base.span);
         let name = self.required_name(item.name.as_ref(), item.base.span, "type declaration");
         let parameters = self.lower_type_parameters(&item.type_parameters);
+        let mut companions = Vec::new();
         let body = match item.type_body() {
             Some(syn::TypeDeclBody::Alias(expr)) => TypeItemBody::Alias(self.lower_type_expr(expr)),
-            Some(syn::TypeDeclBody::Sum(variants)) => {
-                let variants = variants
+            Some(syn::TypeDeclBody::Sum(sum)) => {
+                let variants = sum
+                    .variants
                     .iter()
                     .map(|variant| TypeVariant {
                         span: variant.span,
@@ -970,6 +1001,18 @@ impl<'a> Lowerer<'a> {
                             .collect(),
                     })
                     .collect::<Vec<_>>();
+                companions = sum
+                    .companions
+                    .iter()
+                    .map(|member| {
+                        self.lower_type_companion_member(
+                            member,
+                            item.name.as_ref(),
+                            &item.type_parameters,
+                            &parameters,
+                        )
+                    })
+                    .collect();
                 match crate::NonEmpty::from_vec(variants) {
                     Ok(variants) => TypeItemBody::Sum(variants),
                     Err(_) => {
@@ -992,12 +1035,15 @@ impl<'a> Lowerer<'a> {
             }
         };
 
-        TypeItem {
-            header,
-            name,
-            parameters,
-            body,
-        }
+        (
+            TypeItem {
+                header,
+                name,
+                parameters,
+                body,
+            },
+            companions,
+        )
     }
 
     fn lower_value_item(&mut self, item: &syn::NamedItem) -> ValueItem {
@@ -1167,11 +1213,8 @@ impl<'a> Lowerer<'a> {
             };
 
             // Determine if this is a default/wildcard arm.
-            let is_default_arm = arm.source.is_none()
-                && matches!(
-                    pattern.kind,
-                    syn::PatternKind::Wildcard
-                );
+            let is_default_arm =
+                arm.source.is_none() && matches!(pattern.kind, syn::PatternKind::Wildcard);
 
             // Determine trigger source from the arm's source prefix.
             let trigger_source = if is_default_arm {
@@ -1179,7 +1222,10 @@ impl<'a> Lowerer<'a> {
                 None
             } else if let Some(source_ident) = &arm.source {
                 // Multi-source arm: find the source in the merge list.
-                let pos = merge.sources.iter().position(|s| s.text == source_ident.text);
+                let pos = merge
+                    .sources
+                    .iter()
+                    .position(|s| s.text == source_ident.text);
                 match pos {
                     Some(idx) => source_items[idx],
                     None => {
@@ -1205,22 +1251,19 @@ impl<'a> Lowerer<'a> {
             let source_expr_ident = if is_default_arm {
                 None
             } else {
-                arm.source
-                    .as_ref()
-                    .or_else(|| {
-                        if merge.sources.len() == 1 {
-                            Some(&merge.sources[0])
-                        } else {
-                            None
-                        }
-                    })
+                arm.source.as_ref().or_else(|| {
+                    if merge.sources.len() == 1 {
+                        Some(&merge.sources[0])
+                    } else {
+                        None
+                    }
+                })
             };
 
             if let Some(source_ident) = source_expr_ident {
                 let source_expr =
                     self.lower_unresolved_name_expr(source_ident.text.as_str(), source_ident.span);
-                let guard =
-                    self.make_pattern_match_bool_expr(source_expr, pattern, arm.span);
+                let guard = self.make_pattern_match_bool_expr(source_expr, pattern, arm.span);
                 let body_expr =
                     self.make_pattern_match_optional_expr(source_expr, pattern, body, arm.span);
                 updates.push(ReactiveUpdateClause {
@@ -1348,7 +1391,7 @@ impl<'a> Lowerer<'a> {
                 | Item::Instance(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => false,
+                | Item::Hoist(_) => false,
             })
     }
 
@@ -1567,6 +1610,104 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    fn lower_type_companion_member(
+        &mut self,
+        member: &syn::TypeCompanionMember,
+        owner_name: Option<&syn::Identifier>,
+        owner_type_parameters: &[syn::Identifier],
+        owner_parameter_ids: &[TypeParameterId],
+    ) -> FunctionItem {
+        let header = self.lower_item_header(&[], ItemKind::Function, member.span);
+        let name = self.make_name(&member.name.text, member.name.span);
+        let uses_self = member
+            .body
+            .as_ref()
+            .is_some_and(|body| body.contains_self_reference());
+        let has_explicit_self_parameter = member
+            .parameters
+            .first()
+            .is_some_and(|parameter| parameter.text == "self");
+        let annotation = member
+            .annotation
+            .as_ref()
+            .map(|annotation| self.lower_type_expr(annotation))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    member.span,
+                    format!(
+                        "type companion member `{}` is missing a type annotation",
+                        member.name.text
+                    ),
+                    code("missing-type-companion-type"),
+                );
+                self.placeholder_type(member.span)
+            });
+        let annotation = if uses_self {
+            if let Some(owner_name) = owner_name {
+                let self_type = self.synthesise_owner_self_type(owner_name, owner_type_parameters);
+                self.alloc_type(TypeNode {
+                    span: member.span,
+                    kind: TypeKind::Arrow {
+                        parameter: self_type,
+                        result: annotation,
+                    },
+                })
+            } else {
+                annotation
+            }
+        } else {
+            annotation
+        };
+
+        let mut parameters: Vec<FunctionParameter> = if uses_self && !has_explicit_self_parameter {
+            let self_name = self.make_name("self", member.span);
+            let self_binding = self.alloc_binding(Binding {
+                span: member.span,
+                name: self_name,
+                kind: BindingKind::FunctionParameter,
+            });
+            vec![FunctionParameter {
+                span: member.span,
+                binding: self_binding,
+                annotation: None,
+            }]
+        } else {
+            Vec::new()
+        };
+        parameters.extend(
+            member
+                .parameters
+                .iter()
+                .map(|parameter| self.lower_instance_parameter(parameter)),
+        );
+
+        let body = member
+            .body
+            .as_ref()
+            .map(|body| self.lower_expr(body))
+            .unwrap_or_else(|| {
+                self.emit_error(
+                    member.span,
+                    format!(
+                        "type companion member `{}` is missing a body",
+                        member.name.text
+                    ),
+                    code("missing-type-companion-body"),
+                );
+                self.placeholder_expr(member.span)
+            });
+
+        FunctionItem {
+            header,
+            name,
+            type_parameters: owner_parameter_ids.to_vec(),
+            context: Vec::new(),
+            parameters,
+            annotation: Some(annotation),
+            body,
+        }
+    }
+
     fn lower_domain_member(
         &mut self,
         member: &syn::DomainMember,
@@ -1594,6 +1735,10 @@ impl<'a> Lowerer<'a> {
             .body
             .as_ref()
             .is_some_and(|body| body.contains_self_reference());
+        let has_explicit_self_parameter = member
+            .parameters
+            .first()
+            .is_some_and(|parameter| parameter.text == "self");
 
         let annotation = member
             .annotation
@@ -1615,7 +1760,7 @@ impl<'a> Lowerer<'a> {
         let annotation = if uses_self {
             if let Some(domain_id) = domain_name {
                 let domain_type_id =
-                    self.synthesise_domain_self_type(domain_id, domain_type_parameters);
+                    self.synthesise_owner_self_type(domain_id, domain_type_parameters);
                 self.alloc_type(TypeNode {
                     span: member.span,
                     kind: TypeKind::Arrow {
@@ -1631,7 +1776,7 @@ impl<'a> Lowerer<'a> {
         };
 
         // Synthesise implicit `self` binding before explicit parameters.
-        let mut parameters: Vec<FunctionParameter> = if uses_self {
+        let mut parameters: Vec<FunctionParameter> = if uses_self && !has_explicit_self_parameter {
             let self_name = self.make_name("self", member.span);
             let self_binding = self.alloc_binding(Binding {
                 span: member.span,
@@ -1668,15 +1813,15 @@ impl<'a> Lowerer<'a> {
 
     /// Construct an unresolved HIR type for the domain itself, applying type
     /// parameters when the domain is generic (e.g. `NonEmpty A`).
-    fn synthesise_domain_self_type(
+    fn synthesise_owner_self_type(
         &mut self,
-        domain_name: &syn::Identifier,
+        owner_name: &syn::Identifier,
         type_parameters: &[syn::Identifier],
     ) -> TypeId {
         let name_type = self.alloc_type(TypeNode {
-            span: domain_name.span,
+            span: owner_name.span,
             kind: TypeKind::Name(TypeReference::unresolved(
-                self.make_path(&[self.make_name(&domain_name.text, domain_name.span)]),
+                self.make_path(&[self.make_name(&owner_name.text, owner_name.span)]),
             )),
         });
         if type_parameters.is_empty() {
@@ -1695,7 +1840,7 @@ impl<'a> Lowerer<'a> {
             .collect();
         let arguments = NonEmpty::from_vec(arguments).expect("non-empty type parameter list");
         self.alloc_type(TypeNode {
-            span: domain_name.span,
+            span: owner_name.span,
             kind: TypeKind::Apply {
                 callee: name_type,
                 arguments,
@@ -2121,8 +2266,7 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_hoist_item(&mut self, item: &syn::HoistItem) -> HoistItem {
-        let header =
-            self.lower_item_header(&item.base.decorators, ItemKind::Hoist, item.base.span);
+        let header = self.lower_item_header(&item.base.decorators, ItemKind::Hoist, item.base.span);
 
         let kind_filters = item
             .kind_filters
@@ -2175,8 +2319,7 @@ impl<'a> Lowerer<'a> {
                     // Ambient values provide full polymorphic type inference through the
                     // prelude item system. Always prefer them over exported callable_type,
                     // which only carries the portable ImportValueType representation.
-                    if let Some(metadata) =
-                        known_import_metadata(module_name, imported_name.text())
+                    if let Some(metadata) = known_import_metadata(module_name, imported_name.text())
                     {
                         if matches!(
                             metadata,
@@ -2206,12 +2349,7 @@ impl<'a> Lowerer<'a> {
                             known_import_metadata(module_name, imported_name.text())
                         {
                             if matches!(metadata, ImportBindingMetadata::IntrinsicValue { .. }) {
-                                return (
-                                    ImportBindingResolution::Resolved,
-                                    metadata,
-                                    None,
-                                    None,
-                                );
+                                return (ImportBindingResolution::Resolved, metadata, None, None);
                             }
                         }
                     }
@@ -2853,9 +2991,8 @@ impl<'a> Lowerer<'a> {
                         Some(syn::ExprKind::SubjectPlaceholder)
                     )
                 }) {
-                    let mut names = vec![
-                        self.make_name(&proj_field.label.text, proj_field.label.span),
-                    ];
+                    let mut names =
+                        vec![self.make_name(&proj_field.label.text, proj_field.label.span)];
                     for seg in &proj_field.label_path {
                         names.push(self.make_name(&seg.text, seg.span));
                     }
@@ -3930,12 +4067,8 @@ impl<'a> Lowerer<'a> {
                         .map(|pattern| self.lower_pattern(pattern))
                         .unwrap_or_else(|| {
                             // Shorthand: bind the leaf segment name.
-                            let leaf_ident = field
-                                .label_path
-                                .last()
-                                .unwrap_or(&field.label);
-                            let binding_name =
-                                self.make_name(&leaf_ident.text, leaf_ident.span);
+                            let leaf_ident = field.label_path.last().unwrap_or(&field.label);
+                            let binding_name = self.make_name(&leaf_ident.text, leaf_ident.span);
                             let binding = self.alloc_binding(Binding {
                                 span: leaf_ident.span,
                                 name: binding_name.clone(),
@@ -5317,7 +5450,7 @@ impl<'a> Lowerer<'a> {
                 | Item::Instance(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => {}
+                | Item::Hoist(_) => {}
             }
         }
         self.register_workspace_hoists(&mut namespaces);
@@ -5379,7 +5512,9 @@ impl<'a> Lowerer<'a> {
                     *import_id,
                     import.span,
                 ),
-                ImportBindingMetadata::Domain { literal_suffixes, .. } => {
+                ImportBindingMetadata::Domain {
+                    literal_suffixes, ..
+                } => {
                     insert_site(
                         &mut namespaces.type_imports,
                         import.local_name.text(),
@@ -5395,7 +5530,8 @@ impl<'a> Lowerer<'a> {
                         );
                     }
                 }
-                ImportBindingMetadata::Bundle(_) | ImportBindingMetadata::InstanceMember { .. } => {}
+                ImportBindingMetadata::Bundle(_) | ImportBindingMetadata::InstanceMember { .. } => {
+                }
                 ImportBindingMetadata::Unknown => {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
@@ -5427,8 +5563,8 @@ impl<'a> Lowerer<'a> {
     /// prevent double-registration.  Missing modules are silently ignored (no
     /// diagnostic) since they may belong to a different workspace scope.
     fn register_workspace_hoists(&mut self, namespaces: &mut Namespaces) {
-        use aivi_base::Span;
         use crate::resolver::RawHoistItem;
+        use aivi_base::Span;
 
         let workspace_hoists: Vec<RawHoistItem> = self.resolver.workspace_hoist_items();
         if workspace_hoists.is_empty() {
@@ -5446,16 +5582,24 @@ impl<'a> Lowerer<'a> {
 
         let debug_hoist = std::env::var("AIVI_DEBUG_HOIST").is_ok();
         if debug_hoist {
-            eprintln!("[hoist] module={:?} found {} workspace hoists", self_path, workspace_hoists.len());
+            eprintln!(
+                "[hoist] module={:?} found {} workspace hoists",
+                self_path,
+                workspace_hoists.len()
+            );
         }
         for raw in workspace_hoists {
             let module_key = raw.module_path.join(".");
             if Some(&module_key) == self_path.as_ref() {
-                if debug_hoist { eprintln!("[hoist]   skip self: {module_key}"); }
+                if debug_hoist {
+                    eprintln!("[hoist]   skip self: {module_key}");
+                }
                 continue; // self-hoist: skip for this module, still propagates to others
             }
             if namespaces.hoisted_module_paths.contains(&module_key) {
-                if debug_hoist { eprintln!("[hoist]   skip dup: {module_key}"); }
+                if debug_hoist {
+                    eprintln!("[hoist]   skip dup: {module_key}");
+                }
                 continue;
             }
             namespaces.hoisted_module_paths.insert(module_key.clone());
@@ -5464,13 +5608,19 @@ impl<'a> Lowerer<'a> {
             let module_resolution = self.resolver.resolve_for_hoist(&module_segments);
             let crate::resolver::ImportModuleResolution::Resolved(ref exports) = module_resolution
             else {
-                if debug_hoist { eprintln!("[hoist]   MISS: {module_key} (not resolved)"); }
+                if debug_hoist {
+                    eprintln!("[hoist]   MISS: {module_key} (not resolved)");
+                }
                 continue; // silent — workspace hoists may reference optional modules
             };
 
             if debug_hoist {
                 let names: Vec<&str> = exports.names.iter().map(|n| n.name.as_str()).collect();
-                eprintln!("[hoist]   OK: {module_key} -> {} exports: {:?}", names.len(), &names[..names.len().min(10)]);
+                eprintln!(
+                    "[hoist]   OK: {module_key} -> {} exports: {:?}",
+                    names.len(),
+                    &names[..names.len().min(10)]
+                );
             }
             self.register_hoist_exports(
                 &module_key,
@@ -5548,7 +5698,9 @@ impl<'a> Lowerer<'a> {
                     import_id,
                     span,
                 ),
-                ImportBindingMetadata::Domain { literal_suffixes, .. } => {
+                ImportBindingMetadata::Domain {
+                    literal_suffixes, ..
+                } => {
                     let suffixes = literal_suffixes.clone();
                     insert_site(
                         &mut namespaces.hoisted_type_imports,
@@ -5565,7 +5717,8 @@ impl<'a> Lowerer<'a> {
                         );
                     }
                 }
-                ImportBindingMetadata::Bundle(_) | ImportBindingMetadata::InstanceMember { .. } => {}
+                ImportBindingMetadata::Bundle(_) | ImportBindingMetadata::InstanceMember { .. } => {
+                }
                 _ => insert_site(
                     &mut namespaces.hoisted_term_imports,
                     imported_name.text(),
@@ -5620,10 +5773,12 @@ impl<'a> Lowerer<'a> {
         // Allocate a placeholder carrier type — resolved to Unit so validation
         // does not report spurious "unresolved-name" errors on synthetic stubs.
         let stub_path = self.make_path(&[self.make_name("Unit", span)]);
-        let stub_type_kind = || TypeKind::Name(TypeReference {
-            path: stub_path.clone(),
-            resolution: ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Unit)),
-        });
+        let stub_type_kind = || {
+            TypeKind::Name(TypeReference {
+                path: stub_path.clone(),
+                resolution: ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Unit)),
+            })
+        };
 
         let carrier = self.alloc_type(TypeNode {
             span,
@@ -5658,24 +5813,29 @@ impl<'a> Lowerer<'a> {
         let members: Vec<DomainMember> = members
             .into_iter()
             .enumerate()
-            .map(|(i, m)| m.unwrap_or_else(|| {
-                let annotation = self.alloc_type(TypeNode {
-                    span,
-                    kind: stub_type_kind(),
-                });
-                DomainMember {
-                    span,
-                    kind: DomainMemberKind::Literal,
-                    name: self.make_name(&format!("__stub_{i}"), span),
-                    annotation,
-                    parameters: Vec::new(),
-                    body: None,
-                }
-            }))
+            .map(|(i, m)| {
+                m.unwrap_or_else(|| {
+                    let annotation = self.alloc_type(TypeNode {
+                        span,
+                        kind: stub_type_kind(),
+                    });
+                    DomainMember {
+                        span,
+                        kind: DomainMemberKind::Literal,
+                        name: self.make_name(&format!("__stub_{i}"), span),
+                        annotation,
+                        parameters: Vec::new(),
+                        body: None,
+                    }
+                })
+            })
             .collect();
 
         let domain_stub = Item::Domain(DomainItem {
-            header: ItemHeader { span, decorators: Vec::new() },
+            header: ItemHeader {
+                span,
+                decorators: Vec::new(),
+            },
             name: domain_name.clone(),
             parameters: Vec::new(),
             carrier,
@@ -6517,6 +6677,11 @@ impl<'a> Lowerer<'a> {
                 if prefer_ambient_names {
                     env.set_prefer_ambient_names();
                 }
+                if !item.type_parameters.is_empty() {
+                    env.push_type_scope(
+                        self.type_parameter_scope(item.type_parameters.iter().copied()),
+                    );
+                }
                 env.enable_implicit_type_parameters();
                 for constraint in &item.context {
                     self.resolve_type(*constraint, namespaces, &mut env);
@@ -6533,7 +6698,13 @@ impl<'a> Lowerer<'a> {
                     self.resolve_type(annotation, namespaces, &mut env);
                 }
                 self.resolve_expr(item.body, namespaces, &env);
-                item.type_parameters = env.implicit_type_parameters();
+                let mut type_parameters = item.type_parameters.clone();
+                for parameter in env.implicit_type_parameters() {
+                    if !type_parameters.contains(&parameter) {
+                        type_parameters.push(parameter);
+                    }
+                }
+                item.type_parameters = type_parameters;
                 Item::Function(item)
             }
             Item::Signal(item) => {
@@ -7432,7 +7603,10 @@ impl<'a> Lowerer<'a> {
             LookupResult::Ambiguous => {
                 if let Some(candidates) = namespaces.hoisted_term_imports.get(name)
                     && let Ok(candidates) = crate::NonEmpty::from_vec(
-                        candidates.iter().map(|site| site.value).collect::<Vec<ImportId>>(),
+                        candidates
+                            .iter()
+                            .map(|site| site.value)
+                            .collect::<Vec<ImportId>>(),
                     )
                 {
                     reference.resolution = ResolutionState::Resolved(
@@ -7505,10 +7679,7 @@ impl<'a> Lowerer<'a> {
             candidates.extend(namespaces.term_imports.keys().map(|k| k.as_str()));
             let mut diag = Diagnostic::error(format!("unknown term `{name}`"))
                 .with_code(code("unresolved-term-name"))
-                .with_primary_label(
-                    reference.span(),
-                    "reported during Milestone 2 HIR lowering",
-                );
+                .with_primary_label(reference.span(), "reported during Milestone 2 HIR lowering");
             if let Some(suggestion) = closest_name(name, &candidates) {
                 diag = diag.with_help(format!("did you mean `{suggestion}`?"));
             }
@@ -8509,6 +8680,9 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         )),
         ("aivi.option", "getOrElse") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_option_getOrElse".into(),
+        }),
+        ("aivi.result", "withDefault") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_result_withDefault".into(),
         }),
         ("aivi.list", "length") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_list_length".into(),
@@ -9642,6 +9816,9 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.matrix", "height") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_matrix_height".into(),
         }),
+        ("aivi.matrix", "count") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_count".into(),
+        }),
         ("aivi.matrix", "filled") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_matrix_filled".into(),
         }),
@@ -9956,11 +10133,10 @@ mod tests {
     use crate::{
         ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClusterFinalizer, ClusterPresentation,
         DecoratorPayload, DomainMemberKind, ExportResolution, ExprKind, HoistKindFilter,
-        ImportBindingMetadata,
-        ImportBundleKind, ImportValueType, IntrinsicValue, Item, LiteralSuffixResolution,
-        PipeStageKind, ReactiveUpdateBodyMode, RecordRowTransform, RecurrenceWakeupDecoratorKind,
-        ResolutionState, SourceProviderRef, TermResolution, TextSegment, TypeItemBody, TypeKind,
-        TypeResolution, ValidationMode, exports,
+        ImportBindingMetadata, ImportBundleKind, ImportValueType, IntrinsicValue, Item,
+        LiteralSuffixResolution, PipeStageKind, ReactiveUpdateBodyMode, RecordRowTransform,
+        RecurrenceWakeupDecoratorKind, ResolutionState, SourceProviderRef, TermResolution,
+        TextSegment, TypeItemBody, TypeKind, TypeResolution, ValidationMode, exports,
     };
 
     fn fixture_root() -> PathBuf {
@@ -9997,9 +10173,10 @@ mod tests {
             "value counter = 42\nvalue result = couner\n",
         );
         assert!(result.has_errors(), "expected an error for unknown term");
-        let has_help = result.diagnostics().iter().any(|d| {
-            d.help.iter().any(|h| h.contains("counter"))
-        });
+        let has_help = result
+            .diagnostics()
+            .iter()
+            .any(|d| d.help.iter().any(|h| h.contains("counter")));
         assert!(
             has_help,
             "expected a 'did you mean `counter`?' hint, got diagnostics: {:?}",
@@ -10015,10 +10192,7 @@ mod tests {
             "value counter = 42\nvalue result = xyz\n",
         );
         assert!(result.has_errors(), "expected an error for unknown term");
-        let has_help = result
-            .diagnostics()
-            .iter()
-            .any(|d| !d.help.is_empty());
+        let has_help = result.diagnostics().iter().any(|d| !d.help.is_empty());
         assert!(
             !has_help,
             "expected no 'did you mean' hint for very different name, got: {:?}",
@@ -10042,7 +10216,7 @@ mod tests {
                 | Item::Instance(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => false,
+                | Item::Hoist(_) => false,
             })
             .unwrap_or_else(|| panic!("expected to find ambient item `{name}`"))
     }
@@ -10063,7 +10237,7 @@ mod tests {
                 | Item::Instance(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => false,
+                | Item::Hoist(_) => false,
             })
             .unwrap_or_else(|| panic!("expected to find named item `{name}`"))
     }
@@ -10282,7 +10456,10 @@ signal total : Signal Int = ready
         let total = find_signal(module, "total");
         // Default arm becomes the seed body, so only 1 reactive update.
         assert_eq!(total.reactive_updates.len(), 1);
-        assert!(total.body.is_some(), "default arm should become the signal seed body");
+        assert!(
+            total.body.is_some(),
+            "default arm should become the signal seed body"
+        );
         assert_eq!(
             total.reactive_updates[0].body_mode,
             ReactiveUpdateBodyMode::OptionalPayload
@@ -10340,8 +10517,14 @@ signal tickSeen : Signal Bool = event
         // Default arm becomes seed, so only 1 reactive update each.
         assert_eq!(heading.reactive_updates.len(), 1);
         assert_eq!(tick_seen.reactive_updates.len(), 1);
-        assert!(heading.body.is_some(), "default arm should become heading's seed");
-        assert!(tick_seen.body.is_some(), "default arm should become tickSeen's seed");
+        assert!(
+            heading.body.is_some(),
+            "default arm should become heading's seed"
+        );
+        assert!(
+            tick_seen.body.is_some(),
+            "default arm should become tickSeen's seed"
+        );
         assert_eq!(
             heading.reactive_updates[0].body_mode,
             ReactiveUpdateBodyMode::OptionalPayload
@@ -10372,7 +10555,10 @@ signal event : Signal Event = keyDown
         let event = find_signal(module, "event");
         // Default arm becomes seed, so only 1 reactive update.
         assert_eq!(event.reactive_updates.len(), 1);
-        assert!(event.body.is_some(), "default arm should become event's seed");
+        assert!(
+            event.body.is_some(),
+            "default arm should become event's seed"
+        );
         assert_eq!(
             event.reactive_updates[0].body_mode,
             ReactiveUpdateBodyMode::OptionalPayload
@@ -13200,6 +13386,96 @@ domain Duration over Int = {
     }
 
     #[test]
+    fn lowers_type_companion_members_into_synthetic_functions() {
+        let lowered = lower_text(
+            "type-companions.aivi",
+            r#"
+type Player = {
+    | Human
+    | Computer
+
+    type Player
+    opponent self = self
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
+
+value next : Player = opponent Human
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "type companions should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "type companions should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let companion = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Function(item) if item.name.text() == "opponent" => Some(item),
+                _ => None,
+            })
+            .expect("fixture should lower one synthetic companion function");
+        assert_eq!(companion.parameters.len(), 1);
+        assert!(companion.annotation.is_some());
+    }
+
+    #[test]
+    fn type_companion_members_capture_owner_type_parameters() {
+        let lowered = lower_text(
+            "generic-type-companions.aivi",
+            r#"
+type Box A = {
+    | Box A
+
+    type A
+    unbox self = self
+     ||> Box value -> value
+}
+
+value current : Int = unbox (Box 1)
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "generic type companions should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "generic type companions should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let companion = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Function(item) if item.name.text() == "unbox" => Some(item),
+                _ => None,
+            })
+            .expect("fixture should lower one generic companion function");
+        assert!(
+            !companion.type_parameters.is_empty(),
+            "generic companion should retain the owner type parameters"
+        );
+    }
+
+    #[test]
     fn resolves_suffixed_integers_to_domain_literal_declarations() {
         let lowered = lower_fixture("milestone-2/valid/domain-literal-suffixes/main.aivi");
         assert!(
@@ -13836,10 +14112,7 @@ domain Duration over Int = {
 
     #[test]
     fn hoist_item_lowers_to_hir() {
-        let lowered = lower_text(
-            "hoist-basic.aivi",
-            "hoist\n",
-        );
+        let lowered = lower_text("hoist-basic.aivi", "hoist\n");
         let hoist_item = lowered
             .module()
             .items()
@@ -13855,10 +14128,7 @@ domain Duration over Int = {
 
     #[test]
     fn hoist_item_lowers_kind_filters_correctly() {
-        let lowered = lower_text(
-            "hoist-filters.aivi",
-            "hoist (func, value)\n",
-        );
+        let lowered = lower_text("hoist-filters.aivi", "hoist (func, value)\n");
         let hoist_item = lowered
             .module()
             .items()
@@ -13875,10 +14145,7 @@ domain Duration over Int = {
 
     #[test]
     fn hoist_item_lowers_hiding_list_correctly() {
-        let lowered = lower_text(
-            "hoist-hiding.aivi",
-            "hoist hiding (length, head)\n",
-        );
+        let lowered = lower_text("hoist-hiding.aivi", "hoist hiding (length, head)\n");
         let hoist_item = lowered
             .module()
             .items()
@@ -13896,19 +14163,16 @@ domain Duration over Int = {
 
     #[test]
     fn hoist_item_emits_diagnostic_for_unknown_kind_filter() {
-        let lowered = lower_text(
-            "hoist-bad-filter.aivi",
-            "hoist (funky)\n",
-        );
+        let lowered = lower_text("hoist-bad-filter.aivi", "hoist (funky)\n");
         assert!(
             lowered.has_errors(),
             "hoist with invalid kind filter should emit a diagnostic"
         );
         assert!(
-            lowered
-                .diagnostics()
-                .iter()
-                .any(|d| d.code.as_ref().is_some_and(|c| c.name() == "unknown-hoist-kind-filter")),
+            lowered.diagnostics().iter().any(|d| d
+                .code
+                .as_ref()
+                .is_some_and(|c| c.name() == "unknown-hoist-kind-filter")),
             "expected unknown-hoist-kind-filter diagnostic, got {:?}",
             lowered.diagnostics()
         );

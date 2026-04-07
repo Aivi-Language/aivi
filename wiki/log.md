@@ -69,3 +69,12 @@ Added indexed collection ergonomics and aligned the docs with the current higher
 - `stdlib/aivi/matrix.aivi`: `MatrixIndex`, `coord`, indexed traversal/update helpers, user-authored `Functor` / `Foldable` instances
 - `stdlib/aivi/prelude.aivi`: ambient aliases for the new option/list surfaces
 - manual + RFC updated to document imported unary higher-kinded instance execution and to propose indexed HKTs plus ADT bodies as deferred work
+
+## [2026-04-07] ingest | ADT companion bodies
+
+Implemented brace-bodied closed-sum companions and updated the spec/docs to stop treating them as deferred work.
+
+- `crates/aivi-syntax/`: new CST nodes and parser/formatter support for brace-bodied sum companions
+- `crates/aivi-hir/`: companion members now lower to ordinary synthetic function items that retain owner type parameters
+- `crates/aivi-cli/tests/check.rs`: CLI checks for same-module and imported companion usage
+- `manual/guide/types.md`, `syntax.md`, `manual/guide/surface-feature-matrix.md`, `AIVI_RFC.md`: user-facing docs and spec updated to describe the implemented surface

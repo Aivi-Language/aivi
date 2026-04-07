@@ -215,6 +215,86 @@ fn check_accepts_multiline_accumulate_pipe_signal_bodies() {
 }
 
 #[test]
+fn check_accepts_type_companion_programs() {
+    let dir = TempDir::new("check-type-companions");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "type Player = {\n",
+            "    | Human\n",
+            "    | Computer\n",
+            "\n",
+            "    type Player\n",
+            "    opponent self = self\n",
+            "     ||> Human    -> Computer\n",
+            "     ||> Computer -> Human\n",
+            "}\n",
+            "\n",
+            "value next : Player = opponent Human\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected type companion program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for type companion program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+fn check_accepts_imported_type_companion_programs() {
+    let dir = TempDir::new("check-imported-type-companions");
+    dir.write(
+        "shared/player.aivi",
+        concat!(
+            "type Player = {\n",
+            "    | Human\n",
+            "    | Computer\n",
+            "\n",
+            "    type Player\n",
+            "    opponent self = self\n",
+            "     ||> Human    -> Computer\n",
+            "     ||> Computer -> Human\n",
+            "}\n",
+        ),
+    );
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "use shared.player (Player, Human, opponent)\n",
+            "\n",
+            "value next : Player = opponent Human\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected imported type companion program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for imported type companion program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn check_rejects_result_block_bindings_that_are_not_results() {
     let dir = TempDir::new("check-result-block-binding-not-result");
     let path = dir.write(

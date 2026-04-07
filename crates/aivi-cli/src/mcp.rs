@@ -439,6 +439,7 @@ impl McpHostState {
                 ));
             }
         }
+        self.process_context_work();
         session
             .harness
             .with_access(|access| access.process_pending_work())?;
@@ -2790,6 +2791,7 @@ mod tests {
 
     #[gtk::test]
     fn emit_gtk_event_waits_for_reversi_hydration() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let path = repo_path("demos/reversi.aivi");
         let prepared =
             prepare_launch_request(&path, Some("main".to_owned()), LaunchSourceArgs::default())

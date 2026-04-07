@@ -108,6 +108,13 @@ These correspond to the `Builtin*Carrier` types in `crates/aivi-core/src/expr.rs
 - `aivi.matrix` uses this mechanism to expose ambient `map` / `reduce` via user-authored `Functor` / `Foldable` instances
 - Multi-parameter indexed heads are still a deferred design problem; the current executable evidence path is clearly unary
 
+### Closed sum companions
+
+- Closed sums can now use brace-bodied companion sections when the first significant token inside the braces is a constructor line beginning with `|`
+- Constructors stay ordinary closed-sum constructors; companion helpers lower as ordinary top-level functions
+- Companion helpers use ordinary `use` / `export` rules, so exporting the type does not automatically export its helpers
+- When a companion body references `self`, the owner type is inserted automatically at the front of the annotation
+
 ## Constraints
 
 Constraint syntax: `ClassName TypeParam => ReturnType`

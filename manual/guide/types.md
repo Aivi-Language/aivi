@@ -86,6 +86,43 @@ value readyState = Loaded "Ada"
 value failedState = Failed "offline"
 ```
 
+## Companion helpers on closed sums
+
+Closed sums can keep total helper functions next to their constructors:
+
+```aivi
+type Player = {
+    | Human
+    | Computer
+
+    type Player
+    opponent self =
+        self
+        ||> Human    -> Computer
+        ||> Computer -> Human
+
+    type Text
+    label self =
+        self
+        ||> Human    -> "You"
+        ||> Computer -> "Computer"
+}
+
+value next : Player = opponent Human
+value shown : Text = label Computer
+```
+
+These companion bindings are still ordinary functions. You call them by name, and you import or
+export them the same way as any other function.
+
+When a companion body uses `self`, AIVI inserts the receiver type automatically at the front of the
+annotation. In the example above, `type Player` means `Player -> Player`, and `type Text` means
+`Player -> Text`.
+
+The brace form is reserved for companion sums only when the first significant entry is a constructor
+line beginning with `|`. Ordinary record declarations still use the same `type Name = { field: T }`
+syntax as before.
+
 ## Product types with positional arguments
 
 Constructors can take multiple positional arguments. When a type has a single constructor with fields, the leading `|` is optional:

@@ -69,110 +69,126 @@ Module {
                 body: Some(
                     Type(
                         Sum(
-                            [
-                                TypeVariant {
-                                    name: Some(
-                                        Identifier {
-                                            text: "Red",
-                                            span: SourceSpan {
-                                                file: FileId(
-                                                    0,
-                                                ),
-                                                span: Span {
-                                                    start: ByteIndex(
-                                                        19,
+                            TypeSumBody {
+                                variants: [
+                                    TypeVariant {
+                                        name: Some(
+                                            Identifier {
+                                                text: "Red",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
                                                     ),
-                                                    end: ByteIndex(
-                                                        22,
-                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            19,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            22,
+                                                        ),
+                                                    },
                                                 },
                                             },
-                                        },
-                                    ),
-                                    fields: [],
-                                    span: SourceSpan {
-                                        file: FileId(
-                                            0,
                                         ),
-                                        span: Span {
-                                            start: ByteIndex(
-                                                19,
+                                        fields: [],
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
                                             ),
-                                            end: ByteIndex(
-                                                22,
-                                            ),
-                                        },
-                                    },
-                                },
-                                TypeVariant {
-                                    name: Some(
-                                        Identifier {
-                                            text: "Green",
-                                            span: SourceSpan {
-                                                file: FileId(
-                                                    0,
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    19,
                                                 ),
-                                                span: Span {
-                                                    start: ByteIndex(
-                                                        29,
-                                                    ),
-                                                    end: ByteIndex(
-                                                        34,
-                                                    ),
-                                                },
+                                                end: ByteIndex(
+                                                    22,
+                                                ),
                                             },
                                         },
-                                    ),
-                                    fields: [],
-                                    span: SourceSpan {
-                                        file: FileId(
-                                            0,
-                                        ),
-                                        span: Span {
-                                            start: ByteIndex(
-                                                29,
-                                            ),
-                                            end: ByteIndex(
-                                                34,
-                                            ),
-                                        },
                                     },
-                                },
-                                TypeVariant {
-                                    name: Some(
-                                        Identifier {
-                                            text: "Blue",
-                                            span: SourceSpan {
-                                                file: FileId(
-                                                    0,
-                                                ),
-                                                span: Span {
-                                                    start: ByteIndex(
-                                                        41,
+                                    TypeVariant {
+                                        name: Some(
+                                            Identifier {
+                                                text: "Green",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
                                                     ),
-                                                    end: ByteIndex(
-                                                        45,
-                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            29,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            34,
+                                                        ),
+                                                    },
                                                 },
                                             },
-                                        },
-                                    ),
-                                    fields: [],
-                                    span: SourceSpan {
-                                        file: FileId(
-                                            0,
                                         ),
-                                        span: Span {
-                                            start: ByteIndex(
-                                                41,
+                                        fields: [],
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
                                             ),
-                                            end: ByteIndex(
-                                                45,
-                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    29,
+                                                ),
+                                                end: ByteIndex(
+                                                    34,
+                                                ),
+                                            },
                                         },
                                     },
+                                    TypeVariant {
+                                        name: Some(
+                                            Identifier {
+                                                text: "Blue",
+                                                span: SourceSpan {
+                                                    file: FileId(
+                                                        0,
+                                                    ),
+                                                    span: Span {
+                                                        start: ByteIndex(
+                                                            41,
+                                                        ),
+                                                        end: ByteIndex(
+                                                            45,
+                                                        ),
+                                                    },
+                                                },
+                                            },
+                                        ),
+                                        fields: [],
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    41,
+                                                ),
+                                                end: ByteIndex(
+                                                    45,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                ],
+                                companions: [],
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            17,
+                                        ),
+                                        end: ByteIndex(
+                                            45,
+                                        ),
+                                    },
                                 },
-                            ],
+                            },
                         ),
                     ),
                 ),

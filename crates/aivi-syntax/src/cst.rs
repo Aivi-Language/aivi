@@ -236,11 +236,29 @@ pub struct TypeVariantField {
     pub span: SourceSpan,
 }
 
+/// One authored companion member colocated with a closed sum type.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeCompanionMember {
+    pub name: Identifier,
+    pub annotation: Option<TypeExpr>,
+    pub parameters: Vec<Identifier>,
+    pub body: Option<Expr>,
+    pub span: SourceSpan,
+}
+
+/// Body of a closed sum type, optionally including companion members.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypeSumBody {
+    pub variants: Vec<TypeVariant>,
+    pub companions: Vec<TypeCompanionMember>,
+    pub span: SourceSpan,
+}
+
 /// Body of a `type` declaration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeDeclBody {
     Alias(TypeExpr),
-    Sum(Vec<TypeVariant>),
+    Sum(TypeSumBody),
 }
 
 /// Parenthesized operator name preserved for class member declarations.
@@ -493,9 +511,9 @@ fn patch_contains_self(patch: &PatchBlock) -> bool {
 }
 
 fn markup_contains_self(node: &MarkupNode) -> bool {
-    node.attributes.iter().any(|attr| {
-        matches!(&attr.value, Some(MarkupAttributeValue::Expr(e)) if expr_contains_self(e))
-    }) || node.children.iter().any(markup_contains_self)
+    node.attributes.iter().any(
+        |attr| matches!(&attr.value, Some(MarkupAttributeValue::Expr(e)) if expr_contains_self(e)),
+    ) || node.children.iter().any(markup_contains_self)
 }
 
 /// One `<-` binding inside a `result { ... }` block.

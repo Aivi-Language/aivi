@@ -1,6 +1,6 @@
-# Indexed collections and companion directions
+# Indexed collections and companion bodies
 
-Sources: `stdlib/aivi/list.aivi`, `stdlib/aivi/option.aivi`, `stdlib/aivi/matrix.aivi`, `stdlib/aivi/prelude.aivi`, `manual/guide/typeclasses.md`, `manual/stdlib/list.md`, `manual/stdlib/option.md`, `manual/stdlib/matrix.md`, `manual/stdlib/prelude.md`, `AIVI_RFC.md`.
+Sources: `stdlib/aivi/list.aivi`, `stdlib/aivi/option.aivi`, `stdlib/aivi/matrix.aivi`, `stdlib/aivi/prelude.aivi`, `manual/guide/typeclasses.md`, `manual/guide/types.md`, `manual/stdlib/list.md`, `manual/stdlib/option.md`, `manual/stdlib/matrix.md`, `manual/stdlib/prelude.md`, `syntax.md`, `AIVI_RFC.md`.
 
 ## Implemented today
 
@@ -39,6 +39,30 @@ The ambient prelude now re-exports:
 
 This keeps the “common path” concise while leaving matrix-specific helpers in `aivi.matrix`.
 
+### ADT companion bodies
+
+Closed sums now support colocated companion helpers in a brace body:
+
+```aivi
+type Player = {
+    | Human
+    | Computer
+
+    type Player
+    opponent self = self
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
+```
+
+Important rules:
+
+- the brace form is treated as a companion sum only when the first significant token inside the body is `|`
+- constructors come first; companion members follow
+- companion members elaborate to ordinary top-level functions
+- companion members keep ordinary export/import rules rather than piggybacking on the type export
+- when the body references `self`, the owner type is inserted automatically at the front of the annotation
+
 ## Current higher-kinded reality
 
 - Builtin carrier lowering is still the main executable slice for `List`, `Option`, `Result`, `Validation`, `Signal`, and `Task`
@@ -63,23 +87,3 @@ class FoldableWithIndex F I
 ```
 
 Current blocker: the executable instance path is clearly unary today. Multi-parameter indexed heads are not yet proven end to end.
-
-### ADT bodies / companions
-
-Domains already support adjacent member declarations and authored bodies. A matching future surface for closed ADTs would colocate constructors and total helper functions without introducing methods or mutation.
-
-Proposed direction:
-
-```aivi
-type Player = {
-    | Human
-    | Computer
-
-    type Player -> Player
-    opponent self = self
-     ||> Human    -> Computer
-     ||> Computer -> Human
-}
-```
-
-This should elaborate to ordinary top-level callable items owned by the type declaration, not OO-style receiver methods.

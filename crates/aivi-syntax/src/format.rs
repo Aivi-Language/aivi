@@ -6,13 +6,12 @@ use crate::cst::{
     FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, MapExpr, MapExprEntry,
     MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock, PatchEntry,
     PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern,
-    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
-    RecordExpr, RecordField,
-    RecordPatternField, ResultBinding, ResultBlockExpr, SignalMergeBody, SignalReactiveArm,
-    SourceDecorator,
-    SourceProviderContractItem, SourceProviderContractMember, SourceProviderContractSchemaMember,
-    SuffixedIntegerLiteral, TextInterpolation, TextLiteral, TextSegment, TypeDeclBody, TypeExpr,
-    TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
+    PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName, RecordExpr,
+    RecordField, RecordPatternField, ResultBinding, ResultBlockExpr, SignalMergeBody,
+    SignalReactiveArm, SourceDecorator, SourceProviderContractItem, SourceProviderContractMember,
+    SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextInterpolation, TextLiteral,
+    TextSegment, TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator,
+    UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -133,10 +132,7 @@ impl Formatter {
     fn compacts_with_next_item(&self, item: &Item, lines: &[String]) -> bool {
         item.decorators().is_empty()
             && lines.len() == 1
-            && matches!(
-                item,
-                Item::Value(_) | Item::Signal(_) | Item::Export(_)
-            )
+            && matches!(item, Item::Value(_) | Item::Signal(_) | Item::Export(_))
     }
 
     fn format_type_item(&self, item: &NamedItem) -> Vec<String> {
@@ -160,7 +156,32 @@ impl Formatter {
                     block.prefixed(&format!("{header} = ")).into_lines()
                 }
             }
-            Some(TypeDeclBody::Sum(variants)) => {
+            Some(TypeDeclBody::Sum(sum)) => {
+                let variants = &sum.variants;
+                if !sum.companions.is_empty() {
+                    let mut lines = vec![format!("{header} = {{")];
+                    lines.extend(
+                        variants
+                            .iter()
+                            .map(|variant| {
+                                format!(
+                                    "{}| {}",
+                                    spaces(INDENT_WIDTH),
+                                    self.format_variant_inline(variant)
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                    lines.push(String::new());
+                    for (index, member) in sum.companions.iter().enumerate() {
+                        if index > 0 {
+                            lines.push(String::new());
+                        }
+                        lines.extend(self.format_type_companion_member(member));
+                    }
+                    lines.push("}".to_owned());
+                    return lines;
+                }
                 // Single-variant with fields: format inline without pipe
                 if variants.len() == 1 && !variants[0].fields.is_empty() {
                     let inline = self.format_variant_inline(&variants[0]);
@@ -169,11 +190,7 @@ impl Formatter {
                         return vec![line];
                     }
                     let mut lines = vec![format!("{header} =")];
-                    lines.push(format!(
-                        "{}{}",
-                        spaces(TYPE_VARIANT_INDENT),
-                        inline
-                    ));
+                    lines.push(format!("{}{}", spaces(TYPE_VARIANT_INDENT), inline));
                     return lines;
                 }
                 // Single zero-field variant: keep pipe (disambiguates from alias)
@@ -244,11 +261,7 @@ impl Formatter {
         self.format_value_item("signal", item)
     }
 
-    fn format_signal_merge_item(
-        &self,
-        item: &NamedItem,
-        merge: &SignalMergeBody,
-    ) -> Vec<String> {
+    fn format_signal_merge_item(&self, item: &NamedItem, merge: &SignalMergeBody) -> Vec<String> {
         let mut header = format!("signal {}", self.item_name(&item.name));
         if let Some(annotation) = &item.annotation {
             let formatted = self.format_type_inline(annotation, 0);
@@ -289,8 +302,7 @@ impl Formatter {
         let Some(body) = &arm.body else {
             return vec![header];
         };
-        let force_break =
-            self.should_force_expr_break(display_width(&format!("{header} ")), body);
+        let force_break = self.should_force_expr_break(display_width(&format!("{header} ")), body);
         let block = self.format_expr_block(body, force_break);
         if block.is_inline() {
             vec![format!(
@@ -1667,6 +1679,51 @@ impl Formatter {
         lines
     }
 
+    fn format_type_companion_member(&self, member: &crate::TypeCompanionMember) -> Vec<String> {
+        let mut lines = Vec::new();
+
+        if let Some(annotation) = &member.annotation {
+            let prefix = format!("{}type ", spaces(INDENT_WIDTH));
+            let force_break = self.should_force_type_break(display_width(&prefix), annotation);
+            let block = self.format_type_block(annotation, force_break);
+            if block.is_inline() {
+                lines.push(format!(
+                    "{prefix}{}",
+                    block.inline_text().expect("inline block")
+                ));
+            } else {
+                lines.extend(block.prefixed(&prefix).into_lines());
+            }
+        }
+
+        let mut header = format!("{}{}", spaces(INDENT_WIDTH), member.name.text);
+        for parameter in &member.parameters {
+            header.push(' ');
+            header.push_str(&parameter.text);
+        }
+
+        let Some(body) = &member.body else {
+            lines.push(header);
+            return lines;
+        };
+
+        let force_break =
+            self.should_force_expr_break(display_width(&format!("{header} = ")), body);
+        let block = self.format_expr_block(body, force_break);
+        if block.is_inline() {
+            lines.push(format!(
+                "{header} = {}",
+                block.inline_text().expect("inline block")
+            ));
+        } else if block.starts_with_delimiter() {
+            lines.extend(block.prefixed(&format!("{header} = ")).into_lines());
+        } else {
+            lines.push(format!("{header} ="));
+            lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
+        }
+        lines
+    }
+
     fn format_instance_member(&self, member: &InstanceMember) -> Vec<String> {
         let mut header = format!(
             "{}{}",
@@ -2579,11 +2636,7 @@ impl Formatter {
     fn format_record_field_inline(&self, field: &RecordField) -> String {
         let label = self.format_record_field_label(field);
         match &field.value {
-            Some(value) => format!(
-                "{}: {}",
-                label,
-                self.format_expr_inline(value, 0)
-            ),
+            Some(value) => format!("{}: {}", label, self.format_expr_inline(value, 0)),
             None => label,
         }
     }
@@ -2977,11 +3030,7 @@ impl Formatter {
             label.push_str(&seg.text);
         }
         match &field.pattern {
-            Some(pattern) => format!(
-                "{}: {}",
-                label,
-                self.format_pattern_inline(pattern, 0)
-            ),
+            Some(pattern) => format!("{}: {}", label, self.format_pattern_inline(pattern, 0)),
             None => label,
         }
     }
@@ -3793,9 +3842,8 @@ value view =
 
     #[test]
     fn formatter_normalizes_single_source_signal_merge() {
-        let formatted = format_text(
-            "signal total:Signal Int=ready\n  ||>True=>left+right\n  ||>_=>0\n",
-        );
+        let formatted =
+            format_text("signal total:Signal Int=ready\n  ||>True=>left+right\n  ||>_=>0\n");
         assert_eq!(
             formatted,
             concat!(
@@ -3875,7 +3923,10 @@ value view =
     fn formatter_renders_named_fields_multiline_no_pipe() {
         // Exceeds INLINE_LIMIT, falls back to multi-line without pipe
         let formatted = format_text("type Date = Date year:Int month:Int day:Int\n");
-        assert_eq!(formatted, "type Date =\n  Date year:Int month:Int day:Int\n");
+        assert_eq!(
+            formatted,
+            "type Date =\n  Date year:Int month:Int day:Int\n"
+        );
     }
 
     #[test]
@@ -3888,7 +3939,10 @@ value view =
     fn formatter_keeps_pipe_for_multi_variant() {
         // Multi-variant exceeding inline limit goes to block with pipes
         let formatted = format_text("type Shape = Circle Int | Rect Int Int\n");
-        assert_eq!(formatted, "type Shape =\n  | Circle Int\n  | Rect Int Int\n");
+        assert_eq!(
+            formatted,
+            "type Shape =\n  | Circle Int\n  | Rect Int Int\n"
+        );
     }
 
     #[test]
@@ -3900,10 +3954,7 @@ value view =
     #[test]
     fn formatter_keeps_pipe_for_zero_field_single_variant() {
         let formatted = format_text("type Unit =\n  | Unit\n");
-        assert_eq!(
-            formatted,
-            "type Unit =\n  | Unit\n"
-        );
+        assert_eq!(formatted, "type Unit =\n  | Unit\n");
     }
 
     #[test]

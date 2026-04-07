@@ -109,6 +109,16 @@ type User = {
     name: Text,
     age: Int
 }
+
+type Player = {
+    | Human
+    | Computer
+
+    type Player
+    opponent self = self
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
 ```
 
 Rules:
@@ -117,6 +127,13 @@ Rules:
 - Constructors are curried ordinary values.
 - Under-application is legal; over-application is a type error.
 - Records are built with record literals, not curried record constructors.
+- `type Name = { ... }` is parsed as a companion sum body only when the first significant token
+  inside the braces is `|`; otherwise it remains record-type syntax.
+- In a companion sum body, constructors must come before companion members.
+- Companion members elaborate to ordinary top-level callables and use ordinary `use` / `export`
+  rules.
+- When a companion body references `self`, the owner type is inserted automatically at the front of
+  its annotation.
 
 ### 2.4 `class` and `instance`
 

@@ -565,43 +565,41 @@ type Option A = None | Some A
 
 Nested constructor patterns are allowed. Exhaustiveness is required for sum matches unless a wildcard is present.
 
-### 6.5.1 Deferred proposal: ADT bodies / companions
+### 6.5.1 ADT bodies / companions
 
-Collection-heavy application code often wants a closed ADT together with a small family of total helper
-functions that belong conceptually to that type. Today those helpers must live as nearby top-level
-functions or in a separate module. Domains already have a body form with adjacent member declarations
-and authored bodies; a future closed-ADT companion surface should reuse that feel rather than invent an
-OO-style method system.
-
-Proposed direction:
+Closed sums may colocate constructors with total companion helpers in a brace body:
 
 ```aivi
 type Player = {
     | Human
     | Computer
 
-    type Player -> Player
+    type Player
     opponent self = self
      ||> Human    -> Computer
      ||> Computer -> Human
 
-    type Player -> Text
+    type Text
     label self = self
      ||> Human    -> "You"
      ||> Computer -> "Computer"
 }
 ```
 
-Intended properties:
+Normative rules:
 
-- constructors remain ordinary closed-sum constructors; no implicit receiver dispatch
+- `type Name = { ... }` is treated as a companion sum body only when the first significant token
+  inside the braces is `|`
+- otherwise `type Name = { ... }` remains record-type syntax
+- constructors must appear before companion members
 - companion members elaborate to ordinary top-level callable items owned by the type declaration
-- authored bodies reuse the existing domain-body rule: the leading `self` argument is implicit in the
-  type annotation when `self` appears in the body
-- the feature is about colocated total helpers, not methods, mutation, or open-world extension
-
-This is deliberately deferred. The current implementation does **not** support closed-type bodies for
-ordinary ADTs yet.
+- companion members follow ordinary `use` / `export` rules; exporting the type does not implicitly
+  export its companion members
+- when a companion body references `self`, the owner type is inserted automatically at the front of
+  the annotation
+- naming the receiver as an explicit `self` parameter is accepted, but not required
+- the feature colocates total helpers; it does not introduce methods, mutation, or open-world
+  extension
 
 ## 6.6 Records, tuples, and lists
 
