@@ -2808,6 +2808,28 @@ mod tests {
 
         host.launch_prepared(prepared)
             .expect("reversi should launch through the MCP host");
+        let initial_hydration = host
+            .session_status()
+            .expect("reversi MCP session should report status after launch")
+            .latest_applied_hydration;
+        let idle_deadline = std::time::Instant::now() + std::time::Duration::from_millis(650);
+        while std::time::Instant::now() < idle_deadline {
+            host.process_context_work();
+            host.session
+                .as_ref()
+                .expect("reversi session should stay alive while idling")
+                .harness
+                .with_access(|access| access.process_pending_work())
+                .expect("idle reversi session should keep processing cleanly");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(
+            host.session_status()
+                .expect("reversi MCP session should stay readable while idling")
+                .latest_applied_hydration,
+            initial_hydration,
+            "reversi should stay idle on the human turn until the first click"
+        );
         let opening_move = host
             .find_widgets(FindWidgetsArgs {
                 text_contains: Some("◌".to_owned()),

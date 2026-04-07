@@ -308,6 +308,18 @@ func __aivi_list_tail = items =>
       |> reduce __aivi_list_tailStep { seenFirst: False, items: [] }
       |> __aivi_list_tailFromState
 
+type (List A) -> (List A)
+func __aivi_list_tailOrEmpty = items =>
+    __aivi_list_tail items
+        ||> Some remaining -> remaining
+        ||> None           -> []
+
+type (List A) -> Bool
+func __aivi_list_nonEmpty = items =>
+    __aivi_list_head items
+      T|> True
+      F|> False
+
 type (A -> Bool) -> Bool -> A -> Bool
 func __aivi_list_anyStep = predicate found item => found
     T|> True
@@ -672,6 +684,16 @@ func __aivi_matrix_buildRow = width build y =>
 type Int -> Int -> (Int -> Int -> A) -> (List (List A))
 func __aivi_matrix_buildRows = width height build =>
     __aivi_list_map (__aivi_matrix_buildRow width build) (__aivi_list_range height)
+
+type Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
+func __aivi_matrix_initHeight = width height build => height < 0
+    T|> Err (NegativeHeight height)
+    F|> Ok (MkMatrix width height (__aivi_matrix_buildRows width height build))
+
+type Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
+func __aivi_matrix_init = width height build => width < 0
+    T|> Err (NegativeWidth width)
+    F|> __aivi_matrix_initHeight width height build
 
 type Int -> Int -> (Int -> Int -> A) -> Matrix A
 func __aivi_matrix_filled = w h build => w < 0 or h < 0
@@ -8497,6 +8519,12 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.list", "tail") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_list_tail".into(),
         }),
+        ("aivi.list", "tailOrEmpty") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_tailOrEmpty".into(),
+        }),
+        ("aivi.list", "nonEmpty") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_list_nonEmpty".into(),
+        }),
         ("aivi.list", "any") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_list_any".into(),
         }),
@@ -9616,6 +9644,9 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         }),
         ("aivi.matrix", "filled") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_matrix_filled".into(),
+        }),
+        ("aivi.matrix", "init") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_init".into(),
         }),
         _ => None,
     }
@@ -10767,6 +10798,44 @@ signal tick : Signal Unit
         assert!(
             report.is_ok(),
             "reactive source option payloads should validate cleanly, got diagnostics: {:?}",
+            report.diagnostics()
+        );
+    }
+
+    #[test]
+    fn resolved_validation_allows_active_when_feedback_through_accumulate() {
+        let lowered = lower_text(
+            "active_when_feedback.aivi",
+            r#"
+fun bump:Int = tick:Unit current:Int=>    current + 1
+
+fun keepRunning:Bool = count:Int=>    count < 3
+
+signal count : Signal Int =
+    tick
+    +|> 0 bump
+
+signal enabled : Signal Bool =
+    count
+    |> keepRunning
+
+@source timer.every 120 with {
+    activeWhen: enabled
+}
+signal tick : Signal Unit
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "activeWhen feedback example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "activeWhen feedback loop should validate cleanly, got diagnostics: {:?}",
             report.diagnostics()
         );
     }

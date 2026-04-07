@@ -89,12 +89,8 @@ fn compute_signal_metadata(
         }
         collect_signal_dependencies(module, roots)
     });
-    if let Some(source) = source {
-        work.extend(source.arguments.iter().copied().map(DependencyWork::Expr));
-        if let Some(options) = source.options {
-            work.push(DependencyWork::Expr(options));
-        }
-    }
+    // Source options are tracked in SourceMetadata so lifecycle controls such as
+    // `activeWhen` do not become ordinary signal edges and create false cycles.
     let (signal_dependencies, import_signal_dependencies) =
         collect_all_signal_dependencies(module, work);
     let source_metadata = source.map(|source| {

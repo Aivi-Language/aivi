@@ -1544,6 +1544,103 @@ export main
     }
 
     #[gtk::test]
+    fn reversi_stays_clickable_after_idling_on_human_turn() {
+        let path = repo_path("demos/reversi.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let last_move_item = required_signal_item(&artifact, "lastMoveText");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("reversi demo should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the reversi window should release startup-held timers");
+        let initial_hydration = harness.with_access(|access| access.latest_applied_hydration());
+        pump_context(&context, Duration::from_millis(650));
+        assert_eq!(
+            harness.with_access(|access| access.latest_applied_hydration()),
+            initial_hydration,
+            "reversi should stay idle on the human turn until the user clicks"
+        );
+
+        let opening_move = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
+            .expect("reversi board should still expose a legal opening move after idling");
+        opening_move.emit_clicked();
+        harness.with_access(|access| {
+            access
+                .process_pending_work()
+                .expect("idle opening move should still process in one work cycle");
+        });
+        assert_ne!(
+            text_signal_for(&harness, last_move_item),
+            "Opening position",
+            "an idle reversi session should still accept the first human move"
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
+    fn reversi_stays_playable_after_the_first_full_turn() {
+        let path = repo_path("demos/reversi.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let status_item = required_signal_item(&artifact, "statusText");
+        let last_move_item = required_signal_item(&artifact, "lastMoveText");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("reversi demo should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the reversi window should release startup-held timers");
+
+        let opening_move = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
+            .expect("reversi board should expose a legal opening move");
+        opening_move.emit_clicked();
+        harness.with_access(|access| {
+            access
+                .process_pending_work()
+                .expect("the first human move should process in one work cycle");
+        });
+        assert_eq!(
+            text_signal_for(&harness, status_item),
+            "Computer is choosing...",
+            "the first move should hand control to the AI"
+        );
+        assert!(
+            pump_until(&context, Duration::from_secs(3), || {
+                text_signal_for(&harness, status_item) == "Your turn"
+                    && text_signal_for(&harness, last_move_item).starts_with("Computer plays")
+            }),
+            "after the AI reply the game should return to a playable human turn"
+        );
+
+        let second_move = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌"))
+            .expect("reversi should expose another legal human move after the AI reply");
+        second_move.emit_clicked();
+        harness.with_access(|access| {
+            access
+                .process_pending_work()
+                .expect("the second human move should still process cleanly");
+        });
+        assert!(
+            text_signal_for(&harness, last_move_item).starts_with("You plays"),
+            "the second human move should update the move summary instead of crashing"
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
     #[ignore = "known pre-existing failure: recurrence signal kernel missing in snake demo backend"]
     fn space_restarts_snake_after_game_over() {
         let path = repo_path("demos/snake.aivi");
