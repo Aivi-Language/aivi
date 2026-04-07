@@ -106,7 +106,11 @@ fn compute_signal_metadata(
             signal_dependencies: source_dependencies,
         }
     });
-    (signal_dependencies, import_signal_dependencies, source_metadata)
+    (
+        signal_dependencies,
+        import_signal_dependencies,
+        source_metadata,
+    )
 }
 
 fn compute_source_lifecycle_dependencies(
@@ -236,33 +240,31 @@ fn collect_signal_deps_internal(
                     continue;
                 }
                 match &module.exprs()[expr_id].kind {
-                    ExprKind::Name(reference) => {
-                        match &reference.resolution {
-                            ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-                                match &module.items()[*item_id] {
-                                    Item::Signal(_) => {
-                                        item_deps.insert(*item_id);
-                                    }
-                                    Item::Value(_) | Item::Function(_) => {
-                                        work.push(DependencyWork::Item(*item_id));
-                                    }
-                                    _ => {}
+                    ExprKind::Name(reference) => match &reference.resolution {
+                        ResolutionState::Resolved(TermResolution::Item(item_id)) => {
+                            match &module.items()[*item_id] {
+                                Item::Signal(_) => {
+                                    item_deps.insert(*item_id);
                                 }
-                            }
-                            ResolutionState::Resolved(TermResolution::Import(import_id)) => {
-                                let import = &module.imports()[*import_id];
-                                if matches!(
-                                    &import.metadata,
-                                    ImportBindingMetadata::Value {
-                                        ty: ImportValueType::Signal(_)
-                                    }
-                                ) {
-                                    import_deps.insert(*import_id);
+                                Item::Value(_) | Item::Function(_) => {
+                                    work.push(DependencyWork::Item(*item_id));
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
-                    }
+                        ResolutionState::Resolved(TermResolution::Import(import_id)) => {
+                            let import = &module.imports()[*import_id];
+                            if matches!(
+                                &import.metadata,
+                                ImportBindingMetadata::Value {
+                                    ty: ImportValueType::Signal(_)
+                                }
+                            ) {
+                                import_deps.insert(*import_id);
+                            }
+                        }
+                        _ => {}
+                    },
                     ExprKind::Integer(_)
                     | ExprKind::Float(_)
                     | ExprKind::Decimal(_)
@@ -534,7 +536,7 @@ fn collect_signal_deps_internal(
                     | Item::Instance(_)
                     | Item::Use(_)
                     | Item::Export(_)
-            | Item::Hoist(_) => {}
+                    | Item::Hoist(_) => {}
                 }
             }
         }

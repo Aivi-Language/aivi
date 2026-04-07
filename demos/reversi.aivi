@@ -41,10 +41,14 @@ type Move =
   | Place Player Coord
   | Pass Player
 
-type Action =
-  | Pulse
+type Event =
+  | CommitAi
   | Click Coord
   | Reset
+
+type TimerControl =
+  | Arm
+  | Disarm
 
 type Score = {
     human: Int,
@@ -58,29 +62,10 @@ type Snapshot = {
     computerMoves: List Coord
 }
 
-type Session = {
-    history: List Move,
-    aiTicks: Int,
-    rows: List RowView
-}
-
 type RayState = {
     collecting: Bool,
     closed: Bool,
     trail: List Coord
-}
-
-type CellView = {
-    key: Int,
-    coord: Coord,
-    label: Text,
-    enabled: Bool,
-    opacity: Float
-}
-
-type RowView = {
-    key: Int,
-    cells: List CellView
 }
 
 type Plan = {
@@ -91,11 +76,11 @@ type Plan = {
 value boardSize = 8
 value lastIndex = boardSize - 1
 value neg1 = 0 - 1
-value aiCommitTicks = 4
 
 value boardIndices : List Int = matrixIndices boardSize
 value raySteps : List Int = listTailOrEmpty boardIndices
 value emptyCoords : List Coord = []
+value emptyHistory : List Move = []
 
 value directions : List Vector = [
     Delta neg1 neg1,
@@ -391,91 +376,40 @@ type Move -> List Move -> List Move
 func appendMove = move history =>
     append history [move]
 
-type Snapshot -> Int -> List RowView
-func rowViewsForSnapshot = snapshot aiTicks =>
-    listMap (rowViewAt snapshot (snapshotAiTarget snapshot) (blinkOn aiTicks)) boardIndices
-
-type List Move -> Int -> Snapshot -> Session
-func buildSessionWithSnapshot = history aiTicks snapshot =>
-    {
-        history: history,
-        aiTicks: aiTicks,
-        rows: rowViewsForSnapshot snapshot aiTicks
-    }
-
-type List Move -> Int -> Session
-func buildSession = history aiTicks =>
-    buildSessionWithSnapshot history aiTicks (snapshotFromHistory history)
-
-value initialSession : Session =
-    buildSession [] 0
-
-type Session -> Session
-func resetTicks = session =>
-    session.aiTicks == 0
- T|> session
- F|> buildSession session.history 0
-
-type Move -> Session -> Session
-func appendSessionMove = move session =>
-    buildSession (appendMove move session.history) 0
-
 type Coord -> Snapshot -> Bool
 func humanCanPlace = coord snapshot =>
     snapshot.turn == Human and listContains coordEq coord snapshot.humanMoves
 
-type Coord -> Session -> Snapshot -> Session
-func clickWithSnapshot = coord session snapshot => humanCanPlace coord snapshot
- T|> appendSessionMove (Place Human coord) session
- F|> session
+type Snapshot -> List Move -> List Move
+func settleHistoryFromSnapshot = snapshot history => snapshotPassPending snapshot
+ T|> appendMove (Pass snapshot.turn) history
+ F|> history
 
-type Coord -> Session -> Session
-func clickSession = coord session =>
-    clickWithSnapshot coord session (snapshotFromHistory session.history)
+type List Move -> List Move
+func settleHistory = history =>
+    settleHistoryFromSnapshot (snapshotFromHistory history) history
 
-type Session -> Snapshot -> Session
-func passFromSnapshot = session snapshot => snapshotPassPending snapshot
- T|> appendSessionMove (Pass snapshot.turn) session
- F|> session
+type Coord -> List Move -> List Move
+func clickHistory = coord history =>
+    humanCanPlace coord (snapshotFromHistory history)
+ T|> settleHistory (appendMove (Place Human coord) history)
+ F|> history
 
-type Int -> Bool
-func readyToCommitAi = ticks =>
-    ticks >= aiCommitTicks - 1
+type List Move -> List Move
+func commitComputerHistory = history => snapshotAiTarget (snapshotFromHistory history)
+ ||> None       -> history
+ ||> Some coord -> settleHistory (appendMove (Place Computer coord) history)
 
-type Session -> Snapshot -> Session
-func commitComputerFromSnapshot = session snapshot => snapshotAiTarget snapshot
- ||> None       -> session
- ||> Some coord -> appendSessionMove (Place Computer coord) session
+type Event -> List Move -> List Move
+func stepHistory = event history => event
+ ||> Reset       -> []
+ ||> CommitAi    -> commitComputerHistory history
+ ||> Click coord -> clickHistory coord history
 
-type Session -> Snapshot -> Session
-func advanceComputerTurn = session snapshot => readyToCommitAi session.aiTicks
- T|> commitComputerFromSnapshot session snapshot
- F|> buildSession session.history (session.aiTicks + 1)
-
-type Session -> Snapshot -> Session
-func pulseWithSnapshot = session snapshot => snapshotGameOver snapshot
- T|> resetTicks session
- F|> pulseActiveTurn session snapshot
-
-type Session -> Snapshot -> Session
-func pulseActiveTurn = session snapshot => snapshotPassPending snapshot
- T|> passFromSnapshot session snapshot
- F|> pulsePlayableTurn session snapshot
-
-type Session -> Snapshot -> Session
-func pulsePlayableTurn = session snapshot => snapshotAiPending snapshot
- T|> advanceComputerTurn session snapshot
- F|> resetTicks session
-
-type Session -> Session
-func pulseSession = session =>
-    pulseWithSnapshot session (snapshotFromHistory session.history)
-
-type Action -> Session -> Session
-func stepSession = action session => action
- ||> Reset       -> initialSession
- ||> Pulse       -> pulseSession session
- ||> Click coord -> clickSession coord session
+type TimerControl -> Bool -> Bool
+func stepTimerEnabled = control enabled => control
+ ||> Arm    -> True
+ ||> Disarm -> False
 
 type Move -> Text
 func moveLabel = move => move
@@ -536,91 +470,76 @@ func previewLine = opt => opt
  ||> None       -> "Click a + square to place X."
  ||> Some coord -> "Computer is eyeing {coordLabel coord}."
 
-type Int -> Bool
-func blinkOn = ticks =>
-    ticks % 2 == 0
-
 type Option Coord -> Int -> Int -> Bool
 func previewAt = opt x y => opt
  ||> None                 -> False
  ||> Some (Coord px py)   -> px == x and py == y
 
 type Bool -> Text
-func blinkingPreviewLabel = blinkVisible => blinkVisible
- T|> "○"
- F|> "◌"
-
-type Bool -> Text
 func legalMoveLabel = legal => legal
  T|> "◌"
  F|> "."
 
-type Bool -> Bool -> Bool -> Text
-func emptyCellLabel = legal preview blinkVisible => preview
- T|> blinkingPreviewLabel blinkVisible
+type Bool -> Bool -> Text
+func emptyCellLabel = legal preview => preview
+ T|> "○"
  F|> legalMoveLabel legal
 
 type Int -> Int -> Int
 func cellKey = y x =>
     y * boardSize + x
 
-type Snapshot -> Option Coord -> Bool -> Int -> Int -> Text
-func cellLabelAt = snapshot preview blinkVisible y x =>
+type Snapshot -> Option Coord -> Int -> Int -> Text
+func cellLabelAt = snapshot preview y x =>
     matrixAt snapshot.board x y
  ||> Some Black -> "🔴"
  ||> Some White -> "⚪"
- ||> Some Empty -> emptyCellLabel (listContains coordEq (Coord x y) (snapshotCurrentMoves snapshot)) (previewAt preview x y) blinkVisible
+ ||> Some Empty -> emptyCellLabel (listContains coordEq (Coord x y) (snapshotCurrentMoves snapshot)) (previewAt preview x y)
  ||> None       -> "."
 
 type Snapshot -> Int -> Int -> Bool
 func cellEnabledAt = snapshot y x =>
     snapshot.turn == Human and listContains coordEq (Coord x y) (snapshotCurrentMoves snapshot)
 
-type Snapshot -> Option Coord -> Bool -> Int -> Int -> CellView
-func cellViewAt = snapshot preview blinkVisible y x =>
-    {
-        key: cellKey y x,
-        coord: Coord x y,
-        label: cellLabelAt snapshot preview blinkVisible y x,
-        enabled: cellEnabledAt snapshot y x,
-        opacity: 1.0
-    }
-
-type Snapshot -> Option Coord -> Bool -> Int -> RowView
-func rowViewAt = snapshot preview blinkVisible y =>
-    {
-        key: y,
-        cells: listMap (cellViewAt snapshot preview blinkVisible y) boardIndices
-    }
+type Option Coord -> Int -> Int -> Float
+func cellOpacityAt = preview x y => previewAt preview x y
+ T|> 0.55
+ F|> 1.0
 
 signal placeCoord : Signal Coord
 
 signal restartClick : Signal Unit
 
-@source timer.every 160ms with {
-    immediate: False,
-    coalesce: True,
-    activeWhen: aiPending
-}
-signal tick : Signal Unit
+signal timerControl : Signal TimerControl = placeCoord | restartClick
+  ||> placeCoord _ => Arm
+  ||> restartClick _ => Disarm
+  ||> _ => Arm
 
-signal action : Signal Action = tick | placeCoord | restartClick
-  ||> tick _ => Pulse
+signal timerEnabled : Signal Bool = timerControl
+ +|> False stepTimerEnabled
+
+@source timer.after 640ms with {
+    immediate: False,
+    activeWhen: timerEnabled,
+    restartOn: aiTrigger
+}
+signal aiReady : Signal Unit
+
+signal event : Signal Event = aiReady | placeCoord | restartClick
+  ||> aiReady _ => CommitAi
   ||> placeCoord coord => Click coord
   ||> restartClick _ => Reset
-  ||> _ => Pulse
+  ||> _ => CommitAi
 
-signal session : Signal Session = action
- +|> initialSession stepSession
+signal history : Signal (List Move) = event
+ +|> emptyHistory stepHistory
 
-signal history : Signal (List Move) = session
-  |> .history
+signal aiTrigger : Signal Snapshot = history
+  |> snapshotFromHistory
+  ?|> snapshotAiPending
 
 signal snapshot : Signal Snapshot = history
   |> snapshotFromHistory
-
-signal aiPending : Signal Bool = snapshot
-  |> snapshotAiPending
 
 signal gameOver : Signal Bool = snapshot
   |> snapshotGameOver
@@ -648,9 +567,6 @@ signal previewText : Signal Text = aiPreview
 signal finalText : Signal Text = score
   |> winnerLine
 
-signal rowViews : Signal (List RowView) = session
-  |> .rows
-
 value main =
     <Window title="AIVI Reversi" defaultWidth={640} defaultHeight={760}>
         <Box orientation="vertical" spacing={12} marginTop={16} marginBottom={16} marginStart={16} marginEnd={16}>
@@ -664,26 +580,28 @@ value main =
             </show>
             <Label text="X = you, O = computer, + = legal move." wrap />
             <Button label="Restart" onClick={restartClick} compact hasFrame={False} />
-            <with value={rowViews} as={rows}>
-                <Box orientation="vertical" spacing={2}>
-                    <each of={rows} as={row} key={row.key}>
-                        <Box orientation="horizontal" spacing={2}>
-                            <each of={row.cells} as={cell} key={cell.key}>
-                                <Button
-                                    label={cell.label}
-                                    onClick={placeCoord cell.coord}
-                                    sensitive={cell.enabled}
-                                    compact
-                                    hasFrame={False}
-                                    animateOpacity={True}
-                                    opacity={cell.opacity}
-                                    widthRequest={56}
-                                    heightRequest={56}
-                                />
-                            </each>
-                        </Box>
-                    </each>
-                </Box>
+            <with value={snapshot} as={state}>
+                <with value={aiPreview} as={preview}>
+                    <Box orientation="vertical" spacing={2}>
+                        <each of={boardIndices} as={y} key={y}>
+                            <Box orientation="horizontal" spacing={2}>
+                                <each of={boardIndices} as={x} key={cellKey y x}>
+                                    <Button
+                                        label={cellLabelAt state preview y x}
+                                        onClick={placeCoord (Coord x y)}
+                                        sensitive={cellEnabledAt state y x}
+                                        compact
+                                        hasFrame={False}
+                                        animateOpacity={True}
+                                        opacity={cellOpacityAt preview x y}
+                                        widthRequest={56}
+                                        heightRequest={56}
+                                    />
+                                </each>
+                            </Box>
+                        </each>
+                    </Box>
+                </with>
             </with>
         </Box>
     </Window>

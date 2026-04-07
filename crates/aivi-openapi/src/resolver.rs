@@ -104,7 +104,10 @@ fn resolve_components(components: Option<&Components>) -> ResolvedComponents {
             security_schemes.insert(name.clone(), scheme.clone());
         }
     }
-    ResolvedComponents { schemas, security_schemes }
+    ResolvedComponents {
+        schemas,
+        security_schemes,
+    }
 }
 
 fn resolve_path_item(
@@ -209,10 +212,17 @@ fn resolve_request_body(
 ) -> Option<ResolvedRequestBody> {
     match rb {
         RequestBodyOrRef::RequestBody(body) => {
-            let (content_type, schema) =
-                body.content.iter().next().map(|(ct, media)| {
-                    (ct.clone(), resolve_schema_opt(media.schema.as_ref(), components))
-                }).unwrap_or_else(|| ("application/json".to_string(), None));
+            let (content_type, schema) = body
+                .content
+                .iter()
+                .next()
+                .map(|(ct, media)| {
+                    (
+                        ct.clone(),
+                        resolve_schema_opt(media.schema.as_ref(), components),
+                    )
+                })
+                .unwrap_or_else(|| ("application/json".to_string(), None));
             Some(ResolvedRequestBody {
                 required: body.required,
                 schema,

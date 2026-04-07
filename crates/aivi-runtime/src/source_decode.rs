@@ -537,10 +537,12 @@ fn decode_step(
     depth: usize,
 ) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
     if depth > MAX_DECODE_DEPTH {
-        return Err(SourceDecodeErrorWithPath::new(SourceDecodeError::TypeMismatch {
-            expected: "value within nesting depth limit",
-            found: "structure nested too deeply (> 512 levels)",
-        }));
+        return Err(SourceDecodeErrorWithPath::new(
+            SourceDecodeError::TypeMismatch {
+                expected: "value within nesting depth limit",
+                found: "structure nested too deeply (> 512 levels)",
+            },
+        ));
     }
     match step {
         DecodeProgramStep::Scalar { scalar } => match scalar {
@@ -683,9 +685,7 @@ fn decode_step(
                 (Some(payload_step), Some(payload)) => {
                     let decoded =
                         decode_step(program, program.step(payload_step), payload, depth + 1)
-                            .map_err(|e| {
-                                e.with_segment(DecodePathSegment::Variant(name.into()))
-                            })?;
+                            .map_err(|e| e.with_segment(DecodePathSegment::Variant(name.into())))?;
                     match program.step(payload_step) {
                         DecodeProgramStep::Tuple { .. } => match decoded {
                             RuntimeValue::Tuple(fields) => fields,
@@ -706,11 +706,13 @@ fn decode_step(
                 fields,
             }))
         }
-        DecodeProgramStep::Domain { surface, .. } => Err(wrap(SourceDecodeError::UnsupportedProgram(
-            SourceDecodeProgramSupportError::UnsupportedDomain {
-                member_name: surface.member_name.clone(),
-            },
-        ))),
+        DecodeProgramStep::Domain { surface, .. } => {
+            Err(wrap(SourceDecodeError::UnsupportedProgram(
+                SourceDecodeProgramSupportError::UnsupportedDomain {
+                    member_name: surface.member_name.clone(),
+                },
+            )))
+        }
         DecodeProgramStep::List { element } => {
             let ExternalSourceValue::List(values) = value else {
                 return Err(wrap(type_mismatch("list", value)));
@@ -797,10 +799,9 @@ fn decode_step(
                     }));
                 };
                 Ok(RuntimeValue::ValidationInvalid(Box::new(
-                    decode_step(program, program.step(*error), payload, depth + 1)
-                        .map_err(|e| {
-                            e.with_segment(DecodePathSegment::Variant("Invalid".into()))
-                        })?,
+                    decode_step(program, program.step(*error), payload, depth + 1).map_err(
+                        |e| e.with_segment(DecodePathSegment::Variant("Invalid".into())),
+                    )?,
                 )))
             }
             other => Err(wrap(type_mismatch("validation variant", other))),

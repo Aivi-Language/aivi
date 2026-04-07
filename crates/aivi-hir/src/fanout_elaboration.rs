@@ -949,16 +949,20 @@ value joinedEmails:Text =
         let report = lowered
             .module()
             .validate(ValidationMode::RequireResolvedNames);
-        assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code == Some(crate::codes::FANOUT_SUBJECT_NOT_LIST)
-        }));
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(crate::codes::FANOUT_SUBJECT_NOT_LIST)
+            })
+        );
 
         let lowered = lower_fixture("milestone-2/invalid/fanin-invalid-projection/main.aivi");
         let report = lowered
             .module()
             .validate(ValidationMode::RequireResolvedNames);
-        assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code == Some(crate::codes::INVALID_FANIN_PROJECTION)
-        }));
+        assert!(
+            report.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(crate::codes::INVALID_FANIN_PROJECTION)
+            })
+        );
     }
 }

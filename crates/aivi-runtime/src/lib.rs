@@ -41,6 +41,7 @@ pub use hir_adapter::{
 pub use providers::{
     MailboxPublishError, SourceProviderContext, SourceProviderExecutionError, SourceProviderManager,
 };
+pub use runtime_errors::render_runtime_error;
 pub use scheduler::{
     DependencyValue, DependencyValues, DerivedNodeEvaluator, DerivedSignalUpdate,
     DroppedPublication, Generation, Publication, PublicationDropReason, PublicationStamp,
@@ -48,12 +49,11 @@ pub use scheduler::{
     WorkerPublicationSender, WorkerSendError,
 };
 pub use source_decode::{
-        ExternalSourceValue, SourceDecodeError, SourceDecodeErrorWithPath,
+    ExternalSourceValue, SourceDecodeError, SourceDecodeErrorWithPath,
     SourceDecodeProgramSupportError, decode_external, encode_runtime_json, parse_json_text,
     validate_supported_program,
 };
 pub use source_map::{RuntimeSignalInfo, RuntimeSignalKind, RuntimeSourceInfo, RuntimeSourceMap};
-pub use runtime_errors::render_runtime_error;
 pub use startup::{
     BackendLinkedRuntime, BackendRuntimeError, BackendRuntimeLinkError, BackendRuntimeLinkErrors,
     EvaluatedSourceConfig, EvaluatedSourceOption, LinkedDerivedSignal, LinkedSourceArgument,

@@ -13,7 +13,13 @@ pub enum SecuritySchemeKind {
 impl SecuritySchemeKind {
     pub fn from_scheme(scheme: &SecurityScheme) -> Self {
         match scheme.scheme_type.as_str() {
-            "http" => match scheme.scheme.as_deref().unwrap_or("").to_lowercase().as_str() {
+            "http" => match scheme
+                .scheme
+                .as_deref()
+                .unwrap_or("")
+                .to_lowercase()
+                .as_str()
+            {
                 "bearer" => Self::BearerToken,
                 "basic" => Self::BasicAuth,
                 _ => Self::Unknown,
@@ -26,10 +32,7 @@ impl SecuritySchemeKind {
                         .unwrap_or_else(|| "X-API-Key".to_string()),
                 },
                 "query" => Self::ApiKeyQuery {
-                    param_name: scheme
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| "apiKey".to_string()),
+                    param_name: scheme.name.clone().unwrap_or_else(|| "apiKey".to_string()),
                 },
                 _ => Self::Unknown,
             },

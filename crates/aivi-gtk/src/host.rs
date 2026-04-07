@@ -7,6 +7,7 @@ use std::{
     sync::Mutex,
 };
 
+use adw::prelude::*;
 use aivi_hir::{NamePath, TextLiteral, TextSegment};
 use gtk::{
     Orientation,
@@ -14,7 +15,6 @@ use gtk::{
     prelude::*,
 };
 use libadwaita as adw;
-use adw::prelude::*;
 
 use crate::{
     GtkBoolPropertySetter, GtkChildGroupDescriptor, GtkChildMountRoute, GtkConcreteWidgetKind,
@@ -401,12 +401,8 @@ where
                 gtk::DropDown::new(None::<gtk::StringList>, None::<gtk::Expression>)
                     .upcast::<gtk::Widget>()
             }
-            GtkConcreteWidgetKind::SearchEntry => {
-                gtk::SearchEntry::new().upcast::<gtk::Widget>()
-            }
-            GtkConcreteWidgetKind::Expander => {
-                gtk::Expander::new(None).upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::SearchEntry => gtk::SearchEntry::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::Expander => gtk::Expander::new(None).upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::NavigationView => {
                 adw::NavigationView::new().upcast::<gtk::Widget>()
             }
@@ -414,9 +410,7 @@ where
                 let placeholder = gtk::Box::new(gtk::Orientation::Vertical, 0);
                 adw::NavigationPage::new(&placeholder, "").upcast::<gtk::Widget>()
             }
-            GtkConcreteWidgetKind::ToastOverlay => {
-                adw::ToastOverlay::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::ToastOverlay => adw::ToastOverlay::new().upcast::<gtk::Widget>(),
         };
         ensure_aivi_widget_styles();
         Ok((schema, widget))
@@ -748,7 +742,9 @@ where
                     })?
                     .set_propagate_natural_width(value);
             }
-            GtkPropertySetter::Bool(GtkBoolPropertySetter::ScrolledWindowPropagateNaturalHeight) => {
+            GtkPropertySetter::Bool(
+                GtkBoolPropertySetter::ScrolledWindowPropagateNaturalHeight,
+            ) => {
                 widget
                     .clone()
                     .downcast::<gtk::ScrolledWindow>()
@@ -1612,35 +1608,32 @@ where
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonMin) => {
-                let spin = widget
-                    .clone()
-                    .downcast::<gtk::SpinButton>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let spin = widget.clone().downcast::<gtk::SpinButton>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::SpinButton",
-                    })?;
+                    }
+                })?;
                 spin.adjustment().set_lower(value);
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonMax) => {
-                let spin = widget
-                    .clone()
-                    .downcast::<gtk::SpinButton>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let spin = widget.clone().downcast::<gtk::SpinButton>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::SpinButton",
-                    })?;
+                    }
+                })?;
                 spin.adjustment().set_upper(value);
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::SpinButtonStep) => {
-                let spin = widget
-                    .clone()
-                    .downcast::<gtk::SpinButton>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let spin = widget.clone().downcast::<gtk::SpinButton>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::SpinButton",
-                    })?;
+                    }
+                })?;
                 spin.adjustment().set_step_increment(value);
                 Ok(())
             }
@@ -1656,35 +1649,32 @@ where
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::ScaleMin) => {
-                let scale = widget
-                    .clone()
-                    .downcast::<gtk::Scale>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let scale = widget.clone().downcast::<gtk::Scale>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::Scale",
-                    })?;
+                    }
+                })?;
                 scale.adjustment().set_lower(value);
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::ScaleMax) => {
-                let scale = widget
-                    .clone()
-                    .downcast::<gtk::Scale>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let scale = widget.clone().downcast::<gtk::Scale>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::Scale",
-                    })?;
+                    }
+                })?;
                 scale.adjustment().set_upper(value);
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::ScaleStep) => {
-                let scale = widget
-                    .clone()
-                    .downcast::<gtk::Scale>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let scale = widget.clone().downcast::<gtk::Scale>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::Scale",
-                    })?;
+                    }
+                })?;
                 scale.adjustment().set_step_increment(value);
                 Ok(())
             }
@@ -1700,35 +1690,32 @@ where
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::SpinRowMin) => {
-                let spin = widget
-                    .clone()
-                    .downcast::<adw::SpinRow>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let spin = widget.clone().downcast::<adw::SpinRow>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "adw::SpinRow",
-                    })?;
+                    }
+                })?;
                 spin.adjustment().set_lower(value);
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::SpinRowMax) => {
-                let spin = widget
-                    .clone()
-                    .downcast::<adw::SpinRow>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let spin = widget.clone().downcast::<adw::SpinRow>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "adw::SpinRow",
-                    })?;
+                    }
+                })?;
                 spin.adjustment().set_upper(value);
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::SpinRowStep) => {
-                let spin = widget
-                    .clone()
-                    .downcast::<adw::SpinRow>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let spin = widget.clone().downcast::<adw::SpinRow>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "adw::SpinRow",
-                    })?;
+                    }
+                })?;
                 spin.adjustment().set_step_increment(value);
                 Ok(())
             }
@@ -2365,9 +2352,8 @@ where
                 sid
             }
             GtkEventSignal::Scroll => {
-                let controller = gtk::EventControllerScroll::new(
-                    gtk::EventControllerScrollFlags::VERTICAL,
-                );
+                let controller =
+                    gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::VERTICAL);
                 let sid = controller.connect_scroll(move |_, _, dy| {
                     queue.push(GtkQueuedEvent {
                         route: route_id,

@@ -344,7 +344,7 @@ impl<'a> TypeChecker<'a> {
                 | Item::SourceProviderContract(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => {}
+                | Item::Hoist(_) => {}
             }
         }
         self.solve_pending_eq_constraints();
@@ -2271,10 +2271,8 @@ impl<'a> TypeChecker<'a> {
             .iter()
             .map(|field| (field.name.as_str(), &field.ty))
             .collect::<HashMap<_, _>>();
-        let available_field_names: Vec<String> = expected_fields
-            .iter()
-            .map(|f| f.name.clone())
-            .collect();
+        let available_field_names: Vec<String> =
+            expected_fields.iter().map(|f| f.name.clone()).collect();
         let mut seen = HashMap::<String, SourceSpan>::new();
         let mut ok = true;
 
@@ -2540,8 +2538,7 @@ impl<'a> TypeChecker<'a> {
             }
             // Only handle top-level removals: selector has exactly one Named segment.
             if entry.selector.segments.len() == 1 {
-                if let crate::PatchSelectorSegment::Named { name, .. } =
-                    &entry.selector.segments[0]
+                if let crate::PatchSelectorSegment::Named { name, .. } = &entry.selector.segments[0]
                 {
                     removed.push(name.text().to_string());
                 }
@@ -2693,8 +2690,9 @@ impl<'a> TypeChecker<'a> {
                         ..
                     } = &binding.metadata
                     {
-                        if let Some(field) =
-                            record_fields.iter().find(|f| f.name.as_ref() == name.text())
+                        if let Some(field) = record_fields
+                            .iter()
+                            .find(|f| f.name.as_ref() == name.text())
                         {
                             let field_ty = self.typing.lower_import_value_type(&field.ty);
                             return self.check_patch_selector_segments(
@@ -3167,23 +3165,26 @@ impl<'a> TypeChecker<'a> {
             ),
         };
         let mut diag = Diagnostic::error(format!(
-                "operator `{}` expects {expected_operands}, found {} and {}",
-                binary_operator_text(operator),
-                describe_inferred_type(left),
-                describe_inferred_type(right),
-            ))
-            .with_code(code("invalid-binary-operator"))
-            .with_primary_label(span, label);
+            "operator `{}` expects {expected_operands}, found {} and {}",
+            binary_operator_text(operator),
+            describe_inferred_type(left),
+            describe_inferred_type(right),
+        ))
+        .with_code(code("invalid-binary-operator"))
+        .with_primary_label(span, label);
 
         // Suggest fixes for common mismatches.
         match expectation {
             BinaryOperatorExpectation::BoolOperands => {
-                diag = diag.with_help("logical operators `and`, `or` require both sides to be `Bool`");
+                diag =
+                    diag.with_help("logical operators `and`, `or` require both sides to be `Bool`");
             }
             BinaryOperatorExpectation::MatchingNumericOperands => {
                 if let (Some(l), Some(r)) = (left, right) {
                     if l != r {
-                        diag = diag.with_help("convert one operand so both sides share the same numeric type");
+                        diag = diag.with_help(
+                            "convert one operand so both sides share the same numeric type",
+                        );
                     }
                 }
             }
@@ -3224,10 +3225,8 @@ impl<'a> TypeChecker<'a> {
                         if let Some(available) = constraint.available_field_names()
                             && !available.is_empty()
                         {
-                            diag = diag.with_note(format!(
-                                "available fields: {}",
-                                available.join(", ")
-                            ));
+                            diag = diag
+                                .with_note(format!("available fields: {}", available.join(", ")));
                         }
                         self.diagnostics.push(diag);
                     }
@@ -3687,9 +3686,11 @@ impl<'a> TypeChecker<'a> {
                         _ => "<constructor>".to_owned(),
                     }
                 }
-                crate::validate::TypeConstructorHead::Import(import_id) => {
-                    self.module.imports()[import_id].local_name.text().to_owned()
-                }
+                crate::validate::TypeConstructorHead::Import(import_id) => self.module.imports()
+                    [import_id]
+                    .local_name
+                    .text()
+                    .to_owned(),
             },
         }
     }
@@ -4109,7 +4110,7 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
-        fn emit_type_mismatch(&mut self, span: SourceSpan, expected: &GateType, actual: &GateType) {
+    fn emit_type_mismatch(&mut self, span: SourceSpan, expected: &GateType, actual: &GateType) {
         let mut diag = Diagnostic::error(format!("expected `{expected}` but found `{actual}`"))
             .with_code(code("type-mismatch"))
             .with_primary_label(
@@ -4125,7 +4126,8 @@ impl<'a> TypeChecker<'a> {
                     diag = diag.with_help("use `toString` to convert a number to text");
                 }
                 (BuiltinType::Int, BuiltinType::Float) => {
-                    diag = diag.with_help("use `round`, `floor`, or `ceil` to convert Float to Int");
+                    diag =
+                        diag.with_help("use `round`, `floor`, or `ceil` to convert Float to Int");
                 }
                 (BuiltinType::Float, BuiltinType::Int) => {
                     diag = diag.with_help("use `toFloat` to convert Int to Float");
@@ -4900,9 +4902,10 @@ mod tests {
              value same:Bool = left == right\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::MISSING_EQ_INSTANCE)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::MISSING_EQ_INSTANCE) }),
             "expected missing Eq diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -4917,9 +4920,10 @@ mod tests {
              value different:Bool = left != right\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::MISSING_EQ_INSTANCE)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::MISSING_EQ_INSTANCE) }),
             "expected missing Eq diagnostic for !=, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5040,9 +5044,10 @@ fun compare:Bool = left:Blob right:Blob =>
              }\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
             "expected instance member operator mismatch diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5214,9 +5219,10 @@ fun delegated:Container A => Bool = left:A right:A =>
     fn typecheck_reports_value_annotation_mismatch() {
         let report = typecheck_text("value-mismatch.aivi", "value answer:Text = 42\n");
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
             "expected type mismatch diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5271,9 +5277,10 @@ signal total : Signal Int = ready
 "#,
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
             "expected signal merge body mismatch to report a type mismatch, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5368,9 +5375,10 @@ signal total : Signal Int = ready
              value result:Option Text = keep None\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
             "expected type mismatch diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5638,9 +5646,10 @@ signal total : Signal Int = ready
              value wrapped:(Box Text) = Box 42\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
             "expected same-module constructor mismatch diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5728,8 +5737,11 @@ value broken =
             ),
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| diagnostic.code
-                == Some(crate::codes::RESULT_BLOCK_BINDING_NOT_RESULT)),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code
+                    == Some(crate::codes::RESULT_BLOCK_BINDING_NOT_RESULT)),
             "expected non-Result result-block binding diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -5749,8 +5761,9 @@ value broken =
             ),
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| diagnostic.code
-                == Some(crate::codes::RESULT_BLOCK_ERROR_MISMATCH)),
+            report.diagnostics().iter().any(
+                |diagnostic| diagnostic.code == Some(crate::codes::RESULT_BLOCK_ERROR_MISMATCH)
+            ),
             "expected result-block error mismatch diagnostic, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -6413,9 +6426,10 @@ fun current:Int = tick:Unit => step direction
              signal raw : Signal Text = home.unwrap\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::INVALID_PROJECTION)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::INVALID_PROJECTION) }),
             "expected signal-wrapped domain projections to stay invalid until pointwise runtime support exists, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -6446,9 +6460,10 @@ fun current:Int = tick:Unit => step direction
              signal broken : Signal Int = score.value\n",
         );
         assert!(
-            report.diagnostics().iter().any(|diagnostic| {
-                diagnostic.code == Some(crate::codes::INVALID_PROJECTION)
-            }),
+            report
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| { diagnostic.code == Some(crate::codes::INVALID_PROJECTION) }),
             "expected invalid projection diagnostic from a signal payload projection, got diagnostics: {:?}",
             report.diagnostics()
         );
@@ -6498,9 +6513,7 @@ fun current:Int = tick:Unit => step direction
         let mismatch_count = report
             .diagnostics()
             .iter()
-            .filter(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            })
+            .filter(|diagnostic| diagnostic.code == Some(crate::codes::TYPE_MISMATCH))
             .count();
         assert!(
             mismatch_count >= 4,
@@ -6536,9 +6549,7 @@ fun current:Int = tick:Unit => step direction
         let mismatch_count = report
             .diagnostics()
             .iter()
-            .filter(|diagnostic| {
-                diagnostic.code == Some(crate::codes::TYPE_MISMATCH)
-            })
+            .filter(|diagnostic| diagnostic.code == Some(crate::codes::TYPE_MISMATCH))
             .count();
         assert!(
             mismatch_count >= 3,

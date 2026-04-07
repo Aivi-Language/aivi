@@ -1,10 +1,13 @@
-use std::{cell::{Cell, RefCell}, collections::HashSet, sync::Arc};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashSet,
+    sync::Arc,
+};
 
 use aivi_base::Diagnostic;
 use aivi_hir::{
     ExportedNames, HoistKindFilter, ImportCycle, ImportModuleResolution, ImportResolver,
-    LoweringResult, LspSymbol,
-    exports, extract_symbols, lower_module_with_resolver,
+    LoweringResult, LspSymbol, exports, extract_symbols, lower_module_with_resolver,
 };
 use aivi_syntax::Formatter;
 
@@ -193,13 +196,17 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
         // SUPPRESS_HOISTS set for project modules.  Temporarily clear
         // WARMUP_PASS so the hoist module's result IS cached — these are
         // the modules we're trying to warm up.
-        HOIST_COMPILING.with(|set| { set.borrow_mut().insert(file_id); });
+        HOIST_COMPILING.with(|set| {
+            set.borrow_mut().insert(file_id);
+        });
         let was_suppressed = SUPPRESS_HOISTS.with(|f| f.replace(true));
         let was_warmup = WARMUP_PASS.with(|f| f.replace(false));
         let lowered = hir_module_with_stack(self.db, file, &[], Some(self.workspace));
         WARMUP_PASS.with(|f| f.set(was_warmup));
         SUPPRESS_HOISTS.with(|f| f.set(was_suppressed));
-        HOIST_COMPILING.with(|set| { set.borrow_mut().remove(&file_id); });
+        HOIST_COMPILING.with(|set| {
+            set.borrow_mut().remove(&file_id);
+        });
 
         ImportModuleResolution::Resolved(lowered.exported_names().clone())
     }
@@ -375,11 +382,20 @@ fn collect_workspace_hoist_items(
                 collect_hoists_from_module(parsed.cst(), &module_name, &mut result);
                 if debug_hoist {
                     let found = result.len() - before;
-                    let has_hoist = parsed.cst().items.iter().any(|i| matches!(i, aivi_syntax::cst::Item::Hoist(_)));
-                    eprintln!("[hoist-scan]   project: {module_name} (has_hoist_in_cst={has_hoist}, collected={found})");
+                    let has_hoist = parsed
+                        .cst()
+                        .items
+                        .iter()
+                        .any(|i| matches!(i, aivi_syntax::cst::Item::Hoist(_)));
+                    eprintln!(
+                        "[hoist-scan]   project: {module_name} (has_hoist_in_cst={has_hoist}, collected={found})"
+                    );
                 }
             } else if debug_hoist {
-                eprintln!("[hoist-scan]   project: {} (no module name)", file.path(db).display());
+                eprintln!(
+                    "[hoist-scan]   project: {} (no module name)",
+                    file.path(db).display()
+                );
             }
         }
     }

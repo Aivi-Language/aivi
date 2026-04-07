@@ -165,8 +165,10 @@ fn item_name_and_span(module: &Module, item_id: ItemId) -> Option<(&str, aivi_ba
         Item::Domain(item) => Some((item.name.text(), item.name.span())),
         Item::Class(item) => Some((item.name.text(), item.name.span())),
         // Export, Use, Instance, SourceProviderContract, Hoist: skip unused reporting.
-        Item::Export(_) | Item::Use(_) | Item::Instance(_) | Item::SourceProviderContract(_) | Item::Hoist(_) => {
-            None
-        }
+        Item::Export(_)
+        | Item::Use(_)
+        | Item::Instance(_)
+        | Item::SourceProviderContract(_)
+        | Item::Hoist(_) => None,
     }
 }

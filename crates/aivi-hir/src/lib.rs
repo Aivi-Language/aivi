@@ -3,8 +3,8 @@
 //! Milestone 2 HIR boundary with typed IDs, module-owned arenas, and structural validation.
 
 pub mod arena;
-pub mod codes;
 mod capability_handle_elaboration;
+pub mod codes;
 mod custom_source_capabilities;
 mod decode_elaboration;
 mod decode_generation;
@@ -82,22 +82,22 @@ pub use hir::{
     ExportItem, ExportResolution, Expr, ExprKind, FloatLiteral, FragmentControl, FunctionItem,
     FunctionParameter, HoistItem, HoistKindFilter, ImportBinding, ImportBindingMetadata,
     ImportBindingResolution, ImportBundleKind, ImportRecordField, ImportValueType,
-    ImportedDomainLiteralSuffix, InstanceItem, InstanceMember,
-    IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemKind, LiteralSuffixResolution, MapExpr,
-    MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeKind,
-    MatchControl, MockDecorator, Module, ModuleArenas, Name, NameError, NamePath, NamePathError,
-    PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector,
-    PatchSelectorSegment, Pattern, PatternKind, PipeExpr, PipeFanoutSegment,
-    PipeRecurrenceShapeError, PipeRecurrenceSuffix, PipeStage, PipeStageKind, PipeTransformMode,
-    ProjectionBase, ReactiveUpdateBodyMode, ReactiveUpdateClause, RecordExpr, RecordExprField,
-    RecordFieldSurface, RecordPatternField, RecordRowRename, RecordRowTransform,
-    RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind, RegexLiteral, Resolved,
-    ResolutionState, RootItemError, ShowControl, SignalItem, SourceDecorator,
-    SourceLifecycleDependencies, SourceMetadata, SourceProviderContractItem, SourceProviderRef,
-    SuffixedIntegerLiteral, SumConstructorHandle, TermReference, TermResolution, TestDecorator,
-    TextFragment, TextInterpolation, TextLiteral, TextSegment, TupleConstructorArity, TypeField,
-    TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter, TypeReference, TypeResolution,
-    TypeVariant, UnaryOperator, Unresolved, UseItem, ValueItem, WithControl,
+    ImportedDomainLiteralSuffix, InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue,
+    Item, ItemHeader, ItemKind, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
+    MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeKind, MatchControl, MockDecorator,
+    Module, ModuleArenas, Name, NameError, NamePath, NamePathError, PatchBlock, PatchEntry,
+    PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern,
+    PatternKind, PipeExpr, PipeFanoutSegment, PipeRecurrenceShapeError, PipeRecurrenceSuffix,
+    PipeStage, PipeStageKind, PipeTransformMode, ProjectionBase, ReactiveUpdateBodyMode,
+    ReactiveUpdateClause, RecordExpr, RecordExprField, RecordFieldSurface, RecordPatternField,
+    RecordRowRename, RecordRowTransform, RecurrenceWakeupDecorator, RecurrenceWakeupDecoratorKind,
+    RegexLiteral, ResolutionState, Resolved, RootItemError, ShowControl, SignalItem,
+    SourceDecorator, SourceLifecycleDependencies, SourceMetadata, SourceProviderContractItem,
+    SourceProviderRef, SuffixedIntegerLiteral, SumConstructorHandle, TermReference, TermResolution,
+    TestDecorator, TextFragment, TextInterpolation, TextLiteral, TextSegment,
+    TupleConstructorArity, TypeField, TypeItem, TypeItemBody, TypeKind, TypeNode, TypeParameter,
+    TypeReference, TypeResolution, TypeVariant, UnaryOperator, Unresolved, UseItem, ValueItem,
+    WithControl,
 };
 pub use ids::{
     BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,
@@ -111,7 +111,9 @@ pub use recurrence_elaboration::{
     RecurrenceNonSourceWakeupBinding, RecurrenceRuntimeExpr, RecurrenceRuntimeStageBlocker,
     RecurrenceStagePlan, elaborate_recurrences,
 };
-pub use resolver::{ImportCycle, ImportModuleResolution, ImportResolver, NullImportResolver, RawHoistItem};
+pub use resolver::{
+    ImportCycle, ImportModuleResolution, ImportResolver, NullImportResolver, RawHoistItem,
+};
 pub use sequence::{AtLeastTwo, NonEmpty, SequenceError};
 pub use signal_metadata_elaboration::{
     collect_signal_dependencies_for_expr, collect_signal_dependencies_for_exprs,

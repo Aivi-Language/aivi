@@ -2137,9 +2137,7 @@ mod tests {
         let mut previous = root.as_signal();
         let mut chain = Vec::with_capacity(DEPTH);
         for index in 0..DEPTH {
-            let node = builder
-                .add_derived(format!("chain-{index}"), None)
-                .unwrap();
+            let node = builder.add_derived(format!("chain-{index}"), None).unwrap();
             builder.define_derived(node, [previous]).unwrap();
             previous = node.as_signal();
             chain.push(node);
@@ -2152,9 +2150,8 @@ mod tests {
             .queue_publication(Publication::new(stamp, 0_i32))
             .unwrap();
 
-        scheduler.tick(&mut |_, inputs: DependencyValues<'_, i32>| {
-            Some(inputs.value(0).copied()? + 1)
-        });
+        scheduler
+            .tick(&mut |_, inputs: DependencyValues<'_, i32>| Some(inputs.value(0).copied()? + 1));
 
         // The last node in the chain should equal DEPTH (each step adds 1).
         assert_eq!(

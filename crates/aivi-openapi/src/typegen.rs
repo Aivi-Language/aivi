@@ -27,9 +27,18 @@ pub fn generate_aivi_types(spec: &ResolvedSpec) -> GeneratedTypeSet {
     let mut out = String::new();
     let mut type_names = Vec::new();
 
-    writeln!(out, "// Auto-generated from OpenAPI spec: {}", spec.info.title).ok();
+    writeln!(
+        out,
+        "// Auto-generated from OpenAPI spec: {}",
+        spec.info.title
+    )
+    .ok();
     writeln!(out, "// Version: {}", spec.info.version).ok();
-    writeln!(out, "// Do not edit manually — regenerate with: aivi openapi-gen").ok();
+    writeln!(
+        out,
+        "// Do not edit manually — regenerate with: aivi openapi-gen"
+    )
+    .ok();
     writeln!(out).ok();
     writeln!(out, "hoist").ok();
     writeln!(out).ok();
@@ -66,17 +75,14 @@ pub fn generate_aivi_types(spec: &ResolvedSpec) -> GeneratedTypeSet {
 
     for (name, schema) in &spec.components.schemas {
         let pascal = to_pascal_case(name);
-        if let Some(decl) =
-            schema_to_aivi_type(&pascal, schema, &spec.components.schemas)
-        {
+        if let Some(decl) = schema_to_aivi_type(&pascal, schema, &spec.components.schemas) {
             writeln!(out, "{decl}").ok();
             writeln!(out).ok();
             type_names.push(pascal);
         }
     }
 
-    let handle_type_name =
-        to_pascal_case(&spec.info.title.replace([' ', '-', '_'], ""));
+    let handle_type_name = to_pascal_case(&spec.info.title.replace([' ', '-', '_'], ""));
     writeln!(out, "type {handle_type_name} = Unit").ok();
     writeln!(out).ok();
     type_names.push(handle_type_name.clone());
@@ -164,8 +170,7 @@ fn schema_to_aivi_type(
                     });
                 match sor {
                     SchemaOrRef::Ref(r) => {
-                        let ref_name =
-                            to_pascal_case(r.ref_path.split('/').last().unwrap_or(""));
+                        let ref_name = to_pascal_case(r.ref_path.split('/').last().unwrap_or(""));
                         format!("  | {variant_name} {ref_name}")
                     }
                     SchemaOrRef::Schema(_) => format!("  | {variant_name}"),
@@ -251,9 +256,7 @@ fn schema_to_aivi_type_expr(
     components: &indexmap::IndexMap<String, Schema>,
 ) -> String {
     match sor {
-        SchemaOrRef::Ref(r) => {
-            to_pascal_case(r.ref_path.split('/').last().unwrap_or("Unknown"))
-        }
+        SchemaOrRef::Ref(r) => to_pascal_case(r.ref_path.split('/').last().unwrap_or("Unknown")),
         SchemaOrRef::Schema(s) => schema_type_expr(s, components),
     }
 }

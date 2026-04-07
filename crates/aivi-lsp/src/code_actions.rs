@@ -77,7 +77,10 @@ fn delete_line_edit(source: &aivi_base::SourceFile, range: Range) -> Option<Text
 
     Some(TextEdit {
         range: Range {
-            start: Position { line: range.start.line, character: 0 },
+            start: Position {
+                line: range.start.line,
+                character: 0,
+            },
             end: line_end_position(text, line_start, line_end, range.start.line),
         },
         new_text: String::new(),
@@ -117,8 +120,14 @@ fn line_end_position(text: &str, line_start: usize, line_end: usize, line: u32) 
     let chars = suffix.encode_utf16().count() as u32;
     if text[..line_end].ends_with('\n') {
         // Advance to start of next line
-        Position { line: line + 1, character: 0 }
+        Position {
+            line: line + 1,
+            character: 0,
+        }
     } else {
-        Position { line, character: chars }
+        Position {
+            line,
+            character: chars,
+        }
     }
 }

@@ -65,6 +65,7 @@ struct HydrationRevisionState {
     next_revision: u64,
     latest_requested: Option<u64>,
     latest_applied: Option<u64>,
+    latest_requested_globals: Option<BTreeMap<BackendItemId, DetachedRuntimeValue>>,
 }
 
 struct RunHydrationCoordinator {
@@ -396,6 +397,17 @@ impl HydrationRevisionState {
         revision
     }
 
+    fn should_request_globals(
+        &self,
+        globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+    ) -> bool {
+        self.latest_requested_globals.as_ref() != Some(globals)
+    }
+
+    fn mark_requested_globals(&mut self, globals: BTreeMap<BackendItemId, DetachedRuntimeValue>) {
+        self.latest_requested_globals = Some(globals);
+    }
+
     fn latest_requested(&self) -> Option<u64> {
         self.latest_requested
     }
@@ -441,18 +453,24 @@ impl RunHydrationCoordinator {
         let globals = driver
             .current_signal_globals()
             .map_err(|error| format!("{error}"))?;
-        if !run_hydration_globals_ready(required_signal_globals, &globals) {
+        let projected = project_run_hydration_globals(required_signal_globals, &globals);
+        if !run_hydration_globals_ready(required_signal_globals, &projected) {
             return Ok(());
         }
-        self.request(globals)
+        self.request(projected)
     }
 
     fn request(
         &mut self,
         globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
     ) -> Result<(), String> {
+        if !self.revisions.should_request_globals(&globals) {
+            return Ok(());
+        }
         let revision = self.revisions.next_requested_revision();
-        self.worker.request(revision, globals)
+        self.worker.request(revision, globals.clone())?;
+        self.revisions.mark_requested_globals(globals);
+        Ok(())
     }
 
     fn apply_ready(
@@ -574,13 +592,9 @@ impl RunSessionState {
             for failure in &failures {
                 match failure {
                     GlibLinkedRuntimeFailure::Tick(error) => {
-                        let diagnostics =
-                            render_runtime_error(error, &source_map, &graph, None);
+                        let diagnostics = render_runtime_error(error, &source_map, &graph, None);
                         for diag in &diagnostics {
-                            rendered.push_str(&format!(
-                                "  error: {}\n",
-                                diag.message
-                            ));
+                            rendered.push_str(&format!("  error: {}\n", diag.message));
                             for note in &diag.notes {
                                 rendered.push_str(&format!("  note: {note}\n"));
                             }
@@ -680,6 +694,16 @@ fn run_hydration_worker_loop(
         }
         notifier();
     }
+}
+
+fn project_run_hydration_globals(
+    required: &BTreeMap<BackendItemId, Box<str>>,
+    globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+) -> BTreeMap<BackendItemId, DetachedRuntimeValue> {
+    required
+        .keys()
+        .filter_map(|item| globals.get(item).cloned().map(|value| (*item, value)))
+        .collect()
 }
 
 fn hold_startup_timer_sources(
@@ -990,14 +1014,16 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
 mod tests {
     use super::{
         HydrationRevisionState, MainContextRequestQueue, RunLaunchConfig, RunSessionLifecycle,
-        RunSessionPhase, RunSessionScheduleState, start_run_session_with_launch_config,
+        RunSessionPhase, RunSessionScheduleState, project_run_hydration_globals,
+        start_run_session_with_launch_config,
     };
-    use aivi_backend::RuntimeValue;
+    use aivi_backend::{DetachedRuntimeValue, ItemId as BackendItemId, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
     use aivi_syntax::parse_module;
     use gtk::prelude::*;
     use std::{
+        collections::BTreeMap,
         env,
         path::{Path, PathBuf},
         time::{Duration, Instant},
@@ -1249,6 +1275,68 @@ mod tests {
         assert_eq!(revisions.latest_applied(), Some(second));
         assert!(!revisions.should_apply(first));
         assert!(!revisions.should_apply(second));
+    }
+
+    #[test]
+    fn hydration_revision_state_skips_duplicate_requested_globals() {
+        let mut revisions = HydrationRevisionState::default();
+        let mut first_globals = BTreeMap::new();
+        first_globals.insert(
+            BackendItemId::from_raw(1),
+            DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(7)),
+        );
+
+        assert!(revisions.should_request_globals(&first_globals));
+        let first = revisions.next_requested_revision();
+        revisions.mark_requested_globals(first_globals.clone());
+
+        assert_eq!(first, 1);
+        assert!(!revisions.should_request_globals(&first_globals));
+
+        let mut second_globals = first_globals.clone();
+        second_globals.insert(
+            BackendItemId::from_raw(2),
+            DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(9)),
+        );
+        assert!(revisions.should_request_globals(&second_globals));
+    }
+
+    #[test]
+    fn project_run_hydration_globals_keeps_only_required_items() {
+        let required = BTreeMap::from([
+            (BackendItemId::from_raw(1), "alpha".into()),
+            (BackendItemId::from_raw(3), "gamma".into()),
+        ]);
+        let globals = BTreeMap::from([
+            (
+                BackendItemId::from_raw(1),
+                DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(7)),
+            ),
+            (
+                BackendItemId::from_raw(2),
+                DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(8)),
+            ),
+            (
+                BackendItemId::from_raw(3),
+                DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(9)),
+            ),
+        ]);
+
+        let projected = project_run_hydration_globals(&required, &globals);
+
+        assert_eq!(
+            projected,
+            BTreeMap::from([
+                (
+                    BackendItemId::from_raw(1),
+                    DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(7)),
+                ),
+                (
+                    BackendItemId::from_raw(3),
+                    DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(9)),
+                ),
+            ])
+        );
     }
 
     #[test]

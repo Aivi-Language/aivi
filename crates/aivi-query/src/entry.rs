@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    discover_workspace_root, discover_workspace_root_from_directory, manifest::parse_manifest,
-    manifest::AppConfig,
+    discover_workspace_root, discover_workspace_root_from_directory, manifest::AppConfig,
+    manifest::parse_manifest,
 };
 
 /// How the entrypoint path was chosen.
@@ -139,13 +139,9 @@ impl fmt::Display for EntrypointResolutionError {
                 let name_width = apps.iter().map(|a| a.name.len()).max().unwrap_or(0);
                 for app in apps {
                     match &app.description {
-                        Some(desc) => writeln!(
-                            f,
-                            "  {:<width$}  {}",
-                            app.name,
-                            desc,
-                            width = name_width
-                        )?,
+                        Some(desc) => {
+                            writeln!(f, "  {:<width$}  {}", app.name, desc, width = name_width)?
+                        }
                         None => writeln!(f, "  {}", app.name)?,
                     }
                 }

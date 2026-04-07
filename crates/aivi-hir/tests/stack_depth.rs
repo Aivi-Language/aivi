@@ -59,7 +59,10 @@ fn long_signal_chain_does_not_stack_overflow() {
 
 #[test]
 fn deep_nested_list_pattern_does_not_stack_overflow() {
-    lower_and_validate_unchecked("deep_list_pattern.aivi", &deep_nested_list_pattern_source(100));
+    lower_and_validate_unchecked(
+        "deep_list_pattern.aivi",
+        &deep_nested_list_pattern_source(100),
+    );
 }
 
 #[test]

@@ -49,9 +49,7 @@ impl SpecDiagnostic {
     pub fn unknown_operation(spec_path: &str, operation_id: &str) -> Self {
         Self {
             kind: SpecDiagnosticKind::UnknownOperation,
-            message: format!(
-                "operation `{operation_id}` not found in OpenAPI spec `{spec_path}`"
-            ),
+            message: format!("operation `{operation_id}` not found in OpenAPI spec `{spec_path}`"),
             path: Some(spec_path.to_string()),
         }
     }

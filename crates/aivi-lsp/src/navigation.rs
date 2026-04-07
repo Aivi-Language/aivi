@@ -116,9 +116,7 @@ impl NavigationAnalysis {
         for (span, site) in self.collect_all_sites() {
             let site_targets = self.definition_targets_for_site(db, &site);
             if site_targets.iter().any(|t| targets.contains(t)) {
-                if let Some(loc) =
-                    location_for_target(db, NavigationTarget::new(self.file, span))
-                {
+                if let Some(loc) = location_for_target(db, NavigationTarget::new(self.file, span)) {
                     if !locations.contains(&loc) {
                         locations.push(loc);
                     }
@@ -145,13 +143,20 @@ impl NavigationAnalysis {
         }
 
         for (binding_id, binding) in module.bindings().iter() {
-            push!(binding.name.span(), NavigationSite::BindingDecl { binding: binding_id });
+            push!(
+                binding.name.span(),
+                NavigationSite::BindingDecl {
+                    binding: binding_id
+                }
+            );
         }
 
         for (parameter_id, parameter) in module.type_parameters().iter() {
             push!(
                 parameter.name.span(),
-                NavigationSite::TypeParameterDecl { parameter: parameter_id }
+                NavigationSite::TypeParameterDecl {
+                    parameter: parameter_id
+                }
             );
         }
 
@@ -273,8 +278,7 @@ impl NavigationAnalysis {
 
         for (_, pattern) in module.patterns().iter() {
             match &pattern.kind {
-                PatternKind::Constructor { callee, .. }
-                | PatternKind::UnresolvedName(callee) => {
+                PatternKind::Constructor { callee, .. } | PatternKind::UnresolvedName(callee) => {
                     push!(
                         callee.span(),
                         NavigationSite::TermReference {
@@ -312,9 +316,18 @@ impl NavigationAnalysis {
                         }
                     );
                 }
-                ExprKind::Binary { left, operator, right } => {
+                ExprKind::Binary {
+                    left,
+                    operator,
+                    right,
+                } => {
                     if let Some(span) = self.binary_operator_span(*left, *right) {
-                        push!(span, NavigationSite::BinaryOperator { operator: *operator });
+                        push!(
+                            span,
+                            NavigationSite::BinaryOperator {
+                                operator: *operator
+                            }
+                        );
                     }
                 }
                 ExprKind::Integer(_)

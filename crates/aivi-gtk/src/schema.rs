@@ -925,8 +925,7 @@ const LABEL_USE_MARKUP_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
 const INPUT_PURPOSE_VALUE_SHAPE: GtkEnumValueShape = GtkEnumValueShape {
     name: "InputPurpose",
     variants: &[
-        "FreeForm", "Alpha", "Digits", "Number", "Phone", "Url", "Email", "Name", "Password",
-        "Pin",
+        "FreeForm", "Alpha", "Digits", "Number", "Phone", "Url", "Email", "Name", "Password", "Pin",
     ],
 };
 
@@ -971,9 +970,7 @@ const SCROLLED_WINDOW_PROPAGATE_NATURAL_WIDTH_PROPERTY: GtkPropertyDescriptor =
     GtkPropertyDescriptor {
         name: "propagateNaturalWidth",
         value_shape: GtkPropertyValueShape::Bool,
-        setter: GtkPropertySetter::Bool(
-            GtkBoolPropertySetter::ScrolledWindowPropagateNaturalWidth,
-        ),
+        setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ScrolledWindowPropagateNaturalWidth),
     };
 
 const SCROLLED_WINDOW_PROPAGATE_NATURAL_HEIGHT_PROPERTY: GtkPropertyDescriptor =
@@ -1395,7 +1392,12 @@ const LABEL_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         LABEL_SELECTABLE_PROPERTY,
         LABEL_USE_MARKUP_PROPERTY,
     ],
-    events: &[FOCUS_IN_EVENT, FOCUS_OUT_EVENT, POINTER_ENTER_EVENT, POINTER_LEAVE_EVENT],
+    events: &[
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+        POINTER_ENTER_EVENT,
+        POINTER_LEAVE_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -1425,7 +1427,13 @@ const BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         BUTTON_HAS_FRAME_PROPERTY,
         BUTTON_LABEL_PROPERTY,
     ],
-    events: &[BUTTON_CLICK_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT, POINTER_ENTER_EVENT, POINTER_LEAVE_EVENT],
+    events: &[
+        BUTTON_CLICK_EVENT,
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+        POINTER_ENTER_EVENT,
+        POINTER_LEAVE_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -1458,7 +1466,12 @@ const ENTRY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         ENTRY_MAX_LENGTH_PROPERTY,
         ENTRY_INPUT_PURPOSE_PROPERTY,
     ],
-    events: &[ENTRY_CHANGE_EVENT, ENTRY_ACTIVATE_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
+    events: &[
+        ENTRY_CHANGE_EVENT,
+        ENTRY_ACTIVATE_EVENT,
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -1664,7 +1677,11 @@ const SPIN_BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         SPIN_BUTTON_WRAP_PROPERTY,
         SPIN_BUTTON_NUMERIC_PROPERTY,
     ],
-    events: &[SPIN_BUTTON_VALUE_CHANGED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
+    events: &[
+        SPIN_BUTTON_VALUE_CHANGED_EVENT,
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };

@@ -114,7 +114,13 @@ async fn find_refs_returns_none_for_out_of_range_position() {
     let text = "value answer = 42\n";
     let (state, uri, _) = open_inline("refs-oor.aivi", text);
 
-    let params = reference_params(uri, Position { line: 99, character: 0 });
+    let params = reference_params(
+        uri,
+        Position {
+            line: 99,
+            character: 0,
+        },
+    );
     let result = references(params, state).await;
 
     assert!(

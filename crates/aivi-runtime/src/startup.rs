@@ -10,8 +10,7 @@ use aivi_backend::{
     ItemKind as BackendItemKind, KernelEvaluator, KernelId, LayoutKind, MovingRuntimeValueStore,
     PipelineId as BackendPipelineId, Program as BackendProgram, RuntimeCallable,
     RuntimeDbConnection, RuntimeRecordField, RuntimeSumValue, RuntimeValue,
-    SourceId as BackendSourceId, StageKind as BackendStageKind,
-    TaskFunctionApplier,
+    SourceId as BackendSourceId, StageKind as BackendStageKind, TaskFunctionApplier,
     TemporalStage as BackendTemporalStage,
 };
 use aivi_core as core;
@@ -27,8 +26,7 @@ use crate::{
     providers::SourceProviderContext,
     scheduler::DependencyValues,
     task_executor::{
-        RuntimeDbCommitInvalidation,
-        execute_runtime_value_with_context_effects_and_applier,
+        RuntimeDbCommitInvalidation, execute_runtime_value_with_context_effects_and_applier,
     },
 };
 
@@ -140,17 +138,11 @@ impl BackendLinkedRuntime {
 
         // Enrich with pipeline IDs from derived signals.
         for (handle, linked) in &self.derived_signals {
-            map.set_signal_pipeline_ids(
-                handle.as_signal(),
-                linked.pipeline_ids.clone(),
-            );
+            map.set_signal_pipeline_ids(handle.as_signal(), linked.pipeline_ids.clone());
         }
         // Enrich with pipeline IDs from reactive signals.
         for (_handle, linked) in &self.reactive_signals {
-            map.set_signal_pipeline_ids(
-                linked.signal,
-                linked.pipeline_ids.clone(),
-            );
+            map.set_signal_pipeline_ids(linked.signal, linked.pipeline_ids.clone());
         }
 
         map
@@ -2647,7 +2639,7 @@ impl<'a> LinkBuilder<'a> {
                 .filter(|option| {
                     !matches!(
                         option.option_name.as_ref(),
-                        "decode" | "refreshOn" | "reloadOn" | "activeWhen"
+                        "decode" | "refreshOn" | "reloadOn" | "restartOn" | "activeWhen"
                     )
                 })
                 .map(|option| LinkedSourceOption {
@@ -3706,6 +3698,44 @@ signal users : Signal Text
                 ..
             } if instance == binding.instance && item == required_item
         ));
+    }
+
+    #[test]
+    fn linked_runtime_keeps_timer_restart_on_in_lifecycle_metadata() {
+        let lowered = lower_text(
+            "runtime-startup-timer-restart-on.aivi",
+            r#"
+signal rearm = True
+
+@source timer.after 120 with {
+    restartOn: rearm
+}
+signal ready : Signal Unit
+"#,
+        );
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed");
+        let ready = item_id(lowered.hir.module(), "ready");
+        let instance = linked
+            .source_by_owner(ready)
+            .expect("timer source binding should exist")
+            .instance;
+        let config = linked
+            .evaluate_source_config(instance)
+            .expect("timer restartOn should stay in lifecycle metadata, not eager provider config");
+        assert!(
+            config
+                .options
+                .iter()
+                .all(|option| option.option_name.as_ref() != "restartOn"),
+            "timer restartOn should not be evaluated into provider options"
+        );
     }
 
     #[test]

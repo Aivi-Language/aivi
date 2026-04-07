@@ -583,148 +583,152 @@ impl EqDeriver {
                         });
                     }
                     match types.node(ty) {
-                    TypeNode::Primitive(scalar) => {
-                        ancestors.remove(&ty);
-                        match scalar {
-                        // Bytes is excluded from structural Eq derivation because byte sequences
-                        // have no canonical structural equality in the source language: two Bytes
-                        // values wrapping the same content from different allocations are
-                        // indistinguishable at the type level, and the runtime representation may
-                        // use reference semantics or content-addressed handles. Requiring an
-                        // explicit Eq instance (rather than deriving one silently) forces callers
-                        // to pick the comparison semantics they actually need.
-                        PrimitiveType::Bytes => {
-                            return Err(EqDerivationError {
-                                head,
-                                path: path.clone(),
-                                kind: EqDerivationErrorKind::UnsupportedPrimitive {
-                                    ty,
-                                    primitive: *scalar,
-                                },
+                        TypeNode::Primitive(scalar) => {
+                            ancestors.remove(&ty);
+                            match scalar {
+                                // Bytes is excluded from structural Eq derivation because byte sequences
+                                // have no canonical structural equality in the source language: two Bytes
+                                // values wrapping the same content from different allocations are
+                                // indistinguishable at the type level, and the runtime representation may
+                                // use reference semantics or content-addressed handles. Requiring an
+                                // explicit Eq instance (rather than deriving one silently) forces callers
+                                // to pick the comparison semantics they actually need.
+                                PrimitiveType::Bytes => {
+                                    return Err(EqDerivationError {
+                                        head,
+                                        path: path.clone(),
+                                        kind: EqDerivationErrorKind::UnsupportedPrimitive {
+                                            ty,
+                                            primitive: *scalar,
+                                        },
+                                    });
+                                }
+                                _ => {
+                                    walker.push_assembled(push_step(
+                                        &mut steps,
+                                        EqStep::IntrinsicScalar {
+                                            ty,
+                                            scalar: *scalar,
+                                        },
+                                    ));
+                                }
+                            }
+                        }
+                        TypeNode::Reference(reference) => {
+                            ancestors.remove(&ty);
+                            if context.contains(*reference) {
+                                walker.push_assembled(push_step(
+                                    &mut steps,
+                                    EqStep::FromContext {
+                                        ty,
+                                        reference: *reference,
+                                    },
+                                ));
+                            } else {
+                                return Err(EqDerivationError {
+                                    head,
+                                    path: path.clone(),
+                                    kind: EqDerivationErrorKind::MissingEq {
+                                        ty,
+                                        reference: *reference,
+                                    },
+                                });
+                            }
+                        }
+                        TypeNode::Tuple(elements) => {
+                            walker.push_frame(Frame::ExitTuple {
+                                ty,
+                                arity: elements.len(),
                             });
-                        }
-                        _ => {
-                            walker.push_assembled(push_step(
-                                &mut steps,
-                                EqStep::IntrinsicScalar {
-                                    ty,
-                                    scalar: *scalar,
-                                },
-                            ));
-                        }
-                        }
-                    }
-                    TypeNode::Reference(reference) => {
-                        ancestors.remove(&ty);
-                        if context.contains(*reference) {
-                            walker.push_assembled(push_step(
-                                &mut steps,
-                                EqStep::FromContext {
-                                    ty,
-                                    reference: *reference,
-                                },
-                            ));
-                        } else {
-                            return Err(EqDerivationError {
-                                head,
-                                path: path.clone(),
-                                kind: EqDerivationErrorKind::MissingEq {
-                                    ty,
-                                    reference: *reference,
-                                },
-                            });
-                        }
-                    }
-                    TypeNode::Tuple(elements) => {
-                        walker.push_frame(Frame::ExitTuple {
-                            ty,
-                            arity: elements.len(),
-                        });
-                        for (index, element) in elements.iter().copied().enumerate().rev() {
-                            schedule_child(
-                                &mut walker,
-                                element,
-                                EqPathSegment::TupleElement(index),
-                            );
-                        }
-                    }
-                    TypeNode::Record(record) => {
-                        if record.closedness() != Closedness::Closed {
-                            return Err(EqDerivationError {
-                                head,
-                                path: path.clone(),
-                                kind: EqDerivationErrorKind::OpenRecord { ty },
-                            });
-                        }
-
-                        walker.push_frame(Frame::ExitRecord {
-                            ty,
-                            field_names: record
-                                .fields()
-                                .iter()
-                                .map(|field| field.name().clone())
-                                .collect(),
-                        });
-                        for field in record.fields().iter().rev() {
-                            schedule_child(
-                                &mut walker,
-                                field.ty(),
-                                EqPathSegment::RecordField(field.name().clone()),
-                            );
-                        }
-                    }
-                    TypeNode::Sum(sum) => {
-                        if sum.closedness() != Closedness::Closed {
-                            return Err(EqDerivationError {
-                                head,
-                                path: path.clone(),
-                                kind: EqDerivationErrorKind::OpenSum { ty },
-                            });
-                        }
-
-                        walker.push_frame(Frame::ExitSum {
-                            ty,
-                            variants: sum
-                                .variants()
-                                .iter()
-                                .map(|variant| PendingVariant {
-                                    name: variant.name().clone(),
-                                    has_payload: variant.payload().is_some(),
-                                })
-                                .collect(),
-                        });
-                        for variant in sum.variants().iter().rev() {
-                            if let Some(payload) = variant.payload() {
+                            for (index, element) in elements.iter().copied().enumerate().rev() {
                                 schedule_child(
                                     &mut walker,
-                                    payload,
-                                    EqPathSegment::SumVariantPayload(variant.name().clone()),
+                                    element,
+                                    EqPathSegment::TupleElement(index),
                                 );
                             }
                         }
-                    }
-                    TypeNode::Domain(domain) => {
-                        walker.push_frame(Frame::ExitDomain { ty });
-                        schedule_child(&mut walker, domain.carrier(), EqPathSegment::DomainCarrier);
-                    }
-                    TypeNode::List(element) => {
-                        walker.push_frame(Frame::ExitList { ty });
-                        schedule_child(&mut walker, *element, EqPathSegment::ListElement);
-                    }
-                    TypeNode::Option(element) => {
-                        walker.push_frame(Frame::ExitOption { ty });
-                        schedule_child(&mut walker, *element, EqPathSegment::OptionValue);
-                    }
-                    TypeNode::Result { error, value } => {
-                        walker.push_frame(Frame::ExitResult { ty });
-                        schedule_child(&mut walker, *value, EqPathSegment::ResultValue);
-                        schedule_child(&mut walker, *error, EqPathSegment::ResultError);
-                    }
-                    TypeNode::Validation { error, value } => {
-                        walker.push_frame(Frame::ExitValidation { ty });
-                        schedule_child(&mut walker, *value, EqPathSegment::ValidationValue);
-                        schedule_child(&mut walker, *error, EqPathSegment::ValidationError);
-                    }
+                        TypeNode::Record(record) => {
+                            if record.closedness() != Closedness::Closed {
+                                return Err(EqDerivationError {
+                                    head,
+                                    path: path.clone(),
+                                    kind: EqDerivationErrorKind::OpenRecord { ty },
+                                });
+                            }
+
+                            walker.push_frame(Frame::ExitRecord {
+                                ty,
+                                field_names: record
+                                    .fields()
+                                    .iter()
+                                    .map(|field| field.name().clone())
+                                    .collect(),
+                            });
+                            for field in record.fields().iter().rev() {
+                                schedule_child(
+                                    &mut walker,
+                                    field.ty(),
+                                    EqPathSegment::RecordField(field.name().clone()),
+                                );
+                            }
+                        }
+                        TypeNode::Sum(sum) => {
+                            if sum.closedness() != Closedness::Closed {
+                                return Err(EqDerivationError {
+                                    head,
+                                    path: path.clone(),
+                                    kind: EqDerivationErrorKind::OpenSum { ty },
+                                });
+                            }
+
+                            walker.push_frame(Frame::ExitSum {
+                                ty,
+                                variants: sum
+                                    .variants()
+                                    .iter()
+                                    .map(|variant| PendingVariant {
+                                        name: variant.name().clone(),
+                                        has_payload: variant.payload().is_some(),
+                                    })
+                                    .collect(),
+                            });
+                            for variant in sum.variants().iter().rev() {
+                                if let Some(payload) = variant.payload() {
+                                    schedule_child(
+                                        &mut walker,
+                                        payload,
+                                        EqPathSegment::SumVariantPayload(variant.name().clone()),
+                                    );
+                                }
+                            }
+                        }
+                        TypeNode::Domain(domain) => {
+                            walker.push_frame(Frame::ExitDomain { ty });
+                            schedule_child(
+                                &mut walker,
+                                domain.carrier(),
+                                EqPathSegment::DomainCarrier,
+                            );
+                        }
+                        TypeNode::List(element) => {
+                            walker.push_frame(Frame::ExitList { ty });
+                            schedule_child(&mut walker, *element, EqPathSegment::ListElement);
+                        }
+                        TypeNode::Option(element) => {
+                            walker.push_frame(Frame::ExitOption { ty });
+                            schedule_child(&mut walker, *element, EqPathSegment::OptionValue);
+                        }
+                        TypeNode::Result { error, value } => {
+                            walker.push_frame(Frame::ExitResult { ty });
+                            schedule_child(&mut walker, *value, EqPathSegment::ResultValue);
+                            schedule_child(&mut walker, *error, EqPathSegment::ResultError);
+                        }
+                        TypeNode::Validation { error, value } => {
+                            walker.push_frame(Frame::ExitValidation { ty });
+                            schedule_child(&mut walker, *value, EqPathSegment::ValidationValue);
+                            schedule_child(&mut walker, *error, EqPathSegment::ValidationError);
+                        }
                     }
                 }
                 Frame::PushPath(segment) => path.push(segment),

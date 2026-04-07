@@ -1122,12 +1122,10 @@ fn lower_gate_runtime_expr_with_purity(
                             span: expr.span,
                             ty,
                             kind: GateRuntimeExprKind::Text(GateRuntimeTextLiteral {
-                                segments: vec![GateRuntimeTextSegment::Fragment(
-                                    TextFragment {
-                                        raw: pattern.into(),
-                                        span: expr.span,
-                                    },
-                                )],
+                                segments: vec![GateRuntimeTextSegment::Fragment(TextFragment {
+                                    raw: pattern.into(),
+                                    span: expr.span,
+                                })],
                             }),
                         });
                     }
@@ -1793,9 +1791,10 @@ fn lower_runtime_pipe_expr(
                 ));
             }
             PipeStageKind::Map { expr } => {
-                let element = current.fanout_element().cloned().ok_or(
-                    GateElaborationBlocker::UnknownRuntimeExprType { span: stage.span },
-                )?;
+                let element = current
+                    .fanout_element()
+                    .cloned()
+                    .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: stage.span })?;
                 let body = lower_gate_pipe_body_runtime_expr_with_purity(
                     module, *expr, &stage_env, &element, typing, purity,
                 )?;
@@ -1934,11 +1933,15 @@ fn ambient_item_for_import(module: &Module, import_id: ImportId) -> Option<ItemI
     let ImportBindingMetadata::AmbientValue { name } = &binding.metadata else {
         return None;
     };
-    module.ambient_items().iter().copied().find(|&id| match &module.items()[id] {
-        Item::Function(f) => f.name.text() == name.as_ref(),
-        Item::Value(v) => v.name.text() == name.as_ref(),
-        _ => false,
-    })
+    module
+        .ambient_items()
+        .iter()
+        .copied()
+        .find(|&id| match &module.items()[id] {
+            Item::Function(f) => f.name.text() == name.as_ref(),
+            Item::Value(v) => v.name.text() == name.as_ref(),
+            _ => false,
+        })
 }
 
 fn runtime_reference_for_name(

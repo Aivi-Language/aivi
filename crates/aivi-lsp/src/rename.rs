@@ -28,9 +28,9 @@ pub async fn prepare_rename(
             character: lsp_pos.character,
         },
     ) {
-        NavigationLookup::Targets(_) => {
-            Some(PrepareRenameResponse::DefaultBehavior { default_behavior: true })
-        }
+        NavigationLookup::Targets(_) => Some(PrepareRenameResponse::DefaultBehavior {
+            default_behavior: true,
+        }),
         NavigationLookup::NoSite | NavigationLookup::NoTargets => None,
     }
 }
@@ -70,10 +70,7 @@ pub async fn rename(params: RenameParams, state: Arc<ServerState>) -> Option<Wor
                     new_text: new_name.clone(),
                 })
                 .collect::<Vec<_>>();
-            changes
-                .entry(file_uri.clone())
-                .or_default()
-                .extend(edits);
+            changes.entry(file_uri.clone()).or_default().extend(edits);
         }
     }
 

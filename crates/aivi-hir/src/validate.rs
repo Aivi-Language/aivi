@@ -2014,8 +2014,7 @@ impl Validator<'_> {
                         }
                     }
                 }
-                Item::Use(_) | Item::Export(_)
-            | Item::Hoist(_) => {}
+                Item::Use(_) | Item::Export(_) | Item::Hoist(_) => {}
             }
         }
     }
@@ -5007,7 +5006,7 @@ impl Validator<'_> {
                 | Item::SourceProviderContract(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => {}
+                | Item::Hoist(_) => {}
             }
         }
 
@@ -5713,7 +5712,9 @@ impl Validator<'_> {
         diagnostic = diagnostic.with_note(
             "current resolved-HIR exhaustiveness checking covers only ordinary `Bool`, `Option`, `Result`, `Validation`, and same-module closed sums whose scrutinee type is already known here; signal-lifted case splits, imported sums, and harder unannotated scrutinee inference remain later work",
         );
-        diagnostic = diagnostic.with_help(format!("add branches for {missing_list} to make the pattern exhaustive"));
+        diagnostic = diagnostic.with_help(format!(
+            "add branches for {missing_list} to make the pattern exhaustive"
+        ));
         self.diagnostics.push(diagnostic);
     }
 
@@ -8116,7 +8117,12 @@ impl Validator<'_> {
                 }
                 TermResolution::AmbiguousHoistedImports(candidates) => {
                     for import_id in candidates.iter().copied() {
-                        this.require_import(reference.span(), "term reference", "import", import_id);
+                        this.require_import(
+                            reference.span(),
+                            "term reference",
+                            "import",
+                            import_id,
+                        );
                     }
                 }
                 TermResolution::Builtin(_) => {}
@@ -8937,8 +8943,7 @@ fn item_name(item: Option<&Item>) -> Option<String> {
         Item::SourceProviderContract(item) => {
             Some(item.provider.key().unwrap_or("<provider>").to_owned())
         }
-        Item::Instance(_) | Item::Use(_) | Item::Export(_)
-            | Item::Hoist(_) => None,
+        Item::Instance(_) | Item::Use(_) | Item::Export(_) | Item::Hoist(_) => None,
     }
 }
 
@@ -8960,9 +8965,7 @@ fn levenshtein(a: &str, b: &str) -> usize {
         curr[0] = i + 1;
         for (j, b_char) in b.chars().enumerate() {
             let cost = if a_char == b_char { 0 } else { 1 };
-            curr[j + 1] = (prev[j + 1] + 1)
-                .min(curr[j] + 1)
-                .min(prev[j] + cost);
+            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -10124,7 +10127,10 @@ value resultLabel =
         variant_name: &str,
         fields: Vec<crate::TypeId>,
     ) -> crate::ItemId {
-        let wrapped_fields = fields.into_iter().map(|ty| crate::hir::TypeVariantField { label: None, ty }).collect();
+        let wrapped_fields = fields
+            .into_iter()
+            .map(|ty| crate::hir::TypeVariantField { label: None, ty })
+            .collect();
         module
             .push_item(Item::Type(TypeItem {
                 header: ItemHeader {
@@ -12709,7 +12715,10 @@ signal login : Signal (Result HttpError Session)
                     TypeVariant {
                         span: unit_span(),
                         name: name("TriggerBox"),
-                        fields: vec![crate::hir::TypeVariantField { label: None, ty: signal_payload }],
+                        fields: vec![crate::hir::TypeVariantField {
+                            label: None,
+                            ty: signal_payload,
+                        }],
                     },
                     Vec::new(),
                 )),

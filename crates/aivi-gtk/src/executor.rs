@@ -2812,9 +2812,8 @@ value view =
         let show_instance = GtkNodeInstance::root(root_widget_data.default_children.roots[0]);
 
         let host = FallibleTestHost::with_pending_visibility_failure();
-        let mut executor =
-            GtkRuntimeExecutor::<FallibleTestHost, TestValue>::new(graph, host)
-                .expect("executor should mount the root box");
+        let mut executor = GtkRuntimeExecutor::<FallibleTestHost, TestValue>::new(graph, host)
+            .expect("executor should mount the root box");
 
         let root_widget = executor
             .root_widgets()
@@ -2906,11 +2905,19 @@ value view =
             .expect("root widget list should contain the box");
         let button_widget = {
             let children = executor.host().widget(&root_widget).children.clone();
-            assert_eq!(children.len(), 1, "Box should have one child after show mount");
+            assert_eq!(
+                children.len(),
+                1,
+                "Box should have one child after show mount"
+            );
             children[0].clone()
         };
         let routes = executor.host().widget(&button_widget).routes.clone();
-        assert_eq!(routes.len(), 1, "Button should have one connected event handler");
+        assert_eq!(
+            routes.len(),
+            1,
+            "Button should have one connected event handler"
+        );
         let route_id = routes[0];
 
         // Unmount the show subtree.

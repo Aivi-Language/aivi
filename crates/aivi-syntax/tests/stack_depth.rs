@@ -57,5 +57,8 @@ fn parser_handles_deep_record_type_without_stack_overflow() {
 
 #[test]
 fn parser_handles_deep_nested_list_pattern_without_stack_overflow() {
-    parse_unchecked("deep_list_pattern.aivi", &deep_nested_list_pattern_source(100));
+    parse_unchecked(
+        "deep_list_pattern.aivi",
+        &deep_nested_list_pattern_source(100),
+    );
 }

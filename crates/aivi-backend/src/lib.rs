@@ -29,8 +29,8 @@ mod runtime;
 mod validate;
 
 pub use aivi_core::{Arena, ArenaId, ArenaOverflow};
-pub use codegen::{CodegenError, CodegenErrors, CompiledKernel, CompiledProgram, compile_program};
 pub use cache::compile_program_cached;
+pub use codegen::{CodegenError, CodegenErrors, CompiledKernel, CompiledProgram, compile_program};
 pub use gc::{
     CommittedValueStore, InlineCommittedValueStore, MovingRuntimeValueStore, RuntimeGcHandle,
 };

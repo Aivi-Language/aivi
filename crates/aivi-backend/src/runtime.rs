@@ -1448,7 +1448,9 @@ impl<'a> KernelEvaluator<'a> {
             .items()
             .get(item)
             .ok_or(EvaluationError::UnknownItem { item })?;
-        let kernel = item_decl.body.ok_or(EvaluationError::MissingItemBody { item })?;
+        let kernel = item_decl
+            .body
+            .ok_or(EvaluationError::MissingItemBody { item })?;
         if !item_decl.parameters.is_empty() {
             return Ok(RuntimeValue::Callable(RuntimeCallable::ItemBody {
                 item,
@@ -3174,34 +3176,33 @@ impl<'a> KernelEvaluator<'a> {
             },
             BuiltinApplyCarrier::Task => {
                 match (strip_signal(functions), strip_signal(values)) {
-                    (
-                        RuntimeValue::Task(function_plan),
-                        RuntimeValue::Task(value_plan),
-                    ) => match (function_plan, value_plan) {
-                        // Both Pure: apply eagerly.
-                        (
-                            RuntimeTaskPlan::Pure { value: function },
-                            RuntimeTaskPlan::Pure { value },
-                        ) => {
-                            let result = self.apply_callable(
-                                kernel_id,
-                                expr,
-                                *function,
-                                vec![*value],
-                                globals,
-                            )?;
-                            Ok(RuntimeValue::Task(RuntimeTaskPlan::Pure {
-                                value: Box::new(result),
-                            }))
+                    (RuntimeValue::Task(function_plan), RuntimeValue::Task(value_plan)) => {
+                        match (function_plan, value_plan) {
+                            // Both Pure: apply eagerly.
+                            (
+                                RuntimeTaskPlan::Pure { value: function },
+                                RuntimeTaskPlan::Pure { value },
+                            ) => {
+                                let result = self.apply_callable(
+                                    kernel_id,
+                                    expr,
+                                    *function,
+                                    vec![*value],
+                                    globals,
+                                )?;
+                                Ok(RuntimeValue::Task(RuntimeTaskPlan::Pure {
+                                    value: Box::new(result),
+                                }))
+                            }
+                            // Non-pure: emit a deferred Apply plan.
+                            (function_plan, value_plan) => {
+                                Ok(RuntimeValue::Task(RuntimeTaskPlan::Apply {
+                                    function_task: Box::new(function_plan),
+                                    value_task: Box::new(value_plan),
+                                }))
+                            }
                         }
-                        // Non-pure: emit a deferred Apply plan.
-                        (function_plan, value_plan) => {
-                            Ok(RuntimeValue::Task(RuntimeTaskPlan::Apply {
-                                function_task: Box::new(function_plan),
-                                value_task: Box::new(value_plan),
-                            }))
-                        }
-                    },
+                    }
                     _ => Err(EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,

@@ -19,10 +19,12 @@ pub async fn completion(
     let current_analysis = FileAnalysis::load(&state.db, file);
 
     // Reject out-of-range cursor positions before returning any items.
-    current_analysis.source.lsp_position_to_offset(LspPosition {
-        line: lsp_pos.line,
-        character: lsp_pos.character,
-    })?;
+    current_analysis
+        .source
+        .lsp_position_to_offset(LspPosition {
+            line: lsp_pos.line,
+            character: lsp_pos.character,
+        })?;
 
     let mut items: Vec<CompletionItem> = Vec::new();
 

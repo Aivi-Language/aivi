@@ -59,6 +59,7 @@ longer part of the public external boundary.
 | `immediate` | `Bool` | Supported. Publishes once immediately before the repeating cadence starts. |
 | `jitter` | `Duration` | Supported. Adds a random positive offset (from 0 up to the jitter value) to each tick interval. The jitter must not exceed the base interval. |
 | `coalesce` | `Bool` | Supported. `True` (default) coalesces missed ticks into a single event per sleep cycle. `False` fires all overdue ticks individually. |
+| `restartOn` | `Signal A` | Supported as an explicit trigger option. Reconfigures the timer and restarts its cadence. |
 | `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
 
 **Notes**
@@ -70,7 +71,7 @@ longer part of the public external boundary.
 
 **Form:** `@source timer.after delay`
 
-Uses the same option surface and current limitations as `timer.every`, but fires once instead of repeating.
+Uses the same option surface and current limitations as `timer.every`, but fires once instead of repeating. `restartOn` re-arms the one-shot delay each time its trigger fires.
 
 ## HTTP
 

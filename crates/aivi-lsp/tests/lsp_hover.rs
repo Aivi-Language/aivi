@@ -33,7 +33,10 @@ async fn hover_at_value_name_returns_kind_label() {
     let (state, uri) = open_inline("hover-value.aivi", "value answer = 42\n");
     let result = hover(hover_params(uri, 0, 6), state).await;
 
-    assert!(result.is_some(), "hover at a value name should return a result");
+    assert!(
+        result.is_some(),
+        "hover at a value name should return a result"
+    );
 
     if let Some(hover_info) = result {
         if let HoverContents::Markup(markup) = hover_info.contents {
@@ -65,7 +68,10 @@ async fn hover_on_func_declaration_uses_func_kind_label() {
     let (state, uri) = open_inline("hover-func.aivi", text);
     let result = hover(hover_params(uri, 1, 5), state).await;
 
-    assert!(result.is_some(), "hover on a func name should return a result");
+    assert!(
+        result.is_some(),
+        "hover on a func name should return a result"
+    );
 
     if let Some(hover_info) = result {
         if let HoverContents::Markup(markup) = hover_info.contents {
@@ -93,7 +99,10 @@ async fn hover_on_signal_declaration_uses_signal_kind_label() {
     let (state, uri) = open_inline("hover-signal.aivi", text);
     let result = hover(hover_params(uri, 0, 7), state).await;
 
-    assert!(result.is_some(), "hover on a signal name should return a result");
+    assert!(
+        result.is_some(),
+        "hover on a signal name should return a result"
+    );
 
     if let Some(hover_info) = result {
         if let HoverContents::Markup(markup) = hover_info.contents {

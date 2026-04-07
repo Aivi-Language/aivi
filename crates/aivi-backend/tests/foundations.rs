@@ -4407,8 +4407,7 @@ fun combine:Bytes = left:Bytes right:Bytes=>    append left right
 "#,
     );
 
-    compile_program(&backend)
-        .expect("bytes.append should compile with runtime function call");
+    compile_program(&backend).expect("bytes.append should compile with runtime function call");
 }
 
 #[test]
@@ -5385,8 +5384,7 @@ fn cranelift_codegen_compiles_list_literal() {
     let body = backend.items()[find_item(&backend, "nums")]
         .body
         .expect("nums should carry a body kernel");
-    let compiled =
-        compile_program(&backend).expect("list literal should compile");
+    let compiled = compile_program(&backend).expect("list literal should compile");
     let artifact = compiled
         .kernel(body)
         .expect("compiled program should retain list kernel metadata");
@@ -5409,8 +5407,7 @@ fn cranelift_codegen_compiles_set_literal() {
     let body = backend.items()[find_item(&backend, "tags")]
         .body
         .expect("tags should carry a body kernel");
-    let compiled =
-        compile_program(&backend).expect("set literal should compile");
+    let compiled = compile_program(&backend).expect("set literal should compile");
     let artifact = compiled
         .kernel(body)
         .expect("compiled program should retain set kernel metadata");
@@ -5428,8 +5425,7 @@ fn cranelift_codegen_compiles_map_literal() {
     let body = backend.items()[find_item(&backend, "headers")]
         .body
         .expect("headers should carry a body kernel");
-    let compiled =
-        compile_program(&backend).expect("map literal should compile");
+    let compiled = compile_program(&backend).expect("map literal should compile");
     let artifact = compiled
         .kernel(body)
         .expect("compiled program should retain map kernel metadata");
@@ -5560,8 +5556,7 @@ fun dec_mod:Decimal = a:Decimal b:Decimal => a % b
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("all decimal arithmetic ops should compile");
+    let compiled = compile_program(&backend).expect("all decimal arithmetic ops should compile");
 
     for name in &["dec_add", "dec_sub", "dec_mul", "dec_div", "dec_mod"] {
         let body = backend.items()[find_item(&backend, name)]
@@ -5593,8 +5588,7 @@ fun big_mod:BigInt = a:BigInt b:BigInt => a % b
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("all bigint arithmetic ops should compile");
+    let compiled = compile_program(&backend).expect("all bigint arithmetic ops should compile");
 
     for name in &["big_add", "big_sub", "big_mul", "big_div", "big_mod"] {
         let body = backend.items()[find_item(&backend, name)]
@@ -5627,8 +5621,7 @@ fun dec_ne:Bool = a:Decimal b:Decimal => a != b
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("decimal comparison ops should compile");
+    let compiled = compile_program(&backend).expect("decimal comparison ops should compile");
 
     for name in &["dec_gt", "dec_lt", "dec_gte", "dec_lte", "dec_eq", "dec_ne"] {
         let body = backend.items()[find_item(&backend, name)]
@@ -5661,8 +5654,7 @@ fun big_ne:Bool = a:BigInt b:BigInt => a != b
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("bigint comparison ops should compile");
+    let compiled = compile_program(&backend).expect("bigint comparison ops should compile");
 
     for name in &["big_gt", "big_lt", "big_gte", "big_lte", "big_eq", "big_ne"] {
         let body = backend.items()[find_item(&backend, name)]
@@ -5816,8 +5808,7 @@ value manyLabel = classify [1, 2, 3]
     // List patterns emit icmp_imm eq for length discrimination (e.g. == 0 for [],
     // == 1 for [_]). The aivi_list_len calls appear as fn references in CLIF.
     assert!(
-        artifact.clif.contains("icmp_imm eq")
-            && artifact.clif.contains("call fn"),
+        artifact.clif.contains("icmp_imm eq") && artifact.clif.contains("call fn"),
         "list pattern should emit length checks via list_len calls; CLIF was:\n{}",
         artifact.clif
     );
@@ -5889,11 +5880,16 @@ fun mod_durations:Duration = a:Duration b:Duration=>    a % b
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("domain binary arithmetic should compile");
+    let compiled = compile_program(&backend).expect("domain binary arithmetic should compile");
     let ptr = clif_pointer_ty();
 
-    for name in ["add_durations", "sub_durations", "mul_durations", "div_durations", "mod_durations"] {
+    for name in [
+        "add_durations",
+        "sub_durations",
+        "mul_durations",
+        "div_durations",
+        "mod_durations",
+    ] {
         let item = find_item(&backend, name);
         let body = backend.items()[item]
             .body
@@ -5901,7 +5897,10 @@ fun mod_durations:Duration = a:Duration b:Duration=>    a % b
         let artifact = compiled
             .kernel(body)
             .expect("compiled program should retain domain arithmetic kernel metadata");
-        assert!(artifact.code_size > 0, "{name} should produce non-empty native code");
+        assert!(
+            artifact.code_size > 0,
+            "{name} should produce non-empty native code"
+        );
         assert!(
             artifact.clif.contains(&format!("({ptr}, {ptr}) -> {ptr}")),
             "{name} CLIF should have (ptr, ptr) -> ptr signature, got:\n{}",
@@ -5931,8 +5930,7 @@ fun gt_durations:Bool = a:Duration b:Duration=>    a > b
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("domain binary comparison should compile");
+    let compiled = compile_program(&backend).expect("domain binary comparison should compile");
     let ptr = clif_pointer_ty();
 
     let item = find_item(&backend, "gt_durations");
@@ -5942,7 +5940,10 @@ fun gt_durations:Bool = a:Duration b:Duration=>    a > b
     let artifact = compiled
         .kernel(body)
         .expect("compiled program should retain domain comparison kernel metadata");
-    assert!(artifact.code_size > 0, "gt_durations should produce non-empty native code");
+    assert!(
+        artifact.code_size > 0,
+        "gt_durations should produce non-empty native code"
+    );
     assert!(
         artifact.clif.contains(&format!("({ptr}, {ptr}) -> i8")),
         "gt_durations CLIF should have (ptr, ptr) -> i8 signature, got:\n{}",
@@ -5972,8 +5973,7 @@ func unwrap_duration = d => d.carrier
 "#,
     );
 
-    let compiled =
-        compile_program(&backend).expect("domain carrier accessor should compile");
+    let compiled = compile_program(&backend).expect("domain carrier accessor should compile");
     let ptr = clif_pointer_ty();
 
     let item = find_item(&backend, "unwrap_duration");
@@ -5983,7 +5983,10 @@ func unwrap_duration = d => d.carrier
     let artifact = compiled
         .kernel(body)
         .expect("compiled program should retain domain carrier kernel metadata");
-    assert!(artifact.code_size > 0, "unwrap_duration should produce non-empty native code");
+    assert!(
+        artifact.code_size > 0,
+        "unwrap_duration should produce non-empty native code"
+    );
     assert!(
         artifact.clif.contains(&format!("({ptr}) -> {ptr}")),
         "unwrap_duration CLIF should have (ptr) -> ptr signature, got:\n{}",
@@ -5996,7 +5999,6 @@ func unwrap_duration = d => d.carrier
     );
     assert!(!compiled.object().is_empty());
 }
-
 
 #[test]
 fn cranelift_codegen_compiles_recurrence_kernels() {
@@ -6088,7 +6090,11 @@ value retried : Task Int Int =
         .kernel(polled_witness.kernel)
         .expect("polled wakeup witness should compile");
     assert!(polled_witness_artifact.code_size > 0);
-    assert!(polled_witness_artifact.symbol.contains("recurrence_witness"));
+    assert!(
+        polled_witness_artifact
+            .symbol
+            .contains("recurrence_witness")
+    );
 
     let retried_witness = retried_recurrence
         .non_source_wakeup
@@ -6098,7 +6104,11 @@ value retried : Task Int Int =
         .kernel(retried_witness.kernel)
         .expect("retried wakeup witness should compile");
     assert!(retried_witness_artifact.code_size > 0);
-    assert!(retried_witness_artifact.symbol.contains("recurrence_witness"));
+    assert!(
+        retried_witness_artifact
+            .symbol
+            .contains("recurrence_witness")
+    );
 
     assert!(!compiled.object().is_empty());
 }

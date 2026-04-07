@@ -61,10 +61,8 @@ mod tests {
 
     #[test]
     fn new_preserves_errors() {
-        let errors = ErrorCollection::new(vec![
-            TestError("first".into()),
-            TestError("second".into()),
-        ]);
+        let errors =
+            ErrorCollection::new(vec![TestError("first".into()), TestError("second".into())]);
         assert!(!errors.is_empty());
         assert_eq!(errors.errors().len(), 2);
         assert_eq!(errors.errors()[0].0, "first");

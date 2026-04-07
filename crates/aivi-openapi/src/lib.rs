@@ -19,7 +19,10 @@ use std::path::Path;
 /// Parse and resolve a spec, then find a single operation by its operationId.
 ///
 /// Returns `None` when the spec cannot be read/parsed, or the operation is absent.
-pub fn parse_spec_and_find_operation(spec_path: &Path, operation_id: &str) -> Option<OperationInfo> {
+pub fn parse_spec_and_find_operation(
+    spec_path: &Path,
+    operation_id: &str,
+) -> Option<OperationInfo> {
     let spec = parse_spec(spec_path).ok()?;
     let resolved = resolve_spec(spec, spec_path).ok()?;
     let (path, op) = operations::find_operation(&resolved, operation_id)?;

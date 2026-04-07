@@ -1,6 +1,8 @@
 use aivi_base::{Diagnostic, SourceFile, Span};
 
-use crate::codes::{INVALID_ESCAPE_SEQUENCE, UNEXPECTED_CHARACTER, UNTERMINATED_REGEX, UNTERMINATED_STRING};
+use crate::codes::{
+    INVALID_ESCAPE_SEQUENCE, UNEXPECTED_CHARACTER, UNTERMINATED_REGEX, UNTERMINATED_STRING,
+};
 
 /// Token kinds required for the Milestone 1 surface grammar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -355,7 +357,9 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
                         source.source_span(esc_offset..esc_end),
                         "unrecognised escape sequence",
                     )
-                    .with_help("valid regex escapes include: \\d, \\w, \\s, \\n, \\t, \\r, \\\\, \\0"),
+                    .with_help(
+                        "valid regex escapes include: \\d, \\w, \\s, \\n, \\t, \\r, \\\\, \\0",
+                    ),
                 );
             }
             at_line_start = false;

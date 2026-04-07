@@ -15,10 +15,7 @@ use crate::{
 /// 2. For every tracked file, walk all navigation sites and collect those
 ///    whose definition targets overlap the sought targets.
 /// 3. Return deduplicated `Location` values.
-pub async fn references(
-    params: ReferenceParams,
-    state: Arc<ServerState>,
-) -> Option<Vec<Location>> {
+pub async fn references(params: ReferenceParams, state: Arc<ServerState>) -> Option<Vec<Location>> {
     let uri = &params.text_document_position.text_document.uri;
     let lsp_pos = params.text_document_position.position;
 

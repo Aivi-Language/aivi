@@ -429,7 +429,10 @@ impl SourceProviderManager {
                 focus_only = focus_only && *f;
             }
         }
-        WindowKeyConfig { capture, focus_only }
+        WindowKeyConfig {
+            capture,
+            focus_only,
+        }
     }
 
     /// Returns `true` when at least one worker thread spawned by this manager
@@ -942,9 +945,7 @@ impl SourceProviderManager {
             ) => {
                 // Stub: runtime implementations are pending. Publish Unit so
                 // downstream signals settle at startup without panicking.
-                let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(
-                    RuntimeValue::Unit,
-                ));
+                let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Unit));
                 let stop = Arc::new(AtomicBool::new(false));
                 ActiveProviderState::Passive {
                     provider: config.provider.clone(),
@@ -954,9 +955,7 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Custom(_) => {
                 // Custom providers publish an initial Unit value so the source
                 // signal is populated and downstream derivations can settle.
-                let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(
-                    RuntimeValue::Unit,
-                ));
+                let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Unit));
                 let stop = Arc::new(AtomicBool::new(false));
                 ActiveProviderState::Passive {
                     provider: config.provider.clone(),
@@ -1204,9 +1203,15 @@ impl TimerPlan {
                 "coalesce" => {
                     coalesce = parse_bool(instance, provider, &option.option_name, &option.value)?;
                 }
+                "restartOn" => {}
                 "activeWhen" => {}
                 "jitter" => {
-                    let dur = parse_option_duration(instance, provider, &option.option_name, &option.value)?;
+                    let dur = parse_option_duration(
+                        instance,
+                        provider,
+                        &option.option_name,
+                        &option.value,
+                    )?;
                     if dur > delay {
                         return Err(SourceProviderExecutionError::StartFailed {
                             instance,
@@ -1225,7 +1230,12 @@ impl TimerPlan {
                 }
             }
         }
-        Ok(Self { delay, jitter, immediate, coalesce })
+        Ok(Self {
+            delay,
+            jitter,
+            immediate,
+            coalesce,
+        })
     }
 }
 
@@ -1778,8 +1788,9 @@ impl ApiPlan {
         for option in &config.options {
             match option.option_name.as_ref() {
                 "baseUrl" => {
-                    base_url = parse_text_option(instance, provider, &option.option_name, &option.value)?
-                        .into();
+                    base_url =
+                        parse_text_option(instance, provider, &option.option_name, &option.value)?
+                            .into();
                 }
                 "headers" => {
                     headers =
@@ -1829,14 +1840,17 @@ impl ApiPlan {
                 }
             }
         }
-        let full_url = format!("{}{}", base_url.trim_end_matches('/'), operation_path.as_ref());
-        let url = Url::parse(&full_url).map_err(|error| {
-            SourceProviderExecutionError::StartFailed {
+        let full_url = format!(
+            "{}{}",
+            base_url.trim_end_matches('/'),
+            operation_path.as_ref()
+        );
+        let url =
+            Url::parse(&full_url).map_err(|error| SourceProviderExecutionError::StartFailed {
                 instance,
                 provider,
                 detail: format!("invalid API URL `{full_url}`: {error}").into_boxed_str(),
-            }
-        })?;
+            })?;
         // Convert to HttpPlan by reusing the underlying HTTP worker.
         // We represent the plan as a zero-cost HttpPlan alias via a helper.
         Ok(Self {
@@ -2073,7 +2087,10 @@ impl NamedEventOutputPlan {
         }
     }
 
-    fn value_for_name(&self, name: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
+    fn value_for_name(
+        &self,
+        name: &str,
+    ) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         match self {
             Self::Text => Ok(Some(RuntimeValue::Text(name.into()))),
             Self::Variants { decode, variants } => {
@@ -2525,7 +2542,10 @@ impl ProcessEventPlan {
         self.variant_value(self.exited.as_ref(), Some(ExternalSourceValue::Int(code)))
     }
 
-    fn failed_value(&self, message: &str) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
+    fn failed_value(
+        &self,
+        message: &str,
+    ) -> Result<Option<RuntimeValue>, SourceDecodeErrorWithPath> {
         self.variant_value(
             self.failed.as_ref(),
             Some(ExternalSourceValue::Text(message.into())),
@@ -3088,7 +3108,10 @@ impl DbusNameStateOutputPlan {
         }
     }
 
-    fn value_for_state(&self, state: &'static str) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
+    fn value_for_state(
+        &self,
+        state: &'static str,
+    ) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
         match self {
             Self::Text => Ok(RuntimeValue::Text(state.into())),
             Self::NamedVariants { decode } => {
@@ -3673,10 +3696,8 @@ fn spawn_dbus_method_worker(
                 .as_deref()
                 .map(|text| {
                     Variant::parse(None, text).map_err(|err| {
-                        format!(
-                            "dbus.method reply option is not a valid GLib variant: {err}"
-                        )
-                        .into_boxed_str()
+                        format!("dbus.method reply option is not a valid GLib variant: {err}")
+                            .into_boxed_str()
                     })
                 })
                 .transpose()?;
@@ -4153,7 +4174,8 @@ fn spawn_socket_worker(
                     let heartbeat_stop = stop.clone();
                     let heartbeat_cancel = port.cancellation();
                     let heartbeat_handle = plan.heartbeat.map(|interval| {
-                        let mut writer = stream.try_clone().expect("TcpStream clone should succeed");
+                        let mut writer =
+                            stream.try_clone().expect("TcpStream clone should succeed");
                         thread::spawn(move || {
                             use std::io::Write;
                             while !heartbeat_stop.load(Ordering::Acquire)
@@ -4265,10 +4287,7 @@ fn spawn_mailbox_worker(
             if let Some(interval) = plan.heartbeat {
                 if last_heartbeat.elapsed() >= interval {
                     last_heartbeat = Instant::now();
-                    if port
-                        .publish(DetachedRuntimeValue::unit())
-                        .is_err()
-                    {
+                    if port.publish(DetachedRuntimeValue::unit()).is_err() {
                         return;
                     }
                 }

@@ -364,7 +364,9 @@ impl<'a> ProgramLowerer<'a> {
                             match &stage.kind {
                                 core::PipeStageKind::Transform { expr, .. }
                                 | core::PipeStageKind::Tap { expr }
-                                | core::PipeStageKind::FanOut { map_expr: expr } => work.push(*expr),
+                                | core::PipeStageKind::FanOut { map_expr: expr } => {
+                                    work.push(*expr)
+                                }
                                 core::PipeStageKind::Debug { .. } => {}
                                 core::PipeStageKind::Gate { predicate, .. } => {
                                     work.push(*predicate);

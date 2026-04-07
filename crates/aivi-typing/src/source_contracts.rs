@@ -255,17 +255,11 @@ impl BuiltinSourceProvider {
             Self::SmtpSend => {
                 SourceContract::new(self, &NO_OPTIONS, HTTP_RECURRENCE, HTTP_LIFECYCLE)
             }
-            Self::DbExec => {
-                SourceContract::new(self, &NO_OPTIONS, HTTP_RECURRENCE, HTTP_LIFECYCLE)
-            }
+            Self::DbExec => SourceContract::new(self, &NO_OPTIONS, HTTP_RECURRENCE, HTTP_LIFECYCLE),
             Self::TimeNowMs => {
                 SourceContract::new(self, &NO_OPTIONS, STATIC_RECURRENCE, STATIC_LIFECYCLE)
             }
-            Self::ApiGet
-            | Self::ApiPost
-            | Self::ApiPut
-            | Self::ApiPatch
-            | Self::ApiDelete => {
+            Self::ApiGet | Self::ApiPost | Self::ApiPut | Self::ApiPatch | Self::ApiDelete => {
                 SourceContract::new(self, api_options(), HTTP_RECURRENCE, HTTP_LIFECYCLE)
             }
         }
@@ -767,12 +761,21 @@ fn timer_options() -> &'static [SourceOptionContract] {
             ),
             SourceOptionContract::new("coalesce", SourceContractType::bool()),
             SourceOptionContract::new(
+                "restartOn",
+                SourceContractType::signal(SourceTypeAtom::parameter(SourceTypeParameter::A)),
+            ),
+            SourceOptionContract::new(
                 "activeWhen",
                 SourceContractType::signal(SourceTypeAtom::primitive(PrimitiveType::Bool)),
             ),
         ]
     })
 }
+
+const TIMER_WAKEUP_OPTIONS: [SourceOptionWakeupContract; 1] = [SourceOptionWakeupContract::new(
+    "restartOn",
+    SourceOptionWakeupCause::TriggerSignal,
+)];
 
 static FS_WATCH_OPTIONS_STORAGE: OnceLock<Vec<SourceOptionContract>> = OnceLock::new();
 
@@ -969,8 +972,10 @@ static NO_OPTIONS: [SourceOptionContract; 0] = [];
 
 const HTTP_RECURRENCE: SourceRecurrenceContract =
     SourceRecurrenceContract::new(None, &HTTP_WAKEUP_OPTIONS);
-const TIMER_RECURRENCE: SourceRecurrenceContract =
-    SourceRecurrenceContract::new(Some(SourceContractIntrinsicWakeup::Timer), &[]);
+const TIMER_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::new(
+    Some(SourceContractIntrinsicWakeup::Timer),
+    &TIMER_WAKEUP_OPTIONS,
+);
 const FS_WATCH_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::new(
     Some(SourceContractIntrinsicWakeup::ProviderDefinedTrigger),
     &[],
@@ -1180,6 +1185,12 @@ mod tests {
             Some(SourceContractIntrinsicWakeup::Timer)
         );
         assert_eq!(timer.wakeup_option("immediate"), None);
+        assert_eq!(
+            timer
+                .wakeup_option("restartOn")
+                .map(|option| option.cause()),
+            Some(SourceOptionWakeupCause::TriggerSignal)
+        );
 
         assert_eq!(fs_read.intrinsic_wakeup(), None);
         assert_eq!(

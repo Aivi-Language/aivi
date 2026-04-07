@@ -290,7 +290,7 @@ fn resolve_decode_mode_name(
                 | Item::Instance(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => None,
+                | Item::Hoist(_) => None,
             }
         }
         ResolutionState::Resolved(TermResolution::Local(_))

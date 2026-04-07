@@ -1027,9 +1027,9 @@ fn handle_tool_call(
             let entry_path = if let Some(path) = args.path {
                 PathBuf::from(path)
             } else {
-                configured_target
-                    .entry_path
-                    .ok_or_else(|| JsonRpcError::tool_failure("no entry path configured; provide `path`"))?
+                configured_target.entry_path.ok_or_else(|| {
+                    JsonRpcError::tool_failure("no entry path configured; provide `path`")
+                })?
             };
             let snapshot =
                 WorkspaceHirSnapshot::load(&entry_path).map_err(JsonRpcError::tool_failure)?;
@@ -1099,7 +1099,11 @@ fn handle_tool_call(
                 diagnostics.push(serialize_diagnostic(diag, &sources));
             }
             tool_success(
-                format!("Found {} diagnostic(s) in `{}`", diagnostics.len(), args.file),
+                format!(
+                    "Found {} diagnostic(s) in `{}`",
+                    diagnostics.len(),
+                    args.file
+                ),
                 json!({ "diagnostics": diagnostics }),
             )
         }
@@ -2873,7 +2877,10 @@ mod tests {
             "the click should update the reversi move summary"
         );
 
-        let clicked_path_refs: Vec<&str> = clicked_path.iter().map(|segment| segment.as_str()).collect();
+        let clicked_path_refs: Vec<&str> = clicked_path
+            .iter()
+            .map(|segment| segment.as_str())
+            .collect();
         let clicked_cell = widget_snapshot_by_path(&result.gtk, &clicked_path_refs)
             .expect("the clicked board cell should still exist in the GTK snapshot");
         assert_eq!(

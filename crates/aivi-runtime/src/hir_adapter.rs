@@ -293,8 +293,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                 continue;
             };
             let signal_name = binding.local_name.text();
-            let synthetic_item_id =
-                hir::ItemId::from_raw(hir_item_count + import_id.as_raw());
+            let synthetic_item_id = hir::ItemId::from_raw(hir_item_count + import_id.as_raw());
             let owner = match graph_builder.add_owner(signal_name, None) {
                 Ok(owner) => owner,
                 Err(err) => {

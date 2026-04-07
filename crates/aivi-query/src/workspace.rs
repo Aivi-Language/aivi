@@ -71,7 +71,10 @@ impl Workspace {
 
             // If the workspace has its own version of this module, do not load
             // the bundled copy at all — not even into the database.
-            if self.resolve_module_file_in_root(db, &self.root, &segments).is_some() {
+            if self
+                .resolve_module_file_in_root(db, &self.root, &segments)
+                .is_some()
+            {
                 continue;
             }
 
@@ -144,8 +147,10 @@ impl Workspace {
             if root == bundled_root.as_path() {
                 if let Ok(relative) = path.strip_prefix(bundled_root) {
                     let key = relative.to_str()?.replace('\\', "/");
-                    if let Some(text) =
-                        STDLIB_EMBEDDED.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
+                    if let Some(text) = STDLIB_EMBEDDED
+                        .iter()
+                        .find(|(k, _)| *k == key)
+                        .map(|(_, v)| *v)
                     {
                         return Some(SourceFile::new(db, path, text.to_owned()));
                     }

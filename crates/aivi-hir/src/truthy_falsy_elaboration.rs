@@ -851,8 +851,7 @@ mod tests {
             .module()
             .validate(ValidationMode::RequireResolvedNames);
         assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code
-                == Some(crate::codes::TRUTHY_FALSY_SUBJECT_NOT_CANONICAL)
+            diagnostic.code == Some(crate::codes::TRUTHY_FALSY_SUBJECT_NOT_CANONICAL)
         }));
 
         let lowered =
@@ -861,8 +860,7 @@ mod tests {
             .module()
             .validate(ValidationMode::RequireResolvedNames);
         assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code
-                == Some(crate::codes::TRUTHY_FALSY_BRANCH_TYPE_MISMATCH)
+            diagnostic.code == Some(crate::codes::TRUTHY_FALSY_BRANCH_TYPE_MISMATCH)
         }));
 
         let lowered =
@@ -871,8 +869,7 @@ mod tests {
             .module()
             .validate(ValidationMode::RequireResolvedNames);
         assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code
-                == Some(crate::codes::INVALID_TRUTHY_FALSY_PROJECTION)
+            diagnostic.code == Some(crate::codes::INVALID_TRUTHY_FALSY_PROJECTION)
         }));
 
         let lowered = lower_fixture("milestone-2/invalid/truthy-falsy-signal-misuse/main.aivi");
@@ -880,12 +877,10 @@ mod tests {
             .module()
             .validate(ValidationMode::RequireResolvedNames);
         assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code
-                == Some(crate::codes::TRUTHY_FALSY_SUBJECT_NOT_CANONICAL)
+            diagnostic.code == Some(crate::codes::TRUTHY_FALSY_SUBJECT_NOT_CANONICAL)
         }));
         assert!(report.diagnostics().iter().any(|diagnostic| {
-            diagnostic.code
-                == Some(crate::codes::INVALID_TRUTHY_FALSY_PROJECTION)
+            diagnostic.code == Some(crate::codes::INVALID_TRUTHY_FALSY_PROJECTION)
         }));
     }
 }

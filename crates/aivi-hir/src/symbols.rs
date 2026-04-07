@@ -325,9 +325,11 @@ fn item_to_lsp_symbol(item: &Item, module: &Module) -> Option<LspSymbol> {
                 children,
             })
         }
-        Item::Instance(_) | Item::Use(_) | Item::Export(_) | Item::Hoist(_) | Item::SourceProviderContract(_) => {
-            None
-        }
+        Item::Instance(_)
+        | Item::Use(_)
+        | Item::Export(_)
+        | Item::Hoist(_)
+        | Item::SourceProviderContract(_) => None,
     }
 }
 

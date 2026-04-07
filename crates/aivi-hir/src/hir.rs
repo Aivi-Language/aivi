@@ -709,7 +709,10 @@ pub enum ImportValueType {
     },
     /// A type variable from a polymorphic function's implicit type parameters.
     /// `index` is the position in the originating function's `type_parameters` list.
-    TypeVariable { index: usize, name: String },
+    TypeVariable {
+        index: usize,
+        name: String,
+    },
     /// A user-defined (non-builtin) type constructor applied to arguments.
     /// The `type_name` is the name in the source module.
     Named {

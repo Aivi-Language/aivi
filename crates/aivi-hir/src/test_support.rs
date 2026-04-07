@@ -5,8 +5,7 @@ use aivi_syntax::parse_module;
 
 use crate::{
     ImportModuleResolution, ImportResolver, Item, ItemId, Module, exports, lower_module,
-    lower_module_with_resolver,
-    resolver::RawHoistItem,
+    lower_module_with_resolver, resolver::RawHoistItem,
 };
 
 pub fn fixture_root() -> PathBuf {
@@ -129,8 +128,10 @@ pub fn item_name(module: &Module, item_id: ItemId) -> &str {
         Item::Signal(item) => item.name.text(),
         Item::Class(item) => item.name.text(),
         Item::Domain(item) => item.name.text(),
-        Item::SourceProviderContract(_) | Item::Instance(_) | Item::Use(_) | Item::Export(_) | Item::Hoist(_) => {
-            "<anonymous>"
-        }
+        Item::SourceProviderContract(_)
+        | Item::Instance(_)
+        | Item::Use(_)
+        | Item::Export(_)
+        | Item::Hoist(_) => "<anonymous>",
     }
 }

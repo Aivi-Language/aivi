@@ -59,19 +59,11 @@ pub fn parse_manifest(workspace_root: &Path) -> Result<AiviManifest, String> {
     if !manifest_path.is_file() {
         return Ok(AiviManifest::default());
     }
-    let content = fs::read_to_string(&manifest_path).map_err(|error| {
-        format!(
-            "failed to read `{}`: {error}",
-            manifest_path.display()
-        )
-    })?;
+    let content = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("failed to read `{}`: {error}", manifest_path.display()))?;
     if content.trim().is_empty() || content.trim().starts_with('#') && !content.contains('[') {
         return Ok(AiviManifest::default());
     }
-    toml::from_str(&content).map_err(|error| {
-        format!(
-            "failed to parse `{}`: {error}",
-            manifest_path.display()
-        )
-    })
+    toml::from_str(&content)
+        .map_err(|error| format!("failed to parse `{}`: {error}", manifest_path.display()))
 }

@@ -48,12 +48,7 @@ fn assert_idempotent(path: &Path) {
         None => return, // skip files with parse errors
     };
     let second = format_text(&first).expect("second format pass should succeed");
-    assert_eq!(
-        first,
-        second,
-        "formatter is not idempotent for {:?}",
-        path
-    );
+    assert_eq!(first, second, "formatter is not idempotent for {:?}", path);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +60,10 @@ fn format_corpus_fixtures() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let base = manifest.join("../../fixtures/frontend");
     let files = collect_aivi_files(&base);
-    assert!(!files.is_empty(), "no .aivi files found under fixtures/frontend/");
+    assert!(
+        !files.is_empty(),
+        "no .aivi files found under fixtures/frontend/"
+    );
     for path in &files {
         assert_idempotent(path);
     }

@@ -275,43 +275,41 @@ fn explicit_item_exported_name(
                 .iter()
                 .find(|variant| variant.name.text() == exported_name)
                 .map(|variant| {
-                    let metadata = builtin_term_metadata(exported_name)
-                        .unwrap_or_else(|| {
-                            // For non-builtin sum constructors, store the owner type name so
-                            // that `import_value_type` can return a non-None GateType for them.
-                            // Zero-arg constructors have no Arrow wrapper; constructors with
-                            // fields wrap the field types in Arrow chains.
-                            let owner_type_name: String = item.name.text().into();
-                            if variant.fields.is_empty() {
-                                ImportBindingMetadata::Value {
-                                    ty: ImportValueType::Named {
-                                        type_name: owner_type_name,
-                                        arguments: Vec::new(),
-                                    },
-                                }
-                            } else {
-                                // Multi-field constructors: build Arrow chain over field types,
-                                // returning the owner Named type.
-                                let result = ImportValueType::Named {
+                    let metadata = builtin_term_metadata(exported_name).unwrap_or_else(|| {
+                        // For non-builtin sum constructors, store the owner type name so
+                        // that `import_value_type` can return a non-None GateType for them.
+                        // Zero-arg constructors have no Arrow wrapper; constructors with
+                        // fields wrap the field types in Arrow chains.
+                        let owner_type_name: String = item.name.text().into();
+                        if variant.fields.is_empty() {
+                            ImportBindingMetadata::Value {
+                                ty: ImportValueType::Named {
                                     type_name: owner_type_name,
                                     arguments: Vec::new(),
-                                };
-                                let ty = variant.fields.iter().rev().fold(result, |acc, field| {
-                                    let param_ty =
-                                        import_value_type(module, field.ty).unwrap_or(
-                                            ImportValueType::Named {
-                                                type_name: "Unknown".into(),
-                                                arguments: Vec::new(),
-                                            },
-                                        );
-                                    ImportValueType::Arrow {
-                                        parameter: Box::new(param_ty),
-                                        result: Box::new(acc),
-                                    }
-                                });
-                                ImportBindingMetadata::Value { ty }
+                                },
                             }
-                        });
+                        } else {
+                            // Multi-field constructors: build Arrow chain over field types,
+                            // returning the owner Named type.
+                            let result = ImportValueType::Named {
+                                type_name: owner_type_name,
+                                arguments: Vec::new(),
+                            };
+                            let ty = variant.fields.iter().rev().fold(result, |acc, field| {
+                                let param_ty = import_value_type(module, field.ty).unwrap_or(
+                                    ImportValueType::Named {
+                                        type_name: "Unknown".into(),
+                                        arguments: Vec::new(),
+                                    },
+                                );
+                                ImportValueType::Arrow {
+                                    parameter: Box::new(param_ty),
+                                    result: Box::new(acc),
+                                }
+                            });
+                            ImportBindingMetadata::Value { ty }
+                        }
+                    });
                     ExportedName {
                         name: exported_name.to_owned(),
                         kind: ExportedNameKind::Value,
@@ -346,8 +344,7 @@ fn explicit_item_exported_name(
                     .iter()
                     .enumerate()
                     .filter_map(|(i, m)| {
-                        (m.kind == DomainMemberKind::Literal
-                            && m.name.text().chars().count() >= 2)
+                        (m.kind == DomainMemberKind::Literal && m.name.text().chars().count() >= 2)
                             .then(|| ImportedDomainLiteralSuffix {
                                 name: m.name.text().into(),
                                 member_index: i,
@@ -393,9 +390,11 @@ fn explicit_item_exported_name(
                 callable_type: None,
                 deprecation,
             }),
-        Item::SourceProviderContract(_) | Item::Instance(_) | Item::Use(_) | Item::Export(_) | Item::Hoist(_) => {
-            None
-        }
+        Item::SourceProviderContract(_)
+        | Item::Instance(_)
+        | Item::Use(_)
+        | Item::Export(_)
+        | Item::Hoist(_) => None,
     }
 }
 
@@ -462,8 +461,7 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
                     .iter()
                     .enumerate()
                     .filter_map(|(i, m)| {
-                        (m.kind == DomainMemberKind::Literal
-                            && m.name.text().chars().count() >= 2)
+                        (m.kind == DomainMemberKind::Literal && m.name.text().chars().count() >= 2)
                             .then(|| ImportedDomainLiteralSuffix {
                                 name: m.name.text().into(),
                                 member_index: i,
@@ -479,9 +477,11 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
             callable_type: None,
             deprecation,
         }),
-        Item::SourceProviderContract(_) | Item::Instance(_) | Item::Use(_) | Item::Export(_) | Item::Hoist(_) => {
-            None
-        }
+        Item::SourceProviderContract(_)
+        | Item::Instance(_)
+        | Item::Use(_)
+        | Item::Export(_)
+        | Item::Hoist(_) => None,
     }
 }
 
@@ -499,13 +499,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
         let Some(Item::Instance(instance)) = module.items().get(item_id) else {
             continue;
         };
-        let class_name: Box<str> = instance
-            .class
-            .path
-            .segments()
-            .last()
-            .text()
-            .into();
+        let class_name: Box<str> = instance.class.path.segments().last().text().into();
         let Some(subject_type_id) = instance.arguments.iter().next().copied() else {
             continue;
         };
@@ -565,9 +559,7 @@ fn exported_instance_member_type(
 fn type_label_for_export(module: &Module, ty: TypeId) -> Option<Box<str>> {
     let type_node = module.types().get(ty)?;
     match &type_node.kind {
-        TypeKind::Name(reference) => {
-            Some(reference.path.segments().last().text().into())
-        }
+        TypeKind::Name(reference) => Some(reference.path.segments().last().text().into()),
         TypeKind::Apply { callee, .. } => type_label_for_export(module, *callee),
         _ => None,
     }
@@ -1103,9 +1095,11 @@ fn poly_applied_import_value_type(
         PolyTypeConstructor::Resolved(ResolvedTypeConstructor::Bundle(
             ImportBundleKind::BuiltinOption,
         )) if arguments.len() == 1 => {
-            return Some(ImportValueType::Option(Box::new(
-                poly_import_value_type(module, arguments[0], params)?,
-            )));
+            return Some(ImportValueType::Option(Box::new(poly_import_value_type(
+                module,
+                arguments[0],
+                params,
+            )?)));
         }
         _ => {}
     }

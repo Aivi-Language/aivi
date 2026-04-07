@@ -267,127 +267,129 @@ impl DecodePlanner {
                         });
                     }
                     match types.node(ty) {
-                    TypeNode::Primitive(scalar) => {
-                        ancestors.remove(&ty);
-                        walker.push_assembled(push_step(
-                            &mut steps,
-                            DecodeStep::IntrinsicScalar {
-                                ty,
-                                scalar: *scalar,
-                            },
-                        ));
-                    }
-                    TypeNode::Reference(reference) => {
-                        ancestors.remove(&ty);
-                        return Err(DecodePlanningError {
-                            subject,
-                            path: path.clone(),
-                            kind: DecodePlanningErrorKind::OpaqueReference {
-                                ty,
-                                reference: *reference,
-                            },
-                        });
-                    }
-                    TypeNode::Tuple(elements) => {
-                        walker.push_frame(Frame::ExitTuple {
-                            ty,
-                            arity: elements.len(),
-                        });
-                        for (index, element) in elements.iter().copied().enumerate().rev() {
-                            schedule_child(
-                                &mut walker,
-                                element,
-                                DecodePathSegment::TupleElement(index),
-                            );
+                        TypeNode::Primitive(scalar) => {
+                            ancestors.remove(&ty);
+                            walker.push_assembled(push_step(
+                                &mut steps,
+                                DecodeStep::IntrinsicScalar {
+                                    ty,
+                                    scalar: *scalar,
+                                },
+                            ));
                         }
-                    }
-                    TypeNode::Record(record) => {
-                        if record.closedness() != Closedness::Closed {
+                        TypeNode::Reference(reference) => {
+                            ancestors.remove(&ty);
                             return Err(DecodePlanningError {
                                 subject,
                                 path: path.clone(),
-                                kind: DecodePlanningErrorKind::OpenRecord { ty },
+                                kind: DecodePlanningErrorKind::OpaqueReference {
+                                    ty,
+                                    reference: *reference,
+                                },
                             });
                         }
-                        walker.push_frame(Frame::ExitRecord {
-                            ty,
-                            fields: record
-                                .fields()
-                                .iter()
-                                .map(|field| PendingField {
-                                    name: field.name().clone(),
-                                    requirement: DecodeFieldRequirement::Required,
-                                })
-                                .collect(),
-                            extra_fields: mode.extra_fields(),
-                        });
-                        for field in record.fields().iter().rev() {
-                            schedule_child(
-                                &mut walker,
-                                field.ty(),
-                                DecodePathSegment::RecordField(field.name().clone()),
-                            );
-                        }
-                    }
-                    TypeNode::Sum(sum) => {
-                        if sum.closedness() != Closedness::Closed {
-                            return Err(DecodePlanningError {
-                                subject,
-                                path: path.clone(),
-                                kind: DecodePlanningErrorKind::OpenSum { ty },
+                        TypeNode::Tuple(elements) => {
+                            walker.push_frame(Frame::ExitTuple {
+                                ty,
+                                arity: elements.len(),
                             });
-                        }
-                        walker.push_frame(Frame::ExitSum {
-                            ty,
-                            variants: sum
-                                .variants()
-                                .iter()
-                                .map(|variant| PendingVariant {
-                                    name: variant.name().clone(),
-                                    has_payload: variant.payload().is_some(),
-                                })
-                                .collect(),
-                            strategy: DecodeSumStrategy::Explicit,
-                        });
-                        for variant in sum.variants().iter().rev() {
-                            if let Some(payload) = variant.payload() {
+                            for (index, element) in elements.iter().copied().enumerate().rev() {
                                 schedule_child(
                                     &mut walker,
-                                    payload,
-                                    DecodePathSegment::SumVariantPayload(variant.name().clone()),
+                                    element,
+                                    DecodePathSegment::TupleElement(index),
                                 );
                             }
                         }
-                    }
-                    TypeNode::Domain(domain) => {
-                        walker.push_frame(Frame::ExitDomain {
-                            ty,
-                            rule: DecodeDomainRule::ExplicitSurface,
-                        });
-                        schedule_child(
-                            &mut walker,
-                            domain.carrier(),
-                            DecodePathSegment::DomainCarrier,
-                        );
-                    }
-                    TypeNode::List(element) => {
-                        walker.push_frame(Frame::ExitList { ty });
-                        schedule_child(&mut walker, *element, DecodePathSegment::ListElement);
-                    }
-                    TypeNode::Option(element) => {
-                        walker.push_frame(Frame::ExitOption { ty });
-                        schedule_child(&mut walker, *element, DecodePathSegment::OptionValue);
-                    }
-                    TypeNode::Result { error, value } => {
-                        walker.push_frame(Frame::ExitResult { ty });
-                        schedule_child(&mut walker, *value, DecodePathSegment::ResultValue);
-                        schedule_child(&mut walker, *error, DecodePathSegment::ResultError);
-                    }
-                    TypeNode::Validation { error, value } => {
-                        walker.push_frame(Frame::ExitValidation { ty });
-                        schedule_child(&mut walker, *value, DecodePathSegment::ValidationValue);
-                        schedule_child(&mut walker, *error, DecodePathSegment::ValidationError);
-                    }
+                        TypeNode::Record(record) => {
+                            if record.closedness() != Closedness::Closed {
+                                return Err(DecodePlanningError {
+                                    subject,
+                                    path: path.clone(),
+                                    kind: DecodePlanningErrorKind::OpenRecord { ty },
+                                });
+                            }
+                            walker.push_frame(Frame::ExitRecord {
+                                ty,
+                                fields: record
+                                    .fields()
+                                    .iter()
+                                    .map(|field| PendingField {
+                                        name: field.name().clone(),
+                                        requirement: DecodeFieldRequirement::Required,
+                                    })
+                                    .collect(),
+                                extra_fields: mode.extra_fields(),
+                            });
+                            for field in record.fields().iter().rev() {
+                                schedule_child(
+                                    &mut walker,
+                                    field.ty(),
+                                    DecodePathSegment::RecordField(field.name().clone()),
+                                );
+                            }
+                        }
+                        TypeNode::Sum(sum) => {
+                            if sum.closedness() != Closedness::Closed {
+                                return Err(DecodePlanningError {
+                                    subject,
+                                    path: path.clone(),
+                                    kind: DecodePlanningErrorKind::OpenSum { ty },
+                                });
+                            }
+                            walker.push_frame(Frame::ExitSum {
+                                ty,
+                                variants: sum
+                                    .variants()
+                                    .iter()
+                                    .map(|variant| PendingVariant {
+                                        name: variant.name().clone(),
+                                        has_payload: variant.payload().is_some(),
+                                    })
+                                    .collect(),
+                                strategy: DecodeSumStrategy::Explicit,
+                            });
+                            for variant in sum.variants().iter().rev() {
+                                if let Some(payload) = variant.payload() {
+                                    schedule_child(
+                                        &mut walker,
+                                        payload,
+                                        DecodePathSegment::SumVariantPayload(
+                                            variant.name().clone(),
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                        TypeNode::Domain(domain) => {
+                            walker.push_frame(Frame::ExitDomain {
+                                ty,
+                                rule: DecodeDomainRule::ExplicitSurface,
+                            });
+                            schedule_child(
+                                &mut walker,
+                                domain.carrier(),
+                                DecodePathSegment::DomainCarrier,
+                            );
+                        }
+                        TypeNode::List(element) => {
+                            walker.push_frame(Frame::ExitList { ty });
+                            schedule_child(&mut walker, *element, DecodePathSegment::ListElement);
+                        }
+                        TypeNode::Option(element) => {
+                            walker.push_frame(Frame::ExitOption { ty });
+                            schedule_child(&mut walker, *element, DecodePathSegment::OptionValue);
+                        }
+                        TypeNode::Result { error, value } => {
+                            walker.push_frame(Frame::ExitResult { ty });
+                            schedule_child(&mut walker, *value, DecodePathSegment::ResultValue);
+                            schedule_child(&mut walker, *error, DecodePathSegment::ResultError);
+                        }
+                        TypeNode::Validation { error, value } => {
+                            walker.push_frame(Frame::ExitValidation { ty });
+                            schedule_child(&mut walker, *value, DecodePathSegment::ValidationValue);
+                            schedule_child(&mut walker, *error, DecodePathSegment::ValidationError);
+                        }
                     }
                 }
                 Frame::PushPath(segment) => path.push(segment),

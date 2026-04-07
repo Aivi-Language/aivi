@@ -10,13 +10,13 @@ use aivi_hir::{
     GateRuntimeTextLiteral, GateRuntimeTextSegment, GateRuntimeTruthyFalsyBranch, GateStageOutcome,
     GeneralExprInstanceMemberElaboration, GeneralExprOutcome, GeneralExprParameter,
     ImportBindingMetadata, ImportId, ImportValueType, Item as HirItem, ItemId as HirItemId,
-    SumConstructorHandle,
     PatternId as HirPatternId, PipeTransformMode, RecurrenceNodeOutcome,
     ResolvedClassMemberDispatch, SourceDecodeProgram, SourceDecodeProgramOutcome,
-    SourceLifecycleNodeOutcome, TemporalStageOutcome, TermResolution, TruthyFalsyStageOutcome,
-    TypeBinding, TypeConstructorHead, elaborate_ambient_items, elaborate_fanouts, elaborate_gates,
-    elaborate_general_expressions, elaborate_recurrences, elaborate_source_lifecycles,
-    elaborate_temporal_stages, elaborate_truthy_falsy, generate_source_decode_programs,
+    SourceLifecycleNodeOutcome, SumConstructorHandle, TemporalStageOutcome, TermResolution,
+    TruthyFalsyStageOutcome, TypeBinding, TypeConstructorHead, elaborate_ambient_items,
+    elaborate_fanouts, elaborate_gates, elaborate_general_expressions, elaborate_recurrences,
+    elaborate_source_lifecycles, elaborate_temporal_stages, elaborate_truthy_falsy,
+    generate_source_decode_programs,
 };
 
 use crate::{
@@ -892,7 +892,8 @@ impl<'a> ModuleLowerer<'a> {
                 }
             }
         }
-        self.workspace_name_maps.insert(module_name.into(), name_map);
+        self.workspace_name_maps
+            .insert(module_name.into(), name_map);
 
         // ── Restore entry module state ───────────────────────────────────────
         self.hir = saved_hir;
@@ -921,8 +922,8 @@ impl<'a> ModuleLowerer<'a> {
         let mock_overrides = collect_mock_overrides(hir, included_items.as_ref());
         let hir_item_count =
             u32::try_from(hir.items().iter().count()).expect("HIR item count should fit in u32");
-        let hir_import_count =
-            u32::try_from(hir.imports().iter().count()).expect("HIR import count should fit in u32");
+        let hir_import_count = u32::try_from(hir.imports().iter().count())
+            .expect("HIR import count should fit in u32");
         // Reserve [hir_item_count, hir_item_count + hir_import_count) for deterministic
         // signal import origins (one slot per import by ImportId). The sequential counter
         // for all other synthetic items starts after this reserved range.
@@ -1414,9 +1415,7 @@ impl<'a> ModuleLowerer<'a> {
                     Some(core_id) => dependencies.push(core_id),
                     None => self.errors.push(LoweringError::DependencyOutsideCore {
                         owner: hir_id,
-                        dependency: HirItemId::from_raw(
-                            self.hir_item_count + import_id.as_raw(),
-                        ),
+                        dependency: HirItemId::from_raw(self.hir_item_count + import_id.as_raw()),
                     }),
                 }
             }
@@ -2407,8 +2406,7 @@ impl<'a> ModuleLowerer<'a> {
                 // the synthetic item's `origin` HirItemId. Because `seed_import_item` caches by
                 // ImportId, the same import always gets the same origin, so pattern matching
                 // (`handle.item == value.item`) is consistent with value construction.
-                let variant_name: Box<str> =
-                    reference.path.segments().last().text().into();
+                let variant_name: Box<str> = reference.path.segments().last().text().into();
                 if let Ok(item_id) = self.seed_import_item(*import) {
                     let origin = self.module.items()[item_id].origin;
                     let binding = self.hir.imports().get(*import).cloned();
@@ -3038,14 +3036,12 @@ impl<'a> ModuleLowerer<'a> {
         // builder can independently derive the same HirItemId for the same import without
         // coordination: signal import N gets hir_item_count + N.
         let origin = if matches!(kind, ItemKind::Signal(_)) {
-            HirItemId::from_raw(
-                self.hir_item_count
-                    .checked_add(import.as_raw())
-                    .ok_or(LoweringError::ArenaOverflow {
-                        arena: "deterministic signal import origins",
-                        attempted_len: usize::MAX,
-                    })?,
-            )
+            HirItemId::from_raw(self.hir_item_count.checked_add(import.as_raw()).ok_or(
+                LoweringError::ArenaOverflow {
+                    arena: "deterministic signal import origins",
+                    attempted_len: usize::MAX,
+                },
+            )?)
         } else {
             self.next_synthetic_item_origin()?
         };
@@ -4262,7 +4258,8 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         let report = elaborate_general_expressions(hir);
         let completeness_errors = validate_general_expr_report_completeness(hir, &report, |_| true);
         let (items, domain_members, instance_members) = report.into_parts();
-        let mut report_by_owner: HashMap<HirItemId, _> = items.into_iter().map(|item| (item.owner, item)).collect();
+        let mut report_by_owner: HashMap<HirItemId, _> =
+            items.into_iter().map(|item| (item.owner, item)).collect();
         // Ambient prelude items are elaborated separately; merge their results so
         // runtime fragments that reference ambient functions can lower them.
         let ambient_report = elaborate_ambient_items(hir);
@@ -4691,7 +4688,8 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
     fn new(hir: &'a aivi_hir::Module, fragment: &'a RuntimeFragmentSpec) -> Self {
         let (items, domain_members, instance_members) =
             elaborate_general_expressions(hir).into_parts();
-        let mut report_by_owner: HashMap<HirItemId, _> = items.into_iter().map(|item| (item.owner, item)).collect();
+        let mut report_by_owner: HashMap<HirItemId, _> =
+            items.into_iter().map(|item| (item.owner, item)).collect();
         // Include ambient prelude items so fragment dependency collection can
         // transitively walk through ambient function bodies.
         let (ambient_items, ambient_domain_members, _) = elaborate_ambient_items(hir).into_parts();

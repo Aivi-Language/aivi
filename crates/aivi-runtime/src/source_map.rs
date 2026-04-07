@@ -135,7 +135,9 @@ impl RuntimeSourceMap {
     }
 
     pub fn signal_pipeline_ids(&self, handle: SignalHandle) -> Option<&[aivi_backend::PipelineId]> {
-        self.signals.get(&handle).and_then(|i| i.pipeline_ids.as_deref())
+        self.signals
+            .get(&handle)
+            .and_then(|i| i.pipeline_ids.as_deref())
     }
 
     pub fn derived_name(&self, handle: DerivedHandle) -> Option<&str> {

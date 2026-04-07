@@ -4,29 +4,26 @@ use std::fmt;
 use aivi_base::SourceSpan;
 use aivi_typing::{
     FanoutCarrier, FanoutPlan, FanoutPlanner, FanoutResultKind, FanoutStageKind, GateCarrier,
-    GatePlanner, GateResultKind, RecurrenceTargetEvidence, RecurrenceWakeupKind, SourceTypeParameter,
+    GatePlanner, GateResultKind, RecurrenceTargetEvidence, RecurrenceWakeupKind,
+    SourceTypeParameter,
 };
 
 use crate::{
     domain_operator_elaboration::{binary_operator_text, select_domain_binary_operator},
     hir::{
-        ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClassMemberResolution, CustomSourceRecurrenceWakeup,
-        DomainMemberHandle, DomainMemberKind, DomainMemberResolution, ExprKind,
-        ImportBindingMetadata, ImportValueType, IntrinsicValue, Item, Module, Name, NamePath,
-        PatternKind, PipeStage, PipeStageKind, PipeTransformMode, ProjectionBase, ResolutionState, TermReference, TermResolution, TextSegment,
-        TypeItemBody, TypeKind, TypeReference, TypeResolution, TypeVariantField,
+        ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClassMemberResolution,
+        CustomSourceRecurrenceWakeup, DomainMemberHandle, DomainMemberKind, DomainMemberResolution,
+        ExprKind, ImportBindingMetadata, ImportValueType, IntrinsicValue, Item, Module, Name,
+        NamePath, PatternKind, PipeStage, PipeStageKind, PipeTransformMode, ProjectionBase,
+        ResolutionState, TermReference, TermResolution, TextSegment, TypeItemBody, TypeKind,
+        TypeReference, TypeResolution, TypeVariantField,
     },
-    ids::{
-        BindingId, ClusterId, ExprId, ImportId, ItemId,
-        PatternId, TypeId, TypeParameterId,
-    },
-    source_contract_resolution::{
-        ResolvedSourceContractType, ResolvedSourceTypeConstructor,
-    },
+    ids::{BindingId, ClusterId, ExprId, ImportId, ItemId, PatternId, TypeId, TypeParameterId},
+    source_contract_resolution::{ResolvedSourceContractType, ResolvedSourceTypeConstructor},
     typecheck::{TypeConstraint, expression_matches},
     validate::{
-        builtin_type_name, CaseConstructorKey, CaseConstructorShape, CasePatternCoverage,
-        CaseSubjectShape, GateRecordField, RecurrenceTargetHint, ValidationMode, Validator,
+        CaseConstructorKey, CaseConstructorShape, CasePatternCoverage, CaseSubjectShape,
+        GateRecordField, RecurrenceTargetHint, ValidationMode, Validator, builtin_type_name,
     },
 };
 
@@ -53,13 +50,11 @@ pub(crate) fn type_constructor_arity(head: TypeConstructorHead, module: &Module)
             Item::Domain(item) => item.parameters.len(),
             _ => 0,
         },
-        TypeConstructorHead::Import(import_id) => {
-            match &module.imports()[import_id].metadata {
-                ImportBindingMetadata::TypeConstructor { kind, .. }
-                | ImportBindingMetadata::Domain { kind, .. } => kind.arity(),
-                _ => 0,
-            }
-        }
+        TypeConstructorHead::Import(import_id) => match &module.imports()[import_id].metadata {
+            ImportBindingMetadata::TypeConstructor { kind, .. }
+            | ImportBindingMetadata::Domain { kind, .. } => kind.arity(),
+            _ => 0,
+        },
     }
 }
 
@@ -80,7 +75,10 @@ pub(crate) struct GateExprEnv {
     pub(crate) locals: HashMap<BindingId, GateType>,
 }
 
-pub(crate) fn pipe_stage_subject_memo_type(stage: &PipeStage, subject: &GateType) -> Option<GateType> {
+pub(crate) fn pipe_stage_subject_memo_type(
+    stage: &PipeStage,
+    subject: &GateType,
+) -> Option<GateType> {
     if !stage.supports_memos() {
         return None;
     }
@@ -811,9 +809,9 @@ impl GateType {
             Self::Result { error, value }
             | Self::Validation { error, value }
             | Self::Task { error, value } => error.has_type_params() || value.has_type_params(),
-            Self::Domain { arguments, .. } | Self::OpaqueItem { arguments, .. } | Self::OpaqueImport { arguments, .. } => {
-                arguments.iter().any(|a| a.has_type_params())
-            }
+            Self::Domain { arguments, .. }
+            | Self::OpaqueItem { arguments, .. }
+            | Self::OpaqueImport { arguments, .. } => arguments.iter().any(|a| a.has_type_params()),
         }
     }
 
@@ -1002,10 +1000,9 @@ impl GateType {
             Self::Record(tfields) => match self {
                 Self::Record(sfields) => {
                     sfields.len() == tfields.len()
-                        && sfields
-                            .iter()
-                            .zip(tfields.iter())
-                            .all(|(s, t)| s.name == t.name && s.ty.unify_type_params(&t.ty, bindings))
+                        && sfields.iter().zip(tfields.iter()).all(|(s, t)| {
+                            s.name == t.name && s.ty.unify_type_params(&t.ty, bindings)
+                        })
                 }
                 _ => false,
             },
@@ -1587,7 +1584,9 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    pub(crate) fn truthy_falsy_ordinary_subject_plan(subject: &GateType) -> Option<TruthyFalsySubjectPlan> {
+    pub(crate) fn truthy_falsy_ordinary_subject_plan(
+        subject: &GateType,
+    ) -> Option<TruthyFalsySubjectPlan> {
         match subject {
             GateType::Primitive(BuiltinType::Bool) => Some(TruthyFalsySubjectPlan {
                 truthy_constructor: BuiltinTerm::True,
@@ -1813,7 +1812,11 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    pub(crate) fn case_pattern_bindings(&mut self, pattern_id: PatternId, subject: &GateType) -> GateExprEnv {
+    pub(crate) fn case_pattern_bindings(
+        &mut self,
+        pattern_id: PatternId,
+        subject: &GateType,
+    ) -> GateExprEnv {
         let mut env = GateExprEnv::default();
         let mut work = vec![(pattern_id, subject.clone())];
         while let Some((pattern_id, subject_ty)) = work.pop() {
@@ -2324,8 +2327,7 @@ impl<'a> GateTypeContext<'a> {
                         return None;
                     }
                     let body = item.body?;
-                    let body_ty =
-                        self.infer_expr(body, &GateExprEnv::default(), None).ty?;
+                    let body_ty = self.infer_expr(body, &GateExprEnv::default(), None).ty?;
                     // Signal pipe propagation already wraps the body type in
                     // Signal; avoid double-wrapping Signal(Signal(T)).
                     Some(if matches!(body_ty, GateType::Signal(_)) {
@@ -2378,11 +2380,13 @@ impl<'a> GateTypeContext<'a> {
                         .actual()?;
                     // Signal pipe propagation already wraps the body actual in
                     // Signal; avoid double-wrapping Signal(Signal(T)).
-                    Some(if matches!(body_actual, SourceOptionActualType::Signal(_)) {
-                        body_actual
-                    } else {
-                        SourceOptionActualType::Signal(Box::new(body_actual))
-                    })
+                    Some(
+                        if matches!(body_actual, SourceOptionActualType::Signal(_)) {
+                            body_actual
+                        } else {
+                            SourceOptionActualType::Signal(Box::new(body_actual))
+                        },
+                    )
                 }),
             Item::Type(_)
             | Item::Class(_)
@@ -2446,7 +2450,10 @@ impl<'a> GateTypeContext<'a> {
     /// where we need the type of functions like `list.map` (which is registered
     /// as `AmbientValue { name: "__aivi_list_map" }` rather than carrying an
     /// explicit `ImportValueType`).
-    pub(crate) fn import_value_type_with_ambient(&mut self, import_id: ImportId) -> Option<GateType> {
+    pub(crate) fn import_value_type_with_ambient(
+        &mut self,
+        import_id: ImportId,
+    ) -> Option<GateType> {
         if let Some(ty) = self.import_value_type(import_id) {
             return Some(ty);
         }
@@ -2455,11 +2462,15 @@ impl<'a> GateTypeContext<'a> {
             ImportBindingMetadata::AmbientValue { name } => name.to_string(),
             _ => return None,
         };
-        let item_id = self.module.items().iter().find_map(|(id, item)| match item {
-            Item::Function(f) if f.name.text() == ambient_name => Some(id),
-            Item::Value(v) if v.name.text() == ambient_name => Some(id),
-            _ => None,
-        })?;
+        let item_id = self
+            .module
+            .items()
+            .iter()
+            .find_map(|(id, item)| match item {
+                Item::Function(f) if f.name.text() == ambient_name => Some(id),
+                Item::Value(v) if v.name.text() == ambient_name => Some(id),
+                _ => None,
+            })?;
         self.item_value_type(item_id)
     }
 
@@ -3771,7 +3782,10 @@ impl<'a> GateTypeContext<'a> {
         self.lower_type(annotation, substitutions, &mut item_stack, false)
     }
 
-    pub(crate) fn domain_member_annotation(&self, resolution: DomainMemberResolution) -> Option<TypeId> {
+    pub(crate) fn domain_member_annotation(
+        &self,
+        resolution: DomainMemberResolution,
+    ) -> Option<TypeId> {
         let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
             return None;
         };
@@ -4983,8 +4997,8 @@ impl<'a> GateTypeContext<'a> {
                     {
                         return self.finalize_expr_info(info);
                     }
-                    if let Some(info) = self
-                        .infer_import_function_apply_expr(reference, &arguments, env, ambient)
+                    if let Some(info) =
+                        self.infer_import_function_apply_expr(reference, &arguments, env, ambient)
                     {
                         return self.finalize_expr_info(info);
                     }
@@ -4996,9 +5010,10 @@ impl<'a> GateTypeContext<'a> {
                     // This lets constructors like `None` / `Some` / `Ok` resolve when
                     // the callee's parameter type is known, mirroring the import path.
                     let (param_ty, fallback_result) = match &current {
-                        Some(GateType::Arrow { parameter, result }) => {
-                            (Some(parameter.as_ref().clone()), Some(result.as_ref().clone()))
-                        }
+                        Some(GateType::Arrow { parameter, result }) => (
+                            Some(parameter.as_ref().clone()),
+                            Some(result.as_ref().clone()),
+                        ),
                         _ => (None, None),
                     };
                     let argument_info =
@@ -5149,7 +5164,11 @@ impl<'a> GateTypeContext<'a> {
         self.finalize_expr_info(info)
     }
 
-    pub(crate) fn infer_name(&mut self, reference: &TermReference, env: &GateExprEnv) -> GateExprInfo {
+    pub(crate) fn infer_name(
+        &mut self,
+        reference: &TermReference,
+        env: &GateExprEnv,
+    ) -> GateExprInfo {
         match reference.resolution.as_ref() {
             ResolutionState::Unresolved => GateExprInfo::default(),
             ResolutionState::Resolved(TermResolution::Local(binding)) => {
@@ -5866,7 +5885,9 @@ impl<'a> GateTypeContext<'a> {
                 .zip(signal_payload_arguments.iter())
                 .all(|((argument, expected_parameter), reads_signal_payload)| {
                     let argument_info = self.infer_expr(*argument, env, Some(ambient));
-                    let arg_ty = argument_info.actual_gate_type().or(argument_info.ty.clone());
+                    let arg_ty = argument_info
+                        .actual_gate_type()
+                        .or(argument_info.ty.clone());
                     // If we have no type information for the argument, we can't prove it
                     // doesn't match — accept it and let downstream lowering verify.
                     arg_ty.is_none()
@@ -6365,7 +6386,11 @@ impl<'a> GateTypeContext<'a> {
             }
         }
 
-        if results.len() == 1 { results.pop() } else { None }
+        if results.len() == 1 {
+            results.pop()
+        } else {
+            None
+        }
     }
 
     pub(crate) fn infer_pipe_body(
@@ -6877,7 +6902,11 @@ impl<'a> GateTypeContext<'a> {
         self.finalize_expr_info(info)
     }
 
-    pub(crate) fn infer_cluster_expr(&mut self, cluster_id: ClusterId, env: &GateExprEnv) -> GateExprInfo {
+    pub(crate) fn infer_cluster_expr(
+        &mut self,
+        cluster_id: ClusterId,
+        env: &GateExprEnv,
+    ) -> GateExprInfo {
         let Some(cluster) = self.module.clusters().get(cluster_id).cloned() else {
             return GateExprInfo::default();
         };
@@ -6982,7 +7011,11 @@ impl<'a> GateTypeContext<'a> {
         self.finalize_expr_info(info)
     }
 
-    pub(crate) fn infer_pipe_expr(&mut self, pipe: &crate::hir::PipeExpr, env: &GateExprEnv) -> GateExprInfo {
+    pub(crate) fn infer_pipe_expr(
+        &mut self,
+        pipe: &crate::hir::PipeExpr,
+        env: &GateExprEnv,
+    ) -> GateExprInfo {
         let stages = pipe.stages.iter().collect::<Vec<_>>();
         let mut info = self.infer_expr(pipe.head, env, None);
         let mut current = info.ty.clone();
@@ -7322,7 +7355,11 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    pub(crate) fn apply_function(&self, callee: &GateType, argument: &GateType) -> Option<GateType> {
+    pub(crate) fn apply_function(
+        &self,
+        callee: &GateType,
+        argument: &GateType,
+    ) -> Option<GateType> {
         let GateType::Arrow { parameter, result } = callee else {
             return None;
         };
@@ -7350,7 +7387,11 @@ impl<'a> GateTypeContext<'a> {
         None
     }
 
-    pub(crate) fn apply_function_chain(&self, callee: &GateType, arguments: &[GateType]) -> Option<GateType> {
+    pub(crate) fn apply_function_chain(
+        &self,
+        callee: &GateType,
+        arguments: &[GateType],
+    ) -> Option<GateType> {
         let mut current = callee.clone();
         for argument in arguments {
             current = self.apply_function(&current, argument)?;
@@ -7459,7 +7500,9 @@ pub(crate) fn missing_case_label(missing: &[CaseConstructorShape]) -> String {
     }
 }
 
-pub(crate) fn custom_source_wakeup_kind(wakeup: CustomSourceRecurrenceWakeup) -> RecurrenceWakeupKind {
+pub(crate) fn custom_source_wakeup_kind(
+    wakeup: CustomSourceRecurrenceWakeup,
+) -> RecurrenceWakeupKind {
     match wakeup {
         CustomSourceRecurrenceWakeup::Timer => RecurrenceWakeupKind::Timer,
         CustomSourceRecurrenceWakeup::Backoff => RecurrenceWakeupKind::Backoff,
@@ -8371,7 +8414,10 @@ pub(crate) struct SourceOptionTypeBindings {
 }
 
 impl SourceOptionTypeBindings {
-    pub(crate) fn parameter(&self, parameter: SourceTypeParameter) -> Option<&SourceOptionActualType> {
+    pub(crate) fn parameter(
+        &self,
+        parameter: SourceTypeParameter,
+    ) -> Option<&SourceOptionActualType> {
         self.parameters.get(&parameter)
     }
 
@@ -8403,7 +8449,10 @@ impl SourceOptionTypeBindings {
 pub(crate) fn source_option_contract_parameters(
     expected: &SourceOptionExpectedType,
 ) -> Vec<SourceTypeParameter> {
-    pub(crate) fn collect(expected: &SourceOptionExpectedType, parameters: &mut Vec<SourceTypeParameter>) {
+    pub(crate) fn collect(
+        expected: &SourceOptionExpectedType,
+        parameters: &mut Vec<SourceTypeParameter>,
+    ) {
         match expected {
             SourceOptionExpectedType::Primitive(_) => {}
             SourceOptionExpectedType::Tuple(elements) => {
@@ -8454,7 +8503,9 @@ pub(crate) fn source_option_unresolved_contract_parameters(
         .collect()
 }
 
-pub(crate) fn source_option_contract_parameter_phrase(parameters: &[SourceTypeParameter]) -> String {
+pub(crate) fn source_option_contract_parameter_phrase(
+    parameters: &[SourceTypeParameter],
+) -> String {
     let quoted = parameters
         .iter()
         .map(|parameter| format!("`{parameter}`"))
@@ -8691,4 +8742,3 @@ pub(crate) fn source_option_expected_record_fields_match(
             })
     })
 }
-

@@ -20,8 +20,19 @@ pub(crate) fn is_builtin_source_capability_family_path(path: &NamePath) -> bool 
     }
     matches!(
         path.segments().first().text(),
-        "fs" | "http" | "db" | "env" | "log" | "stdio" | "random" | "process" | "path" | "dbus"
-            | "imap" | "smtp" | "time" | "api"
+        "fs" | "http"
+            | "db"
+            | "env"
+            | "log"
+            | "stdio"
+            | "random"
+            | "process"
+            | "path"
+            | "dbus"
+            | "imap"
+            | "smtp"
+            | "time"
+            | "api"
     )
 }
 
@@ -863,7 +874,9 @@ fn lower_builtin_signal_member(
                 options: handle.options,
             })
         }
-        BuiltinCapabilityFamily::Log | BuiltinCapabilityFamily::Random | BuiltinCapabilityFamily::Smtp => None,
+        BuiltinCapabilityFamily::Log
+        | BuiltinCapabilityFamily::Random
+        | BuiltinCapabilityFamily::Smtp => None,
         BuiltinCapabilityFamily::Imap => {
             let provider = match invocation.member.as_str() {
                 "connect" => BuiltinSourceProvider::ImapConnect,
@@ -1289,10 +1302,7 @@ fn lower_api_signal_member(
                         invocation.span,
                         BuiltinSourceProvider::ApiGet,
                     )),
-                    arguments: vec![
-                        spec_path_expr.unwrap_or(op_path_expr),
-                        op_path_expr,
-                    ],
+                    arguments: vec![spec_path_expr.unwrap_or(op_path_expr), op_path_expr],
                     options: handle.options,
                 })
             }
@@ -1357,7 +1367,12 @@ fn lower_api_value_member(
                     invocation.span,
                     diagnostics,
                 );
-                Some(build_intrinsic_call(module, intrinsic, invocation.span, arguments))
+                Some(build_intrinsic_call(
+                    module,
+                    intrinsic,
+                    invocation.span,
+                    arguments,
+                ))
             }
             None => {
                 diagnostics.push(
@@ -1648,7 +1663,9 @@ fn supports_builtin_signal_member(family: BuiltinCapabilityFamily, member: &str)
         BuiltinCapabilityFamily::Dbus => matches!(member, "ownName" | "signal" | "method"),
         BuiltinCapabilityFamily::Imap => matches!(member, "connect" | "idle" | "fetchBody"),
         BuiltinCapabilityFamily::Time => matches!(member, "nowMs"),
-        BuiltinCapabilityFamily::Log | BuiltinCapabilityFamily::Random | BuiltinCapabilityFamily::Smtp => false,
+        BuiltinCapabilityFamily::Log
+        | BuiltinCapabilityFamily::Random
+        | BuiltinCapabilityFamily::Smtp => false,
         // Api members are dynamic (spec-based); validation happens in lower_api_signal_member.
         BuiltinCapabilityFamily::Api => true,
     }

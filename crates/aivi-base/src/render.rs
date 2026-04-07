@@ -300,10 +300,7 @@ impl DiagnosticRenderer {
                             let _ = writeln!(
                                 out,
                                 " {} {} {}",
-                                STYLE_GUTTER.paint(
-                                    self.color,
-                                    &format!("{mid:>gutter_width$}")
-                                ),
+                                STYLE_GUTTER.paint(self.color, &format!("{mid:>gutter_width$}")),
                                 STYLE_GUTTER.paint(self.color, "│"),
                                 text
                             );
@@ -326,7 +323,10 @@ impl DiagnosticRenderer {
                 );
 
                 // Print underlines for labels on this line.
-                let labels_here = line_labels.get(&line_num).map(|v| v.as_slice()).unwrap_or(&[]);
+                let labels_here = line_labels
+                    .get(&line_num)
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[]);
                 if labels_here.is_empty() {
                     continue;
                 }
@@ -353,7 +353,11 @@ impl DiagnosticRenderer {
                         line_text.len() + 1
                     };
 
-                    let caret_width = if col_end <= col_start { 1 } else { col_end - col_start };
+                    let caret_width = if col_end <= col_start {
+                        1
+                    } else {
+                        col_end - col_start
+                    };
                     let caret_width = caret_width.max(1);
 
                     let (caret_char, caret_style, msg_style) = match label.style {
@@ -365,7 +369,9 @@ impl DiagnosticRenderer {
                             };
                             ("^", cs, cs)
                         }
-                        LabelStyle::Secondary => ("─", &STYLE_SECONDARY_CARET, &STYLE_LABEL_MESSAGE),
+                        LabelStyle::Secondary => {
+                            ("─", &STYLE_SECONDARY_CARET, &STYLE_LABEL_MESSAGE)
+                        }
                     };
 
                     let padding = " ".repeat(col_start.saturating_sub(1));
@@ -410,12 +416,7 @@ impl DiagnosticRenderer {
 
     fn write_notes(&self, out: &mut String, diag: &Diagnostic) {
         for note in &diag.notes {
-            let _ = writeln!(
-                out,
-                " {} {}",
-                STYLE_NOTE.paint(self.color, "note:"),
-                note
-            );
+            let _ = writeln!(out, " {} {}", STYLE_NOTE.paint(self.color, "note:"), note);
         }
     }
 
@@ -423,12 +424,7 @@ impl DiagnosticRenderer {
 
     fn write_help(&self, out: &mut String, diag: &Diagnostic) {
         for h in &diag.help {
-            let _ = writeln!(
-                out,
-                " {} {}",
-                STYLE_HELP.paint(self.color, "help:"),
-                h
-            );
+            let _ = writeln!(out, " {} {}", STYLE_HELP.paint(self.color, "help:"), h);
         }
     }
 }
@@ -625,25 +621,46 @@ mod tests {
         // Span from byte 0 to just before the final newline (stays on line 10).
         let span_end = src.trim_end_matches('\n').len();
         let span = file.source_span(0..span_end);
-        let diag =
-            Diagnostic::error("very long span").with_primary_label(span, "spans many lines");
+        let diag = Diagnostic::error("very long span").with_primary_label(span, "spans many lines");
 
         let renderer = DiagnosticRenderer::plain();
         let rendered = renderer.render(&diag, &sources);
 
         // First 3 lines must appear.
-        assert!(rendered.contains("line one"), "first line missing: {rendered}");
-        assert!(rendered.contains("line two"), "second line missing: {rendered}");
-        assert!(rendered.contains("line three"), "third line missing: {rendered}");
+        assert!(
+            rendered.contains("line one"),
+            "first line missing: {rendered}"
+        );
+        assert!(
+            rendered.contains("line two"),
+            "second line missing: {rendered}"
+        );
+        assert!(
+            rendered.contains("line three"),
+            "third line missing: {rendered}"
+        );
         // Last line must appear.
-        assert!(rendered.contains("line ten"), "last line missing: {rendered}");
+        assert!(
+            rendered.contains("line ten"),
+            "last line missing: {rendered}"
+        );
         // Intermediate lines should be truncated with the ellipsis gutter marker.
-        assert!(rendered.contains("·"), "expected ellipsis gap marker: {rendered}");
+        assert!(
+            rendered.contains("·"),
+            "expected ellipsis gap marker: {rendered}"
+        );
         // Lines 4-9 should NOT all appear (truncation must have happened).
-        let middle_lines_shown = ["line four", "line five", "line six", "line seven", "line eight", "line nine"]
-            .iter()
-            .filter(|&&l| rendered.contains(l))
-            .count();
+        let middle_lines_shown = [
+            "line four",
+            "line five",
+            "line six",
+            "line seven",
+            "line eight",
+            "line nine",
+        ]
+        .iter()
+        .filter(|&&l| rendered.contains(l))
+        .count();
         assert!(
             middle_lines_shown < 6,
             "expected middle lines to be truncated, but all appeared: {rendered}"

@@ -33,11 +33,15 @@ fn ambient_item_for_import(module: &Module, import_id: ImportId) -> Option<ItemI
     let ImportBindingMetadata::AmbientValue { name } = &binding.metadata else {
         return None;
     };
-    module.ambient_items().iter().copied().find(|&id| match &module.items()[id] {
-        Item::Function(f) => f.name.text() == name.as_ref(),
-        Item::Value(v) => v.name.text() == name.as_ref(),
-        _ => false,
-    })
+    module
+        .ambient_items()
+        .iter()
+        .copied()
+        .find(|&id| match &module.items()[id] {
+            Item::Function(f) => f.name.text() == name.as_ref(),
+            Item::Value(v) => v.name.text() == name.as_ref(),
+            _ => false,
+        })
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -838,7 +842,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 | Item::SourceProviderContract(_)
                 | Item::Use(_)
                 | Item::Export(_)
-            | Item::Hoist(_) => {}
+                | Item::Hoist(_) => {}
             }
         }
         GeneralExprElaborationReport::new(items, domain_members, instance_members)
@@ -1521,7 +1525,8 @@ impl<'a> GeneralExprElaborator<'a> {
                 }]);
             }
             ExprKind::PatchApply { target, patch } => {
-                return self.lower_patch_apply_expr(expr_id, *target, patch, env, ambient, expected);
+                return self
+                    .lower_patch_apply_expr(expr_id, *target, patch, env, ambient, expected);
             }
             ExprKind::Cluster(cluster) => {
                 return self.lower_cluster_expr(expr_id, *cluster, env, ambient, expected);
@@ -1539,9 +1544,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 } = &expr.kind
                 {
                     if let Some(result_ty) = expected {
-                        if let Ok(kind) = self.lower_apply_expr(
-                            expr_id, *callee, arguments, env, ambient, result_ty,
-                        ) {
+                        if let Ok(kind) = self
+                            .lower_apply_expr(expr_id, *callee, arguments, env, ambient, result_ty)
+                        {
                             return Ok(GateRuntimeExpr {
                                 span: expr.span,
                                 ty: result_ty.clone(),
@@ -1957,8 +1962,10 @@ impl<'a> GeneralExprElaborator<'a> {
         let mut replace_map: HashMap<String, ExprId> = HashMap::new();
         let mut remove_set: HashSet<String> = HashSet::new();
         // Nested patches: top-level field → list of (remaining segments, instruction kind)
-        let mut nested_patches: HashMap<String, Vec<(Vec<PatchSelectorSegment>, PatchInstructionKind)>> =
-            HashMap::new();
+        let mut nested_patches: HashMap<
+            String,
+            Vec<(Vec<PatchSelectorSegment>, PatchInstructionKind)>,
+        > = HashMap::new();
 
         for entry in &patch.entries {
             let segments = &entry.selector.segments;
@@ -1998,8 +2005,8 @@ impl<'a> GeneralExprElaborator<'a> {
                 continue;
             }
 
-            let label = Name::new(field_name.to_owned(), span)
-                .expect("record field names are non-empty");
+            let label =
+                Name::new(field_name.to_owned(), span).expect("record field names are non-empty");
 
             if let Some(replacement_id) = replace_map.get(field_name) {
                 match self.lower_expr(*replacement_id, env, ambient, Some(field_ty)) {
@@ -2013,7 +2020,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 let path = NamePath::from_vec(vec![label.clone()])
                     .expect("single-segment projection paths are always valid");
                 let base = match &lowered_target.kind {
-                    GateRuntimeExprKind::AmbientSubject => GateRuntimeProjectionBase::AmbientSubject,
+                    GateRuntimeExprKind::AmbientSubject => {
+                        GateRuntimeProjectionBase::AmbientSubject
+                    }
                     _ => GateRuntimeProjectionBase::Expr(Box::new(lowered_target.clone())),
                 };
                 let projected = GateRuntimeExpr {
@@ -2066,7 +2075,9 @@ impl<'a> GeneralExprElaborator<'a> {
                                 span,
                                 ty: nf.ty.clone(),
                                 kind: GateRuntimeExprKind::Projection {
-                                    base: GateRuntimeProjectionBase::Expr(Box::new(projected.clone())),
+                                    base: GateRuntimeProjectionBase::Expr(Box::new(
+                                        projected.clone(),
+                                    )),
                                     path: nf_path,
                                 },
                             };
@@ -2106,7 +2117,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 let path = NamePath::from_vec(vec![label.clone()])
                     .expect("single-segment projection paths are always valid");
                 let base = match &lowered_target.kind {
-                    GateRuntimeExprKind::AmbientSubject => GateRuntimeProjectionBase::AmbientSubject,
+                    GateRuntimeExprKind::AmbientSubject => {
+                        GateRuntimeProjectionBase::AmbientSubject
+                    }
                     _ => GateRuntimeProjectionBase::Expr(Box::new(lowered_target.clone())),
                 };
                 let projected = GateRuntimeExpr {
@@ -2114,7 +2127,10 @@ impl<'a> GeneralExprElaborator<'a> {
                     ty: field_ty.clone(),
                     kind: GateRuntimeExprKind::Projection { base, path },
                 };
-                result_fields.push(GateRuntimeRecordField { label, value: projected });
+                result_fields.push(GateRuntimeRecordField {
+                    label,
+                    value: projected,
+                });
             }
         }
 
@@ -2162,8 +2178,7 @@ impl<'a> GeneralExprElaborator<'a> {
             // When the callee is polymorphic but the concrete result type is known,
             // pre-substitute TypeParameters so argument expectations are concrete.
             if !result_ty.has_type_params() && inferred_result.has_type_params() {
-                let subs =
-                    collect_type_param_subs(&[inferred_result], &[result_ty.clone()]);
+                let subs = collect_type_param_subs(&[inferred_result], &[result_ty.clone()]);
                 if !subs.is_empty() {
                     return Some(
                         parameters
@@ -2419,12 +2434,7 @@ impl<'a> GeneralExprElaborator<'a> {
                     let element = current.fanout_element().ok_or_else(|| {
                         vec![GeneralExprBlocker::UnknownExprType { span: stage.span }]
                     })?;
-                    let body = self.lower_body_expr(
-                        *expr,
-                        &stage_env,
-                        Some(element),
-                        None,
-                    )?;
+                    let body = self.lower_body_expr(*expr, &stage_env, Some(element), None)?;
                     let result_subject = self
                         .typing
                         .infer_fanout_map_stage_info(*expr, &stage_env, &current)
@@ -3032,11 +3042,8 @@ impl<'a> GeneralExprElaborator<'a> {
                 }
             };
             let args_vec: Vec<ExprId> = spine.apply_arguments().collect();
-            let arguments = crate::NonEmpty::from_vec(args_vec).map_err(|_| {
-                vec![GeneralExprBlocker::UnknownExprType {
-                    span: cluster.span,
-                }]
-            })?;
+            let arguments = crate::NonEmpty::from_vec(args_vec)
+                .map_err(|_| vec![GeneralExprBlocker::UnknownExprType { span: cluster.span }])?;
             let kind =
                 self.lower_apply_expr(expr_id, callee_expr, &arguments, env, ambient, &cluster_ty)?;
             return Ok(GateRuntimeExpr {
@@ -3282,7 +3289,10 @@ impl<'a> GeneralExprElaborator<'a> {
                         return Ok(expected.clone());
                     }
                 }
-                return Ok(info.actual_gate_type().or(info.ty).unwrap_or_else(|| expected.clone()));
+                return Ok(info
+                    .actual_gate_type()
+                    .or(info.ty)
+                    .unwrap_or_else(|| expected.clone()));
             }
         }
         let info = self.typing.infer_expr(expr_id, env, ambient);
@@ -3296,9 +3306,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 // items) and inference cannot determine a concrete type, trust the propagated
                 // expected type.  This is safe because the HIR type-checker already validated these
                 // expressions against their annotations.
-                expected
-                    .filter(|e| e.has_type_params())
-                    .cloned()
+                expected.filter(|e| e.has_type_params()).cloned()
             })
             .ok_or_else(|| {
                 vec![GeneralExprBlocker::UnknownExprType {
@@ -3358,7 +3366,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 }])
             }
             ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
-                if let Some(import_id) = self.typing.select_hoisted_import(reference, Some(expected)) {
+                if let Some(import_id) =
+                    self.typing.select_hoisted_import(reference, Some(expected))
+                {
                     if let Some(item_id) = ambient_item_for_import(self.module, import_id) {
                         Ok(GateRuntimeReference::Item(item_id))
                     } else {
@@ -4395,7 +4405,10 @@ fun duplicate:List Int = values:List Int =>
                 };
                 assert_eq!(pipe.stages.len(), 1, "expected one stage");
                 assert!(
-                    matches!(&pipe.stages[0].kind, GateRuntimePipeStageKind::FanOut { .. }),
+                    matches!(
+                        &pipe.stages[0].kind,
+                        GateRuntimePipeStageKind::FanOut { .. }
+                    ),
                     "expected FanOut stage, got {:?}",
                     pipe.stages[0].kind
                 );

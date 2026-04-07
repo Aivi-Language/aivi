@@ -63,9 +63,5 @@ pub fn inlay_hints(params: InlayHintParams, state: Arc<ServerState>) -> Option<V
         }
     }
 
-    if hints.is_empty() {
-        None
-    } else {
-        Some(hints)
-    }
+    if hints.is_empty() { None } else { Some(hints) }
 }

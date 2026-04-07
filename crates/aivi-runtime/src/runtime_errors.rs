@@ -4,11 +4,7 @@
 use aivi_backend::{EvaluationError, KernelId, Program as BackendProgram};
 use aivi_base::{Diagnostic, DiagnosticCode};
 
-use crate::{
-    graph::SignalGraph,
-    source_map::RuntimeSourceMap,
-    startup::BackendRuntimeError,
-};
+use crate::{graph::SignalGraph, source_map::RuntimeSourceMap, startup::BackendRuntimeError};
 
 const RUNTIME_DOMAIN: &str = "runtime";
 
@@ -16,10 +12,8 @@ const SIGNAL_EVAL_FAILED: DiagnosticCode =
     DiagnosticCode::new(RUNTIME_DOMAIN, "SIGNAL_EVAL_FAILED");
 const SOURCE_EVAL_FAILED: DiagnosticCode =
     DiagnosticCode::new(RUNTIME_DOMAIN, "SOURCE_EVAL_FAILED");
-const TASK_EVAL_FAILED: DiagnosticCode =
-    DiagnosticCode::new(RUNTIME_DOMAIN, "TASK_EVAL_FAILED");
-const RUNTIME_INTERNAL: DiagnosticCode =
-    DiagnosticCode::new(RUNTIME_DOMAIN, "INTERNAL");
+const TASK_EVAL_FAILED: DiagnosticCode = DiagnosticCode::new(RUNTIME_DOMAIN, "TASK_EVAL_FAILED");
+const RUNTIME_INTERNAL: DiagnosticCode = DiagnosticCode::new(RUNTIME_DOMAIN, "INTERNAL");
 
 /// Identify which pipeline stage (if any) references the given kernel.
 ///
@@ -143,8 +137,7 @@ pub fn render_runtime_error(
             }
 
             // Trace dependency chain.
-            let chains =
-                source_map.trace_signal_dependencies(graph, signal.as_signal());
+            let chains = source_map.trace_signal_dependencies(graph, signal.as_signal());
             if let Some(chain) = chains.first() {
                 let trace = source_map.format_dependency_chain(chain);
                 diag = diag.with_note(format!("dependency chain: {trace}"));
@@ -192,9 +185,7 @@ pub fn render_runtime_error(
             if let Some(span) = source_map.item_span(*item) {
                 diag = diag.with_primary_label(span, "reactive guard failed here");
             }
-            diag = diag.with_help(
-                "the guard expression must return a Bool value",
-            );
+            diag = diag.with_help("the guard expression must return a Bool value");
 
             vec![diag]
         }
@@ -233,9 +224,7 @@ pub fn render_runtime_error(
             if let Some(span) = source_map.item_span(*item) {
                 diag = diag.with_primary_label(span, "this guard expression");
             }
-            diag = diag.with_help(
-                "ensure the `when` clause returns a Bool value",
-            );
+            diag = diag.with_help("ensure the `when` clause returns a Bool value");
 
             vec![diag]
         }
@@ -267,9 +256,7 @@ pub fn render_runtime_error(
             item,
             error: eval_error,
         } => {
-            let name = source_map
-                .derived_name(*signal)
-                .unwrap_or("(unknown)");
+            let name = source_map.derived_name(*signal).unwrap_or("(unknown)");
             let mut diag = Diagnostic::error(format!(
                 "recurrence signal `{name}` evaluation failed: {eval_error}"
             ))
@@ -316,10 +303,7 @@ pub fn render_runtime_error(
             .with_code(SOURCE_EVAL_FAILED);
 
             if let Some(span) = source_map.source_span(*instance) {
-                diag = diag.with_primary_label(
-                    span,
-                    format!("option `{option_name}` failed"),
-                );
+                diag = diag.with_primary_label(span, format!("option `{option_name}` failed"));
             }
 
             vec![diag]
@@ -337,9 +321,7 @@ pub fn render_runtime_error(
             if let Some(span) = source_map.source_span(*instance) {
                 diag = diag.with_primary_label(span, "this source declaration");
             }
-            diag = diag.with_help(
-                "the `activeWhen` option must evaluate to a Bool value",
-            );
+            diag = diag.with_help("the `activeWhen` option must evaluate to a Bool value");
 
             vec![diag]
         }
@@ -367,9 +349,7 @@ pub fn render_runtime_error(
             expected,
             found,
         } => {
-            let name = source_map
-                .derived_name(*signal)
-                .unwrap_or("(unknown)");
+            let name = source_map.derived_name(*signal).unwrap_or("(unknown)");
             let diag = Diagnostic::error(format!(
                 "derived signal `{name}` expected {expected} dependencies, found {found}"
             ))
@@ -382,53 +362,60 @@ pub fn render_runtime_error(
         // Internal/infrastructure errors — render with whatever info we have.
         BackendRuntimeError::UnknownDerivedSignal { signal } => {
             let name = source_map.derived_name(*signal).unwrap_or("(unknown)");
-            vec![Diagnostic::error(format!(
-                "unknown derived signal `{name}` (internal ID: {:?})",
-                signal
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!(
+                    "unknown derived signal `{name}` (internal ID: {:?})",
+                    signal
+                ))
+                .with_code(RUNTIME_INTERNAL),
+            ]
         }
         BackendRuntimeError::UnknownReactiveSignal { signal } => {
             let name = source_map.signal_name(*signal).unwrap_or("(unknown)");
-            vec![Diagnostic::error(format!(
-                "unknown reactive signal `{name}` (internal ID: {:?})",
-                signal
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!(
+                    "unknown reactive signal `{name}` (internal ID: {:?})",
+                    signal
+                ))
+                .with_code(RUNTIME_INTERNAL),
+            ]
         }
         BackendRuntimeError::UnknownReactiveClause { signal, clause } => {
             let name = source_map.signal_name(*signal).unwrap_or("(unknown)");
-            vec![Diagnostic::error(format!(
-                "unknown reactive clause {:?} for signal `{name}`",
-                clause
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!(
+                    "unknown reactive clause {:?} for signal `{name}`",
+                    clause
+                ))
+                .with_code(RUNTIME_INTERNAL),
+            ]
         }
         BackendRuntimeError::UnknownSourceInstance { instance } => {
             let name = source_map.source_name(*instance).unwrap_or("(unknown)");
-            vec![Diagnostic::error(format!(
-                "unknown source instance `{name}` (ID: {})",
-                instance.as_raw()
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!(
+                    "unknown source instance `{name}` (ID: {})",
+                    instance.as_raw()
+                ))
+                .with_code(RUNTIME_INTERNAL),
+            ]
         }
         BackendRuntimeError::UnknownTaskInstance { instance } => {
-            vec![Diagnostic::error(format!(
-                "unknown task instance (ID: {})",
-                instance.as_raw()
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!("unknown task instance (ID: {})", instance.as_raw()))
+                    .with_code(RUNTIME_INTERNAL),
+            ]
         }
         BackendRuntimeError::UnknownTaskOwner { owner } => {
             let name = source_map.item_name(*owner).unwrap_or("(unknown)");
-            vec![Diagnostic::error(format!("unknown task owner `{name}`"))
-                .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!("unknown task owner `{name}`"))
+                    .with_code(RUNTIME_INTERNAL),
+            ]
         }
 
         BackendRuntimeError::MissingCommittedSignalSnapshot {
-            instance,
-            signal,
-            ..
+            instance, signal, ..
         } => {
             let source = source_map.source_name(*instance).unwrap_or("(unknown)");
             let sig_name = source_map.signal_name(*signal).unwrap_or("(unknown)");
@@ -441,16 +428,16 @@ pub fn render_runtime_error(
 
         BackendRuntimeError::MissingSignalItemMapping { instance, item, .. } => {
             let source = source_map.source_name(*instance).unwrap_or("(unknown)");
-            vec![Diagnostic::error(format!(
-                "source `{source}` could not map backend item {item} to a runtime signal"
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!(
+                    "source `{source}` could not map backend item {item} to a runtime signal"
+                ))
+                .with_code(RUNTIME_INTERNAL),
+            ]
         }
 
         BackendRuntimeError::MissingCommittedTaskSignalSnapshot {
-            instance,
-            signal,
-            ..
+            instance, signal, ..
         } => {
             let sig_name = source_map.signal_name(*signal).unwrap_or("(unknown)");
             vec![Diagnostic::error(format!(
@@ -461,21 +448,20 @@ pub fn render_runtime_error(
         }
 
         BackendRuntimeError::MissingTaskSignalItemMapping { instance, item, .. } => {
-            vec![Diagnostic::error(format!(
-                "task instance {} could not map backend item {item} to a runtime signal",
-                instance.as_raw()
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!(
+                    "task instance {} could not map backend item {item} to a runtime signal",
+                    instance.as_raw()
+                ))
+                .with_code(RUNTIME_INTERNAL),
+            ]
         }
 
-        BackendRuntimeError::TaskExecutionBlocked {
-            owner, blocker, ..
-        } => {
+        BackendRuntimeError::TaskExecutionBlocked { owner, blocker, .. } => {
             let name = source_map.item_name(*owner).unwrap_or("(unknown task)");
-            let mut diag = Diagnostic::error(format!(
-                "task `{name}` execution is blocked: {blocker}"
-            ))
-            .with_code(TASK_EVAL_FAILED);
+            let mut diag =
+                Diagnostic::error(format!("task `{name}` execution is blocked: {blocker}"))
+                    .with_code(TASK_EVAL_FAILED);
 
             if let Some(span) = source_map.item_span(*owner) {
                 diag = diag.with_primary_label(span, "this task");
@@ -485,15 +471,17 @@ pub fn render_runtime_error(
         }
 
         BackendRuntimeError::SpawnTaskWorker { message, .. } => {
-            vec![Diagnostic::error(format!(
-                "failed to spawn task worker thread: {message}"
-            ))
-            .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!("failed to spawn task worker thread: {message}"))
+                    .with_code(RUNTIME_INTERNAL),
+            ]
         }
 
         BackendRuntimeError::Runtime(error) => {
-            vec![Diagnostic::error(format!("runtime scheduler error: {error:?}"))
-                .with_code(RUNTIME_INTERNAL)]
+            vec![
+                Diagnostic::error(format!("runtime scheduler error: {error:?}"))
+                    .with_code(RUNTIME_INTERNAL),
+            ]
         }
     }
 }

@@ -5,8 +5,7 @@
 //! Format: custom binary with magic header for validation.
 
 use std::{
-    env,
-    fs,
+    env, fs,
     hash::{Hash, Hasher},
     io::{Cursor, Read},
     path::PathBuf,

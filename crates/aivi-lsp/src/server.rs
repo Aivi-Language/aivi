@@ -5,19 +5,19 @@ use tower_lsp::{
     jsonrpc::Result,
     lsp_types::request::{GotoImplementationParams, GotoImplementationResponse},
     lsp_types::{
-        CodeActionOptions, CodeActionParams, CodeActionProviderCapability,
-        CodeLens, CodeLensOptions, CodeLensParams, CompletionOptions, CompletionParams,
-        CompletionResponse, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-        DidOpenTextDocumentParams, DocumentFormattingParams, DocumentSymbolParams,
-        DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams,
-        HoverProviderCapability, ImplementationProviderCapability, InlayHint, InlayHintParams,
-        InitializeParams, InitializeResult, InitializedParams,
-        Location, MessageType, OneOf, PrepareRenameResponse, ReferenceParams, RenameOptions,
-        RenameParams, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-        SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities,
-        ServerCapabilities, SymbolInformation, SymbolKind, TextDocumentPositionParams,
-        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit,
-        WorkDoneProgressOptions, WorkspaceEdit, WorkspaceSymbolParams,
+        CodeActionOptions, CodeActionParams, CodeActionProviderCapability, CodeLens,
+        CodeLensOptions, CodeLensParams, CompletionOptions, CompletionParams, CompletionResponse,
+        DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+        DocumentFormattingParams, DocumentSymbolParams, DocumentSymbolResponse,
+        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability,
+        ImplementationProviderCapability, InitializeParams, InitializeResult, InitializedParams,
+        InlayHint, InlayHintParams, Location, MessageType, OneOf, PrepareRenameResponse,
+        ReferenceParams, RenameOptions, RenameParams, SemanticTokensFullOptions,
+        SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
+        SemanticTokensServerCapabilities, ServerCapabilities, SymbolInformation, SymbolKind,
+        TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextDocumentSyncOptions, TextEdit, WorkDoneProgressOptions, WorkspaceEdit,
+        WorkspaceSymbolParams,
     },
 };
 
@@ -233,14 +233,20 @@ impl LanguageServer for Backend {
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
-        Ok(crate::inlay_hints::inlay_hints(params, Arc::clone(&self.state)))
+        Ok(crate::inlay_hints::inlay_hints(
+            params,
+            Arc::clone(&self.state),
+        ))
     }
 
     async fn code_action(
         &self,
         params: CodeActionParams,
     ) -> Result<Option<tower_lsp::lsp_types::CodeActionResponse>> {
-        Ok(crate::code_actions::code_actions(params, Arc::clone(&self.state)))
+        Ok(crate::code_actions::code_actions(
+            params,
+            Arc::clone(&self.state),
+        ))
     }
 
     async fn symbol(

@@ -89,8 +89,8 @@ fn implicit_resolution_uses_the_current_directory_when_no_manifest_exists() {
     let cwd = workspace.mkdir("playground");
     let entry = workspace.write("playground/main.aivi", "value view = 3\n");
 
-    let resolved =
-        resolve_v1_entrypoint(&cwd, None, None).expect("current directory should be the workspace root");
+    let resolved = resolve_v1_entrypoint(&cwd, None, None)
+        .expect("current directory should be the workspace root");
 
     assert_eq!(resolved.origin(), EntrypointOrigin::ImplicitWorkspaceMain);
     assert_eq!(resolved.workspace_root(), cwd.as_path());

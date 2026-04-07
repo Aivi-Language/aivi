@@ -29,9 +29,8 @@ use aivi_backend::{
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
 use aivi_core::{
-    IncludedItems, RuntimeFragmentSpec, lower_runtime_fragment,
-    lower_runtime_module_with_items, lower_runtime_module_with_workspace,
-    runtime_fragment_included_items,
+    IncludedItems, RuntimeFragmentSpec, lower_runtime_fragment, lower_runtime_module_with_items,
+    lower_runtime_module_with_workspace, runtime_fragment_included_items,
     validate_module as validate_core_module,
 };
 use aivi_gtk::{
@@ -45,14 +44,14 @@ use aivi_hir::{
     BuiltinTerm, BuiltinType, DecoratorPayload, ExprId as HirExprId, ExprKind, GateRecordField,
     GateType, GeneralExprOutcome, GeneralExprParameter, ImportBindingMetadata, ImportId,
     ImportValueType, Item, ItemId as HirItemId, MarkupRuntimeExprSites, Module as HirModule,
-    PatternId as HirPatternId, PatternKind, TermResolution, ValidationMode, ValueItem, collect_markup_runtime_expr_sites, elaborate_runtime_expr_with_env,
-    signal_payload_type,
+    PatternId as HirPatternId, PatternKind, TermResolution, ValidationMode, ValueItem,
+    collect_markup_runtime_expr_sites, elaborate_runtime_expr_with_env, signal_payload_type,
 };
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_query::{
-    HirModuleResult, RootDatabase, SourceFile as QuerySourceFile, hir_module as query_hir_module,
-    parsed_file as query_parsed_file, parse_manifest, resolve_v1_entrypoint,
-    discover_workspace_root_from_directory,
+    HirModuleResult, RootDatabase, SourceFile as QuerySourceFile,
+    discover_workspace_root_from_directory, hir_module as query_hir_module, parse_manifest,
+    parsed_file as query_parsed_file, resolve_v1_entrypoint,
 };
 use aivi_runtime::{
     BackendLinkedRuntime, GlibLinkedRuntimeDriver, GlibLinkedRuntimeFailure, HirRuntimeAssembly,
@@ -199,11 +198,9 @@ fn run_fmt(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String>
 
 fn run_openapi_gen(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     let Some(next) = args.next() else {
-        return Err(
-            "expected a spec path argument after `openapi-gen`\n\
+        return Err("expected a spec path argument after `openapi-gen`\n\
              Usage: aivi openapi-gen <spec.yaml> [-o output.aivi]"
-                .to_owned(),
-        );
+            .to_owned());
     };
 
     if next == "--help" || next == "-h" {
@@ -225,22 +222,19 @@ fn run_openapi_gen(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode,
         }
     }
 
-    let spec = aivi_openapi::parse_spec(&spec_path)
-        .map_err(|e| format!("error: {e}"))?;
-    let resolved = aivi_openapi::resolve_spec(spec, &spec_path)
-        .map_err(|errs| {
-            errs.iter()
-                .map(|e| format!("error: {e}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        })?;
+    let spec = aivi_openapi::parse_spec(&spec_path).map_err(|e| format!("error: {e}"))?;
+    let resolved = aivi_openapi::resolve_spec(spec, &spec_path).map_err(|errs| {
+        errs.iter()
+            .map(|e| format!("error: {e}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    })?;
     let generated = aivi_openapi::generate_aivi_types(&resolved);
 
     match output_path {
         Some(path) => {
-            fs::write(&path, &generated.aivi_source).map_err(|e| {
-                format!("failed to write output to `{}`: {e}", path.display())
-            })?;
+            fs::write(&path, &generated.aivi_source)
+                .map_err(|e| format!("failed to write output to `{}`: {e}", path.display()))?;
             eprintln!("wrote {}", path.display());
         }
         None => {
@@ -443,8 +437,9 @@ fn resolve_run_entrypoint_for_build(
     let cwd = env::current_dir().map_err(|error| {
         format!("failed to determine current directory for `aivi {command_name}`: {error}")
     })?;
-    let resolved = resolve_v1_entrypoint(&cwd, explicit_path, app_name)
-        .map_err(|error| format!("failed to resolve entrypoint for `aivi {command_name}`: {error}"))?;
+    let resolved = resolve_v1_entrypoint(&cwd, explicit_path, app_name).map_err(|error| {
+        format!("failed to resolve entrypoint for `aivi {command_name}`: {error}")
+    })?;
     Ok(ResolvedRunEntrypoint {
         entry_path: resolved.entry_path().to_path_buf(),
         manifest_view: resolved.manifest_view().map(str::to_owned),
@@ -527,9 +522,8 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
         let workspace_root = aivi_query::discover_workspace_root_from_directory(&cwd);
         if let Ok(manifest) = aivi_query::parse_manifest(&workspace_root) {
             if manifest.apps.len() > 1 {
-                let exe = env::current_exe().map_err(|e| {
-                    format!("failed to locate aivi executable: {e}")
-                })?;
+                let exe = env::current_exe()
+                    .map_err(|e| format!("failed to locate aivi executable: {e}"))?;
                 let mut children: Vec<std::process::Child> = manifest
                     .apps
                     .iter()
@@ -564,7 +558,8 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
         }
     }
 
-    let resolved = resolve_run_entrypoint(&cwd, requested_path.as_deref(), requested_app.as_deref())?;
+    let resolved =
+        resolve_run_entrypoint(&cwd, requested_path.as_deref(), requested_app.as_deref())?;
     let view = requested_view
         .as_deref()
         .or(resolved.manifest_view.as_deref())
@@ -771,8 +766,7 @@ fn collect_workspace_hirs_sorted(
         .or_else(|_| std::fs::canonicalize(cwd.join(&entry_path_raw)))
         .unwrap_or_else(|_| cwd.join(&entry_path_raw));
     let workspace_root_raw = discover_workspace_root(&entry_path);
-    let workspace_root = std::fs::canonicalize(&workspace_root_raw)
-        .unwrap_or(workspace_root_raw);
+    let workspace_root = std::fs::canonicalize(&workspace_root_raw).unwrap_or(workspace_root_raw);
 
     // Collect (module_name, file, hir) for all non-entry, non-stdlib workspace files.
     // Stdlib modules (aivi.*) are excluded because their intrinsic functions can't be
@@ -927,9 +921,9 @@ impl GtkHostValue for RunHostValue {
     }
 
     fn from_i64(v: i64) -> Self {
-        Self(DetachedRuntimeValue::from_runtime_owned(
-            RuntimeValue::Int(v),
-        ))
+        Self(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            v,
+        )))
     }
 
     fn as_bool(&self) -> Option<bool> {
@@ -1217,7 +1211,10 @@ fn collect_aivi_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
         })?;
         for entry in entries {
             let entry = entry.map_err(|error| {
-                format!("failed to read directory entry in `{}`: {error}", current.display())
+                format!(
+                    "failed to read directory entry in `{}`: {error}",
+                    current.display()
+                )
             })?;
             let path = entry.path();
             if path.is_dir() {
@@ -1311,8 +1308,7 @@ fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
             .iter()
             .any(|d| d.severity == Severity::Error);
         if !has_errors {
-            let warnings =
-                aivi_lsp::collect_unused_native_diagnostics(hir.module(), &hir.source());
+            let warnings = aivi_lsp::collect_unused_native_diagnostics(hir.module(), &hir.source());
             unused_count += warnings.len();
             print_diagnostics(&snapshot.sources, warnings.iter());
         }
@@ -1328,7 +1324,11 @@ fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
         snapshot.files.len(),
         plural_suffix(snapshot.files.len()),
         if unused_count > 0 {
-            format!(", {} unused-symbol warning{}", unused_count, plural_suffix(unused_count))
+            format!(
+                ", {} unused-symbol warning{}",
+                unused_count,
+                plural_suffix(unused_count)
+            )
         } else {
             String::new()
         }
@@ -1979,9 +1979,7 @@ fn settle_execute_sources(
             providers
                 .apply_actions(outcome.source_actions())
                 .map_err(|error| {
-                    format!(
-                        "failed to apply source lifecycle actions for `aivi execute`: {error}"
-                    )
+                    format!("failed to apply source lifecycle actions for `aivi execute`: {error}")
                 })?;
             if !had_source_actions && linked.queued_message_count() == 0 {
                 break;
@@ -2664,7 +2662,6 @@ fn lower_runtime_backend_stack_with_workspace(
     })
 }
 
-
 fn lower_runtime_fragment_backend_stack(
     module: &HirModule,
     fragment: &RuntimeFragmentSpec,
@@ -2915,8 +2912,7 @@ fn resolve_run_event_signal_target(
                     name_path_text(&reference.path)
                 ));
             };
-            let synthetic_id =
-                aivi_hir::ItemId::from_raw(hir_item_count + import_id.as_raw());
+            let synthetic_id = aivi_hir::ItemId::from_raw(hir_item_count + import_id.as_raw());
             let binding = runtime_assembly.signal(synthetic_id).ok_or_else(|| {
                 format!(
                     "event handler `{}` at {location}: no runtime stub found for cross-module signal `{}`",
@@ -3034,9 +3030,6 @@ fn import_value_type_to_gate_type(ty: &ImportValueType) -> Option<GateType> {
         ImportValueType::Named { .. } => return None,
     })
 }
-
-
-
 
 fn name_path_text(path: &aivi_hir::NamePath) -> String {
     path.segments()
@@ -3265,8 +3258,9 @@ fn collect_stub_signal_defaults(
         let Some(input) = signal_binding.input() else {
             continue;
         };
-        let default_value =
-            DetachedRuntimeValue::from_runtime_owned(default_runtime_value_for_import_type(inner_ty));
+        let default_value = DetachedRuntimeValue::from_runtime_owned(
+            default_runtime_value_for_import_type(inner_ty),
+        );
         defaults.push((input, default_value));
     }
     defaults
@@ -3278,7 +3272,9 @@ fn default_runtime_value_for_import_type(ty: &ImportValueType) -> RuntimeValue {
             BuiltinType::Text => RuntimeValue::Text("".into()),
             BuiltinType::Int => RuntimeValue::Int(0),
             BuiltinType::Bool => RuntimeValue::Bool(false),
-            BuiltinType::Float => RuntimeValue::Float(RuntimeFloat::new(0.0_f64).expect("0.0 is a valid float")),
+            BuiltinType::Float => {
+                RuntimeValue::Float(RuntimeFloat::new(0.0_f64).expect("0.0 is a valid float"))
+            }
             BuiltinType::Unit => RuntimeValue::Unit,
             _ => RuntimeValue::Unit,
         },
@@ -3286,12 +3282,12 @@ fn default_runtime_value_for_import_type(ty: &ImportValueType) -> RuntimeValue {
         ImportValueType::Set(_) => RuntimeValue::Set(vec![]),
         ImportValueType::Map { .. } => RuntimeValue::Map(Default::default()),
         ImportValueType::Option(_) => RuntimeValue::OptionNone,
-        ImportValueType::Result { error, .. } => RuntimeValue::ResultErr(Box::new(
-            default_runtime_value_for_import_type(error),
-        )),
-        ImportValueType::Validation { error, .. } => RuntimeValue::ValidationInvalid(Box::new(
-            default_runtime_value_for_import_type(error),
-        )),
+        ImportValueType::Result { error, .. } => {
+            RuntimeValue::ResultErr(Box::new(default_runtime_value_for_import_type(error)))
+        }
+        ImportValueType::Validation { error, .. } => {
+            RuntimeValue::ValidationInvalid(Box::new(default_runtime_value_for_import_type(error)))
+        }
         ImportValueType::Tuple(elements) => RuntimeValue::Tuple(
             elements
                 .iter()
@@ -3307,9 +3303,9 @@ fn default_runtime_value_for_import_type(ty: &ImportValueType) -> RuntimeValue {
                 })
                 .collect(),
         ),
-        ImportValueType::Signal(inner) => RuntimeValue::Signal(Box::new(
-            default_runtime_value_for_import_type(inner),
-        )),
+        ImportValueType::Signal(inner) => {
+            RuntimeValue::Signal(Box::new(default_runtime_value_for_import_type(inner)))
+        }
         // Functions, tasks, and named/variable types cannot be trivially defaulted.
         ImportValueType::Arrow { .. }
         | ImportValueType::Task { .. }
@@ -4434,13 +4430,14 @@ fn build_markup_bundle(
     }
 
     let lowered = snapshot.entry_hir();
-    let artifact = match prepare_run_artifact(&snapshot.sources, lowered.module(), &[], requested_view) {
-        Ok(artifact) => artifact,
-        Err(message) => {
-            eprintln!("{message}");
-            return Ok(ExitCode::FAILURE);
-        }
-    };
+    let artifact =
+        match prepare_run_artifact(&snapshot.sources, lowered.module(), &[], requested_view) {
+            Ok(artifact) => artifact,
+            Err(message) => {
+                eprintln!("{message}");
+                return Ok(ExitCode::FAILURE);
+            }
+        };
 
     let summary = write_run_bundle(&snapshot, path, output, artifact.view_name.as_ref())?;
     println!("build bundle passed: {}", path.display());
@@ -4948,7 +4945,8 @@ Run `aivi help <command>` for detailed information about a specific command.
 
 fn format_subcommand_help(name: &str) -> Option<String> {
     let text = match name {
-        "check" => "\
+        "check" => {
+            "\
 aivi check — type-check a module through HIR
 
 USAGE:
@@ -4965,8 +4963,10 @@ DESCRIPTION:
     HIR pipeline. Reports any syntax errors, name resolution failures, or type
     errors as diagnostics. Exits with code 0 when all files pass, 1 on any
     diagnostic error.
-",
-        "compile" => "\
+"
+        }
+        "compile" => {
+            "\
 aivi compile — compile a module to native object code
 
 USAGE:
@@ -4984,8 +4984,10 @@ DESCRIPTION:
     Lowers the module through typed core, typed lambda IR, backend IR,
     and Cranelift codegen to produce a native object file. Includes all
     compiler stages from parsing through machine code generation.
-",
-        "build" => "\
+"
+        }
+        "build" => {
+            "\
 aivi build — package a runnable GTK app bundle
 
 USAGE:
@@ -5011,8 +5013,10 @@ DESCRIPTION:
     Compiles a GTK/libadwaita application and packages it into a
     self-contained bundle directory. The bundle includes compiled code,
     runtime assets, and the necessary metadata to launch the app.
-",
-        "run" => "\
+"
+        }
+        "run" => {
+            "\
 aivi run — launch a live GTK app
 
 USAGE:
@@ -5040,8 +5044,10 @@ DESCRIPTION:
     Compiles and immediately launches a GTK/libadwaita application with
     the full reactive runtime, signal engine, source providers, and
     live widget tree. The app runs until the window is closed.
-",
-        "execute" => "\
+"
+        }
+        "execute" => {
+            "\
 aivi execute — run a headless Task program
 
 USAGE:
@@ -5058,8 +5064,10 @@ DESCRIPTION:
     Evaluates a top-level Task value without GTK or the widget runtime.
     Useful for command-line tools, scripts, and batch processing written
     in AIVI. The program receives arguments via a ProcessArgs source.
-",
-        "test" => "\
+"
+        }
+        "test" => {
+            "\
 aivi test — run @test declarations in a workspace
 
 USAGE:
@@ -5073,8 +5081,10 @@ DESCRIPTION:
     workspace and executes them. Each test runs in isolation. Reports
     pass/fail status for each test and exits with code 0 if all tests
     pass, 1 if any test fails.
-",
-        "lex" => "\
+"
+        }
+        "lex" => {
+            "\
 aivi lex — dump the lossless token stream
 
 USAGE:
@@ -5087,8 +5097,10 @@ DESCRIPTION:
     Lexes the source file and prints every token in the lossless token
     stream, including whitespace and comments. Useful for debugging the
     lexer and inspecting tokenization behavior.
-",
-        "fmt" => "\
+"
+        }
+        "fmt" => {
+            "\
 aivi fmt — format AIVI source code
 
 USAGE:
@@ -5113,8 +5125,10 @@ DESCRIPTION:
     Canonically formats AIVI source code. The formatter preserves
     semantics while normalizing whitespace, indentation, and layout.
     Files with parse errors are left unchanged.
-",
-        "openapi-gen" => "\
+"
+        }
+        "openapi-gen" => {
+            "\
 aivi openapi-gen — generate AIVI type declarations from an OpenAPI spec
 
 USAGE:
@@ -5135,8 +5149,10 @@ DESCRIPTION:
 
     Example:
         aivi openapi-gen ./petstore.yaml -o types/petstore.aivi
-",
-        "lsp" => "\
+"
+        }
+        "lsp" => {
+            "\
 aivi lsp — start the language server
 
 USAGE:
@@ -5150,8 +5166,10 @@ DESCRIPTION:
 
     Typically launched automatically by the VSCode extension or other
     LSP-compatible editors.
-",
-        "mcp" => "\
+"
+        }
+        "mcp" => {
+            "\
 aivi mcp — start the MCP introspection server
 
 USAGE:
@@ -5172,8 +5190,10 @@ DESCRIPTION:
     and sources, capture the GTK widget tree, emit synthetic events,
     and publish source values — enabling AI-assisted development and
     testing workflows.
-",
-        "manual-snippets" => "\
+"
+        }
+        "manual-snippets" => {
+            "\
 aivi manual-snippets — validate and format manual code blocks
 
 USAGE:
@@ -5198,7 +5218,8 @@ DESCRIPTION:
     validates that they parse and type-check, formats them canonically,
     and optionally rewrites the files. Produces a TODO report of blocks
     that need manual attention.
-",
+"
+        }
         _ => return None,
     };
     Some(text.to_owned())
@@ -5510,8 +5531,11 @@ value view =
 
     #[test]
     fn check_rejects_milestone_two_invalid_fixture() {
-        let result = check_file(&fixture("milestone-2/invalid/unknown-decorator/main.aivi"), false)
-            .expect("check should run");
+        let result = check_file(
+            &fixture("milestone-2/invalid/unknown-decorator/main.aivi"),
+            false,
+        )
+        .expect("check should run");
         assert_eq!(result, ExitCode::FAILURE);
     }
 
