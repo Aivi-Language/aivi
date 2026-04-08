@@ -27,16 +27,14 @@ type Disc = {
     | White
 
     type Disc -> Bool
-    isHumanDisc = self =>
-        self
-        ||> Black -> True
-        ||> _     -> False
+    isHumanDisc = .
+     ||> Black -> True
+     ||> _     -> False
 
     type Disc -> Bool
-    isComputerDisc = self =>
-        self
-        ||> White -> True
-        ||> _     -> False
+    isComputerDisc = .
+     ||> White -> True
+     ||> _     -> False
 }
 
 type Player = {
@@ -44,16 +42,14 @@ type Player = {
     | Computer
 
     type Player -> Player
-    otherPlayer = self =>
-        self
-        ||> Human    -> Computer
-        ||> Computer -> Human
+    otherPlayer = .
+     ||> Human    -> Computer
+     ||> Computer -> Human
 
     type Player -> Disc
-    discFor = self =>
-        self
-        ||> Human    -> Black
-        ||> Computer -> White
+    discFor = .
+     ||> Human    -> Black
+     ||> Computer -> White
 }
 
 type Coord = Coord Int Int
@@ -77,34 +73,29 @@ type Phase = {
     | ComputerAnimating Coord Int
 
     type Phase -> Bool
-    phaseAllowsHumanInput = self =>
-        self
-        ||> HumanReady -> True
-        ||> _          -> False
+    phaseAllowsHumanInput = .
+     ||> HumanReady -> True
+     ||> _          -> False
 
     type Phase -> Bool
-    phaseIsComputerThinking = self =>
-        self
-        ||> ComputerThinking -> True
-        ||> _                -> False
+    phaseIsComputerThinking = .
+     ||> ComputerThinking -> True
+     ||> _                -> False
 
     type Phase -> Bool
-    phaseHasComputerAnimation = self =>
-        self
-        ||> ComputerAnimating _ _ -> True
-        ||> _                     -> False
+    phaseHasComputerAnimation = .
+     ||> ComputerAnimating _ _ -> True
+     ||> _                     -> False
 
     type Phase -> Option Coord
-    phaseComputerTarget = self =>
-        self
-        ||> ComputerAnimating coord _ -> Some coord
-        ||> _                         -> None
+    phaseComputerTarget = .
+     ||> ComputerAnimating coord _ -> Some coord
+     ||> _                         -> None
 
     type Phase -> Bool
-    phaseShowsComputerTarget = self =>
-        self
-        ||> ComputerAnimating _ step -> step == 1 or step == 3 or step == 5
-        ||> _                        -> False
+    phaseShowsComputerTarget = .
+     ||> ComputerAnimating _ step -> step == 1 or step == 3 or step == 5
+     ||> _                        -> False
 }
 
 type Score = {
