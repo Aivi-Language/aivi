@@ -733,6 +733,10 @@ pub enum ImportValueType {
     Named {
         type_name: String,
         arguments: Vec<Self>,
+        /// Inline structural definition when the named type can be serialised
+        /// across the import boundary. This lets consumers lower nested imported
+        /// payload types without requiring a matching direct `use` binding.
+        definition: Option<Box<ImportTypeDefinition>>,
     },
 }
 

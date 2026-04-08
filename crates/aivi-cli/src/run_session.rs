@@ -78,6 +78,75 @@ struct RunSessionLifecycle {
     runtime_error: Option<String>,
 }
 
+fn render_backend_runtime_link_error(
+    error: &aivi_runtime::BackendRuntimeLinkError,
+    module: &HirModule,
+    backend: &BackendProgram,
+) -> String {
+    let hir_item_name = |item: HirItemId| {
+        match &module.items()[item] {
+            Item::Type(item) => item.name.text(),
+            Item::Value(item) => item.name.text(),
+            Item::Function(item) => item.name.text(),
+            Item::Signal(item) => item.name.text(),
+            Item::Class(item) => item.name.text(),
+            Item::Domain(item) => item.name.text(),
+            Item::SourceProviderContract(_)
+            | Item::Instance(_)
+            | Item::Use(_)
+            | Item::Export(_)
+            | Item::Hoist(_) => "<anonymous>",
+        }
+    };
+    match error {
+        aivi_runtime::BackendRuntimeLinkError::DuplicateBackendOrigin { item, first, second } => {
+            format!(
+                "HIR item {} ({}) lowered to multiple backend items: item{} ({}) and item{} ({})",
+                item,
+                hir_item_name(*item),
+                first,
+                backend.item_name(*first),
+                second,
+                backend.item_name(*second)
+            )
+        }
+        aivi_runtime::BackendRuntimeLinkError::MissingBackendItem { item } => {
+            format!(
+                "HIR runtime item {item} ({}) has no linked backend item",
+                hir_item_name(*item)
+            )
+        }
+        aivi_runtime::BackendRuntimeLinkError::BackendItemNotSignal { item, backend_item } => {
+            format!(
+                "HIR signal {} ({}) lowered to non-signal backend item item{} ({})",
+                item,
+                hir_item_name(*item),
+                backend_item,
+                backend.item_name(*backend_item)
+            )
+        }
+        aivi_runtime::BackendRuntimeLinkError::MissingSignalBody { item, backend_item } => {
+            format!(
+                "linked derived signal {} ({}) has no backend body kernel on item{} ({})",
+                item,
+                hir_item_name(*item),
+                backend_item,
+                backend.item_name(*backend_item)
+            )
+        }
+        aivi_runtime::BackendRuntimeLinkError::MissingItemBodyForGlobal { owner, item } => {
+            format!(
+                "owner {} ({}) references non-signal global item{} ({}) without a backend body kernel",
+                owner,
+                hir_item_name(*owner),
+                item,
+                backend.item_name(*item)
+            )
+        }
+        _ => error.to_string(),
+    }
+}
+
 #[derive(Clone, Default)]
 struct RunSessionScheduleState {
     work_scheduled: Rc<Cell<bool>>,
@@ -762,11 +831,11 @@ pub(super) fn start_run_session_with_launch_config(
         event_handlers,
         stub_signal_defaults,
     } = artifact;
-    let linked = link_backend_runtime(runtime_assembly, &core, backend).map_err(|errors| {
+    let linked = link_backend_runtime(runtime_assembly, &core, backend.clone()).map_err(|errors| {
         let mut rendered = String::from("failed to link backend runtime for `aivi run`:\n");
         for error in errors.errors() {
             rendered.push_str("- ");
-            rendered.push_str(&error.to_string());
+            rendered.push_str(&render_backend_runtime_link_error(error, &module, &backend));
             rendered.push('\n');
         }
         rendered

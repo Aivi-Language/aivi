@@ -210,6 +210,7 @@ pub enum ValidationError {
     },
     ItemCyclicDependency {
         cycle: Vec<ItemId>,
+        names: Vec<String>,
     },
 }
 
@@ -482,9 +483,13 @@ impl fmt::Display for ValidationError {
                 f,
                 "kernel {kernel} expression {expr} expected layout{expected} for its subject, found layout{found}"
             ),
-            Self::ItemCyclicDependency { cycle } => {
-                let ids: Vec<String> = cycle.iter().map(|id| format!("{id}")).collect();
-                write!(f, "circular dependency between items: {}", ids.join(" -> "))
+            Self::ItemCyclicDependency { cycle, names } => {
+                let items: Vec<String> = cycle
+                    .iter()
+                    .zip(names.iter())
+                    .map(|(id, name)| format!("{name} (item{id})"))
+                    .collect();
+                write!(f, "circular dependency between items: {}", items.join(" -> "))
             }
         }
     }
@@ -1661,7 +1666,11 @@ fn validate_no_item_dep_cycles(program: &Program, errors: &mut Vec<ValidationErr
                         let cycle_start = path.iter().position(|&n| n == neighbor).unwrap_or(0);
                         let mut cycle = path[cycle_start..].to_vec();
                         cycle.push(neighbor);
-                        errors.push(ValidationError::ItemCyclicDependency { cycle });
+                        let names = cycle
+                            .iter()
+                            .map(|item_id| program.item_name(*item_id).to_owned())
+                            .collect();
+                        errors.push(ValidationError::ItemCyclicDependency { cycle, names });
                         // Mark all gray nodes on path as black to avoid duplicate reports.
                         for &n in &path {
                             color.insert(n, 2);

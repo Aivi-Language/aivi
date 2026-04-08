@@ -2644,6 +2644,7 @@ impl<'a> GateTypeContext<'a> {
             ImportValueType::Named {
                 type_name,
                 arguments,
+                ..
             } => {
                 let lowered_args: Vec<GateType> = arguments
                     .iter()

@@ -116,7 +116,7 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
         let Some(item) = module.items().get(id) else {
             continue;
         };
-        if let Some(exported) = item_to_exported_name(module, item) {
+        if let Some(exported) = item_to_exported_name(module, id, item) {
             push_unique_exported_name(&mut names, exported);
         }
         // For sum types, also export each constructor individually so that
@@ -133,18 +133,21 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
                                 ty: ImportValueType::Named {
                                     type_name: owner_type_name,
                                     arguments: Vec::new(),
+                                    definition: None,
                                 },
                             }
                         } else {
                             let result = ImportValueType::Named {
                                 type_name: owner_type_name,
                                 arguments: Vec::new(),
+                                definition: None,
                             };
                             let ty = variant.fields.iter().rev().fold(result, |acc, field| {
                                 let param_ty = import_value_type(module, field.ty).unwrap_or(
                                     ImportValueType::Named {
                                         type_name: "Unknown".into(),
                                         arguments: Vec::new(),
+                                        definition: None,
                                     },
                                 );
                                 ImportValueType::Arrow {
@@ -253,8 +256,8 @@ fn explicit_item_exported_name(
                 let metadata = if ambient {
                     ImportBindingMetadata::AmbientType
                 } else {
-                    let fields = extract_type_record_fields(module, item);
-                    let definition = extract_type_definition(module, item);
+                    let fields = extract_type_record_fields(module, item_id, item);
+                    let definition = extract_type_definition(module, item_id, item);
                     ImportBindingMetadata::TypeConstructor {
                         kind: aivi_typing::Kind::constructor(item.parameters.len()),
                         fields,
@@ -288,6 +291,7 @@ fn explicit_item_exported_name(
                                 ty: ImportValueType::Named {
                                     type_name: owner_type_name,
                                     arguments: Vec::new(),
+                                    definition: None,
                                 },
                             }
                         } else {
@@ -296,12 +300,14 @@ fn explicit_item_exported_name(
                             let result = ImportValueType::Named {
                                 type_name: owner_type_name,
                                 arguments: Vec::new(),
+                                definition: None,
                             };
                             let ty = variant.fields.iter().rev().fold(result, |acc, field| {
                                 let param_ty = import_value_type(module, field.ty).unwrap_or(
                                     ImportValueType::Named {
                                         type_name: "Unknown".into(),
                                         arguments: Vec::new(),
+                                        definition: None,
                                     },
                                 );
                                 ImportValueType::Arrow {
@@ -401,7 +407,7 @@ fn explicit_item_exported_name(
     }
 }
 
-fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
+fn item_to_exported_name(module: &Module, item_id: ItemId, item: &Item) -> Option<ExportedName> {
     if item_has_test_decorator(module, item) {
         return None;
     }
@@ -412,8 +418,8 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
             kind: ExportedNameKind::Type,
             metadata: ImportBindingMetadata::TypeConstructor {
                 kind: aivi_typing::Kind::constructor(item.parameters.len()),
-                fields: extract_type_record_fields(module, item),
-                definition: extract_type_definition(module, item),
+                fields: extract_type_record_fields(module, item_id, item),
+                definition: extract_type_definition(module, item_id, item),
             },
             callable_type: None,
             deprecation,
@@ -640,6 +646,15 @@ fn deprecation_notice(module: &Module, deprecated: &DeprecatedDecorator) -> Depr
 }
 
 pub(crate) fn import_value_type(module: &Module, ty: TypeId) -> Option<ImportValueType> {
+    let mut item_stack = Vec::new();
+    import_value_type_with_stack(module, ty, &mut item_stack)
+}
+
+fn import_value_type_with_stack(
+    module: &Module,
+    ty: TypeId,
+    item_stack: &mut Vec<ItemId>,
+) -> Option<ImportValueType> {
     let type_node = module.types().get(ty)?;
     match &type_node.kind {
         TypeKind::Name(reference) => {
@@ -650,21 +665,14 @@ pub(crate) fn import_value_type(module: &Module, ty: TypeId) -> Option<ImportVal
             // For user-defined types, emit a Named entry so field projection
             // can be resolved in importing modules via lower_import_value_type.
             match reference.resolution.as_ref() {
-                ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
-                    let item = module.items().get(*item_id)?;
-                    let name = item_type_name(item);
-                    Some(ImportValueType::Named {
-                        type_name: name,
-                        arguments: Vec::new(),
-                    })
-                }
+                ResolutionState::Resolved(TypeResolution::Item(item_id)) => named_import_value_type_from_item(
+                    module,
+                    *item_id,
+                    Vec::new(),
+                    item_stack,
+                ),
                 ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
-                    let binding = module.imports().get(*import_id)?;
-                    let name = binding.imported_name.text().to_owned();
-                    Some(ImportValueType::Named {
-                        type_name: name,
-                        arguments: Vec::new(),
-                    })
+                    named_import_value_type_from_import(module, *import_id, Vec::new())
                 }
                 _ => None,
             }
@@ -672,7 +680,7 @@ pub(crate) fn import_value_type(module: &Module, ty: TypeId) -> Option<ImportVal
         TypeKind::Tuple(elements) => Some(ImportValueType::Tuple(
             elements
                 .iter()
-                .map(|element| import_value_type(module, *element))
+                .map(|element| import_value_type_with_stack(module, *element, item_stack))
                 .collect::<Option<Vec<_>>>()?,
         )),
         TypeKind::Record(fields) => Some(ImportValueType::Record(
@@ -681,21 +689,71 @@ pub(crate) fn import_value_type(module: &Module, ty: TypeId) -> Option<ImportVal
                 .map(|field| {
                     Some(ImportRecordField {
                         name: field.label.text().into(),
-                        ty: import_value_type(module, field.ty)?,
+                        ty: import_value_type_with_stack(module, field.ty, item_stack)?,
                     })
                 })
                 .collect::<Option<Vec<_>>>()?,
         )),
         TypeKind::RecordTransform { transform, source } => {
-            let source = import_value_type(module, *source)?;
+            let source = import_value_type_with_stack(module, *source, item_stack)?;
             apply_record_row_transform_import_value_type(transform, source)
         }
         TypeKind::Arrow { parameter, result } => Some(ImportValueType::Arrow {
-            parameter: Box::new(import_value_type(module, *parameter)?),
-            result: Box::new(import_value_type(module, *result)?),
+            parameter: Box::new(import_value_type_with_stack(module, *parameter, item_stack)?),
+            result: Box::new(import_value_type_with_stack(module, *result, item_stack)?),
         }),
-        TypeKind::Apply { .. } => applied_import_value_type(module, ty),
+        TypeKind::Apply { .. } => applied_import_value_type(module, ty, item_stack),
     }
+}
+
+fn named_import_value_type_from_item(
+    module: &Module,
+    item_id: ItemId,
+    arguments: Vec<ImportValueType>,
+    item_stack: &mut Vec<ItemId>,
+) -> Option<ImportValueType> {
+    let item = module.items().get(item_id)?;
+    let type_name = item_type_name(item);
+    let definition = if item_stack.contains(&item_id) {
+        None
+    } else {
+        match item {
+            Item::Type(type_item) => {
+                item_stack.push(item_id);
+                let definition =
+                    extract_type_definition_with_stack(module, type_item, item_stack).map(Box::new);
+                let popped = item_stack.pop();
+                debug_assert_eq!(popped, Some(item_id));
+                definition
+            }
+            _ => None,
+        }
+    };
+    Some(ImportValueType::Named {
+        type_name,
+        arguments,
+        definition,
+    })
+}
+
+fn named_import_value_type_from_import(
+    module: &Module,
+    import_id: ImportId,
+    arguments: Vec<ImportValueType>,
+) -> Option<ImportValueType> {
+    let binding = module.imports().get(import_id)?;
+    let definition = match &binding.metadata {
+        ImportBindingMetadata::TypeConstructor {
+            definition: Some(definition),
+            ..
+        } => Some(Box::new(definition.clone())),
+        _ => None,
+    };
+    Some(ImportValueType::Named {
+        type_name: binding.imported_name.text().to_owned(),
+        arguments,
+        definition,
+    })
 }
 
 fn primitive_import_value_type(reference: &TypeReference) -> Option<ImportValueType> {
@@ -723,51 +781,65 @@ fn primitive_import_value_type(reference: &TypeReference) -> Option<ImportValueT
     }
 }
 
-fn applied_import_value_type(module: &Module, ty: TypeId) -> Option<ImportValueType> {
+fn applied_import_value_type(
+    module: &Module,
+    ty: TypeId,
+    item_stack: &mut Vec<ItemId>,
+) -> Option<ImportValueType> {
     let (constructor, arguments) = flatten_type_application(module, ty)?;
     match constructor {
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::List) if arguments.len() == 1 => Some(
-            ImportValueType::List(Box::new(import_value_type(module, arguments[0])?)),
+            ImportValueType::List(Box::new(import_value_type_with_stack(
+                module,
+                arguments[0],
+                item_stack,
+            )?)),
         ),
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::Map) if arguments.len() == 2 => {
             Some(ImportValueType::Map {
-                key: Box::new(import_value_type(module, arguments[0])?),
-                value: Box::new(import_value_type(module, arguments[1])?),
+                key: Box::new(import_value_type_with_stack(module, arguments[0], item_stack)?),
+                value: Box::new(import_value_type_with_stack(module, arguments[1], item_stack)?),
             })
         }
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::Set) if arguments.len() == 1 => Some(
-            ImportValueType::Set(Box::new(import_value_type(module, arguments[0])?)),
-        ),
-        ResolvedTypeConstructor::Builtin(crate::BuiltinType::Option) if arguments.len() == 1 => {
-            Some(ImportValueType::Option(Box::new(import_value_type(
+            ImportValueType::Set(Box::new(import_value_type_with_stack(
                 module,
                 arguments[0],
+                item_stack,
+            )?)),
+        ),
+        ResolvedTypeConstructor::Builtin(crate::BuiltinType::Option) if arguments.len() == 1 => {
+            Some(ImportValueType::Option(Box::new(import_value_type_with_stack(
+                module,
+                arguments[0],
+                item_stack,
             )?)))
         }
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::Result) if arguments.len() == 2 => {
             Some(ImportValueType::Result {
-                error: Box::new(import_value_type(module, arguments[0])?),
-                value: Box::new(import_value_type(module, arguments[1])?),
+                error: Box::new(import_value_type_with_stack(module, arguments[0], item_stack)?),
+                value: Box::new(import_value_type_with_stack(module, arguments[1], item_stack)?),
             })
         }
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::Validation)
             if arguments.len() == 2 =>
         {
             Some(ImportValueType::Validation {
-                error: Box::new(import_value_type(module, arguments[0])?),
-                value: Box::new(import_value_type(module, arguments[1])?),
+                error: Box::new(import_value_type_with_stack(module, arguments[0], item_stack)?),
+                value: Box::new(import_value_type_with_stack(module, arguments[1], item_stack)?),
             })
         }
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::Signal) if arguments.len() == 1 => {
-            Some(ImportValueType::Signal(Box::new(import_value_type(
+            Some(ImportValueType::Signal(Box::new(import_value_type_with_stack(
                 module,
                 arguments[0],
+                item_stack,
             )?)))
         }
         ResolvedTypeConstructor::Builtin(crate::BuiltinType::Task) if arguments.len() == 2 => {
             Some(ImportValueType::Task {
-                error: Box::new(import_value_type(module, arguments[0])?),
-                value: Box::new(import_value_type(module, arguments[1])?),
+                error: Box::new(import_value_type_with_stack(module, arguments[0], item_stack)?),
+                value: Box::new(import_value_type_with_stack(module, arguments[1], item_stack)?),
             })
         }
         ResolvedTypeConstructor::Bundle(ImportBundleKind::BuiltinOption)
@@ -1022,6 +1094,7 @@ fn poly_name_import_value_type(
             Some(ImportValueType::Named {
                 type_name,
                 arguments: Vec::new(),
+                definition: None,
             })
         }
         ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
@@ -1030,6 +1103,7 @@ fn poly_name_import_value_type(
             Some(ImportValueType::Named {
                 type_name: name,
                 arguments: Vec::new(),
+                definition: None,
             })
         }
         _ => None,
@@ -1120,6 +1194,7 @@ fn poly_applied_import_value_type(
     Some(ImportValueType::Named {
         type_name,
         arguments: args,
+        definition: None,
     })
 }
 
@@ -1200,7 +1275,17 @@ fn builtin_term_metadata(name: &str) -> Option<ImportBindingMetadata> {
 /// `type Foo = { field: Type, ... }`. Parameterised types and sum types return `None`.
 fn extract_type_record_fields(
     module: &Module,
+    item_id: ItemId,
     item: &crate::TypeItem,
+) -> Option<Vec<ImportRecordField>> {
+    let mut item_stack = vec![item_id];
+    extract_type_record_fields_with_stack(module, item, &mut item_stack)
+}
+
+fn extract_type_record_fields_with_stack(
+    module: &Module,
+    item: &crate::TypeItem,
+    item_stack: &mut Vec<ItemId>,
 ) -> Option<Vec<ImportRecordField>> {
     // Only monomorphic record aliases carry stable field lists.
     if !item.parameters.is_empty() {
@@ -1209,7 +1294,7 @@ fn extract_type_record_fields(
     let TypeItemBody::Alias(alias) = &item.body else {
         return None;
     };
-    match import_value_type(module, *alias)? {
+    match import_value_type_with_stack(module, *alias, item_stack)? {
         ImportValueType::Record(fields) => Some(fields),
         _ => None,
     }
@@ -1217,11 +1302,21 @@ fn extract_type_record_fields(
 
 fn extract_type_definition(
     module: &Module,
+    item_id: ItemId,
     item: &crate::TypeItem,
+) -> Option<ImportTypeDefinition> {
+    let mut item_stack = vec![item_id];
+    extract_type_definition_with_stack(module, item, &mut item_stack)
+}
+
+fn extract_type_definition_with_stack(
+    module: &Module,
+    item: &crate::TypeItem,
+    item_stack: &mut Vec<ItemId>,
 ) -> Option<ImportTypeDefinition> {
     match &item.body {
         TypeItemBody::Alias(alias) => {
-            import_value_type(module, *alias).map(ImportTypeDefinition::Alias)
+            import_value_type_with_stack(module, *alias, item_stack).map(ImportTypeDefinition::Alias)
         }
         TypeItemBody::Sum(variants) => variants
             .iter()
@@ -1231,7 +1326,7 @@ fn extract_type_definition(
                     fields: variant
                         .fields
                         .iter()
-                        .map(|field| import_value_type(module, field.ty))
+                        .map(|field| import_value_type_with_stack(module, field.ty, item_stack))
                         .collect::<Option<Vec<_>>>()?,
                 })
             })

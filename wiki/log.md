@@ -112,3 +112,8 @@ Documented the follow-up runtime and GTK bridge changes behind the Reversi laten
 
 Updated companion syntax notes in [type-system.md](type-system.md) and [indexed-collections.md](indexed-collections.md) to match the new explicit receiver style.  
 Sources updated alongside the wiki: `syntax.md`, `AIVI_RFC.md`, `manual/guide/types.md`, `crates/aivi-syntax/src/parse.rs`, and `crates/aivi-hir/src/lower.rs`.
+## [2026-04-08] query | triggered temporal scheduling design
+
+Compared two designs for delayed/finite repeated signal triggering: a new source-shaped helper
+versus a recurrence/pipe-shaped temporal transform. Concluded that recurrence/temporal pipe is the
+more AIVI-like long-term home, while a narrow source helper is a pragmatic short-term fallback.  

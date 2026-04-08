@@ -8419,6 +8419,7 @@ fn import_value_type_label(ty: &ImportValueType) -> String {
         ImportValueType::Named {
             type_name,
             arguments,
+            ..
         } => {
             if arguments.is_empty() {
                 type_name.clone()

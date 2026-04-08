@@ -14,6 +14,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [compiler-pipeline.md](compiler-pipeline.md) | CST → HIR → Core → Lambda → Backend → Cranelift codegen |
 | [type-system.md](type-system.md) | Types, kinds, HKT, type classes, Eq derivation, constraints |
 | [signal-model.md](signal-model.md) | Reactive signals, sources, merge syntax, signal graph |
+| [temporal-design.md](temporal-design.md) | Tradeoff between source-shaped and recurrence-shaped temporal scheduling |
 | [runtime.md](runtime.md) | Scheduler, signal graph execution, task executor, GC |
 | [gtk-bridge.md](gtk-bridge.md) | GTK4/libadwaita widget bridge, markup lowering, event routing |
 | [query-layer.md](query-layer.md) | Incremental Salsa-style query layer, workspace, memoisation |

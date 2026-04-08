@@ -333,6 +333,7 @@ pub(crate) struct DecodeTypeLowerer<'a> {
     parameters: HashMap<HirTypeParameterId, StructuralTypeParameterId>,
     externals: HashMap<String, ExternalTypeId>,
     imports_in_progress: Vec<ImportId>,
+    inline_named_in_progress: Vec<String>,
     domain_bindings: Vec<SourceDecodeDomainBinding>,
     sum_bindings: Vec<SourceDecodeSumBinding>,
 }
@@ -349,6 +350,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             parameters: HashMap::new(),
             externals: HashMap::new(),
             imports_in_progress: Vec::new(),
+            inline_named_in_progress: Vec::new(),
             domain_bindings: Vec::new(),
             sum_bindings: Vec::new(),
         }
@@ -1078,6 +1080,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             ImportValueType::Named {
                 type_name,
                 arguments: nested_arguments,
+                definition,
             } => {
                 let lowered_arguments = nested_arguments
                     .iter()
@@ -1094,6 +1097,20 @@ impl<'a> DecodeTypeLowerer<'a> {
                         )
                 }) {
                     self.lower_import_type_reference(import_id, &lowered_arguments, span)
+                } else if let Some(definition) = definition {
+                    if self.inline_named_in_progress.iter().any(|name| name == type_name) {
+                        Ok(self.external_reference(type_name.clone()))
+                    } else {
+                        self.inline_named_in_progress.push(type_name.clone());
+                        let lowered = self.lower_import_type_definition(
+                            definition.as_ref(),
+                            &lowered_arguments,
+                            span,
+                        );
+                        let popped = self.inline_named_in_progress.pop();
+                        debug_assert_eq!(popped.as_deref(), Some(type_name.as_str()));
+                        lowered
+                    }
                 } else {
                     Ok(self.external_reference(type_name.clone()))
                 }
