@@ -625,6 +625,9 @@ pub enum ImportBindingMetadata {
         /// Record fields when the exported type is a record alias, enabling
         /// cross-module field projection (`thread.subject`) in typed-core.
         fields: Option<Vec<ImportRecordField>>,
+        /// Closed structural definition when the exported type can be serialized
+        /// through the current import surface.
+        definition: Option<ImportTypeDefinition>,
     },
     /// An imported domain type. Carries the kind for type-checking, the set of literal-suffix
     /// members so importing modules can resolve suffixed integer literals (e.g. `120ms`) without
@@ -670,6 +673,18 @@ pub enum ImportBundleKind {
 pub struct ImportRecordField {
     pub name: Box<str>,
     pub ty: ImportValueType,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportSumVariant {
+    pub name: Box<str>,
+    pub fields: Vec<ImportValueType>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImportTypeDefinition {
+    Alias(ImportValueType),
+    Sum(Vec<ImportSumVariant>),
 }
 
 /// Portable imported value-type surface that HIR uses before real module-linked nominal typing

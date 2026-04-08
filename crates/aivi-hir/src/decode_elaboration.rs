@@ -8,10 +8,10 @@ use aivi_typing::{
 };
 
 use crate::{
-    BuiltinType, DecoratorId, DecoratorPayload, ExprId, ExprKind, Item, ItemId, Module,
-    ResolutionState, SignalItem, SourceDecorator, TermReference, TermResolution,
-    TypeId as HirTypeId, TypeItemBody, TypeKind, TypeParameterId as HirTypeParameterId,
-    TypeResolution, TypeVariant,
+    BuiltinType, DecoratorId, DecoratorPayload, ExprId, ExprKind, ImportBindingMetadata, ImportId,
+    ImportTypeDefinition, ImportValueType, Item, ItemId, Module, ResolutionState, SignalItem,
+    SourceDecorator, TermReference, TermResolution, TypeId as HirTypeId, TypeItemBody, TypeKind,
+    TypeParameterId as HirTypeParameterId, TypeResolution, TypeVariant,
 };
 
 /// Focused pre-runtime decode-schema handoff for `@source` signals.
@@ -332,6 +332,7 @@ pub(crate) struct DecodeTypeLowerer<'a> {
     types: TypeStore,
     parameters: HashMap<HirTypeParameterId, StructuralTypeParameterId>,
     externals: HashMap<String, ExternalTypeId>,
+    imports_in_progress: Vec<ImportId>,
     domain_bindings: Vec<SourceDecodeDomainBinding>,
     sum_bindings: Vec<SourceDecodeSumBinding>,
 }
@@ -347,6 +348,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             types,
             parameters: HashMap::new(),
             externals: HashMap::new(),
+            imports_in_progress: Vec::new(),
             domain_bindings: Vec::new(),
             sum_bindings: Vec::new(),
         }
@@ -712,9 +714,10 @@ impl<'a> DecodeTypeLowerer<'a> {
             ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
                 self.lower_type_item(*item_id, &[], item_stack)
             }
-            ResolutionState::Resolved(TypeResolution::Import(_)) | ResolutionState::Unresolved => {
-                Ok(self.external_reference(type_path_name(&reference.path)))
+            ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
+                self.lower_import_type_reference(*import_id, &[], span)
             }
+            ResolutionState::Unresolved => Ok(self.external_reference(type_path_name(&reference.path))),
         }
     }
 
@@ -785,9 +788,10 @@ impl<'a> DecodeTypeLowerer<'a> {
                     .copied()
                     .unwrap_or_else(|| self.parameter_reference(*parameter)))
             }
-            ResolutionState::Resolved(TypeResolution::Import(_)) | ResolutionState::Unresolved => {
-                Ok(self.external_reference(type_path_name(&reference.path)))
+            ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
+                self.lower_import_type_reference(*import_id, arguments, span)
             }
+            ResolutionState::Unresolved => Ok(self.external_reference(type_path_name(&reference.path))),
         }
     }
 
@@ -910,6 +914,227 @@ impl<'a> DecodeTypeLowerer<'a> {
             parameter_id
         };
         self.types.parameter(structural)
+    }
+
+    fn lower_import_type_reference(
+        &mut self,
+        import_id: ImportId,
+        arguments: &[StructuralTypeId],
+        span: SourceSpan,
+    ) -> Result<StructuralTypeId, DecodeTypeLoweringError> {
+        let import = &self.module.imports()[import_id];
+        let name = import.local_name.text().to_owned();
+        if self.imports_in_progress.contains(&import_id) {
+            return Ok(self.external_reference(name));
+        }
+        match &import.metadata {
+            ImportBindingMetadata::TypeConstructor {
+                definition: Some(definition),
+                ..
+            } => {
+                self.imports_in_progress.push(import_id);
+                let lowered = self.lower_import_type_definition(definition, arguments, span);
+                let popped = self.imports_in_progress.pop();
+                debug_assert_eq!(popped, Some(import_id));
+                lowered
+            }
+            ImportBindingMetadata::Domain {
+                carrier: Some(carrier),
+                ..
+            } => {
+                self.imports_in_progress.push(import_id);
+                let lowered = self
+                    .lower_import_value_type(carrier, arguments, span)
+                    .map(|carrier| self.types.domain(name, carrier));
+                let popped = self.imports_in_progress.pop();
+                debug_assert_eq!(popped, Some(import_id));
+                lowered
+            }
+            ImportBindingMetadata::BuiltinType(builtin) => {
+                self.lower_import_builtin(*builtin, arguments, span)
+            }
+            ImportBindingMetadata::Unknown
+            | ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::IntrinsicValue { .. }
+            | ImportBindingMetadata::OpaqueValue
+            | ImportBindingMetadata::AmbientValue { .. }
+            | ImportBindingMetadata::TypeConstructor { definition: None, .. }
+            | ImportBindingMetadata::Domain { carrier: None, .. }
+            | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::AmbientType
+            | ImportBindingMetadata::Bundle(_)
+            | ImportBindingMetadata::InstanceMember { .. } => Ok(self.external_reference(name)),
+        }
+    }
+
+    fn lower_import_type_definition(
+        &mut self,
+        definition: &ImportTypeDefinition,
+        arguments: &[StructuralTypeId],
+        span: SourceSpan,
+    ) -> Result<StructuralTypeId, DecodeTypeLoweringError> {
+        match definition {
+            ImportTypeDefinition::Alias(alias) => self.lower_import_value_type(alias, arguments, span),
+            ImportTypeDefinition::Sum(variants) => {
+                let lowered_variants = variants
+                    .iter()
+                    .map(|variant| {
+                        let payload = match variant.fields.as_slice() {
+                            [] => None,
+                            [only] => Some(self.lower_import_value_type(only, arguments, span)?),
+                            many => {
+                                let lowered = many
+                                    .iter()
+                                    .map(|field| self.lower_import_value_type(field, arguments, span))
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                Some(self.types.tuple(lowered).map_err(|error| {
+                                    DecodeTypeLoweringError::invalid_shape(
+                                        span,
+                                        error.kind().clone(),
+                                    )
+                                })?)
+                            }
+                        };
+                        Ok(match payload {
+                            Some(payload) => SumVariant::unary(variant.name.as_ref(), payload),
+                            None => SumVariant::nullary(variant.name.as_ref()),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, DecodeTypeLoweringError>>()?;
+                self.types
+                    .sum(Closedness::Closed, lowered_variants)
+                    .map_err(|error| DecodeTypeLoweringError::invalid_shape(span, error.kind().clone()))
+            }
+        }
+    }
+
+    fn lower_import_value_type(
+        &mut self,
+        ty: &ImportValueType,
+        arguments: &[StructuralTypeId],
+        span: SourceSpan,
+    ) -> Result<StructuralTypeId, DecodeTypeLoweringError> {
+        match ty {
+            ImportValueType::Primitive(builtin) => self.lower_import_builtin(*builtin, &[], span),
+            ImportValueType::Tuple(elements) => {
+                let lowered = elements
+                    .iter()
+                    .map(|element| self.lower_import_value_type(element, arguments, span))
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.types
+                    .tuple(lowered)
+                    .map_err(|error| DecodeTypeLoweringError::invalid_shape(span, error.kind().clone()))
+            }
+            ImportValueType::Record(fields) => {
+                let lowered = fields
+                    .iter()
+                    .map(|field| {
+                        Ok(RecordField::new(
+                            field.name.as_ref(),
+                            self.lower_import_value_type(&field.ty, arguments, span)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, DecodeTypeLoweringError>>()?;
+                self.types
+                    .record(Closedness::Closed, lowered)
+                    .map_err(|error| DecodeTypeLoweringError::invalid_shape(span, error.kind().clone()))
+            }
+            ImportValueType::Arrow { .. } => Err(DecodeTypeLoweringError::unsupported(
+                span,
+                SourceDecodeUnsupportedTypeKind::Arrow,
+            )),
+            ImportValueType::List(element) => {
+                let element = self.lower_import_value_type(element, arguments, span)?;
+                Ok(self.types.list(element))
+            }
+            ImportValueType::Map { .. } => Ok(self.external_reference("Map")),
+            ImportValueType::Set(_) => Ok(self.external_reference("Set")),
+            ImportValueType::Option(element) => {
+                let element = self.lower_import_value_type(element, arguments, span)?;
+                Ok(self.types.option(element))
+            }
+            ImportValueType::Result { error, value } => {
+                let error = self.lower_import_value_type(error, arguments, span)?;
+                let value = self.lower_import_value_type(value, arguments, span)?;
+                Ok(self.types.result(error, value))
+            }
+            ImportValueType::Validation { error, value } => {
+                let error = self.lower_import_value_type(error, arguments, span)?;
+                let value = self.lower_import_value_type(value, arguments, span)?;
+                Ok(self.types.validation(error, value))
+            }
+            ImportValueType::Signal(_) => Err(DecodeTypeLoweringError::unsupported(
+                span,
+                SourceDecodeUnsupportedTypeKind::NestedSignal,
+            )),
+            ImportValueType::Task { .. } => Err(DecodeTypeLoweringError::unsupported(
+                span,
+                SourceDecodeUnsupportedTypeKind::Task,
+            )),
+            ImportValueType::TypeVariable { index, name } => Ok(arguments
+                .get(*index)
+                .copied()
+                .unwrap_or_else(|| self.external_reference(name.clone()))),
+            ImportValueType::Named {
+                type_name,
+                arguments: nested_arguments,
+            } => {
+                let lowered_arguments = nested_arguments
+                    .iter()
+                    .map(|argument| self.lower_import_value_type(argument, arguments, span))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if let Some((import_id, _)) = self.module.imports().iter().find(|(_, binding)| {
+                    (binding.imported_name.text() == type_name || binding.local_name.text() == type_name)
+                        && matches!(
+                            &binding.metadata,
+                            ImportBindingMetadata::TypeConstructor { .. }
+                                | ImportBindingMetadata::Domain { .. }
+                                | ImportBindingMetadata::BuiltinType(_)
+                                | ImportBindingMetadata::AmbientType
+                        )
+                }) {
+                    self.lower_import_type_reference(import_id, &lowered_arguments, span)
+                } else {
+                    Ok(self.external_reference(type_name.clone()))
+                }
+            }
+        }
+    }
+
+    fn lower_import_builtin(
+        &mut self,
+        builtin: BuiltinType,
+        arguments: &[StructuralTypeId],
+        span: SourceSpan,
+    ) -> Result<StructuralTypeId, DecodeTypeLoweringError> {
+        match builtin_scalar(builtin) {
+            Some(primitive) if arguments.is_empty() => Ok(self.types.primitive(primitive)),
+            Some(_) => Ok(self.external_reference(builtin_type_name(builtin))),
+            None => match builtin {
+                BuiltinType::List | BuiltinType::Map | BuiltinType::Set | BuiltinType::Option => {
+                    Ok(self.external_reference(builtin_type_name(builtin)))
+                }
+                BuiltinType::Result | BuiltinType::Validation => {
+                    Ok(self.external_reference(builtin_type_name(builtin)))
+                }
+                BuiltinType::Signal => Err(DecodeTypeLoweringError::unsupported(
+                    span,
+                    SourceDecodeUnsupportedTypeKind::NestedSignal,
+                )),
+                BuiltinType::Task => Err(DecodeTypeLoweringError::unsupported(
+                    span,
+                    SourceDecodeUnsupportedTypeKind::Task,
+                )),
+                BuiltinType::Int
+                | BuiltinType::Float
+                | BuiltinType::Decimal
+                | BuiltinType::BigInt
+                | BuiltinType::Bool
+                | BuiltinType::Text
+                | BuiltinType::Unit
+                | BuiltinType::Bytes => unreachable!("scalar builtins should match above"),
+            },
+        }
     }
 
     fn external_reference(&mut self, name: impl Into<String>) -> StructuralTypeId {

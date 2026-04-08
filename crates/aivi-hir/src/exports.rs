@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use crate::{
     BuiltinTerm, DecoratorPayload, DeprecatedDecorator, DeprecationNotice, DomainMemberKind,
     ExportItem, ExportResolution, ImportBindingMetadata, ImportBundleKind, ImportId,
-    ImportRecordField, ImportValueType, ImportedDomainLiteralSuffix, Item, ItemId, Module,
-    RecordExpr, ResolutionState, TypeId, TypeItemBody, TypeKind, TypeParameterId, TypeReference,
-    TypeResolution,
+    ImportRecordField, ImportSumVariant, ImportTypeDefinition, ImportValueType,
+    ImportedDomainLiteralSuffix, Item, ItemId, Module, RecordExpr, ResolutionState, TypeId,
+    TypeItemBody, TypeKind, TypeParameterId, TypeReference, TypeResolution,
 };
 
 /// The kind of an exported name.
@@ -254,9 +254,11 @@ fn explicit_item_exported_name(
                     ImportBindingMetadata::AmbientType
                 } else {
                     let fields = extract_type_record_fields(module, item);
+                    let definition = extract_type_definition(module, item);
                     ImportBindingMetadata::TypeConstructor {
                         kind: aivi_typing::Kind::constructor(item.parameters.len()),
                         fields,
+                        definition,
                     }
                 };
                 return Some(ExportedName {
@@ -328,6 +330,7 @@ fn explicit_item_exported_name(
                 ImportBindingMetadata::TypeConstructor {
                     kind: aivi_typing::Kind::constructor(item.parameters.len()),
                     fields: None,
+                    definition: None,
                 }
             },
             callable_type: None,
@@ -410,6 +413,7 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
             metadata: ImportBindingMetadata::TypeConstructor {
                 kind: aivi_typing::Kind::constructor(item.parameters.len()),
                 fields: extract_type_record_fields(module, item),
+                definition: extract_type_definition(module, item),
             },
             callable_type: None,
             deprecation,
@@ -448,6 +452,7 @@ fn item_to_exported_name(module: &Module, item: &Item) -> Option<ExportedName> {
             metadata: ImportBindingMetadata::TypeConstructor {
                 kind: aivi_typing::Kind::constructor(item.parameters.len()),
                 fields: None,
+                definition: None,
             },
             callable_type: None,
             deprecation,
@@ -1207,5 +1212,30 @@ fn extract_type_record_fields(
     match import_value_type(module, *alias)? {
         ImportValueType::Record(fields) => Some(fields),
         _ => None,
+    }
+}
+
+fn extract_type_definition(
+    module: &Module,
+    item: &crate::TypeItem,
+) -> Option<ImportTypeDefinition> {
+    match &item.body {
+        TypeItemBody::Alias(alias) => {
+            import_value_type(module, *alias).map(ImportTypeDefinition::Alias)
+        }
+        TypeItemBody::Sum(variants) => variants
+            .iter()
+            .map(|variant| {
+                Some(ImportSumVariant {
+                    name: variant.name.text().into(),
+                    fields: variant
+                        .fields
+                        .iter()
+                        .map(|field| import_value_type(module, field.ty))
+                        .collect::<Option<Vec<_>>>()?,
+                })
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(ImportTypeDefinition::Sum),
     }
 }

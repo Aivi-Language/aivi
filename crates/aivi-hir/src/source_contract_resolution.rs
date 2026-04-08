@@ -84,7 +84,7 @@ impl<'a> SourceContractTypeResolver<'a> {
                 arguments: vec![self.resolve(*element)?],
             }),
             SourceContractType::Map { key, value } => Ok(ResolvedSourceContractType::Apply {
-                callee: ResolvedSourceTypeConstructor::Item(self.resolve_named_type("Map", 2)?),
+                callee: ResolvedSourceTypeConstructor::Builtin(BuiltinType::Map),
                 arguments: vec![self.resolve_atom(key)?, self.resolve(*value)?],
             }),
             SourceContractType::Signal(payload) => Ok(ResolvedSourceContractType::Apply {
@@ -303,7 +303,6 @@ mod tests {
         let decode_mode = push_sum_type(&mut module, "DecodeMode", &[]);
         let stream_mode = push_sum_type(&mut module, "StreamMode", &[]);
         let fs_watch_event = push_sum_type(&mut module, "FsWatchEvent", &[]);
-        let map = push_sum_type(&mut module, "Map", &["K", "V"]);
 
         let mut resolver = SourceContractTypeResolver::new(&module);
 
@@ -350,7 +349,7 @@ mod tests {
                 ))
                 .expect("Map Text Text should resolve"),
             ResolvedSourceContractType::Apply {
-                callee: ResolvedSourceTypeConstructor::Item(map),
+                callee: ResolvedSourceTypeConstructor::Builtin(BuiltinType::Map),
                 arguments: vec![
                     ResolvedSourceContractType::Builtin(BuiltinType::Text),
                     ResolvedSourceContractType::Builtin(BuiltinType::Text),
@@ -375,7 +374,7 @@ mod tests {
     #[test]
     fn rejects_missing_nominal_types_and_wrong_constructor_arities() {
         let mut module = Module::new(FileId::new(0));
-        let map = push_sum_type(&mut module, "Map", &["K"]);
+        let decode_mode = push_sum_type(&mut module, "DecodeMode", &["A"]);
         let mut resolver = SourceContractTypeResolver::new(&module);
 
         let missing = resolver
@@ -389,18 +388,15 @@ mod tests {
         );
 
         let wrong_arity = resolver
-            .resolve(SourceContractType::map(
-                SourceTypeAtom::primitive(PrimitiveType::Text),
-                SourceTypeAtom::primitive(PrimitiveType::Text),
-            ))
-            .expect_err("Map should reject the wrong arity");
+            .resolve(SourceContractType::nominal(SourceNominalType::DecodeMode))
+            .expect_err("DecodeMode should reject the wrong arity");
         assert_eq!(
             wrong_arity.kind(),
             &SourceContractResolutionErrorKind::ArityMismatch {
-                name: "Map".to_owned(),
-                expected: 2,
+                name: "DecodeMode".to_owned(),
+                expected: 0,
                 actual: 1,
-                item: map,
+                item: decode_mode,
             }
         );
     }

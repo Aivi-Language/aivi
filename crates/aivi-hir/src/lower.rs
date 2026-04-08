@@ -8717,10 +8717,12 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.network", "Request") => Some(ImportBindingMetadata::TypeConstructor {
             kind: Kind::constructor(1),
             fields: None,
+            definition: None,
         }),
         ("aivi.network", "Channel") => Some(ImportBindingMetadata::TypeConstructor {
             kind: Kind::constructor(2),
             fields: None,
+            definition: None,
         }),
         ("aivi.defaults", "defaultText") => Some(ImportBindingMetadata::Value {
             ty: ImportValueType::Primitive(BuiltinType::Text),
@@ -8830,6 +8832,7 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.random", "RandomError") => Some(ImportBindingMetadata::TypeConstructor {
             kind: Kind::constructor(0),
             fields: None,
+            definition: None,
         }),
         ("aivi.db", "paramBool") => Some(intrinsic_import_value(
             IntrinsicValue::DbParamBool,

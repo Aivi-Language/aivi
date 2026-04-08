@@ -200,7 +200,8 @@ async fn hover_survives_box_drawing_comments_before_binary_exprs() {
     let text = "/**\n * Mailfox UI entry point.\n **/\n\n// ─── Imports ──────────────────────────────────────\nvalue total = 42\nvalue check = 1 + 2\n";
     let (state, uri) = open_inline("hover-box-drawing-comment.aivi", text);
     let position = position_of_nth(text, "total", 0);
-    let markup = hover_markup(hover(hover_params(uri, position.line, position.character), state).await);
+    let markup =
+        hover_markup(hover(hover_params(uri, position.line, position.character), state).await);
 
     assert!(
         markup.contains("value total : Int"),
