@@ -241,8 +241,8 @@ func finishRayState = board own state coord => discAt board coord == own
 
 type Matrix Disc -> Disc -> Disc -> RayState -> Coord -> RayState
 func advanceRayState = board own other state coord => discAt board coord == other
- T|> recordOpponent state coord
- F|> finishRayState board own state coord
+ ||> True  -> recordOpponent state coord
+ ||> False -> finishRayState board own state coord
 
 type Matrix Disc -> Disc -> Disc -> RayState -> Coord -> RayState
 func scanRayStep = board own other state coord => state.collecting
