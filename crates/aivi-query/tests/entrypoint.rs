@@ -121,3 +121,76 @@ fn missing_implicit_main_reports_the_expected_path_without_guessing() {
     assert!(message.contains(expected_path.to_string_lossy().as_ref()));
     assert!(message.contains("--path <entry-file>"));
 }
+
+#[test]
+fn run_entry_is_used_as_default_in_multi_app_workspaces() {
+    let workspace = ScratchDir::new("run-entry-default");
+    workspace.write(
+        "aivi.toml",
+        concat!(
+            "[run]\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"ui\"\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"tray\"\n",
+            "entry = \"apps/tray/main.aivi\"\n",
+        ),
+    );
+    let ui = workspace.write(
+        "apps/ui/main.aivi",
+        "value main = <Window title=\"UI\" />\n",
+    );
+    workspace.write(
+        "apps/tray/main.aivi",
+        "value quickCompose = <Window title=\"Tray\" />\n",
+    );
+    let cwd = workspace.mkdir("tooling");
+
+    let resolved = resolve_v1_entrypoint(&cwd, None, None)
+        .expect("[run] entry should provide the default run target");
+
+    assert_eq!(resolved.origin(), EntrypointOrigin::ManifestEntry);
+    assert_eq!(resolved.workspace_root(), workspace.path());
+    assert_eq!(resolved.entry_path(), ui.as_path());
+}
+
+#[test]
+fn named_app_overrides_manifest_run_entry() {
+    let workspace = ScratchDir::new("named-app-overrides-run-entry");
+    workspace.write(
+        "aivi.toml",
+        concat!(
+            "[run]\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"ui\"\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"tray\"\n",
+            "entry = \"apps/tray/main.aivi\"\n",
+            "view = \"quickCompose\"\n",
+        ),
+    );
+    workspace.write(
+        "apps/ui/main.aivi",
+        "value main = <Window title=\"UI\" />\n",
+    );
+    let tray = workspace.write(
+        "apps/tray/main.aivi",
+        "value quickCompose = <Window title=\"Tray\" />\n",
+    );
+    let cwd = workspace.mkdir("tooling");
+
+    let resolved = resolve_v1_entrypoint(&cwd, None, Some("tray"))
+        .expect("--app should override the workspace default run entry");
+
+    assert_eq!(resolved.origin(), EntrypointOrigin::ManifestEntry);
+    assert_eq!(resolved.entry_path(), tray.as_path());
+    assert_eq!(resolved.manifest_view(), Some("quickCompose"));
+}

@@ -856,8 +856,11 @@ fn infer_recurrence_input_subject(
                 advance_by: 1,
             },
             PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
-                new_subject: current
-                    .and_then(|s| typing.infer_burst_stage_info(*every, *count, current_env, s).ty),
+                new_subject: current.and_then(|s| {
+                    typing
+                        .infer_burst_stage_info(*every, *count, current_env, s)
+                        .ty
+                }),
                 advance_by: 1,
             },
             // Transform and Tap are handled by PipeSubjectWalker before the

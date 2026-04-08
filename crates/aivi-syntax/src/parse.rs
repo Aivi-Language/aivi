@@ -3709,7 +3709,9 @@ impl<'a> Parser<'a> {
 
             let mut fields = Vec::new();
             while let Some(index) = self.peek_nontrivia(*cursor, end) {
-                if self.tokens[index].kind() == TokenKind::PipeTap || !self.starts_type_atom(index)
+                if self.tokens[index].line_start()
+                    || self.tokens[index].kind() == TokenKind::PipeTap
+                    || !self.starts_type_atom(index)
                 {
                     break;
                 }
@@ -3752,6 +3754,8 @@ impl<'a> Parser<'a> {
             );
             return None;
         };
+        let name_span = name.span;
+        let mut annotation = None;
 
         if let Some(colon_idx) = self.peek_nontrivia(*cursor, end) {
             if self.tokens[colon_idx].kind() == TokenKind::Colon
@@ -3759,18 +3763,33 @@ impl<'a> Parser<'a> {
             {
                 *cursor = colon_idx + 1;
                 let ann_end = self
-                    .find_next_type_companion_member_start(*cursor, end, member_indent)
+                    .find_same_line_top_level_equals(*cursor, end)
+                    .or_else(|| self.find_next_type_companion_member_start(*cursor, end, member_indent))
                     .unwrap_or(end);
-                let annotation = self.parse_type_expr(cursor, ann_end, TypeStop::default());
+                annotation = self
+                    .parse_type_expr(cursor, ann_end, TypeStop::default())
+                    .or_else(|| {
+                        self.diagnostics.push(
+                            Diagnostic::error("type companion member is missing its type after `:`")
+                                .with_code(MISSING_TYPE_COMPANION_TYPE)
+                                .with_primary_label(
+                                    name_span,
+                                    "expected a companion type such as `Player -> Player`",
+                                ),
+                        );
+                        None
+                    });
                 *cursor = ann_end;
-                return Some(TypeCompanionMember {
-                    name,
-                    annotation,
-                    function_form: FunctionSurfaceForm::Explicit,
-                    parameters: Vec::new(),
-                    body: None,
-                    span: self.source_span_for_range(start, *cursor),
-                });
+                if self.peek_kind(*cursor, end) != Some(TokenKind::Equals) {
+                    return Some(TypeCompanionMember {
+                        name,
+                        annotation,
+                        function_form: FunctionSurfaceForm::Explicit,
+                        parameters: Vec::new(),
+                        body: None,
+                        span: self.source_span_for_range(start, *cursor),
+                    });
+                }
             }
         }
 
@@ -3872,7 +3891,7 @@ impl<'a> Parser<'a> {
         *cursor = member_end;
         Some(TypeCompanionMember {
             name,
-            annotation: None,
+            annotation,
             function_form,
             parameters,
             body,
@@ -4363,11 +4382,7 @@ impl<'a> Parser<'a> {
                         stop.with_pipe_stage().with_hash(),
                     )?;
                     let result_memo = self.parse_optional_pipe_memo(cursor, end);
-                    (
-                        subject_memo,
-                        PipeStageKind::Delay { duration },
-                        result_memo,
-                    )
+                    (subject_memo, PipeStageKind::Delay { duration }, result_memo)
                 }
                 TokenKind::PipeBurst => {
                     cluster_active = false;
@@ -7590,6 +7605,42 @@ export main
             panic!("expected sum type body");
         };
         assert_eq!(sum.companions.len(), 1);
+        assert_eq!(
+            sum.companions[0].function_form,
+            FunctionSurfaceForm::UnarySubjectSugar
+        );
+        assert_eq!(sum.companions[0].parameters.len(), 1);
+        assert!(sum.companions[0].annotation.is_some());
+        assert!(sum.companions[0].body.is_some());
+    }
+
+    #[test]
+    fn parser_builds_inline_annotated_sum_type_companions_with_unary_subject_sugar() {
+        let (_, parsed) = load(
+            r#"type Player = {
+    | Human
+    | Computer
+
+    opponent: Player -> Player = .
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "{:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let Item::Type(item) = &parsed.module.items[0] else {
+            panic!("expected type item");
+        };
+        let Some(TypeDeclBody::Sum(sum)) = item.type_body() else {
+            panic!("expected sum type body");
+        };
+        assert_eq!(sum.companions.len(), 1);
+        assert_eq!(sum.companions[0].name.text, "opponent");
         assert_eq!(
             sum.companions[0].function_form,
             FunctionSurfaceForm::UnarySubjectSugar

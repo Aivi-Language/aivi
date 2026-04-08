@@ -60,8 +60,7 @@ impl ResolvedEntrypoint {
     }
 }
 
-/// v1 entry discovery can only fail when the implicit `<workspace-root>/main.aivi`
-/// target is absent.
+/// Errors returned while resolving a workspace entrypoint.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EntrypointResolutionError {
     MissingImplicitEntrypoint {
@@ -168,8 +167,8 @@ impl Error for EntrypointResolutionError {}
 /// Resolution order:
 /// 1. Explicit CLI path (`--path` or positional argument)
 /// 2. `--app <name>` matched against `[[app]]` entries in `aivi.toml`
-/// 3. Single `[[app]]` entry (auto-selected when only one app is defined)
-/// 4. `[run] entry` from `aivi.toml` in the workspace root
+/// 3. `[run] entry` from `aivi.toml` in the workspace root
+/// 4. Single `[[app]]` entry (auto-selected when only one app is defined)
 /// 5. Implicit `<workspace-root>/main.aivi`
 pub fn resolve_v1_entrypoint(
     current_dir: &Path,
@@ -194,27 +193,16 @@ pub fn resolve_v1_entrypoint(
     let manifest = parse_manifest(&workspace_root)
         .map_err(|message| EntrypointResolutionError::ManifestParseError { message })?;
 
-    // [[app]] resolution: named or auto-select when exactly one entry exists.
-    if !manifest.apps.is_empty() {
-        let app = if let Some(name) = app_name {
-            manifest
-                .apps
-                .iter()
-                .find(|a| a.name == name)
-                .ok_or_else(|| EntrypointResolutionError::UnknownApp {
-                    workspace_root: workspace_root.clone(),
-                    requested: name.to_owned(),
-                    available: manifest.apps.iter().map(|a| a.name.clone()).collect(),
-                })?
-        } else if manifest.apps.len() == 1 {
-            &manifest.apps[0]
-        } else {
-            return Err(EntrypointResolutionError::AmbiguousApp {
-                workspace_root,
-                apps: manifest.apps,
-            });
-        };
-
+    if let Some(name) = app_name {
+        let app = manifest
+            .apps
+            .iter()
+            .find(|a| a.name == name)
+            .ok_or_else(|| EntrypointResolutionError::UnknownApp {
+                workspace_root: workspace_root.clone(),
+                requested: name.to_owned(),
+                available: manifest.apps.iter().map(|a| a.name.clone()).collect(),
+            })?;
         let entry_path = workspace_root.join(&app.entry);
         if !entry_path.is_file() {
             return Err(EntrypointResolutionError::ManifestEntryNotFound {
@@ -223,7 +211,7 @@ pub fn resolve_v1_entrypoint(
                 resolved_path: entry_path,
             });
         }
-        let manifest_view = app.view.clone().or(manifest.run.view);
+        let manifest_view = app.view.clone().or(manifest.run.view.clone());
         return Ok(ResolvedEntrypoint::new(
             entry_path,
             workspace_root,
@@ -247,6 +235,34 @@ pub fn resolve_v1_entrypoint(
             EntrypointOrigin::ManifestEntry,
             manifest.run.view,
         ));
+    }
+
+    // [[app]] resolution: auto-select when exactly one entry exists, otherwise
+    // require the caller to disambiguate with `--app`.
+    if !manifest.apps.is_empty() {
+        if manifest.apps.len() == 1 {
+            let app = &manifest.apps[0];
+            let entry_path = workspace_root.join(&app.entry);
+            if !entry_path.is_file() {
+                return Err(EntrypointResolutionError::ManifestEntryNotFound {
+                    workspace_root,
+                    manifest_entry: app.entry.clone(),
+                    resolved_path: entry_path,
+                });
+            }
+            let manifest_view = app.view.clone().or(manifest.run.view);
+            return Ok(ResolvedEntrypoint::new(
+                entry_path,
+                workspace_root,
+                EntrypointOrigin::ManifestEntry,
+                manifest_view,
+            ));
+        }
+
+        return Err(EntrypointResolutionError::AmbiguousApp {
+            workspace_root,
+            apps: manifest.apps,
+        });
     }
 
     let entry_path = workspace_root.join("main.aivi");

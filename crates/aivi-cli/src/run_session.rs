@@ -1182,6 +1182,28 @@ mod tests {
             .expect("run-session text fixture should prepare")
     }
 
+    fn near_endgame_reversi_source() -> String {
+        let original = include_str!("../../../demos/reversi.aivi");
+        let replaced = original.replacen(
+            r#"func buildInitialDisc = x y => (x, y)
+ ||> (3, 3) -> White
+ ||> (4, 4) -> White
+ ||> (3, 4) -> Black
+ ||> (4, 3) -> Black
+ ||> _      -> Empty"#,
+            r#"func buildInitialDisc = x y => (x, y)
+ ||> (7, 0) -> Empty
+ ||> (6, 0) -> White
+ ||> _      -> Black"#,
+            1,
+        );
+        assert_ne!(
+            replaced, original,
+            "near-endgame reversi fixture should replace the opening board"
+        );
+        replaced
+    }
+
     fn pump_context(context: &gtk::glib::MainContext, duration: Duration) {
         let deadline = Instant::now() + duration;
         while Instant::now() < deadline {
@@ -1843,6 +1865,60 @@ export main
                 debug_signal_value_for(&harness, "state") == opening_state
             }),
             "restart should restore the opening board even if the AI turn had already started (phase: {}, state: {})",
+            debug_signal_value_for(&harness, "phase"),
+            debug_signal_value_for(&harness, "state"),
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
+    fn reversi_restart_resets_after_game_over() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let source = near_endgame_reversi_source();
+        let workspace = tempfile::tempdir().expect("near-endgame reversi workspace should create");
+        let fixture_path = workspace.path().join("main.aivi");
+        std::fs::write(&fixture_path, source)
+            .expect("near-endgame reversi fixture should write");
+        let artifact = prepare_run_from_path(&fixture_path);
+        let harness =
+            start_run_session_with_launch_config(&fixture_path, artifact, RunLaunchConfig::default())
+                .expect("near-endgame reversi fixture should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the reversi window should release startup-held timers");
+
+        let opening_state = debug_signal_value_for(&harness, "state");
+        let opening_move = find_sensitive_button_by_label(&harness, "◌")
+            .expect("near-endgame reversi should expose the final legal human move");
+        let restart = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| {
+                find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Restart")
+            })
+            .expect("reversi window should expose a restart button");
+
+        opening_move.emit_clicked();
+        assert!(
+            pump_until(&context, Duration::from_millis(250), || {
+                debug_signal_value_for(&harness, "phase").contains("HumanReady")
+                    && !has_sensitive_button_by_label(&harness, "◌")
+                    && debug_signal_value_for(&harness, "state") != opening_state
+            }),
+            "the near-endgame reversi fixture should settle into a terminal state after the final move (phase: {}, state: {})",
+            debug_signal_value_for(&harness, "phase"),
+            debug_signal_value_for(&harness, "state"),
+        );
+
+        restart.emit_clicked();
+        assert!(
+            pump_until(&context, Duration::from_millis(250), || {
+                debug_signal_value_for(&harness, "state") == opening_state
+                    && has_sensitive_button_by_label(&harness, "◌")
+            }),
+            "restart should restore the near-endgame opening state after game over (phase: {}, state: {})",
             debug_signal_value_for(&harness, "phase"),
             debug_signal_value_for(&harness, "state"),
         );

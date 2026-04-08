@@ -13579,6 +13579,64 @@ value next : Player = opponent Human
     }
 
     #[test]
+    fn lowers_inline_annotated_type_companion_members_into_synthetic_functions() {
+        let lowered = lower_text(
+            "inline-type-companions.aivi",
+            r#"
+type Player = {
+    | Human
+    | Computer
+
+    opponent: Player -> Player = .
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
+
+value next : Player = opponent Human
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "inline type companions should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "inline type companions should validate as resolved HIR: {:?}",
+            report.diagnostics()
+        );
+
+        let companion = lowered
+            .module()
+            .root_items()
+            .iter()
+            .find_map(|item_id| match &lowered.module().items()[*item_id] {
+                Item::Function(item) if item.name.text() == "opponent" => Some(item),
+                _ => None,
+            })
+            .expect("fixture should lower one synthetic companion function");
+        assert_eq!(companion.parameters.len(), 1);
+        let parameter_annotation = companion.parameters[0]
+            .annotation
+            .expect("inline companion receiver type should split onto the parameter");
+        let TypeKind::Name(parameter_ref) = &lowered.module().types()[parameter_annotation].kind
+        else {
+            panic!("companion parameter type should lower to Player");
+        };
+        let result_annotation = companion
+            .annotation
+            .expect("inline companion result type should remain on the function");
+        let TypeKind::Name(result_ref) = &lowered.module().types()[result_annotation].kind else {
+            panic!("companion result type should lower to Player");
+        };
+        assert_eq!(parameter_ref.path.to_string(), "Player");
+        assert_eq!(result_ref.path.to_string(), "Player");
+    }
+
+    #[test]
     fn type_companion_members_capture_owner_type_parameters() {
         let lowered = lower_text(
             "generic-type-companions.aivi",

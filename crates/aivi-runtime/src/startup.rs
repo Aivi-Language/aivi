@@ -306,23 +306,22 @@ impl BackendLinkedRuntime {
         schedules: Vec<PendingTemporalSchedule>,
     ) -> Result<(), BackendRuntimeError> {
         for schedule in schedules {
-            let binding = self
-                .derived_signals
-                .get(&schedule.signal)
-                .ok_or(BackendRuntimeError::UnknownDerivedSignal {
+            let binding = self.derived_signals.get(&schedule.signal).ok_or(
+                BackendRuntimeError::UnknownDerivedSignal {
                     signal: schedule.signal,
-                })?;
-            let helper =
-                binding
-                    .temporal_helper(schedule.key)
-                    .ok_or(BackendRuntimeError::MissingTemporalHelper {
-                        signal: schedule.signal,
-                        item: schedule.item,
-                        pipeline: schedule.key.pipeline,
-                        stage_index: schedule.key.stage_index,
-                    })?;
+                },
+            )?;
+            let helper = binding.temporal_helper(schedule.key).ok_or(
+                BackendRuntimeError::MissingTemporalHelper {
+                    signal: schedule.signal,
+                    item: schedule.item,
+                    pipeline: schedule.key.pipeline,
+                    stage_index: schedule.key.stage_index,
+                },
+            )?;
             let stamp = self.runtime.advance_generation(helper.input)?;
-            let worker = self.ensure_temporal_worker(schedule.signal, schedule.item, schedule.key)?;
+            let worker =
+                self.ensure_temporal_worker(schedule.signal, schedule.item, schedule.key)?;
             worker
                 .schedule(TemporalWorkerSchedule {
                     stamp,
@@ -348,16 +347,15 @@ impl BackendLinkedRuntime {
     ) -> Result<&TemporalWorkerHandle, BackendRuntimeError> {
         if !self.temporal_workers.contains_key(&key) {
             let sender = self.runtime.worker_sender();
-            let handle =
-                spawn_temporal_worker(signal, item, key, sender).map_err(|message| {
-                    BackendRuntimeError::SpawnTemporalWorker {
-                        signal,
-                        item,
-                        pipeline: key.pipeline,
-                        stage_index: key.stage_index,
-                        message: message.into_boxed_str(),
-                    }
-                })?;
+            let handle = spawn_temporal_worker(signal, item, key, sender).map_err(|message| {
+                BackendRuntimeError::SpawnTemporalWorker {
+                    signal,
+                    item,
+                    pipeline: key.pipeline,
+                    stage_index: key.stage_index,
+                    message: message.into_boxed_str(),
+                }
+            })?;
             self.temporal_workers.insert(key, handle);
         }
         Ok(self
@@ -911,7 +909,8 @@ impl TemporalWorkerHandle {
         &self,
         schedule: TemporalWorkerSchedule,
     ) -> Result<(), mpsc::SendError<TemporalWorkerCommand>> {
-        self.commands.send(TemporalWorkerCommand::Schedule(schedule))
+        self.commands
+            .send(TemporalWorkerCommand::Schedule(schedule))
     }
 
     fn stop(&mut self) {
@@ -2581,7 +2580,9 @@ impl LinkedDerivedEvaluator<'_> {
                             .map_err(|error| self.derived_eval_error(signal, item, error))?;
                         self.temporal_states.insert(key, current);
                     }
-                    BackendStageKind::Temporal(BackendTemporalStage::Delay { duration, .. }) => {
+                    BackendStageKind::Temporal(BackendTemporalStage::Delay {
+                        duration, ..
+                    }) => {
                         let duration_value = evaluator
                             .evaluate_kernel(*duration, None, &[], globals)
                             .map_err(|error| self.derived_eval_error(signal, item, error))?;
@@ -2603,19 +2604,24 @@ impl LinkedDerivedEvaluator<'_> {
                                 value: duration_value,
                             });
                         }
-                        self.pending_temporal_schedules.push(PendingTemporalSchedule {
-                            signal,
-                            item,
-                            key: TemporalStageKey {
-                                pipeline: pipeline_id,
-                                stage_index: stage.index,
-                            },
-                            value: value.clone(),
-                            kind: TemporalWorkerScheduleKind::Delay { wait },
-                        });
+                        self.pending_temporal_schedules
+                            .push(PendingTemporalSchedule {
+                                signal,
+                                item,
+                                key: TemporalStageKey {
+                                    pipeline: pipeline_id,
+                                    stage_index: stage.index,
+                                },
+                                value: value.clone(),
+                                kind: TemporalWorkerScheduleKind::Delay { wait },
+                            });
                         return Ok(self.suppressed_derived_update(binding.backend_item));
                     }
-                    BackendStageKind::Temporal(BackendTemporalStage::Burst { every, count, .. }) => {
+                    BackendStageKind::Temporal(BackendTemporalStage::Burst {
+                        every,
+                        count,
+                        ..
+                    }) => {
                         let every_value = evaluator
                             .evaluate_kernel(*every, None, &[], globals)
                             .map_err(|error| self.derived_eval_error(signal, item, error))?;
@@ -2631,16 +2637,15 @@ impl LinkedDerivedEvaluator<'_> {
                         let count_value = evaluator
                             .evaluate_kernel(*count, None, &[], globals)
                             .map_err(|error| self.derived_eval_error(signal, item, error))?;
-                        let repetitions =
-                            parse_temporal_count(&count_value).ok_or_else(|| {
-                                BackendRuntimeError::InvalidTemporalBurstCount {
-                                    signal,
-                                    item,
-                                    pipeline: pipeline_id,
-                                    stage_index: stage.index,
-                                    value: count_value.clone(),
-                                }
-                            })?;
+                        let repetitions = parse_temporal_count(&count_value).ok_or_else(|| {
+                            BackendRuntimeError::InvalidTemporalBurstCount {
+                                signal,
+                                item,
+                                pipeline: pipeline_id,
+                                stage_index: stage.index,
+                                value: count_value.clone(),
+                            }
+                        })?;
                         if wait.is_zero() {
                             return Err(BackendRuntimeError::InvalidTemporalBurstInterval {
                                 signal,
@@ -2650,19 +2655,20 @@ impl LinkedDerivedEvaluator<'_> {
                                 value: every_value,
                             });
                         }
-                        self.pending_temporal_schedules.push(PendingTemporalSchedule {
-                            signal,
-                            item,
-                            key: TemporalStageKey {
-                                pipeline: pipeline_id,
-                                stage_index: stage.index,
-                            },
-                            value: value.clone(),
-                            kind: TemporalWorkerScheduleKind::Burst {
-                                wait,
-                                remaining: repetitions,
-                            },
-                        });
+                        self.pending_temporal_schedules
+                            .push(PendingTemporalSchedule {
+                                signal,
+                                item,
+                                key: TemporalStageKey {
+                                    pipeline: pipeline_id,
+                                    stage_index: stage.index,
+                                },
+                                value: value.clone(),
+                                kind: TemporalWorkerScheduleKind::Burst {
+                                    wait,
+                                    remaining: repetitions,
+                                },
+                            });
                         return Ok(self.suppressed_derived_update(binding.backend_item));
                     }
                     BackendStageKind::Fanout(fanout) => {
@@ -3671,11 +3677,15 @@ impl<'a> LinkBuilder<'a> {
                     BackendStageKind::Temporal(BackendTemporalStage::DiffSeed { seed, .. }) => {
                         kernels.push(*seed);
                     }
-                    BackendStageKind::Temporal(BackendTemporalStage::Delay { duration, .. }) => {
+                    BackendStageKind::Temporal(BackendTemporalStage::Delay {
+                        duration, ..
+                    }) => {
                         kernels.push(*duration);
                     }
                     BackendStageKind::Temporal(BackendTemporalStage::Burst {
-                        every, count, ..
+                        every,
+                        count,
+                        ..
                     }) => {
                         kernels.push(*every);
                         kernels.push(*count);
@@ -5753,7 +5763,10 @@ signal delayedScore : Signal Int =
                 .count(),
             0
         );
-        assert_eq!(linked.runtime().current_value(delayed_signal).unwrap(), None);
+        assert_eq!(
+            linked.runtime().current_value(delayed_signal).unwrap(),
+            None
+        );
         assert_eq!(
             pump_for_commit_count(
                 &mut linked,
@@ -5762,7 +5775,10 @@ signal delayedScore : Signal Int =
             ),
             0
         );
-        assert_eq!(linked.runtime().current_value(delayed_signal).unwrap(), None);
+        assert_eq!(
+            linked.runtime().current_value(delayed_signal).unwrap(),
+            None
+        );
         assert_eq!(
             pump_until_commit_count(
                 &mut linked,
@@ -5941,7 +5957,10 @@ signal delayedScore : Signal Int =
                 .count(),
             0
         );
-        assert_eq!(linked.runtime().current_value(delayed_signal).unwrap(), None);
+        assert_eq!(
+            linked.runtime().current_value(delayed_signal).unwrap(),
+            None
+        );
 
         assert_eq!(
             pump_until_commit_count(

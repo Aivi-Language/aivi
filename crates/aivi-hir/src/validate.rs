@@ -665,12 +665,7 @@ impl Validator<'_> {
                                     "burst interval",
                                     *every,
                                 );
-                                self.require_expr(
-                                    stage.span,
-                                    "pipe stage",
-                                    "burst count",
-                                    *count,
-                                );
+                                self.require_expr(stage.span, "pipe stage", "burst count", *count);
                             }
                             PipeStageKind::Case { pattern, body } => {
                                 self.require_pattern(
@@ -5409,7 +5404,9 @@ impl Validator<'_> {
                                             env: env.clone(),
                                         });
                                         current = current.as_ref().and_then(|subject| {
-                                            typing.infer_delay_stage_info(*duration, &env, subject).ty
+                                            typing
+                                                .infer_delay_stage_info(*duration, &env, subject)
+                                                .ty
                                         });
                                         stage_index += 1;
                                     }
@@ -5423,13 +5420,11 @@ impl Validator<'_> {
                                             env: env.clone(),
                                         });
                                         current = current.as_ref().and_then(|subject| {
-                                            typing.infer_burst_stage_info(
-                                                *every,
-                                                *count,
-                                                &env,
-                                                subject,
-                                            )
-                                            .ty
+                                            typing
+                                                .infer_burst_stage_info(
+                                                    *every, *count, &env, subject,
+                                                )
+                                                .ty
                                         });
                                         stage_index += 1;
                                     }
@@ -6123,7 +6118,9 @@ impl Validator<'_> {
                     stage_index += 1;
                 }
                 PipeStageKind::Burst { every, count } => {
-                    current = typing.infer_burst_stage_info(*every, *count, env, &current).ty?;
+                    current = typing
+                        .infer_burst_stage_info(*every, *count, env, &current)
+                        .ty?;
                     stage_index += 1;
                 }
             }
@@ -6484,7 +6481,9 @@ impl Validator<'_> {
                 },
                 PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| {
-                        typing.infer_burst_stage_info(*every, *count, current_env, s).ty
+                        typing
+                            .infer_burst_stage_info(*every, *count, current_env, s)
+                            .ty
                     }),
                     advance_by: 1,
                 },
@@ -6608,7 +6607,9 @@ impl Validator<'_> {
                 },
                 PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| {
-                        typing.infer_burst_stage_info(*every, *count, current_env, s).ty
+                        typing
+                            .infer_burst_stage_info(*every, *count, current_env, s)
+                            .ty
                     }),
                     advance_by: 1,
                 },
@@ -6737,7 +6738,9 @@ impl Validator<'_> {
                 },
                 PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| {
-                        typing.infer_burst_stage_info(*every, *count, current_env, s).ty
+                        typing
+                            .infer_burst_stage_info(*every, *count, current_env, s)
+                            .ty
                     }),
                     advance_by: 1,
                 },

@@ -6759,7 +6759,9 @@ impl<'a> GateTypeContext<'a> {
         };
 
         let duration_info = self.infer_expr(duration_expr, env, None);
-        let duration_ty = duration_info.actual_gate_type().or(duration_info.ty.clone());
+        let duration_ty = duration_info
+            .actual_gate_type()
+            .or(duration_info.ty.clone());
         info.merge(duration_info);
         let Some(duration_ty) = duration_ty else {
             return self.finalize_expr_info(info);

@@ -135,9 +135,8 @@ pub use source_lifecycle_elaboration::{
 pub use symbols::{LspSymbol, LspSymbolKind, extract_symbols};
 pub use temporal_elaboration::{
     BlockedTemporalStage, BurstStagePlan, DelayStagePlan, DiffStageMode, DiffStagePlan,
-    PreviousStagePlan,
-    TemporalElaborationBlocker, TemporalElaborationReport, TemporalStageElaboration,
-    TemporalStageOutcome, elaborate_temporal_stages,
+    PreviousStagePlan, TemporalElaborationBlocker, TemporalElaborationReport,
+    TemporalStageElaboration, TemporalStageOutcome, elaborate_temporal_stages,
 };
 pub use truthy_falsy_elaboration::{
     BlockedTruthyFalsyStage, TruthyFalsyBranchKind, TruthyFalsyBranchPlan,

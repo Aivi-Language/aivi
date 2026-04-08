@@ -22,6 +22,7 @@ use serde_json::{Value as JsonValue, json};
 const MCP_PROTOCOL_VERSION: &str = "2024-11-05";
 const HOST_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const HYDRATION_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
+const HYDRATION_SETTLE_GRACE: Duration = Duration::from_millis(20);
 
 type HostTask = Box<dyn FnOnce(&mut McpHostState) + Send + 'static>;
 
@@ -219,9 +220,12 @@ impl McpHostState {
             root_window_count: session.harness.root_windows().len(),
             latest_requested_hydration: runtime.latest_requested_hydration,
             latest_applied_hydration: runtime.latest_applied_hydration,
+            hydration_in_sync: Some(runtime.hydration_in_sync()),
+            pending_hydration_revision: runtime.pending_hydration_revision(),
             queued_messages: Some(runtime.queued_messages),
             queued_outcomes: Some(runtime.queued_outcomes),
             queued_failures: Some(runtime.queued_failures),
+            runtime_idle: Some(runtime.runtime_idle()),
         })
     }
 
@@ -240,9 +244,12 @@ impl McpHostState {
             root_window_count: 0,
             latest_requested_hydration: None,
             latest_applied_hydration: None,
+            hydration_in_sync: None,
+            pending_hydration_revision: None,
             queued_messages: None,
             queued_outcomes: None,
             queued_failures: None,
+            runtime_idle: None,
         }
     }
 
@@ -467,26 +474,40 @@ impl McpHostState {
 
     fn settle_session(&self) -> Result<(), String> {
         let session = self.require_session()?;
-        let target_revision = session.harness.with_access(|access| {
-            access.process_pending_work()?;
-            Ok::<Option<u64>, String>(access.latest_requested_hydration())
-        })?;
         let deadline = Instant::now() + HYDRATION_SETTLE_TIMEOUT;
+        let mut stable_since = None;
         loop {
             self.process_context_work();
-            let settled = session.harness.with_access(|access| {
+            let runtime = session.harness.with_access(|access| {
                 access.process_pending_work()?;
-                let applied = access.latest_applied_hydration();
-                Ok::<bool, String>(match target_revision {
-                    Some(target) => applied.is_some_and(|revision| revision >= target),
-                    None => true,
+                Ok::<SessionRuntimeStatus, String>(SessionRuntimeStatus {
+                    phase: phase_label(access.phase()).to_owned(),
+                    latest_requested_hydration: access.latest_requested_hydration(),
+                    latest_applied_hydration: access.latest_applied_hydration(),
+                    queued_messages: access.queued_message_count(),
+                    queued_outcomes: access.outcome_count(),
+                    queued_failures: access.failure_count(),
                 })
             })?;
-            if settled {
-                break;
+            if runtime.hydration_in_sync() && runtime.runtime_idle() {
+                stable_since = Some(stable_since.unwrap_or_else(Instant::now));
+                if stable_since
+                    .is_some_and(|since| since.elapsed() >= HYDRATION_SETTLE_GRACE)
+                {
+                    break;
+                }
+            } else {
+                stable_since = None;
             }
             if Instant::now() >= deadline {
-                return Err("timed out waiting for GTK hydration to settle".to_owned());
+                return Err(format!(
+                    "timed out waiting for GTK hydration to settle (requested: {:?}, applied: {:?}, queued messages: {}, queued outcomes: {}, queued failures: {})",
+                    runtime.latest_requested_hydration,
+                    runtime.latest_applied_hydration,
+                    runtime.queued_messages,
+                    runtime.queued_outcomes,
+                    runtime.queued_failures,
+                ));
             }
             thread::sleep(HOST_POLL_INTERVAL);
         }
@@ -2188,9 +2209,12 @@ struct SessionStatus {
     root_window_count: usize,
     latest_requested_hydration: Option<u64>,
     latest_applied_hydration: Option<u64>,
+    hydration_in_sync: Option<bool>,
+    pending_hydration_revision: Option<u64>,
     queued_messages: Option<usize>,
     queued_outcomes: Option<usize>,
     queued_failures: Option<usize>,
+    runtime_idle: Option<bool>,
 }
 
 struct SessionRuntimeStatus {
@@ -2200,6 +2224,28 @@ struct SessionRuntimeStatus {
     queued_messages: usize,
     queued_outcomes: usize,
     queued_failures: usize,
+}
+
+impl SessionRuntimeStatus {
+    fn hydration_in_sync(&self) -> bool {
+        match (self.latest_requested_hydration, self.latest_applied_hydration) {
+            (Some(requested), Some(applied)) => applied >= requested,
+            (Some(_), None) => false,
+            (None, _) => true,
+        }
+    }
+
+    fn pending_hydration_revision(&self) -> Option<u64> {
+        match (self.latest_requested_hydration, self.latest_applied_hydration) {
+            (Some(requested), Some(applied)) if applied < requested => Some(requested),
+            (Some(requested), None) => Some(requested),
+            _ => None,
+        }
+    }
+
+    fn runtime_idle(&self) -> bool {
+        self.queued_messages == 0 && self.queued_outcomes == 0
+    }
 }
 
 #[derive(Clone, Serialize)]

@@ -294,6 +294,59 @@ fn compile_accepts_temporal_signal_programs() {
 }
 
 #[test]
+fn compile_accepts_delay_and_burst_pipe_stage_programs() {
+    let input = TempFile::new(
+        "compile-delay-burst",
+        "aivi",
+        concat!(
+            "provider custom.feed\n",
+            "    wakeup: providerTrigger\n",
+            "\n",
+            "@source custom.feed\n",
+            "signal score : Signal Int\n",
+            "\n",
+            "signal delayedScore : Signal Int =\n",
+            "    score\n",
+            "     delay|> 200\n",
+            "\n",
+            "signal burstScore : Signal Int =\n",
+            "    score\n",
+            "     burst|> 75 3\n",
+        ),
+    );
+    let output_dir = TempDir::new("compile-delay-burst");
+    let output_path = output_dir.path().join("delay-burst.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(input.path())
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
+    assert!(
+        output.status.success(),
+        "expected delay/burst pipe stage compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata = fs::metadata(&output_path)
+        .expect("delay/burst pipe stage compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "delay/burst pipe stage object file should not be empty"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("codegen: ok"),
+        "expected codegen success in summary, got stdout: {stdout}"
+    );
+}
+
+#[test]
 fn compile_accepts_source_pattern_reactive_update_program() {
     let input = TempFile::new(
         "compile-source-pattern-reactive-update",

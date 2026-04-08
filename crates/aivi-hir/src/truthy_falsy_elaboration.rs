@@ -309,8 +309,11 @@ fn collect_truthy_falsy_pipe(
                 advance_by: 1,
             },
             PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
-                new_subject: current
-                    .and_then(|s| typing.infer_burst_stage_info(*every, *count, current_env, s).ty),
+                new_subject: current.and_then(|s| {
+                    typing
+                        .infer_burst_stage_info(*every, *count, current_env, s)
+                        .ty
+                }),
                 advance_by: 1,
             },
             PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {

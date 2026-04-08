@@ -1905,10 +1905,8 @@ fn add_temporal_helper_inputs(
     let helper_count = collect_temporal_helper_count(module, expr);
     let mut helpers = Vec::with_capacity(helper_count);
     for index in 0..helper_count {
-        let input = graph_builder.add_input(
-            format!("{signal_name}#temporal{}", index + 1),
-            Some(owner),
-        )?;
+        let input =
+            graph_builder.add_input(format!("{signal_name}#temporal{}", index + 1), Some(owner))?;
         helpers.push(input);
     }
     Ok(helpers.into_boxed_slice())

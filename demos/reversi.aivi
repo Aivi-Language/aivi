@@ -241,8 +241,8 @@ func finishRayState = board own state coord => discAt board coord == own
 
 type Matrix Disc -> Disc -> Disc -> RayState -> Coord -> RayState
 func advanceRayState = board own other state coord => discAt board coord == other
- ||> True  -> recordOpponent state coord
- ||> False -> finishRayState board own state coord
+ T|> recordOpponent state coord
+ F|> finishRayState board own state coord
 
 type Matrix Disc -> Disc -> Disc -> RayState -> Coord -> RayState
 func scanRayStep = board own other state coord => state.collecting
@@ -251,8 +251,8 @@ func scanRayStep = board own other state coord => state.collecting
 
 type RayState -> List Coord
 func finalizeRay = state => state.closed
- T|> state.trail
- F|> emptyCoords
+ ||> True  -> state.trail
+ ||> False -> emptyCoords
 
 type Matrix Disc -> Disc -> Disc -> List Coord -> List Coord
 func collectRay = board own other coords =>
@@ -352,13 +352,13 @@ func computerThinkingState = board lastMove =>
 
 type GameState -> Coord -> GameState
 func clickGameState = state coord => humanCanPlace coord state.snapshot
- T|> makeGameState (applyPlacement state.board Human coord) Computer state.snapshot ComputerThinking (Some (Place Human coord))
- F|> state
+ ||> True  -> makeGameState (applyPlacement state.board Human coord) Computer state.snapshot ComputerThinking (Some (Place Human coord))
+ ||> False -> state
 
 type GameState -> Snapshot -> GameState
 func settleComputerWithoutMove = state refreshed => snapshotPassPending refreshed
- T|> humanReadyState state.board (Some (Pass Computer))
- F|> makeGameState state.board state.turn refreshed HumanReady state.lastMove
+ ||> True  -> humanReadyState state.board (Some (Pass Computer))
+ ||> False -> makeGameState state.board state.turn refreshed HumanReady state.lastMove
 
 type GameState -> Coord -> GameState
 func commitComputerPlacement = state coord =>
@@ -366,8 +366,8 @@ func commitComputerPlacement = state coord =>
 
 type GameState -> Coord -> Matrix Disc -> GameState
 func commitComputerPlacementToBoard = state coord board => snapshotPassPending (makeSnapshot board Human)
- T|> computerThinkingState board (Some (Place Computer coord))
- F|> humanReadyState board (Some (Place Computer coord))
+ ||> True  -> computerThinkingState board (Some (Place Computer coord))
+ ||> False -> humanReadyState board (Some (Place Computer coord))
 
 type GameState -> GameState
 func refreshGameState = state => state.phase
@@ -381,8 +381,8 @@ func beginComputerAnimation = state refreshed => snapshotAiTarget refreshed
 
 type GameState -> Coord -> Int -> GameState
 func stepComputerAnimation = state coord step => step + 1 >= computerFlashTicksTotal
- T|> commitComputerPlacement state coord
- F|> makeGameState state.board state.turn state.snapshot (ComputerAnimating coord (step + 1)) state.lastMove
+ ||> True  -> commitComputerPlacement state coord
+ ||> False -> makeGameState state.board state.turn state.snapshot (ComputerAnimating coord (step + 1)) state.lastMove
 
 type GameState -> GameState
 func advanceComputerAnimation = state => state.phase
@@ -456,9 +456,8 @@ signal restartClick : Signal Unit
 }
 signal snapshotReady : Signal Unit
 
-signal computerFlashTick : Signal Unit =
-    snapshotReady
-     burst|> 200ms computerFlashTicksTotal
+signal computerFlashTick : Signal Unit = snapshotReady
+ burst|> 200ms computerFlashTicksTotal
 
 signal event : Signal Event = snapshotReady | computerFlashTick | placeCoord | restartClick
   ||> snapshotReady _ => RefreshSnapshot

@@ -583,7 +583,9 @@ fn collect_gate_pipe(
                 },
                 PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| {
-                        typing.infer_burst_stage_info(*every, *count, current_env, s).ty
+                        typing
+                            .infer_burst_stage_info(*every, *count, current_env, s)
+                            .ty
                     }),
                     advance_by: 1,
                 },

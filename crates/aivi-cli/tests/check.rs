@@ -408,6 +408,8 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/pipe-transform-memos/main.aivi",
         "milestone-2/valid/pipe-accumulate-signal-wakeup/main.aivi",
         "milestone-2/valid/pipe-explicit-recurrence-wakeups/main.aivi",
+        "milestone-2/valid/pipe-truthy-falsy-signal-carriers/main.aivi",
+        "milestone-2/valid/workspace-domain-literal-imports/main.aivi",
         "milestone-1/valid/records/record_shorthand_and_elision.aivi",
         "milestone-1/valid/sources/source_declarations.aivi",
         "milestone-1/valid/strings/text_and_regex.aivi",
@@ -563,6 +565,8 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/custom-source-provider-unsupported-schema-type/main.aivi",
         "milestone-2/invalid/non-exhaustive-match-control/main.aivi",
         "milestone-2/invalid/nested-pipe-expression/main.aivi",
+        "milestone-2/invalid/truthy-falsy-signal-misuse/main.aivi",
+        "milestone-2/invalid/source-option-constructor-application-mismatch/main.aivi",
     ] {
         let path = fixture_path(relative);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -1415,4 +1419,139 @@ fn check_reports_case_branch_type_mismatch_from_hir_typechecker() {
             .contains("case split branches must agree on one result type, found `Int` and `Text`"),
         "expected explicit case branch type mismatch message, got stderr: {stderr}"
     );
+}
+
+#[test]
+fn check_reports_truthy_falsy_signal_misuse_from_hir() {
+    let path = fixture_path("milestone-2/invalid/truthy-falsy-signal-misuse/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected truthy-falsy-signal-misuse fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::truthy-falsy-subject-not-canonical"),
+        "expected truthy-falsy-subject-not-canonical diagnostic for Signal Record subject, got stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("hir::invalid-truthy-falsy-projection"),
+        "expected invalid-truthy-falsy-projection diagnostic for Bool projection, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_reports_source_option_constructor_application_mismatch_from_hir() {
+    let path = fixture_path(
+        "milestone-2/invalid/source-option-constructor-application-mismatch/main.aivi",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        !output.status.success(),
+        "expected source-option-constructor-application-mismatch fixture to fail check"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("hir::ambiguous-literal-suffix"),
+        "expected ambiguous-literal-suffix diagnostic for conflicting domain constructor applications, got stderr: {stderr}"
+    );
+}
+
+#[test]
+fn check_accepts_delay_and_burst_pipe_stages() {
+    let dir = TempDir::new("check-delay-burst");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "provider custom.feed\n",
+            "    wakeup: providerTrigger\n",
+            "\n",
+            "@source custom.feed\n",
+            "signal score : Signal Int\n",
+            "\n",
+            "signal delayedScore : Signal Int =\n",
+            "    score\n",
+            "     delay|> 200\n",
+            "\n",
+            "signal burstScore : Signal Int =\n",
+            "    score\n",
+            "     burst|> 75 3\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected delay/burst pipe stage program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for delay/burst pipe stage program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+fn check_accepts_remaining_stdlib_modules() {
+    for relative in [
+        "aivi/api.aivi",
+        "aivi/async.aivi",
+        "aivi/auth.aivi",
+        "aivi/bigint.aivi",
+        "aivi/bundledsmokesupport.aivi",
+        "aivi/bundledsmoketest.aivi",
+        "aivi/clipboard.aivi",
+        "aivi/date.aivi",
+        "aivi/db.aivi",
+        "aivi/dbus.aivi",
+        "aivi/defaults.aivi",
+        "aivi/env.aivi",
+        "aivi/gnome/notifications.aivi",
+        "aivi/gnome/onlineAccounts.aivi",
+        "aivi/gnome/settings.aivi",
+        "aivi/gresource.aivi",
+        "aivi/i18n.aivi",
+        "aivi/image.aivi",
+        "aivi/imap.aivi",
+        "aivi/portal.aivi",
+        "aivi/process.aivi",
+        "aivi/random.aivi",
+        "aivi/regex.aivi",
+        "aivi/smtp.aivi",
+        "aivi/stdio.aivi",
+        "aivi/time.aivi",
+    ] {
+        let path = stdlib_path(relative);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .expect("check command should run");
+
+        assert!(
+            output.status.success(),
+            "expected {relative} to pass check, stderr was: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+            "expected success output for {relative}, got stdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
 }

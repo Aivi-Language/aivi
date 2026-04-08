@@ -3869,6 +3869,27 @@ value view =
     }
 
     #[test]
+    fn formatter_preserves_inline_annotated_type_companion_bodies() {
+        let formatted = format_text(
+            "type Player = {\n    | Human\n    | Computer\n\n    opponent:Player -> Player=.\n     ||> Human    -> Computer\n     ||> Computer -> Human\n}\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "type Player = {\n",
+                "    | Human\n",
+                "    | Computer\n",
+                "\n",
+                "    type Player -> Player\n",
+                "    opponent = .\n",
+                "     ||> Human    -> Computer\n",
+                "     ||> Computer -> Human\n",
+                "}\n",
+            )
+        );
+    }
+
+    #[test]
     fn formatter_keeps_record_type_fields_spaced_while_other_annotations_are_compact() {
         let formatted = format_text(
             "fun project:{name:Text,age:Int} = profile:{name:Text,age:Int} => profile\nvalue profile:{name:Text,age:Int}={name:\"Ada\",age:37}\n",

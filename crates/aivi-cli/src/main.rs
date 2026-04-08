@@ -515,49 +515,6 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
         format!("failed to determine current directory for `aivi run`: {error}")
     })?;
 
-    // When no explicit path or --app was given and the manifest defines multiple
-    // [[app]] entries, launch every app as a separate subprocess so each gets its
-    // own GTK main loop.
-    if requested_path.is_none() && requested_app.is_none() {
-        let workspace_root = aivi_query::discover_workspace_root_from_directory(&cwd);
-        if let Ok(manifest) = aivi_query::parse_manifest(&workspace_root) {
-            if manifest.apps.len() > 1 {
-                let exe = env::current_exe()
-                    .map_err(|e| format!("failed to locate aivi executable: {e}"))?;
-                let mut children: Vec<std::process::Child> = manifest
-                    .apps
-                    .iter()
-                    .map(|app| {
-                        let mut cmd = std::process::Command::new(&exe);
-                        cmd.arg("run").arg("--app").arg(&app.name);
-                        if let Some(view) = requested_view.as_deref().or(app.view.as_deref()) {
-                            cmd.arg("--view").arg(view);
-                        }
-                        cmd.spawn().map_err(|e| {
-                            format!("failed to spawn `aivi run --app {}`: {e}", app.name)
-                        })
-                    })
-                    .collect::<Result<_, _>>()?;
-                let mut any_failed = false;
-                for child in &mut children {
-                    match child.wait() {
-                        Ok(status) if !status.success() => any_failed = true,
-                        Err(e) => {
-                            eprintln!("error waiting for child process: {e}");
-                            any_failed = true;
-                        }
-                        _ => {}
-                    }
-                }
-                return Ok(if any_failed {
-                    ExitCode::FAILURE
-                } else {
-                    ExitCode::SUCCESS
-                });
-            }
-        }
-    }
-
     let resolved =
         resolve_run_entrypoint(&cwd, requested_path.as_deref(), requested_app.as_deref())?;
     let view = requested_view
@@ -5289,7 +5246,8 @@ ARGS:
 OPTIONS:
     --app <name>
             Select a named app from `[[app]]` in aivi.toml.
-            Required when multiple apps are defined and no --path is given.
+            Required when multiple apps are defined and neither --path
+            nor [run] entry is given.
 
     -o, --output <directory>    (required)
             Output directory for the packaged bundle. The directory will
@@ -5320,7 +5278,8 @@ ARGS:
 OPTIONS:
     --app <name>
             Select a named app from `[[app]]` in aivi.toml.
-            Required when multiple apps are defined and no --path is given.
+            Required when multiple apps are defined and neither --path
+            nor [run] entry is given.
 
     --path <path>
             Explicit path to the entry file. Alternative to the
@@ -5721,6 +5680,42 @@ mod tests {
         assert!(error.contains("failed to resolve entrypoint for `aivi run`"));
         assert!(error.contains(&workspace.path().join("main.aivi").display().to_string()));
         assert!(error.contains("--path <entry-file>") || error.contains("aivi.toml"));
+    }
+
+    #[test]
+    fn resolve_run_entrypoint_uses_manifest_run_entry_when_multiple_apps_exist() {
+        let workspace = TempDir::new("run-entry-manifest-default");
+        workspace.write(
+            "aivi.toml",
+            concat!(
+                "[run]\n",
+                "entry = \"apps/ui/main.aivi\"\n",
+                "\n",
+                "[[app]]\n",
+                "name = \"ui\"\n",
+                "entry = \"apps/ui/main.aivi\"\n",
+                "\n",
+                "[[app]]\n",
+                "name = \"tray\"\n",
+                "entry = \"apps/tray/main.aivi\"\n",
+            ),
+        );
+        let expected = workspace.write(
+            "apps/ui/main.aivi",
+            "value main = <Window title=\"UI\" />\n",
+        );
+        workspace.write(
+            "apps/tray/main.aivi",
+            "value quickCompose = <Window title=\"Tray\" />\n",
+        );
+        let cwd = workspace.path().join("tooling/nested");
+        fs::create_dir_all(&cwd).expect("nested tooling directory should exist");
+
+        let resolved = super::resolve_run_entrypoint(&cwd, None, None)
+            .expect("manifest [run] entry should be the default run target");
+
+        assert_eq!(resolved.entry_path, expected);
+        assert_eq!(resolved.manifest_view, None);
     }
 
     fn execute_workspace(
