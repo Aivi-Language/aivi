@@ -44,6 +44,8 @@ pub struct TypedDeclarationSummary {
     pub annotation: Option<TypeAnnotationSite>,
 }
 
+const MARKUP_SURFACE_TYPE: &str = "Widget";
+
 pub fn collect_typed_declaration_summaries(
     module: &aivi_hir::Module,
     parsed: &aivi_syntax::Module,
@@ -53,15 +55,25 @@ pub fn collect_typed_declaration_summaries(
         .into_iter()
         .map(|info| {
             let parsed_item = matching_named_item(parsed, info.kind, info.header_span);
+            let markup_inferred_type =
+                markup_surface_inferred_type(module, info.item_id, info.kind);
+            let declared_type = info.declared_type;
+            let inferred_type = info.inferred_type.or_else(|| markup_inferred_type.clone());
+            let annotation_matches_inferred = info.annotation_matches_inferred.or_else(|| {
+                declared_type
+                    .as_deref()
+                    .zip(markup_inferred_type.as_deref())
+                    .map(|(declared, inferred)| declared == inferred)
+            });
             TypedDeclarationSummary {
                 item_id: info.item_id,
                 kind: info.kind,
                 name: info.name,
                 header_span: info.header_span,
                 name_span: info.name_span,
-                declared_type: info.declared_type,
-                inferred_type: info.inferred_type,
-                annotation_matches_inferred: info.annotation_matches_inferred,
+                declared_type,
+                inferred_type,
+                annotation_matches_inferred,
                 has_explicit_constraints: info.has_explicit_constraints,
                 annotation_is_independently_inferable: annotation_is_independently_inferable(
                     info.kind,
@@ -71,6 +83,26 @@ pub fn collect_typed_declaration_summaries(
             }
         })
         .collect()
+}
+
+fn markup_surface_inferred_type(
+    module: &aivi_hir::Module,
+    item_id: aivi_hir::ItemId,
+    kind: aivi_hir::TypedDeclarationKind,
+) -> Option<String> {
+    let body = match &module.items()[item_id] {
+        aivi_hir::Item::Value(item) => Some(item.body),
+        aivi_hir::Item::Signal(item) => item.body,
+        _ => None,
+    }?;
+    if !matches!(module.exprs()[body].kind, aivi_hir::ExprKind::Markup(_)) {
+        return None;
+    }
+    Some(match kind {
+        aivi_hir::TypedDeclarationKind::Value => MARKUP_SURFACE_TYPE.to_owned(),
+        aivi_hir::TypedDeclarationKind::Signal => format!("Signal {MARKUP_SURFACE_TYPE}"),
+        aivi_hir::TypedDeclarationKind::Function => return None,
+    })
 }
 
 pub fn diagnostic_kind(summary: &TypedDeclarationSummary) -> Option<TypeAnnotationDiagnosticKind> {
@@ -511,6 +543,29 @@ mod tests {
                     ))
             }),
             "expected contextual inference to suppress missing type annotation diagnostics, got {diagnostics:?}"
+        );
+    }
+
+    #[test]
+    fn markup_values_get_widget_surface_type() {
+        let (source, _, _, summaries) =
+            parse("value main =\n    <Window title=\"AIVI Snake\">\n    </Window>\n");
+        let main = summaries
+            .iter()
+            .find(|summary| summary.name == "main")
+            .expect("expected summary for `main`");
+        let diagnostics = collect_type_annotation_diagnostics(&summaries, &source);
+
+        assert_eq!(main.inferred_type.as_deref(), Some("Widget"));
+        assert_eq!(diagnostic_kind(main), None);
+        assert!(
+            diagnostics.iter().all(|diagnostic| {
+                diagnostic.code
+                    != Some(NumberOrString::String(
+                        MISSING_TYPE_ANNOTATION_CODE.to_owned(),
+                    ))
+            }),
+            "markup values should not be reported as missing type annotations, got {diagnostics:?}"
         );
     }
 

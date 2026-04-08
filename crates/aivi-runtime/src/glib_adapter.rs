@@ -212,7 +212,11 @@ enum GlibTickDrainMode {
 }
 
 impl GlibTickDrainMode {
-    fn should_continue_after_tick(self, async_wake_requested: bool, queued_messages: usize) -> bool {
+    fn should_continue_after_tick(
+        self,
+        async_wake_requested: bool,
+        queued_messages: usize,
+    ) -> bool {
         match self {
             Self::UntilIdle | Self::AsyncWakeBudgeted => {
                 async_wake_requested || queued_messages > 0
@@ -887,7 +891,7 @@ impl GlibLinkedRuntimeShared {
             *self
                 .state
                 .lock()
-                    .expect("GLib linked runtime state mutex should not be poisoned") = Some(state);
+                .expect("GLib linked runtime state mutex should not be poisoned") = Some(state);
             let (async_wake_requested, should_continue) = should_continue;
 
             if !should_continue {

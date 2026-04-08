@@ -46,6 +46,21 @@ fn inlay_hints_show_inferred_type_for_unannotated_value() {
 }
 
 #[test]
+fn inlay_hints_show_widget_type_for_markup_values() {
+    let text = "value main =\n    <Window title=\"AIVI Snake\">\n    </Window>\n";
+    let (state, uri) = open_inline("hints-markup.aivi", text);
+    let hints = inlay_hints(inlay_hint_params(uri), state)
+        .expect("expected an inferred inlay hint for a markup value");
+
+    assert_eq!(hints.len(), 1, "expected exactly one inlay hint");
+    assert!(
+        matches!(&hints[0].label, InlayHintLabel::String(label) if label == ": Widget"),
+        "expected `: Widget` inferred hint, got {:?}",
+        hints[0].label
+    );
+}
+
+#[test]
 fn annotated_values_do_not_emit_inlay_hints() {
     let (state, uri) = open_inline("hints-kind.aivi", "value answer : Int = 42\n");
     let hints = inlay_hints(inlay_hint_params(uri), state);

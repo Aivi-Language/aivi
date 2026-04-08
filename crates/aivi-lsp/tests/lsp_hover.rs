@@ -50,6 +50,19 @@ async fn hover_at_value_name_returns_kind_label() {
 }
 
 #[tokio::test]
+async fn hover_on_markup_value_name_returns_widget_type() {
+    let text = "value main =\n    <Window title=\"AIVI Snake\">\n    </Window>\n";
+    let (state, uri) = open_inline("hover-markup-value.aivi", text);
+    let markup = hover_markup(hover(hover_params(uri, 0, 6), state).await);
+
+    assert!(
+        markup.contains("value main : Widget"),
+        "hover should show the surface widget type for markup values; got: {}",
+        markup
+    );
+}
+
+#[tokio::test]
 async fn hover_at_out_of_range_position_returns_none() {
     let (state, uri) = open_inline("hover-empty.aivi", "value answer = 42\n");
     // Line 99 is far beyond the file content

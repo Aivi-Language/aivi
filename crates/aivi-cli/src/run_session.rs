@@ -612,11 +612,15 @@ impl RunSessionState {
             }
             return Err(rendered);
         }
-        let has_outcomes = !self.driver.drain_outcomes().is_empty();
-        if has_outcomes {
-            let required_signal_globals = self.required_signal_globals.clone();
-            self.hydration
-                .request_current(&self.driver, &required_signal_globals)?;
+        // Some runtime changes (notably timer-driven signal-only transitions) can advance the
+        // view state without surfacing new outcomes here. Always re-check the projected hydration
+        // globals; duplicate requests are suppressed by HydrationRevisionState.
+        self.driver.drain_outcomes();
+        let required_signal_globals = self.required_signal_globals.clone();
+        let latest_requested = self.hydration.latest_requested();
+        self.hydration
+            .request_current(&self.driver, &required_signal_globals)?;
+        if self.hydration.latest_requested() != latest_requested {
             // Try to apply immediately: hydration is fast, so the background thread
             // typically responds within microseconds, collapsing the two-cycle pipeline.
             self.hydration.apply_ready_immediate(&mut self.executor)?;
@@ -1660,7 +1664,7 @@ export main
             .expect("presenting the reversi window should release startup-held timers");
         assert_eq!(
             text_signal_for(&harness, status_item),
-            "You are 🔴",
+            "Your turn",
             "reversi should start on the human turn"
         );
 
@@ -1741,7 +1745,7 @@ export main
             "the first human move should paint its red stones without waiting for the AI turn"
         );
         assert!(
-            pump_until(&context, Duration::from_secs(1), || {
+            pump_until(&context, Duration::from_secs(4), || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌")
                         .is_some_and(|button| button.is_sensitive())
@@ -1786,6 +1790,7 @@ export main
             .present_root_windows()
             .expect("presenting the reversi window should release startup-held timers");
         let opening_red_count = button_label_count_for(&harness, "🔴");
+        let opening_white_count = button_label_count_for(&harness, "⚪");
 
         let opening_move = harness
             .root_windows()
@@ -1799,33 +1804,41 @@ export main
             }),
             "clicking a legal move should put the new red stone on the board right away"
         );
-        assert!(
-            pump_until(&context, Duration::from_millis(100), || {
-                text_signal_for(&harness, status_item) == "Computer is choosing..."
-                    && text_signal_for(&harness, preview_item).starts_with("Computer is eyeing")
-            }),
-            "the first move should promptly hand control to the AI and expose its planned target"
+        pump_context(&context, Duration::from_millis(100));
+        assert_eq!(
+            text_signal_for(&harness, status_item),
+            "Computer is choosing...",
+            "the first move should promptly hand control to the hidden computer-thinking phase"
         );
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
-                harness.root_windows().iter().any(|window| {
-                    find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "○").is_some()
-                })
-            }),
-            "the board should surface the AI preview while the human animation is still running"
+            text_signal_for(&harness, preview_item).is_empty(),
+            "the helper line should stay blank while the computer is thinking"
+        );
+        let thinking_white_count = button_label_count_for(&harness, "⚪");
+        assert_eq!(
+            thinking_white_count,
+            opening_white_count - 1,
+            "the board should stay visually unchanged while the computer is only thinking"
         );
         assert!(
-            !pump_until(&context, Duration::from_millis(200), || {
+            pump_until(&context, Duration::from_millis(600), || {
+                button_label_count_for(&harness, "⚪") > thinking_white_count
+                    && !text_signal_for(&harness, last_move_item).starts_with("Computer plays")
+            }),
+            "the computer target should flash onto the board before the move commits"
+        );
+        assert!(
+            !pump_until(&context, Duration::from_millis(600), || {
                 text_signal_for(&harness, status_item) == "Your turn"
             }),
-            "the AI reply should wait for the human animation window instead of landing immediately"
+            "the computer move should not commit before the flash sequence finishes"
         );
         assert!(
-            pump_until(&context, Duration::from_millis(800), || {
+            pump_until(&context, Duration::from_secs(4), || {
                 text_signal_for(&harness, status_item) == "Your turn"
                     && text_signal_for(&harness, last_move_item).starts_with("Computer plays")
             }),
-            "after the AI reply the game should quickly return to a playable human turn (status: {}, preview: {}, last move: {}, action: {}, session: {}, history: {})",
+            "after the computer flash sequence the game should return to a playable human turn (status: {}, preview: {}, last move: {}, action: {}, session: {}, history: {})",
             text_signal_for(&harness, status_item),
             text_signal_for(&harness, preview_item),
             text_signal_for(&harness, last_move_item),
@@ -1835,7 +1848,7 @@ export main
         );
 
         assert!(
-            pump_until(&context, Duration::from_secs(1), || {
+            pump_until(&context, Duration::from_secs(4), || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌")
                         .is_some_and(|button| button.is_sensitive())

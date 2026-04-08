@@ -38,26 +38,15 @@ type Move =
 
 type Event =
   | RefreshSnapshot
-  | CommitAi
+  | ComputerFlashTick
   | Click Coord
   | Reset
   | Idle
 
-type HumanAnimation = {
-    placed: Coord,
-    changed: List Coord
-}
-
-type AnimationEvent =
-  | StartAnimation HumanAnimation
-  | StepAnimation
-  | ClearAnimation
-  | IdleAnimation
-
-type AnimationState = {
-    current: Option HumanAnimation,
-    blinkTicks: Int
-}
+type Phase =
+  | HumanReady
+  | ComputerThinking
+  | ComputerAnimating Coord Int
 
 type Score = {
     human: Int,
@@ -75,6 +64,7 @@ type GameState = {
     board: Matrix Disc,
     turn: Player,
     snapshot: Snapshot,
+    phase: Phase,
     lastMove: Option Move
 }
 
@@ -90,15 +80,7 @@ value neg1 = 0 - 1
 value boardIndices = matrixIndices boardSize
 value raySteps = listTailOrEmpty boardIndices
 value emptyCoords : List Coord = []
-value blinkTicksBeforeFlash = 5
-value animationTicksTotal = 8
-value placedBlinkOpacity = 0.7
-value flipFlashOpacity = 0.55
-
-value idleAnimationState : AnimationState = {
-    current: None,
-    blinkTicks: 0
-}
+value computerFlashTicksTotal = 6
 
 value directions = [
     Delta neg1 neg1,
@@ -126,6 +108,7 @@ value initialGame : GameState = {
     board: initialBoard,
     turn: Human,
     snapshot: initialSnapshot,
+    phase: HumanReady,
     lastMove: None
 }
 
@@ -321,108 +304,100 @@ func snapshotAiTarget = snapshot => snapshotAiPending snapshot
  T|> listHead snapshot.computerMoves
  F|> None
 
-type Snapshot -> Coord -> Option HumanAnimation
-func humanAnimationFromClick = snapshot coord => humanCanPlace coord snapshot
- T|> Some { placed: coord, changed: append [coord] (flipsForMove snapshot.board Human coord) }
- F|> None
+type Phase -> Bool
+func phaseAllowsHumanInput = phase => phase
+ ||> HumanReady -> True
+ ||> _          -> False
 
-type Option HumanAnimation -> Bool
-func hasHumanAnimation = animation => animation
- ||> Some _ -> True
- ||> None   -> False
+type Phase -> Bool
+func phaseIsComputerThinking = phase => phase
+ ||> ComputerThinking -> True
+ ||> _                -> False
 
-type AnimationState -> Bool
-func animationActive = state =>
-    hasHumanAnimation state.current
+type Phase -> Bool
+func phaseHasComputerAnimation = phase => phase
+ ||> ComputerAnimating _ _ -> True
+ ||> _                     -> False
 
-type AnimationState -> Bool
-func blinkRunning = state =>
-    animationActive state and state.blinkTicks < blinkTicksBeforeFlash
+type Phase -> Option Coord
+func phaseComputerTarget = phase => phase
+ ||> ComputerAnimating coord _ -> Some coord
+ ||> _                        -> None
 
-type AnimationState -> Bool
-func flashRunning = state =>
-    animationActive state and not (blinkRunning state)
-
-type AnimationState -> Bool
-func animationFinishesOnTick = state =>
-    animationActive state and state.blinkTicks + 1 >= animationTicksTotal
-
-type AnimationState -> Bool
-func blinkVisible = state =>
-    state.blinkTicks == 0 or state.blinkTicks == 2 or state.blinkTicks == 4 or flashRunning state
-
-type AnimationState -> HumanAnimation -> AnimationState
-func bumpAnimationState = state animation =>
-    {
-        current: Some animation,
-        blinkTicks: state.blinkTicks + 1
-    }
-
-type AnimationState -> HumanAnimation -> AnimationState
-func stepAnimationFromCurrent = state animation => animationFinishesOnTick state
- T|> idleAnimationState
- F|> bumpAnimationState state animation
-
-type AnimationState -> AnimationState
-func stepBlinkState = state => state.current
- ||> None                  -> state
- ||> Some currentAnimation -> stepAnimationFromCurrent state currentAnimation
-
-type AnimationEvent -> AnimationState -> AnimationState
-func stepAnimationState = event state => event
- ||> StartAnimation animation -> { current: Some animation, blinkTicks: 0 }
- ||> StepAnimation            -> stepBlinkState state
- ||> ClearAnimation           -> idleAnimationState
- ||> IdleAnimation            -> state
+type Phase -> Bool
+func phaseShowsComputerTarget = phase => phase
+ ||> ComputerAnimating ignored step -> step == 1 or step == 3 or step == 5
+ ||> _                             -> False
 
 type Coord -> Snapshot -> Bool
 func humanCanPlace = coord snapshot =>
     snapshot.turn == Human and listContains coordEq coord snapshot.humanMoves
 
-type Matrix Disc -> Player -> Snapshot -> Option Move -> GameState
-func makeGameState = board turn snapshot lastMove =>
+type Matrix Disc -> Player -> Snapshot -> Phase -> Option Move -> GameState
+func makeGameState = board turn snapshot phase lastMove =>
     {
         board: board,
         turn: turn,
         snapshot: snapshot,
+        phase: phase,
         lastMove: lastMove
     }
 
-type GameState -> GameState
-func refreshGameState = state =>
-    makeGameState state.board state.turn (makeSnapshot state.board state.turn) state.lastMove
+type Matrix Disc -> Option Move -> GameState
+func humanReadyState = board lastMove =>
+    makeGameState board Human (makeSnapshot board Human) HumanReady lastMove
+
+type Matrix Disc -> Option Move -> GameState
+func computerThinkingState = board lastMove =>
+    makeGameState board Computer (makeSnapshot board Computer) ComputerThinking lastMove
 
 type GameState -> Coord -> GameState
 func clickGameState = state coord => humanCanPlace coord state.snapshot
- T|> makeGameState (applyPlacement state.board Human coord) Computer state.snapshot (Some (Place Human coord))
+ T|> makeGameState (applyPlacement state.board Human coord) Computer state.snapshot ComputerThinking (Some (Place Human coord))
  F|> state
 
-type GameState -> GameState
-func commitComputerWithoutMove = state => snapshotPassPending state.snapshot
- T|> makeGameState state.board Human (makeSnapshot state.board Human) (Some (Pass Computer))
- F|> state
-
-type GameState -> Coord -> Snapshot -> GameState
-func commitComputerPlacementWithSnapshot = state coord snapshot => snapshotPassPending snapshot
- T|> makeGameState snapshot.board Computer (makeSnapshot snapshot.board Computer) (Some (Pass Human))
- F|> makeGameState snapshot.board Human snapshot (Some (Place Computer coord))
+type GameState -> Snapshot -> GameState
+func settleComputerWithoutMove = state refreshed => snapshotPassPending refreshed
+ T|> humanReadyState state.board (Some (Pass Computer))
+ F|> makeGameState state.board state.turn refreshed HumanReady state.lastMove
 
 type GameState -> Coord -> GameState
 func commitComputerPlacement = state coord =>
-    commitComputerPlacementWithSnapshot state coord (makeSnapshot (applyPlacement state.board Computer coord) Human)
+    commitComputerPlacementToBoard state coord (applyPlacement state.board Computer coord)
+
+type GameState -> Coord -> Matrix Disc -> GameState
+func commitComputerPlacementToBoard = state coord board =>
+    snapshotPassPending (makeSnapshot board Human)
+ T|> computerThinkingState board (Some (Place Computer coord))
+ F|> humanReadyState board (Some (Place Computer coord))
 
 type GameState -> GameState
-func commitComputerGameState = state => snapshotAiTarget state.snapshot
- ||> None       -> commitComputerWithoutMove state
- ||> Some coord -> commitComputerPlacement state coord
+func refreshGameState = state => state.phase
+ ||> ComputerThinking -> beginComputerAnimation state (makeSnapshot state.board state.turn)
+ ||> _                -> makeGameState state.board state.turn (makeSnapshot state.board state.turn) state.phase state.lastMove
+
+type GameState -> Snapshot -> GameState
+func beginComputerAnimation = state refreshed => snapshotAiTarget refreshed
+ ||> Some coord -> makeGameState state.board state.turn refreshed (ComputerAnimating coord 0) state.lastMove
+ ||> None       -> settleComputerWithoutMove state refreshed
+
+type GameState -> Coord -> Int -> GameState
+func stepComputerAnimation = state coord step => step + 1 >= computerFlashTicksTotal
+ T|> commitComputerPlacement state coord
+ F|> makeGameState state.board state.turn state.snapshot (ComputerAnimating coord (step + 1)) state.lastMove
+
+type GameState -> GameState
+func advanceComputerAnimation = state => state.phase
+ ||> ComputerAnimating coord step -> stepComputerAnimation state coord step
+ ||> _                            -> state
 
 type Event -> GameState -> GameState
 func stepGame = event state => event
- ||> Reset       -> initialGame
- ||> RefreshSnapshot -> refreshGameState state
- ||> CommitAi    -> commitComputerGameState state
- ||> Click coord -> clickGameState state coord
- ||> Idle        -> state
+ ||> Reset             -> initialGame
+ ||> RefreshSnapshot   -> refreshGameState state
+ ||> ComputerFlashTick -> advanceComputerAnimation state
+ ||> Click coord       -> clickGameState state coord
+ ||> Idle              -> state
 
 type Move -> Text
 func moveLabel = move => move
@@ -449,6 +424,17 @@ func turnLine = player => player == Human
  T|> "Your turn"
  F|> "Computer is choosing..."
 
+type Int -> Text
+func computerAnimationStatus = step => step == 0
+ T|> "Computer is choosing..."
+ F|> "Computer is placing..."
+
+type Phase -> Text
+func phaseStatusLine = phase => phase
+ ||> HumanReady                -> "Your turn"
+ ||> ComputerThinking          -> "Computer is choosing..."
+ ||> ComputerAnimating _ step  -> computerAnimationStatus step
+
 type Snapshot -> Text
 func activeStatusLine = snapshot => snapshotPassPending snapshot
  T|> "{playerLabel snapshot.turn} must pass"
@@ -458,40 +444,25 @@ type Score -> Text
 func scoreLine = score =>
     "You 🔴: {score.human}   Computer ⚪: {score.computer}"
 
-type Option Coord -> Text
-func previewLine = opt => opt
- ||> None       -> "Click a ◌ square to place 🔴."
- ||> Some coord -> "Computer is eyeing {coordLabel coord}."
+type Phase -> Text
+func previewLine = phase => phase
+ ||> HumanReady -> "Click a ◌ square to place 🔴."
+ ||> _          -> ""
 
-type Snapshot -> Score -> Text
-func statusLine = snapshot score => snapshotGameOver snapshot
+type Phase -> Snapshot -> Text
+func activePhaseStatus = phase snapshot => phaseAllowsHumanInput phase
+ T|> activeStatusLine snapshot
+ F|> phaseStatusLine phase
+
+type Phase -> Snapshot -> Score -> Text
+func statusLine = phase snapshot score => snapshotGameOver snapshot
  T|> "Game over. {winnerLine score}"
- F|> activeStatusLine snapshot
-
-type Snapshot -> Score -> Text
-func settledStatusLine = snapshot score => score.human == 2 and score.computer == 2 and snapshot.turn == Human
- T|> "You are 🔴"
- F|> statusLine snapshot score
-
-type Bool -> Snapshot -> Score -> Text
-func statusFromUi = thinking snapshot score => thinking
- T|> "Computer is choosing..."
- F|> settledStatusLine snapshot score
-
-type Bool -> Option Coord -> Text
-func previewFromUi = thinking preview => thinking
- T|> "Computer is eyeing..."
- F|> previewLine preview
-
-type Bool -> Option Coord -> Option Coord
-func previewWhileThinking = thinking preview => thinking
- T|> preview
- F|> None
+ F|> activePhaseStatus phase snapshot
 
 type Bool -> Snapshot -> List Coord
-func currentMovesFromUi = thinking snapshot => thinking
- T|> emptyCoords
- F|> snapshotCurrentMoves snapshot
+func currentMovesFromUi = humanTurn snapshot => humanTurn
+ T|> snapshotCurrentMoves snapshot
+ F|> emptyCoords
 
 type Option Coord -> Int -> Int -> Bool
 func coordAt = opt x y => opt
@@ -503,88 +474,56 @@ func legalMoveLabel = legal => legal
  T|> "◌"
  F|> "·"
 
-type List Coord -> Option Coord -> Int -> Int -> Text
-func emptyCellLabel = currentMoves preview x y => coordAt preview x y
- T|> "○"
+type Option Coord -> Bool -> Int -> Int -> Bool
+func targetVisibleAt = target visible x y =>
+    visible and coordAt target x y
+
+type List Coord -> Option Coord -> Bool -> Int -> Int -> Text
+func emptyCellLabel = currentMoves target visible x y => targetVisibleAt target visible x y
+ T|> "⚪"
  F|> legalMoveLabel (listContains coordEq (Coord x y) currentMoves)
 
 type Int -> Int -> Int
 func cellKey = y x =>
     y * boardSize + x
 
-type Matrix Disc -> List Coord -> Int -> Int -> Text
-func boardCellLabelWithoutPreview = board currentMoves x y => matrixAt board x y
+type Matrix Disc -> List Coord -> Option Coord -> Bool -> Int -> Int -> Text
+func boardCellLabelAt = board currentMoves target visible x y => matrixAt board x y
  ||> Some Black -> "🔴"
  ||> Some White -> "⚪"
- ||> Some Empty -> emptyCellLabel currentMoves None x y
+ ||> Some Empty -> emptyCellLabel currentMoves target visible x y
  ||> None       -> "·"
-
-type Matrix Disc -> List Coord -> Option Coord -> Int -> Int -> Text
-func boardCellLabelAt = board currentMoves preview x y => coordAt preview x y
- T|> "○"
- F|> boardCellLabelWithoutPreview board currentMoves x y
 
 type Bool -> List Coord -> Int -> Int -> Bool
 func cellEnabledAt = humanTurn currentMoves x y =>
     humanTurn and listContains coordEq (Coord x y) currentMoves
 
-type Option Coord -> Int -> Int -> Float
-func cellOpacityAt = preview x y => coordAt preview x y
- T|> 0.55
- F|> 1.0
-
-
-type HumanAnimation -> Coord -> Bool
-func changedAt = animation coord =>
-    coordEq animation.placed coord or listContains coordEq coord animation.changed
-
-type AnimationState -> HumanAnimation -> Coord -> Float
-func restingAnimatedOpacity = state animation coord => coordEq animation.placed coord and not (blinkVisible state)
- T|> placedBlinkOpacity
- F|> 1.0
-
-type AnimationState -> HumanAnimation -> Coord -> Float
-func flashingOpacityAt = state animation coord => flashRunning state and changedAt animation coord
- T|> flipFlashOpacity
- F|> restingAnimatedOpacity state animation coord
-
-type AnimationState -> Coord -> Float
-func animatedOpacityAt = state coord => state.current
- ||> None                  -> 1.0
- ||> Some currentAnimation -> flashingOpacityAt state currentAnimation coord
-
 signal placeCoord : Signal Coord
 signal restartClick : Signal Unit
 
-signal animationVisible : Signal Bool = animationState
-  |> animationActive
-
-signal blinkTimerEnabled : Signal Bool = animationState
-  |> animationActive
-
-@source timer.every 70ms with {
-    immediate: False,
-    activeWhen: blinkTimerEnabled,
-    coalesce: True
-}
-signal blinkTick : Signal Unit
-
-@source timer.after 480ms with {
-    immediate: False,
-    activeWhen: animationVisible,
-    restartOn: placeCoord
-}
-signal aiReply : Signal Unit
-
 @source timer.after 1ms with {
     immediate: False,
+    activeWhen: computerThinkingActive,
     restartOn: placeCoord
 }
 signal snapshotReady : Signal Unit
 
-signal event : Signal Event = snapshotReady | aiReply | placeCoord | restartClick
+signal computerThinkingActive : Signal Bool = phase
+  |> phaseIsComputerThinking
+
+signal computerAnimationActive : Signal Bool = phase
+  |> phaseHasComputerAnimation
+
+@source timer.every 200ms with {
+    immediate: False,
+    activeWhen: computerAnimationActive,
+    coalesce: True
+}
+signal computerFlashTick : Signal Unit
+
+signal event : Signal Event = snapshotReady | computerFlashTick | placeCoord | restartClick
   ||> snapshotReady _ => RefreshSnapshot
-  ||> aiReply _ => CommitAi
+  ||> computerFlashTick _ => ComputerFlashTick
   ||> placeCoord coord => Click coord
   ||> restartClick _ => Reset
   ||> _ => Idle
@@ -595,21 +534,9 @@ signal game : Signal GameState = event
 from game = {
     board: .board
     snapshot: .snapshot
+    phase: .phase
     lastMove: .lastMove
 }
-
-signal animationTrigger : Signal (Option HumanAnimation) = placeCoord
-  |> humanAnimationFromClick snapshot
- ?|> hasHumanAnimation
-
-signal animationEvent : Signal AnimationEvent = animationTrigger | blinkTick | aiReply | restartClick
-  ||> animationTrigger (Some animation) => StartAnimation animation
-  ||> blinkTick _ => StepAnimation
-  ||> restartClick _ => ClearAnimation
-  ||> _ => IdleAnimation
-
-signal animationState : Signal AnimationState = animationEvent
- +|> idleAnimationState stepAnimationState
 
 signal gameOver = snapshot
   |> snapshotGameOver
@@ -617,18 +544,18 @@ signal gameOver = snapshot
 signal score = board
   |> countScore
 
-signal aiThinking : Signal Bool = animationVisible
+signal humanTurn : Signal Bool = phase
+  |> phaseAllowsHumanInput
 
-signal humanTurn : Signal Bool = not aiThinking
+signal currentMoves = currentMovesFromUi humanTurn snapshot
 
-signal aiPreviewBase : Signal (Option Coord) = snapshot
-  |> snapshotAiTarget
+signal computerTarget : Signal (Option Coord) = phase
+  |> phaseComputerTarget
 
-signal aiPreview : Signal (Option Coord) = previewWhileThinking aiThinking aiPreviewBase
+signal computerTargetVisible : Signal Bool = phase
+  |> phaseShowsComputerTarget
 
-signal currentMoves = currentMovesFromUi aiThinking snapshot
-
-signal statusText : Signal Text = statusFromUi aiThinking snapshot score
+signal statusText : Signal Text = statusLine phase snapshot score
 
 signal scoreText = score
   |> scoreLine
@@ -636,7 +563,8 @@ signal scoreText = score
 signal lastMoveText = lastMove
   |> lastMoveLine
 
-signal previewText : Signal Text = previewFromUi aiThinking aiPreview
+signal previewText : Signal Text = phase
+  |> previewLine
 
 signal finalText = score
   |> winnerLine
@@ -652,13 +580,13 @@ value main =
             <show when={gameOver}>
                 <Label text={finalText} />
             </show>
-            <Label text="🔴 = you, ⚪ = computer, ◌ = legal move, ○ = AI preview." wrap />
+            <Label text="🔴 = you, ⚪ = computer, ◌ = legal move." wrap />
             <Button label="Restart" onClick={restartClick} compact hasFrame={False} />
             <Box orientation="vertical" spacing={2}>
                 <each of={boardIndices} as={y} key={y}>
                     <Box orientation="horizontal" spacing={2}>
                         <each of={boardIndices} as={x} key={cellKey y x}>
-                            <Button label={boardCellLabelAt board currentMoves aiPreview x y} onClick={placeCoord (Coord x y)} sensitive={cellEnabledAt humanTurn currentMoves x y} focusable={False} compact hasFrame={False} animateOpacity={True} opacity={cellOpacityAt aiPreview x y * animatedOpacityAt animationState (Coord x y)} widthRequest={56} heightRequest={56} />
+                            <Button label={boardCellLabelAt board currentMoves computerTarget computerTargetVisible x y} onClick={placeCoord (Coord x y)} sensitive={cellEnabledAt humanTurn currentMoves x y} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
                         </each>
                     </Box>
                 </each>
