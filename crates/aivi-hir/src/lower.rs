@@ -3716,6 +3716,13 @@ impl<'a> Lowerer<'a> {
             syn::PipeStageKind::Diff { expr } => PipeStageKind::Diff {
                 expr: self.lower_expr(expr),
             },
+            syn::PipeStageKind::Delay { duration } => PipeStageKind::Delay {
+                duration: self.lower_expr(duration),
+            },
+            syn::PipeStageKind::Burst { every, count } => PipeStageKind::Burst {
+                every: self.lower_expr(every),
+                count: self.lower_expr(count),
+            },
         };
         PipeStage {
             span: stage.span,
@@ -6515,7 +6522,8 @@ impl<'a> Lowerer<'a> {
                                 | PipeStageKind::RecurStep { expr }
                                 | PipeStageKind::Validate { expr }
                                 | PipeStageKind::Previous { expr }
-                                | PipeStageKind::Diff { expr } => {
+                                | PipeStageKind::Diff { expr }
+                                | PipeStageKind::Delay { duration: expr } => {
                                     work.push(AmbientProjectionWork::Expr {
                                         expr: *expr,
                                         ambient_allowed: true,
@@ -6528,6 +6536,16 @@ impl<'a> Lowerer<'a> {
                                     });
                                     work.push(AmbientProjectionWork::Expr {
                                         expr: *seed,
+                                        ambient_allowed: true,
+                                    });
+                                }
+                                PipeStageKind::Burst { every, count } => {
+                                    work.push(AmbientProjectionWork::Expr {
+                                        expr: *every,
+                                        ambient_allowed: true,
+                                    });
+                                    work.push(AmbientProjectionWork::Expr {
+                                        expr: *count,
                                         ambient_allowed: true,
                                     });
                                 }
@@ -7144,12 +7162,17 @@ impl<'a> Lowerer<'a> {
                         | PipeStageKind::RecurStep { expr }
                         | PipeStageKind::Validate { expr }
                         | PipeStageKind::Previous { expr }
-                        | PipeStageKind::Diff { expr } => {
+                        | PipeStageKind::Diff { expr }
+                        | PipeStageKind::Delay { duration: expr } => {
                             self.resolve_expr(*expr, namespaces, &stage_env)
                         }
                         PipeStageKind::Accumulate { seed, step } => {
                             self.resolve_expr(*seed, namespaces, &stage_env);
                             self.resolve_expr(*step, namespaces, &stage_env);
+                        }
+                        PipeStageKind::Burst { every, count } => {
+                            self.resolve_expr(*every, namespaces, &stage_env);
+                            self.resolve_expr(*count, namespaces, &stage_env);
                         }
                         PipeStageKind::Case { pattern, body } => {
                             let bindings = self.resolve_pattern(*pattern, namespaces, &stage_env);

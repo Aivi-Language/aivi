@@ -2568,6 +2568,8 @@ impl<'a> GeneralExprElaborator<'a> {
                 }
                 PipeStageKind::Previous { .. }
                 | PipeStageKind::Diff { .. }
+                | PipeStageKind::Delay { .. }
+                | PipeStageKind::Burst { .. }
                 | PipeStageKind::Accumulate { .. } => {
                     if matches!(mode, PipeLoweringMode::PrefixBeforeSchedulerBoundary) {
                         break;
