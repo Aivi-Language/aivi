@@ -678,6 +678,7 @@ fn alloc_custom_command_import(
     module
         .alloc_import(ImportBinding {
             span,
+            source_module: None,
             imported_name: local_name.clone(),
             local_name,
             resolution: ImportBindingResolution::Resolved,

@@ -195,6 +195,7 @@ pub struct DeprecationNotice {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportBinding {
     pub span: SourceSpan,
+    pub source_module: Option<Box<str>>,
     pub imported_name: Name,
     pub local_name: Name,
     pub resolution: ImportBindingResolution,

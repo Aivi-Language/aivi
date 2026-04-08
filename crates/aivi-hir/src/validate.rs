@@ -10091,6 +10091,7 @@ value resultLabel =
         let import_id = module
             .alloc_import(ImportBinding {
                 span: unit_span(),
+                source_module: None,
                 imported_name: name(text),
                 local_name: name(text),
                 resolution: ImportBindingResolution::Resolved,

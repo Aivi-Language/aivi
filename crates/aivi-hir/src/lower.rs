@@ -2229,6 +2229,7 @@ impl<'a> Lowerer<'a> {
                     self.resolve_import_binding(&module_name, &imported_name, &module_resolution);
                 self.alloc_import(ImportBinding {
                     span: import.path.span,
+                    source_module: Some(module_name.clone().into()),
                     imported_name: imported_name.clone(),
                     local_name,
                     resolution,
@@ -2253,6 +2254,7 @@ impl<'a> Lowerer<'a> {
                     let name = self.make_name(&synthetic_name, item.base.span);
                     imports.push(self.alloc_import(ImportBinding {
                         span: item.base.span,
+                        source_module: Some(module_name.clone().into()),
                         imported_name: self.make_name(&member.name, item.base.span),
                         local_name: name,
                         resolution: ImportBindingResolution::Resolved,
@@ -2276,6 +2278,7 @@ impl<'a> Lowerer<'a> {
             );
             imports.push(self.alloc_import(ImportBinding {
                 span: item.base.span,
+                source_module: Some(module_name.into()),
                 imported_name: self.make_name("invalid", item.base.span),
                 local_name: self.make_name("invalid", item.base.span),
                 resolution: ImportBindingResolution::UnknownModule,
@@ -5737,6 +5740,7 @@ impl<'a> Lowerer<'a> {
 
             let import_id = self.alloc_import(ImportBinding {
                 span,
+                source_module: Some(module_name.into()),
                 imported_name: imported_name.clone(),
                 local_name: imported_name.clone(),
                 resolution,
@@ -5797,6 +5801,7 @@ impl<'a> Lowerer<'a> {
                 let name = self.make_name(&synthetic_name, span);
                 self.alloc_import(ImportBinding {
                     span,
+                    source_module: Some(module_name.into()),
                     imported_name: self.make_name(&member.name, span),
                     local_name: name,
                     resolution: ImportBindingResolution::Resolved,

@@ -894,6 +894,9 @@ impl<'a> ModuleLowerer<'a> {
         }
         self.workspace_name_maps
             .insert(module_name.into(), name_map);
+        if std::env::var("AIVI_DEBUG_WORKSPACE_IMPORTS").is_ok() {
+            eprintln!("workspace compiled module map: {module_name}");
+        }
 
         // ── Restore entry module state ───────────────────────────────────────
         self.hir = saved_hir;
@@ -3022,13 +3025,36 @@ impl<'a> ModuleLowerer<'a> {
         // break the assembly → backend item mapping in startup.rs index_origins.
         let (kind, parameters) = self.import_item_shape(import, &binding)?;
         if !matches!(kind, ItemKind::Signal(_)) {
-            if let Some(module_name) = self.import_to_module.get(&import) {
-                if let Some(name_map) = self.workspace_name_maps.get(module_name.as_ref()) {
+            if let Some(module_name) = binding
+                .source_module
+                .as_deref()
+                .or_else(|| self.import_to_module.get(&import).map(|name| name.as_ref()))
+            {
+                if let Some(name_map) = self.workspace_name_maps.get(module_name) {
                     if let Some(&core_item_id) = name_map.get(binding.imported_name.text()) {
                         self.import_item_map.insert(import, core_item_id);
                         return Ok(core_item_id);
+                    } else if std::env::var("AIVI_DEBUG_WORKSPACE_IMPORTS").is_ok() {
+                        eprintln!(
+                            "workspace import miss: module={module_name} imported={} local={} keys={}",
+                            binding.imported_name.text(),
+                            binding.local_name.text(),
+                            name_map.len()
+                        );
                     }
+                } else if std::env::var("AIVI_DEBUG_WORKSPACE_IMPORTS").is_ok() {
+                    eprintln!(
+                        "workspace import missing module map: module={module_name} imported={} local={}",
+                        binding.imported_name.text(),
+                        binding.local_name.text()
+                    );
                 }
+            } else if std::env::var("AIVI_DEBUG_WORKSPACE_IMPORTS").is_ok() {
+                eprintln!(
+                    "workspace import missing source module: imported={} local={}",
+                    binding.imported_name.text(),
+                    binding.local_name.text()
+                );
             }
         }
 

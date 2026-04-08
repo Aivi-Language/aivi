@@ -6,7 +6,7 @@ mod run_session;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     env,
     ffi::OsString,
     fs,
@@ -793,21 +793,55 @@ fn collect_workspace_hirs_sorted(
         ws_modules.push((module_name, file, hir));
     }
 
-    // Build dependency graph: module_name → set of workspace module names it depends on.
+    // Restrict to the entry module's reachable workspace dependency closure. Including
+    // unrelated apps in the same workspace pollutes runtime lowering with extra items
+    // and can cause synthetic-origin collisions across independent app graphs.
     let ws_names: std::collections::HashSet<&str> =
         ws_modules.iter().map(|(n, _, _)| n.as_str()).collect();
+    let module_hirs: HashMap<String, Arc<HirModuleResult>> = ws_modules
+        .iter()
+        .map(|(name, _, hir)| (name.clone(), hir.clone()))
+        .collect();
+    let mut reachable = HashSet::<String>::new();
+    let mut queue = VecDeque::<String>::new();
+    for (_, import) in snapshot.entry_hir().module().imports().iter() {
+        let Some(dep_name) = import.source_module.as_deref() else {
+            continue;
+        };
+        if ws_names.contains(dep_name) {
+            queue.push_back(dep_name.to_owned());
+        }
+    }
+    while let Some(name) = queue.pop_front() {
+        if !reachable.insert(name.clone()) {
+            continue;
+        }
+        let Some(hir) = module_hirs.get(&name) else {
+            continue;
+        };
+        for (_, import) in hir.module().imports().iter() {
+            let Some(dep_name) = import.source_module.as_deref() else {
+                continue;
+            };
+            if ws_names.contains(dep_name) && !reachable.contains(dep_name) {
+                queue.push_back(dep_name.to_owned());
+            }
+        }
+    }
+
+    // Build dependency graph: module_name → set of reachable workspace module names it depends on.
     let deps: Vec<(String, Vec<String>)> = ws_modules
         .iter()
+        .filter(|(name, _, _)| reachable.contains(name))
         .map(|(name, _, hir)| {
             let module_hir = hir.module();
             let mut module_deps = Vec::new();
-            for (_, item) in module_hir.items().iter() {
-                let aivi_hir::Item::Use(use_item) = item else {
+            for (_, import) in module_hir.imports().iter() {
+                let Some(dep_name) = import.source_module.as_deref() else {
                     continue;
                 };
-                let dep_name = use_item.module.to_string();
-                if ws_names.contains(dep_name.as_str()) && dep_name != *name {
-                    module_deps.push(dep_name);
+                if reachable.contains(dep_name) && dep_name != name {
+                    module_deps.push(dep_name.to_owned());
                 }
             }
             module_deps.sort();
@@ -846,6 +880,7 @@ fn collect_workspace_hirs_sorted(
     // Build final result in topological order.
     let module_map: HashMap<String, Arc<HirModuleResult>> = ws_modules
         .into_iter()
+        .filter(|(name, _, _)| reachable.contains(name))
         .map(|(name, _, hir)| (name, hir))
         .collect();
     sorted_names
