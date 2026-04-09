@@ -217,7 +217,7 @@ func paintMany = disc board coords =>
 
 type RayState -> Coord -> RayState
 func recordOpponent = state coord =>
-    {
+    state <| {
         collecting: True,
         closed: False,
         trail: append state.trail [coord]
@@ -225,15 +225,14 @@ func recordOpponent = state coord =>
 
 type RayState -> RayState
 func closeRay = state =>
-    {
+    state <| {
         collecting: False,
-        closed: True,
-        trail: state.trail
+        closed: True
     }
 
 type RayState -> RayState
 func invalidateRay = state =>
-    {
+    state <| {
         collecting: False,
         closed: False,
         trail: emptyCoords
@@ -324,9 +323,13 @@ func snapshotGameOver = snapshot =>
     not (listNonEmpty snapshot.humanMoves or listNonEmpty snapshot.computerMoves)
 
 type Snapshot -> Bool
-func snapshotPassPending = snapshot => snapshotGameOver snapshot
- T|> False
- F|> not (listNonEmpty (snapshotCurrentMoves snapshot)) and listNonEmpty (snapshotOtherMoves snapshot)
+func snapshotPassPending = snapshot =>
+    snapshot
+    |> snapshotCurrentMoves #currentMoves
+    |> snapshotOtherMoves snapshot #otherMoves
+    |> snapshotGameOver snapshot
+    T|> False
+    F|> not (listNonEmpty currentMoves) and listNonEmpty otherMoves
 
 type Snapshot -> Bool
 func snapshotAiPending = snapshot =>
@@ -334,9 +337,12 @@ func snapshotAiPending = snapshot =>
 
 type Matrix Disc -> Score
 func countScore = board =>
-    {
-        human: matrixCount isHumanDisc board,
-        computer: matrixCount isComputerDisc board
+    board
+    |> matrixCount isHumanDisc #human
+    |> matrixCount isComputerDisc board #computer
+    |> {
+        human: human,
+        computer: computer
     }
 
 type Snapshot -> Option Coord
@@ -416,7 +422,7 @@ func stepComputerAnimation = state coord step =>
     |> . + 1 #nextStep
     |> nextStep >= computerFlashTicksTotal
     T|> commitComputerPlacement state coord
-    F|> makeGameState state.board state.turn state.snapshot (ComputerAnimating coord nextStep) state.lastMove
+    F|> state <| { phase: ComputerAnimating coord nextStep }
 
 type GameState -> GameState
 func advanceComputerAnimation = state => state.phase

@@ -136,3 +136,9 @@ branch memo behavior plus the `&|>` cluster boundary in the wiki.
 Updated the Reversi demo audit after `demos/reversi.aivi` switched several helper-heavy flows to
 `#name` memos, using the demo as a concrete example of naming intermediate ray, board, snapshot,
 and animation-step values without introducing throwaway helpers.
+
+## [2026-04-09] ingest | reversi helper cleanup
+
+Expanded the Reversi cleanup beyond the first memo pass: boolean routing now consistently uses
+`T|>` / `F|>`, additional helpers memo derived move and score values where that improves readability,
+and small `RayState` / animation updates now use `<|` patches instead of manual record rebuilds.
