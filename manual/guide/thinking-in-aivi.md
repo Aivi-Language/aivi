@@ -38,7 +38,9 @@ function classify(score) {
 }
 ```
 
-In AIVI, branching is done through the values themselves. For boolean conditions, use `T|>` and `F|>`:
+In AIVI, branching is done through the values themselves. For two-way
+truthy/falsy splits, use `T|>` and `F|>`. They work with `Bool`, `Option`,
+`Result`, and `Validation`; the example below starts from a boolean condition:
 
 ```aivi
 type Int -> Text

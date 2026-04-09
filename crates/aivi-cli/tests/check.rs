@@ -405,6 +405,7 @@ fn check_accepts_valid_hir_fixtures() {
         "milestone-2/valid/pipe-fanout-carriers/main.aivi",
         "milestone-2/valid/pipe-gate-carriers/main.aivi",
         "milestone-2/valid/result-block/main.aivi",
+        "milestone-2/valid/pipe-stage-memos/main.aivi",
         "milestone-2/valid/pipe-transform-memos/main.aivi",
         "milestone-2/valid/pipe-accumulate-signal-wakeup/main.aivi",
         "milestone-2/valid/pipe-explicit-recurrence-wakeups/main.aivi",
@@ -515,7 +516,6 @@ fn check_rejects_invalid_hir_fixtures() {
         "milestone-2/invalid/fanin-invalid-projection/main.aivi",
         "milestone-2/invalid/nested-gate-predicate/main.aivi",
         "milestone-2/invalid/nested-fanout-map/main.aivi",
-        "milestone-2/invalid/unsupported-pipe-memo-stage/main.aivi",
         "milestone-2/invalid/gate-predicate-not-bool/main.aivi",
         "milestone-2/invalid/impure-gate-predicate/main.aivi",
         "milestone-2/invalid/cluster-ambient-projection/main.aivi",
@@ -609,6 +609,27 @@ fn check_accepts_regex_in_expression_position() {
 }
 
 #[test]
+fn check_accepts_pipe_stage_memo_fixture() {
+    let path = fixture_path("milestone-2/valid/pipe-stage-memos/main.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected pipe-stage memo fixture to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn check_reports_regex_validation_from_hir() {
     let path = fixture_path("milestone-1/invalid/regex_invalid_quantifier.aivi");
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -657,30 +678,6 @@ fn check_reports_non_exhaustive_case_from_hir() {
     assert!(
         stderr.contains("case split over `Status` is not exhaustive; missing `Pending`, `Failed`"),
         "expected explicit non-exhaustive case message, got stderr: {stderr}"
-    );
-}
-
-#[test]
-fn check_reports_unsupported_pipe_memo_stage() {
-    let path = fixture_path("milestone-2/invalid/unsupported-pipe-memo-stage/main.aivi");
-    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
-        .arg("check")
-        .arg(&path)
-        .output()
-        .expect("check command should run");
-
-    assert!(
-        !output.status.success(),
-        "expected unsupported pipe memo fixture to fail check"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("hir::unsupported-pipe-memo-stage"),
-        "expected unsupported pipe memo diagnostic code, got stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("pipe memo bindings are currently supported only on `|>` and `|` stages"),
-        "expected unsupported pipe memo message, got stderr: {stderr}"
     );
 }
 

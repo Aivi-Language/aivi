@@ -71,7 +71,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 | `result { ... }` | yes | yes | yes | yes | Checked and runtime-backed. Compile emits Cranelift IR for result block expressions through the standard transform codegen path. |
 | Gate `?\|>` | yes | yes | yes | yes | Gate compilation handles Option/Result/Validation/Bool carriers. Domain-typed gate expressions compile through the domain member access path. |
 | Case split `\|\|>` | yes | yes | yes | yes | Codegen emits Cranelift IR for inline-pipe `Case` stages with pattern matching, branching, and merge blocks. Pattern coverage extends to constructors, wildcards, records, lists, and nested patterns. |
-| Truthy/falsy branches `T\|>` / `F\|>` | yes | yes | yes | yes | Codegen emits Cranelift IR for `TruthyFalsy` stages supporting Bool, Option (Some/None), Result (Ok/Err), Validation (Valid/Invalid), and False constructors. |
+| Truthy/falsy branches `T\|>` / `F\|>` | yes | yes | yes | yes | Codegen emits Cranelift IR for `TruthyFalsy` stages supporting Bool, Option (Some/None), Result (Ok/Err), Validation (Valid/Invalid), plus one outer `Signal (...)` lift of the same canonical carriers. |
 | Fan-out `*\|>` / join `<\|*` | yes | yes | yes | yes | Fan-out and join work in both derived signal pipelines and general expression contexts. Codegen emits Cranelift loop IR for FanOut stages with List, Set, and Map result types. |
 | Tap `\|` | yes | yes | yes | yes | Runtime-backed as an observing stage. Codegen emits the tap body and discards the result, preserving the pipeline subject value. |
 | Debug stage | yes | yes | yes | yes | Runtime-backed debugging/logging stage. Codegen emits debug stages as no-op pass-throughs, preserving the pipeline subject value. |

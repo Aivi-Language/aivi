@@ -31,7 +31,6 @@ use aivi.defaults (
 ### defaultText
 
 ```aivi
-// <unparseable item>
 ```
 
 An empty `Text` value. Useful for form fields, search boxes, labels, and other text that starts
@@ -46,7 +45,6 @@ value searchQuery = defaultText
 ### defaultInt
 
 ```aivi
-// <unparseable item>
 ```
 
 The number `0`. Useful for counters, indexes, totals, or retry counts that should start empty.
@@ -60,7 +58,6 @@ value retryCount = defaultInt
 ### defaultBool
 
 ```aivi
-// <unparseable item>
 ```
 
 The boolean value `False`. Useful for flags that should start turned off.

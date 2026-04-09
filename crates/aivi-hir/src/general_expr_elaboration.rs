@@ -2356,15 +2356,16 @@ impl<'a> GeneralExprElaborator<'a> {
                     stage_index += 1;
                 }
                 PipeStageKind::Gate { expr } => {
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &current);
                     let predicate = self.lower_body_expr(
                         *expr,
-                        &pipe_env,
+                        &stage_env,
                         Some(current.gate_payload()),
                         Some(&GateType::Primitive(crate::BuiltinType::Bool)),
                     )?;
                     let result_subject = self
                         .typing
-                        .infer_gate_stage(*expr, &pipe_env, &current)
+                        .infer_gate_stage(*expr, &stage_env, &current)
                         .ok_or_else(|| {
                         vec![GeneralExprBlocker::UnknownExprType { span: stage.span }]
                     })?;
@@ -2385,6 +2386,12 @@ impl<'a> GeneralExprElaborator<'a> {
                             emits_negative_update: plan.emits_negative_update(),
                         },
                     });
+                    extend_pipe_env_with_stage_memos(
+                        &mut pipe_env,
+                        stage,
+                        &current,
+                        &result_subject,
+                    );
                     current = result_subject;
                     stage_index += 1;
                 }
@@ -2405,6 +2412,12 @@ impl<'a> GeneralExprElaborator<'a> {
                         stage_expected.as_ref(),
                         result_block_error,
                     )?;
+                    extend_pipe_env_with_stage_memos(
+                        &mut pipe_env,
+                        stages[case_start],
+                        &current,
+                        &lowered_stage.result_subject,
+                    );
                     current = lowered_stage.result_subject.clone();
                     lowered.push(lowered_stage);
                 }
@@ -2426,6 +2439,12 @@ impl<'a> GeneralExprElaborator<'a> {
                         &current,
                         stage_expected.as_ref(),
                     )?;
+                    extend_pipe_env_with_stage_memos(
+                        &mut pipe_env,
+                        crate::typecheck_context::truthy_falsy_pair_start_stage(&pair),
+                        &current,
+                        &lowered_stage.result_subject,
+                    );
                     current = lowered_stage.result_subject.clone();
                     lowered.push(lowered_stage);
                     stage_index = pair.next_index;
@@ -2604,13 +2623,19 @@ impl<'a> GeneralExprElaborator<'a> {
         let mut arms = Vec::with_capacity(stages.len());
         let mut result_subject = None::<GateType>;
         let mut blockers = Vec::new();
+        let Some(case_start) = stages.first().copied() else {
+            return Err(vec![GeneralExprBlocker::UnknownExprType {
+                span: SourceSpan::default(),
+            }]);
+        };
+        let case_env = pipe_stage_expr_env(env, case_start, subject);
         let branch_subject = subject.gate_payload().clone();
         let branch_expected = self.inline_pipe_stage_result_body_type(subject, expected);
         for stage in stages {
             let PipeStageKind::Case { pattern, body } = &stage.kind else {
                 continue;
             };
-            let branch_env = self.case_branch_env(env, *pattern, &branch_subject);
+            let branch_env = self.case_branch_env(&case_env, *pattern, &branch_subject);
             let lowered_body = match self.lower_result_block_body_expr(
                 *body,
                 &branch_env,
@@ -2657,8 +2682,8 @@ impl<'a> GeneralExprElaborator<'a> {
         };
         Ok(GateRuntimePipeStage {
             span: join_stage_spans(stages),
-            subject_memo: None,
-            result_memo: None,
+            subject_memo: case_start.subject_memo,
+            result_memo: case_start.result_memo,
             input_subject: branch_subject,
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::Case { arms },
@@ -2673,6 +2698,8 @@ impl<'a> GeneralExprElaborator<'a> {
         expected: Option<&GateType>,
     ) -> Result<GateRuntimePipeStage, Vec<GeneralExprBlocker>> {
         let branch_expected = self.inline_pipe_stage_result_body_type(subject, expected);
+        let pair_start = crate::typecheck_context::truthy_falsy_pair_start_stage(pair);
+        let pair_env = pipe_stage_expr_env(env, pair_start, subject);
         let plan = self
             .typing
             .truthy_falsy_subject_plan(subject)
@@ -2684,20 +2711,20 @@ impl<'a> GeneralExprElaborator<'a> {
         let truthy_body = match plan.truthy_payload.as_ref() {
             Some(payload) => self.lower_body_expr(
                 pair.truthy_expr,
-                env,
+                &pair_env,
                 Some(payload),
                 branch_expected.as_ref(),
             )?,
-            None => self.lower_expr(pair.truthy_expr, env, None, branch_expected.as_ref())?,
+            None => self.lower_expr(pair.truthy_expr, &pair_env, None, branch_expected.as_ref())?,
         };
         let falsy_body = match plan.falsy_payload.as_ref() {
             Some(payload) => self.lower_body_expr(
                 pair.falsy_expr,
-                env,
+                &pair_env,
                 Some(payload),
                 branch_expected.as_ref(),
             )?,
-            None => self.lower_expr(pair.falsy_expr, env, None, branch_expected.as_ref())?,
+            None => self.lower_expr(pair.falsy_expr, &pair_env, None, branch_expected.as_ref())?,
         };
         if !truthy_body.ty.same_shape(&falsy_body.ty) {
             return Err(vec![GeneralExprBlocker::UnknownExprType {
@@ -2709,8 +2736,8 @@ impl<'a> GeneralExprElaborator<'a> {
             .apply_truthy_falsy_result_type(subject, truthy_body.ty.clone());
         Ok(GateRuntimePipeStage {
             span: join_spans(pair.truthy_stage.span, pair.falsy_stage.span),
-            subject_memo: None,
-            result_memo: None,
+            subject_memo: pair_start.subject_memo,
+            result_memo: pair_start.result_memo,
             input_subject: subject.gate_payload().clone(),
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::TruthyFalsy {

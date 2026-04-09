@@ -54,7 +54,6 @@ use aivi.time (
 ### `nowMs`
 
 ```aivi
-// <unparseable item>
 ```
 
 Use this when you need a real-world timestamp for storage, logging, or comparing with other
@@ -63,7 +62,6 @@ epoch-based values.
 ### `monotonicMs`
 
 ```aivi
-// <unparseable item>
 ```
 
 Use this when you want a steady clock for measuring elapsed time inside the running program.
@@ -99,7 +97,6 @@ fallback behavior.
 ### `format`
 
 ```aivi
-// <unparseable item>
 ```
 
 The surface API takes an epoch millisecond value and a pattern string.
@@ -118,7 +115,6 @@ Today this returns `"1735689600000"`, not a human-readable ISO timestamp yet.
 ### `parse`
 
 ```aivi
-// <unparseable item>
 ```
 
 The surface API takes text plus a pattern string and returns epoch milliseconds.

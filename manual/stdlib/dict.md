@@ -58,7 +58,6 @@ value emptyScores : (Dict Text Int) = {
 Creates a dict with exactly one entry.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -77,7 +76,6 @@ value greeting : (Dict Text Text) = singleton "hello" "world"
 Inserts or replaces a key. If the key already exists, the old value is discarded.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -98,7 +96,6 @@ value scores : (Dict Text Int) = { entries: [] }
 Inserts a key, combining the new value with the existing one using `merge` if the key is already present.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -123,7 +120,6 @@ func addScore = key n d =>
 Looks up a key. Returns `None` when the key is absent.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -148,7 +144,6 @@ value found : (Option Int) = get "x" d
 Looks up a key, returning a fallback value when the key is absent.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -173,7 +168,6 @@ value level : Int = getWithDefault 1 "level" d
 Returns `True` if the key exists in the dict.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -198,7 +192,6 @@ value hasIt : Bool = member "exists" d
 Removes a key. Has no effect if the key is absent.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -223,7 +216,6 @@ value cleaned : (Dict Text Int) = remove "temp" d
 Returns the number of entries.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -247,7 +239,6 @@ value count : Int = size d
 Return the keys or values as a list, in insertion order.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -274,7 +265,6 @@ value vs : (List Int) = values d
 Convert between a `Dict K V` and a list of `(K, V)` pairs.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -300,7 +290,6 @@ value back : (List (Text, Int)) = toList d
 Applies a function to every value, preserving keys.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -329,7 +318,6 @@ value doubled : (Dict Text Int) = mapValues double d
 Keeps only entries whose value satisfies a predicate.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -357,7 +345,6 @@ value highOnly : (Dict Text Int) = filterValues isHigh d
 Merges two dicts. When both contain the same key, `combine` is called with the left and right values to produce the merged value.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -391,7 +378,6 @@ value merged : (Dict Text Int) = mergeWith addScores left right
 Merges two dicts. When a key exists in both, the **right** dict wins.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi

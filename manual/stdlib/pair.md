@@ -23,7 +23,6 @@ use aivi.pair (
 Extracts the first element of a pair.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -41,7 +40,6 @@ func getKey = entry =>
 Extracts the second element of a pair.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -59,7 +57,6 @@ func getValue = entry =>
 Swaps the two elements of a pair, returning `(B, A)` from `(A, B)`.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -77,7 +74,6 @@ func flipEntry = entry =>
 Applies a function to the first element, leaving the second unchanged.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -97,7 +93,6 @@ func squareFst = pair =>
 Applies a function to the second element, leaving the first unchanged.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -117,7 +112,6 @@ func absValue = entry =>
 Applies one function to the first element and another to the second.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -140,7 +134,6 @@ func normalizePair = pair =>
 Constructs a pair from two separate values.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -158,7 +151,6 @@ func makeEntry = label score =>
 Constructs a pair from two separate values. Useful as a named combinator when pairing results in a pipeline.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -176,7 +168,6 @@ func labelScore = label score =>
 Creates a pair where both elements are the same value.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi

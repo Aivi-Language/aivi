@@ -23,7 +23,6 @@ use aivi.math (
 Returns the absolute value of an integer.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -41,7 +40,6 @@ func distance = a b =>
 Negates an integer: `negate n` is equivalent to `0 - n`.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -59,7 +57,6 @@ func flipSign = n =>
 Returns the sign of an integer as `-1`, `0`, or `1`.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -77,7 +74,6 @@ func direction = velocity =>
 Returns `True` if the integer is divisible by 2.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -97,7 +93,6 @@ func evensOnly = numbers =>
 Returns `True` if the integer is not divisible by 2.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -117,7 +112,6 @@ func oddsOnly = numbers =>
 Multiplies an integer by itself.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -135,7 +129,6 @@ func areaOfSquare = side =>
 Constrains a value to lie within `[low, high]`. If `n < low`, returns `low`; if `n > high`, returns `high`; otherwise returns `n`.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -153,7 +146,6 @@ func normalizedVolume = raw =>
 Returns `True` if `n` is within the inclusive range `[low, high]`.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -171,7 +163,6 @@ func isValidAge = age =>
 Returns `True` if `divisor` evenly divides `n` (i.e. `n % divisor == 0`).
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi

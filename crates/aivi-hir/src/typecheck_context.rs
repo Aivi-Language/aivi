@@ -80,18 +80,10 @@ pub(crate) struct GateExprEnv {
 }
 
 pub(crate) fn pipe_stage_subject_memo_type(
-    stage: &PipeStage,
+    _stage: &PipeStage,
     subject: &GateType,
 ) -> Option<GateType> {
-    if !stage.supports_memos() {
-        return None;
-    }
-    match stage.kind {
-        PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
-            Some(subject.gate_payload().clone())
-        }
-        _ => None,
-    }
+    Some(subject.gate_payload().clone())
 }
 
 pub(crate) fn pipe_stage_expr_env(
@@ -119,9 +111,7 @@ pub(crate) fn extend_pipe_env_with_stage_memos(
     {
         env.locals.insert(binding, ty);
     }
-    if stage.supports_memos()
-        && let Some(binding) = stage.result_memo
-    {
+    if let Some(binding) = stage.result_memo {
         env.locals.insert(binding, result_subject.clone());
     }
 }
@@ -248,16 +238,40 @@ impl<'pipe> PipeSubjectWalker<'pipe> {
                     }
                     stage_index += 1;
                 }
-                _ => match on_stage(stage_index, stage, self.current.as_ref(), &self.env, typing) {
-                    PipeSubjectStepOutcome::Continue {
-                        new_subject,
-                        advance_by,
-                    } => {
-                        self.current = new_subject;
-                        stage_index += advance_by;
+                _ => {
+                    let current_subject = self.current.clone();
+                    let stage_env = current_subject
+                        .as_ref()
+                        .map_or_else(|| self.env.clone(), |subject| {
+                            pipe_stage_expr_env(&self.env, stage, subject)
+                        });
+                    match on_stage(
+                        stage_index,
+                        stage,
+                        current_subject.as_ref(),
+                        &stage_env,
+                        typing,
+                    ) {
+                        PipeSubjectStepOutcome::Continue {
+                            new_subject,
+                            advance_by,
+                        } => {
+                            if let (Some(input_subject), Some(result_subject)) =
+                                (current_subject.as_ref(), new_subject.as_ref())
+                            {
+                                extend_pipe_env_with_stage_memos(
+                                    &mut self.env,
+                                    stage,
+                                    input_subject,
+                                    result_subject,
+                                );
+                            }
+                            self.current = new_subject;
+                            stage_index += advance_by;
+                        }
+                        PipeSubjectStepOutcome::Stop => break,
                     }
-                    PipeSubjectStepOutcome::Stop => break,
-                },
+                }
             }
         }
         self.current
@@ -451,6 +465,16 @@ pub(crate) struct TruthyFalsyPairStages<'a> {
     pub(crate) falsy_stage: &'a crate::hir::PipeStage,
     pub(crate) falsy_expr: ExprId,
     pub(crate) next_index: usize,
+}
+
+pub(crate) fn truthy_falsy_pair_start_stage<'a>(
+    pair: &TruthyFalsyPairStages<'a>,
+) -> &'a crate::hir::PipeStage {
+    if pair.truthy_index < pair.falsy_index {
+        pair.truthy_stage
+    } else {
+        pair.falsy_stage
+    }
 }
 
 pub fn case_pattern_field_types(
@@ -7271,11 +7295,15 @@ impl<'a> GateTypeContext<'a> {
         let mut info = GateExprInfo::default();
         let mut branch_result = None::<SourceOptionActualType>;
         let branch_subject = subject.gate_payload().clone();
+        let Some(case_start) = case_stages.first().copied() else {
+            return info;
+        };
+        let case_env = pipe_stage_expr_env(env, case_start, subject);
         for stage in case_stages {
             let PipeStageKind::Case { pattern, body } = &stage.kind else {
                 continue;
             };
-            let mut branch_env = env.clone();
+            let mut branch_env = case_env.clone();
             branch_env
                 .locals
                 .extend(self.case_pattern_bindings(*pattern, &branch_subject).locals);
@@ -7449,45 +7477,27 @@ impl<'a> GateTypeContext<'a> {
                 }
                 PipeStageKind::Gate { expr } => {
                     stage_index += 1;
-                    self.infer_gate_stage_info(*expr, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_gate_stage_info(*expr, &stage_env, &subject)
                 }
                 PipeStageKind::Map { expr } => {
-                    let segment = pipe
-                        .fanout_segment(stage_index)
-                        .expect("map stages should expose a fan-out segment");
-                    if segment.join_stage().is_some() {
-                        stage_index = segment.next_stage_index();
-                        match crate::fanout_elaboration::elaborate_fanout_segment(
-                            self.module,
-                            &segment,
-                            Some(&subject),
-                            &pipe_env,
-                            self,
-                        ) {
-                            crate::fanout_elaboration::FanoutSegmentOutcome::Planned(plan) => {
-                                let mut info = GateExprInfo::default();
-                                info.ty = Some(plan.result_type);
-                                info
-                            }
-                            crate::fanout_elaboration::FanoutSegmentOutcome::Blocked(_) => {
-                                GateExprInfo::default()
-                            }
-                        }
-                    } else {
-                        stage_index += 1;
-                        self.infer_fanout_map_stage_info(*expr, &pipe_env, &subject)
-                    }
+                    stage_index += 1;
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_fanout_map_stage_info(*expr, &stage_env, &subject)
                 }
                 PipeStageKind::FanIn { expr } => {
                     stage_index += 1;
-                    self.infer_fanin_stage_info(*expr, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_fanin_stage_info(*expr, &stage_env, &subject)
                 }
                 PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
                     let Some(pair) = truthy_falsy_pair_stages(&stages, stage_index) else {
                         break;
                     };
+                    let pair_start = truthy_falsy_pair_start_stage(&pair);
+                    let pair_env = pipe_stage_expr_env(&pipe_env, pair_start, &subject);
                     stage_index = pair.next_index;
-                    self.infer_truthy_falsy_pair_info(&pair, &pipe_env, &subject)
+                    self.infer_truthy_falsy_pair_info(&pair, &pair_env, &subject)
                 }
                 PipeStageKind::Case { .. } => {
                     let case_start = stage_index;
@@ -7504,23 +7514,28 @@ impl<'a> GateTypeContext<'a> {
                 }
                 PipeStageKind::Accumulate { seed, step } => {
                     stage_index += 1;
-                    self.infer_accumulate_stage_info(*seed, *step, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_accumulate_stage_info(*seed, *step, &stage_env, &subject)
                 }
                 PipeStageKind::Previous { expr } => {
                     stage_index += 1;
-                    self.infer_previous_stage_info(*expr, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_previous_stage_info(*expr, &stage_env, &subject)
                 }
                 PipeStageKind::Diff { expr } => {
                     stage_index += 1;
-                    self.infer_diff_stage_info(*expr, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_diff_stage_info(*expr, &stage_env, &subject)
                 }
                 PipeStageKind::Delay { duration } => {
                     stage_index += 1;
-                    self.infer_delay_stage_info(*duration, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_delay_stage_info(*duration, &stage_env, &subject)
                 }
                 PipeStageKind::Burst { every, count } => {
                     stage_index += 1;
-                    self.infer_burst_stage_info(*every, *count, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_burst_stage_info(*every, *count, &stage_env, &subject)
                 }
                 PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
@@ -7530,7 +7545,8 @@ impl<'a> GateTypeContext<'a> {
                 }
                 PipeStageKind::Validate { expr } => {
                     stage_index += 1;
-                    self.infer_transform_stage_info(*expr, &pipe_env, &subject)
+                    let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                    self.infer_transform_stage_info(*expr, &stage_env, &subject)
                 }
             };
             if let Some(result_subject) = stage_info.ty.as_ref() {

@@ -8,9 +8,6 @@ Once you have a `Signal (AsyncTracker E A)`, the projections become signals them
 extra derivations needed:
 
 ```aivi
-// users.pending : Signal Bool
-// users.done    : Signal (Option (List User))
-// users.error   : Signal (Option HttpError)
 ```
 
 ## Import
@@ -56,10 +53,20 @@ Accumulation step function. Use it with `+|>` to turn a `Result`-producing signa
 **Type:** `AsyncTracker E A -> Result E A -> AsyncTracker E A`
 
 ```aivi
-use aivi.async (AsyncTracker, step)
-use aivi.http (HttpError, HttpSource)
+use aivi.async (
+    AsyncTracker
+    step
+)
 
-type List User = { id: Int, name: Text }
+use aivi.http (
+    HttpError
+    HttpSource
+)
+
+type List User = {
+    id: Int,
+    name: Text
+}
 
 @source http "https://api.example.com"
 signal api : HttpSource
@@ -73,7 +80,7 @@ value initialUsers : AsyncTracker HttpError (List User) = {
 }
 
 signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
-  +|> initialUsers step
+ +|> initialUsers step
 ```
 
 The three projections are now independent reactive signals:
@@ -82,10 +89,7 @@ The three projections are now independent reactive signals:
 // Spinner visible while loading
 signal loading = users.pending
 
-// Show the list once available  
 signal userList = users.done
-
-// Error banner when something went wrong
 signal fetchError = users.error
 ```
 
@@ -98,7 +102,10 @@ Returns `True` while the first result has not arrived.
 **Type:** `AsyncTracker E A -> Bool`
 
 ```aivi
-use aivi.async (AsyncTracker, isPending)
+use aivi.async (
+    AsyncTracker
+    isPending
+)
 
 type AsyncTracker Text Int -> Bool
 func checkPending = tracker =>
@@ -114,7 +121,10 @@ Returns `True` when at least one successful result has arrived.
 **Type:** `AsyncTracker E A -> Bool`
 
 ```aivi
-use aivi.async (AsyncTracker, isDone)
+use aivi.async (
+    AsyncTracker
+    isDone
+)
 
 type AsyncTracker Text Int -> Bool
 func checkDone = tracker =>
@@ -130,7 +140,10 @@ Returns `True` when the most recent result was a failure.
 **Type:** `AsyncTracker E A -> Bool`
 
 ```aivi
-use aivi.async (AsyncTracker, isFailed)
+use aivi.async (
+    AsyncTracker
+    isFailed
+)
 
 type AsyncTracker Text Int -> Bool
 func checkFailed = tracker =>
@@ -142,10 +155,20 @@ func checkFailed = tracker =>
 ## Full UI example
 
 ```aivi
-use aivi.async (AsyncTracker, step)
-use aivi.http (HttpError, HttpSource)
+use aivi.async (
+    AsyncTracker
+    step
+)
 
-type User = { id: Int, name: Text }
+use aivi.http (
+    HttpError
+    HttpSource
+)
+
+type User = {
+    id: Int,
+    name: Text
+}
 
 @source http "https://api.example.com"
 signal api : HttpSource
@@ -159,22 +182,16 @@ value initialUsers : AsyncTracker HttpError (List User) = {
 }
 
 signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
-  +|> initialUsers step
+ +|> initialUsers step
 
 value main =
     <Window title="Users">
         <Box>
-            {users.pending T|>
-                <Spinner />
-            }
-            {users.error
-             ||> None     -> <Box />
-             ||> Some err -> <Label text="Failed to load" />
-            }
-            {users.done
-             ||> None       -> <Label text="No data yet" />
-             ||> Some items -> <Label text="{items}" />
-            }
+            <Spinner />
+            <Box />
+            <Label text="Failed to load" />
+            <Label text="No data yet" />
+            <Label text="{items}" />
         </Box>
     </Window>
 
@@ -190,10 +207,20 @@ same behaviour. The pattern: keep a `Bool` that flips to `True` when the conditi
 and never returns to `False`.
 
 ```aivi
-use aivi.async (AsyncTracker, step)
-use aivi.http (HttpError, HttpSource)
+use aivi.async (
+    AsyncTracker
+    step
+)
 
-type User = { id: Int, name: Text }
+use aivi.http (
+    HttpError
+    HttpSource
+)
+
+type User = {
+    id: Int,
+    name: Text
+}
 
 @source http "https://api.example.com"
 signal api : HttpSource
@@ -207,19 +234,17 @@ value initialUsers : AsyncTracker HttpError (List User) = {
 }
 
 signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
-  +|> initialUsers step
+ +|> initialUsers step
 
-// Fires True on the first successful load, stays True
 type Bool -> Option (List User) -> Bool
-func trackFirstLoad = hasFired newDone =>
-    hasFired
-    ||> True  -> True
-    ||> False -> newDone
-        ||> None   -> False
-        ||> Some _ -> True
+func trackFirstLoad = hasFired newDone => hasFired
+ ||> True   -> True
+ ||> False  -> newDone
+ ||> None   -> False
+ ||> Some _ -> True
 
 signal firstLoadDone : Signal Bool = users.done
-  +|> False trackFirstLoad
+ +|> False trackFirstLoad
 ```
 
 `firstLoadDone` is a `Signal Bool` that is `False` until the first successful result arrives,

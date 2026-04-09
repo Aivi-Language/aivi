@@ -117,3 +117,10 @@ Sources updated alongside the wiki: `syntax.md`, `AIVI_RFC.md`, `manual/guide/ty
 Compared two designs for delayed/finite repeated signal triggering: a new source-shaped helper
 versus a recurrence/pipe-shaped temporal transform. Concluded that recurrence/temporal pipe is the
 more AIVI-like long-term home, while a narrow source helper is a pragmatic short-term fallback.  
+
+## [2026-04-09] ingest | truthy/falsy branch carriers
+
+Aligned the manual and wiki with the implemented `T|>` / `F|>` semantics.
+Documented the canonical carrier set (`Bool`, `Option`, `Result`, `Validation`)
+plus the one-outer-`Signal (...)` lift, clarified ambient `.` rebinding for
+single-payload constructors, and corrected the surface feature matrix note.

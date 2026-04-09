@@ -53,7 +53,6 @@ func describeResult = result => result
 Transforms the `Right` value, leaving `Left` unchanged.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -78,7 +77,6 @@ func doubleRight = result =>
 Transforms the `Left` value, leaving `Right` unchanged.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -103,7 +101,6 @@ func wrapError = result =>
 Transforms both sides independently.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -128,7 +125,6 @@ func transformBoth = e =>
 Reduces an `Either` to a single value by applying the appropriate function.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -157,7 +153,6 @@ func toLength = e =>
 Predicates that test which case an `Either` holds.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -179,7 +174,6 @@ func hasError = e =>
 Extract the value from the expected case, returning a default if the other case is held.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -200,7 +194,6 @@ func getValueOrZero = e =>
 Swaps the `Left` and `Right` cases.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -221,7 +214,6 @@ func flipEither = e =>
 Converts to `Option`, keeping only `Right` values.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -242,7 +234,6 @@ func rightOrNone = e =>
 Converts a `Result E A` into an `Either E A`. `Ok value` becomes `Right value`; `Err error` becomes `Left error`.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi
@@ -263,7 +254,6 @@ func resultToEither = result =>
 Splits a list of `Either` values into a tuple of lefts and rights.
 
 ```aivi
-// <unparseable item>
 ```
 
 ```aivi

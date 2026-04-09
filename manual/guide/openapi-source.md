@@ -32,8 +32,7 @@ Member access on a handle is validated against the spec's `operationId`s at comp
 ### Read operations (GET) — use as `signal`
 
 ```aivi
-signal allPets : Signal (Result ApiError (List Pet)) =
-    petstore.listPets
+signal allPets : Signal (Result ApiError (List Pet)) = petstore.listPets
 ```
 
 `listPets` maps to `GET /pets` in the spec. The compiler checks that `listPets` is a real
@@ -43,8 +42,7 @@ runtime.
 ### Write operations (POST / PUT / PATCH / DELETE) — use as `value`
 
 ```aivi
-value createNewPet : (NewPet -> Task ApiError Pet) =
-    petstore.createPet
+value createNewPet : (NewPet -> Task ApiError Pet) = petstore.createPet
 ```
 
 `createPet` maps to `POST /pets` in the spec. The compiler lowers this to an `HttpPost` intrinsic
@@ -68,7 +66,7 @@ The generated file contains:
 You can then import the generated types in your module:
 
 ```aivi
-use ./types/petstore (Pet, NewPet, ApiError)
+use _
 ```
 
 ## Authentication
@@ -86,9 +84,18 @@ The `auth` option accepts an `ApiAuth` sum value imported from `aivi.api`:
 ## Full example
 
 ```aivi
-use aivi.api (ApiSource, ApiError, BearerToken)
+use aivi.api (
+    ApiSource
+    ApiError
+    BearerToken
+)
 
-type Pet = { id: Int, name: Text, status: Option Text }
+type Pet = {
+    id: Int,
+    name: Text,
+    status: Option Text
+}
+
 type NewPet = { name: Text }
 
 value serverUrl : Text = "https://api.petstore.io/v2"
@@ -100,8 +107,7 @@ value apiToken : Text = "secret"
 }
 signal petstore : ApiSource
 
-signal pets : Signal (Result ApiError (List Pet)) =
-    petstore.listPets
+signal pets : Signal (Result ApiError (List Pet)) = petstore.listPets
 ```
 
 ## See also

@@ -156,9 +156,9 @@ func buildInitialDisc = x y => (x, y)
  ||> (4, 3) -> Black
  ||> _      -> Empty
 
-value initialBoardFallback : Matrix Disc = matrixFilled boardSize boardSize buildInitialDisc
-value initialBoard : Matrix Disc = resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
-value initialSnapshot : Snapshot = makeSnapshot initialBoard Human
+value initialBoardFallback = matrixFilled boardSize boardSize buildInitialDisc
+value initialBoard = resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
+value initialSnapshot = makeSnapshot initialBoard Human
 
 value initialGame : GameState = {
     board: initialBoard,
@@ -481,14 +481,14 @@ signal computerAnimationStart : Signal Phase = phase
 }
 signal computerFlashTick : Signal Unit
 
-signal event : Signal Event = computerTurnReady | computerFlashTick | placeCoord | restartClick
+signal event = computerTurnReady | computerFlashTick | placeCoord | restartClick
   ||> computerTurnReady _ => StartComputerTurn
   ||> computerFlashTick _ => ComputerFlashTick
   ||> placeCoord coord => Click coord
   ||> restartClick _ => Reset
   ||> _ => Idle
 
-signal state : Signal GameState = event
+signal state = event
  +|> initialGame stepGame
 
 from state = {

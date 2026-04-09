@@ -5340,6 +5340,67 @@ fun demo:Int = x:Int=> x  |> #before add1 #after
     }
 
     #[test]
+    fn lower_module_preserves_grouped_pipe_memos_in_core_pipe_exprs() {
+        let lowered = lower_text(
+            "grouped-pipe-memos.aivi",
+            r#"
+type StageChoice = Ready Int | Missing
+
+fun caseDemo:Int = input:StageChoice=> input
+ ||> Ready value -> value + 1 #resolved
+ ||> Missing -> 0 #resolved
+ |> resolved
+
+fun truthyDemo:Int = input:Option Int=> input
+ T|> . + 1 #branch
+ F|> 0 #branch
+ |> branch
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "grouped pipe memo fixture should lower cleanly before typed-core lowering: {:?}",
+            lowered.diagnostics()
+        );
+
+        let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+        validate_module(&core).expect("typed-core module should validate");
+
+        let case_demo = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "caseDemo")
+            .map(|(id, _)| id)
+            .expect("expected caseDemo item");
+        let case_body = core.items()[case_demo]
+            .body
+            .expect("caseDemo should have a typed-core body");
+        let crate::expr::ExprKind::Pipe(case_pipe) = &core.exprs()[case_body].kind else {
+            panic!("expected caseDemo to lower into a pipe expression");
+        };
+        assert!(matches!(case_pipe.stages[0].kind, crate::expr::PipeStageKind::Case { .. }));
+        assert!(case_pipe.stages[0].result_memo.is_some());
+
+        let truthy_demo = core
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == "truthyDemo")
+            .map(|(id, _)| id)
+            .expect("expected truthyDemo item");
+        let truthy_body = core.items()[truthy_demo]
+            .body
+            .expect("truthyDemo should have a typed-core body");
+        let crate::expr::ExprKind::Pipe(truthy_pipe) = &core.exprs()[truthy_body].kind else {
+            panic!("expected truthyDemo to lower into a pipe expression");
+        };
+        assert!(matches!(
+            truthy_pipe.stages[0].kind,
+            crate::expr::PipeStageKind::TruthyFalsy(_)
+        ));
+        assert!(truthy_pipe.stages[0].result_memo.is_some());
+    }
+
+    #[test]
     fn lowers_transform_stage_modes_into_core_pipe_nodes() {
         let mut module = aivi_hir::Module::new(FileId::new(0));
         let int_type = builtin_type(&mut module, BuiltinType::Int);

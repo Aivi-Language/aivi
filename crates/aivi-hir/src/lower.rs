@@ -3554,7 +3554,8 @@ impl<'a> Lowerer<'a> {
             );
             self.placeholder_expr(span)
         });
-        let stages = std::mem::take(ordinary);
+        let mut stages = std::mem::take(ordinary);
+        self.normalize_grouped_pipe_memos(&mut stages);
         let stages =
             crate::NonEmpty::from_vec(stages).expect("flush only runs for non-empty stage buffers");
         let expr = self.alloc_expr(Expr {
@@ -3642,32 +3643,14 @@ impl<'a> Lowerer<'a> {
     }
 
     fn lower_pipe_stage(&mut self, stage: &syn::PipeStage) -> PipeStage {
-        let supports_memos = matches!(
-            stage.kind,
-            syn::PipeStageKind::Transform { .. } | syn::PipeStageKind::Tap { .. }
-        );
-        let subject_memo = if supports_memos {
-            stage
-                .subject_memo
-                .as_ref()
-                .map(|memo| self.lower_pipe_memo_binding(memo, BindingKind::PipeSubjectMemo))
-        } else {
-            if let Some(memo) = &stage.subject_memo {
-                self.emit_unsupported_pipe_memo(memo.span);
-            }
-            None
-        };
-        let result_memo = if supports_memos {
-            stage
-                .result_memo
-                .as_ref()
-                .map(|memo| self.lower_pipe_memo_binding(memo, BindingKind::PipeResultMemo))
-        } else {
-            if let Some(memo) = &stage.result_memo {
-                self.emit_unsupported_pipe_memo(memo.span);
-            }
-            None
-        };
+        let subject_memo = stage
+            .subject_memo
+            .as_ref()
+            .map(|memo| self.lower_pipe_memo_binding(memo, BindingKind::PipeSubjectMemo));
+        let result_memo = stage
+            .result_memo
+            .as_ref()
+            .map(|memo| self.lower_pipe_memo_binding(memo, BindingKind::PipeResultMemo));
         let kind = match &stage.kind {
             syn::PipeStageKind::Transform { expr } => PipeStageKind::Transform {
                 expr: self.lower_expr(expr),
@@ -3743,17 +3726,53 @@ impl<'a> Lowerer<'a> {
         })
     }
 
-    fn emit_unsupported_pipe_memo(&mut self, span: SourceSpan) {
-        self.diagnostics.push(
-            Diagnostic::error(
-                "pipe memo bindings are currently supported only on `|>` and `|` stages",
-            )
-            .with_code(code("unsupported-pipe-memo-stage"))
-            .with_primary_label(
-                span,
-                "move this memo to a plain transform or tap stage for now",
-            ),
-        );
+    fn normalize_grouped_pipe_memos(&mut self, stages: &mut [PipeStage]) {
+        let mut index = 0usize;
+        while index < stages.len() {
+            match stages[index].kind {
+                PipeStageKind::Case { .. } => {
+                    let start = index;
+                    while index < stages.len() && matches!(stages[index].kind, PipeStageKind::Case { .. })
+                    {
+                        index += 1;
+                    }
+                    self.promote_grouped_pipe_memos(&mut stages[start..index]);
+                }
+                PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
+                    if index + 1 < stages.len()
+                        && matches!(
+                            (&stages[index].kind, &stages[index + 1].kind),
+                            (PipeStageKind::Truthy { .. }, PipeStageKind::Falsy { .. })
+                                | (PipeStageKind::Falsy { .. }, PipeStageKind::Truthy { .. })
+                        )
+                    {
+                        self.promote_grouped_pipe_memos(&mut stages[index..index + 2]);
+                        index += 2;
+                    } else {
+                        index += 1;
+                    }
+                }
+                _ => index += 1,
+            }
+        }
+    }
+
+    fn promote_grouped_pipe_memos(&mut self, stages: &mut [PipeStage]) {
+        let Some((first, rest)) = stages.split_first_mut() else {
+            return;
+        };
+        let subject_memo = std::iter::once(first.subject_memo)
+            .chain(rest.iter().map(|stage| stage.subject_memo))
+            .find_map(|binding| binding);
+        let result_memo = std::iter::once(first.result_memo)
+            .chain(rest.iter().map(|stage| stage.result_memo))
+            .find_map(|binding| binding);
+        first.subject_memo = subject_memo;
+        first.result_memo = result_memo;
+        for stage in rest {
+            stage.subject_memo = None;
+            stage.result_memo = None;
+        }
     }
 
     fn validate_pipe_stages(&mut self, stages: &[syn::PipeStage]) {
@@ -7147,51 +7166,134 @@ impl<'a> Lowerer<'a> {
             ExprKind::Pipe(pipe) => {
                 self.resolve_expr(pipe.head, namespaces, env);
                 let mut pipe_env = env.clone();
-                for stage in pipe.stages.iter() {
-                    let mut stage_env = pipe_env.clone();
-                    if stage.supports_memos()
-                        && let Some(binding) = stage.subject_memo
-                    {
-                        stage_env.push_term_scope(self.binding_scope([binding]));
-                    }
+                let stages = pipe.stages.iter().collect::<Vec<_>>();
+                let mut stage_index = 0usize;
+                while stage_index < stages.len() {
+                    let stage = stages[stage_index];
                     match &stage.kind {
+                        PipeStageKind::Case { .. } => {
+                            let case_start = stage_index;
+                            while stage_index < stages.len()
+                                && matches!(stages[stage_index].kind, PipeStageKind::Case { .. })
+                            {
+                                stage_index += 1;
+                            }
+                            let first_stage = stages[case_start];
+                            let mut case_env = pipe_env.clone();
+                            if let Some(binding) = first_stage.subject_memo {
+                                case_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            for case_stage in &stages[case_start..stage_index] {
+                                let PipeStageKind::Case { pattern, body } = &case_stage.kind else {
+                                    continue;
+                                };
+                                let bindings =
+                                    self.resolve_pattern(*pattern, namespaces, &case_env);
+                                let mut branch_env = case_env.clone();
+                                branch_env.push_term_scope(self.binding_scope(bindings));
+                                self.resolve_expr(*body, namespaces, &branch_env);
+                            }
+                            if let Some(binding) = first_stage.subject_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            if let Some(binding) = first_stage.result_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                        }
+                        PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
+                            if let Some(pair) =
+                                crate::typecheck_context::truthy_falsy_pair_stages(&stages, stage_index)
+                            {
+                                let first_stage = stages[stage_index];
+                                let mut pair_env = pipe_env.clone();
+                                if let Some(binding) = first_stage.subject_memo {
+                                    pair_env.push_term_scope(self.binding_scope([binding]));
+                                }
+                                self.resolve_expr(pair.truthy_expr, namespaces, &pair_env);
+                                self.resolve_expr(pair.falsy_expr, namespaces, &pair_env);
+                                if let Some(binding) = first_stage.subject_memo {
+                                    pipe_env.push_term_scope(self.binding_scope([binding]));
+                                }
+                                if let Some(binding) = first_stage.result_memo {
+                                    pipe_env.push_term_scope(self.binding_scope([binding]));
+                                }
+                                stage_index = pair.next_index;
+                            } else {
+                                let mut stage_env = pipe_env.clone();
+                                if let Some(binding) = stage.subject_memo {
+                                    stage_env.push_term_scope(self.binding_scope([binding]));
+                                }
+                                let (
+                                    PipeStageKind::Truthy { expr }
+                                    | PipeStageKind::Falsy { expr }
+                                ) = &stage.kind
+                                else {
+                                    unreachable!();
+                                };
+                                self.resolve_expr(*expr, namespaces, &stage_env);
+                                if let Some(binding) = stage.subject_memo {
+                                    pipe_env.push_term_scope(self.binding_scope([binding]));
+                                }
+                                if let Some(binding) = stage.result_memo {
+                                    pipe_env.push_term_scope(self.binding_scope([binding]));
+                                }
+                                stage_index += 1;
+                            }
+                        }
                         PipeStageKind::Transform { expr }
                         | PipeStageKind::Gate { expr }
                         | PipeStageKind::Map { expr }
                         | PipeStageKind::Apply { expr }
                         | PipeStageKind::Tap { expr }
                         | PipeStageKind::FanIn { expr }
-                        | PipeStageKind::Truthy { expr }
-                        | PipeStageKind::Falsy { expr }
                         | PipeStageKind::RecurStart { expr }
                         | PipeStageKind::RecurStep { expr }
                         | PipeStageKind::Validate { expr }
                         | PipeStageKind::Previous { expr }
                         | PipeStageKind::Diff { expr }
                         | PipeStageKind::Delay { duration: expr } => {
-                            self.resolve_expr(*expr, namespaces, &stage_env)
+                            let mut stage_env = pipe_env.clone();
+                            if let Some(binding) = stage.subject_memo {
+                                stage_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            self.resolve_expr(*expr, namespaces, &stage_env);
+                            if let Some(binding) = stage.subject_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            if let Some(binding) = stage.result_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            stage_index += 1;
                         }
                         PipeStageKind::Accumulate { seed, step } => {
+                            let mut stage_env = pipe_env.clone();
+                            if let Some(binding) = stage.subject_memo {
+                                stage_env.push_term_scope(self.binding_scope([binding]));
+                            }
                             self.resolve_expr(*seed, namespaces, &stage_env);
                             self.resolve_expr(*step, namespaces, &stage_env);
+                            if let Some(binding) = stage.subject_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            if let Some(binding) = stage.result_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            stage_index += 1;
                         }
                         PipeStageKind::Burst { every, count } => {
+                            let mut stage_env = pipe_env.clone();
+                            if let Some(binding) = stage.subject_memo {
+                                stage_env.push_term_scope(self.binding_scope([binding]));
+                            }
                             self.resolve_expr(*every, namespaces, &stage_env);
                             self.resolve_expr(*count, namespaces, &stage_env);
-                        }
-                        PipeStageKind::Case { pattern, body } => {
-                            let bindings = self.resolve_pattern(*pattern, namespaces, &stage_env);
-                            let mut branch_env = stage_env.clone();
-                            branch_env.push_term_scope(self.binding_scope(bindings));
-                            self.resolve_expr(*body, namespaces, &branch_env);
-                        }
-                    }
-                    if stage.supports_memos() {
-                        if let Some(binding) = stage.subject_memo {
-                            pipe_env.push_term_scope(self.binding_scope([binding]));
-                        }
-                        if let Some(binding) = stage.result_memo {
-                            pipe_env.push_term_scope(self.binding_scope([binding]));
+                            if let Some(binding) = stage.subject_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            if let Some(binding) = stage.result_memo {
+                                pipe_env.push_term_scope(self.binding_scope([binding]));
+                            }
+                            stage_index += 1;
                         }
                     }
                 }

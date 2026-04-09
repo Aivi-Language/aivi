@@ -28,6 +28,24 @@ AIVI types in HIR:
 - Function types: `A -> B` (internal only; surface uses domain-annotated functions)
 - Domain types: opaque wrappers with declared operators
 
+## Canonical truthy/falsy carriers
+
+**Sources**: `syntax.md` §6.5, `crates/aivi-hir/src/validate.rs`
+
+`T|>` / `F|>` are not Bool-only sugar. The current resolved-HIR path accepts
+these canonical pairs:
+
+- `Bool`: `True` / `False`
+- `Option A`: `Some _` / `None`
+- `Result E A`: `Ok _` / `Err _`
+- `Validation E A`: `Valid _` / `Invalid _`
+- one outer `Signal (...)` around any of the carriers above
+
+Inside a branch, `.` is rebound to the matched payload only when that
+constructor has exactly one payload. Use `||>` instead when you need named
+bindings, nested patterns, more than two constructors, or a user-defined
+carrier; custom truthy/falsy overloads are still future work.
+
 ## Type Checking
 
 **Source**: `crates/aivi-hir/src/typecheck.rs`, `typecheck_context.rs`

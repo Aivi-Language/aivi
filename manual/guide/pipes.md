@@ -90,9 +90,23 @@ Today `||>` supports patterns only. Case-stage guard syntax is not implemented e
 so the current workaround is to match the shape first and then compute a `Bool` in the arm body
 or a helper, branching with `T|>` / `F|>` if needed.
 
-## Boolean branches with `T|>` and `F|>`
+## Truthy/falsy branches with `T|>` and `F|>`
 
-For `Bool`, the dedicated true/false pipes are shorter than a full match:
+`T|>` / `F|>` are shorthand for the built-in two-way carriers with a canonical
+truthy/falsy split:
+
+| Subject type | `T|>` matches | `F|>` matches |
+| --- | --- | --- |
+| `Bool` | `True` | `False` |
+| `Option A` | `Some _` | `None` |
+| `Result E A` | `Ok _` | `Err _` |
+| `Validation E A` | `Valid _` | `Invalid _` |
+
+The same shorthand also lifts through one outer `Signal (...)`, so `Signal Bool`
+and `Signal (Option A)` work the same way pointwise. Inside a chosen branch,
+`.` is rebound to the matched payload when that constructor has exactly one
+payload. Use `||>` when you need named bindings, nested patterns, or a
+non-canonical carrier.
 
 ```aivi
 type Bool -> Text
@@ -101,6 +115,31 @@ func availabilityLabel = .
  F|> "waiting"
 
 value shownAvailability = availabilityLabel True
+```
+
+```aivi
+type User = { name: Text }
+
+type Option User -> Text
+func userNameOrGuest = .
+ T|> .name
+ F|> "guest"
+
+value shownUserName =
+    userNameOrGuest (
+        Some {
+            name: "Ada"
+        }
+    )
+```
+
+```aivi
+type Result Text Int -> Text
+func loadStatus = .
+ T|> "loaded"
+ F|> .
+
+value currentLoadStatus = loadStatus (Err "network down")
 ```
 
 ## Filtering with `?|>`
@@ -406,8 +445,8 @@ That keeps pipe flow explicit and matches the compiler's current nesting rule.
 | --- | --- |
 | `\|>` | Apply a function |
 | `\|\|>` | Pattern match / case split |
-| `T\|>` | Branch for `True` |
-| `F\|>` | Branch for `False` |
+| `T\|>` | Branch for `True` / `Some` / `Ok` / `Valid` |
+| `F\|>` | Branch for `False` / `None` / `Err` / `Invalid` |
 | `?\|>` | Gate values; ordinary values become `Option`, signals stay `Signal` |
 | `~\|>` | Carry previous value |
 | `-\|>` | Compute a difference |

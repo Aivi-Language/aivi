@@ -87,7 +87,6 @@ Friendly alias names such as `parse`, `plus`, `minus`, `times`, `dividedBy`, `re
 ### fromInt / fromInteger
 
 ```aivi
-// <unparseable item>
 ```
 
 Convert a normal machine-sized `Int` into `BigInt`. Use this when you want to move into
@@ -102,7 +101,6 @@ value startCount = fromInt 42
 ### fromText / parse
 
 ```aivi
-// <unparseable item>
 ```
 
 Parse decimal text into `BigInt`. Surrounding whitespace is ignored. Returns `None` when the text
@@ -117,7 +115,6 @@ value customerId = fromText "90071992547409931234567890"
 ### toInt
 
 ```aivi
-// <unparseable item>
 ```
 
 Try to convert a `BigInt` back to plain `Int`. Returns `Some n` when the value fits in `Int`, or
@@ -135,7 +132,6 @@ func toMachineInt = raw =>
 ### toText
 
 ```aivi
-// <unparseable item>
 ```
 
 Render a `BigInt` as decimal text. This is the easiest way to show a large number in the UI or
@@ -153,7 +149,6 @@ value rendered = toText (factorial 30)
 ### add / plus
 
 ```aivi
-// <unparseable item>
 ```
 
 Add two `BigInt` values.
@@ -161,7 +156,6 @@ Add two `BigInt` values.
 ### sub / minus
 
 ```aivi
-// <unparseable item>
 ```
 
 Subtract the right value from the left.
@@ -169,7 +163,6 @@ Subtract the right value from the left.
 ### mul / times
 
 ```aivi
-// <unparseable item>
 ```
 
 Multiply two `BigInt` values.
@@ -177,7 +170,6 @@ Multiply two `BigInt` values.
 ### div / dividedBy
 
 ```aivi
-// <unparseable item>
 ```
 
 Integer division. Any remainder is discarded. Returns `None` when the divisor is zero.
@@ -194,7 +186,6 @@ value maybePages = div (fromInt 120) (fromInt 10)
 ### bigMod / remainder
 
 ```aivi
-// <unparseable item>
 ```
 
 Return the remainder after integer division. Returns `None` when the divisor is zero.
@@ -202,7 +193,6 @@ Return the remainder after integer division. Returns `None` when the divisor is 
 ### pow / raiseTo
 
 ```aivi
-// <unparseable item>
 ```
 
 Raise a `BigInt` to a whole-number power. The exponent is a normal `Int`. Negative exponents are
@@ -211,7 +201,6 @@ currently treated as `0`, so the result is `1`.
 ### neg / negate
 
 ```aivi
-// <unparseable item>
 ```
 
 Flip the sign of a `BigInt`.
@@ -219,7 +208,6 @@ Flip the sign of a `BigInt`.
 ### bigAbs / absolute
 
 ```aivi
-// <unparseable item>
 ```
 
 Return the absolute value of a `BigInt`.
@@ -227,7 +215,6 @@ Return the absolute value of a `BigInt`.
 ### cmp
 
 ```aivi
-// <unparseable item>
 ```
 
 Compare two `BigInt` values. The result is `-1` when the left value is smaller, `0` when both
@@ -236,7 +223,6 @@ values are equal, and `1` when the left value is larger.
 ### bigEq / equals
 
 ```aivi
-// <unparseable item>
 ```
 
 Check whether two `BigInt` values are exactly equal.
@@ -244,7 +230,6 @@ Check whether two `BigInt` values are exactly equal.
 ### gt / greaterThan
 
 ```aivi
-// <unparseable item>
 ```
 
 Return `True` when the left value is greater than the right value.
@@ -252,7 +237,6 @@ Return `True` when the left value is greater than the right value.
 ### lt / lessThan
 
 ```aivi
-// <unparseable item>
 ```
 
 Return `True` when the left value is less than the right value.
@@ -260,7 +244,6 @@ Return `True` when the left value is less than the right value.
 ### greaterOrEqual / lessOrEqual
 
 ```aivi
-// <unparseable item>
 ```
 
 Inclusive comparison helpers built from the basic comparison functions.
@@ -268,7 +251,6 @@ Inclusive comparison helpers built from the basic comparison functions.
 ### zero / one / negOne
 
 ```aivi
-// <unparseable item>
 ```
 
 Ready-made `BigInt` constants for common starting values.
@@ -276,7 +258,6 @@ Ready-made `BigInt` constants for common starting values.
 ### isZero / isPositive / isNegative
 
 ```aivi
-// <unparseable item>
 ```
 
 Small sign-check helpers for common conditions.
@@ -284,7 +265,6 @@ Small sign-check helpers for common conditions.
 ### factorial
 
 ```aivi
-// <unparseable item>
 ```
 
 Compute `n!` as a `BigInt`. `factorial 0` returns `one`, and negative input currently also returns

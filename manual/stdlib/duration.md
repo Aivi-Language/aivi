@@ -55,7 +55,6 @@ values elsewhere in your program.
 ### `millis`
 
 ```aivi
-// <unparseable item>
 ```
 
 Build a duration from a raw millisecond count.
@@ -72,7 +71,6 @@ value shortDelay : Duration = millis 150
 ### `trySeconds`
 
 ```aivi
-// <unparseable item>
 ```
 
 A safe constructor for whole seconds. Use this when you want construction to report a

@@ -4221,11 +4221,14 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::PipeCase => {
                     cluster_active = false;
-                    (
-                        None,
-                        PipeStageKind::Case(self.parse_pipe_case_arm(cursor, end, stop)?),
-                        None,
-                    )
+                    let subject_memo = self.parse_optional_pipe_memo(cursor, end);
+                    let arm = self.parse_pipe_case_arm(
+                        cursor,
+                        end,
+                        stop.with_pipe_stage().with_hash(),
+                    )?;
+                    let result_memo = self.parse_optional_pipe_memo(cursor, end);
+                    (subject_memo, PipeStageKind::Case(arm), result_memo)
                 }
                 TokenKind::PipeMap => {
                     cluster_active = false;
@@ -9256,6 +9259,59 @@ fun scoreLineFor:Text = "Score: {.}"
         );
         assert!(pipe.stages[1].subject_memo.is_none());
         assert!(pipe.stages[1].result_memo.is_none());
+    }
+
+    #[test]
+    fn parser_accepts_pipe_case_stage_memos() {
+        let (_, parsed) = load(
+            r#"value memoed = Some 2
+ ||> #incoming Some value -> value + 1 #resolved
+ ||> None -> 0 #resolved
+ |> resolved
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "expected case-stage pipe memos to parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let Item::Value(value) = &parsed.module.items[0] else {
+            panic!("expected memoed value item");
+        };
+        let Some(Expr {
+            kind: ExprKind::Pipe(pipe),
+            ..
+        }) = value.expr_body()
+        else {
+            panic!("expected value body to be a pipe expression");
+        };
+        assert_eq!(pipe.stages.len(), 3);
+        assert_eq!(
+            pipe.stages[0]
+                .subject_memo
+                .as_ref()
+                .expect("first case arm should preserve the subject memo")
+                .text,
+            "incoming"
+        );
+        assert_eq!(
+            pipe.stages[0]
+                .result_memo
+                .as_ref()
+                .expect("first case arm should preserve the result memo")
+                .text,
+            "resolved"
+        );
+        assert_eq!(
+            pipe.stages[1]
+                .result_memo
+                .as_ref()
+                .expect("second case arm should preserve the shared result memo")
+                .text,
+            "resolved"
+        );
     }
 
     #[test]

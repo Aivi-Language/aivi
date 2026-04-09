@@ -2893,9 +2893,19 @@ impl Formatter {
     fn format_pipe_stage_inline(&self, stage: &PipeStage) -> String {
         match &stage.kind {
             PipeStageKind::Case(arm) => format!(
-                "||> {} -> {}",
+                "||>{} {} -> {}{}",
+                stage
+                    .subject_memo
+                    .as_ref()
+                    .map(|memo| format!(" #{}", memo.text))
+                    .unwrap_or_default(),
                 self.format_pattern_inline(&arm.pattern, 0),
-                self.format_expr_inline(&arm.body, 0)
+                self.format_expr_inline(&arm.body, 0),
+                stage
+                    .result_memo
+                    .as_ref()
+                    .map(|memo| format!(" #{}", memo.text))
+                    .unwrap_or_default()
             ),
             PipeStageKind::Transform { expr } => self.format_pipe_expr_stage("|>", stage, expr),
             PipeStageKind::Gate { expr } => self.format_pipe_expr_stage("?|>", stage, expr),
@@ -2915,7 +2925,19 @@ impl Formatter {
             PipeStageKind::Accumulate { seed, step } => {
                 let seed_str = self.format_expr_inline(seed, EXPR_PIPE_PREC + 1);
                 let step_str = self.format_expr_inline(step, EXPR_PIPE_PREC + 1);
-                format!("+|> {seed_str} {step_str}")
+                format!(
+                    "+|>{} {seed_str} {step_str}{}",
+                    stage
+                        .subject_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default(),
+                    stage
+                        .result_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default()
+                )
             }
             PipeStageKind::Diff { expr } => self.format_pipe_expr_stage("-|>", stage, expr),
             PipeStageKind::Delay { duration } => {
@@ -2924,7 +2946,19 @@ impl Formatter {
             PipeStageKind::Burst { every, count } => {
                 let every_str = self.format_expr_inline(every, EXPR_PIPE_PREC + 1);
                 let count_str = self.format_expr_inline(count, EXPR_PIPE_PREC + 1);
-                format!("burst|> {every_str} {count_str}")
+                format!(
+                    "burst|>{} {every_str} {count_str}{}",
+                    stage
+                        .subject_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default(),
+                    stage
+                        .result_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default()
+                )
             }
         }
     }
@@ -2932,9 +2966,19 @@ impl Formatter {
     fn format_pipe_stage_line(&self, stage: &PipeStage) -> String {
         match &stage.kind {
             PipeStageKind::Case(arm) => format!(
-                " ||> {} -> {}",
+                " ||>{} {} -> {}{}",
+                stage
+                    .subject_memo
+                    .as_ref()
+                    .map(|memo| format!(" #{}", memo.text))
+                    .unwrap_or_default(),
                 self.format_pattern_inline(&arm.pattern, 0),
-                self.format_expr_inline(&arm.body, 0)
+                self.format_expr_inline(&arm.body, 0),
+                stage
+                    .result_memo
+                    .as_ref()
+                    .map(|memo| format!(" #{}", memo.text))
+                    .unwrap_or_default()
             ),
             PipeStageKind::Transform { expr } => self.format_aligned_pipe_stage("|>", stage, expr),
             PipeStageKind::Gate { expr } => self.format_aligned_pipe_stage("?|>", stage, expr),
@@ -2956,7 +3000,19 @@ impl Formatter {
             PipeStageKind::Accumulate { seed, step } => {
                 let seed_str = self.format_expr_inline(seed, EXPR_PIPE_PREC + 1);
                 let step_str = self.format_expr_inline(step, EXPR_PIPE_PREC + 1);
-                format!("+|> {seed_str} {step_str}")
+                format!(
+                    "+|>{} {seed_str} {step_str}{}",
+                    stage
+                        .subject_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default(),
+                    stage
+                        .result_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default()
+                )
             }
             PipeStageKind::Diff { expr } => self.format_aligned_pipe_stage("-|>", stage, expr),
             PipeStageKind::Delay { duration } => {
@@ -2965,34 +3021,57 @@ impl Formatter {
             PipeStageKind::Burst { every, count } => {
                 let every_str = self.format_expr_inline(every, EXPR_PIPE_PREC + 1);
                 let count_str = self.format_expr_inline(count, EXPR_PIPE_PREC + 1);
-                format!("burst|> {every_str} {count_str}")
+                format!(
+                    "burst|>{} {every_str} {count_str}{}",
+                    stage
+                        .subject_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default(),
+                    stage
+                        .result_memo
+                        .as_ref()
+                        .map(|memo| format!(" #{}", memo.text))
+                        .unwrap_or_default()
+                )
             }
         }
     }
 
     fn format_pipe_case_group(&self, stages: &[PipeStage]) -> Vec<String> {
-        let patterns: Vec<_> = stages
+        let heads: Vec<_> = stages
             .iter()
             .map(|stage| match &stage.kind {
-                PipeStageKind::Case(arm) => self.format_pattern_inline(&arm.pattern, 0),
+                PipeStageKind::Case(arm) => {
+                    let pattern = self.format_pattern_inline(&arm.pattern, 0);
+                    match &stage.subject_memo {
+                        Some(memo) => format!("#{} {pattern}", memo.text),
+                        None => pattern,
+                    }
+                }
                 _ => "// <error: unformattable node>".to_owned(),
             })
             .collect();
-        let width = patterns
+        let width = heads
             .iter()
-            .map(|pattern| display_width(pattern))
+            .map(|head| display_width(head))
             .max()
             .unwrap_or(0);
 
         stages
             .iter()
-            .zip(patterns)
-            .map(|(stage, pattern)| match &stage.kind {
+            .zip(heads)
+            .map(|(stage, head)| match &stage.kind {
                 PipeStageKind::Case(arm) => {
-                    let padding = spaces(width.saturating_sub(display_width(&pattern)));
+                    let padding = spaces(width.saturating_sub(display_width(&head)));
                     format!(
-                        "||> {pattern}{padding} -> {}",
-                        self.format_expr_inline(&arm.body, 0)
+                        "||> {head}{padding} -> {}{}",
+                        self.format_expr_inline(&arm.body, 0),
+                        stage
+                            .result_memo
+                            .as_ref()
+                            .map(|memo| format!(" #{}", memo.text))
+                            .unwrap_or_default()
                     )
                 }
                 _ => "// <error: unformattable node>".to_owned(),
@@ -3843,6 +3922,45 @@ value view =
                 "\n",
                 "value projection = .email\n",
                 "value values = [1..10]\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_preserves_pipe_stage_memos() {
+        let formatted = format_text(
+            concat!(
+                "value resolved=Some 2\n",
+                "||>#incoming Some value->value + 1 #resolved\n",
+                "||>None->0 #resolved\n",
+                "|>resolved\n",
+                "\n",
+                "signal delayed=1\n",
+                "delay|>#current 10 #later\n",
+                "\n",
+                "signal replayed=1\n",
+                "burst|>#current 10 3 #later\n",
+                "\n",
+                "signal counted=1\n",
+                "+|>#event 0 step #total\n",
+            ),
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "value resolved = Some 2\n",
+                " ||> #incoming Some value -> value + 1 #resolved\n",
+                " ||> None                 -> 0 #resolved\n",
+                "  |> resolved\n",
+                "\n",
+                "signal delayed = 1\n",
+                " delay|> #current 10 #later\n",
+                "\n",
+                "signal replayed = 1\n",
+                " burst|> #current 10 3 #later\n",
+                "\n",
+                "signal counted = 1\n",
+                " +|> #event 0 step #total\n",
             )
         );
     }

@@ -21,7 +21,6 @@ Every integration has the same four steps:
 @source http.get "https://api.example.com/users"
 signal usersRaw : Signal (Result HttpError (List User))
 
-// 2. Derive signals (pure functions of the data)
 signal users : Signal (List User) = usersRaw
   |> .ok
   |> withDefault []
@@ -30,7 +29,6 @@ signal userCount : Signal Text = users
   |> length
   |> "Users: {.}"
 
-// 3. Use in markup
 value main =
     <Window title="Users">
         <Label text={userCount} />
@@ -55,9 +53,7 @@ Timers are the simplest source — no external service, no decode.
 }
 signal tick : Signal Unit
 
-// Accumulate a running counter
-signal count : Signal Int = tick
-  +|> 0 (\acc _ -> acc + 1)
+signal count : Signal Int
 ```
 
 Use `coalesce: True` when a slow UI should not queue up a backlog of ticks. The runtime discards any un-processed ticks rather than piling them up.
@@ -87,7 +83,10 @@ The response body is decoded directly into `AppConfig` using the structural deco
 ### Polling with a timer
 
 ```aivi
-@source timer.every 30s with { immediate: True, coalesce: True }
+@source timer.every 30s with {
+    immediate: True,
+    coalesce: True
+}
 signal refreshTick : Signal Unit
 
 @source http.get "https://api.example.com/feed" with {
@@ -129,10 +128,11 @@ signal configText : Signal (Result FsError AppConfig)
 ### Watch for changes
 
 ```aivi
-@source fs.watch "/home/user/notes" with { recursive: False }
+@source fs.watch "/home/user/notes" with {
+    recursive: False
+}
 signal notesChanged : Signal FsEvent
 
-// Re-read on each change
 @source fs.read "/home/user/notes/index.md" with {
     trigger: notesChanged
 }
@@ -146,7 +146,10 @@ signal notesIndex : Signal (Result FsError Text)
 If a file is large, annotate the signal type with a narrower record and the runtime will decode only what you need:
 
 ```aivi
-type AppConfig = { theme: Text, fontSize: Int }
+type AppConfig = {
+    theme: Text,
+    fontSize: Int
+}
 
 @source fs.read "/etc/myapp/config.json"
 signal config : Signal (Result FsError AppConfig)
@@ -171,7 +174,7 @@ signal users : Signal (Result DbError (List User))
 ### Parameterised queries
 
 ```aivi
-signal selectedTag : Signal Text = ...
+signal selectedTag : Signal Text
 
 @source db.live db "SELECT * FROM posts WHERE tag = $1" with {
     params: [selectedTag]
@@ -216,9 +219,12 @@ D-Bus method sources call the method on startup (or on a trigger) and decode the
 Annotate the signal type and the runtime decodes D-Bus variant values into AIVI types:
 
 ```aivi
-type NetworkState = { connectivity: Int, state: Int }
+type NetworkState = {
+    connectivity: Int,
+    state: Int
+}
 
-@source dbus.method with { ... }
+@source dbus.method with {}
 signal networkState : Signal (Result DbusError NetworkState)
 ```
 
@@ -231,7 +237,6 @@ signal networkState : Signal (Result DbusError NetworkState)
 @source env.get "HOME"
 signal homeDir : Signal (Result EnvError Text)
 
-// Capture XDG paths
 @source env.getAll
 signal envMap : Signal (Result EnvError (Dict Text Text))
 ```
@@ -245,7 +250,10 @@ Use signal merge to combine several sources into a single event stream:
 ```aivi
 signal refreshClick : Signal Unit
 
-@source timer.every 60s with { immediate: True, coalesce: True }
+@source timer.every 60s with {
+    immediate: True,
+    coalesce: True
+}
 signal autoRefresh : Signal Unit
 
 signal refresh : Signal Unit = refreshClick | autoRefresh
@@ -266,14 +274,7 @@ This wires a manual refresh button and an automatic 60-second refresh into a sin
 When no built-in source fits, declare a custom provider with a contract:
 
 ```aivi
-source provider BluetoothScanner {
-    options {
-        scanDurationMs: Int
-        nameFilter: Option Text
-    }
-    output BluetoothDevice
-    recurrence { wakeup: providerTrigger }
-}
+// <unparseable item>
 
 @source BluetoothScanner with {
     scanDurationMs: 5000,
@@ -297,10 +298,11 @@ Always annotate source signals with the narrowest useful type. Let the runtime d
 @source http.get url
 signal user : Signal (Result HttpError User)
 
-// Avoid — raw text that you decode manually later
 @source http.get url
 signal userJson : Signal (Result HttpError Text)
-signal user = userJson |> map parseUser
+
+signal user = userJson
+  |> map parseUser
 ```
 
 ### Coalesce high-frequency sources
@@ -308,7 +310,10 @@ signal user = userJson |> map parseUser
 For timers driving network requests or expensive computations, always set `coalesce: True`:
 
 ```aivi
-@source timer.every 100ms with { immediate: False, coalesce: True }
+@source timer.every 100ms with {
+    immediate: False,
+    coalesce: True
+}
 signal tick : Signal Unit
 ```
 
@@ -319,10 +324,10 @@ Without coalescing, a slow downstream will cause ticks to queue.
 If a derived signal is expensive and only meaningful in certain states, gate it:
 
 ```aivi
-signal isLoggedIn : Signal Bool = ...
+signal isLoggedIn : Signal Bool
 
 signal userProfile : Signal Profile = authToken
-  ?|> isLoggedIn
+ ?|> isLoggedIn
   |> fetchProfile
 ```
 
@@ -333,18 +338,17 @@ The `fetchProfile` derivation only runs when `isLoggedIn` is `True`.
 Every I/O signal should carry a `Result`. Lift errors into the UI explicitly rather than silently defaulting:
 
 ```aivi
-signal configResult : Signal (Result FsError AppConfig) = ...
+signal configResult : Signal (Result FsError AppConfig)
 
 signal configError : Signal (Option Text) = configResult
-  ||> Ok _    -> None
-  ||> Err e   -> Some (renderFsError e)
+ ||> Ok _  -> None
+ ||> Err e -> Some (renderFsError e)
 
 value main =
     <Window title="App">
         <show when={configError |> isSome}>
             <Label text={configError |> withDefault ""} />
         </show>
-        ...
     </Window>
 ```
 

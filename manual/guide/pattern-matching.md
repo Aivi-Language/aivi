@@ -202,9 +202,12 @@ func handleResult = .
 value handledResult = handleResult (Ok 42)
 ```
 
-## Boolean branches
+## Truthy/falsy shorthand
 
-When the subject is already `Bool`, `T|>` and `F|>` are shorter than a full match:
+When the subject fits one of AIVI's canonical truthy/falsy carriers, `T|>` and
+`F|>` are shorter than a full match. Today that means `Bool`, `Option A`,
+`Result E A`, and `Validation E A`; the same shorthand also lifts through one
+outer `Signal (...)`.
 
 ```aivi
 type Bool -> Text
@@ -214,6 +217,10 @@ func statusLabel = .
 
 value currentStatus = statusLabel True
 ```
+
+Inside a chosen branch, `.` is rebound to the matched payload when that
+constructor has exactly one payload. Use `||>` when you need a named binding, a
+nested pattern, or more than the canonical two-way split.
 
 ## Exhaustiveness
 
@@ -237,5 +244,5 @@ That guarantee is one of the reasons pattern matching is the normal way to branc
 | Operator | Meaning |
 | --- | --- |
 | `\|\|>` | Pattern match / case split |
-| `T\|>` | Branch for `True` |
-| `F\|>` | Branch for `False` |
+| `T\|>` | Branch for `True` / `Some` / `Ok` / `Valid` |
+| `F\|>` | Branch for `False` / `None` / `Err` / `Invalid` |

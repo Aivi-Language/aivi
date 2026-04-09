@@ -75,7 +75,8 @@ Local same-module functions can sometimes be inferred from nearby usage even wit
 `type` line:
 
 ```aivi
-func keep = value => value
+func keep = value =>
+    value
 
 value chosen : Int = keep 1
 ```

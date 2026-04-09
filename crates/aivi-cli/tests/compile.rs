@@ -347,6 +347,105 @@ fn compile_accepts_delay_and_burst_pipe_stage_programs() {
 }
 
 #[test]
+fn compile_accepts_pipe_stage_memo_programs() {
+    let input = TempFile::new(
+        "compile-pipe-stage-memos",
+        "aivi",
+        concat!(
+            "use aivi.list (length)\n",
+            "\n",
+            "type Int -> Int -> Int\n",
+            "func add = total x =>\n",
+            "    total + x\n",
+            "\n",
+            "type Int -> Int -> Int\n",
+            "func addEvent = event total =>\n",
+            "    event + total\n",
+            "\n",
+            "type StageChoice =\n",
+            "  | Ready Int\n",
+            "  | Missing\n",
+            "\n",
+            "type Int -> Result Text Int\n",
+            "func nonNegative = n => n >= 0\n",
+            " T|> Ok n\n",
+            " F|> Err \"negative\"\n",
+            "\n",
+            "value transformed : Int = 20\n",
+            " |> #before before + 1 #after\n",
+            " |> after + before\n",
+            "\n",
+            "value chosen : Int = Ready 2\n",
+            " ||> Ready value -> value + 1 #resolved\n",
+            " ||> Missing -> 0 #resolved\n",
+            " |> resolved + 1\n",
+            "\n",
+            "value branched : Int = Some 2\n",
+            " T|> . + 1 #branch\n",
+            " F|> 0 #branch\n",
+            " |> branch + 1\n",
+            "\n",
+            "value kept : Option Int = 2\n",
+            " ?|> #candidate candidate > 0 #filtered\n",
+            " |> filtered\n",
+            "\n",
+            "value total : Int = [1, 2, 3]\n",
+            " *|> #source . + length source\n",
+            " <|* #mapped reduce add 0 mapped #sum\n",
+            " |> sum + 1\n",
+            "\n",
+            "value checked : Result Text Int = 2\n",
+            " !|> #candidate nonNegative candidate #checked\n",
+            " |> checked\n",
+            "\n",
+            "signal source : Signal Int = 1\n",
+            "signal previousValue : Signal Int = source\n",
+            " ~|> #current current\n",
+            "signal delayedValue : Signal Int = source\n",
+            " delay|> 10 #later\n",
+            " | later\n",
+            "signal burstValue : Signal Int = source\n",
+            " burst|> 10 3 #later\n",
+            " | later\n",
+            "signal accumulated : Signal Int = source\n",
+            " +|> #event 0 addEvent #total\n",
+            " | total\n",
+        ),
+    );
+    let output_dir = TempDir::new("compile-pipe-stage-memos");
+    let output_path = output_dir.path().join("pipe-stage-memos.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(input.path())
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
+    assert!(
+        output.status.success(),
+        "expected pipe-stage memo compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata =
+        fs::metadata(&output_path).expect("pipe-stage memo compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "pipe-stage memo object file should not be empty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("codegen: ok"),
+        "expected codegen success in summary, got stdout: {stdout}"
+    );
+}
+
+#[test]
 fn compile_accepts_source_pattern_reactive_update_program() {
     let input = TempFile::new(
         "compile-source-pattern-reactive-update",

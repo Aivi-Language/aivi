@@ -34,9 +34,11 @@ signal doubledCount = count
   |> double
 ```
 
-## Boolean gating
+## Signal branching
 
-Signals can branch just like ordinary values:
+Signals can use the same truthy/falsy shorthand as ordinary values. `Signal Bool`
+branches on `True` / `False`, and `Signal (Option A)`, `Signal (Result E A)`,
+and `Signal (Validation E A)` use the same canonical pairs pointwise:
 
 ```aivi
 signal ready = True
