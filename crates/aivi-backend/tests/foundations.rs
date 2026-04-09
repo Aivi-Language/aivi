@@ -1421,12 +1421,17 @@ value lifted:Envelope (Option Int) =
     match &lifted_kernel.exprs()[lifted_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            assert!(matches!(
-                &lifted_kernel.exprs()[*callee].kind,
+            match &lifted_kernel.exprs()[*callee].kind {
                 KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Map(
-                    BuiltinFunctorCarrier::Option
-                ))
-            ));
+                    BuiltinFunctorCarrier::Option,
+                )) => {}
+                KernelExprKind::Item(item) => {
+                    assert_eq!(backend.items()[*item].name.as_ref(), "__aivi_option_map");
+                }
+                other => {
+                    panic!("expected workspace map call to lower through builtin or ambient map, found {other:?}");
+                }
+            }
         }
         other => panic!("expected workspace map call to lower into an apply tree, found {other:?}"),
     }
@@ -2678,6 +2683,87 @@ fn lowering_makes_local_bindings_explicit_environment_slots() {
     assert_eq!(backend.kernels()[*when_true].environment.len(), 1);
     assert_eq!(backend.kernels()[*when_true].input_subject, None);
     assert!(backend.kernels()[*when_false].environment.is_empty());
+}
+
+#[test]
+fn lowers_direct_signal_dependencies_into_dedicated_body_kernels() {
+    let backend = lower_text(
+        "backend-direct-signal-body-kernel.aivi",
+        r#"
+signal base = 1
+signal derived = base
+"#,
+    );
+    let base = find_item(&backend, "base");
+    let derived = find_item(&backend, "derived");
+    let derived_item = &backend.items()[derived];
+    let BackendItemKind::Signal(signal) = &derived_item.kind else {
+        panic!("derived should remain a signal item");
+    };
+
+    assert_eq!(signal.dependencies, vec![base]);
+    assert_eq!(signal.dependency_layouts.len(), 1);
+
+    let body_kernel_id = signal
+        .body_kernel
+        .expect("direct dependency signal should lower a dedicated body kernel");
+    let body_kernel = &backend.kernels()[body_kernel_id];
+    assert!(
+        matches!(body_kernel.origin.kind, KernelOriginKind::SignalBody { item } if item == derived)
+    );
+    assert_eq!(body_kernel.input_subject, None);
+    assert_eq!(body_kernel.environment, signal.dependency_layouts);
+    assert!(body_kernel.global_items.is_empty());
+    assert!(matches!(
+        body_kernel.exprs()[body_kernel.root].kind,
+        KernelExprKind::Environment(_)
+    ));
+
+    let fallback_kernel_id = derived_item
+        .body
+        .expect("signal items should keep their fallback body kernel");
+    let fallback_kernel = &backend.kernels()[fallback_kernel_id];
+    assert!(fallback_kernel.global_items.contains(&base));
+    assert!(matches!(
+        fallback_kernel.exprs()[fallback_kernel.root].kind,
+        KernelExprKind::Item(item) if item == base
+    ));
+}
+
+#[test]
+fn validator_rejects_signal_body_kernels_that_still_take_input() {
+    let mut backend = lower_text(
+        "backend-direct-signal-body-kernel-invalid.aivi",
+        r#"
+signal base = 1
+signal derived = base
+"#,
+    );
+    let derived = find_item(&backend, "derived");
+    let (body_kernel, dependency_layout) = match &backend.items()[derived].kind {
+        BackendItemKind::Signal(signal) => (
+            signal
+                .body_kernel
+                .expect("direct dependency signal should lower a dedicated body kernel"),
+            signal.dependency_layouts[0],
+        ),
+        other => panic!("expected signal item, found {other:?}"),
+    };
+    backend
+        .kernels_mut()
+        .get_mut(body_kernel)
+        .expect("signal body kernel should exist")
+        .input_subject = Some(dependency_layout);
+
+    let errors = validate_program(&backend)
+        .expect_err("signal body kernels with an input subject should fail validation");
+    assert!(errors.errors().iter().any(|error| {
+        matches!(
+            error,
+            ValidationError::SignalBodyHasInput { item, kernel, layout }
+                if *item == derived && *kernel == body_kernel && *layout == dependency_layout
+        )
+    }));
 }
 
 #[test]

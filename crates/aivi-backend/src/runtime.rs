@@ -1395,6 +1395,16 @@ impl<'a> KernelEvaluator<'a> {
         Ok(result)
     }
 
+    pub fn evaluate_signal_body_kernel(
+        &mut self,
+        kernel_id: KernelId,
+        environment: &[RuntimeValue],
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        let (result, expected) = self.evaluate_kernel_raw(kernel_id, None, environment, globals)?;
+        normalize_signal_kernel_result(self.program, kernel_id, result, expected)
+    }
+
     pub fn apply_runtime_callable(
         &mut self,
         kernel_id: KernelId,
@@ -1578,20 +1588,17 @@ impl<'a> KernelEvaluator<'a> {
                 return Err(e);
             }
         };
-        let result = match (&item_decl.kind, raw_result) {
-            (crate::ItemKind::Signal(_), RuntimeValue::Signal(value))
-                if value_matches_layout(self.program, value.as_ref(), expected) =>
-            {
-                *value
-            }
-            (_, value) => value,
-        };
-        if !value_matches_layout(self.program, &result, expected) {
-            return Err(EvaluationError::KernelResultLayoutMismatch {
-                kernel,
-                expected,
-                found: result,
-            });
+        let result = if matches!(item_decl.kind, crate::ItemKind::Signal(_)) {
+            normalize_signal_kernel_result(self.program, kernel, raw_result, expected)?
+        } else {
+            if !value_matches_layout(self.program, &raw_result, expected) {
+                return Err(EvaluationError::KernelResultLayoutMismatch {
+                    kernel,
+                    expected,
+                    found: raw_result,
+                });
+            };
+            raw_result
         };
         self.record_item_profile(
             item,
@@ -6377,6 +6384,28 @@ fn shared_suffixed_integer_suffix(
         (RuntimeValue::SuffixedInteger { .. }, RuntimeValue::SuffixedInteger { .. }) => None,
         _ => Some(None),
     }
+}
+
+pub(crate) fn normalize_signal_kernel_result(
+    program: &Program,
+    kernel: KernelId,
+    raw_result: RuntimeValue,
+    expected: LayoutId,
+) -> Result<RuntimeValue, EvaluationError> {
+    let result = match raw_result {
+        RuntimeValue::Signal(value) if value_matches_layout(program, value.as_ref(), expected) => {
+            *value
+        }
+        value => value,
+    };
+    if !value_matches_layout(program, &result, expected) {
+        return Err(EvaluationError::KernelResultLayoutMismatch {
+            kernel,
+            expected,
+            found: result,
+        });
+    }
+    Ok(result)
 }
 
 fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutId) -> bool {

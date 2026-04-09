@@ -312,6 +312,9 @@ pub enum KernelOriginKind {
     ItemBody {
         item: ItemId,
     },
+    SignalBody {
+        item: ItemId,
+    },
     GateTrue {
         pipeline: PipelineId,
         stage_index: usize,
@@ -388,6 +391,7 @@ impl fmt::Display for KernelOriginKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ItemBody { item } => write!(f, "item-body item{item}"),
+            Self::SignalBody { item } => write!(f, "signal-body item{item}"),
             Self::GateTrue {
                 pipeline,
                 stage_index,

@@ -4754,6 +4754,97 @@ fun length:Int = items:(List A)=>    items
     }
 
     #[test]
+    fn elaborates_ambient_map_calls_against_transparent_import_alias_results() {
+        let lowered = lower_text_with_single_import(
+            "general-expr-workspace-alias-map.aivi",
+            r#"
+use shared.types (
+    Envelope
+)
+
+fun increment:Int = n:Int=>    n + 1
+
+value lifted:Envelope (Option Int) =
+    map increment (Some 1)
+"#,
+            vec!["shared", "types"],
+            "shared/types.aivi",
+            r#"
+type Envelope A = A
+
+export Envelope
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "workspace alias map example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let lifted = report
+            .items()
+            .iter()
+            .find(|item| item_name(lowered.module(), item.owner) == Some("lifted"))
+            .expect("expected lifted elaboration");
+        if !matches!(lifted.outcome, GeneralExprOutcome::Lowered(_)) {
+            let module = lowered.module();
+            let Item::Value(value) = &module.items()[lifted.owner] else {
+                panic!("lifted should be a value");
+            };
+            let expected = value
+                .annotation
+                .and_then(|annotation| GateTypeContext::new(module).lower_annotation(annotation))
+                .expect("lifted annotation should lower");
+            let ExprKind::Apply { callee, arguments } = module.exprs()[value.body].kind.clone() else {
+                panic!("lifted body should be an apply expression");
+            };
+            let ExprKind::Name(reference) = &module.exprs()[callee].kind else {
+                panic!("lifted callee should be a name");
+            };
+            let mut typing = GateTypeContext::new(module);
+            let argument_infos = arguments
+                .iter()
+                .map(|argument| (*argument, typing.infer_expr(*argument, &GateExprEnv::default(), None)))
+                .collect::<Vec<_>>();
+            let argument_types = argument_infos
+                .iter()
+                .map(|(_, info)| info.actual_gate_type().or(info.ty.clone()))
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_else(|| {
+                    panic!("lifted arguments should infer: {argument_infos:?}");
+                });
+            let callee_expected = {
+                let mut current = expected.clone();
+                for argument in argument_types.iter().rev() {
+                    current = GateType::Arrow {
+                        parameter: Box::new(argument.clone()),
+                        result: Box::new(current),
+                    };
+                }
+                current
+            };
+            let hoisted_candidates = typing.hoisted_import_candidates(&reference);
+            let hoisted_types = hoisted_candidates
+                .clone()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|import| {
+                    let ty = typing.import_value_type_with_ambient(import);
+                    (import, ty)
+                })
+                .collect::<Vec<_>>();
+            let selected_hoisted = typing.select_hoisted_import(&reference, Some(&callee_expected));
+            let dispatch =
+                resolve_class_member_dispatch(module, &reference, &argument_types, Some(&expected));
+            panic!(
+                "expected workspace alias map body to lower, found {:?}; expected={expected:?}; callee_expected={callee_expected:?}; argument_types={argument_types:?}; hoisted_types={hoisted_types:?}; selected_hoisted={selected_hoisted:?}; dispatch={dispatch:?}",
+                lifted.outcome
+            );
+        }
+    }
+
+    #[test]
     fn elaborates_domain_value_projection_into_domain_member_apply() {
         let lowered = lower_text(
             "general-expr-domain-projection.aivi",

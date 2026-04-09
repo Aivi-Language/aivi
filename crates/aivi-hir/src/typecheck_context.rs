@@ -846,6 +846,12 @@ impl GateType {
     }
 
     pub(crate) fn fits_template(&self, template: &Self) -> bool {
+        if let Some(expanded_self) = self.expand_transparent_import_alias() {
+            return expanded_self.fits_template(template);
+        }
+        if let Some(expanded_template) = template.expand_transparent_import_alias() {
+            return self.fits_template(&expanded_template);
+        }
         match template {
             Self::TypeParameter { .. } => true,
             Self::Primitive(_) => self == template,
@@ -1463,6 +1469,11 @@ impl GateType {
     }
 
     pub(crate) fn constructor_view(&self) -> Option<(TypeConstructorHead, Vec<GateType>)> {
+        if let Some(expanded) = self.expand_transparent_import_alias()
+            && let Some(view) = expanded.constructor_view()
+        {
+            return Some(view);
+        }
         match self {
             Self::List(element) => Some((
                 TypeConstructorHead::Builtin(BuiltinType::List),
@@ -1511,6 +1522,21 @@ impl GateType {
             | Self::Record(_)
             | Self::Arrow { .. } => None,
         }
+    }
+
+    fn expand_transparent_import_alias(&self) -> Option<GateType> {
+        let Self::OpaqueImport {
+            arguments,
+            definition: Some(definition),
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let ImportTypeDefinition::Alias(alias) = definition.as_ref() else {
+            return None;
+        };
+        Self::expand_import_alias_type(alias, arguments)
     }
 }
 
@@ -2559,30 +2585,40 @@ impl<'a> GateTypeContext<'a> {
                 .and_then(|annotation| self.lower_annotation(annotation))
                 .or_else(|| self.infer_expr(item.body, &GateExprEnv::default(), None).ty),
             Item::Function(item) => {
+                let explicit_signature = item
+                    .annotation
+                    .and_then(|annotation| self.lower_open_annotation(annotation));
+                let explicit_parameter_types = explicit_signature
+                    .as_ref()
+                    .and_then(|ty| Self::arrow_parameter_types(ty, item.parameters.len()));
+                let explicit_result = explicit_signature.as_ref().and_then(|ty| {
+                    Self::arrow_result_type(ty, item.parameters.len()).or_else(|| Some(ty.clone()))
+                });
                 let mut env = GateExprEnv::default();
                 let mut parameters = Vec::with_capacity(item.parameters.len());
                 for parameter in &item.parameters {
                     let parameter_ty = match parameter.annotation {
                         Some(annotation) => self.lower_open_annotation(annotation)?,
                         None => {
-                            if !self.allow_function_inference
-                                || !supports_same_module_function_inference(item)
-                            {
-                                return None;
+                            if let Some(parameter_types) = explicit_parameter_types.as_ref() {
+                                parameter_types.get(parameters.len())?.clone()
+                            } else {
+                                if !self.allow_function_inference
+                                    || !supports_same_module_function_inference(item)
+                                {
+                                    return None;
+                                }
+                                let inferred = self.inferred_function_types().get(&item_id).cloned()?;
+                                let parameter_types =
+                                    Self::arrow_parameter_types(&inferred, item.parameters.len())?;
+                                parameter_types.get(parameters.len())?.clone()
                             }
-                            let inferred = self.inferred_function_types().get(&item_id).cloned()?;
-                            let parameter_types =
-                                Self::arrow_parameter_types(&inferred, item.parameters.len())?;
-                            parameter_types.get(parameters.len())?.clone()
                         }
                     };
                     env.locals.insert(parameter.binding, parameter_ty.clone());
                     parameters.push(parameter_ty);
                 }
-                let result = item
-                    .annotation
-                    .and_then(|annotation| self.lower_open_annotation(annotation))
-                    .or_else(|| {
+                let result = explicit_result.or_else(|| {
                         if self.allow_function_inference
                             && supports_same_module_function_inference(item)
                         {
@@ -9184,4 +9220,78 @@ pub(crate) fn source_option_expected_record_fields_match(
                 source_option_expected_matches_actual_type(&field.ty, actual, bindings)
             })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GateType, TypeConstructorHead};
+    use crate::{BuiltinType, ImportId, ImportTypeDefinition, ImportValueType};
+
+    #[test]
+    fn constructor_view_expands_transparent_import_aliases_before_matching_heads() {
+        let envelope = GateType::OpaqueImport {
+            import: ImportId::from_raw(7),
+            name: "Envelope".into(),
+            arguments: vec![GateType::Option(Box::new(GateType::Primitive(
+                BuiltinType::Int,
+            )))],
+            definition: Some(Box::new(ImportTypeDefinition::Alias(
+                ImportValueType::TypeVariable {
+                    index: 0,
+                    name: "A".into(),
+                },
+            ))),
+        };
+
+        let Some((head, arguments)) = envelope.constructor_view() else {
+            panic!("transparent import alias should expose the underlying constructor view");
+        };
+        assert_eq!(head, TypeConstructorHead::Builtin(BuiltinType::Option));
+        assert_eq!(arguments, vec![GateType::Primitive(BuiltinType::Int)]);
+    }
+
+    #[test]
+    fn fits_template_accepts_transparent_import_aliases_of_builtin_carriers() {
+        let envelope_option = GateType::OpaqueImport {
+            import: ImportId::from_raw(7),
+            name: "Envelope".into(),
+            arguments: vec![GateType::Option(Box::new(GateType::Primitive(
+                BuiltinType::Int,
+            )))],
+            definition: Some(Box::new(ImportTypeDefinition::Alias(
+                ImportValueType::TypeVariable {
+                    index: 0,
+                    name: "A".into(),
+                },
+            ))),
+        };
+        let template = GateType::Arrow {
+            parameter: Box::new(GateType::Arrow {
+                parameter: Box::new(GateType::Primitive(BuiltinType::Int)),
+                result: Box::new(GateType::Primitive(BuiltinType::Int)),
+            }),
+            result: Box::new(GateType::Arrow {
+                parameter: Box::new(GateType::Option(Box::new(GateType::Primitive(
+                    BuiltinType::Int,
+                )))),
+                result: Box::new(GateType::Option(Box::new(GateType::Primitive(
+                    BuiltinType::Int,
+                )))),
+            }),
+        };
+        let actual = GateType::Arrow {
+            parameter: Box::new(GateType::Arrow {
+                parameter: Box::new(GateType::Primitive(BuiltinType::Int)),
+                result: Box::new(GateType::Primitive(BuiltinType::Int)),
+            }),
+            result: Box::new(GateType::Arrow {
+                parameter: Box::new(GateType::Option(Box::new(GateType::Primitive(
+                    BuiltinType::Int,
+                )))),
+                result: Box::new(envelope_option),
+            }),
+        };
+
+        assert!(actual.fits_template(&template));
+    }
 }
