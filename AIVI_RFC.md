@@ -225,6 +225,10 @@ func add = x y=>    x + y
 
 signal counter = 0
 
+from counter = {
+    doubled: . * 2
+}
+
 use aivi.network (
     http
     socket
@@ -240,6 +244,7 @@ Top-level forms:
 - `value`
 - `func`
 - `signal`
+- `from`
 - `use`
 - `export`
 - `provider`
@@ -265,6 +270,26 @@ func add = x y=>    x + y
 type Text -> Text
 func greet = name=>    "Hello, {name}"
 ```
+
+Function headers may also mark one parameter as the selected subject for an immediate `|>` or `<|`
+continuation, omitting `=>`:
+
+```aivi
+type Int -> Int -> Int
+func addFrom = amount value!
+  |> add amount
+
+type State -> Int
+func readNested = state { x.y.z! }
+  |> addOne
+```
+
+Normative rules:
+
+- `param!` selects the whole parameter as the starting subject
+- `param { path! }` selects a projection rooted at that parameter
+- selected-subject headers are surface sugar only; after lowering they become an ordinary head
+  expression feeding the following pipe or patch continuation
 
 `value` is a **contextual keyword**: it is also a valid identifier and parameter name. The following is valid AIVI — the parameter is named `value`:
 
@@ -318,6 +343,23 @@ signal total : Signal Int = ready
   ||> True => left + right
   ||> _ => 0
 ```
+
+Several derived signals may also share one upstream source through top-level `from` sugar:
+
+```aivi
+from state = {
+    boardText: renderBoard
+    readyNow: .ready
+}
+```
+
+Normative rules for `from`:
+
+- each entry lowers to an ordinary top-level derived binding fed by the shared source
+- plain entry bodies such as `renderBoard` are treated as if the source were piped into them
+- headless pipe bodies such as `.ready` or `.dir |> dirLabel` keep that headless shape and are
+  prefixed with the shared source during lowering
+- a standalone `type` line inside the block attaches to the immediately following `from` entry only
 
 Normative rules for signal merge:
 
@@ -597,6 +639,8 @@ Normative rules:
   export its companion members
 - companion member `type` lines spell the full function type, including the receiver
 - companion bodies use ordinary function forms such as `name = self => ...` or `name = . ...`
+- companion members also accept selected-subject headers when the body should begin with `|>` or
+  `<|`, e.g. `name = self! |> ...` or `name = self { field! } <| { ... }`
 - naming the receiver as an explicit `self` parameter is accepted, but not required
 - the feature colocates total helpers; it does not introduce methods, mutation, or open-world
   extension
@@ -1069,6 +1113,9 @@ Core operators:
 - `<|*` fan-out join
 - `<|` structural patch application
 
+Stage memos `#name` are not a separate top-level pipe operator. They decorate an ordinary stage to
+name that stage's input, result, or both.
+
 Ordinary expression precedence (tighter to looser):
 
 1. function application
@@ -1093,6 +1140,43 @@ Transforms the current subject into a new subject.
 ```aivi
 order |> .status
 ```
+
+### 11.2.1 Pipe memos `#name`
+
+Pipe memos let one stage remember its input or result without introducing a separate helper:
+
+```aivi
+score
+ |> #before before + 1 #after
+ |> after + before
+```
+
+Rules:
+
+- `operator #name expr` binds the stage input for that stage body only
+- `operator expr #name` binds the stage result for the rest of the pipe after that stage
+- both forms may appear on the same stage
+- grouped `||>` runs and adjacent `T|>` / `F|>` pairs share memo flow across the grouped branch
+  result when the same memo name is reintroduced on each arm
+
+### 11.2.2 Temporal replay stages
+
+Signal pipes may schedule scheduler-owned replays with reserved `|>` stage heads:
+
+```aivi
+signal delayedClick = click
+ |> delay 80ms
+
+signal flashingClick = click
+ |> burst 150ms 3times
+```
+
+Rules:
+
+- `|> delay d` re-emits the upstream payload once after duration `d`
+- `|> burst d count` re-emits the same payload `count` times, one replay per interval `d`
+- a newer upstream event replaces any pending delay or burst schedule
+- the first burst replay happens after the first interval, not immediately
 
 ### 11.3 `?|>` gate
 

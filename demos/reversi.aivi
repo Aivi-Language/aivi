@@ -440,46 +440,25 @@ func winnerLine = score => score.human > score.computer
  T|> "You win."
  F|> trailingWinnerLine score
 
-type Bool -> Snapshot -> List Coord
-func currentMovesFromUi = humanTurn snapshot => humanTurn
- T|> snapshotCurrentMoves snapshot
- F|> emptyCoords
-
-type Option Coord -> Int -> Int -> Bool
-func coordAt = opt x y => opt
- ||> None               -> False
- ||> Some (Coord px py) -> px == x and py == y
+type Coord -> Option Coord -> Bool
+func coordMatchesTarget = coord target => target
+ ||> Some targetCoord -> coordEq coord targetCoord
+ ||> None             -> False
 
 type Bool -> Text
 func legalMoveLabel = .
  T|> "◌"
  F|> "·"
 
-type Option Coord -> Bool -> Int -> Int -> Bool
-func targetVisibleAt = target visible x y => visible
- T|> coordAt target x y
- F|> False
-
-type List Coord -> Option Coord -> Bool -> Int -> Int -> Text
-func emptyCellLabel = currentMoves target visible x y => targetVisibleAt target visible x y
- T|> "⚪"
- F|> legalMoveLabel (listContains coordEq (Coord x y) currentMoves)
+type Bool -> Disc -> Text
+func renderCell = legal disc => disc
+ ||> Black -> "🔴"
+ ||> White -> "⚪"
+ ||> Empty -> legalMoveLabel legal
 
 type Int -> Int -> Int
 func cellKey = y x!
   |> y * boardSize + .
-
-type Matrix Disc -> List Coord -> Option Coord -> Bool -> Int -> Int -> Text
-func boardCellLabelAt = board currentMoves target visible x y => matrixAt board x y
- ||> Some Black -> "🔴"
- ||> Some White -> "⚪"
- ||> Some Empty -> emptyCellLabel currentMoves target visible x y
- ||> None       -> "·"
-
-type Bool -> List Coord -> Int -> Int -> Bool
-func cellEnabledAt = humanTurn currentMoves x y => humanTurn
- T|> listContains coordEq (Coord x y) currentMoves
- F|> False
 
 signal placeCoord : Signal Coord
 signal restartClick : Signal Unit
@@ -516,29 +495,26 @@ signal state = event
 
 from state = {
     board: .board
-    snapshot: .snapshot
+    turn: .turn
+    snapshot: makeSnapshot board turn
     phase: .phase
-}
+    computerPreparingActive: phaseIsComputerPreparing phase
+    computerAnimationActive: phaseHasComputerAnimation phase
+    computerTarget: phaseComputerTarget phase
+    computerTargetVisible: phaseShowsComputerTarget phase
+    gameOver: snapshotGameOver snapshot
+    score: countScore board
+    finalText: winnerLine score
 
-from phase = {
-    humanTurn: phaseAllowsHumanInput
-    computerPreparingActive: phaseIsComputerPreparing
-    computerAnimationActive: phaseHasComputerAnimation
-    computerTarget: phaseComputerTarget
-    computerTargetVisible: phaseShowsComputerTarget
-}
+    type Coord -> Bool
+    legalAt coord: humanCanPlace coord snapshot
 
-from snapshot = {
-    gameOver: snapshotGameOver
-    currentMoves: currentMovesFromUi humanTurn
-}
-
-from board = {
-    score: countScore
-}
-
-from score = {
-    finalText: winnerLine
+    type Coord -> Text
+    cellLabel coord: computerTargetVisible
+     T|> coordMatchesTarget coord computerTarget
+      T|> "⚪"
+      F|> renderCell (legalAt coord) (discAt board coord)
+     F|> renderCell (legalAt coord) (discAt board coord)
 }
 
 value main =
@@ -552,7 +528,7 @@ value main =
                 <each of={boardIndices} as={y} key={y}>
                     <Box orientation="horizontal" spacing={2}>
                         <each of={boardIndices} as={x} key={cellKey y x}>
-                            <Button label={boardCellLabelAt board currentMoves computerTarget computerTargetVisible x y} onClick={placeCoord (Coord x y)} sensitive={cellEnabledAt humanTurn currentMoves x y} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
+                            <Button label={cellLabel (Coord x y)} onClick={placeCoord (Coord x y)} sensitive={legalAt (Coord x y)} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
                         </each>
                     </Box>
                 </each>

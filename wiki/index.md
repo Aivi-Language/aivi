@@ -15,6 +15,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [type-system.md](type-system.md) | Types, kinds, HKT, type classes, Eq derivation, constraints |
 | [signal-model.md](signal-model.md) | Reactive signals, sources, merge syntax, signal graph |
 | [pipe-algebra.md](pipe-algebra.md) | Pipe operators, `#name` memos, grouped branch behavior, cluster boundary |
+| [surface-syntax.md](surface-syntax.md) | Audit summary of recent main-branch surface syntax additions and where they are documented |
 | [temporal-design.md](temporal-design.md) | Tradeoff between source-shaped and recurrence-shaped temporal scheduling |
 | [runtime.md](runtime.md) | Scheduler, signal graph execution, task executor, GC |
 | [gtk-bridge.md](gtk-bridge.md) | GTK4/libadwaita widget bridge, markup lowering, event routing |

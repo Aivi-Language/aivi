@@ -133,6 +133,7 @@ These correspond to the `Builtin*Carrier` types in `crates/aivi-core/src/expr.rs
 - Companion helpers use ordinary `use` / `export` rules, so exporting the type does not automatically export its helpers
 - Companion helper `type` lines spell the full function type, including the receiver
 - Companion bodies use ordinary function forms such as `name = self => ...` or `name = . ...`
+- Companion members can also use selected-subject header sugar when the body should begin with a pipe or patch continuation, e.g. `name = self! |> ...` or `name = self { field! } <| { ... }`
 
 ## Constraints
 

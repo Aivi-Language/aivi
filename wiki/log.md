@@ -166,6 +166,18 @@ Refactored `demos/reversi.aivi` to showcase a wider cross-section of the impleme
 - Kept the live GTK boolean helper chain on its older call shape after validation showed that path is
   the stable one currently exercised by the Reversi run-session tests
 
+## [2026-04-09] query | recent surface syntax audit
+
+Audited `main` commits from the last two days for user-facing syntax changes and reconciled the
+documentation coverage across the RFC, manual, and wiki.
+
+- `AIVI_RFC.md`: added missing coverage for top-level `from`, selected-subject function headers,
+  companion-member selected-subject continuations, pipe memos, and temporal replay heads
+- `wiki/surface-syntax.md`: added a stable audit summary page linking recent surface syntax work to
+  the canonical manual/wiki/RFC locations
+- `wiki/type-system.md`: extended closed-sum companion notes to mention selected-subject companion
+  bodies explicitly
+
 ## [2026-04-09] ingest | parameterized from selectors
 
 Implemented parameterized entries inside top-level `from source = { ... }` fan-out blocks.
