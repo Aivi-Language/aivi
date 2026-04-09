@@ -11,6 +11,7 @@ use rustc_hash::FxHasher;
 use aivi_ffi_call::{AbiValueKind, CallSignature, FunctionCaller};
 use aivi_hir::IntrinsicValue;
 use cranelift_codegen::{
+    binemit::Reloc,
     control::ControlPlane,
     ir::{
         AbiParam, BlockArg, InstBuilder, MemFlags, Type, UserFuncName, Value,
@@ -26,7 +27,8 @@ use cranelift_codegen::{
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{
-    DataDescription, DataId, FuncId, Linkage, Module, ModuleReloc, default_libcall_names,
+    DataDescription, DataId, FuncId, Linkage, Module, ModuleReloc, ModuleRelocTarget,
+    default_libcall_names,
 };
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
@@ -169,6 +171,78 @@ pub(crate) struct CompiledJitKernel {
     pub(crate) _module: JITModule,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CachedJitKernelArtifact {
+    pub(crate) requested_kernel: KernelId,
+    pub(crate) kernels: Vec<CachedJitCompiledKernel>,
+    pub(crate) signal_slots: Vec<CachedJitDataSlot>,
+    pub(crate) imported_item_slots: Vec<CachedJitDataSlot>,
+    pub(crate) callable_descriptors: Vec<CachedJitCallableDescriptor>,
+    pub(crate) literal_data: Vec<CachedJitLiteralData>,
+    pub(crate) external_funcs: Vec<Box<str>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CachedJitCompiledKernel {
+    pub(crate) kernel: KernelId,
+    pub(crate) bytes: Box<[u8]>,
+    pub(crate) relocs: Vec<CachedJitReloc>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CachedJitDataSlot {
+    pub(crate) item: ItemId,
+    pub(crate) layout: LayoutId,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CachedJitCallableDescriptor {
+    pub(crate) item: ItemId,
+    pub(crate) body: KernelId,
+    pub(crate) arity: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CachedJitLiteralData {
+    pub(crate) symbol: Box<str>,
+    pub(crate) align: u64,
+    pub(crate) bytes: Box<[u8]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CachedJitReloc {
+    pub(crate) offset: u32,
+    pub(crate) kind: Reloc,
+    pub(crate) target: CachedJitRelocTarget,
+    pub(crate) addend: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CachedJitRelocTarget {
+    Function(CachedJitFunctionTarget),
+    FunctionOffset {
+        target: CachedJitFunctionTarget,
+        offset: u32,
+    },
+    Data(CachedJitDataTarget),
+    LibCall(Box<str>),
+    KnownSymbol(Box<str>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CachedJitFunctionTarget {
+    Kernel(KernelId),
+    External(Box<str>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CachedJitDataTarget {
+    SignalSlot(ItemId),
+    ImportedItemSlot(ItemId),
+    CallableDescriptor(ItemId),
+    Literal(Box<str>),
+}
+
 /// Intermediate result holding the built CLIF for one kernel, ready for parallel
 /// Cranelift compilation. Produced by `build_kernel_clif`; consumed by `compile()`.
 struct BuiltKernel {
@@ -179,6 +253,13 @@ struct BuiltKernel {
     /// Human-readable CLIF text snapshot taken before compilation.
     clif: Box<str>,
     symbol: Box<str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct JitLiteralDataRecord {
+    data_id: DataId,
+    align: u64,
+    bytes: Box<[u8]>,
 }
 
 pub type CodegenErrors = aivi_base::ErrorCollection<CodegenError>;
@@ -415,9 +496,26 @@ pub(crate) fn compile_kernel_jit(
     program: &Program,
     kernel_id: KernelId,
 ) -> Result<CompiledJitKernel, CodegenErrors> {
+    compile_kernel_jit_with_cache_artifact(program, kernel_id).map(|(compiled, _)| compiled)
+}
+
+pub(crate) fn compile_kernel_jit_with_cache_artifact(
+    program: &Program,
+    kernel_id: KernelId,
+) -> Result<(CompiledJitKernel, Option<CachedJitKernelArtifact>), CodegenErrors> {
     validate_backend_program(program)?;
     let compiler = CraneliftCompiler::new_jit(program).map_err(wrap_one)?;
-    compiler.compile_kernel_jit(kernel_id)
+    compiler.compile_kernel_jit_with_cache_artifact(kernel_id)
+}
+
+pub(crate) fn instantiate_cached_jit_kernel(
+    program: &Program,
+    kernel_id: KernelId,
+    artifact: &CachedJitKernelArtifact,
+) -> Result<CompiledJitKernel, CodegenErrors> {
+    validate_backend_program(program)?;
+    let compiler = CraneliftCompiler::new_jit(program).map_err(wrap_one)?;
+    compiler.replay_cached_jit_kernel(kernel_id, artifact)
 }
 
 /// Stable symbol name for one backend kernel.
@@ -480,7 +578,9 @@ struct CraneliftCompiler<'a, M: Module> {
     declared_imported_item_slots: BTreeMap<ItemId, DataId>,
     imported_item_slot_layouts: BTreeMap<ItemId, LayoutId>,
     declared_callable_descriptors: BTreeMap<ItemId, DataId>,
+    callable_descriptor_specs: BTreeMap<ItemId, (KernelId, usize)>,
     declared_external_funcs: BTreeMap<Box<str>, FuncId>,
+    literal_data: BTreeMap<Box<str>, JitLiteralDataRecord>,
     function_builder_ctx: FunctionBuilderContext,
     next_data_symbol: u64,
     jit_symbols: Option<Arc<Mutex<BTreeMap<Box<str>, usize>>>>,
@@ -790,10 +890,10 @@ impl<'a> CraneliftCompiler<'a, ObjectModule> {
 }
 
 impl<'a> CraneliftCompiler<'a, JITModule> {
-    fn compile_kernel_jit(
+    fn compile_kernel_jit_with_cache_artifact(
         mut self,
         kernel_id: KernelId,
-    ) -> Result<CompiledJitKernel, CodegenErrors> {
+    ) -> Result<(CompiledJitKernel, Option<CachedJitKernelArtifact>), CodegenErrors> {
         let kernel_ids = jit_dependency_kernel_ids(self.program, kernel_id).map_err(wrap_one)?;
         self.prevalidate_kernels(kernel_ids.iter().copied())?;
         self.declare_kernels(kernel_ids.iter().copied(), KernelLinkage::Local)?;
@@ -805,18 +905,20 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         mut self,
         requested_kernel: KernelId,
         built_kernels: Vec<BuiltKernel>,
-    ) -> Result<CompiledJitKernel, CodegenErrors> {
+    ) -> Result<(CompiledJitKernel, Option<CachedJitKernelArtifact>), CodegenErrors> {
         let emit_inputs = self.compile_machine_code(built_kernels)?;
         let alignment = self.module.isa().function_alignment().minimum as u64;
         let mut compiled_metadata = BTreeMap::new();
         let mut requested_func_id = None;
+        let mut cached_kernels = Vec::with_capacity(emit_inputs.len());
+        let mut cacheable = true;
         let mut emit_errors = Vec::new();
         for (built, code_size) in emit_inputs {
             let compiled = built
                 .ctx
                 .compiled_code()
                 .expect("compilation succeeded in phase 3");
-            let bytes = compiled.code_buffer();
+            let bytes = compiled.code_buffer().to_vec().into_boxed_slice();
             let relocs: Vec<ModuleReloc> = compiled
                 .buffer
                 .relocs()
@@ -825,13 +927,19 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 .collect();
             if let Err(error) =
                 self.module
-                    .define_function_bytes(built.func_id, alignment, bytes, &relocs)
+                    .define_function_bytes(built.func_id, alignment, bytes.as_ref(), &relocs)
             {
                 emit_errors.push(CodegenError::CraneliftModule {
                     kernel: Some(built.kernel_id),
                     message: error.to_string().into_boxed_str(),
                 });
                 continue;
+            }
+            if cacheable {
+                match self.cacheable_jit_kernel(built.kernel_id, bytes.clone(), &relocs) {
+                    Some(cached) => cached_kernels.push(cached),
+                    None => cacheable = false,
+                }
             }
             if built.kernel_id == requested_kernel {
                 requested_func_id = Some(built.func_id);
@@ -870,6 +978,111 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 kernel: requested_kernel,
             })
         })?;
+        let cached_artifact =
+            cacheable.then(|| self.build_cached_jit_artifact(requested_kernel, cached_kernels));
+
+        Ok((
+            CompiledJitKernel {
+                function,
+                caller,
+                signal_slots,
+                imported_item_slots,
+                _module: self.module,
+            },
+            cached_artifact,
+        ))
+    }
+
+    fn replay_cached_jit_kernel(
+        mut self,
+        requested_kernel: KernelId,
+        artifact: &CachedJitKernelArtifact,
+    ) -> Result<CompiledJitKernel, CodegenErrors> {
+        let kernel_ids = jit_dependency_kernel_ids(self.program, requested_kernel).map_err(wrap_one)?;
+        if artifact.requested_kernel != requested_kernel
+            || artifact.kernels.iter().map(|kernel| kernel.kernel).collect::<Vec<_>>() != kernel_ids
+        {
+            return Err(wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: "cached JIT artifact does not match the requested kernel dependency closure"
+                    .into(),
+            }));
+        }
+
+        self.prevalidate_kernels(kernel_ids.iter().copied())?;
+        self.declare_kernels(kernel_ids.iter().copied(), KernelLinkage::Local)?;
+        for slot in &artifact.signal_slots {
+            self.declare_signal_item_slot(slot.item, slot.layout)
+                .map_err(wrap_one)?;
+        }
+        for slot in &artifact.imported_item_slots {
+            self.declare_imported_item_slot(slot.item, slot.layout)
+                .map_err(wrap_one)?;
+        }
+        for descriptor in &artifact.callable_descriptors {
+            self.declare_callable_item_descriptor(
+                descriptor.item,
+                descriptor.body,
+                descriptor.arity as usize,
+            )
+            .map_err(wrap_one)?;
+        }
+        for symbol in &artifact.external_funcs {
+            self.ensure_named_external_func_declared(symbol)
+                .map_err(wrap_one)?;
+        }
+        for literal in &artifact.literal_data {
+            self.define_cached_literal_data(&literal.symbol, literal.bytes.clone(), literal.align)
+                .map_err(wrap_one)?;
+        }
+
+        let alignment = self.module.isa().function_alignment().minimum as u64;
+        let mut requested_func_id = None;
+        for kernel in &artifact.kernels {
+            let func_id = self
+                .declared_functions
+                .get(&kernel.kernel)
+                .copied()
+                .expect("replayed JIT kernels were declared before machine code definition");
+            let relocs = kernel
+                .relocs
+                .iter()
+                .map(|reloc| self.materialize_cached_jit_reloc(reloc))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(wrap_one)?;
+            self.module
+                .define_function_bytes(func_id, alignment, kernel.bytes.as_ref(), &relocs)
+                .map_err(|error| {
+                    wrap_one(CodegenError::CraneliftModule {
+                        kernel: Some(kernel.kernel),
+                        message: error.to_string().into_boxed_str(),
+                    })
+                })?;
+            if kernel.kernel == requested_kernel {
+                requested_func_id = Some(func_id);
+            }
+        }
+
+        self.ensure_supported_jit_externals(requested_kernel)
+            .map_err(wrap_one)?;
+        let requested_func_id = requested_func_id.ok_or_else(|| {
+            wrap_one(CodegenError::MissingKernel {
+                kernel: requested_kernel,
+            })
+        })?;
+        let (signal_slots, imported_item_slots) =
+            self.materialize_jit_data_slots(requested_kernel)?;
+        self.module.finalize_definitions().map_err(|error| {
+            wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: error.to_string().into_boxed_str(),
+            })
+        })?;
+        let function = self.module.get_finalized_function(requested_func_id);
+        let caller = FunctionCaller::new(
+            self.build_jit_call_signature(requested_kernel)
+                .map_err(wrap_one)?,
+        );
 
         Ok(CompiledJitKernel {
             function,
@@ -878,6 +1091,333 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
             imported_item_slots,
             _module: self.module,
         })
+    }
+
+    fn build_cached_jit_artifact(
+        &self,
+        requested_kernel: KernelId,
+        kernels: Vec<CachedJitCompiledKernel>,
+    ) -> CachedJitKernelArtifact {
+        CachedJitKernelArtifact {
+            requested_kernel,
+            kernels,
+            signal_slots: self
+                .signal_slot_layouts
+                .iter()
+                .map(|(&item, &layout)| CachedJitDataSlot { item, layout })
+                .collect(),
+            imported_item_slots: self
+                .imported_item_slot_layouts
+                .iter()
+                .map(|(&item, &layout)| CachedJitDataSlot { item, layout })
+                .collect(),
+            callable_descriptors: self
+                .callable_descriptor_specs
+                .iter()
+                .map(|(&item, &(body, arity))| CachedJitCallableDescriptor {
+                    item,
+                    body,
+                    arity: arity as u32,
+                })
+                .collect(),
+            literal_data: self
+                .literal_data
+                .iter()
+                .map(|(symbol, record)| CachedJitLiteralData {
+                    symbol: symbol.clone(),
+                    align: record.align,
+                    bytes: record.bytes.clone(),
+                })
+                .collect(),
+            external_funcs: self.declared_external_funcs.keys().cloned().collect(),
+        }
+    }
+
+    fn cacheable_jit_kernel(
+        &self,
+        kernel: KernelId,
+        bytes: Box<[u8]>,
+        relocs: &[ModuleReloc],
+    ) -> Option<CachedJitCompiledKernel> {
+        let relocs = relocs
+            .iter()
+            .map(|reloc| self.cacheable_jit_reloc(reloc))
+            .collect::<Option<Vec<_>>>()?;
+        Some(CachedJitCompiledKernel {
+            kernel,
+            bytes,
+            relocs,
+        })
+    }
+
+    fn cacheable_jit_reloc(&self, reloc: &ModuleReloc) -> Option<CachedJitReloc> {
+        Some(CachedJitReloc {
+            offset: reloc.offset,
+            kind: reloc.kind,
+            target: self.cacheable_jit_reloc_target(&reloc.name)?,
+            addend: reloc.addend,
+        })
+    }
+
+    fn cacheable_jit_reloc_target(
+        &self,
+        target: &ModuleRelocTarget,
+    ) -> Option<CachedJitRelocTarget> {
+        match target {
+            ModuleRelocTarget::User { namespace: 0, index } => {
+                Some(CachedJitRelocTarget::Function(
+                    self.cacheable_jit_function_target(FuncId::from_u32(*index))?,
+                ))
+            }
+            ModuleRelocTarget::User { namespace: 1, index } => {
+                Some(CachedJitRelocTarget::Data(
+                    self.cacheable_jit_data_target(DataId::from_u32(*index))?,
+                ))
+            }
+            ModuleRelocTarget::FunctionOffset(func_id, offset) => {
+                Some(CachedJitRelocTarget::FunctionOffset {
+                    target: self.cacheable_jit_function_target(*func_id)?,
+                    offset: *offset,
+                })
+            }
+            ModuleRelocTarget::LibCall(libcall) => {
+                Some(CachedJitRelocTarget::LibCall(libcall.to_string().into()))
+            }
+            ModuleRelocTarget::KnownSymbol(symbol) => {
+                Some(CachedJitRelocTarget::KnownSymbol(symbol.to_string().into()))
+            }
+            ModuleRelocTarget::User { .. } => None,
+        }
+    }
+
+    fn cacheable_jit_function_target(&self, func_id: FuncId) -> Option<CachedJitFunctionTarget> {
+        self.declared_functions
+            .iter()
+            .find_map(|(&kernel, &declared)| {
+                (declared == func_id).then_some(CachedJitFunctionTarget::Kernel(kernel))
+            })
+            .or_else(|| {
+                self.declared_external_funcs
+                    .iter()
+                    .find_map(|(symbol, &declared)| {
+                        (declared == func_id)
+                            .then_some(CachedJitFunctionTarget::External(symbol.clone()))
+                    })
+            })
+    }
+
+    fn cacheable_jit_data_target(&self, data_id: DataId) -> Option<CachedJitDataTarget> {
+        self.declared_signal_slots
+            .iter()
+            .find_map(|(&item, &declared)| {
+                (declared == data_id).then_some(CachedJitDataTarget::SignalSlot(item))
+            })
+            .or_else(|| {
+                self.declared_imported_item_slots
+                    .iter()
+                    .find_map(|(&item, &declared)| {
+                        (declared == data_id).then_some(CachedJitDataTarget::ImportedItemSlot(item))
+                    })
+            })
+            .or_else(|| {
+                self.declared_callable_descriptors
+                    .iter()
+                    .find_map(|(&item, &declared)| {
+                        (declared == data_id)
+                            .then_some(CachedJitDataTarget::CallableDescriptor(item))
+                    })
+            })
+            .or_else(|| {
+                self.literal_data.iter().find_map(|(symbol, record)| {
+                    (record.data_id == data_id).then_some(CachedJitDataTarget::Literal(symbol.clone()))
+                })
+            })
+    }
+
+    fn materialize_cached_jit_reloc(
+        &self,
+        reloc: &CachedJitReloc,
+    ) -> Result<ModuleReloc, CodegenError> {
+        Ok(ModuleReloc {
+            offset: reloc.offset,
+            kind: reloc.kind,
+            name: self.materialize_cached_jit_reloc_target(&reloc.target)?,
+            addend: reloc.addend,
+        })
+    }
+
+    fn materialize_cached_jit_reloc_target(
+        &self,
+        target: &CachedJitRelocTarget,
+    ) -> Result<ModuleRelocTarget, CodegenError> {
+        match target {
+            CachedJitRelocTarget::Function(target) => Ok(self
+                .resolve_cached_jit_function_target(target)?
+                .into()),
+            CachedJitRelocTarget::FunctionOffset { target, offset } => Ok(
+                ModuleRelocTarget::FunctionOffset(
+                    self.resolve_cached_jit_function_target(target)?,
+                    *offset,
+                ),
+            ),
+            CachedJitRelocTarget::Data(target) => {
+                Ok(self.resolve_cached_jit_data_target(target)?.into())
+            }
+            CachedJitRelocTarget::LibCall(symbol) => symbol
+                .parse::<cranelift_codegen::ir::LibCall>()
+                .map(ModuleRelocTarget::LibCall)
+                .map_err(|_| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!("unknown cached libcall relocation target `{symbol}`").into(),
+                }),
+            CachedJitRelocTarget::KnownSymbol(symbol) => symbol
+                .parse::<cranelift_codegen::ir::KnownSymbol>()
+                .map(ModuleRelocTarget::KnownSymbol)
+                .map_err(|_| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!("unknown cached known-symbol relocation target `{symbol}`")
+                        .into(),
+                }),
+        }
+    }
+
+    fn resolve_cached_jit_function_target(
+        &self,
+        target: &CachedJitFunctionTarget,
+    ) -> Result<FuncId, CodegenError> {
+        match target {
+            CachedJitFunctionTarget::Kernel(kernel) => self
+                .declared_functions
+                .get(kernel)
+                .copied()
+                .ok_or_else(|| CodegenError::MissingKernel { kernel: *kernel }),
+            CachedJitFunctionTarget::External(symbol) => self
+                .declared_external_funcs
+                .get(symbol)
+                .copied()
+                .ok_or_else(|| CodegenError::UnsupportedJitSymbol {
+                    kernel: KernelId::from_raw(0),
+                    symbol: symbol.clone(),
+                }),
+        }
+    }
+
+    fn resolve_cached_jit_data_target(
+        &self,
+        target: &CachedJitDataTarget,
+    ) -> Result<DataId, CodegenError> {
+        match target {
+            CachedJitDataTarget::SignalSlot(item) => self
+                .declared_signal_slots
+                .get(item)
+                .copied()
+                .ok_or_else(|| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!("missing cached JIT signal slot for item{item}").into(),
+                }),
+            CachedJitDataTarget::ImportedItemSlot(item) => self
+                .declared_imported_item_slots
+                .get(item)
+                .copied()
+                .ok_or_else(|| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!("missing cached JIT imported-item slot for item{item}").into(),
+                }),
+            CachedJitDataTarget::CallableDescriptor(item) => self
+                .declared_callable_descriptors
+                .get(item)
+                .copied()
+                .ok_or_else(|| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!("missing cached JIT callable descriptor for item{item}").into(),
+                }),
+            CachedJitDataTarget::Literal(symbol) => self
+                .literal_data
+                .get(symbol)
+                .map(|record| record.data_id)
+                .ok_or_else(|| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!("missing cached JIT literal data `{symbol}`").into(),
+                }),
+        }
+    }
+
+    fn ensure_named_external_func_declared(&mut self, symbol: &str) -> Result<FuncId, CodegenError> {
+        if let Some(&func_id) = self.declared_external_funcs.get(symbol) {
+            return Ok(func_id);
+        }
+        let mut sig = self.module.make_signature();
+        match symbol {
+            "aivi_text_concat" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bytes_repeat" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bytes_slice" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            _ => {
+                return Err(CodegenError::UnsupportedJitSymbol {
+                    kernel: KernelId::from_raw(0),
+                    symbol: symbol.into(),
+                });
+            }
+        }
+        let func_id = self
+            .module
+            .declare_function(symbol, Linkage::Import, &sig)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: None,
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_external_funcs
+            .insert(symbol.to_owned().into_boxed_str(), func_id);
+        Ok(func_id)
+    }
+
+    fn define_cached_literal_data(
+        &mut self,
+        symbol: &str,
+        bytes: Box<[u8]>,
+        align: u64,
+    ) -> Result<DataId, CodegenError> {
+        if let Some(record) = self.literal_data.get(symbol) {
+            return Ok(record.data_id);
+        }
+        let data_id = self
+            .module
+            .declare_data(symbol, Linkage::Local, false, false)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: None,
+                message: error.to_string().into_boxed_str(),
+            })?;
+        let stored_bytes = bytes.clone();
+        let mut data = DataDescription::new();
+        data.define(bytes);
+        data.set_align(align);
+        self.module
+            .define_data(data_id, &data)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: None,
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.literal_data.insert(
+            symbol.to_owned().into_boxed_str(),
+            JitLiteralDataRecord {
+                data_id,
+                align,
+                bytes: stored_bytes,
+            },
+        );
+        Ok(data_id)
     }
 
     fn ensure_supported_jit_externals(&self, kernel_id: KernelId) -> Result<(), CodegenError> {
@@ -1010,7 +1550,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             declared_imported_item_slots: BTreeMap::new(),
             imported_item_slot_layouts: BTreeMap::new(),
             declared_callable_descriptors: BTreeMap::new(),
+            callable_descriptor_specs: BTreeMap::new(),
             declared_external_funcs: BTreeMap::new(),
+            literal_data: BTreeMap::new(),
             function_builder_ctx: FunctionBuilderContext::new(),
             next_data_symbol: 0,
             jit_symbols,
@@ -4068,6 +4610,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 message: error.to_string().into_boxed_str(),
             })?;
         self.declared_callable_descriptors.insert(item, data_id);
+        self.callable_descriptor_specs.insert(item, (body, arity));
         Ok(data_id)
     }
 
@@ -7695,6 +8238,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 kernel: Some(kernel_id),
                 message: error.to_string().into_boxed_str(),
             })?;
+        let stored_bytes = bytes.clone();
         let mut data = DataDescription::new();
         data.define(bytes);
         data.set_align(align);
@@ -7704,6 +8248,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 kernel: Some(kernel_id),
                 message: error.to_string().into_boxed_str(),
             })?;
+        self.literal_data.insert(
+            symbol.clone().into_boxed_str(),
+            JitLiteralDataRecord {
+                data_id,
+                align,
+                bytes: stored_bytes,
+            },
+        );
         let global = self.module.declare_data_in_func(data_id, builder.func);
         Ok(builder.ins().symbol_value(self.pointer_type(), global))
     }

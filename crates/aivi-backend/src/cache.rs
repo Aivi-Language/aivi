@@ -17,11 +17,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use cranelift_codegen::binemit::Reloc;
 use rustc_hash::FxHasher;
 
 use crate::{
     CompiledKernel, CompiledKernelArtifact, CompiledProgram, KernelFingerprint, KernelId,
-    codegen::{CodegenErrors, compile_kernel, compile_program, compute_kernel_fingerprint},
+    codegen::{
+        CachedJitCallableDescriptor, CachedJitCompiledKernel, CachedJitDataSlot,
+        CachedJitFunctionTarget, CachedJitKernelArtifact, CachedJitLiteralData, CachedJitReloc,
+        CachedJitRelocTarget, compile_kernel, compile_kernel_jit_with_cache_artifact,
+        compile_program, compute_kernel_fingerprint, instantiate_cached_jit_kernel,
+    },
     program::Program,
 };
 
@@ -29,6 +35,8 @@ use crate::{
 const PROGRAM_CACHE_MAGIC: &[u8; 5] = b"AIVI\x02";
 /// Magic bytes: ASCII "AIVK" + format version byte.
 const KERNEL_CACHE_MAGIC: &[u8; 5] = b"AIVK\x01";
+/// Magic bytes: ASCII "AIVJ" + format version byte.
+const JIT_KERNEL_CACHE_MAGIC: &[u8; 5] = b"AIVJ\x01";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
@@ -162,6 +170,10 @@ fn kernel_cache_path_in(cache_root: &Path, key: u64) -> PathBuf {
     cache_root.join("kernels").join(format!("{key:016x}.bin"))
 }
 
+fn jit_kernel_cache_path_in(cache_root: &Path, key: u64) -> PathBuf {
+    cache_root.join("jit-kernels").join(format!("{key:016x}.bin"))
+}
+
 fn read_u32(cursor: &mut Cursor<&[u8]>) -> Option<u32> {
     let mut buf = [0u8; 4];
     cursor.read_exact(&mut buf).ok()?;
@@ -174,11 +186,35 @@ fn read_u64(cursor: &mut Cursor<&[u8]>) -> Option<u64> {
     Some(u64::from_le_bytes(buf))
 }
 
+fn read_u8(cursor: &mut Cursor<&[u8]>) -> Option<u8> {
+    let mut buf = [0u8; 1];
+    cursor.read_exact(&mut buf).ok()?;
+    Some(buf[0])
+}
+
 fn read_boxed_str(cursor: &mut Cursor<&[u8]>) -> Option<Box<str>> {
     let len = read_u32(cursor)? as usize;
     let mut buf = vec![0u8; len];
     cursor.read_exact(&mut buf).ok()?;
     String::from_utf8(buf).ok().map(String::into_boxed_str)
+}
+
+fn read_boxed_bytes(cursor: &mut Cursor<&[u8]>) -> Option<Box<[u8]>> {
+    let len = read_u64(cursor)? as usize;
+    let mut buf = vec![0u8; len];
+    cursor.read_exact(&mut buf).ok()?;
+    Some(buf.into_boxed_slice())
+}
+
+fn write_boxed_str(buf: &mut Vec<u8>, value: &str) {
+    let bytes = value.as_bytes();
+    buf.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    buf.extend_from_slice(bytes);
+}
+
+fn write_boxed_bytes(buf: &mut Vec<u8>, value: &[u8]) {
+    buf.extend_from_slice(&(value.len() as u64).to_le_bytes());
+    buf.extend_from_slice(value);
 }
 
 fn serialize_compiled_kernel(buf: &mut Vec<u8>, kernel: &CompiledKernel) {

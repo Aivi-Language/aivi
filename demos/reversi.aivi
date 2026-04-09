@@ -159,7 +159,7 @@ func buildInitialDisc = x y => (x, y)
 value initialBoardFallback = matrixFilled boardSize boardSize buildInitialDisc
 value initialBoard = resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
 value initialSnapshot = makeSnapshot initialBoard Human
-value initialGame : GameState = makeGameState initialBoard Human initialSnapshot HumanReady None
+value initialGame = makeGameState initialBoard Human initialSnapshot HumanReady None
 
 type Coord -> Bool
 func onBoard = .
