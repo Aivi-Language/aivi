@@ -586,10 +586,12 @@ struct CraneliftCompiler<'a, M: Module> {
     jit_symbols: Option<Arc<Mutex<BTreeMap<Box<str>, usize>>>>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum DirectApplyPlan {
     Item {
         body: KernelId,
+        arguments: Box<[(LayoutId, LayoutId)]>,
+        result: (LayoutId, LayoutId),
     },
     ExternalItem {
         item: ItemId,
@@ -610,6 +612,7 @@ enum DirectApplyPlan {
 enum ItemReferencePlan {
     DirectValue {
         body: KernelId,
+        result: (LayoutId, LayoutId),
     },
     SignalSlot {
         item: ItemId,
@@ -632,9 +635,21 @@ enum DomainMemberCallPlan {
     NativeIntBinary(BinaryOperator),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum BuiltinCallPlan {
     OptionSome(OptionCodegenContract),
+    ListReduce(ListReducePlan),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ListReducePlan {
+    step_body: KernelId,
+    loop_layout: LayoutId,
+    seed_layout: LayoutId,
+    step_acc_layout: LayoutId,
+    element_layout: LayoutId,
+    step_element_layout: LayoutId,
+    step_result_layout: LayoutId,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1386,6 +1401,53 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
+            "aivi_arena_alloc" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_new" | "aivi_set_new" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_map_new" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_len" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(types::I64));
+            }
+            "aivi_list_get" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_slice" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_decimal_add" | "aivi_decimal_sub" | "aivi_decimal_mul" | "aivi_decimal_div"
+            | "aivi_decimal_mod" | "aivi_bigint_add" | "aivi_bigint_sub" | "aivi_bigint_mul"
+            | "aivi_bigint_div" | "aivi_bigint_mod" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_decimal_eq" | "aivi_decimal_gt" | "aivi_decimal_lt" | "aivi_decimal_gte"
+            | "aivi_decimal_lte" | "aivi_bigint_eq" | "aivi_bigint_gt" | "aivi_bigint_lt"
+            | "aivi_bigint_gte" | "aivi_bigint_lte" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(types::I8));
+            }
             _ => {
                 return Err(CodegenError::CraneliftModule {
                     kernel: None,
@@ -1585,8 +1647,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         }
     }
 
-    /// Ambient prelude kernels (e.g. `__aivi_list_*`) use runtime-only
-    /// intrinsics (`Reduce`, `Append`) and are interpreted, never compiled.
+    /// Full-program object emission still skips ambient prelude kernels
+    /// by default, but lazy JIT may compile them on demand when their
+    /// lowered expressions stay inside the supported backend slice.
     fn is_ambient_kernel(&self, kernel: &Kernel) -> bool {
         self.program.items()[kernel.origin.item]
             .name
@@ -2037,12 +2100,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     }
 
     fn ensure_compileable_kernel(&self, kernel_id: KernelId) -> Result<(), CodegenError> {
-        let Some(kernel) = self.program.kernels().get(kernel_id) else {
+        let Some(_kernel) = self.program.kernels().get(kernel_id) else {
             return Err(CodegenError::MissingKernel { kernel: kernel_id });
         };
-        if self.is_ambient_kernel(kernel) {
-            return Err(CodegenError::AmbientKernelUnsupported { kernel: kernel_id });
-        }
         Ok(())
     }
 
@@ -2454,12 +2514,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     match &expr.kind {
                         KernelExprKind::Item(item) => {
                             match self.plan_item_reference(kernel_id, expr_id, *item)? {
-                                ItemReferencePlan::DirectValue { body } => {
-                                    values.push(self.lower_direct_item_call(
-                                        kernel_id,
-                                        body,
-                                        &[],
-                                        builder,
+                                ItemReferencePlan::DirectValue { body, result } => {
+                                    let value =
+                                        self.lower_direct_item_call(kernel_id, body, &[], builder)?;
+                                    values.push(self.repack_value(
+                                        kernel_id, value, result.0, result.1, builder,
                                     )?);
                                 }
                                 ItemReferencePlan::SignalSlot { item } => {
@@ -2542,9 +2601,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         KernelExprKind::SuffixedInteger(integer) => {
                             // Representational domain literal (e.g. `5sec`):
                             // the carrier is Int, but the layout is Domain
-                            // (by-reference).  Store the integer in a stack
-                            // slot and return the slot pointer, matching the
-                            // by-reference ABI convention.
+                            // (by-reference). Store the integer in arena-backed
+                            // storage so nested compiled calls can safely reuse it.
                             let raw = integer.raw.as_ref();
                             let value = raw.parse::<i64>().map_err(|_| {
                                 CodegenError::InvalidIntegerLiteral {
@@ -2553,17 +2611,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     raw: integer.raw.clone(),
                                 }
                             })?;
-                            let slot = builder.create_sized_stack_slot(
-                                cranelift_codegen::ir::StackSlotData::new(
-                                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                                    8,
-                                    3, // align = 8 = 2^3
-                                ),
-                            );
-                            let ptr = builder.ins().stack_addr(self.pointer_type(), slot, 0);
                             let iconst = builder.ins().iconst(types::I64, value);
-                            builder.ins().store(MemFlags::new(), iconst, ptr, 0);
-                            values.push(ptr);
+                            values.push(
+                                self.emit_scalar_arena_cell(kernel_id, iconst, 8, 8, builder)?,
+                            );
                         }
                         KernelExprKind::Float(float) => {
                             self.require_float_expression(
@@ -2989,11 +3040,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 NativeArithmeticKind::DomainInt => self
                                     .lower_domain_int_arithmetic(
+                                        kernel_id,
                                         lhs,
                                         rhs,
                                         BinaryOperator::Add,
                                         builder,
-                                    ),
+                                    )?,
                             }
                         }
                         BinaryOperator::Subtract => {
@@ -3021,11 +3073,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 NativeArithmeticKind::DomainInt => self
                                     .lower_domain_int_arithmetic(
+                                        kernel_id,
                                         lhs,
                                         rhs,
                                         BinaryOperator::Subtract,
                                         builder,
-                                    ),
+                                    )?,
                             }
                         }
                         BinaryOperator::Multiply => {
@@ -3053,11 +3106,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 NativeArithmeticKind::DomainInt => self
                                     .lower_domain_int_arithmetic(
+                                        kernel_id,
                                         lhs,
                                         rhs,
                                         BinaryOperator::Multiply,
                                         builder,
-                                    ),
+                                    )?,
                             }
                         }
                         BinaryOperator::Divide => {
@@ -3085,11 +3139,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 NativeArithmeticKind::DomainInt => self
                                     .lower_domain_int_arithmetic(
+                                        kernel_id,
                                         lhs,
                                         rhs,
                                         BinaryOperator::Divide,
                                         builder,
-                                    ),
+                                    )?,
                             }
                         }
                         BinaryOperator::Modulo => {
@@ -3117,11 +3172,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 NativeArithmeticKind::DomainInt => self
                                     .lower_domain_int_arithmetic(
+                                        kernel_id,
                                         lhs,
                                         rhs,
                                         BinaryOperator::Modulo,
                                         builder,
-                                    ),
+                                    )?,
                             }
                         }
                         BinaryOperator::GreaterThan => {
@@ -3874,39 +3930,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         .map(|_| values.pop().expect("aggregate field value"))
                         .collect();
                     field_values.reverse();
-
-                    let mut total_size = 0u32;
-                    let mut max_align = 1u32;
-                    let mut offsets: Vec<u32> = Vec::new();
-                    for &field_layout in &field_layouts {
-                        let abi =
-                            self.field_abi_shape(kernel_id, field_layout, "aggregate field")?;
-                        max_align = max_align.max(abi.align);
-                        total_size = align_to(total_size, abi.align);
-                        offsets.push(total_size);
-                        total_size += abi.size;
-                    }
-                    if max_align > 0 {
-                        total_size = align_to(total_size, max_align);
-                    }
-                    if total_size == 0 {
-                        total_size = 1;
-                    }
-
-                    let slot =
-                        builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-                            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                            total_size,
-                            max_align.ilog2() as u8,
-                        ));
-                    let base = builder.ins().stack_addr(self.pointer_type(), slot, 0);
-
-                    for (i, &offset) in offsets.iter().enumerate() {
-                        builder
-                            .ins()
-                            .store(MemFlags::new(), field_values[i], base, offset as i32);
-                    }
-                    values.push(base);
+                    values.push(self.emit_aggregate_reference(
+                        kernel_id,
+                        &field_layouts,
+                        &field_values,
+                        "runtime aggregate field",
+                        builder,
+                    )?);
                 }
                 Task::BuildRuntimeText { expr_id } => {
                     let text_segments = {
@@ -4414,7 +4444,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 body_kernel.result_layout,
                 &format!("direct item value for `{}`", item_decl.name),
             )?;
-            return Ok(ItemReferencePlan::DirectValue { body });
+            return Ok(ItemReferencePlan::DirectValue {
+                body,
+                result: (body_kernel.result_layout, expr_layout),
+            });
         }
 
         let (parameters, result_layout) = self.callable_signature(expr_layout);
@@ -4481,27 +4514,35 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             .kernels()
             .get(body)
             .expect("validated backend programs keep item body kernels aligned with codegen");
+        let result_layout = kernel.exprs()[expr_id].layout;
         self.require_layout_match(
             kernel_id,
             expr_id,
-            kernel.exprs()[expr_id].layout,
+            result_layout,
             body_kernel.result_layout,
             &format!("direct item call result for `{}`", item_decl.name),
         )?;
+        let mut argument_layouts = Vec::with_capacity(arguments.len());
         for (index, (argument, expected_layout)) in arguments
             .iter()
             .zip(item_decl.parameters.iter())
             .enumerate()
         {
+            let found_layout = kernel.exprs()[*argument].layout;
             self.require_layout_match(
                 kernel_id,
                 *argument,
                 *expected_layout,
-                kernel.exprs()[*argument].layout,
+                found_layout,
                 &format!("direct item call argument {index} for `{}`", item_decl.name),
             )?;
+            argument_layouts.push((found_layout, *expected_layout));
         }
-        Ok(DirectApplyPlan::Item { body })
+        Ok(DirectApplyPlan::Item {
+            body,
+            arguments: argument_layouts.into_boxed_slice(),
+            result: (body_kernel.result_layout, result_layout),
+        })
     }
 
     fn declare_signal_item_slot(
@@ -4679,7 +4720,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     ));
                 }
                 let result_layout = kernel.exprs()[expr_id].layout;
-                let variant_tag = match &self.program.layouts()[result_layout].kind {
+                let result_layout_kind = &self.program.layouts()[result_layout].kind;
+                let variant_tag = match result_layout_kind {
                     LayoutKind::Sum(variants) => variants
                         .iter()
                         .position(|v| v.name.as_ref() == handle.variant_name.as_ref())
@@ -4696,10 +4738,28 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "sum constructor apply requires a Sum, Opaque, or Domain result layout",
                     )),
                 };
-                let payload_layout = if !arguments.is_empty() {
+                let payload_layout = if let Some(payload_layout) =
+                    crate::layout::variant_payload_layout(
+                        result_layout_kind,
+                        handle.variant_name.as_ref(),
+                    )
+                {
+                    payload_layout
+                } else if arguments.is_empty() {
+                    None
+                } else if arguments.len() == 1 {
                     Some(kernel.exprs()[arguments[0]].layout)
                 } else {
-                    None
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        &format!(
+                            "sum constructor `{}.{}` needs payload layout metadata for {} fields",
+                            handle.type_name,
+                            handle.variant_name,
+                            arguments.len()
+                        ),
+                    ));
                 };
                 Ok(DirectApplyPlan::SumConstruction { variant_tag, payload_layout })
             }
@@ -4765,14 +4825,15 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     arguments,
                 )
                 .map(DirectApplyPlan::Intrinsic),
-            KernelExprKind::BuiltinClassMember(intrinsic) => Err(
-                self.unsupported_builtin_class_member_call(
+            KernelExprKind::BuiltinClassMember(intrinsic) => self
+                .require_compilable_builtin_class_member_call(
                     kernel_id,
                     expr_id,
+                    callee,
                     *intrinsic,
-                    arguments.len(),
-                ),
-            ),
+                    arguments,
+                )
+                .map(DirectApplyPlan::Builtin),
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -4976,6 +5037,119 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 kernel_id,
                 expr_id,
                 &format!("Bool literal `{term}` is not callable"),
+            )),
+        }
+    }
+
+    fn require_compilable_builtin_class_member_call(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        callee: KernelExprId,
+        intrinsic: crate::BuiltinClassMemberIntrinsic,
+        arguments: &[KernelExprId],
+    ) -> Result<BuiltinCallPlan, CodegenError> {
+        match intrinsic {
+            crate::BuiltinClassMemberIntrinsic::Reduce(crate::BuiltinFoldableCarrier::List) => {
+                let detail = format!("builtin class member `{intrinsic:?}`");
+                let (_parameters, _result_layout) = self.require_saturated_callable_call(
+                    kernel_id, expr_id, callee, arguments, &detail,
+                )?;
+                let [function, seed, subject] = arguments else {
+                    unreachable!("saturated list reduce call should keep exactly three arguments");
+                };
+                let kernel = &self.program.kernels()[kernel_id];
+                let loop_layout = kernel.exprs()[expr_id].layout;
+                let function_expr = &kernel.exprs()[*function];
+                let KernelExprKind::Item(step_item) = &function_expr.kind else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        "list reduce currently requires an item reducer",
+                    ));
+                };
+                let item_decl = self
+                    .program
+                    .items()
+                    .get(*step_item)
+                    .expect("validated backend kernels keep reducer item references aligned");
+                let Some(step_body) = item_decl.body else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        "list reduce currently requires a reducer item body",
+                    ));
+                };
+                if item_decl.parameters.len() != 2 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        &format!(
+                            "list reduce reducer `{}` must take exactly two parameters",
+                            item_decl.name
+                        ),
+                    ));
+                }
+
+                let seed_layout = kernel.exprs()[*seed].layout;
+                let subject_layout = kernel.exprs()[*subject].layout;
+                let LayoutKind::List { element } = &self.program.layouts()[subject_layout].kind
+                else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *subject,
+                        "list reduce currently requires a List subject",
+                    ));
+                };
+                let step_body_kernel = self
+                    .program
+                    .kernels()
+                    .get(step_body)
+                    .expect("validated backend programs keep reducer body kernels aligned");
+                self.require_layout_match(
+                    kernel_id,
+                    *seed,
+                    loop_layout,
+                    seed_layout,
+                    "list reduce seed",
+                )?;
+                self.require_layout_match(
+                    kernel_id,
+                    *seed,
+                    item_decl.parameters[0],
+                    seed_layout,
+                    &format!("list reduce reducer accumulator for `{}`", item_decl.name),
+                )?;
+                self.require_layout_match(
+                    kernel_id,
+                    *subject,
+                    item_decl.parameters[1],
+                    *element,
+                    &format!("list reduce reducer element for `{}`", item_decl.name),
+                )?;
+                self.require_layout_match(
+                    kernel_id,
+                    expr_id,
+                    loop_layout,
+                    step_body_kernel.result_layout,
+                    &format!("list reduce result for `{}`", item_decl.name),
+                )?;
+
+                Ok(BuiltinCallPlan::ListReduce(ListReducePlan {
+                    step_body,
+                    loop_layout,
+                    seed_layout,
+                    step_acc_layout: item_decl.parameters[0],
+                    element_layout: *element,
+                    step_element_layout: item_decl.parameters[1],
+                    step_result_layout: step_body_kernel.result_layout,
+                }))
+            }
+            _ => Err(self.unsupported_builtin_class_member_call(
+                kernel_id,
+                expr_id,
+                intrinsic,
+                arguments.len(),
             )),
         }
     }
@@ -5273,12 +5447,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     }
 
     fn lower_domain_int_arithmetic(
-        &self,
+        &mut self,
+        kernel_id: KernelId,
         lhs_ptr: Value,
         rhs_ptr: Value,
         operator: BinaryOperator,
         builder: &mut FunctionBuilder<'_>,
-    ) -> Value {
+    ) -> Result<Value, CodegenError> {
         let lhs = builder.ins().load(types::I64, MemFlags::new(), lhs_ptr, 0);
         let rhs = builder.ins().load(types::I64, MemFlags::new(), rhs_ptr, 0);
         let result = match operator {
@@ -5289,14 +5464,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             BinaryOperator::Modulo => builder.ins().srem(lhs, rhs),
             _ => unreachable!("lower_domain_int_arithmetic only handles arithmetic ops"),
         };
-        let slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            8,
-            3,
-        ));
-        let addr = builder.ins().stack_addr(self.pointer_type(), slot, 0);
-        builder.ins().store(MemFlags::new(), result, addr, 0);
-        addr
+        self.emit_scalar_arena_cell(kernel_id, result, 8, 8, builder)
     }
 
     fn lower_domain_int_comparison(
@@ -5328,6 +5496,721 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(*result)
     }
 
+    fn allocate_arena_bytes(
+        &mut self,
+        kernel_id: KernelId,
+        size: Value,
+        align: u32,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let alloc = self.declare_arena_alloc_func(kernel_id, builder)?;
+        let align = builder.ins().iconst(types::I64, i64::from(align.max(1)));
+        let call = builder.ins().call(alloc, &[size, align]);
+        Ok(builder.inst_results(call)[0])
+    }
+
+    fn allocate_static_arena_bytes(
+        &mut self,
+        kernel_id: KernelId,
+        size: u32,
+        align: u32,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let size = builder.ins().iconst(types::I64, i64::from(size.max(1)));
+        self.allocate_arena_bytes(kernel_id, size, align, builder)
+    }
+
+    fn emit_scalar_arena_cell(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        size: u32,
+        align: u32,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let base =
+            self.allocate_static_arena_bytes(kernel_id, size.max(1), align.max(1), builder)?;
+        builder.ins().store(MemFlags::new(), value, base, 0);
+        Ok(base)
+    }
+
+    fn emit_aggregate_reference(
+        &mut self,
+        kernel_id: KernelId,
+        field_layouts: &[LayoutId],
+        field_values: &[Value],
+        detail: &str,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if field_layouts.len() != field_values.len() {
+            return Err(self.unsupported_expression(
+                kernel_id,
+                KernelExprId::from_raw(0),
+                &format!("{detail} field arity does not match layout metadata"),
+            ));
+        }
+        let mut total_size = 0u32;
+        let mut max_align = 1u32;
+        let mut offsets = Vec::with_capacity(field_layouts.len());
+        for &field_layout in field_layouts {
+            let abi = self.field_abi_shape(kernel_id, field_layout, detail)?;
+            max_align = max_align.max(abi.align);
+            total_size = align_to(total_size, abi.align);
+            offsets.push(total_size);
+            total_size += abi.size;
+        }
+        if max_align > 0 {
+            total_size = align_to(total_size, max_align);
+        }
+        let base = self.allocate_static_arena_bytes(
+            kernel_id,
+            total_size.max(1),
+            max_align.max(1),
+            builder,
+        )?;
+        for (offset, value) in offsets.into_iter().zip(field_values.iter()) {
+            builder
+                .ins()
+                .store(MemFlags::new(), *value, base, offset as i32);
+        }
+        Ok(base)
+    }
+
+    fn emit_tagged_reference(
+        &mut self,
+        kernel_id: KernelId,
+        tag: i64,
+        payload: Option<(Value, LayoutId)>,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let payload_size = if let Some((_, layout)) = payload {
+            self.field_abi_shape(kernel_id, layout, "tagged payload")?
+                .size
+        } else {
+            0
+        };
+        let total_size = (8 + payload_size).max(8);
+        let base = self.allocate_static_arena_bytes(kernel_id, total_size, 8, builder)?;
+        let tag_value = builder.ins().iconst(types::I64, tag);
+        builder.ins().store(MemFlags::new(), tag_value, base, 0);
+        if let Some((payload, _)) = payload {
+            builder.ins().store(MemFlags::new(), payload, base, 8);
+        }
+        Ok(base)
+    }
+
+    fn repack_value(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from: LayoutId,
+        to: LayoutId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if from == to {
+            return Ok(value);
+        }
+
+        let from_layout = self.program.layouts()[from].clone();
+        let to_layout = self.program.layouts()[to].clone();
+        match (&from_layout.kind, &to_layout.kind) {
+            (_, LayoutKind::Domain { .. }) => {
+                self.repack_value_to_domain(kernel_id, value, &from_layout, builder)
+            }
+            (LayoutKind::Domain { .. }, _) => {
+                self.repack_value_from_domain(kernel_id, value, to, &to_layout, builder)
+            }
+            (LayoutKind::Primitive(left), LayoutKind::Primitive(right))
+                if left == right && from_layout.abi == to_layout.abi =>
+            {
+                Ok(value)
+            }
+            (
+                LayoutKind::List {
+                    element: from_element,
+                },
+                LayoutKind::List {
+                    element: to_element,
+                },
+            ) => self.repack_sequence_value(
+                kernel_id,
+                value,
+                *from_element,
+                *to_element,
+                false,
+                builder,
+            ),
+            (
+                LayoutKind::Set {
+                    element: from_element,
+                },
+                LayoutKind::Set {
+                    element: to_element,
+                },
+            ) => self.repack_sequence_value(
+                kernel_id,
+                value,
+                *from_element,
+                *to_element,
+                true,
+                builder,
+            ),
+            (LayoutKind::Tuple(from_fields), LayoutKind::Tuple(to_fields)) => {
+                self.repack_tuple_value(kernel_id, value, from, from_fields, to, to_fields, builder)
+            }
+            (LayoutKind::Record(from_fields), LayoutKind::Record(to_fields)) => self
+                .repack_record_value(kernel_id, value, from, from_fields, to, to_fields, builder),
+            (
+                LayoutKind::Result {
+                    error: from_error,
+                    value: from_value,
+                },
+                LayoutKind::Result {
+                    error: to_error,
+                    value: to_value,
+                },
+            ) => self.repack_result_like(
+                kernel_id,
+                value,
+                (*from_value, *from_error),
+                (*to_value, *to_error),
+                builder,
+            ),
+            (
+                LayoutKind::Validation {
+                    error: from_error,
+                    value: from_value,
+                },
+                LayoutKind::Validation {
+                    error: to_error,
+                    value: to_value,
+                },
+            ) => self.repack_result_like(
+                kernel_id,
+                value,
+                (*from_value, *from_error),
+                (*to_value, *to_error),
+                builder,
+            ),
+            (
+                LayoutKind::Opaque {
+                    item: from_item,
+                    name: from_name,
+                    variants: from_variants,
+                    ..
+                },
+                LayoutKind::Opaque {
+                    item: to_item,
+                    name: to_name,
+                    variants: to_variants,
+                    ..
+                },
+            ) if opaque_layout_identity_matches(*from_item, from_name, *to_item, to_name) => {
+                self.repack_opaque_value(kernel_id, value, from_variants, to_variants, builder)
+            }
+            _ => Err(self.unsupported_expression(
+                kernel_id,
+                KernelExprId::from_raw(0),
+                &format!(
+                    "no ABI repack path from layout{from}=`{}` to layout{to}=`{}`",
+                    self.program.layouts()[from],
+                    self.program.layouts()[to]
+                ),
+            )),
+        }
+    }
+
+    fn repack_value_to_domain(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from_layout: &Layout,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if from_layout.abi == AbiPassMode::ByReference {
+            return Ok(value);
+        }
+        let abi =
+            match &from_layout.kind {
+                LayoutKind::Primitive(PrimitiveType::Int) => AbiShape {
+                    ty: types::I64,
+                    size: 8,
+                    align: 8,
+                },
+                LayoutKind::Primitive(PrimitiveType::Float) => AbiShape {
+                    ty: types::F64,
+                    size: 8,
+                    align: 8,
+                },
+                LayoutKind::Primitive(PrimitiveType::Bool) => AbiShape {
+                    ty: types::I8,
+                    size: 1,
+                    align: 1,
+                },
+                _ => return Err(self.unsupported_expression(
+                    kernel_id,
+                    KernelExprId::from_raw(0),
+                    "erased domain repack currently supports Int, Float, and Bool by-value leaves",
+                )),
+            };
+        let ptr = self.allocate_static_arena_bytes(kernel_id, abi.size, abi.align, builder)?;
+        builder.ins().store(MemFlags::new(), value, ptr, 0);
+        Ok(ptr)
+    }
+
+    fn repack_value_from_domain(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        to: LayoutId,
+        to_layout: &Layout,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if to_layout.abi == AbiPassMode::ByReference {
+            return Ok(value);
+        }
+        let abi = self.field_abi_shape(kernel_id, to, "erased domain target")?;
+        Ok(builder.ins().load(abi.ty, MemFlags::new(), value, 0))
+    }
+
+    fn repack_sequence_value(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from_element: LayoutId,
+        to_element: LayoutId,
+        set_like: bool,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let list_len = self.declare_list_len_func(kernel_id, builder)?;
+        let list_get = self.declare_list_get_func(kernel_id, builder)?;
+        let new_func = if set_like {
+            self.declare_set_new_func(kernel_id, builder)?
+        } else {
+            self.declare_list_new_func(kernel_id, builder)?
+        };
+        let len_call = builder.ins().call(list_len, &[value]);
+        let len = builder.inst_results(len_call)[0];
+        let from_abi = self.field_abi_shape(kernel_id, from_element, "sequence source element")?;
+        let to_abi = self.field_abi_shape(kernel_id, to_element, "sequence target element")?;
+        let stride = builder
+            .ins()
+            .iconst(types::I64, i64::from(to_abi.size.max(1)));
+        let alloc_count = builder.ins().iadd_imm(len, 1);
+        let alloc_size = builder.ins().imul(alloc_count, stride);
+        let buffer = self.allocate_arena_bytes(kernel_id, alloc_size, to_abi.align, builder)?;
+
+        let loop_block = builder.create_block();
+        let body_block = builder.create_block();
+        let done_block = builder.create_block();
+        builder.append_block_param(loop_block, types::I64);
+
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(loop_block, &[BlockArg::Value(zero)]);
+
+        builder.switch_to_block(loop_block);
+        let index = builder.block_params(loop_block)[0];
+        let at_end = builder.ins().icmp(IntCC::Equal, index, len);
+        builder.ins().brif(at_end, done_block, &[], body_block, &[]);
+
+        builder.seal_block(body_block);
+        builder.switch_to_block(body_block);
+        let get_call = builder.ins().call(list_get, &[value, index]);
+        let cell_ptr = builder.inst_results(get_call)[0];
+        let source = builder
+            .ins()
+            .load(from_abi.ty, MemFlags::new(), cell_ptr, 0);
+        let adapted = self.repack_value(kernel_id, source, from_element, to_element, builder)?;
+        let offset = builder.ins().imul(index, stride);
+        let offset = if self.pointer_type() == types::I64 {
+            offset
+        } else {
+            builder.ins().ireduce(self.pointer_type(), offset)
+        };
+        let target_ptr = builder.ins().iadd(buffer, offset);
+        builder.ins().store(MemFlags::new(), adapted, target_ptr, 0);
+        let next = builder.ins().iadd_imm(index, 1);
+        builder.ins().jump(loop_block, &[BlockArg::Value(next)]);
+
+        builder.seal_block(loop_block);
+        builder.seal_block(done_block);
+        builder.switch_to_block(done_block);
+        let call = builder.ins().call(new_func, &[len, buffer, stride]);
+        Ok(builder.inst_results(call)[0])
+    }
+
+    fn repack_tuple_value(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from_layout: LayoutId,
+        from_fields: &[LayoutId],
+        to_layout: LayoutId,
+        to_fields: &[LayoutId],
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if from_fields.len() != to_fields.len() {
+            return Err(self.unsupported_expression(
+                kernel_id,
+                KernelExprId::from_raw(0),
+                &format!(
+                    "tuple ABI repack requires matching arity for layout{from_layout} and layout{to_layout}"
+                ),
+            ));
+        }
+        let mut source_fields = Vec::with_capacity(from_fields.len());
+        let mut target_fields = Vec::with_capacity(to_fields.len());
+        let mut source_offset = 0u32;
+        let mut target_offset = 0u32;
+        let mut target_size = 0u32;
+        let mut target_align = 1u32;
+        for (&from_field, &to_field) in from_fields.iter().zip(to_fields.iter()) {
+            let from_abi = self.field_abi_shape(kernel_id, from_field, "tuple source field")?;
+            source_offset = align_to(source_offset, from_abi.align);
+            source_fields.push((from_field, source_offset, from_abi));
+            source_offset = source_offset.checked_add(from_abi.size).ok_or_else(|| {
+                CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout: from_layout,
+                    detail: "tuple source field offsets overflow ABI repack".into(),
+                }
+            })?;
+
+            let to_abi = self.field_abi_shape(kernel_id, to_field, "tuple target field")?;
+            target_align = target_align.max(to_abi.align);
+            target_offset = align_to(target_offset, to_abi.align);
+            target_fields.push((to_field, target_offset, to_abi));
+            target_offset = target_offset.checked_add(to_abi.size).ok_or_else(|| {
+                CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout: to_layout,
+                    detail: "tuple target field offsets overflow ABI repack".into(),
+                }
+            })?;
+            target_size = target_offset;
+        }
+        let target =
+            self.allocate_static_arena_bytes(kernel_id, target_size.max(1), target_align, builder)?;
+        for ((from_field, source_offset, source_abi), (to_field, target_offset, _)) in
+            source_fields.into_iter().zip(target_fields.into_iter())
+        {
+            let field =
+                builder
+                    .ins()
+                    .load(source_abi.ty, MemFlags::new(), value, source_offset as i32);
+            let adapted = self.repack_value(kernel_id, field, from_field, to_field, builder)?;
+            builder
+                .ins()
+                .store(MemFlags::new(), adapted, target, target_offset as i32);
+        }
+        Ok(target)
+    }
+
+    fn repack_record_value(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from_layout: LayoutId,
+        from_fields: &[crate::RecordFieldLayout],
+        to_layout: LayoutId,
+        to_fields: &[crate::RecordFieldLayout],
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if from_fields.len() != to_fields.len() {
+            return Err(self.unsupported_expression(
+                kernel_id,
+                KernelExprId::from_raw(0),
+                &format!(
+                    "record ABI repack requires matching arity for layout{from_layout} and layout{to_layout}"
+                ),
+            ));
+        }
+        let mut source_fields = Vec::with_capacity(from_fields.len());
+        let mut target_fields = Vec::with_capacity(to_fields.len());
+        let mut source_offset = 0u32;
+        let mut target_offset = 0u32;
+        let mut target_size = 0u32;
+        let mut target_align = 1u32;
+        for (from_field, to_field) in from_fields.iter().zip(to_fields.iter()) {
+            if from_field.name != to_field.name {
+                return Err(self.unsupported_expression(
+                    kernel_id,
+                    KernelExprId::from_raw(0),
+                    "record ABI repack requires matching field labels",
+                ));
+            }
+            let from_abi =
+                self.field_abi_shape(kernel_id, from_field.layout, "record source field")?;
+            source_offset = align_to(source_offset, from_abi.align);
+            source_fields.push((from_field.layout, source_offset, from_abi));
+            source_offset = source_offset.checked_add(from_abi.size).ok_or_else(|| {
+                CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout: from_layout,
+                    detail: "record source field offsets overflow ABI repack".into(),
+                }
+            })?;
+
+            let to_abi = self.field_abi_shape(kernel_id, to_field.layout, "record target field")?;
+            target_align = target_align.max(to_abi.align);
+            target_offset = align_to(target_offset, to_abi.align);
+            target_fields.push((to_field.layout, target_offset, to_abi));
+            target_offset = target_offset.checked_add(to_abi.size).ok_or_else(|| {
+                CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout: to_layout,
+                    detail: "record target field offsets overflow ABI repack".into(),
+                }
+            })?;
+            target_size = target_offset;
+        }
+        let target =
+            self.allocate_static_arena_bytes(kernel_id, target_size.max(1), target_align, builder)?;
+        for ((from_field, source_offset, source_abi), (to_field, target_offset, _)) in
+            source_fields.into_iter().zip(target_fields.into_iter())
+        {
+            let field =
+                builder
+                    .ins()
+                    .load(source_abi.ty, MemFlags::new(), value, source_offset as i32);
+            let adapted = self.repack_value(kernel_id, field, from_field, to_field, builder)?;
+            builder
+                .ins()
+                .store(MemFlags::new(), adapted, target, target_offset as i32);
+        }
+        Ok(target)
+    }
+
+    fn repack_result_like(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from: (LayoutId, LayoutId),
+        to: (LayoutId, LayoutId),
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let tag = builder.ins().load(types::I64, MemFlags::new(), value, 0);
+        let ok_block = builder.create_block();
+        let err_block = builder.create_block();
+        let exit_block = builder.create_block();
+        builder.append_block_param(exit_block, self.pointer_type());
+
+        let is_ok = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
+        builder.ins().brif(is_ok, ok_block, &[], err_block, &[]);
+
+        builder.seal_block(ok_block);
+        builder.switch_to_block(ok_block);
+        let from_ok_abi = self.field_abi_shape(kernel_id, from.0, "result ok payload")?;
+        let ok_value = builder
+            .ins()
+            .load(from_ok_abi.ty, MemFlags::new(), value, 8);
+        let ok_value = self.repack_value(kernel_id, ok_value, from.0, to.0, builder)?;
+        let ok_value = self.emit_tagged_reference(kernel_id, 0, Some((ok_value, to.0)), builder)?;
+        builder.ins().jump(exit_block, &[BlockArg::Value(ok_value)]);
+
+        builder.seal_block(err_block);
+        builder.switch_to_block(err_block);
+        let from_err_abi = self.field_abi_shape(kernel_id, from.1, "result err payload")?;
+        let err_value = builder
+            .ins()
+            .load(from_err_abi.ty, MemFlags::new(), value, 8);
+        let err_value = self.repack_value(kernel_id, err_value, from.1, to.1, builder)?;
+        let err_value =
+            self.emit_tagged_reference(kernel_id, 1, Some((err_value, to.1)), builder)?;
+        builder
+            .ins()
+            .jump(exit_block, &[BlockArg::Value(err_value)]);
+
+        builder.seal_block(exit_block);
+        builder.switch_to_block(exit_block);
+        Ok(builder.block_params(exit_block)[0])
+    }
+
+    fn repack_opaque_value(
+        &mut self,
+        kernel_id: KernelId,
+        value: Value,
+        from_variants: &[crate::VariantLayout],
+        to_variants: &[crate::VariantLayout],
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        if from_variants.is_empty() || to_variants.is_empty() {
+            return Ok(value);
+        }
+        if from_variants.len() != to_variants.len() {
+            return Err(self.unsupported_expression(
+                kernel_id,
+                KernelExprId::from_raw(0),
+                "opaque ABI repack requires matching variant sets",
+            ));
+        }
+        let variants = from_variants
+            .iter()
+            .zip(to_variants.iter())
+            .map(|(from, to)| {
+                if from.name != to.name || from.field_count != to.field_count {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        KernelExprId::from_raw(0),
+                        "opaque ABI repack requires matching variant metadata",
+                    ));
+                }
+                Ok((
+                    crate::layout::opaque_variant_tag(from.name.as_ref()),
+                    from.payload,
+                    to.payload,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let tag = builder.ins().load(types::I64, MemFlags::new(), value, 0);
+        let exit_block = builder.create_block();
+        builder.append_block_param(exit_block, self.pointer_type());
+        let mut dispatch_block = builder.create_block();
+        builder.ins().jump(dispatch_block, &[]);
+
+        for (index, (variant_tag, from_payload, to_payload)) in variants.iter().enumerate() {
+            builder.seal_block(dispatch_block);
+            builder.switch_to_block(dispatch_block);
+            let matched_block = builder.create_block();
+            let next_block = builder.create_block();
+            let is_match = builder.ins().icmp_imm(IntCC::Equal, tag, *variant_tag);
+            builder
+                .ins()
+                .brif(is_match, matched_block, &[], next_block, &[]);
+
+            builder.seal_block(matched_block);
+            builder.switch_to_block(matched_block);
+            let result = match (from_payload, to_payload) {
+                (Some(from_payload), Some(to_payload)) => {
+                    let payload_abi =
+                        self.field_abi_shape(kernel_id, *from_payload, "opaque payload")?;
+                    let payload = builder
+                        .ins()
+                        .load(payload_abi.ty, MemFlags::new(), value, 8);
+                    let payload =
+                        self.repack_value(kernel_id, payload, *from_payload, *to_payload, builder)?;
+                    self.emit_tagged_reference(
+                        kernel_id,
+                        *variant_tag,
+                        Some((payload, *to_payload)),
+                        builder,
+                    )?
+                }
+                (None, None) => {
+                    self.emit_tagged_reference(kernel_id, *variant_tag, None, builder)?
+                }
+                _ => {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        KernelExprId::from_raw(0),
+                        "opaque ABI repack requires matching payload presence",
+                    ));
+                }
+            };
+            builder.ins().jump(exit_block, &[BlockArg::Value(result)]);
+
+            dispatch_block = next_block;
+            if index + 1 == variants.len() {
+                builder.seal_block(dispatch_block);
+                builder.switch_to_block(dispatch_block);
+                builder.ins().jump(exit_block, &[BlockArg::Value(value)]);
+            }
+        }
+
+        builder.seal_block(exit_block);
+        builder.switch_to_block(exit_block);
+        Ok(builder.block_params(exit_block)[0])
+    }
+
+    fn lower_list_reduce(
+        &mut self,
+        kernel_id: KernelId,
+        plan: &ListReducePlan,
+        seed: Value,
+        subject: Value,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let list_len = self.declare_list_len_func(kernel_id, builder)?;
+        let list_get = self.declare_list_get_func(kernel_id, builder)?;
+        let len_call = builder.ins().call(list_len, &[subject]);
+        let len = builder.inst_results(len_call)[0];
+        let loop_abi =
+            self.field_abi_shape(kernel_id, plan.loop_layout, "list reduce accumulator")?;
+        let element_abi =
+            self.field_abi_shape(kernel_id, plan.element_layout, "list reduce element")?;
+        let seed =
+            self.repack_value(kernel_id, seed, plan.seed_layout, plan.loop_layout, builder)?;
+
+        let loop_block = builder.create_block();
+        let body_block = builder.create_block();
+        let done_block = builder.create_block();
+        builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(loop_block, loop_abi.ty);
+        builder.append_block_param(done_block, loop_abi.ty);
+
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder
+            .ins()
+            .jump(loop_block, &[BlockArg::Value(zero), BlockArg::Value(seed)]);
+
+        builder.switch_to_block(loop_block);
+        let index = builder.block_params(loop_block)[0];
+        let accumulator = builder.block_params(loop_block)[1];
+        let at_end = builder.ins().icmp(IntCC::Equal, index, len);
+        builder.ins().brif(
+            at_end,
+            done_block,
+            &[BlockArg::Value(accumulator)],
+            body_block,
+            &[],
+        );
+
+        builder.seal_block(body_block);
+        builder.switch_to_block(body_block);
+        let get_call = builder.ins().call(list_get, &[subject, index]);
+        let element_ptr = builder.inst_results(get_call)[0];
+        let element = builder
+            .ins()
+            .load(element_abi.ty, MemFlags::new(), element_ptr, 0);
+        let step_acc = self.repack_value(
+            kernel_id,
+            accumulator,
+            plan.loop_layout,
+            plan.step_acc_layout,
+            builder,
+        )?;
+        let step_element = self.repack_value(
+            kernel_id,
+            element,
+            plan.element_layout,
+            plan.step_element_layout,
+            builder,
+        )?;
+        let next = self.lower_direct_item_call(
+            kernel_id,
+            plan.step_body,
+            &[step_acc, step_element],
+            builder,
+        )?;
+        let next = self.repack_value(
+            kernel_id,
+            next,
+            plan.step_result_layout,
+            plan.loop_layout,
+            builder,
+        )?;
+        let next_index = builder.ins().iadd_imm(index, 1);
+        builder.ins().jump(
+            loop_block,
+            &[BlockArg::Value(next_index), BlockArg::Value(next)],
+        );
+
+        builder.seal_block(done_block);
+        builder.switch_to_block(done_block);
+        Ok(builder.block_params(done_block)[0])
+    }
+
     fn lower_direct_apply(
         &mut self,
         kernel_id: KernelId,
@@ -5337,8 +6220,19 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
         match plan {
-            DirectApplyPlan::Item { body } => {
-                self.lower_direct_item_call(kernel_id, body, arguments, builder)
+            DirectApplyPlan::Item {
+                body,
+                arguments: argument_layouts,
+                result,
+            } => {
+                let mut adapted_arguments = Vec::with_capacity(arguments.len());
+                for ((from, to), argument) in argument_layouts.iter().zip(arguments.iter()) {
+                    adapted_arguments
+                        .push(self.repack_value(kernel_id, *argument, *from, *to, builder)?);
+                }
+                let result_value =
+                    self.lower_direct_item_call(kernel_id, body, &adapted_arguments, builder)?;
+                self.repack_value(kernel_id, result_value, result.0, result.1, builder)
             }
             DirectApplyPlan::ExternalItem { item } => {
                 let result_layout = self.program.kernels()[kernel_id].exprs()[expr_id].layout;
@@ -5369,32 +6263,60 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 variant_tag,
                 payload_layout,
             } => {
-                let tag_size = 8u32;
-                let payload_size = if let Some(layout) = payload_layout {
-                    self.field_abi_shape(kernel_id, layout, "sum payload")
-                        .map(|a| a.size)
-                        .unwrap_or(8)
-                } else {
-                    0u32
-                };
-                let total_size = (tag_size + payload_size).max(8);
-                let slot =
-                    builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-                        cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                        total_size,
-                        3,
-                    ));
-                let base = builder.ins().stack_addr(self.pointer_type(), slot, 0);
-                let tag_val = builder.ins().iconst(types::I64, variant_tag);
-                builder.ins().store(MemFlags::new(), tag_val, base, 0);
-                if payload_layout.is_some() {
-                    if let [payload] = arguments {
-                        builder
-                            .ins()
-                            .store(MemFlags::new(), *payload, base, tag_size as i32);
+                let payload = match (payload_layout, arguments) {
+                    (None, []) => None,
+                    (Some(layout), payload_values) => {
+                        if payload_values.is_empty() {
+                            return Err(self.unsupported_expression(
+                                kernel_id,
+                                expr_id,
+                                "sum payload layout requires at least one payload value",
+                            ));
+                        }
+                        if payload_values.len() == 1 {
+                            Some(payload_values[0])
+                        } else {
+                            let LayoutKind::Tuple(field_layouts) =
+                                &self.program.layouts()[layout].kind
+                            else {
+                                return Err(self.unsupported_expression(
+                                    kernel_id,
+                                    expr_id,
+                                    "multi-field sum payload requires tuple layout metadata",
+                                ));
+                            };
+                            if field_layouts.len() != payload_values.len() {
+                                return Err(self.unsupported_expression(
+                                    kernel_id,
+                                    expr_id,
+                                    "multi-field sum payload arity does not match tuple layout",
+                                ));
+                            }
+                            Some(self.emit_aggregate_reference(
+                                kernel_id,
+                                field_layouts,
+                                payload_values,
+                                "sum payload field",
+                                builder,
+                            )?)
+                        }
                     }
-                }
-                Ok(base)
+                    (None, _) => {
+                        return Err(self.unsupported_expression(
+                            kernel_id,
+                            expr_id,
+                            "sum payload arguments require payload layout metadata",
+                        ));
+                    }
+                };
+                Ok(self.emit_tagged_reference(
+                    kernel_id,
+                    variant_tag,
+                    payload
+                        .zip(payload_layout)
+                        .map(|(payload, layout)| (payload, layout)),
+                    builder,
+                )?)
             }
             DirectApplyPlan::DomainMember(DomainMemberCallPlan::CarrierExtractPrimitive) => {
                 let [argument] = arguments else {
@@ -5445,18 +6367,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             BinaryOperator::Modulo => builder.ins().srem(lhs, rhs),
                             _ => unreachable!(),
                         };
-                        // Re-wrap: store the scalar result into a stack slot and
-                        // return a pointer (domain values are ByReference).
-                        let slot = builder.create_sized_stack_slot(
-                            cranelift_codegen::ir::StackSlotData::new(
-                                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                                8,
-                                3,
-                            ),
-                        );
-                        let addr = builder.ins().stack_addr(self.pointer_type(), slot, 0);
-                        builder.ins().store(MemFlags::new(), result, addr, 0);
-                        Ok(addr)
+                        Ok(self.emit_scalar_arena_cell(kernel_id, result, 8, 8, builder)?)
                     }
                     BinaryOperator::GreaterThan => {
                         Ok(builder.ins().icmp(IntCC::SignedGreaterThan, lhs, rhs))
@@ -5478,6 +6389,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "unsupported domain binary operator in emission",
                     )),
                 }
+            }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
+                let [_function, seed, subject] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct list reduce lowering expected exactly three materialized arguments",
+                    ));
+                };
+                self.lower_list_reduce(kernel_id, &plan, *seed, *subject, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::OptionSome(contract)) => {
                 let [argument] = arguments else {
@@ -5574,7 +6495,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         found: LayoutId,
         detail: &str,
     ) -> Result<(), CodegenError> {
-        if expected == found {
+        if self.layouts_call_compatible(expected, found) {
             return Ok(());
         }
         Err(self.unsupported_expression(
@@ -5586,6 +6507,151 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 self.program.layouts()[found]
             ),
         ))
+    }
+
+    fn layouts_call_compatible(&self, expected: LayoutId, found: LayoutId) -> bool {
+        if expected == found {
+            return true;
+        }
+        let expected_layout = &self.program.layouts()[expected];
+        let found_layout = &self.program.layouts()[found];
+        if matches!(
+            (&expected_layout.kind, &found_layout.kind),
+            (LayoutKind::Domain { .. }, _) | (_, LayoutKind::Domain { .. })
+        ) {
+            return !matches!(
+                (&expected_layout.kind, &found_layout.kind),
+                (LayoutKind::Signal { .. }, _) | (_, LayoutKind::Signal { .. })
+            );
+        }
+        if expected_layout.abi != found_layout.abi {
+            return false;
+        }
+        match (&expected_layout.kind, &found_layout.kind) {
+            (LayoutKind::Primitive(left), LayoutKind::Primitive(right)) => left == right,
+            (LayoutKind::Tuple(left), LayoutKind::Tuple(right)) => {
+                left.len() == right.len()
+                    && left
+                        .iter()
+                        .zip(right.iter())
+                        .all(|(left, right)| self.layouts_call_compatible(*left, *right))
+            }
+            (LayoutKind::Record(left), LayoutKind::Record(right)) => {
+                left.len() == right.len()
+                    && left.iter().zip(right.iter()).all(|(left, right)| {
+                        left.name == right.name
+                            && self.layouts_call_compatible(left.layout, right.layout)
+                    })
+            }
+            (LayoutKind::Sum(left), LayoutKind::Sum(right)) => {
+                self.variant_layouts_compatible(left, right)
+            }
+            (
+                LayoutKind::Arrow {
+                    parameter: left_parameter,
+                    result: left_result,
+                },
+                LayoutKind::Arrow {
+                    parameter: right_parameter,
+                    result: right_result,
+                },
+            ) => {
+                self.layouts_call_compatible(*left_parameter, *right_parameter)
+                    && self.layouts_call_compatible(*left_result, *right_result)
+            }
+            (LayoutKind::List { element: left }, LayoutKind::List { element: right })
+            | (LayoutKind::Set { element: left }, LayoutKind::Set { element: right })
+            | (LayoutKind::Option { element: left }, LayoutKind::Option { element: right })
+            | (LayoutKind::Signal { element: left }, LayoutKind::Signal { element: right }) => {
+                self.layouts_call_compatible(*left, *right)
+            }
+            (
+                LayoutKind::Map {
+                    key: left_key,
+                    value: left_value,
+                },
+                LayoutKind::Map {
+                    key: right_key,
+                    value: right_value,
+                },
+            )
+            | (
+                LayoutKind::Result {
+                    error: left_key,
+                    value: left_value,
+                },
+                LayoutKind::Result {
+                    error: right_key,
+                    value: right_value,
+                },
+            )
+            | (
+                LayoutKind::Validation {
+                    error: left_key,
+                    value: left_value,
+                },
+                LayoutKind::Validation {
+                    error: right_key,
+                    value: right_value,
+                },
+            )
+            | (
+                LayoutKind::Task {
+                    error: left_key,
+                    value: left_value,
+                },
+                LayoutKind::Task {
+                    error: right_key,
+                    value: right_value,
+                },
+            ) => {
+                self.layouts_call_compatible(*left_key, *right_key)
+                    && self.layouts_call_compatible(*left_value, *right_value)
+            }
+            (
+                LayoutKind::AnonymousDomain { carrier: left, .. },
+                LayoutKind::AnonymousDomain { carrier: right, .. },
+            ) => self.layouts_call_compatible(*left, *right),
+            (
+                LayoutKind::Opaque {
+                    item: left_item,
+                    name: left_name,
+                    variants: left_variants,
+                    ..
+                },
+                LayoutKind::Opaque {
+                    item: right_item,
+                    name: right_name,
+                    variants: right_variants,
+                    ..
+                },
+            ) => {
+                opaque_layout_identity_matches(*left_item, left_name, *right_item, right_name)
+                    && (left_variants.is_empty()
+                        || right_variants.is_empty()
+                        || self.variant_layouts_compatible(left_variants, right_variants))
+            }
+            _ => false,
+        }
+    }
+
+    fn variant_layouts_compatible(
+        &self,
+        expected: &[crate::VariantLayout],
+        found: &[crate::VariantLayout],
+    ) -> bool {
+        expected.len() == found.len()
+            && expected.iter().zip(found.iter()).all(|(expected, found)| {
+                expected.name == found.name
+                    && expected.field_count == found.field_count
+                    && match (expected.payload, found.payload) {
+                        (Some(expected), Some(found)) => {
+                            self.layouts_call_compatible(expected, found)
+                        }
+                        (None, None) => true,
+                        _ => false,
+                    }
+            })
     }
 
     fn unsupported_inline_pipe_stage(
@@ -7513,6 +8579,34 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(self.module.declare_func_in_func(func_id, builder.func))
     }
 
+    /// `aivi_arena_alloc(size: i64, align: i64) -> ptr`
+    fn declare_arena_alloc_func(
+        &mut self,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let sym = "aivi_arena_alloc";
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
+            sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(types::I64));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
     /// `aivi_list_len(list_ptr: ptr) -> i64`
     fn declare_list_len_func(
         &mut self,
@@ -7982,51 +9076,99 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         }
                     }
                     crate::InlinePipeConstructor::Sum(handle) => {
-                        if let [sub_pat] = arguments.as_slice() {
-                            let payload_layout = match &self.program.layouts()[input_layout].kind {
-                                LayoutKind::Sum(variants) => variants
-                                    .iter()
-                                    .find(|v| v.name.as_ref() == handle.variant_name.as_ref())
-                                    .and_then(|v| v.payload),
-                                _ => None,
-                            };
-                            if let Some(pl) = payload_layout {
-                                let payload_abi =
-                                    self.field_abi_shape(kernel_id, pl, "sum payload").ok();
-                                let payload = if let Some(abi) = payload_abi {
-                                    builder.ins().load(abi.ty, MemFlags::new(), current, 8)
+                        let payload_layout = crate::layout::variant_payload_layout(
+                            &self.program.layouts()[input_layout].kind,
+                            handle.variant_name.as_ref(),
+                        )
+                        .flatten();
+                        match arguments.as_slice() {
+                            [] => {}
+                            [sub_pat] => {
+                                if let Some(pl) = payload_layout {
+                                    let payload_abi =
+                                        self.field_abi_shape(kernel_id, pl, "sum payload").ok();
+                                    let payload = if let Some(abi) = payload_abi {
+                                        builder.ins().load(abi.ty, MemFlags::new(), current, 8)
+                                    } else {
+                                        builder.ins().load(
+                                            self.pointer_type(),
+                                            MemFlags::new(),
+                                            current,
+                                            8,
+                                        )
+                                    };
+                                    self.apply_pattern_bindings(
+                                        kernel_id,
+                                        payload,
+                                        sub_pat,
+                                        pl,
+                                        inline_subjects,
+                                        builder,
+                                    );
                                 } else {
-                                    builder.ins().load(
+                                    let payload = builder.ins().load(
                                         self.pointer_type(),
                                         MemFlags::new(),
                                         current,
                                         8,
-                                    )
+                                    );
+                                    self.apply_pattern_bindings(
+                                        kernel_id,
+                                        payload,
+                                        sub_pat,
+                                        input_layout,
+                                        inline_subjects,
+                                        builder,
+                                    );
+                                }
+                            }
+                            sub_patterns => {
+                                let Some(pl) = payload_layout else {
+                                    return;
                                 };
-                                self.apply_pattern_bindings(
-                                    kernel_id,
-                                    payload,
-                                    sub_pat,
-                                    pl,
-                                    inline_subjects,
-                                    builder,
-                                );
-                            } else {
-                                // Opaque/Domain layout: payload is at offset 8 as a pointer
+                                let LayoutKind::Tuple(field_layouts) =
+                                    &self.program.layouts()[pl].kind
+                                else {
+                                    return;
+                                };
+                                if field_layouts.len() != sub_patterns.len() {
+                                    return;
+                                }
                                 let payload = builder.ins().load(
                                     self.pointer_type(),
                                     MemFlags::new(),
                                     current,
                                     8,
                                 );
-                                self.apply_pattern_bindings(
-                                    kernel_id,
-                                    payload,
-                                    sub_pat,
-                                    input_layout,
-                                    inline_subjects,
-                                    builder,
-                                );
+                                let mut offset = 0u32;
+                                for (sub_pat, &field_layout) in
+                                    sub_patterns.iter().zip(field_layouts.iter())
+                                {
+                                    let abi = match self.field_abi_shape(
+                                        kernel_id,
+                                        field_layout,
+                                        "sum payload field",
+                                    ) {
+                                        Ok(abi) => abi,
+                                        Err(_) => return,
+                                    };
+                                    offset = align_to(offset, abi.align);
+                                    let field = builder.ins().load(
+                                        abi.ty,
+                                        MemFlags::new(),
+                                        payload,
+                                        offset as i32,
+                                    );
+                                    self.apply_pattern_bindings(
+                                        kernel_id,
+                                        field,
+                                        sub_pat,
+                                        field_layout,
+                                        inline_subjects,
+                                        builder,
+                                    );
+                                    offset += abi.size;
+                                }
                             }
                         }
                     }
@@ -9399,10 +10541,20 @@ fn write_u32_le(bytes: &mut [u8], offset: usize, value: u32) {
     bytes[offset..end].copy_from_slice(&value.to_le_bytes());
 }
 
+fn opaque_layout_identity_matches(
+    left_item: Option<aivi_hir::ItemId>,
+    left_name: &str,
+    right_item: Option<aivi_hir::ItemId>,
+    right_name: &str,
+) -> bool {
+    match (left_item, right_item) {
+        (Some(left_item), Some(right_item)) => left_item == right_item,
+        _ => left_name == right_name,
+    }
+}
+
 fn sum_variant_tag_for_opaque(variant_name: &str) -> i64 {
-    variant_name
-        .bytes()
-        .fold(5381u64, |h, b| h.wrapping_mul(33).wrapping_add(b as u64)) as i64
+    crate::layout::opaque_variant_tag(variant_name)
 }
 
 fn kernel_symbol_for(program: &Program, kernel_id: KernelId, kernel: &Kernel) -> String {
@@ -9636,9 +10788,23 @@ fn collect_layout_dependency(
         LayoutKind::AnonymousDomain { carrier, .. } => {
             collect_layout_dependency(program, *carrier, layout_ids);
         }
-        LayoutKind::Domain { arguments, .. } | LayoutKind::Opaque { arguments, .. } => {
+        LayoutKind::Domain { arguments, .. } => {
             for argument in arguments {
                 collect_layout_dependency(program, *argument, layout_ids);
+            }
+        }
+        LayoutKind::Opaque {
+            arguments,
+            variants,
+            ..
+        } => {
+            for argument in arguments {
+                collect_layout_dependency(program, *argument, layout_ids);
+            }
+            for variant in variants {
+                if let Some(payload) = variant.payload {
+                    collect_layout_dependency(program, payload, layout_ids);
+                }
             }
         }
     }

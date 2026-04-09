@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use aivi_backend::{
     BackendExecutableProgram, BackendExecutionEngine, BackendExecutionEngineKind,
-    BackendKernelArtifactCache, KernelEvaluator, RuntimeFloat, RuntimeValue, compile_program,
+    BackendKernelArtifactCache, KernelEvaluator, RuntimeBigInt, RuntimeDecimal, RuntimeFloat,
+    RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeValue, compile_program,
     lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::SourceDatabase;
@@ -272,26 +273,366 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
 }
 
 #[test]
-fn jit_engine_falls_back_for_unsupported_kernel_layouts() {
+fn jit_engine_executes_collection_kernels() {
     let backend = lower_text(
-        "backend-engine-list-fallback.aivi",
-        "value ids:List Int = [1, 2, 3]\n",
+        "backend-engine-collections-jit.aivi",
+        r#"
+value contacts:List { id: Int, name: Text } = [
+    { id: 1, name: "Ada" },
+    { id: 2, name: "Grace" }
+]
+
+fun keepContacts:List { id: Int, name: Text } = contacts:List { id: Int, name: Text } =>
+    contacts
+
+value headers:Map Text Text =
+    Map {
+        "Authorization": "Bearer demo",
+        "Accept": "application/json"
+    }
+
+fun keepHeaders:Map Text Text = input:Map Text Text =>
+    input
+
+value tags:Set Text =
+    Set [
+        "news",
+        "featured"
+    ]
+
+fun keepTags:Set Text = input:Set Text =>
+    input
+"#,
     );
-    let ids = find_item(&backend, "ids");
     let executable = BackendExecutableProgram::interpreted(&backend);
     let mut engine = executable.create_engine();
+    let globals = BTreeMap::new();
+    let contacts = RuntimeValue::List(vec![
+        RuntimeValue::Record(vec![
+            RuntimeRecordField {
+                label: "id".into(),
+                value: RuntimeValue::Int(1),
+            },
+            RuntimeRecordField {
+                label: "name".into(),
+                value: RuntimeValue::Text("Ada".into()),
+            },
+        ]),
+        RuntimeValue::Record(vec![
+            RuntimeRecordField {
+                label: "id".into(),
+                value: RuntimeValue::Int(2),
+            },
+            RuntimeRecordField {
+                label: "name".into(),
+                value: RuntimeValue::Text("Grace".into()),
+            },
+        ]),
+    ]);
+    let headers = RuntimeValue::Map(RuntimeMap::from_entries(vec![
+        RuntimeMapEntry {
+            key: RuntimeValue::Text("Authorization".into()),
+            value: RuntimeValue::Text("Bearer demo".into()),
+        },
+        RuntimeMapEntry {
+            key: RuntimeValue::Text("Accept".into()),
+            value: RuntimeValue::Text("application/json".into()),
+        },
+    ]));
+    let tags = RuntimeValue::Set(vec![
+        RuntimeValue::Text("news".into()),
+        RuntimeValue::Text("featured".into()),
+    ]);
 
     assert_eq!(engine.kind(), BackendExecutionEngineKind::Jit);
     assert_eq!(
         engine
-            .evaluate_item(ids, &BTreeMap::new())
-            .expect("unsupported layouts should fall back to interpreter execution"),
-        RuntimeValue::List(vec![
-            RuntimeValue::Int(1),
-            RuntimeValue::Int(2),
-            RuntimeValue::Int(3),
-        ])
+            .evaluate_item(find_item(&backend, "contacts"), &globals)
+            .expect("JIT engine should evaluate list-of-record items"),
+        contacts.clone()
     );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "keepContacts"),
+            vec![contacts.clone()],
+            &globals
+        ),
+        contacts
+    );
+    assert_eq!(
+        engine
+            .evaluate_item(find_item(&backend, "headers"), &globals)
+            .expect("JIT engine should evaluate map items"),
+        headers.clone()
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "keepHeaders"),
+            vec![headers.clone()],
+            &globals
+        ),
+        headers
+    );
+    assert_eq!(
+        engine
+            .evaluate_item(find_item(&backend, "tags"), &globals)
+            .expect("JIT engine should evaluate set items"),
+        tags.clone()
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "keepTags"),
+            vec![tags.clone()],
+            &globals
+        ),
+        tags
+    );
+}
+
+#[test]
+fn jit_engine_executes_decimal_and_bigint_kernels() {
+    let backend = lower_text(
+        "backend-engine-numerics-jit.aivi",
+        r#"
+value decimalBase:Decimal = 19.25d
+value bigintBase:BigInt = 123456789012345678901234567890n
+
+fun addDecimals:Decimal = left:Decimal right:Decimal =>
+    left + right
+
+fun decimalGt:Bool = left:Decimal right:Decimal =>
+    left > right
+
+fun addBigints:BigInt = left:BigInt right:BigInt =>
+    left + right
+
+fun bigintGt:Bool = left:BigInt right:BigInt =>
+    left > right
+"#,
+    );
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    let globals = BTreeMap::new();
+    let left_decimal = RuntimeValue::Decimal(
+        RuntimeDecimal::parse_literal("19.25d").expect("decimal should parse"),
+    );
+    let right_decimal = RuntimeValue::Decimal(
+        RuntimeDecimal::parse_literal("0.75d").expect("decimal should parse"),
+    );
+    let left_bigint = RuntimeValue::BigInt(
+        RuntimeBigInt::parse_literal("123456789012345678901234567890n")
+            .expect("bigint should parse"),
+    );
+    let right_bigint =
+        RuntimeValue::BigInt(RuntimeBigInt::parse_literal("10n").expect("bigint should parse"));
+
+    assert_eq!(engine.kind(), BackendExecutionEngineKind::Jit);
+    assert_eq!(
+        engine
+            .evaluate_item(find_item(&backend, "decimalBase"), &globals)
+            .expect("JIT engine should evaluate decimal literal items"),
+        left_decimal.clone()
+    );
+    assert_eq!(
+        engine
+            .evaluate_item(find_item(&backend, "bigintBase"), &globals)
+            .expect("JIT engine should evaluate bigint literal items"),
+        left_bigint.clone()
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "addDecimals"),
+            vec![left_decimal.clone(), right_decimal.clone()],
+            &globals
+        ),
+        RuntimeValue::Decimal(
+            RuntimeDecimal::parse_literal("20.00d").expect("decimal should parse")
+        )
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "decimalGt"),
+            vec![left_decimal.clone(), right_decimal],
+            &globals
+        ),
+        RuntimeValue::Bool(true)
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "addBigints"),
+            vec![left_bigint.clone(), right_bigint.clone()],
+            &globals
+        ),
+        RuntimeValue::BigInt(
+            RuntimeBigInt::parse_literal("123456789012345678901234567900n")
+                .expect("bigint should parse")
+        )
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "bigintGt"),
+            vec![left_bigint, right_bigint],
+            &globals
+        ),
+        RuntimeValue::Bool(true)
+    );
+}
+
+#[test]
+fn jit_engine_supports_opaque_matrix_layouts() {
+    let backend = lower_text(
+        "backend-engine-matrix.aivi",
+        r#"
+use aivi.matrix (
+    Matrix,
+    MatrixError
+)
+
+value matrix:Matrix Int =
+    MkMatrix 2 2 [
+        [1, 2],
+        [3, 4]
+    ]
+
+value matrixResult:Result MatrixError (Matrix Int) =
+    Ok matrix
+
+value matrixWidth:Int =
+    matrix
+    ||> MkMatrix w _ _ -> w
+
+value matrixHeight:Int =
+    matrix
+    ||> MkMatrix _ h _ -> h
+
+value matrixRows:List (List Int) =
+    matrix
+    ||> MkMatrix _ _ inputRows -> inputRows
+"#,
+    );
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+
+    assert_eq!(engine.kind(), BackendExecutionEngineKind::Jit);
+    for name in [
+        "matrix",
+        "matrixResult",
+        "matrixWidth",
+        "matrixHeight",
+        "matrixRows",
+    ] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            engine
+                .evaluate_item(item, &globals)
+                .unwrap_or_else(|_| panic!("JIT engine should evaluate `{name}`")),
+            interpreter
+                .evaluate_item(item, &globals)
+                .unwrap_or_else(|_| panic!("interpreter should evaluate `{name}`"))
+        );
+    }
+}
+
+#[test]
+fn jit_engine_supports_imported_generic_matrix_helpers() {
+    let backend = lower_text(
+        "backend-engine-matrix-generic.aivi",
+        r#"
+use aivi.matrix (
+    Matrix,
+    MatrixError,
+    fromRows,
+    height,
+    rows,
+    width
+)
+
+value matrixResult:Result MatrixError (Matrix Int) =
+    fromRows [
+        [1, 2],
+        [3, 4]
+    ]
+
+value liftedMatrixResult:Result MatrixError (Matrix Int) =
+    matrixResult
+
+value matrixIsOk:Int =
+    fromRows [
+        [1, 2],
+        [3, 4]
+    ]
+    ||> Ok _ -> 1
+    ||> Err _ -> -1
+
+value liftedResultIsOk:Int =
+    matrixResult
+    ||> Ok _ -> 1
+    ||> Err _ -> -1
+
+value matrixWidth:Int =
+    fromRows [
+        [1, 2],
+        [3, 4]
+    ]
+    ||> Ok matrix -> width matrix
+    ||> Err _ -> 0
+
+value matrixHeight:Int =
+    fromRows [
+        [1, 2],
+        [3, 4]
+    ]
+    ||> Ok matrix -> height matrix
+    ||> Err _ -> 0
+
+value matrixRows:List (List Int) =
+    fromRows [
+        [1, 2],
+        [3, 4]
+    ]
+    ||> Ok matrix -> rows matrix
+    ||> Err _ -> []
+"#,
+    );
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut jit = executable.create_engine();
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+
+    for name in [
+        "matrixResult",
+        "liftedMatrixResult",
+        "matrixIsOk",
+        "liftedResultIsOk",
+        "matrixWidth",
+        "matrixHeight",
+        "matrixRows",
+    ] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            jit.evaluate_item(item, &globals)
+                .unwrap_or_else(|_| panic!("JIT engine should evaluate `{name}`")),
+            interpreter
+                .evaluate_item(item, &globals)
+                .unwrap_or_else(|_| panic!("interpreter should evaluate `{name}`"))
+        );
+    }
 }
 
 #[test]
@@ -313,7 +654,30 @@ fun decodeBlob:(Option Text) = seed:Int=>    toText (makeBlob seed)
 fun passMaybeInt:(Option Int) = value:(Option Int)=>    value
 fun passMaybeFloat:(Option Float) = value:(Option Float)=>    value
 fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
-value ids:List Int = [1, 2, 3]
+value contacts:List { id: Int, name: Text } = [
+    { id: 1, name: "Ada" },
+    { id: 2, name: "Grace" }
+]
+fun keepContacts:List { id: Int, name: Text } = contacts:List { id: Int, name: Text } =>
+    contacts
+value headers:Map Text Text =
+    Map {
+        "Authorization": "Bearer demo",
+        "Accept": "application/json"
+    }
+fun keepHeaders:Map Text Text = input:Map Text Text =>    input
+value tags:Set Text =
+    Set [
+        "news",
+        "featured"
+    ]
+fun keepTags:Set Text = input:Set Text =>    input
+value decimalBase:Decimal = 19.25d
+value bigintBase:BigInt = 123456789012345678901234567890n
+fun addDecimals:Decimal = left:Decimal right:Decimal =>    left + right
+fun decimalGt:Bool = left:Decimal right:Decimal =>    left > right
+fun addBigints:BigInt = left:BigInt right:BigInt =>    left + right
+fun bigintGt:Bool = left:BigInt right:BigInt =>    left > right
 "#,
     );
     let executable = BackendExecutableProgram::interpreted(&backend);
@@ -323,9 +687,52 @@ value ids:List Int = [1, 2, 3]
     let option_float = RuntimeValue::OptionSome(Box::new(RuntimeValue::Float(
         RuntimeFloat::new(3.5).expect("finite float should build a runtime float"),
     )));
+    let contacts = RuntimeValue::List(vec![
+        RuntimeValue::Record(vec![
+            RuntimeRecordField {
+                label: "id".into(),
+                value: RuntimeValue::Int(1),
+            },
+            RuntimeRecordField {
+                label: "name".into(),
+                value: RuntimeValue::Text("Ada".into()),
+            },
+        ]),
+        RuntimeValue::Record(vec![
+            RuntimeRecordField {
+                label: "id".into(),
+                value: RuntimeValue::Int(2),
+            },
+            RuntimeRecordField {
+                label: "name".into(),
+                value: RuntimeValue::Text("Grace".into()),
+            },
+        ]),
+    ]);
+    let headers = RuntimeValue::Map(RuntimeMap::from_entries(vec![
+        RuntimeMapEntry {
+            key: RuntimeValue::Text("Authorization".into()),
+            value: RuntimeValue::Text("Bearer demo".into()),
+        },
+        RuntimeMapEntry {
+            key: RuntimeValue::Text("Accept".into()),
+            value: RuntimeValue::Text("application/json".into()),
+        },
+    ]));
+    let tags = RuntimeValue::Set(vec![
+        RuntimeValue::Text("news".into()),
+        RuntimeValue::Text("featured".into()),
+    ]);
 
     assert_eq!(jit.kind(), BackendExecutionEngineKind::Jit);
-    for item in ["greeting", "ids"] {
+    for item in [
+        "greeting",
+        "contacts",
+        "headers",
+        "tags",
+        "decimalBase",
+        "bigintBase",
+    ] {
         let item_id = find_item(&backend, item);
         assert_eq!(
             jit.evaluate_item(item_id, &globals)
@@ -357,6 +764,18 @@ value ids:List Int = [1, 2, 3]
                     &globals
                 )
                 .expect("interpreter should execute the same callable item")
+        );
+    }
+    for (item, argument) in [
+        ("keepContacts", contacts),
+        ("keepHeaders", headers),
+        ("keepTags", tags),
+    ] {
+        let item_id = find_item(&backend, item);
+        let arguments = vec![argument];
+        assert_eq!(
+            apply_callable_item(jit.as_mut(), &backend, item_id, arguments.clone(), &globals),
+            apply_callable_item(&mut interpreter, &backend, item_id, arguments, &globals)
         );
     }
     for (item, argument) in [

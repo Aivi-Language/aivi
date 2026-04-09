@@ -252,6 +252,7 @@ impl<'a> ProgramLowerer<'a> {
         self.lower_item_bodies().map_err(wrap_one)?;
         self.lower_pipelines().map_err(wrap_one)?;
         self.lower_sources().map_err(wrap_one)?;
+        self.attach_opaque_variants().map_err(wrap_one)?;
         if let Err(errors) = validate_program(&self.program) {
             return Err(LoweringErrors::new(
                 errors
@@ -953,6 +954,185 @@ impl<'a> ProgramLowerer<'a> {
         Ok(())
     }
 
+    fn attach_opaque_variants(&mut self) -> Result<(), LoweringError> {
+        let mut variants_by_layout: HashMap<LayoutId, CollectedOpaqueLayout> = HashMap::new();
+        for (ty, collected) in self.collect_opaque_variants() {
+            let Some(layout_id) = self.core_layouts.get(&ty).copied() else {
+                continue;
+            };
+            let layout_info = variants_by_layout.entry(layout_id).or_default();
+            if layout_info.item.is_none() {
+                layout_info.item = collected.item;
+            }
+            for (name, fields) in collected.variants {
+                layout_info.variants.entry(name).or_insert(fields);
+            }
+        }
+        for (layout_id, collected) in variants_by_layout {
+            let mut lowered_variants = collected
+                .variants
+                .into_iter()
+                .map(|(name, fields)| {
+                    let payload = match fields.as_slice() {
+                        [] => None,
+                        [field] => Some(self.intern_core_type(field)?),
+                        _ => {
+                            let tuple_fields = fields
+                                .iter()
+                                .map(|field| self.intern_core_type(field))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            Some(self.intern_layout(Layout::new(LayoutKind::Tuple(tuple_fields)))?)
+                        }
+                    };
+                    Ok(VariantLayout {
+                        name,
+                        field_count: fields.len(),
+                        payload,
+                    })
+                })
+                .collect::<Result<Vec<_>, LoweringError>>()?;
+            lowered_variants.sort_by(|left, right| left.name.cmp(&right.name));
+            let layout = self
+                .program
+                .layouts_mut()
+                .get_mut(layout_id)
+                .expect("opaque layout should exist");
+            let LayoutKind::Opaque { item, variants, .. } = &mut layout.kind else {
+                continue;
+            };
+            if item.is_none() {
+                *item = collected.item;
+            }
+            variants.clear();
+            variants.extend(lowered_variants);
+        }
+        Ok(())
+    }
+
+    fn collect_opaque_variants(&self) -> HashMap<core::Type, CollectedOpaqueLayout> {
+        let mut collected = HashMap::new();
+        for (_, expr) in self.lambda.core().exprs().iter() {
+            match &expr.kind {
+                core::ExprKind::Apply { callee, arguments }
+                    if is_opaque_type(&expr.ty)
+                        && matches!(
+                            &self.lambda.core().exprs()[*callee].kind,
+                            core::ExprKind::Reference(core::Reference::SumConstructor(_))
+                        ) =>
+                {
+                    let core::ExprKind::Reference(core::Reference::SumConstructor(handle)) =
+                        &self.lambda.core().exprs()[*callee].kind
+                    else {
+                        unreachable!();
+                    };
+                    if handle.field_count == arguments.len() {
+                        record_opaque_variant(
+                            &mut collected,
+                            &expr.ty,
+                            Some(handle.item),
+                            handle.variant_name.clone(),
+                            arguments
+                                .iter()
+                                .map(|argument| self.lambda.core().exprs()[*argument].ty.clone())
+                                .collect(),
+                        );
+                    }
+                }
+                core::ExprKind::Reference(core::Reference::SumConstructor(handle))
+                    if is_opaque_type(&expr.ty) && handle.field_count == 0 =>
+                {
+                    record_opaque_variant(
+                        &mut collected,
+                        &expr.ty,
+                        Some(handle.item),
+                        handle.variant_name.clone(),
+                        Vec::new(),
+                    );
+                }
+                core::ExprKind::Pipe(pipe) => {
+                    for stage in &pipe.stages {
+                        if let core::PipeStageKind::Case { arms } = &stage.kind {
+                            for arm in arms {
+                                self.collect_opaque_pattern_variants(
+                                    &arm.pattern,
+                                    &stage.input_subject,
+                                    &mut collected,
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        collected
+    }
+
+    fn collect_opaque_pattern_variants(
+        &self,
+        pattern: &core::Pattern,
+        subject_ty: &core::Type,
+        collected: &mut HashMap<core::Type, CollectedOpaqueLayout>,
+    ) {
+        match &pattern.kind {
+            core::PatternKind::Wildcard
+            | core::PatternKind::Binding(_)
+            | core::PatternKind::Integer(_)
+            | core::PatternKind::Text(_) => {}
+            core::PatternKind::Tuple(elements) => {
+                let core::Type::Tuple(field_types) = subject_ty else {
+                    return;
+                };
+                for (element, field_ty) in elements.iter().zip(field_types.iter()) {
+                    self.collect_opaque_pattern_variants(element, field_ty, collected);
+                }
+            }
+            core::PatternKind::List { elements, rest } => {
+                let core::Type::List(element_ty) = subject_ty else {
+                    return;
+                };
+                for element in elements {
+                    self.collect_opaque_pattern_variants(element, element_ty, collected);
+                }
+                if let Some(rest) = rest {
+                    self.collect_opaque_pattern_variants(rest, subject_ty, collected);
+                }
+            }
+            core::PatternKind::Record(fields) => {
+                let core::Type::Record(record_fields) = subject_ty else {
+                    return;
+                };
+                for field in fields {
+                    let Some(field_ty) = record_fields
+                        .iter()
+                        .find(|candidate| candidate.name == field.label)
+                        .map(|candidate| &candidate.ty)
+                    else {
+                        continue;
+                    };
+                    self.collect_opaque_pattern_variants(&field.pattern, field_ty, collected);
+                }
+            }
+            core::PatternKind::Constructor { callee, arguments } => {
+                let field_types = constructor_pattern_field_types(subject_ty, callee);
+                if let core::Reference::SumConstructor(handle) = &callee.reference {
+                    if is_opaque_type(subject_ty) {
+                        record_opaque_variant(
+                            collected,
+                            subject_ty,
+                            Some(handle.item),
+                            handle.variant_name.clone(),
+                            field_types.clone(),
+                        );
+                    }
+                }
+                for (argument, field_ty) in arguments.iter().zip(field_types.iter()) {
+                    self.collect_opaque_pattern_variants(argument, field_ty, collected);
+                }
+            }
+        }
+    }
+
     fn lower_decode_plan(
         &mut self,
         owner: ItemId,
@@ -1158,6 +1338,7 @@ impl<'a> ProgramLowerer<'a> {
                                 };
                                 layout_variants.push(VariantLayout {
                                     name: name.clone(),
+                                    field_count: usize::from(has_payload),
                                     payload: payload.map(|(_, layout)| layout),
                                 });
                                 decode_variants.push(DecodeVariant {
@@ -2842,8 +3023,15 @@ impl<'a> ProgramLowerer<'a> {
             Validation,
             Signal,
             Task,
-            Domain { name: Box<str>, arguments: usize },
-            Opaque { name: Box<str>, arguments: usize },
+            Domain {
+                name: Box<str>,
+                arguments: usize,
+            },
+            Opaque {
+                item: Option<aivi_hir::ItemId>,
+                name: Box<str>,
+                arguments: usize,
+            },
         }
 
         let mut tasks = vec![Task::Visit(root)];
@@ -2952,14 +3140,29 @@ impl<'a> ProgramLowerer<'a> {
                             }
                         }
                         core::Type::OpaqueItem {
-                            name, arguments, ..
+                            item,
+                            name,
+                            arguments,
+                        } => {
+                            tasks.push(Task::Build(
+                                ty.clone(),
+                                TypeBuildTask::Opaque {
+                                    item: Some(*item),
+                                    name: name.clone(),
+                                    arguments: arguments.len(),
+                                },
+                            ));
+                            for argument in arguments.iter().rev() {
+                                tasks.push(Task::Visit(argument));
+                            }
                         }
-                        | core::Type::OpaqueImport {
+                        core::Type::OpaqueImport {
                             name, arguments, ..
                         } => {
                             tasks.push(Task::Build(
                                 ty.clone(),
                                 TypeBuildTask::Opaque {
+                                    item: None,
                                     name: name.clone(),
                                     arguments: arguments.len(),
                                 },
@@ -3042,12 +3245,16 @@ impl<'a> ProgramLowerer<'a> {
                                 arguments: drain_tail(&mut values, arguments),
                             })
                         }
-                        TypeBuildTask::Opaque { name, arguments } => {
-                            Layout::new(LayoutKind::Opaque {
-                                name,
-                                arguments: drain_tail(&mut values, arguments),
-                            })
-                        }
+                        TypeBuildTask::Opaque {
+                            item,
+                            name,
+                            arguments,
+                        } => Layout::new(LayoutKind::Opaque {
+                            item,
+                            name,
+                            arguments: drain_tail(&mut values, arguments),
+                            variants: Vec::new(),
+                        }),
                     };
                     let id = self.intern_layout(layout)?;
                     self.core_layouts.insert(cache_key, id);
@@ -3059,6 +3266,62 @@ impl<'a> ProgramLowerer<'a> {
         Ok(values
             .pop()
             .expect("core type lowering should produce one backend layout"))
+    }
+}
+
+fn is_opaque_type(ty: &core::Type) -> bool {
+    matches!(
+        ty,
+        core::Type::OpaqueItem { .. } | core::Type::OpaqueImport { .. }
+    )
+}
+
+#[derive(Default)]
+struct CollectedOpaqueLayout {
+    item: Option<aivi_hir::ItemId>,
+    variants: HashMap<Box<str>, Vec<core::Type>>,
+}
+
+fn record_opaque_variant(
+    collected: &mut HashMap<core::Type, CollectedOpaqueLayout>,
+    ty: &core::Type,
+    item: Option<aivi_hir::ItemId>,
+    variant_name: Box<str>,
+    field_types: Vec<core::Type>,
+) {
+    if !is_opaque_type(ty) {
+        return;
+    }
+    let collected = collected.entry(ty.clone()).or_default();
+    if collected.item.is_none() {
+        collected.item = item;
+    }
+    collected
+        .variants
+        .entry(variant_name)
+        .or_insert(field_types);
+}
+
+fn constructor_pattern_field_types(
+    subject_ty: &core::Type,
+    callee: &core::PatternConstructor,
+) -> Vec<core::Type> {
+    if let Some(field_types) = &callee.field_types {
+        return field_types.clone();
+    }
+    match (&callee.reference, subject_ty) {
+        (core::Reference::Builtin(HirBuiltinTerm::Some), core::Type::Option(element)) => {
+            vec![element.as_ref().clone()]
+        }
+        (
+            core::Reference::Builtin(HirBuiltinTerm::Ok),
+            core::Type::Result { value, .. } | core::Type::Validation { value, .. },
+        ) => vec![value.as_ref().clone()],
+        (
+            core::Reference::Builtin(HirBuiltinTerm::Err),
+            core::Type::Result { error, .. } | core::Type::Validation { error, .. },
+        ) => vec![error.as_ref().clone()],
+        _ => Vec::new(),
     }
 }
 

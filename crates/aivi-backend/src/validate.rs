@@ -756,9 +756,16 @@ fn validate_layouts(program: &Program, errors: &mut Vec<ValidationError>) {
             | LayoutKind::Validation { error: key, value }
             | LayoutKind::Task { error: key, value } => vec![*key, *value],
             LayoutKind::AnonymousDomain { carrier, .. } => vec![*carrier],
-            LayoutKind::Domain { arguments, .. } | LayoutKind::Opaque { arguments, .. } => {
-                arguments.clone()
-            }
+            LayoutKind::Domain { arguments, .. } => arguments.clone(),
+            LayoutKind::Opaque {
+                arguments,
+                variants,
+                ..
+            } => arguments
+                .iter()
+                .copied()
+                .chain(variants.iter().filter_map(|variant| variant.payload))
+                .collect(),
         };
         for child in children {
             if !program.layouts().contains(child) {

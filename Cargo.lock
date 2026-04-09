@@ -96,6 +96,8 @@ name = "aivi-ffi-call"
 version = "0.1.0"
 dependencies = [
  "libffi",
+ "num-bigint",
+ "rust_decimal",
 ]
 
 [[package]]

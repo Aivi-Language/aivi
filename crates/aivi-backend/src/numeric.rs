@@ -51,6 +51,8 @@ impl std::fmt::Display for RuntimeFloat {
 pub struct RuntimeDecimal(Decimal);
 
 impl RuntimeDecimal {
+    pub(crate) const ENCODED_BYTES: usize = 20;
+
     pub fn parse_literal(raw: &str) -> Option<Self> {
         let digits = raw.strip_suffix('d')?;
         let value = digits.parse::<Decimal>().ok()?;
@@ -58,10 +60,19 @@ impl RuntimeDecimal {
     }
 
     pub(crate) fn encode_constant_bytes(&self) -> Box<[u8]> {
-        let mut bytes = Vec::with_capacity(20);
+        let mut bytes = Vec::with_capacity(Self::ENCODED_BYTES);
         bytes.extend_from_slice(&self.0.mantissa().to_le_bytes());
         bytes.extend_from_slice(&self.0.scale().to_le_bytes());
         bytes.into_boxed_slice()
+    }
+
+    pub(crate) fn from_constant_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != Self::ENCODED_BYTES {
+            return None;
+        }
+        let mantissa = i128::from_le_bytes(bytes[..16].try_into().ok()?);
+        let scale = u32::from_le_bytes(bytes[16..20].try_into().ok()?);
+        Some(Self(Decimal::from_i128_with_scale(mantissa, scale)))
     }
 
     pub(crate) fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -79,6 +90,8 @@ impl std::fmt::Display for RuntimeDecimal {
 pub struct RuntimeBigInt(BigInt);
 
 impl RuntimeBigInt {
+    pub(crate) const HEADER_BYTES: usize = 16;
+
     pub fn parse_literal(raw: &str) -> Option<Self> {
         let digits = raw.strip_suffix('n')?;
         let value = digits.parse::<BigInt>().ok()?;
@@ -97,6 +110,21 @@ impl RuntimeBigInt {
         bytes.extend_from_slice(&(magnitude.len() as u64).to_le_bytes());
         bytes.extend_from_slice(&magnitude);
         bytes.into_boxed_slice()
+    }
+
+    pub(crate) fn from_constant_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < Self::HEADER_BYTES {
+            return None;
+        }
+        let sign = match bytes[0] {
+            0 => Sign::NoSign,
+            1 => Sign::Plus,
+            2 => Sign::Minus,
+            _ => return None,
+        };
+        let magnitude_len = u64::from_le_bytes(bytes[8..16].try_into().ok()?) as usize;
+        let magnitude = bytes.get(Self::HEADER_BYTES..Self::HEADER_BYTES + magnitude_len)?;
+        Some(Self(BigInt::from_bytes_le(sign, magnitude)))
     }
 
     pub(crate) fn cmp(&self, other: &Self) -> std::cmp::Ordering {

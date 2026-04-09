@@ -6379,7 +6379,11 @@ fn shared_suffixed_integer_suffix(
     }
 }
 
-fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutId) -> bool {
+pub(crate) fn value_matches_layout(
+    program: &Program,
+    value: &RuntimeValue,
+    layout: LayoutId,
+) -> bool {
     let Some(layout) = program.layouts().get(layout) else {
         return false;
     };
@@ -6454,8 +6458,15 @@ fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutI
         // on earlier typed lowering to keep those carrier values sound and only preserves the
         // outer signal/non-signal distinction here.
         (LayoutKind::Domain { .. }, _) => true,
-        (LayoutKind::Opaque { name, .. }, RuntimeValue::Sum(value)) => {
+        (LayoutKind::Opaque { name, variants, .. }, RuntimeValue::Sum(value)) => {
             name.as_ref() == value.type_name.as_ref()
+                && (variants.is_empty()
+                    || variants
+                        .iter()
+                        .find(|variant| variant.name.as_ref() == value.variant_name.as_ref())
+                        .is_some_and(|variant| {
+                            sum_fields_match_layout(program, &value.fields, variant.payload)
+                        }))
         }
         _ => false,
     }
@@ -6739,7 +6750,7 @@ fn truthy_falsy_payload(
     }
 }
 
-fn coerce_runtime_value(
+pub(crate) fn coerce_runtime_value(
     program: &Program,
     value: RuntimeValue,
     layout: LayoutId,
@@ -6774,7 +6785,7 @@ fn coerce_inline_pipe_value(
     coerce_runtime_value(program, value, layout).ok()
 }
 
-fn strip_signal(value: RuntimeValue) -> RuntimeValue {
+pub(crate) fn strip_signal(value: RuntimeValue) -> RuntimeValue {
     match value {
         RuntimeValue::Signal(value) => *value,
         other => other,

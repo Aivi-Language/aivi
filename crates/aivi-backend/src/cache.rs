@@ -819,7 +819,9 @@ mod tests {
     use aivi_base::SourceDatabase;
     use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
     use aivi_ffi_call::{
-        AbiValue, AllocationArena, FunctionCaller, decode_len_prefixed_bytes, with_active_arena,
+        AbiValue, AllocationArena, FunctionCaller, decode_len_prefixed_bytes, decode_marshaled_map,
+        decode_marshaled_sequence, read_bigint_constant_bytes, read_decimal_constant_bytes,
+        with_active_arena,
     };
     use aivi_lambda::{
         lower_module as lower_lambda_module, validate_module as validate_lambda_module,
@@ -827,7 +829,9 @@ mod tests {
     use aivi_syntax::parse_module;
 
     use super::*;
-    use crate::{lower_module as lower_backend_module, validate_program};
+    use crate::{
+        RuntimeBigInt, RuntimeDecimal, lower_module as lower_backend_module, validate_program,
+    };
 
     fn lower_text(path: &str, text: &str) -> Program {
         let mut sources = SourceDatabase::new();
@@ -1048,6 +1052,213 @@ fun makeBlob:Bytes = seed:Int=>
     }
 
     #[test]
+    fn cached_jit_collection_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-collections-roundtrip.aivi",
+            r#"
+value ids:List Int = [1, 2, 3]
+
+value tags:Set Text =
+    Set [
+        "news",
+        "featured"
+    ]
+
+value headers:Map Text Text =
+    Map {
+        "Authorization": "Bearer demo",
+        "Accept": "application/json"
+    }
+"#,
+        );
+
+        with_temp_cache_dir(|cache_root| {
+            for (name, expected_funcs) in [
+                ("ids", vec!["aivi_list_new"]),
+                ("tags", vec!["aivi_set_new"]),
+                ("headers", vec!["aivi_map_new"]),
+            ] {
+                let kernel = backend.items()[find_item(&backend, name)]
+                    .body
+                    .expect("collection item should lower into a body kernel");
+                let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, kernel)
+                    .expect(
+                        "collection kernel should compile and persist a replayable cache artifact",
+                    );
+                let fingerprint = compute_kernel_fingerprint(&backend, kernel);
+                let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                    .expect("compiled collection kernel should write a disk artifact");
+                let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact)
+                    .expect("serialized collection artifact should replay into a live kernel");
+
+                assert_eq!(
+                    artifact
+                        .external_funcs
+                        .iter()
+                        .map(|symbol| symbol.as_ref())
+                        .collect::<Vec<_>>(),
+                    expected_funcs
+                );
+                match name {
+                    "ids" => {
+                        assert_eq!(
+                            call_i64_sequence(&compiled.caller, compiled.function, &[]),
+                            vec![1, 2, 3]
+                        );
+                        assert_eq!(
+                            call_i64_sequence(&replayed.caller, replayed.function, &[]),
+                            vec![1, 2, 3]
+                        );
+                    }
+                    "tags" => {
+                        assert_eq!(
+                            call_text_sequence(&compiled.caller, compiled.function, &[]),
+                            vec!["news".to_owned(), "featured".to_owned()]
+                        );
+                        assert_eq!(
+                            call_text_sequence(&replayed.caller, replayed.function, &[]),
+                            vec!["news".to_owned(), "featured".to_owned()]
+                        );
+                    }
+                    "headers" => {
+                        assert_eq!(
+                            call_text_map(&compiled.caller, compiled.function, &[]),
+                            vec![
+                                ("Authorization".to_owned(), "Bearer demo".to_owned()),
+                                ("Accept".to_owned(), "application/json".to_owned()),
+                            ]
+                        );
+                        assert_eq!(
+                            call_text_map(&replayed.caller, replayed.function, &[]),
+                            vec![
+                                ("Authorization".to_owned(), "Bearer demo".to_owned()),
+                                ("Accept".to_owned(), "application/json".to_owned()),
+                            ]
+                        );
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn cached_jit_imported_generic_matrix_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-matrix-roundtrip.aivi",
+            r#"
+use aivi.matrix (
+    fromRows,
+    width
+)
+
+value matrixWidth:Int =
+    fromRows [
+        [1, 2],
+        [3, 4]
+    ]
+    ||> Ok matrix -> width matrix
+    ||> Err _ -> 0
+"#,
+        );
+
+        with_temp_cache_dir(|cache_root| {
+            let kernel = backend.items()[find_item(&backend, "matrixWidth")]
+                .body
+                .expect("matrix width item should lower into a body kernel");
+            let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, kernel)
+                .expect("Matrix kernel should compile and persist a replayable cache artifact");
+            let fingerprint = compute_kernel_fingerprint(&backend, kernel);
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                .expect("compiled Matrix kernel should write a disk artifact");
+            let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact)
+                .expect("serialized Matrix artifact should replay into a live kernel");
+
+            assert!(
+                artifact
+                    .external_funcs
+                    .iter()
+                    .any(|symbol| symbol.as_ref() == "aivi_arena_alloc"),
+                "Matrix artifact should retain arena allocation helper linkage"
+            );
+            assert_eq!(
+                call_i64_value(&compiled.caller, compiled.function, &[]),
+                AbiValue::I64(2)
+            );
+            assert_eq!(
+                call_i64_value(&replayed.caller, replayed.function, &[]),
+                AbiValue::I64(2)
+            );
+        });
+    }
+
+    #[test]
+    fn cached_jit_numeric_helper_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-numeric-roundtrip.aivi",
+            r#"
+value decimalTotal:Decimal = 19.25d + 0.75d
+value bigintTotal:BigInt = 123456789012345678901234567890n + 10n
+"#,
+        );
+
+        with_temp_cache_dir(|cache_root| {
+            for (name, expected_funcs) in [
+                ("decimalTotal", vec!["aivi_decimal_add"]),
+                ("bigintTotal", vec!["aivi_bigint_add"]),
+            ] {
+                let kernel = backend.items()[find_item(&backend, name)]
+                    .body
+                    .expect("numeric item should lower into a body kernel");
+                let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, kernel)
+                    .expect("numeric helper kernel should compile and persist a replayable cache artifact");
+                let fingerprint = compute_kernel_fingerprint(&backend, kernel);
+                let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                    .expect("compiled numeric helper kernel should write a disk artifact");
+                let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact)
+                    .expect("serialized numeric helper artifact should replay into a live kernel");
+
+                assert_eq!(
+                    artifact
+                        .external_funcs
+                        .iter()
+                        .map(|symbol| symbol.as_ref())
+                        .collect::<Vec<_>>(),
+                    expected_funcs
+                );
+                match name {
+                    "decimalTotal" => {
+                        let expected =
+                            RuntimeDecimal::parse_literal("20.00d").expect("decimal should parse");
+                        assert_eq!(
+                            call_decimal_value(&compiled.caller, compiled.function, &[]),
+                            expected
+                        );
+                        assert_eq!(
+                            call_decimal_value(&replayed.caller, replayed.function, &[]),
+                            expected
+                        );
+                    }
+                    "bigintTotal" => {
+                        let expected =
+                            RuntimeBigInt::parse_literal("123456789012345678901234567900n")
+                                .expect("bigint should parse");
+                        assert_eq!(
+                            call_bigint_value(&compiled.caller, compiled.function, &[]),
+                            expected
+                        );
+                        assert_eq!(
+                            call_bigint_value(&replayed.caller, replayed.function, &[]),
+                            expected
+                        );
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        });
+    }
+
+    #[test]
     fn cached_jit_inline_scalar_option_artifact_replays_after_disk_roundtrip() {
         let backend = lower_text(
             "cache-jit-inline-option-roundtrip.aivi",
@@ -1171,6 +1382,164 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
         let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
             .expect("helper-backed kernel should execute inside an active arena");
         decode_pointer_bytes(value)
+    }
+
+    fn call_i64_value(caller: &FunctionCaller, function: *const u8, args: &[AbiValue]) -> AbiValue {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("scalar kernel should execute inside an active arena")
+    }
+
+    fn call_i64_sequence(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> Vec<i64> {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("collection kernel should execute inside an active arena");
+        decode_i64_sequence(value)
+    }
+
+    fn call_text_sequence(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> Vec<String> {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("collection kernel should execute inside an active arena");
+        decode_text_sequence(value)
+    }
+
+    fn call_text_map(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> Vec<(String, String)> {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("map kernel should execute inside an active arena");
+        decode_text_map(value)
+    }
+
+    fn call_decimal_value(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> RuntimeDecimal {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("decimal kernel should execute inside an active arena");
+        decode_decimal_value(value)
+    }
+
+    fn call_bigint_value(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> RuntimeBigInt {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("bigint kernel should execute inside an active arena");
+        decode_bigint_value(value)
+    }
+
+    fn decode_i64_sequence(value: AbiValue) -> Vec<i64> {
+        let AbiValue::Pointer(pointer) = value else {
+            panic!("expected pointer ABI value from list kernel, found {value:?}");
+        };
+        let decoded =
+            decode_marshaled_sequence(pointer).expect("list kernel should return a sequence");
+        assert_eq!(decoded.element_size, 8);
+        decoded
+            .bytes
+            .chunks_exact(decoded.element_size)
+            .map(|chunk| i64::from_ne_bytes(chunk.try_into().expect("int cell should be 8 bytes")))
+            .collect()
+    }
+
+    fn decode_text_sequence(value: AbiValue) -> Vec<String> {
+        let AbiValue::Pointer(pointer) = value else {
+            panic!("expected pointer ABI value from set kernel, found {value:?}");
+        };
+        let decoded =
+            decode_marshaled_sequence(pointer).expect("set kernel should return a sequence");
+        assert_eq!(decoded.element_size, std::mem::size_of::<usize>());
+        decoded
+            .bytes
+            .chunks_exact(decoded.element_size)
+            .map(|chunk| {
+                let raw: [u8; std::mem::size_of::<usize>()] =
+                    chunk.try_into().expect("text cell should store a pointer");
+                let pointer = usize::from_ne_bytes(raw) as *const std::ffi::c_void;
+                let bytes = decode_len_prefixed_bytes(pointer)
+                    .expect("text cell pointer should decode to len-prefixed bytes");
+                String::from_utf8(bytes.into_vec()).expect("text cell bytes should be valid UTF-8")
+            })
+            .collect()
+    }
+
+    fn decode_text_map(value: AbiValue) -> Vec<(String, String)> {
+        let AbiValue::Pointer(pointer) = value else {
+            panic!("expected pointer ABI value from map kernel, found {value:?}");
+        };
+        let decoded = decode_marshaled_map(pointer).expect("map kernel should return a map blob");
+        let cell_size = std::mem::size_of::<usize>();
+        assert_eq!(decoded.key_size, cell_size);
+        assert_eq!(decoded.value_size, cell_size);
+        decoded
+            .bytes
+            .chunks_exact(decoded.key_size + decoded.value_size)
+            .map(|chunk| {
+                let key_raw: [u8; std::mem::size_of::<usize>()] = chunk[..decoded.key_size]
+                    .try_into()
+                    .expect("map key cell should store a pointer");
+                let value_raw: [u8; std::mem::size_of::<usize>()] = chunk
+                    [decoded.key_size..decoded.key_size + decoded.value_size]
+                    .try_into()
+                    .expect("map value cell should store a pointer");
+                let key_pointer = usize::from_ne_bytes(key_raw) as *const std::ffi::c_void;
+                let value_pointer = usize::from_ne_bytes(value_raw) as *const std::ffi::c_void;
+                let key = String::from_utf8(
+                    decode_len_prefixed_bytes(key_pointer)
+                        .expect("map key pointer should decode to len-prefixed bytes")
+                        .into_vec(),
+                )
+                .expect("map key bytes should be valid UTF-8");
+                let value = String::from_utf8(
+                    decode_len_prefixed_bytes(value_pointer)
+                        .expect("map value pointer should decode to len-prefixed bytes")
+                        .into_vec(),
+                )
+                .expect("map value bytes should be valid UTF-8");
+                (key, value)
+            })
+            .collect()
+    }
+
+    fn decode_decimal_value(value: AbiValue) -> RuntimeDecimal {
+        let AbiValue::Pointer(pointer) = value else {
+            panic!("expected pointer ABI value from decimal kernel, found {value:?}");
+        };
+        RuntimeDecimal::from_constant_bytes(
+            read_decimal_constant_bytes(pointer)
+                .expect("decimal kernel should return decimal bytes")
+                .as_ref(),
+        )
+        .expect("decimal bytes should decode")
+    }
+
+    fn decode_bigint_value(value: AbiValue) -> RuntimeBigInt {
+        let AbiValue::Pointer(pointer) = value else {
+            panic!("expected pointer ABI value from bigint kernel, found {value:?}");
+        };
+        RuntimeBigInt::from_constant_bytes(
+            read_bigint_constant_bytes(pointer)
+                .expect("bigint kernel should return bigint bytes")
+                .as_ref(),
+        )
+        .expect("bigint bytes should decode")
     }
 
     const fn encode_inline_option_bits(payload: u64) -> u128 {

@@ -1,6 +1,14 @@
 use std::{cell::RefCell, ffi::c_void, ptr, rc::Rc, slice};
 
 use libffi::middle::{Arg, Cif, CodePtr, Type};
+use num_bigint::{BigInt, Sign};
+use rust_decimal::Decimal;
+
+const LEN_PREFIX_BYTES: usize = 8;
+const SEQUENCE_HEADER_BYTES: usize = 16;
+const MAP_HEADER_BYTES: usize = 24;
+const DECIMAL_ENCODED_BYTES: usize = 20;
+const BIGINT_HEADER_BYTES: usize = 16;
 
 thread_local! {
     static ACTIVE_ARENA: RefCell<Option<Rc<RefCell<AllocationArena>>>> = const { RefCell::new(None) };
@@ -16,15 +24,51 @@ impl AllocationArena {
         Self::default()
     }
 
-    pub fn store_len_prefixed_bytes(&mut self, bytes: &[u8]) -> *const c_void {
-        let mut encoded = Vec::with_capacity(8 + bytes.len());
-        encoded.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
-        encoded.extend_from_slice(bytes);
+    pub fn alloc_raw_bytes_aligned(&mut self, len: usize, align: usize) -> *mut c_void {
+        let align = align.max(1).next_power_of_two();
+        let mut encoded = vec![0u8; len.max(1).saturating_add(align - 1)];
+        let base = encoded.as_mut_ptr() as usize;
+        let aligned = (base + (align - 1)) & !(align - 1);
+        let offset = aligned - base;
+        let pointer = encoded.as_mut_ptr().wrapping_add(offset);
+        self.allocations.push(encoded.into_boxed_slice());
+        pointer.cast()
+    }
+
+    pub fn store_raw_bytes_aligned(&mut self, bytes: &[u8], align: usize) -> *const c_void {
+        let align = align.max(1).next_power_of_two();
+        let mut encoded = vec![0u8; bytes.len().saturating_add(align - 1)];
+        let base = encoded.as_ptr() as usize;
+        let aligned = (base + (align - 1)) & !(align - 1);
+        let offset = aligned - base;
+        encoded[offset..offset + bytes.len()].copy_from_slice(bytes);
         let cell = encoded.into_boxed_slice();
-        let pointer = cell.as_ptr();
+        let pointer = cell.as_ptr().wrapping_add(offset);
         self.allocations.push(cell);
         pointer.cast()
     }
+
+    pub fn store_len_prefixed_bytes(&mut self, bytes: &[u8]) -> *const c_void {
+        let mut encoded = Vec::with_capacity(LEN_PREFIX_BYTES + bytes.len());
+        encoded.extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+        encoded.extend_from_slice(bytes);
+        self.store_raw_bytes_aligned(&encoded, LEN_PREFIX_BYTES)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarshaledSequence {
+    pub count: usize,
+    pub element_size: usize,
+    pub bytes: Box<[u8]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarshaledMap {
+    pub count: usize,
+    pub key_size: usize,
+    pub value_size: usize,
+    pub bytes: Box<[u8]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -207,14 +251,133 @@ pub fn decode_len_prefixed_bytes(pointer: *const c_void) -> Option<Box<[u8]>> {
     }
 }
 
+pub fn encode_marshaled_sequence(
+    count: usize,
+    element_size: usize,
+    bytes: &[u8],
+    arena: &mut AllocationArena,
+) -> Option<*const c_void> {
+    encode_marshaled_sequence_with_align(
+        count,
+        element_size,
+        bytes,
+        sequence_alignment_for_element_size(element_size),
+        arena,
+    )
+}
+
+pub fn decode_marshaled_sequence(pointer: *const c_void) -> Option<MarshaledSequence> {
+    // SAFETY: callers only hand us pointers produced by `encode_marshaled_sequence`
+    // or the matching lazy-JIT helpers, both of which use the same counted-sequence contract.
+    let view = unsafe { read_marshaled_sequence_view(pointer.cast()) }?;
+    Some(MarshaledSequence {
+        count: view.count,
+        element_size: view.element_size,
+        bytes: view.data.into(),
+    })
+}
+
+pub fn encode_marshaled_map(
+    count: usize,
+    key_size: usize,
+    value_size: usize,
+    bytes: &[u8],
+    arena: &mut AllocationArena,
+) -> Option<*const c_void> {
+    let entry_size = key_size.checked_add(value_size)?;
+    let expected = count.checked_mul(entry_size)?;
+    if expected != bytes.len() {
+        return None;
+    }
+    let mut encoded = Vec::with_capacity(MAP_HEADER_BYTES + bytes.len());
+    encoded.extend_from_slice(&(count as u64).to_le_bytes());
+    encoded.extend_from_slice(&(key_size as u64).to_le_bytes());
+    encoded.extend_from_slice(&(value_size as u64).to_le_bytes());
+    encoded.extend_from_slice(bytes);
+    Some(arena.store_raw_bytes_aligned(&encoded, 8))
+}
+
+pub fn decode_marshaled_map(pointer: *const c_void) -> Option<MarshaledMap> {
+    // SAFETY: callers only hand us pointers produced by `encode_marshaled_map`
+    // or the matching lazy-JIT helpers, both of which use the same counted-map contract.
+    let view = unsafe { read_marshaled_map_view(pointer.cast()) }?;
+    Some(MarshaledMap {
+        count: view.count,
+        key_size: view.key_size,
+        value_size: view.value_size,
+        bytes: view.data.into(),
+    })
+}
+
+pub fn read_marshaled_field(
+    pointer: *const c_void,
+    offset: usize,
+    size: usize,
+) -> Option<Box<[u8]>> {
+    let field_pointer = pointer_at(pointer.cast(), offset)?;
+    // SAFETY: callers pass offsets/sizes that stay within a blob produced by the
+    // matching lazy-JIT marshalling contract.
+    unsafe { read_exact_bytes(field_pointer, size) }
+}
+
+pub fn read_decimal_constant_bytes(pointer: *const c_void) -> Option<Box<[u8]>> {
+    read_marshaled_field(pointer, 0, DECIMAL_ENCODED_BYTES)
+}
+
+pub fn read_bigint_constant_bytes(pointer: *const c_void) -> Option<Box<[u8]>> {
+    let header = read_marshaled_field(pointer, 0, BIGINT_HEADER_BYTES)?;
+    let magnitude_len = u64::from_le_bytes(header[8..16].try_into().ok()?) as usize;
+    read_marshaled_field(pointer, 0, BIGINT_HEADER_BYTES.checked_add(magnitude_len)?)
+}
+
 pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
     match symbol {
+        "aivi_arena_alloc" => Some(aivi_arena_alloc as *const () as *const u8),
         "aivi_text_concat" => Some(aivi_text_concat as *const () as *const u8),
         "aivi_bytes_append" => Some(aivi_bytes_append as *const () as *const u8),
         "aivi_bytes_repeat" => Some(aivi_bytes_repeat as *const () as *const u8),
         "aivi_bytes_slice" => Some(aivi_bytes_slice as *const () as *const u8),
+        "aivi_list_new" => Some(aivi_list_new as *const () as *const u8),
+        "aivi_set_new" => Some(aivi_set_new as *const () as *const u8),
+        "aivi_map_new" => Some(aivi_map_new as *const () as *const u8),
+        "aivi_list_len" => Some(aivi_list_len as *const () as *const u8),
+        "aivi_list_get" => Some(aivi_list_get as *const () as *const u8),
+        "aivi_list_slice" => Some(aivi_list_slice as *const () as *const u8),
+        "aivi_decimal_add" => Some(aivi_decimal_add as *const () as *const u8),
+        "aivi_decimal_sub" => Some(aivi_decimal_sub as *const () as *const u8),
+        "aivi_decimal_mul" => Some(aivi_decimal_mul as *const () as *const u8),
+        "aivi_decimal_div" => Some(aivi_decimal_div as *const () as *const u8),
+        "aivi_decimal_mod" => Some(aivi_decimal_mod as *const () as *const u8),
+        "aivi_decimal_eq" => Some(aivi_decimal_eq as *const () as *const u8),
+        "aivi_decimal_gt" => Some(aivi_decimal_gt as *const () as *const u8),
+        "aivi_decimal_lt" => Some(aivi_decimal_lt as *const () as *const u8),
+        "aivi_decimal_gte" => Some(aivi_decimal_gte as *const () as *const u8),
+        "aivi_decimal_lte" => Some(aivi_decimal_lte as *const () as *const u8),
+        "aivi_bigint_add" => Some(aivi_bigint_add as *const () as *const u8),
+        "aivi_bigint_sub" => Some(aivi_bigint_sub as *const () as *const u8),
+        "aivi_bigint_mul" => Some(aivi_bigint_mul as *const () as *const u8),
+        "aivi_bigint_div" => Some(aivi_bigint_div as *const () as *const u8),
+        "aivi_bigint_mod" => Some(aivi_bigint_mod as *const () as *const u8),
+        "aivi_bigint_eq" => Some(aivi_bigint_eq as *const () as *const u8),
+        "aivi_bigint_gt" => Some(aivi_bigint_gt as *const () as *const u8),
+        "aivi_bigint_lt" => Some(aivi_bigint_lt as *const () as *const u8),
+        "aivi_bigint_gte" => Some(aivi_bigint_gte as *const () as *const u8),
+        "aivi_bigint_lte" => Some(aivi_bigint_lte as *const () as *const u8),
         _ => None,
     }
+}
+
+extern "C" fn aivi_arena_alloc(size: i64, align: i64) -> *mut u8 {
+    with_current_arena(|arena| {
+        let Some(size) = non_negative_usize(size) else {
+            return ptr::null_mut();
+        };
+        let Some(align) = non_negative_usize(align) else {
+            return ptr::null_mut();
+        };
+        arena.alloc_raw_bytes_aligned(size, align).cast()
+    })
+    .unwrap_or(ptr::null_mut())
 }
 
 fn type_for_abi_kind(kind: AbiValueKind) -> Type {
@@ -350,6 +513,200 @@ extern "C" fn aivi_bytes_slice(from: i64, to: i64, bytes: *const u8) -> *const u
     .unwrap_or(ptr::null())
 }
 
+extern "C" fn aivi_list_new(count: i64, elements_ptr: *const u8, element_size: i64) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(count) = non_negative_usize(count) else {
+            return ptr::null();
+        };
+        let Some(element_size) = non_negative_usize(element_size) else {
+            return ptr::null();
+        };
+        let Some(byte_len) = count.checked_mul(element_size) else {
+            return ptr::null();
+        };
+        // SAFETY: the JIT constructor ABI passes `count * element_size` contiguous bytes.
+        let Some(bytes) = (unsafe { read_exact_bytes(elements_ptr, byte_len) }) else {
+            return ptr::null();
+        };
+        encode_marshaled_sequence(count, element_size, bytes.as_ref(), arena)
+            .map(|pointer| pointer.cast())
+            .unwrap_or(ptr::null())
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_set_new(count: i64, elements_ptr: *const u8, element_size: i64) -> *const u8 {
+    aivi_list_new(count, elements_ptr, element_size)
+}
+
+extern "C" fn aivi_map_new(
+    count: i64,
+    entries_ptr: *const u8,
+    key_size: i64,
+    value_size: i64,
+) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(count) = non_negative_usize(count) else {
+            return ptr::null();
+        };
+        let Some(key_size) = non_negative_usize(key_size) else {
+            return ptr::null();
+        };
+        let Some(value_size) = non_negative_usize(value_size) else {
+            return ptr::null();
+        };
+        let Some(entry_size) = key_size.checked_add(value_size) else {
+            return ptr::null();
+        };
+        let Some(byte_len) = count.checked_mul(entry_size) else {
+            return ptr::null();
+        };
+        // SAFETY: the JIT constructor ABI passes `count * (key_size + value_size)` bytes.
+        let Some(bytes) = (unsafe { read_exact_bytes(entries_ptr, byte_len) }) else {
+            return ptr::null();
+        };
+        encode_marshaled_map(count, key_size, value_size, bytes.as_ref(), arena)
+            .map(|pointer| pointer.cast())
+            .unwrap_or(ptr::null())
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_list_len(list_ptr: *const u8) -> i64 {
+    // SAFETY: the lazy-JIT collection helpers only hand us pointers produced by
+    // `encode_marshaled_sequence`/`aivi_list_new`/`aivi_list_slice`.
+    unsafe { read_marshaled_sequence_view(list_ptr) }
+        .and_then(|view| i64::try_from(view.count).ok())
+        .unwrap_or(0)
+}
+
+extern "C" fn aivi_list_get(list_ptr: *const u8, index: i64) -> *const u8 {
+    let Some(index) = non_negative_usize(index) else {
+        return ptr::null();
+    };
+    // SAFETY: the lazy-JIT collection helpers only hand us pointers produced by
+    // `encode_marshaled_sequence`/`aivi_list_new`/`aivi_list_slice`.
+    let Some(view) = (unsafe { read_marshaled_sequence_view(list_ptr) }) else {
+        return ptr::null();
+    };
+    if index >= view.count {
+        return ptr::null();
+    }
+    view.data
+        .as_ptr()
+        .wrapping_add(index.saturating_mul(view.element_size))
+}
+
+extern "C" fn aivi_list_slice(list_ptr: *const u8, start: i64, element_size: i64) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(start) = non_negative_usize(start) else {
+            return ptr::null();
+        };
+        let Some(element_size) = non_negative_usize(element_size) else {
+            return ptr::null();
+        };
+        // SAFETY: the lazy-JIT collection helpers only hand us pointers produced by
+        // `encode_marshaled_sequence`/`aivi_list_new`/`aivi_list_slice`.
+        let Some(view) = (unsafe { read_marshaled_sequence_view(list_ptr) }) else {
+            return ptr::null();
+        };
+        if view.element_size != element_size {
+            return ptr::null();
+        }
+        let start = start.min(view.count);
+        let remaining = view.count - start;
+        let byte_start = start.saturating_mul(element_size);
+        encode_marshaled_sequence(remaining, element_size, &view.data[byte_start..], arena)
+            .map(|pointer| pointer.cast())
+            .unwrap_or(ptr::null())
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_decimal_add(left: *const u8, right: *const u8) -> *const u8 {
+    decimal_binop(left, right, |left, right| left.checked_add(right))
+}
+
+extern "C" fn aivi_decimal_sub(left: *const u8, right: *const u8) -> *const u8 {
+    decimal_binop(left, right, |left, right| left.checked_sub(right))
+}
+
+extern "C" fn aivi_decimal_mul(left: *const u8, right: *const u8) -> *const u8 {
+    decimal_binop(left, right, |left, right| left.checked_mul(right))
+}
+
+extern "C" fn aivi_decimal_div(left: *const u8, right: *const u8) -> *const u8 {
+    decimal_binop(left, right, |left, right| left.checked_div(right))
+}
+
+extern "C" fn aivi_decimal_mod(left: *const u8, right: *const u8) -> *const u8 {
+    decimal_binop(left, right, |left, right| left.checked_rem(right))
+}
+
+extern "C" fn aivi_decimal_eq(left: *const u8, right: *const u8) -> i8 {
+    decimal_cmp(left, right, |cmp| cmp == std::cmp::Ordering::Equal)
+}
+
+extern "C" fn aivi_decimal_gt(left: *const u8, right: *const u8) -> i8 {
+    decimal_cmp(left, right, |cmp| cmp == std::cmp::Ordering::Greater)
+}
+
+extern "C" fn aivi_decimal_lt(left: *const u8, right: *const u8) -> i8 {
+    decimal_cmp(left, right, |cmp| cmp == std::cmp::Ordering::Less)
+}
+
+extern "C" fn aivi_decimal_gte(left: *const u8, right: *const u8) -> i8 {
+    decimal_cmp(left, right, |cmp| cmp != std::cmp::Ordering::Less)
+}
+
+extern "C" fn aivi_decimal_lte(left: *const u8, right: *const u8) -> i8 {
+    decimal_cmp(left, right, |cmp| cmp != std::cmp::Ordering::Greater)
+}
+
+extern "C" fn aivi_bigint_add(left: *const u8, right: *const u8) -> *const u8 {
+    bigint_binop(left, right, |left, right| Some(left + right))
+}
+
+extern "C" fn aivi_bigint_sub(left: *const u8, right: *const u8) -> *const u8 {
+    bigint_binop(left, right, |left, right| Some(left - right))
+}
+
+extern "C" fn aivi_bigint_mul(left: *const u8, right: *const u8) -> *const u8 {
+    bigint_binop(left, right, |left, right| Some(left * right))
+}
+
+extern "C" fn aivi_bigint_div(left: *const u8, right: *const u8) -> *const u8 {
+    bigint_binop(left, right, |left, right| {
+        (!right.eq(&BigInt::from(0))).then_some(left / right)
+    })
+}
+
+extern "C" fn aivi_bigint_mod(left: *const u8, right: *const u8) -> *const u8 {
+    bigint_binop(left, right, |left, right| {
+        (!right.eq(&BigInt::from(0))).then_some(left % right)
+    })
+}
+
+extern "C" fn aivi_bigint_eq(left: *const u8, right: *const u8) -> i8 {
+    bigint_cmp(left, right, |cmp| cmp == std::cmp::Ordering::Equal)
+}
+
+extern "C" fn aivi_bigint_gt(left: *const u8, right: *const u8) -> i8 {
+    bigint_cmp(left, right, |cmp| cmp == std::cmp::Ordering::Greater)
+}
+
+extern "C" fn aivi_bigint_lt(left: *const u8, right: *const u8) -> i8 {
+    bigint_cmp(left, right, |cmp| cmp == std::cmp::Ordering::Less)
+}
+
+extern "C" fn aivi_bigint_gte(left: *const u8, right: *const u8) -> i8 {
+    bigint_cmp(left, right, |cmp| cmp != std::cmp::Ordering::Less)
+}
+
+extern "C" fn aivi_bigint_lte(left: *const u8, right: *const u8) -> i8 {
+    bigint_cmp(left, right, |cmp| cmp != std::cmp::Ordering::Greater)
+}
+
 fn with_current_arena<R>(f: impl FnOnce(&mut AllocationArena) -> R) -> Option<R> {
     ACTIVE_ARENA.with(|slot| {
         let arena = slot.borrow().as_ref()?.clone();
@@ -358,16 +715,223 @@ fn with_current_arena<R>(f: impl FnOnce(&mut AllocationArena) -> R) -> Option<R>
     })
 }
 
+fn non_negative_usize(value: i64) -> Option<usize> {
+    usize::try_from(value).ok()
+}
+
+fn sequence_alignment_for_element_size(element_size: usize) -> usize {
+    match element_size {
+        0 | 1 => 1,
+        16.. => 16,
+        _ => 8,
+    }
+}
+
+fn encode_marshaled_sequence_with_align(
+    count: usize,
+    element_size: usize,
+    bytes: &[u8],
+    align: usize,
+    arena: &mut AllocationArena,
+) -> Option<*const c_void> {
+    let expected = count.checked_mul(element_size)?;
+    if expected != bytes.len() {
+        return None;
+    }
+    let mut encoded = Vec::with_capacity(SEQUENCE_HEADER_BYTES + bytes.len());
+    encoded.extend_from_slice(&(count as u64).to_le_bytes());
+    encoded.extend_from_slice(&(element_size as u64).to_le_bytes());
+    encoded.extend_from_slice(bytes);
+    Some(arena.store_raw_bytes_aligned(&encoded, align.max(LEN_PREFIX_BYTES)))
+}
+
+fn decimal_binop(
+    left: *const u8,
+    right: *const u8,
+    op: impl FnOnce(Decimal, Decimal) -> Option<Decimal>,
+) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(left) = parse_decimal(left) else {
+            return ptr::null();
+        };
+        let Some(right) = parse_decimal(right) else {
+            return ptr::null();
+        };
+        let Some(result) = op(left, right) else {
+            return ptr::null();
+        };
+        encode_decimal(result, arena)
+    })
+    .unwrap_or(ptr::null())
+}
+
+fn decimal_cmp(
+    left: *const u8,
+    right: *const u8,
+    predicate: impl FnOnce(std::cmp::Ordering) -> bool,
+) -> i8 {
+    let Some(left) = parse_decimal(left) else {
+        return 0;
+    };
+    let Some(right) = parse_decimal(right) else {
+        return 0;
+    };
+    i8::from(predicate(left.cmp(&right)))
+}
+
+fn bigint_binop(
+    left: *const u8,
+    right: *const u8,
+    op: impl FnOnce(BigInt, BigInt) -> Option<BigInt>,
+) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(left) = parse_bigint(left) else {
+            return ptr::null();
+        };
+        let Some(right) = parse_bigint(right) else {
+            return ptr::null();
+        };
+        let Some(result) = op(left, right) else {
+            return ptr::null();
+        };
+        encode_bigint(result, arena)
+    })
+    .unwrap_or(ptr::null())
+}
+
+fn bigint_cmp(
+    left: *const u8,
+    right: *const u8,
+    predicate: impl FnOnce(std::cmp::Ordering) -> bool,
+) -> i8 {
+    let Some(left) = parse_bigint(left) else {
+        return 0;
+    };
+    let Some(right) = parse_bigint(right) else {
+        return 0;
+    };
+    i8::from(predicate(left.cmp(&right)))
+}
+
+fn parse_decimal(pointer: *const u8) -> Option<Decimal> {
+    let bytes = read_decimal_constant_bytes(pointer.cast())?;
+    let mantissa = i128::from_le_bytes(bytes[..16].try_into().ok()?);
+    let scale = u32::from_le_bytes(bytes[16..20].try_into().ok()?);
+    Some(Decimal::from_i128_with_scale(mantissa, scale))
+}
+
+fn encode_decimal(value: Decimal, arena: &mut AllocationArena) -> *const u8 {
+    let mut encoded = Vec::with_capacity(DECIMAL_ENCODED_BYTES);
+    encoded.extend_from_slice(&value.mantissa().to_le_bytes());
+    encoded.extend_from_slice(&value.scale().to_le_bytes());
+    arena.store_raw_bytes_aligned(&encoded, 16).cast()
+}
+
+fn parse_bigint(pointer: *const u8) -> Option<BigInt> {
+    let bytes = read_bigint_constant_bytes(pointer.cast())?;
+    let sign = match bytes[0] {
+        0 => Sign::NoSign,
+        1 => Sign::Plus,
+        2 => Sign::Minus,
+        _ => return None,
+    };
+    let magnitude_len = u64::from_le_bytes(bytes[8..16].try_into().ok()?) as usize;
+    let magnitude = bytes.get(16..16 + magnitude_len)?;
+    Some(BigInt::from_bytes_le(sign, magnitude))
+}
+
+fn encode_bigint(value: BigInt, arena: &mut AllocationArena) -> *const u8 {
+    let (sign, magnitude) = value.to_bytes_le();
+    let mut encoded = Vec::with_capacity(BIGINT_HEADER_BYTES + magnitude.len());
+    encoded.push(match sign {
+        Sign::NoSign => 0,
+        Sign::Plus => 1,
+        Sign::Minus => 2,
+    });
+    encoded.extend_from_slice(&[0; 7]);
+    encoded.extend_from_slice(&(magnitude.len() as u64).to_le_bytes());
+    encoded.extend_from_slice(&magnitude);
+    arena.store_raw_bytes_aligned(&encoded, 8).cast()
+}
+
+fn pointer_at(pointer: *const u8, offset: usize) -> Option<*const u8> {
+    if pointer.is_null() {
+        return None;
+    }
+    let base = pointer as usize;
+    let address = base.checked_add(offset)?;
+    Some(address as *const u8)
+}
+
+struct MarshaledSequenceView<'a> {
+    count: usize,
+    element_size: usize,
+    data: &'a [u8],
+}
+
+struct MarshaledMapView<'a> {
+    count: usize,
+    key_size: usize,
+    value_size: usize,
+    data: &'a [u8],
+}
+
 unsafe fn read_len_prefixed_bytes<'a>(pointer: *const u8) -> Option<&'a [u8]> {
     if pointer.is_null() {
         return None;
     }
-    let mut prefix = [0u8; 8];
+    let mut prefix = [0u8; LEN_PREFIX_BYTES];
     // SAFETY: caller guarantees `pointer` addresses at least the 8-byte length prefix.
     unsafe { ptr::copy_nonoverlapping(pointer, prefix.as_mut_ptr(), prefix.len()) };
     let len = u64::from_le_bytes(prefix) as usize;
     // SAFETY: caller guarantees the contract stores exactly `len` bytes immediately after prefix.
     Some(unsafe { slice::from_raw_parts(pointer.add(prefix.len()), len) })
+}
+
+unsafe fn read_exact_bytes(pointer: *const u8, len: usize) -> Option<Box<[u8]>> {
+    if pointer.is_null() {
+        return None;
+    }
+    let mut bytes = vec![0u8; len].into_boxed_slice();
+    // SAFETY: caller guarantees `pointer` addresses at least `len` readable bytes.
+    unsafe { ptr::copy_nonoverlapping(pointer, bytes.as_mut_ptr(), len) };
+    Some(bytes)
+}
+
+unsafe fn read_marshaled_sequence_view<'a>(
+    pointer: *const u8,
+) -> Option<MarshaledSequenceView<'a>> {
+    let header = unsafe { read_exact_bytes(pointer, SEQUENCE_HEADER_BYTES) }?;
+    let count = u64::from_le_bytes(header[..8].try_into().ok()?) as usize;
+    let element_size = u64::from_le_bytes(header[8..16].try_into().ok()?) as usize;
+    let data_len = count.checked_mul(element_size)?;
+    let data_pointer = pointer_at(pointer, SEQUENCE_HEADER_BYTES)?;
+    // SAFETY: the sequence contract stores exactly `count * element_size` bytes after the header.
+    let data = unsafe { slice::from_raw_parts(data_pointer, data_len) };
+    Some(MarshaledSequenceView {
+        count,
+        element_size,
+        data,
+    })
+}
+
+unsafe fn read_marshaled_map_view<'a>(pointer: *const u8) -> Option<MarshaledMapView<'a>> {
+    let header = unsafe { read_exact_bytes(pointer, MAP_HEADER_BYTES) }?;
+    let count = u64::from_le_bytes(header[..8].try_into().ok()?) as usize;
+    let key_size = u64::from_le_bytes(header[8..16].try_into().ok()?) as usize;
+    let value_size = u64::from_le_bytes(header[16..24].try_into().ok()?) as usize;
+    let entry_size = key_size.checked_add(value_size)?;
+    let data_len = count.checked_mul(entry_size)?;
+    let data_pointer = pointer_at(pointer, MAP_HEADER_BYTES)?;
+    // SAFETY: the map contract stores exactly `count * (key_size + value_size)` bytes after the
+    // header.
+    let data = unsafe { slice::from_raw_parts(data_pointer, data_len) };
+    Some(MarshaledMapView {
+        count,
+        key_size,
+        value_size,
+        data,
+    })
 }
 
 #[cfg(test)]
@@ -413,5 +977,68 @@ mod tests {
                 found: AbiValueKind::I64,
             }
         );
+    }
+
+    #[test]
+    fn marshaled_sequence_round_trips() {
+        let mut arena = AllocationArena::new();
+        let pointer = encode_marshaled_sequence(
+            2,
+            8,
+            &[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0],
+            &mut arena,
+        )
+        .expect("sequence should encode");
+        let decoded = decode_marshaled_sequence(pointer).expect("sequence should decode");
+        assert_eq!(decoded.count, 2);
+        assert_eq!(decoded.element_size, 8);
+        assert_eq!(
+            decoded.bytes.as_ref(),
+            &[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn marshaled_map_round_trips() {
+        let mut arena = AllocationArena::new();
+        let bytes = [1, 0, 0, 0, 2, 0, 0, 0];
+        let pointer = encode_marshaled_map(1, 4, 4, &bytes, &mut arena).expect("map should encode");
+        let decoded = decode_marshaled_map(pointer).expect("map should decode");
+        assert_eq!(decoded.count, 1);
+        assert_eq!(decoded.key_size, 4);
+        assert_eq!(decoded.value_size, 4);
+        assert_eq!(decoded.bytes.as_ref(), &bytes);
+    }
+
+    #[test]
+    fn numeric_helpers_round_trip_bigint_and_decimal_bytes() {
+        let mut arena = AllocationArena::new();
+        let decimal = Decimal::from_i128_with_scale(1925, 2);
+        let decimal_ptr = encode_decimal(decimal, &mut arena);
+        let decimal_bytes =
+            read_decimal_constant_bytes(decimal_ptr.cast()).expect("decimal bytes should read");
+        assert_eq!(decimal_bytes.len(), DECIMAL_ENCODED_BYTES);
+        assert_eq!(
+            parse_decimal(decimal_ptr).expect("decimal should decode"),
+            decimal
+        );
+
+        let bigint = BigInt::from(-12345i64);
+        let bigint_ptr = encode_bigint(bigint.clone(), &mut arena);
+        let bigint_bytes =
+            read_bigint_constant_bytes(bigint_ptr.cast()).expect("bigint bytes should read");
+        assert_eq!(
+            parse_bigint(bigint_ptr).expect("bigint should decode"),
+            bigint
+        );
+        assert_eq!(bigint_bytes[0], 2);
+    }
+
+    #[test]
+    fn arena_alloc_helper_returns_aligned_stable_memory() {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let pointer = with_active_arena(Rc::clone(&arena), || aivi_arena_alloc(24, 16));
+        assert!(!pointer.is_null());
+        assert_eq!((pointer as usize) % 16, 0);
     }
 }

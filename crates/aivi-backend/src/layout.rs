@@ -1,6 +1,6 @@
 use std::fmt;
 
-use aivi_hir::BuiltinType;
+use aivi_hir::{BuiltinType, ItemId as HirItemId};
 
 use crate::LayoutId;
 
@@ -111,6 +111,7 @@ pub struct RecordFieldLayout {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VariantLayout {
     pub name: Box<str>,
+    pub field_count: usize,
     pub payload: Option<LayoutId>,
 }
 
@@ -161,8 +162,10 @@ pub enum LayoutKind {
         arguments: Vec<LayoutId>,
     },
     Opaque {
+        item: Option<HirItemId>,
         name: Box<str>,
         arguments: Vec<LayoutId>,
+        variants: Vec<VariantLayout>,
     },
 }
 
@@ -274,13 +277,70 @@ impl fmt::Display for Layout {
                 "anonymous-domain via {} carrier=layout{} [{}]",
                 surface_member, carrier, self.abi
             ),
-            LayoutKind::Domain { name, arguments } | LayoutKind::Opaque { name, arguments } => {
+            LayoutKind::Domain { name, arguments } => {
                 write!(f, "{name}")?;
                 for argument in arguments {
                     write!(f, " layout{argument}")?;
                 }
                 write!(f, " [{}]", self.abi)
             }
+            LayoutKind::Opaque {
+                item,
+                name,
+                arguments,
+                variants,
+            } => {
+                if let Some(item) = item {
+                    write!(f, "item{}:", item.as_raw())?;
+                }
+                write!(f, "{name}")?;
+                for argument in arguments {
+                    write!(f, " layout{argument}")?;
+                }
+                if !variants.is_empty() {
+                    f.write_str(" opaque(")?;
+                    for (index, variant) in variants.iter().enumerate() {
+                        if index > 0 {
+                            f.write_str(", ")?;
+                        }
+                        write!(f, "{}", variant.name)?;
+                        if variant.field_count > 1 {
+                            write!(f, "/{}", variant.field_count)?;
+                        }
+                        if let Some(payload) = variant.payload {
+                            write!(f, " layout{payload}")?;
+                        }
+                    }
+                    f.write_str(")")?;
+                }
+                write!(f, " [{}]", self.abi)
+            }
         }
     }
+}
+
+pub(crate) fn opaque_variant_tag(variant_name: &str) -> i64 {
+    variant_name.bytes().fold(5381u64, |hash, byte| {
+        hash.wrapping_mul(33).wrapping_add(byte as u64)
+    }) as i64
+}
+
+pub(crate) fn variant_layouts(kind: &LayoutKind) -> Option<&[VariantLayout]> {
+    match kind {
+        LayoutKind::Sum(variants) => Some(variants),
+        LayoutKind::Opaque { variants, .. } if !variants.is_empty() => Some(variants),
+        _ => None,
+    }
+}
+
+pub(crate) fn variant_payload_layout(
+    kind: &LayoutKind,
+    variant_name: &str,
+) -> Option<Option<LayoutId>> {
+    Some(
+        variant_layouts(kind)?
+            .iter()
+            .find(|variant| variant.name.as_ref() == variant_name)?
+            .payload,
+    )
 }
