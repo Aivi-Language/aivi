@@ -188,6 +188,34 @@ fn check_accepts_parameterized_from_selectors() {
 }
 
 #[test]
+fn check_accepts_negative_constructor_arguments() {
+    let dir = TempDir::new("check-negative-constructor-arguments");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "type Vector = Delta Int Int\n",
+            "value diagonal = Delta -1 -1\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected negative constructor argument program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for negative constructor argument program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn check_accepts_source_pattern_reactive_updates() {
     let dir = TempDir::new("check-source-pattern-reactive-update");
     let path = dir.write(

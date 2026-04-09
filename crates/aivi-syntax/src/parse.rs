@@ -824,11 +824,13 @@ impl<'a> Parser<'a> {
         }
         if let Some(trailing_index) = self.next_significant_in_range(cursor, header_colon) {
             self.diagnostics.push(
-                Diagnostic::error("`from` entry headers only accept unannotated parameters before `:`")
-                    .with_primary_label(
-                        self.source_span_of_token(trailing_index),
-                        "remove this token or move its type into a preceding `type` line",
-                    ),
+                Diagnostic::error(
+                    "`from` entry headers only accept unannotated parameters before `:`",
+                )
+                .with_primary_label(
+                    self.source_span_of_token(trailing_index),
+                    "remove this token or move its type into a preceding `type` line",
+                ),
             );
         }
         cursor = header_colon + 1;
@@ -959,11 +961,13 @@ impl<'a> Parser<'a> {
         };
         if let Some(trailing_index) = self.next_significant_in_range(cursor, end) {
             self.diagnostics.push(
-                Diagnostic::error("`from`-block type annotations must contain exactly one type expression")
-                    .with_primary_label(
-                        self.source_span_of_token(trailing_index),
-                        "this token is outside the attached type annotation",
-                    ),
+                Diagnostic::error(
+                    "`from`-block type annotations must contain exactly one type expression",
+                )
+                .with_primary_label(
+                    self.source_span_of_token(trailing_index),
+                    "this token is outside the attached type annotation",
+                ),
             );
         }
         Some(PendingTypeAnnotation {
@@ -4938,7 +4942,8 @@ impl<'a> Parser<'a> {
         while let Some(index) = self.peek_nontrivia(*cursor, end) {
             if self.expr_should_stop(index, stop)
                 || self.tokens[index].kind().is_pipe_operator()
-                || self.binary_operator(index).is_some()
+                || (self.binary_operator(index).is_some()
+                    && !self.starts_negative_numeric_application_argument(&expr, index, end))
             {
                 break;
             }
@@ -4949,6 +4954,28 @@ impl<'a> Parser<'a> {
             expr = self.make_apply_expr(expr, argument);
         }
         Some(expr)
+    }
+
+    fn starts_negative_numeric_application_argument(
+        &self,
+        callee: &Expr,
+        index: usize,
+        end: usize,
+    ) -> bool {
+        self.tokens[index].kind() == TokenKind::Minus
+            && self.negative_numeric_literal_token(index, end).is_some()
+            && self.expr_can_accept_negative_numeric_argument(callee)
+    }
+
+    fn expr_can_accept_negative_numeric_argument(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Name(_)
+            | ExprKind::AmbientProjection(_)
+            | ExprKind::Projection { .. }
+            | ExprKind::Apply { .. } => true,
+            ExprKind::Group(inner) => self.expr_can_accept_negative_numeric_argument(inner),
+            _ => false,
+        }
     }
 
     fn parse_atomic_expr(
@@ -8436,7 +8463,10 @@ signal flashed: Signal Int = clicks
         );
         assert!(at_least.constraints.is_empty());
         assert!(matches!(
-            at_least.annotation.as_ref().map(|annotation| &annotation.kind),
+            at_least
+                .annotation
+                .as_ref()
+                .map(|annotation| &annotation.kind),
             Some(TypeExprKind::Arrow { .. })
         ));
 
@@ -9327,6 +9357,57 @@ instance Eq A => Eq (Option A) = {
             parsed.has_errors(),
             "spaced negative literals should stay invalid"
         );
+    }
+
+    #[test]
+    fn parser_accepts_negative_numeric_constructor_arguments() {
+        let (_, parsed) =
+            load("type Vector = Delta Int Int\nvalue step = Delta -1 -1\nvalue subtract = 4-3\n");
+
+        assert!(
+            !parsed.has_errors(),
+            "negative constructor arguments should parse cleanly: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        match &parsed.module.items[1] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::Apply { callee, arguments }) => {
+                    assert!(
+                        matches!(callee.kind, ExprKind::Name(ref name) if name.text == "Delta")
+                    );
+                    assert_eq!(arguments.len(), 2);
+                    assert!(
+                        matches!(arguments[0].kind, ExprKind::Integer(ref literal) if literal.raw == "-1")
+                    );
+                    assert!(
+                        matches!(arguments[1].kind, ExprKind::Integer(ref literal) if literal.raw == "-1")
+                    );
+                }
+                other => panic!("expected constructor application, got {other:?}"),
+            },
+            other => panic!("expected value item, got {other:?}"),
+        }
+
+        match &parsed.module.items[2] {
+            Item::Value(item) => match item.expr_body().map(|expr| &expr.kind) {
+                Some(ExprKind::Binary {
+                    operator,
+                    left,
+                    right,
+                }) => {
+                    assert_eq!(*operator, BinaryOperator::Subtract);
+                    assert!(
+                        matches!(left.kind, ExprKind::Integer(ref literal) if literal.raw == "4")
+                    );
+                    assert!(
+                        matches!(right.kind, ExprKind::Integer(ref literal) if literal.raw == "3")
+                    );
+                }
+                other => panic!("expected compact subtraction, got {other:?}"),
+            },
+            other => panic!("expected value item, got {other:?}"),
+        }
     }
 
     #[test]

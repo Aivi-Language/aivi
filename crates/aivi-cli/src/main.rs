@@ -6,7 +6,7 @@ mod run_session;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     env,
     ffi::OsString,
     fs,
@@ -3943,85 +3943,11 @@ impl<'a> RunFragmentCompiler<'a> {
                     source_location(self.sources, site.span)
                 )
             })?;
-        let required_signal_globals = backend.items()[item]
-            .body
-            .map(|kernel| backend.kernels()[kernel].global_items.clone())
-            .unwrap_or_default()
+        let required_signal_globals = self
+            .collect_fragment_signal_global_items(backend, item, expr)?
             .into_iter()
             .map(|fragment_item| {
-                let fragment_decl = backend.items().get(fragment_item).ok_or_else(|| {
-                    format!(
-                        "compiled runtime fragment {} references missing backend item {}",
-                        expr.as_raw(),
-                        fragment_item
-                    )
-                })?;
-                let core_item = unit
-                    .core
-                    .module
-                    .items()
-                    .get(fragment_decl.origin)
-                    .ok_or_else(|| {
-                        format!(
-                            "compiled runtime fragment {} lost core→HIR origin for backend item {}",
-                            expr.as_raw(),
-                            fragment_item
-                        )
-                    })?;
-                let hir_item = core_item.origin;
-                let hir_lookup = self.module.items().get(hir_item);
-                let signal_name: Box<str> = match hir_lookup {
-                    Some(Item::Signal(signal)) => signal.name.text().into(),
-                    Some(_) => return Ok(None),
-                    None => core_item.name.clone(),
-                };
-                let runtime_item = if hir_lookup.is_some() {
-                    self.runtime_backend_by_hir
-                        .get(&hir_item)
-                        .copied()
-                        .ok_or_else(|| {
-                            format!(
-                                "runtime fragment {} needs signal `{signal_name}` but the live run backend has no matching item",
-                                expr.as_raw(),
-                            )
-                        })?
-                } else {
-                    self.runtime_backend
-                        .items()
-                        .iter()
-                        .find_map(|(backend_item, item)| {
-                            (item.name.as_ref() == signal_name.as_ref()
-                                && matches!(item.kind, aivi_backend::ItemKind::Signal(_)))
-                            .then_some(backend_item)
-                        })
-                        .ok_or_else(|| {
-                            format!(
-                                "runtime fragment {} needs signal `{signal_name}` (synthetic origin) but no matching signal found",
-                                expr.as_raw(),
-                            )
-                        })?
-                };
-                let runtime_decl = self
-                    .runtime_backend
-                    .items()
-                    .get(runtime_item)
-                    .ok_or_else(|| {
-                        format!(
-                            "live run backend is missing runtime item {} for signal `{signal_name}`",
-                            runtime_item,
-                        )
-                    })?;
-                if !matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
-                    return Err(format!(
-                        "live run backend item {} for signal `{signal_name}` is not a signal",
-                        runtime_item,
-                    ));
-                }
-                Ok(Some(CompiledRunSignalGlobal {
-                    fragment_item,
-                    runtime_item,
-                    name: signal_name,
-                }))
+                self.link_fragment_signal_global(expr, &unit, backend, fragment_item)
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
@@ -4034,6 +3960,134 @@ impl<'a> RunFragmentCompiler<'a> {
             item,
             required_signal_globals,
         })
+    }
+
+    fn collect_fragment_signal_global_items(
+        &self,
+        backend: &BackendProgram,
+        entry_item: BackendItemId,
+        expr: HirExprId,
+    ) -> Result<Vec<BackendItemId>, String> {
+        let mut required = BTreeSet::new();
+        let mut visited_items = BTreeSet::new();
+        let mut kernels = backend.items()[entry_item]
+            .body
+            .into_iter()
+            .collect::<Vec<_>>();
+        while let Some(kernel_id) = kernels.pop() {
+            let kernel = &backend.kernels()[kernel_id];
+            for &fragment_item in &kernel.global_items {
+                if !visited_items.insert(fragment_item) {
+                    continue;
+                }
+                let decl = backend.items().get(fragment_item).ok_or_else(|| {
+                    format!(
+                        "compiled runtime fragment {} references missing backend item {}",
+                        expr.as_raw(),
+                        fragment_item
+                    )
+                })?;
+                match decl.kind {
+                    aivi_backend::ItemKind::Signal(_) => {
+                        required.insert(fragment_item);
+                    }
+                    _ => {
+                        let Some(body) = decl.body else {
+                            return Err(format!(
+                                "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
+                                expr.as_raw(),
+                                fragment_item,
+                                decl.name
+                            ));
+                        };
+                        kernels.push(body);
+                    }
+                }
+            }
+        }
+        Ok(required.into_iter().collect())
+    }
+
+    fn link_fragment_signal_global(
+        &self,
+        expr: HirExprId,
+        unit: &CompiledRuntimeFragmentUnit,
+        backend: &BackendProgram,
+        fragment_item: BackendItemId,
+    ) -> Result<Option<CompiledRunSignalGlobal>, String> {
+        let fragment_decl = backend.items().get(fragment_item).ok_or_else(|| {
+            format!(
+                "compiled runtime fragment {} references missing backend item {}",
+                expr.as_raw(),
+                fragment_item
+            )
+        })?;
+        let core_item = unit
+            .core
+            .module
+            .items()
+            .get(fragment_decl.origin)
+            .ok_or_else(|| {
+                format!(
+                    "compiled runtime fragment {} lost core→HIR origin for backend item {}",
+                    expr.as_raw(),
+                    fragment_item
+                )
+            })?;
+        let hir_item = core_item.origin;
+        let hir_lookup = self.module.items().get(hir_item);
+        let signal_name: Box<str> = match hir_lookup {
+            Some(Item::Signal(signal)) => signal.name.text().into(),
+            Some(_) => return Ok(None),
+            None => core_item.name.clone(),
+        };
+        let runtime_item = if hir_lookup.is_some() {
+            self.runtime_backend_by_hir
+                .get(&hir_item)
+                .copied()
+                .ok_or_else(|| {
+                    format!(
+                        "runtime fragment {} needs signal `{signal_name}` but the live run backend has no matching item",
+                        expr.as_raw(),
+                    )
+                })?
+        } else {
+            self.runtime_backend
+                .items()
+                .iter()
+                .find_map(|(backend_item, item)| {
+                    (item.name.as_ref() == signal_name.as_ref()
+                        && matches!(item.kind, aivi_backend::ItemKind::Signal(_)))
+                    .then_some(backend_item)
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "runtime fragment {} needs signal `{signal_name}` (synthetic origin) but no matching signal found",
+                        expr.as_raw(),
+                    )
+                })?
+        };
+        let runtime_decl = self
+            .runtime_backend
+            .items()
+            .get(runtime_item)
+            .ok_or_else(|| {
+                format!(
+                    "live run backend is missing runtime item {} for signal `{signal_name}`",
+                    runtime_item,
+                )
+            })?;
+        if !matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
+            return Err(format!(
+                "live run backend item {} for signal `{signal_name}` is not a signal",
+                runtime_item,
+            ));
+        }
+        Ok(Some(CompiledRunSignalGlobal {
+            fragment_item,
+            runtime_item,
+            name: signal_name,
+        }))
     }
 }
 
@@ -6393,6 +6447,81 @@ export (Greeting, Farewell)
         assert!(required.contains(&"scoreLine"));
         assert!(required.contains(&"statusLine"));
         assert!(required.contains(&"dirLine"));
+    }
+
+    #[test]
+    fn prepare_run_tracks_transitive_signal_globals_for_parameterized_from_selectors() {
+        let artifact = prepare_run_from_text(
+            "parameterized-from-run.aivi",
+            r#"
+type State = { count: Int }
+
+type Int -> State -> Bool
+func atLeastFromState = threshold state => state.count >= threshold
+
+signal state : Signal State = { count: 1 }
+
+from state = {
+    type Int -> Bool
+    atLeast threshold: atLeastFromState threshold
+}
+
+value view =
+    <Window title="AIVI">
+        <Button label="Go" sensitive={atLeast 0} />
+    </Window>
+"#,
+            None,
+        )
+        .expect("parameterized from-selector view should prepare for run");
+        let required = artifact
+            .required_signal_globals
+            .values()
+            .map(|name| name.as_ref())
+            .collect::<Vec<_>>();
+        assert!(
+            required.contains(&"state"),
+            "hydration fragments calling parameterized from-selectors should project their transitive signal dependency"
+        );
+    }
+
+    #[test]
+    fn prepare_run_accepts_truthy_falsy_parameterized_from_selectors_with_same_block_signals() {
+        let artifact = prepare_run_from_text(
+            "parameterized-from-truthy-falsy-run.aivi",
+            r#"
+type State = { ready: Bool, label: Text }
+
+signal state : Signal State = { ready: True, label: "Go" }
+
+from state = {
+    ready: .ready
+    baseLabel: .label
+
+    type Text -> Text
+    cellLabel fallback: ready
+     T|> baseLabel
+     F|> fallback
+}
+
+value view =
+    <Window title="AIVI">
+        <Button label={cellLabel "."} />
+    </Window>
+"#,
+            None,
+        )
+        .expect("same-block truthy/falsy parameterized from-selector view should prepare for run");
+        assert_eq!(artifact.view_name.as_ref(), "view");
+        let required = artifact
+            .required_signal_globals
+            .values()
+            .map(|name| name.as_ref())
+            .collect::<Vec<_>>();
+        assert!(
+            required.contains(&"state"),
+            "truthy/falsy parameterized from-selector fragments should keep the source signal as a runtime dependency"
+        );
     }
 
     #[test]

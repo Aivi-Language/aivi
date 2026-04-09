@@ -1189,11 +1189,7 @@ impl<'a> Lowerer<'a> {
             .collect()
     }
 
-    fn lower_from_entry_item(
-        &mut self,
-        from_item: &syn::FromItem,
-        entry: &syn::FromEntry,
-    ) -> Item {
+    fn lower_from_entry_item(&mut self, from_item: &syn::FromItem, entry: &syn::FromEntry) -> Item {
         if entry.parameters.is_empty() {
             Item::Signal(self.lower_from_entry_signal(from_item, entry))
         } else {
@@ -1293,7 +1289,10 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn wrap_from_entry_annotation_result_in_signal(&self, annotation: &syn::TypeExpr) -> syn::TypeExpr {
+    fn wrap_from_entry_annotation_result_in_signal(
+        &self,
+        annotation: &syn::TypeExpr,
+    ) -> syn::TypeExpr {
         match &annotation.kind {
             syn::TypeExprKind::Arrow { parameter, result } => syn::TypeExpr {
                 span: annotation.span,
@@ -12401,7 +12400,8 @@ signal game : Signal Int = stepOnTick tick
         let result_annotation = at_least
             .annotation
             .expect("parameterized from entry should keep its synthesized reactive result type");
-        let TypeKind::Apply { callee, arguments } = &lowered.module().types()[result_annotation].kind
+        let TypeKind::Apply { callee, arguments } =
+            &lowered.module().types()[result_annotation].kind
         else {
             panic!("expected selector result to be wrapped in `Signal`");
         };

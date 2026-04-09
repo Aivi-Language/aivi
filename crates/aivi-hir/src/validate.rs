@@ -6772,11 +6772,13 @@ impl Validator<'_> {
             pair.truthy_expr,
             env,
             subject_plan.truthy_payload.as_ref(),
+            subject,
         );
         let falsy_info = typing.infer_truthy_falsy_branch(
             pair.falsy_expr,
             env,
             subject_plan.falsy_payload.as_ref(),
+            subject,
         );
         let truthy_ty = truthy_info.ty.clone();
         let falsy_ty = falsy_info.ty.clone();

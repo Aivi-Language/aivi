@@ -55,11 +55,14 @@ Semantics:
 - Plain expressions such as `renderBoard` become `state |> renderBoard`.
 - Parameterized entries still produce reactive results, so a surface annotation like
   `type Int -> Bool` is wrapped internally as `Int -> Signal Bool`.
+- Inside parameterized entry bodies, direct references to earlier same-block signals and
+  selector calls are treated as one outer signal payload read in body contexts. That lift
+  also applies inside `T|>` / `F|>` branches when the branch subject is a `Signal Bool`.
 - A standalone `type` line inside the block attaches to the immediately following
   entry only.
 - Entry boundaries are indentation-sensitive: a peer `name:` line starts a new derived signal; deeper-indented lines stay attached to the current entry.
 
-**Source**: `crates/aivi-syntax/src/parse.rs` (`parse_from_item`, `parse_from_entries`), `crates/aivi-hir/src/lower.rs` (`lower_from_item`, `prepend_from_source`)
+**Source**: `crates/aivi-syntax/src/parse.rs` (`parse_from_item`, `parse_from_entries`), `crates/aivi-hir/src/lower.rs` (`lower_from_item`, `prepend_from_source`), `crates/aivi-hir/src/typecheck_context.rs` (`infer_transform_stage_info`, `infer_truthy_falsy_branch`, `infer_pipe_expr`), `crates/aivi-hir/src/general_expr_elaboration.rs` (`lower_truthy_falsy_stage`)
 
 ## Signal Merge Syntax
 

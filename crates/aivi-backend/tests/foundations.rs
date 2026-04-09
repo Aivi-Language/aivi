@@ -595,6 +595,114 @@ value answer =
 }
 
 #[test]
+fn lowers_backend_bodies_for_parameterized_from_selectors() {
+    let backend = lower_text(
+        "backend-parameterized-from-selectors.aivi",
+        r#"
+type State = { score: Int, ready: Bool }
+
+signal state : Signal State = { score: 0, ready: True }
+
+from state = {
+    type Bool
+    readyNow: .ready
+    type Int -> Bool
+    atLeast threshold: .score >= threshold
+}
+
+signal currentReady : Signal Bool = readyNow
+signal thresholdMet : Signal Bool = atLeast 0
+"#,
+    );
+
+    let at_least = find_item(&backend, "atLeast");
+    let item = &backend.items()[at_least];
+    assert_eq!(item.parameters.len(), 1);
+    assert!(
+        item.body.is_some(),
+        "parameterized from-selector should lower a backend body kernel"
+    );
+
+    let threshold_met = find_item(&backend, "thresholdMet");
+    assert!(
+        backend.items()[threshold_met].body.is_some(),
+        "signals calling parameterized from-selectors should keep backend bodies"
+    );
+}
+
+#[test]
+fn lowers_backend_bodies_for_parameterized_from_selectors_using_source_helpers() {
+    let backend = lower_text(
+        "backend-parameterized-from-selectors-helpers.aivi",
+        r#"
+type State = { score: Int, ready: Bool }
+
+type Int -> State -> Bool
+func atLeastFromState = threshold state => state.ready and state.score >= threshold
+
+signal state : Signal State = { score: 0, ready: True }
+
+from state = {
+    type Int -> Bool
+    atLeast threshold: atLeastFromState threshold
+}
+
+signal thresholdMet : Signal Bool = atLeast 0
+"#,
+    );
+
+    let at_least = find_item(&backend, "atLeast");
+    let item = &backend.items()[at_least];
+    assert_eq!(item.parameters.len(), 1);
+    assert!(
+        item.body.is_some(),
+        "helper-backed parameterized from-selector should lower a backend body kernel"
+    );
+
+    let threshold_met = find_item(&backend, "thresholdMet");
+    assert!(
+        backend.items()[threshold_met].body.is_some(),
+        "signals depending on helper-backed parameterized selectors should keep backend bodies"
+    );
+}
+
+#[test]
+fn lowers_backend_bodies_for_parameterized_from_selectors_using_same_block_signals() {
+    let backend = lower_text(
+        "backend-parameterized-from-selectors-same-block-signals.aivi",
+        r#"
+type State = { score: Int, ready: Bool }
+
+signal state : Signal State = { score: 1, ready: True }
+
+from state = {
+    score: .score
+    ready: .ready
+
+    type Int -> Bool
+    atLeast threshold: ready and score >= threshold
+}
+
+signal thresholdMet : Signal Bool = atLeast 0
+"#,
+    );
+
+    let at_least = find_item(&backend, "atLeast");
+    let item = &backend.items()[at_least];
+    assert_eq!(item.parameters.len(), 1);
+    assert!(
+        item.body.is_some(),
+        "same-block signal-backed parameterized from-selector should lower a backend body kernel"
+    );
+
+    let threshold_met = find_item(&backend, "thresholdMet");
+    assert!(
+        backend.items()[threshold_met].body.is_some(),
+        "signals depending on same-block signal-backed parameterized selectors should keep backend bodies"
+    );
+}
+
+#[test]
 fn runtime_evaluates_item_bodies_and_source_kernels() {
     let backend = lower_text(
         "backend-runtime-values.aivi",

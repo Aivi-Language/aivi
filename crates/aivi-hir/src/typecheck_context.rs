@@ -2703,6 +2703,26 @@ impl<'a> GateTypeContext<'a> {
         info
     }
 
+    fn maybe_use_ambient_signal_payload(
+        &self,
+        expr_id: ExprId,
+        ambient: Option<&GateType>,
+        mut info: GateExprInfo,
+    ) -> GateExprInfo {
+        if ambient.is_some()
+            && matches!(
+                self.module.exprs()[expr_id].kind,
+                ExprKind::Name(_) | ExprKind::Apply { .. }
+            )
+        {
+            if let Some(GateType::Signal(payload)) = info.ty.clone() {
+                info.ty = Some(*payload);
+                info.actual = None;
+            }
+        }
+        info
+    }
+
     pub(crate) fn import_value_type(&self, import_id: ImportId) -> Option<GateType> {
         let import = &self.module.imports()[import_id];
         if let Some(ty) = import.callable_type.as_ref() {
@@ -5269,22 +5289,30 @@ impl<'a> GateTypeContext<'a> {
                     if let Some(info) = self
                         .infer_builtin_constructor_apply_expr(reference, &arguments, env, ambient)
                     {
-                        return self.finalize_expr_info(info);
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
                     }
                     if let Some(info) =
                         self.infer_domain_member_apply(reference, &arguments, env, ambient)
                     {
-                        return self.finalize_expr_info(info);
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
                     }
                     if let Some(info) =
                         self.infer_class_member_apply_expr(reference, &arguments, env, ambient)
                     {
-                        return self.finalize_expr_info(info);
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
                     }
                     if let Some(info) = self.infer_same_module_constructor_apply_expr(
                         reference, &arguments, env, ambient,
                     ) {
-                        return self.finalize_expr_info(info);
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
                     }
                     if let ResolutionState::Resolved(TermResolution::Item(item_id)) =
                         reference.resolution.as_ref()
@@ -5296,12 +5324,16 @@ impl<'a> GateTypeContext<'a> {
                     if let Some(info) = self
                         .infer_polymorphic_function_apply_expr(reference, &arguments, env, ambient)
                     {
-                        return self.finalize_expr_info(info);
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
                     }
                     if let Some(info) =
                         self.infer_import_function_apply_expr(reference, &arguments, env, ambient)
                     {
-                        return self.finalize_expr_info(info);
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
                     }
                 }
                 let mut info = self.infer_expr(callee, env, ambient);
@@ -5359,7 +5391,8 @@ impl<'a> GateTypeContext<'a> {
             }
             ExprKind::Unary { operator, expr } => {
                 let mut info = self.infer_expr(expr, env, ambient);
-                info.ty = match (operator, info.ty.as_ref()) {
+                let operand_ty = info.actual_gate_type().or(info.ty.clone());
+                info.ty = match (operator, operand_ty.as_ref()) {
                     (crate::hir::UnaryOperator::Not, Some(ty)) if ty.is_bool() => {
                         Some(GateType::Primitive(BuiltinType::Bool))
                     }
@@ -5373,9 +5406,9 @@ impl<'a> GateTypeContext<'a> {
                 right,
             } => {
                 let mut info = self.infer_expr(left, env, ambient);
-                let left_ty = info.ty.clone();
+                let left_ty = info.actual_gate_type().or(info.ty.clone());
                 let right_info = self.infer_expr(right, env, ambient);
-                let right_ty = right_info.ty.clone();
+                let right_ty = right_info.actual_gate_type().or(right_info.ty.clone());
                 info.merge(right_info);
                 info.ty = if let (Some(left), Some(right)) = (left_ty.as_ref(), right_ty.as_ref()) {
                     match select_domain_binary_operator(self.module, self, operator, left, right) {
@@ -5483,7 +5516,7 @@ impl<'a> GateTypeContext<'a> {
             }
             ExprKind::Markup(_) => GateExprInfo::default(),
         };
-        self.finalize_expr_info(info)
+        self.finalize_expr_info(self.maybe_use_ambient_signal_payload(expr_id, ambient, info))
     }
 
     pub(crate) fn infer_name(
@@ -7006,9 +7039,13 @@ impl<'a> GateTypeContext<'a> {
         expr_id: ExprId,
         env: &GateExprEnv,
         payload_subject: Option<&GateType>,
+        subject: &GateType,
     ) -> GateExprInfo {
         match payload_subject {
             Some(subject) => self.infer_pipe_body(expr_id, env, subject),
+            None if subject.is_signal() => {
+                self.infer_expr(expr_id, env, Some(subject.gate_payload()))
+            }
             None => self.infer_expr(expr_id, env, None),
         }
     }
@@ -7024,6 +7061,7 @@ impl<'a> GateTypeContext<'a> {
             pair.truthy_expr,
             env,
             subject_plan.truthy_payload.as_ref(),
+            subject,
         );
         if !truthy.issues.is_empty() {
             return None;
@@ -7032,6 +7070,7 @@ impl<'a> GateTypeContext<'a> {
             pair.falsy_expr,
             env,
             subject_plan.falsy_payload.as_ref(),
+            subject,
         );
         if !falsy.issues.is_empty() {
             return None;
@@ -7056,6 +7095,7 @@ impl<'a> GateTypeContext<'a> {
             pair.truthy_expr,
             env,
             subject_plan.truthy_payload.as_ref(),
+            subject,
         );
         let truthy_ty = truthy.actual();
         info.merge(truthy);
@@ -7063,6 +7103,7 @@ impl<'a> GateTypeContext<'a> {
             pair.falsy_expr,
             env,
             subject_plan.falsy_payload.as_ref(),
+            subject,
         );
         let falsy_ty = falsy.actual();
         info.merge(falsy);
@@ -7213,7 +7254,8 @@ impl<'a> GateTypeContext<'a> {
             mut info,
             transform_mode: _,
         } = self.infer_pipe_body_inference(expr_id, env, subject);
-        info.ty = info.ty.map(|body_ty| match subject {
+        let body_ty = info.actual_gate_type().or(info.ty.clone());
+        info.ty = body_ty.map(|body_ty| match subject {
             GateType::Signal(_) => GateType::Signal(Box::new(body_ty)),
             _ => body_ty,
         });
@@ -7542,10 +7584,11 @@ impl<'a> GateTypeContext<'a> {
                     self.infer_transform_stage_info(*expr, &stage_env, &subject)
                 }
             };
-            if let Some(result_subject) = stage_info.ty.as_ref() {
+            let result_subject = stage_info.actual_gate_type().or(stage_info.ty.clone());
+            if let Some(result_subject) = result_subject.as_ref() {
                 extend_pipe_env_with_stage_memos(&mut pipe_env, stage, &subject, result_subject);
             }
-            current = stage_info.ty.clone();
+            current = result_subject;
             info.merge(stage_info);
         }
         info.ty = current;

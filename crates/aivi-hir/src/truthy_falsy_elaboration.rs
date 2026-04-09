@@ -349,9 +349,14 @@ fn elaborate_truthy_falsy_pair(
         pair.truthy_expr,
         env,
         subject_plan.truthy_payload.as_ref(),
+        subject,
     );
-    let falsy_info =
-        typing.infer_truthy_falsy_branch(pair.falsy_expr, env, subject_plan.falsy_payload.as_ref());
+    let falsy_info = typing.infer_truthy_falsy_branch(
+        pair.falsy_expr,
+        env,
+        subject_plan.falsy_payload.as_ref(),
+        subject,
+    );
     let branch_expected = truthy_falsy_branch_expected(subject, expected_result);
     let truthy_ty = truthy_info.ty.clone().or_else(|| branch_expected.clone());
     let falsy_ty = falsy_info.ty.clone().or_else(|| branch_expected.clone());

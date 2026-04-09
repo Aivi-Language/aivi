@@ -1110,7 +1110,12 @@ impl<'a> GeneralExprElaborator<'a> {
         let expected = function
             .annotation
             .and_then(|annotation| self.typing.lower_open_annotation(annotation));
-        let outcome = match self.lower_expr(function.body, &env, None, expected.as_ref()) {
+        let outcome = match self.lower_expr_with_signal_result_fallback(
+            function.body,
+            &env,
+            None,
+            expected.as_ref(),
+        ) {
             Ok(body) => GeneralExprOutcome::Lowered(body),
             Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
         };
@@ -1119,6 +1124,29 @@ impl<'a> GeneralExprElaborator<'a> {
             body_expr: function.body,
             parameters,
             outcome,
+        }
+    }
+
+    fn lower_expr_with_signal_result_fallback(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        expected: Option<&GateType>,
+    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        match expected {
+            Some(expected @ GateType::Signal(_)) => {
+                match self.lower_expr(expr_id, env, ambient, Some(expected)) {
+                    Ok(lowered_body) => Ok(lowered_body),
+                    Err(blockers) => match expected {
+                        GateType::Signal(payload) => self
+                            .lower_expr(expr_id, env, ambient, Some(payload.as_ref()))
+                            .map_err(|_| blockers),
+                        _ => unreachable!("signal result fallback only applies to `Signal A`"),
+                    },
+                }
+            }
+            _ => self.lower_expr(expr_id, env, ambient, expected),
         }
     }
 
@@ -1135,20 +1163,12 @@ impl<'a> GeneralExprElaborator<'a> {
         let expected = signal
             .annotation
             .and_then(|annotation| self.typing.lower_annotation(annotation));
-        let lowered = match expected.as_ref() {
-            Some(annotation @ GateType::Signal(_)) => {
-                match self.lower_expr(body, &GateExprEnv::default(), None, Some(annotation)) {
-                    Ok(lowered_body) => Ok(lowered_body),
-                    Err(blockers) => match annotation {
-                        GateType::Signal(payload) => self
-                            .lower_expr(body, &GateExprEnv::default(), None, Some(payload.as_ref()))
-                            .map_err(|_| blockers),
-                        _ => unreachable!("signal elaboration only falls back from `Signal A`"),
-                    },
-                }
-            }
-            _ => self.lower_expr(body, &GateExprEnv::default(), None, expected.as_ref()),
-        };
+        let lowered = self.lower_expr_with_signal_result_fallback(
+            body,
+            &GateExprEnv::default(),
+            None,
+            expected.as_ref(),
+        );
         match lowered {
             Ok(lowered_body)
                 if pipe.is_none() || signal_pipe_body_runtime_supported(&lowered_body) =>
@@ -1297,7 +1317,12 @@ impl<'a> GeneralExprElaborator<'a> {
                     };
                 }
             };
-        let outcome = match self.lower_expr(body_expr, &env, None, Some(&result_ty)) {
+        let outcome = match self.lower_expr_with_signal_result_fallback(
+            body_expr,
+            &env,
+            None,
+            Some(&result_ty),
+        ) {
             Ok(body) => GeneralExprOutcome::Lowered(body),
             Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
         };
@@ -1330,7 +1355,12 @@ impl<'a> GeneralExprElaborator<'a> {
                     };
                 }
             };
-        let outcome = match self.lower_expr(member.body, &env, None, Some(&result_ty)) {
+        let outcome = match self.lower_expr_with_signal_result_fallback(
+            member.body,
+            &env,
+            None,
+            Some(&result_ty),
+        ) {
             Ok(body) => GeneralExprOutcome::Lowered(body),
             Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
         };
@@ -2715,6 +2745,12 @@ impl<'a> GeneralExprElaborator<'a> {
                 Some(payload),
                 branch_expected.as_ref(),
             )?,
+            None if subject.is_signal() => self.lower_body_expr(
+                pair.truthy_expr,
+                &pair_env,
+                Some(subject.gate_payload()),
+                branch_expected.as_ref(),
+            )?,
             None => self.lower_expr(pair.truthy_expr, &pair_env, None, branch_expected.as_ref())?,
         };
         let falsy_body = match plan.falsy_payload.as_ref() {
@@ -2722,6 +2758,12 @@ impl<'a> GeneralExprElaborator<'a> {
                 pair.falsy_expr,
                 &pair_env,
                 Some(payload),
+                branch_expected.as_ref(),
+            )?,
+            None if subject.is_signal() => self.lower_body_expr(
+                pair.falsy_expr,
+                &pair_env,
+                Some(subject.gate_payload()),
                 branch_expected.as_ref(),
             )?,
             None => self.lower_expr(pair.falsy_expr, &pair_env, None, branch_expected.as_ref())?,
@@ -4011,7 +4053,7 @@ mod tests {
         lower_module, lower_module_with_resolver,
         resolver::RawHoistItem,
         typecheck::resolve_class_member_dispatch,
-        validate::{GateExprEnv, GateType, GateTypeContext},
+        validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
 
     fn item_name(module: &crate::Module, item: crate::ItemId) -> Option<&str> {
@@ -4658,6 +4700,102 @@ fun current:Int = tick:Unit=>    step direction
             },
             other => panic!("expected lowered function body, found {other:?}"),
         }
+    }
+
+    #[test]
+    fn infers_parameterized_from_selector_bodies_with_same_block_signal_reads() {
+        let lowered = lower_text(
+            "general-expr-parameterized-from-same-block-signals.aivi",
+            r#"
+type State = { score: Int, ready: Bool }
+
+signal state : Signal State = { score: 1, ready: True }
+
+from state = {
+    score: .score
+    ready: .ready
+
+    type Int -> Bool
+    atLeast threshold: ready and score >= threshold
+}
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "same-block selector example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let at_least = lowered
+            .module()
+            .items()
+            .iter()
+            .find_map(|(item_id, item)| match item {
+                crate::Item::Function(function) if function.name.text() == "atLeast" => {
+                    Some((item_id, function))
+                }
+                _ => None,
+            })
+            .expect("expected synthesized atLeast function");
+        let mut typing = GateTypeContext::new(lowered.module());
+        let env = gate_env_for_function(at_least.1, &mut typing);
+        let inferred = typing.infer_expr(at_least.1.body, &env, None);
+        assert_eq!(
+            inferred.ty,
+            Some(GateType::Signal(Box::new(GateType::Primitive(
+                BuiltinType::Bool
+            )))),
+            "same-block selector body should infer as Signal Bool: {inferred:?}"
+        );
+    }
+
+    #[test]
+    fn infers_truthy_falsy_parameterized_from_selector_bodies_with_same_block_signals() {
+        let lowered = lower_text(
+            "general-expr-parameterized-from-truthy-falsy.aivi",
+            r#"
+type State = { ready: Bool, label: Text }
+
+signal state : Signal State = { ready: True, label: "Go" }
+
+from state = {
+    ready: .ready
+    baseLabel: .label
+
+    type Text -> Text
+    cellLabel fallback: ready
+     T|> baseLabel
+     F|> fallback
+}
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "truthy/falsy selector example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let cell_label = lowered
+            .module()
+            .items()
+            .iter()
+            .find_map(|(item_id, item)| match item {
+                crate::Item::Function(function) if function.name.text() == "cellLabel" => {
+                    Some((item_id, function))
+                }
+                _ => None,
+            })
+            .expect("expected synthesized cellLabel function");
+        let mut typing = GateTypeContext::new(lowered.module());
+        let env = gate_env_for_function(cell_label.1, &mut typing);
+        let inferred = typing.infer_expr(cell_label.1.body, &env, None);
+        assert_eq!(
+            inferred.ty,
+            Some(GateType::Signal(Box::new(GateType::Primitive(
+                BuiltinType::Text
+            )))),
+            "truthy/falsy selector body should infer as Signal Text: {inferred:?}"
+        );
     }
 
     #[test]

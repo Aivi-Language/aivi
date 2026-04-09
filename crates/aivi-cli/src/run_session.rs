@@ -1308,31 +1308,48 @@ mod tests {
     fn prepare_run_from_path(path: &Path) -> crate::RunArtifact {
         let snapshot = crate::WorkspaceHirSnapshot::load(path)
             .expect("workspace snapshot should load for run-session test");
+        let parsed = snapshot.entry_parsed();
         assert!(
-            !crate::workspace_syntax_failed(&snapshot, |_, diagnostics| diagnostics
+            !parsed
+                .diagnostics()
                 .iter()
-                .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)),
-            "run-session test fixture should parse cleanly"
-        );
-        let (hir_failed, validation_failed) = crate::workspace_hir_failed(
-            &snapshot,
-            |_, diagnostics| {
-                diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
-            },
-            |_, diagnostics| {
-                diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
-            },
-        );
-        assert!(!hir_failed, "run-session test fixture should lower cleanly");
-        assert!(
-            !validation_failed,
-            "run-session test fixture should validate cleanly"
+                .any(|diagnostic| diagnostic.severity == aivi_base::Severity::Error),
+            "run-session test fixture should parse cleanly: {:?}",
+            parsed
+                .diagnostics()
+                .iter()
+                .filter(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
+                .map(|diagnostic| diagnostic.render(&snapshot.sources))
+                .collect::<Vec<_>>()
         );
         let lowered = snapshot.entry_hir();
+        let hir_diagnostics = lowered
+            .hir_diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
+            .map(|diagnostic| diagnostic.render(&snapshot.sources))
+            .collect::<Vec<_>>();
+        let validation_mode = if hir_diagnostics.is_empty() {
+            ValidationMode::RequireResolvedNames
+        } else {
+            ValidationMode::Structural
+        };
+        let validation_diagnostics = lowered
+            .module()
+            .validate(validation_mode)
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == aivi_base::Severity::Error)
+            .map(|diagnostic| diagnostic.render(&snapshot.sources))
+            .collect::<Vec<_>>();
+        assert!(
+            hir_diagnostics.is_empty(),
+            "run-session test fixture should lower cleanly: {hir_diagnostics:?}"
+        );
+        assert!(
+            validation_diagnostics.is_empty(),
+            "run-session test fixture should validate cleanly: {validation_diagnostics:?}"
+        );
         crate::prepare_run_artifact(&snapshot.sources, lowered.module(), &[], None)
             .expect("run-session test fixture should prepare")
     }
@@ -1359,6 +1376,12 @@ mod tests {
         );
         crate::prepare_run_artifact(&sources, lowered.module(), &[], None)
             .expect("run-session text fixture should prepare")
+    }
+
+    fn prepare_reversi_run() -> (PathBuf, crate::RunArtifact) {
+        let path = repo_path("demos/reversi.aivi");
+        let artifact = prepare_run_from_path(&path);
+        (path, artifact)
     }
 
     fn reversi_source_with_initial_board(initial_board: &str) -> String {
@@ -2094,8 +2117,7 @@ export main
     #[gtk::test]
     fn reversi_run_session_exposes_human_opening_move() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
-        let path = repo_path("demos/reversi.aivi");
-        let artifact = prepare_run_from_path(&path);
+        let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -2119,8 +2141,7 @@ export main
     #[gtk::test]
     fn reversi_stays_clickable_after_idling_on_human_turn() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
-        let path = repo_path("demos/reversi.aivi");
-        let artifact = prepare_run_from_path(&path);
+        let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -2156,8 +2177,7 @@ export main
     #[gtk::test]
     fn reversi_restart_resets_the_board_during_the_ai_turn() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
-        let path = repo_path("demos/reversi.aivi");
-        let artifact = prepare_run_from_path(&path);
+        let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -2232,8 +2252,7 @@ export main
     #[gtk::test]
     fn reversi_human_moves_paint_red_stones_promptly() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
-        let path = repo_path("demos/reversi.aivi");
-        let artifact = prepare_run_from_path(&path);
+        let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -2288,8 +2307,7 @@ export main
     #[gtk::test]
     fn reversi_stays_playable_after_the_first_full_turn() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
-        let path = repo_path("demos/reversi.aivi");
-        let artifact = prepare_run_from_path(&path);
+        let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -2370,8 +2388,7 @@ export main
     #[gtk::test]
     fn reversi_profiled_hydration_reports_fragment_and_kernel_activity() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
-        let path = repo_path("demos/reversi.aivi");
-        let artifact = prepare_run_from_path(&path);
+        let (path, artifact) = prepare_reversi_run();
         let shared = RunHydrationStaticState {
             view_name: artifact.view_name.clone(),
             module: artifact.module.clone(),

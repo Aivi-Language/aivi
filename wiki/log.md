@@ -118,6 +118,13 @@ Compared two designs for delayed/finite repeated signal triggering: a new source
 versus a recurrence/pipe-shaped temporal transform. Concluded that recurrence/temporal pipe is the
 more AIVI-like long-term home, while a narrow source helper is a pragmatic short-term fallback.  
 
+## [2026-04-09] ingest | From selector body signal lifting
+
+Documented the HIR/typecheck fix that lets parameterized `from` selector bodies read earlier
+same-block signals as payloads inside ambient body contexts, including `T|>` / `F|>` branches.
+Updated [signal-model.md](signal-model.md) to describe the lift and cite the relevant lowering and
+typecheck paths.
+
 ## [2026-04-09] ingest | truthy/falsy branch carriers
 
 Aligned the manual and wiki with the implemented `T|>` / `F|>` semantics.

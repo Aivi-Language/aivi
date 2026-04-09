@@ -131,19 +131,18 @@ type RayState = {
 
 value boardSize = 8
 value lastIndex = boardSize - 1
-value neg1 = 0 - 1
 value boardIndices = matrixIndices boardSize
 value raySteps = listTailOrEmpty boardIndices
 value emptyCoords : List Coord = []
 value computerFlashTicksTotal = 6
 
 value directions = [
-    Delta neg1 neg1,
-    Delta 0 neg1,
-    Delta 1 neg1,
-    Delta neg1 0,
+    Delta -1 -1,
+    Delta 0 -1,
+    Delta 1 -1,
+    Delta -1 0,
     Delta 1 0,
-    Delta neg1 1,
+    Delta -1 1,
     Delta 0 1,
     Delta 1 1
 ]
@@ -440,21 +439,26 @@ func winnerLine = score => score.human > score.computer
  T|> "You win."
  F|> trailingWinnerLine score
 
-type Coord -> Option Coord -> Bool
-func coordMatchesTarget = coord target => target
- ||> Some targetCoord -> coordEq coord targetCoord
- ||> None             -> False
-
 type Bool -> Text
 func legalMoveLabel = .
  T|> "◌"
  F|> "·"
 
 type Bool -> Disc -> Text
-func renderCell = legal disc => disc
+func renderStillCell = legal disc => disc
  ||> Black -> "🔴"
  ||> White -> "⚪"
  ||> Empty -> legalMoveLabel legal
+
+type Bool -> Bool -> Disc -> Text
+func renderTargetCell = matched legal disc => matched
+ T|> "⚪"
+ F|> renderStillCell legal disc
+
+type Coord -> Bool -> Option Coord -> Bool -> Disc -> Text
+func renderCell = coord legal target visible disc => target
+ ||> Some targetCoord -> renderTargetCell (visible and coordEq coord targetCoord) legal disc
+ ||> None -> renderStillCell legal disc
 
 type Int -> Int -> Int
 func cellKey = y x!
@@ -495,26 +499,35 @@ signal state = event
 
 from state = {
     board: .board
-    turn: .turn
-    snapshot: makeSnapshot board turn
     phase: .phase
-    computerPreparingActive: phaseIsComputerPreparing phase
-    computerAnimationActive: phaseHasComputerAnimation phase
-    computerTarget: phaseComputerTarget phase
-    computerTargetVisible: phaseShowsComputerTarget phase
-    gameOver: snapshotGameOver snapshot
-    score: countScore board
-    finalText: winnerLine score
+    snapshot: .snapshot
 
     type Coord -> Bool
-    legalAt coord: humanCanPlace coord snapshot
+    legalAt coord: phaseAllowsHumanInput phase
+     T|> humanCanPlace coord snapshot
+     F|> False
 
     type Coord -> Text
-    cellLabel coord: computerTargetVisible
-     T|> coordMatchesTarget coord computerTarget
-      T|> "⚪"
-      F|> renderCell (legalAt coord) (discAt board coord)
-     F|> renderCell (legalAt coord) (discAt board coord)
+    cellLabel coord: phaseAllowsHumanInput phase
+     T|> renderCell coord (humanCanPlace coord snapshot) (phaseComputerTarget phase) (phaseShowsComputerTarget phase) (discAt board coord)
+     F|> renderCell coord False (phaseComputerTarget phase) (phaseShowsComputerTarget phase) (discAt board coord)
+}
+
+from phase = {
+    computerPreparingActive: phaseIsComputerPreparing
+    computerAnimationActive: phaseHasComputerAnimation
+}
+
+from snapshot = {
+    gameOver: snapshotGameOver
+}
+
+from board = {
+    score: countScore
+}
+
+from score = {
+    finalText: winnerLine
 }
 
 value main =
