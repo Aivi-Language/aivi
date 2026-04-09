@@ -116,7 +116,7 @@ fn canonicalize_check_path(cwd: &Path, path: &Path) -> PathBuf {
         .unwrap_or_else(|_| cwd.join(path))
 }
 
-fn include_unused_check_warnings(
+fn include_project_workspace_file(
     workspace_root: &Path,
     bundled_stdlib_root: Option<&Path>,
     file_path: &Path,
@@ -173,7 +173,7 @@ fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
     let mut unused_count = 0usize;
     for file in &snapshot.files {
         let file_path = canonicalize_check_path(&cwd, &file.path(&snapshot.frontend.db));
-        if !include_unused_check_warnings(
+        if !include_project_workspace_file(
             &workspace_root,
             bundled_stdlib_root.as_deref(),
             &file_path,
@@ -386,7 +386,13 @@ fn test_file_with_context(
         return Ok(ExitCode::FAILURE);
     }
 
-    let tests = discover_workspace_tests(&snapshot);
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let entry_path = canonicalize_check_path(&cwd, path);
+    let workspace_root_raw = discover_workspace_root(&entry_path);
+    let workspace_root = fs::canonicalize(&workspace_root_raw).unwrap_or(workspace_root_raw);
+    let bundled_stdlib_root = discover_bundled_stdlib_root().ok();
+
+    let tests = discover_workspace_tests(&snapshot, &workspace_root, bundled_stdlib_root.as_deref());
     if tests.is_empty() {
         write_output_line(stderr, "no `@test` values found in the loaded workspace")?;
         return Ok(ExitCode::FAILURE);
@@ -520,9 +526,18 @@ struct DiscoveredWorkspaceTest {
     location: String,
 }
 
-fn discover_workspace_tests(snapshot: &WorkspaceHirSnapshot) -> Vec<DiscoveredWorkspaceTest> {
+fn discover_workspace_tests(
+    snapshot: &WorkspaceHirSnapshot,
+    workspace_root: &Path,
+    bundled_stdlib_root: Option<&Path>,
+) -> Vec<DiscoveredWorkspaceTest> {
     let mut tests = Vec::new();
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     for file in &snapshot.files {
+        let file_path = canonicalize_check_path(&cwd, &file.path(&snapshot.frontend.db));
+        if !include_project_workspace_file(workspace_root, bundled_stdlib_root, &file_path) {
+            continue;
+        }
         let hir = query_hir_module(&snapshot.frontend.db, *file);
         let module = hir.module();
         for (item_id, item) in module.items().iter() {
@@ -1001,4 +1016,3 @@ fn execute_test_task_value(
 fn write_output_line(target: &mut impl Write, text: &str) -> Result<(), String> {
     writeln!(target, "{text}").map_err(|error| format!("failed to write CLI output: {error}"))
 }
-

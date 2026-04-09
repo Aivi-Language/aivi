@@ -80,15 +80,15 @@ impl<'a> SourceContractTypeResolver<'a> {
         match ty {
             SourceContractType::Atom(atom) => self.resolve_atom(atom),
             SourceContractType::List(element) => Ok(ResolvedSourceContractType::Apply {
-                callee: ResolvedSourceTypeConstructor::Builtin(BuiltinType::List),
+                callee: self.resolve_named_constructor("List", BuiltinType::List, 1)?,
                 arguments: vec![self.resolve(*element)?],
             }),
             SourceContractType::Map { key, value } => Ok(ResolvedSourceContractType::Apply {
-                callee: ResolvedSourceTypeConstructor::Builtin(BuiltinType::Map),
+                callee: self.resolve_named_constructor("Map", BuiltinType::Map, 2)?,
                 arguments: vec![self.resolve_atom(key)?, self.resolve(*value)?],
             }),
             SourceContractType::Signal(payload) => Ok(ResolvedSourceContractType::Apply {
-                callee: ResolvedSourceTypeConstructor::Builtin(BuiltinType::Signal),
+                callee: self.resolve_named_constructor("Signal", BuiltinType::Signal, 1)?,
                 arguments: vec![self.resolve(*payload)?],
             }),
         }
@@ -139,6 +139,33 @@ impl<'a> SourceContractTypeResolver<'a> {
         }
     }
 
+    fn resolve_named_constructor(
+        &mut self,
+        name: &str,
+        builtin: BuiltinType,
+        expected_arity: usize,
+    ) -> Result<ResolvedSourceTypeConstructor, SourceContractResolutionError> {
+        match self.lookup_local_type(name) {
+            LocalTypeLookup::Missing => Ok(ResolvedSourceTypeConstructor::Builtin(builtin)),
+            LocalTypeLookup::Ambiguous => Err(SourceContractResolutionError {
+                kind: SourceContractResolutionErrorKind::AmbiguousType {
+                    name: name.to_owned(),
+                },
+            }),
+            LocalTypeLookup::Unique { item, arity } if arity == expected_arity => {
+                Ok(ResolvedSourceTypeConstructor::Item(item))
+            }
+            LocalTypeLookup::Unique { item, arity } => Err(SourceContractResolutionError {
+                kind: SourceContractResolutionErrorKind::ArityMismatch {
+                    name: name.to_owned(),
+                    expected: expected_arity,
+                    actual: arity,
+                    item,
+                },
+            }),
+        }
+    }
+
     fn lookup_local_type(&mut self, name: &str) -> LocalTypeLookup {
         if let Some(lookup) = self.local_types.get(name) {
             return *lookup;
@@ -146,14 +173,14 @@ impl<'a> SourceContractTypeResolver<'a> {
 
         let mut matches = self
             .module
-            .items()
+            .root_items()
             .iter()
-            .filter_map(|(item_id, item)| match item {
+            .filter_map(|item_id| match &self.module.items()[*item_id] {
                 Item::Type(item) => {
-                    (item.name.text() == name).then_some((item_id, item.parameters.len()))
+                    (item.name.text() == name).then_some((*item_id, item.parameters.len()))
                 }
                 Item::Domain(item) => {
-                    (item.name.text() == name).then_some((item_id, item.parameters.len()))
+                    (item.name.text() == name).then_some((*item_id, item.parameters.len()))
                 }
                 Item::Value(_)
                 | Item::Function(_)
@@ -397,6 +424,64 @@ mod tests {
                 expected: 0,
                 actual: 1,
                 item: decode_mode,
+            }
+        );
+    }
+
+    #[test]
+    fn same_module_container_types_shadow_builtin_source_contract_helpers() {
+        let mut module = Module::new(FileId::new(0));
+        let map = push_sum_type(&mut module, "Map", &["K", "V"]);
+        let signal = push_sum_type(&mut module, "Signal", &["A"]);
+        let mut resolver = SourceContractTypeResolver::new(&module);
+
+        assert_eq!(
+            resolver
+                .resolve(SourceContractType::map(
+                    SourceTypeAtom::primitive(PrimitiveType::Text),
+                    SourceTypeAtom::primitive(PrimitiveType::Text),
+                ))
+                .expect("same-module Map should shadow builtin helper"),
+            ResolvedSourceContractType::Apply {
+                callee: ResolvedSourceTypeConstructor::Item(map),
+                arguments: vec![
+                    ResolvedSourceContractType::Builtin(BuiltinType::Text),
+                    ResolvedSourceContractType::Builtin(BuiltinType::Text),
+                ],
+            }
+        );
+        assert_eq!(
+            resolver
+                .resolve(SourceContractType::signal(SourceTypeAtom::primitive(
+                    PrimitiveType::Bool,
+                )))
+                .expect("same-module Signal should shadow builtin helper"),
+            ResolvedSourceContractType::Apply {
+                callee: ResolvedSourceTypeConstructor::Item(signal),
+                arguments: vec![ResolvedSourceContractType::Builtin(BuiltinType::Bool)],
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_wrong_arity_for_shadowing_container_helpers() {
+        let mut module = Module::new(FileId::new(0));
+        let map = push_sum_type(&mut module, "Map", &["K"]);
+        let mut resolver = SourceContractTypeResolver::new(&module);
+
+        let wrong_arity = resolver
+            .resolve(SourceContractType::map(
+                SourceTypeAtom::primitive(PrimitiveType::Text),
+                SourceTypeAtom::primitive(PrimitiveType::Text),
+            ))
+            .expect_err("same-module Map with the wrong arity should be rejected");
+        assert_eq!(
+            wrong_arity.kind(),
+            &SourceContractResolutionErrorKind::ArityMismatch {
+                name: "Map".to_owned(),
+                expected: 2,
+                actual: 1,
+                item: map,
             }
         );
     }

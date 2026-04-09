@@ -659,7 +659,14 @@ func __aivi_text_nonEmpty = text => text == ""
     T|> False
     F|> True
 
+domain Duration over Int = {
+    literal ms : Int -> Duration
+}
+
+domain Retry over Int = {
+    literal times : Int -> Retry
+}
+
 "#;
 
 const MAX_COMPILE_TIME_RANGE_ELEMENTS: u64 = 4096;
-

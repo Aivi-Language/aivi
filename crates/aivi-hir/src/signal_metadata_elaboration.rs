@@ -87,12 +87,18 @@ fn compute_signal_metadata(
         if let Some(options) = source.options {
             roots.push(DependencyWork::Expr(options));
         }
-        collect_signal_dependencies(module, roots)
+        collect_all_signal_dependencies(module, roots)
     });
-    // Source options are tracked in SourceMetadata so lifecycle controls such as
-    // `activeWhen` do not become ordinary signal edges and create false cycles.
-    let (signal_dependencies, import_signal_dependencies) =
+    let (mut signal_dependencies, mut import_signal_dependencies) =
         collect_all_signal_dependencies(module, work);
+    if let Some((source_signal_dependencies, source_import_signal_dependencies)) =
+        source_dependencies.as_ref()
+    {
+        signal_dependencies.extend(source_signal_dependencies.iter().copied());
+        import_signal_dependencies.extend(source_import_signal_dependencies.iter().copied());
+        normalize_dependency_list(&mut signal_dependencies);
+        normalize_import_dependency_list(&mut import_signal_dependencies);
+    }
     let source_metadata = source.map(|source| {
         let source_dependencies = source_dependencies.unwrap_or_default();
         let provider = SourceProviderRef::from_path(source.provider.as_ref());
@@ -102,8 +108,8 @@ fn compute_signal_metadata(
                 module, source, &provider,
             ),
             provider,
-            is_reactive: !source_dependencies.is_empty(),
-            signal_dependencies: source_dependencies,
+            is_reactive: !source_dependencies.0.is_empty() || !source_dependencies.1.is_empty(),
+            signal_dependencies: source_dependencies.0,
         }
     });
     (
@@ -551,6 +557,11 @@ fn collect_signal_deps_internal(
 }
 
 fn normalize_dependency_list(dependencies: &mut Vec<ItemId>) {
+    dependencies.sort();
+    dependencies.dedup();
+}
+
+fn normalize_import_dependency_list(dependencies: &mut Vec<ImportId>) {
     dependencies.sort();
     dependencies.dedup();
 }

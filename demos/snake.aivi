@@ -164,7 +164,7 @@ func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (C
 type List Cell -> Cell -> Cell -> Int -> Text
 func renderRowAt = body head food y => indices boardW
   |> map (cellGlyph body head food y)
-  |> concat
+  |> join ""
 
 type Snake -> Cell -> Text
 func renderBoard = snake food => indices boardH

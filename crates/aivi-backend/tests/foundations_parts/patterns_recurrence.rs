@@ -200,12 +200,12 @@ fun mod_durations:Duration = a:Duration b:Duration=>    a % b
     let compiled = compile_program(&backend).expect("domain binary arithmetic should compile");
     let ptr = clif_pointer_ty();
 
-    for name in [
-        "add_durations",
-        "sub_durations",
-        "mul_durations",
-        "div_durations",
-        "mod_durations",
+    for (name, opcode) in [
+        ("add_durations", "iadd"),
+        ("sub_durations", "isub"),
+        ("mul_durations", "imul"),
+        ("div_durations", "sdiv"),
+        ("mod_durations", "srem"),
     ] {
         let item = find_item(&backend, name);
         let body = backend.items()[item]
@@ -224,8 +224,13 @@ fun mod_durations:Duration = a:Duration b:Duration=>    a % b
             artifact.clif
         );
         assert!(
-            !artifact.clif.contains("call"),
-            "{name} CLIF should not contain function calls, got:\n{}",
+            artifact.clif.contains(opcode),
+            "{name} CLIF should lower through {opcode}, got:\n{}",
+            artifact.clif
+        );
+        assert!(
+            artifact.clif.matches("call ").count() == 1,
+            "{name} CLIF should only call arena allocation for the boxed result, got:\n{}",
             artifact.clif
         );
     }

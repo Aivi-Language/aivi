@@ -1499,7 +1499,8 @@ use aivi.fs (
 @source process.cwd
 signal cwd : Signal Text
 
-fun mockedProbe:Task Text Bool = path:Text=>    exists "{cwd}/flag.txt"
+type Text -> Task Text Bool
+func mockedProbe = path=>    exists "{cwd}/flag.txt"
 
 @test
 @mock(probe, mockedProbe)
@@ -1517,7 +1518,8 @@ use aivi.fs (
 @source process.cwd
 signal cwd : Signal Text
 
-fun probe:Task Text Bool = path:Text=>    exists path
+type Text -> Task Text Bool
+func probe = path=>    exists path
 
 @test
 value service_smoke : Task Text Bool =

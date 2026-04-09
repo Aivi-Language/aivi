@@ -38,6 +38,7 @@ struct Namespaces {
     any_items: HashMap<String, Vec<NamedSite<ItemId>>>,
     provider_contracts: HashMap<String, Vec<NamedSite<ItemId>>>,
     literal_suffixes: HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
+    ambient_literal_suffixes: HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
     term_imports: HashMap<String, Vec<NamedSite<ImportId>>>,
     type_imports: HashMap<String, Vec<NamedSite<ImportId>>>,
     /// Names made available project-wide by `hoist` declarations.  Consulted
@@ -4797,7 +4798,7 @@ impl<'a> Lowerer<'a> {
                             && member.name.text().chars().count() >= 2
                         {
                             insert_site(
-                                &mut namespaces.literal_suffixes,
+                                &mut namespaces.ambient_literal_suffixes,
                                 member.name.text(),
                                 LiteralSuffixResolution {
                                     domain: item_id,
@@ -7533,7 +7534,31 @@ impl<'a> Lowerer<'a> {
             );
             return ResolutionState::Unresolved;
         }
-        let Some(candidates) = namespaces.literal_suffixes.get(suffix.text()) else {
+        let local_root_candidates: Vec<_> = namespaces
+            .literal_suffixes
+            .get(suffix.text())
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|candidate| self.module.root_items().contains(&candidate.value.domain))
+            .collect();
+        if !local_root_candidates.is_empty() {
+            return self.finish_literal_suffix_resolution(suffix, &local_root_candidates);
+        }
+
+        let imported_candidates: Vec<_> = namespaces
+            .literal_suffixes
+            .get(suffix.text())
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|candidate| !self.module.root_items().contains(&candidate.value.domain))
+            .collect();
+        if !imported_candidates.is_empty() {
+            return self.finish_literal_suffix_resolution(suffix, &imported_candidates);
+        }
+
+        let Some(candidates) = namespaces.ambient_literal_suffixes.get(suffix.text()) else {
             self.emit_error(
                 suffix.span(),
                 format!("unknown literal suffix `{}`", suffix.text()),
@@ -7542,6 +7567,14 @@ impl<'a> Lowerer<'a> {
             return ResolutionState::Unresolved;
         };
 
+        self.finish_literal_suffix_resolution(suffix, candidates)
+    }
+
+    fn finish_literal_suffix_resolution(
+        &mut self,
+        suffix: &Name,
+        candidates: &[NamedSite<LiteralSuffixResolution>],
+    ) -> ResolutionState<LiteralSuffixResolution> {
         if candidates.len() > 1 {
             let mut diagnostic =
                 Diagnostic::error(format!("literal suffix `{}` is ambiguous", suffix.text()))

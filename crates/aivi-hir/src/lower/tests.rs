@@ -4125,6 +4125,85 @@ fn local_module_definitions_shadow_builtins() {
 }
 
 #[test]
+fn local_domain_literal_suffixes_shadow_ambient_stdlib_suffixes() {
+    let lowered = crate::test_support::lower_text_with_stdlib(
+        "local-domain-suffix-shadowing.aivi",
+        r#"
+domain Duration over Int = {
+    literal sec : Int -> Duration
+}
+
+domain Retry over Int = {
+    literal times : Int -> Retry
+}
+
+value timeout : Duration = 5sec
+value retries : Retry = 3times
+"#,
+    );
+    assert!(
+        !lowered.has_errors(),
+        "local domain suffix shadowing should lower cleanly with stdlib hoists: {:?}",
+        lowered.diagnostics()
+    );
+
+    let duration_domain_id = lowered
+        .module()
+        .root_items()
+        .iter()
+        .find_map(|item_id| match &lowered.module().items()[*item_id] {
+            Item::Domain(item) if item.name.text() == "Duration" => Some(*item_id),
+            _ => None,
+        })
+        .expect("fixture should define a local Duration domain");
+    let retry_domain_id = lowered
+        .module()
+        .root_items()
+        .iter()
+        .find_map(|item_id| match &lowered.module().items()[*item_id] {
+            Item::Domain(item) if item.name.text() == "Retry" => Some(*item_id),
+            _ => None,
+        })
+        .expect("fixture should define a local Retry domain");
+
+    let timeout = match find_named_item(lowered.module(), "timeout") {
+        Item::Value(item) => item,
+        other => panic!("expected timeout to be a value item, found {other:?}"),
+    };
+    match &lowered.module().exprs()[timeout.body].kind {
+        ExprKind::SuffixedInteger(literal) => {
+            assert_eq!(literal.suffix.text(), "sec");
+            assert_eq!(
+                literal.resolution,
+                ResolutionState::Resolved(LiteralSuffixResolution {
+                    domain: duration_domain_id,
+                    member_index: 0,
+                })
+            );
+        }
+        other => panic!("expected timeout body to be a suffixed integer, found {other:?}"),
+    }
+
+    let retries = match find_named_item(lowered.module(), "retries") {
+        Item::Value(item) => item,
+        other => panic!("expected retries to be a value item, found {other:?}"),
+    };
+    match &lowered.module().exprs()[retries.body].kind {
+        ExprKind::SuffixedInteger(literal) => {
+            assert_eq!(literal.suffix.text(), "times");
+            assert_eq!(
+                literal.resolution,
+                ResolutionState::Resolved(LiteralSuffixResolution {
+                    domain: retry_domain_id,
+                    member_index: 0,
+                })
+            );
+        }
+        other => panic!("expected retries body to be a suffixed integer, found {other:?}"),
+    }
+}
+
+#[test]
 fn lowers_result_blocks_into_nested_result_case_pipes() {
     let lowered = lower_fixture("milestone-2/valid/result-block/main.aivi");
     assert!(

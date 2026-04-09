@@ -1579,7 +1579,22 @@ impl Validator<'_> {
         let mut signal_names: HashMap<ItemId, String> = HashMap::new();
         for (item_id, item) in self.module.items().iter() {
             if let Item::Signal(signal) = item {
-                signal_deps.insert(item_id, signal.signal_dependencies.clone());
+                let deps = if let Some(metadata) = signal.source_metadata.as_ref() {
+                    let lifecycle_dependencies = metadata
+                        .lifecycle_dependencies
+                        .merged()
+                        .into_iter()
+                        .collect::<HashSet<_>>();
+                    signal
+                        .signal_dependencies
+                        .iter()
+                        .copied()
+                        .filter(|dep| !lifecycle_dependencies.contains(dep))
+                        .collect()
+                } else {
+                    signal.signal_dependencies.clone()
+                };
+                signal_deps.insert(item_id, deps);
                 signal_names.insert(item_id, signal.name.text().to_owned());
             }
         }
@@ -8692,4 +8707,3 @@ impl Validator<'_> {
         }
     }
 }
-

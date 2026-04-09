@@ -841,7 +841,7 @@ mod tests {
                         branch: TruthyFalsyBranchKind::Truthy,
                         subject,
                         ..
-                    } if subject == "unknown subject"
+                    } if subject == "Bool"
                 )));
             }
             other => {
