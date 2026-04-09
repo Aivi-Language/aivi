@@ -192,7 +192,7 @@ type Int -> List Coord
 func coordsInRow = y =>
     listMap (coordAtRow y) boardIndices
 
-value allCoords : List Coord = listFlatMap coordsInRow boardIndices
+value allCoords = listFlatMap coordsInRow boardIndices
 
 type Option Disc -> Disc
 func discOrEmpty = .

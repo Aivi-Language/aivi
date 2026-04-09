@@ -80,7 +80,7 @@ export default defineConfig({
     socialLinks: [],
 
     footer: {
-      message: 'AIVI Language Manual',
+      message: '(c) 2026 by Andreas Herd',
     },
   },
 })
