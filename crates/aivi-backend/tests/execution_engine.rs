@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use aivi_backend::{
     BackendExecutableProgram, BackendExecutionEngine, BackendExecutionEngineKind,
-    BackendKernelArtifactCache, KernelEvaluator, RuntimeValue, compile_program,
+    BackendKernelArtifactCache, KernelEvaluator, RuntimeFloat, RuntimeValue, compile_program,
     lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::SourceDatabase;
@@ -45,6 +45,24 @@ fn find_item(program: &aivi_backend::Program, name: &str) -> aivi_backend::ItemI
         .find(|(_, item)| item.name.as_ref() == name)
         .map(|(id, _)| id)
         .unwrap_or_else(|| panic!("expected backend item `{name}`"))
+}
+
+fn apply_callable_item(
+    engine: &mut dyn BackendExecutionEngine,
+    program: &aivi_backend::Program,
+    item: aivi_backend::ItemId,
+    arguments: Vec<RuntimeValue>,
+    globals: &BTreeMap<aivi_backend::ItemId, RuntimeValue>,
+) -> RuntimeValue {
+    let callable = engine
+        .evaluate_item(item, globals)
+        .expect("engine should evaluate callable items before applying them");
+    let kernel = program.items()[item]
+        .body
+        .expect("callable item should lower into a body kernel");
+    engine
+        .apply_runtime_callable(kernel, callable, arguments, globals)
+        .expect("engine should execute callable items")
 }
 
 #[test]
@@ -135,6 +153,125 @@ value greeting:Text = "hello {host}"
 }
 
 #[test]
+fn jit_engine_executes_helper_backed_bytes_kernels() {
+    let backend = lower_text(
+        "backend-engine-bytes-jit.aivi",
+        r#"
+use aivi.core.bytes (
+    append,
+    repeat,
+    slice,
+    toText
+)
+
+fun makeBlob:Bytes = seed:Int=>
+    append (repeat seed 1) (slice 1 3 (repeat (seed + 1) 4))
+
+fun decodeBlob:(Option Text) = seed:Int=>
+    toText (makeBlob seed)
+"#,
+    );
+    let make_blob = find_item(&backend, "makeBlob");
+    let decode_blob = find_item(&backend, "decodeBlob");
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+
+    assert_eq!(engine.kind(), BackendExecutionEngineKind::Jit);
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            make_blob,
+            vec![RuntimeValue::Int(65)],
+            &BTreeMap::new()
+        ),
+        RuntimeValue::Bytes(b"ABB".to_vec().into())
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            decode_blob,
+            vec![RuntimeValue::Int(65)],
+            &BTreeMap::new()
+        ),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Text("ABB".into())))
+    );
+}
+
+#[test]
+fn jit_engine_executes_inline_scalar_option_kernels() {
+    let backend = lower_text(
+        "backend-engine-inline-option-jit.aivi",
+        r#"
+fun passMaybeInt:(Option Int) = value:(Option Int)=>    value
+fun passMaybeFloat:(Option Float) = value:(Option Float)=>    value
+fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
+"#,
+    );
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    let globals = BTreeMap::new();
+    let option_float = RuntimeValue::OptionSome(Box::new(RuntimeValue::Float(
+        RuntimeFloat::new(3.5).expect("finite float should build a runtime float"),
+    )));
+
+    assert_eq!(engine.kind(), BackendExecutionEngineKind::Jit);
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "passMaybeInt"),
+            vec![RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(-7)))],
+            &globals
+        ),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(-7)))
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "passMaybeInt"),
+            vec![RuntimeValue::OptionNone],
+            &globals
+        ),
+        RuntimeValue::OptionNone
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "passMaybeFloat"),
+            vec![option_float.clone()],
+            &globals
+        ),
+        option_float
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "passMaybeBool"),
+            vec![RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(
+                false
+            )))],
+            &globals
+        ),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(false)))
+    );
+    assert_eq!(
+        apply_callable_item(
+            engine.as_mut(),
+            &backend,
+            find_item(&backend, "passMaybeBool"),
+            vec![RuntimeValue::OptionNone],
+            &globals
+        ),
+        RuntimeValue::OptionNone
+    );
+}
+
+#[test]
 fn jit_engine_falls_back_for_unsupported_kernel_layouts() {
     let backend = lower_text(
         "backend-engine-list-fallback.aivi",
@@ -162,8 +299,20 @@ fn jit_engine_matches_interpreter_results_for_supported_and_fallback_items() {
     let backend = lower_text(
         "backend-engine-parity.aivi",
         r#"
+use aivi.core.bytes (
+    append,
+    repeat,
+    slice,
+    toText
+)
+
 value host:Text = "Ada"
 value greeting:Text = "hello {host}"
+fun makeBlob:Bytes = seed:Int=>    append (repeat seed 1) (slice 1 3 (repeat (seed + 1) 4))
+fun decodeBlob:(Option Text) = seed:Int=>    toText (makeBlob seed)
+fun passMaybeInt:(Option Int) = value:(Option Int)=>    value
+fun passMaybeFloat:(Option Float) = value:(Option Float)=>    value
+fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
 value ids:List Int = [1, 2, 3]
 "#,
     );
@@ -171,6 +320,9 @@ value ids:List Int = [1, 2, 3]
     let mut jit = executable.create_engine();
     let mut interpreter = KernelEvaluator::new(&backend);
     let globals = BTreeMap::new();
+    let option_float = RuntimeValue::OptionSome(Box::new(RuntimeValue::Float(
+        RuntimeFloat::new(3.5).expect("finite float should build a runtime float"),
+    )));
 
     assert_eq!(jit.kind(), BackendExecutionEngineKind::Jit);
     for item in ["greeting", "ids"] {
@@ -181,6 +333,61 @@ value ids:List Int = [1, 2, 3]
             interpreter
                 .evaluate_item(item_id, &globals)
                 .expect("interpreter should evaluate the same item")
+        );
+    }
+    for item in ["makeBlob", "decodeBlob"] {
+        let item_id = find_item(&backend, item);
+        let kernel = backend.items()[item_id]
+            .body
+            .expect("callable item should lower into a body kernel");
+        let jit_callable = jit
+            .evaluate_item(item_id, &globals)
+            .expect("JIT engine should evaluate the callable item");
+        let interpreter_callable = interpreter
+            .evaluate_item(item_id, &globals)
+            .expect("interpreter should evaluate the callable item");
+        assert_eq!(
+            jit.apply_runtime_callable(kernel, jit_callable, vec![RuntimeValue::Int(65)], &globals)
+                .expect("JIT engine should execute the callable item"),
+            interpreter
+                .apply_runtime_callable(
+                    kernel,
+                    interpreter_callable,
+                    vec![RuntimeValue::Int(65)],
+                    &globals
+                )
+                .expect("interpreter should execute the same callable item")
+        );
+    }
+    for (item, argument) in [
+        (
+            "passMaybeInt",
+            RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(-7))),
+        ),
+        ("passMaybeInt", RuntimeValue::OptionNone),
+        ("passMaybeFloat", option_float.clone()),
+        (
+            "passMaybeBool",
+            RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(false))),
+        ),
+        ("passMaybeBool", RuntimeValue::OptionNone),
+    ] {
+        let item_id = find_item(&backend, item);
+        assert_eq!(
+            apply_callable_item(
+                jit.as_mut(),
+                &backend,
+                item_id,
+                vec![argument.clone()],
+                &globals
+            ),
+            apply_callable_item(
+                &mut interpreter,
+                &backend,
+                item_id,
+                vec![argument],
+                &globals
+            )
         );
     }
 }

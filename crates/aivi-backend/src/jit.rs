@@ -511,6 +511,9 @@ enum MarshalPlan {
     Bool,
     Text,
     Bytes,
+    OptionInt,
+    OptionFloat,
+    OptionBool,
     OptionText,
     OptionBytes,
 }
@@ -524,6 +527,9 @@ impl MarshalPlan {
             LayoutKind::Primitive(PrimitiveType::Text) => Some(Self::Text),
             LayoutKind::Primitive(PrimitiveType::Bytes) => Some(Self::Bytes),
             LayoutKind::Option { element } => match &program.layouts().get(*element)?.kind {
+                LayoutKind::Primitive(PrimitiveType::Int) => Some(Self::OptionInt),
+                LayoutKind::Primitive(PrimitiveType::Float) => Some(Self::OptionFloat),
+                LayoutKind::Primitive(PrimitiveType::Bool) => Some(Self::OptionBool),
                 LayoutKind::Primitive(PrimitiveType::Text) => Some(Self::OptionText),
                 LayoutKind::Primitive(PrimitiveType::Bytes) => Some(Self::OptionBytes),
                 _ => None,
@@ -539,8 +545,20 @@ impl MarshalPlan {
             | (Self::Bool, RuntimeValue::Bool(_))
             | (Self::Text, RuntimeValue::Text(_))
             | (Self::Bytes, RuntimeValue::Bytes(_))
+            | (Self::OptionInt, RuntimeValue::OptionNone)
+            | (Self::OptionFloat, RuntimeValue::OptionNone)
+            | (Self::OptionBool, RuntimeValue::OptionNone)
             | (Self::OptionText, RuntimeValue::OptionNone)
             | (Self::OptionBytes, RuntimeValue::OptionNone) => true,
+            (Self::OptionInt, RuntimeValue::OptionSome(value)) => {
+                matches!(value.as_ref(), RuntimeValue::Int(_))
+            }
+            (Self::OptionFloat, RuntimeValue::OptionSome(value)) => {
+                matches!(value.as_ref(), RuntimeValue::Float(_))
+            }
+            (Self::OptionBool, RuntimeValue::OptionSome(value)) => {
+                matches!(value.as_ref(), RuntimeValue::Bool(_))
+            }
             (Self::OptionText, RuntimeValue::OptionSome(value)) => {
                 matches!(value.as_ref(), RuntimeValue::Text(_))
             }
@@ -562,8 +580,29 @@ impl MarshalPlan {
             (Self::Bytes, RuntimeValue::Bytes(value)) => Some(AbiValue::Pointer(
                 encode_len_prefixed_bytes(value.as_ref(), arena),
             )),
+            (Self::OptionInt, RuntimeValue::OptionNone)
+            | (Self::OptionFloat, RuntimeValue::OptionNone)
+            | (Self::OptionBool, RuntimeValue::OptionNone) => Some(AbiValue::I128(0)),
             (Self::OptionText, RuntimeValue::OptionNone)
             | (Self::OptionBytes, RuntimeValue::OptionNone) => Some(AbiValue::Pointer(ptr::null())),
+            (Self::OptionInt, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+                RuntimeValue::Int(value) => {
+                    Some(AbiValue::I128(encode_inline_option_bits(*value as u64)))
+                }
+                _ => None,
+            },
+            (Self::OptionFloat, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+                RuntimeValue::Float(value) => Some(AbiValue::I128(encode_inline_option_bits(
+                    value.to_f64().to_bits(),
+                ))),
+                _ => None,
+            },
+            (Self::OptionBool, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+                RuntimeValue::Bool(value) => {
+                    Some(AbiValue::I128(encode_inline_option_bits(u64::from(*value))))
+                }
+                _ => None,
+            },
             (Self::OptionText, RuntimeValue::OptionSome(value)) => match value.as_ref() {
                 RuntimeValue::Text(value) => Some(AbiValue::Pointer(encode_len_prefixed_bytes(
                     value.as_bytes(),
@@ -608,10 +647,31 @@ impl MarshalPlan {
             (Self::Bytes, RuntimeValue::Bytes(value)) => {
                 write_pointer_cell(cell, encode_len_prefixed_bytes(value.as_ref(), arena))
             }
+            (Self::OptionInt, RuntimeValue::OptionNone)
+            | (Self::OptionFloat, RuntimeValue::OptionNone)
+            | (Self::OptionBool, RuntimeValue::OptionNone) => write_i128_cell(cell, 0),
             (Self::OptionText, RuntimeValue::OptionNone)
             | (Self::OptionBytes, RuntimeValue::OptionNone) => {
                 write_pointer_cell(cell, ptr::null())
             }
+            (Self::OptionInt, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+                RuntimeValue::Int(value) => {
+                    write_i128_cell(cell, encode_inline_option_bits(*value as u64))
+                }
+                _ => false,
+            },
+            (Self::OptionFloat, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+                RuntimeValue::Float(value) => {
+                    write_i128_cell(cell, encode_inline_option_bits(value.to_f64().to_bits()))
+                }
+                _ => false,
+            },
+            (Self::OptionBool, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+                RuntimeValue::Bool(value) => {
+                    write_i128_cell(cell, encode_inline_option_bits(u64::from(*value)))
+                }
+                _ => false,
+            },
             (Self::OptionText, RuntimeValue::OptionSome(value)) => match value.as_ref() {
                 RuntimeValue::Text(value) => {
                     write_pointer_cell(cell, encode_len_prefixed_bytes(value.as_bytes(), arena))
@@ -635,6 +695,9 @@ impl MarshalPlan {
                 Some(RuntimeValue::Float(RuntimeFloat::new(value)?))
             }
             (Self::Bool, AbiValue::I8(value)) => Some(RuntimeValue::Bool(value != 0)),
+            (Self::OptionInt, AbiValue::I128(bits)) => decode_inline_int_option(bits),
+            (Self::OptionFloat, AbiValue::I128(bits)) => decode_inline_float_option(bits),
+            (Self::OptionBool, AbiValue::I128(bits)) => decode_inline_bool_option(bits),
             (Self::Text, AbiValue::Pointer(value)) => decode_text(value),
             (Self::Bytes, AbiValue::Pointer(value)) => {
                 Some(RuntimeValue::Bytes(decode_len_prefixed_bytes(value)?))
@@ -694,6 +757,46 @@ fn write_pointer_cell(cell: &mut [u8], pointer: *const c_void) -> bool {
     }
     cell[..bytes.len()].copy_from_slice(&bytes);
     true
+}
+
+fn write_i128_cell(cell: &mut [u8], bits: u128) -> bool {
+    let bytes = bits.to_ne_bytes();
+    if cell.len() < bytes.len() {
+        return false;
+    }
+    cell[..bytes.len()].copy_from_slice(&bytes);
+    true
+}
+
+const fn encode_inline_option_bits(payload: u64) -> u128 {
+    ((payload as u128) << 64) | 1
+}
+
+fn decode_inline_int_option(bits: u128) -> Option<RuntimeValue> {
+    if (bits as u64) == 0 {
+        return Some(RuntimeValue::OptionNone);
+    }
+    Some(RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(
+        (bits >> 64) as u64 as i64,
+    ))))
+}
+
+fn decode_inline_float_option(bits: u128) -> Option<RuntimeValue> {
+    if (bits as u64) == 0 {
+        return Some(RuntimeValue::OptionNone);
+    }
+    Some(RuntimeValue::OptionSome(Box::new(RuntimeValue::Float(
+        RuntimeFloat::new(f64::from_bits((bits >> 64) as u64))?,
+    ))))
+}
+
+fn decode_inline_bool_option(bits: u128) -> Option<RuntimeValue> {
+    if (bits as u64) == 0 {
+        return Some(RuntimeValue::OptionNone);
+    }
+    Some(RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(
+        ((bits >> 64) as u64) != 0,
+    ))))
 }
 
 fn record_call(profile: &mut EvaluationCallProfile, elapsed: Duration, cache_hit: bool) {

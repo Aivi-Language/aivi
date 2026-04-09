@@ -1370,6 +1370,11 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
+            "aivi_bytes_append" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
             "aivi_bytes_repeat" => {
                 sig.params.push(AbiParam::new(types::I64));
                 sig.params.push(AbiParam::new(types::I64));
@@ -1542,6 +1547,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 match abi.ty {
                     types::I8 => Ok(AbiValueKind::I8),
                     types::I64 => Ok(AbiValueKind::I64),
+                    types::I128 => Ok(AbiValueKind::I128),
                     types::F64 => Ok(AbiValueKind::F64),
                     other => Err(CodegenError::UnsupportedLayout {
                         kernel: kernel_id,

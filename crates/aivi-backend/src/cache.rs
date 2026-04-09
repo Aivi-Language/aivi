@@ -810,13 +810,17 @@ fn compile_kernel_jit_cached_in_dir(
 #[cfg(test)]
 mod tests {
     use std::{
+        cell::RefCell,
         fs,
+        rc::Rc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use aivi_base::SourceDatabase;
     use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
-    use aivi_ffi_call::AbiValue;
+    use aivi_ffi_call::{
+        AbiValue, AllocationArena, FunctionCaller, decode_len_prefixed_bytes, with_active_arena,
+    };
     use aivi_lambda::{
         lower_module as lower_lambda_module, validate_module as validate_lambda_module,
     };
@@ -996,6 +1000,115 @@ mod tests {
     }
 
     #[test]
+    fn cached_jit_helper_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-helper-roundtrip.aivi",
+            r#"
+use aivi.core.bytes (
+    append,
+    repeat,
+    slice
+)
+
+fun makeBlob:Bytes = seed:Int=>
+    append (repeat seed 1) (slice 1 3 (repeat (seed + 1) 4))
+"#,
+        );
+        let make_blob = backend.items()[find_item(&backend, "makeBlob")]
+            .body
+            .expect("makeBlob should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, make_blob).expect(
+                "helper-backed JIT kernel should compile and persist a replayable cache artifact",
+            );
+            let fingerprint = compute_kernel_fingerprint(&backend, make_blob);
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                .expect("compiled helper-backed JIT kernel should write a disk artifact");
+            let replayed = instantiate_cached_jit_kernel(&backend, make_blob, &artifact)
+                .expect("serialized helper-backed JIT artifact should replay into a live kernel");
+
+            assert_eq!(
+                artifact
+                    .external_funcs
+                    .iter()
+                    .map(|symbol| symbol.as_ref())
+                    .collect::<Vec<_>>(),
+                vec!["aivi_bytes_append", "aivi_bytes_repeat", "aivi_bytes_slice"]
+            );
+            assert_eq!(
+                call_pointer_bytes(&compiled.caller, compiled.function, &[AbiValue::I64(65)]),
+                b"ABB".to_vec().into_boxed_slice()
+            );
+            assert_eq!(
+                call_pointer_bytes(&replayed.caller, replayed.function, &[AbiValue::I64(65)]),
+                b"ABB".to_vec().into_boxed_slice()
+            );
+        });
+    }
+
+    #[test]
+    fn cached_jit_inline_scalar_option_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-inline-option-roundtrip.aivi",
+            r#"
+fun passMaybeInt:(Option Int) = value:(Option Int)=>    value
+fun passMaybeFloat:(Option Float) = value:(Option Float)=>    value
+fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
+"#,
+        );
+
+        with_temp_cache_dir(|cache_root| {
+            for (name, argument, expected) in [
+                (
+                    "passMaybeInt",
+                    AbiValue::I128(encode_inline_option_bits((-7i64) as u64)),
+                    AbiValue::I128(encode_inline_option_bits((-7i64) as u64)),
+                ),
+                ("passMaybeInt", AbiValue::I128(0), AbiValue::I128(0)),
+                (
+                    "passMaybeFloat",
+                    AbiValue::I128(encode_inline_option_bits(3.5f64.to_bits())),
+                    AbiValue::I128(encode_inline_option_bits(3.5f64.to_bits())),
+                ),
+                (
+                    "passMaybeBool",
+                    AbiValue::I128(encode_inline_option_bits(0)),
+                    AbiValue::I128(encode_inline_option_bits(0)),
+                ),
+                ("passMaybeBool", AbiValue::I128(0), AbiValue::I128(0)),
+            ] {
+                let kernel = backend.items()[find_item(&backend, name)]
+                    .body
+                    .expect("inline option function should lower into a body kernel");
+                let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, kernel)
+                    .expect("inline scalar option kernel should compile and persist a replayable cache artifact");
+                let fingerprint = compute_kernel_fingerprint(&backend, kernel);
+                let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                    .expect("compiled inline scalar option kernel should write a disk artifact");
+                let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact).expect(
+                    "serialized inline scalar option artifact should replay into a live kernel",
+                );
+
+                assert_eq!(
+                    compiled
+                        .caller
+                        .call(compiled.function, &[argument])
+                        .expect("compiled inline scalar option kernel should execute"),
+                    expected
+                );
+                assert_eq!(
+                    replayed
+                        .caller
+                        .call(replayed.function, &[argument])
+                        .expect("replayed inline scalar option kernel should execute"),
+                    expected
+                );
+            }
+        });
+    }
+
+    #[test]
     fn compile_kernel_jit_cached_recovers_from_corrupt_disk_entry() {
         let backend = lower_text("cache-jit-corrupt.aivi", "value total:Int = 21 + 21\n");
         let total = backend.items()[find_item(&backend, "total")]
@@ -1039,5 +1152,28 @@ mod tests {
                 b"corrupt-jit-kernel-cache"
             );
         });
+    }
+
+    fn decode_pointer_bytes(value: AbiValue) -> Box<[u8]> {
+        let AbiValue::Pointer(pointer) = value else {
+            panic!("expected pointer ABI value from helper-backed bytes kernel, found {value:?}");
+        };
+        decode_len_prefixed_bytes(pointer)
+            .expect("helper-backed bytes kernel should return len-prefixed bytes")
+    }
+
+    fn call_pointer_bytes(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> Box<[u8]> {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+            .expect("helper-backed kernel should execute inside an active arena");
+        decode_pointer_bytes(value)
+    }
+
+    const fn encode_inline_option_bits(payload: u64) -> u128 {
+        ((payload as u128) << 64) | 1
     }
 }
