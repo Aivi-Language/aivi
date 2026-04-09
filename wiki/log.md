@@ -156,3 +156,12 @@ with subject-rooted `|>` or `<|` continuations without an explicit `=>`.
   `manual/guide/record-patterns.md`, `manual/guide/types.md`, `manual/guide/surface-feature-matrix.md`,
   and `syntax.md`: user-facing docs updated
 - `demos/reversi.aivi`: `recordOpponent` and `flipsFromDirection` now use the new sugar
+
+## [2026-04-09] ingest | reversi syntax showcase refactor
+
+Refactored `demos/reversi.aivi` to showcase a wider cross-section of the implemented surface sugar.
+
+- Expanded the demo's use of selected-subject headers, selector-based subject picks, record shorthand,
+  pipe memos, and `T|>` / `F|>` routing across the pure game-logic helpers
+- Kept the live GTK boolean helper chain on its older call shape after validation showed that path is
+  the stable one currently exercised by the Reversi run-session tests

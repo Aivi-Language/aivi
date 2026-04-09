@@ -159,6 +159,12 @@ The tiebreaker semantics (fewer flips wins when positional scores are equal) ali
 - `demos/reversi.aivi` now takes the fast path on human clicks: the board and turn update immediately, while the heavier `Snapshot` recompute is deferred by a 1ms timer tick.
 - The AI preview dot is computed directly from the current board so the human red stones paint before the delayed snapshot bookkeeping catches up.
 
+### 2026-04-09 syntax showcase note
+
+- `demos/reversi.aivi` now serves as a broader surface-sugar showcase as well as a gameplay demo.
+- Pure helper flows lean much harder on selected-subject headers, record-selector subject picks, record shorthand, pipe memos, and `T|>` / `F|>` routing.
+- The live GTK-facing boolean helper chain kept its older argument order after refactoring, because that remains the stable shape exercised by the Reversi run-session tests.
+
 ---
 
 ## Summary table

@@ -159,38 +159,31 @@ func buildInitialDisc = x y => (x, y)
 value initialBoardFallback = matrixFilled boardSize boardSize buildInitialDisc
 value initialBoard = resultWithDefault initialBoardFallback (matrixInit boardSize boardSize buildInitialDisc)
 value initialSnapshot = makeSnapshot initialBoard Human
-
-value initialGame : GameState = {
-    board: initialBoard,
-    turn: Human,
-    snapshot: initialSnapshot,
-    phase: HumanReady,
-    lastMove: None
-}
+value initialGame : GameState = makeGameState initialBoard Human initialSnapshot HumanReady None
 
 type Coord -> Bool
 func onBoard = .
  ||> Coord x y -> x >= 0 and x <= lastIndex and y >= 0 and y <= lastIndex
 
 type Coord -> Coord -> Bool
-func coordEq = left right =>
-    left == right
+func coordEq = left right!
+  |> left == .
 
 type Vector -> Coord -> Int -> Coord
 func advanceBy = vector coord steps => (vector, coord)
  ||> (Delta dx dy, Coord x y) -> Coord (x + dx * steps) (y + dy * steps)
 
 type Coord -> Vector -> List Coord
-func rayFrom = coord vector =>
-    listMap (advanceBy vector coord) raySteps
+func rayFrom = coord vector!
+  |> listMap (advanceBy vector coord) raySteps
 
 type Int -> Int -> Coord
 func coordAtRow = y x =>
     Coord x y
 
 type Int -> List Coord
-func coordsInRow = y =>
-    listMap (coordAtRow y) boardIndices
+func coordsInRow = y!
+  |> listMap (coordAtRow y) boardIndices
 
 value allCoords = listFlatMap coordsInRow boardIndices
 
@@ -200,20 +193,21 @@ func discOrEmpty = .
  ||> None      -> Empty
 
 type Matrix Disc -> Coord -> Disc
-func discAt = board coord => coord
+func discAt = board coord!
  ||> Coord x y -> discOrEmpty (matrixAt board x y)
 
 type Matrix Disc -> Coord -> Bool
-func emptyAt = board coord =>
-    discAt board coord == Empty
+func emptyAt = board coord!
+  |> discAt board
+  |> . == Empty
 
 type Disc -> Matrix Disc -> Coord -> (Matrix Disc)
-func paintDisc = disc board coord => coord
+func paintDisc = disc board coord!
  ||> Coord x y -> getOrElse board (matrixReplaceAt board (x, y) disc)
 
 type Disc -> Matrix Disc -> List Coord -> (Matrix Disc)
-func paintMany = disc board coords =>
-    reduce (paintDisc disc) board coords
+func paintMany = disc board coords!
+  |> reduce (paintDisc disc) board
 
 type RayState -> Coord -> RayState
 func recordOpponent = state! coord
@@ -224,27 +218,31 @@ func recordOpponent = state! coord
     }
 
 type RayState -> RayState
-func closeRay = state =>
-    state <| {
+func closeRay = state!
+    <| {
         collecting: False,
         closed: True,
     }
 
 type RayState -> RayState
-func invalidateRay = state =>
-    state <| {
+func invalidateRay = state!
+    <| {
         collecting: False,
         closed: False,
         trail: emptyCoords,
     }
 
 type Matrix Disc -> Disc -> RayState -> Coord -> RayState
-func finishRayState = board own state coord => discAt board coord == own
+func finishRayState = board own state coord!
+  |> discAt board
+  |> . == own
  T|> closeRay state
  F|> invalidateRay state
 
 type Matrix Disc -> Disc -> Disc -> RayState -> Coord -> RayState
-func advanceRayState = board own other state coord => discAt board coord == other
+func advanceRayState = board own other state coord!
+  |> discAt board
+  |> . == other
  T|> recordOpponent state coord
  F|> finishRayState board own state coord
 
@@ -254,12 +252,12 @@ func scanRayStep = board own other state coord => state.collecting
  F|> state
 
 type RayState -> List Coord
-func finalizeRay = state => state.closed
+func finalizeRay = state { closed! }
  T|> state.trail
  F|> emptyCoords
 
 type Matrix Disc -> Disc -> Disc -> List Coord -> List Coord
-func collectRay = board own other coords => coords
+func collectRay = board own other coords!
   |> reduce (scanRayStep board own other) { collecting: True, closed: False, trail: emptyCoords } #state
   |> finalizeRay state
 
@@ -271,55 +269,57 @@ func flipsFromDirection = board player coord vector!
   |> collectRay board own other ray
 
 type Matrix Disc -> Player -> Coord -> List Coord
-func flipsForMove = board player coord => onBoard coord and emptyAt board coord
+func flipsForMove = board player coord!
+  |> onBoard coord and emptyAt board coord
  T|> listFlatMap (flipsFromDirection board player coord) directions
  F|> emptyCoords
 
 type Matrix Disc -> Player -> Coord -> Bool
-func legalMoveAt = board player coord =>
-    listNonEmpty (flipsForMove board player coord)
+func legalMoveAt = board player coord!
+  |> flipsForMove board player
+  |> listNonEmpty
 
 type Matrix Disc -> Player -> List Coord
-func legalMovesFor = board player =>
-    listFilter (legalMoveAt board player) allCoords
+func legalMovesFor = board player!
+  |> listFilter (legalMoveAt board player) allCoords
 
-type Matrix Disc -> Player -> Coord -> List Coord -> (Matrix Disc)
-func placeWithFlips = board player coord flips => player
+type Matrix Disc -> Coord -> List Coord -> Player -> (Matrix Disc)
+func placeWithFlips = board coord flips player!
   |> discFor #disc
   |> listLength flips == 0
  T|> board
  F|> paintMany disc (paintDisc disc board coord) flips
 
 type Matrix Disc -> Player -> Coord -> (Matrix Disc)
-func applyPlacement = board player coord => coord
+func applyPlacement = board player coord!
   |> flipsForMove board player #flips
-  |> placeWithFlips board player coord flips
+  |> placeWithFlips board coord flips player
 
 type Matrix Disc -> Player -> Snapshot
 func makeSnapshot = board turn =>
     {
-        board: board,
-        turn: turn,
+        board,
+        turn,
         humanMoves: legalMovesFor board Human,
         computerMoves: legalMovesFor board Computer
     }
 
 type Snapshot -> List Coord
-func snapshotCurrentMoves = snapshot => snapshot.turn
+func snapshotCurrentMoves = snapshot { turn! }
  ||> Human    -> snapshot.humanMoves
  ||> Computer -> snapshot.computerMoves
 
 type Snapshot -> List Coord
-func snapshotOtherMoves = snapshot => snapshot.turn
+func snapshotOtherMoves = snapshot { turn! }
  ||> Human    -> snapshot.computerMoves
  ||> Computer -> snapshot.humanMoves
 
 type Snapshot -> Bool
-func snapshotGameOver = snapshot =>
-    not (listNonEmpty snapshot.humanMoves or listNonEmpty snapshot.computerMoves)
+func snapshotGameOver = snapshot { humanMoves! }
+  |> #human not (listNonEmpty human or listNonEmpty snapshot.computerMoves)
 
 type Snapshot -> Bool
-func snapshotPassPending = snapshot => snapshot
+func snapshotPassPending = snapshot!
   |> snapshotCurrentMoves #currentMoves
   |> snapshotOtherMoves snapshot #otherMoves
   |> snapshotGameOver snapshot
@@ -327,32 +327,35 @@ func snapshotPassPending = snapshot => snapshot
  F|> not (listNonEmpty currentMoves) and listNonEmpty otherMoves
 
 type Snapshot -> Bool
-func snapshotAiPending = snapshot =>
-    snapshot.turn == Computer and listNonEmpty snapshot.computerMoves
+func snapshotAiPending = snapshot { turn! }
+ ||> Human    -> False
+ ||> Computer -> listNonEmpty snapshot.computerMoves
 
 type Matrix Disc -> Score
-func countScore = board => board
+func countScore = board!
   |> matrixCount isHumanDisc #human
   |> matrixCount isComputerDisc board #computer
-  |> { human: human, computer: computer }
+  |> { human, computer }
 
 type Snapshot -> Option Coord
-func snapshotAiTarget = snapshot => snapshotAiPending snapshot
- T|> listHead snapshot.computerMoves
+func snapshotAiTarget = snapshot { computerMoves! }
+  |> #moves snapshotAiPending snapshot
+ T|> listHead moves
  F|> None
 
 type Coord -> Snapshot -> Bool
-func humanCanPlace = coord snapshot =>
-    snapshot.turn == Human and listContains coordEq coord snapshot.humanMoves
+func humanCanPlace = coord snapshot { turn! }
+ ||> Human    -> listContains coordEq coord snapshot.humanMoves
+ ||> Computer -> False
 
 type Matrix Disc -> Player -> Snapshot -> Phase -> Option Move -> GameState
 func makeGameState = board turn snapshot phase lastMove =>
     {
-        board: board,
-        turn: turn,
-        snapshot: snapshot,
-        phase: phase,
-        lastMove: lastMove
+        board,
+        turn,
+        snapshot,
+        phase,
+        lastMove
     }
 
 type Matrix Disc -> Option Move -> GameState
@@ -360,58 +363,62 @@ func humanReadyState = board lastMove => Human
   |> makeSnapshot board #snapshot
   |> makeGameState board Human snapshot HumanReady lastMove
 
-type Matrix Disc -> Snapshot -> Option Move -> GameState
-func computerPreparingState = board snapshot lastMove =>
-    makeGameState board Computer snapshot ComputerPreparing lastMove
+type Matrix Disc -> Option Move -> Snapshot -> GameState
+func computerPreparingState = board lastMove snapshot!
+  |> makeGameState board Computer snapshot ComputerPreparing lastMove
 
-type Matrix Disc -> Snapshot -> Option Move -> GameState
-func settleComputerSnapshot = board snapshot lastMove => snapshotPassPending snapshot
+type Matrix Disc -> Option Move -> Snapshot -> GameState
+func settleComputerSnapshot = board lastMove snapshot!
+  |> snapshotPassPending
  T|> humanReadyState board (Some (Pass Computer))
  F|> makeGameState board Computer snapshot HumanReady lastMove
 
-type Matrix Disc -> Snapshot -> Option Move -> GameState
-func startComputerTurnFromSnapshot = board snapshot lastMove => snapshotAiTarget snapshot
+type Matrix Disc -> Option Move -> Snapshot -> GameState
+func startComputerTurnFromSnapshot = board lastMove snapshot!
+  |> snapshotAiTarget
  ||> Some coord -> makeGameState board Computer snapshot (ComputerAnimating coord 0) lastMove
- ||> None       -> settleComputerSnapshot board snapshot lastMove
+ ||> None       -> settleComputerSnapshot board lastMove snapshot
 
 type Matrix Disc -> Option Move -> GameState
 func startComputerTurn = board lastMove => Computer
   |> makeSnapshot board #snapshot
-  |> startComputerTurnFromSnapshot board snapshot lastMove
+  |> startComputerTurnFromSnapshot board lastMove snapshot
 
-type Matrix Disc -> Snapshot -> Option Move -> GameState
-func commitComputerPlacementFromSnapshot = board snapshot lastMove => snapshotPassPending snapshot
- T|> computerPreparingState board snapshot lastMove
+type Matrix Disc -> Option Move -> Snapshot -> GameState
+func commitComputerPlacementFromSnapshot = board lastMove snapshot!
+  |> snapshotPassPending
+ T|> computerPreparingState board lastMove snapshot
  F|> makeGameState board Human snapshot HumanReady lastMove
 
-type GameState -> Coord -> GameState
-func clickGameState = state coord => humanCanPlace coord state.snapshot
- T|> computerPreparingState (applyPlacement state.board Human coord) state.snapshot (Some (Place Human coord))
+type Coord -> GameState -> GameState
+func clickGameState = coord state { snapshot! }
+  |> humanCanPlace coord
+ T|> computerPreparingState (applyPlacement state.board Human coord) (Some (Place Human coord)) state.snapshot
  F|> state
 
 type GameState -> GameState
-func beginComputerTurn = state =>
-    startComputerTurn state.board state.lastMove
+func beginComputerTurn = state { lastMove! }
+  |> startComputerTurn state.board
 
-type GameState -> Coord -> GameState
-func commitComputerPlacement = state coord => coord
-  |> applyPlacement state.board Computer #board
+type Coord -> GameState -> GameState
+func commitComputerPlacement = coord state { board! }
+  |> applyPlacement state.board Computer coord #board
   |> commitComputerPlacementToBoard state coord board
 
 type GameState -> Coord -> Matrix Disc -> GameState
-func commitComputerPlacementToBoard = state coord board => Human
-  |> makeSnapshot board #snapshot
-  |> commitComputerPlacementFromSnapshot board snapshot (Some (Place Computer coord))
+func commitComputerPlacementToBoard = state coord board!
+  |> makeSnapshot board Human #snapshot
+  |> commitComputerPlacementFromSnapshot board (Some (Place Computer coord)) snapshot
 
 type GameState -> Coord -> Int -> GameState
 func stepComputerAnimation = state coord step => step
   |> . + 1 #nextStep
   |> nextStep >= computerFlashTicksTotal
- T|> commitComputerPlacement state coord
+ T|> commitComputerPlacement coord state
  F|> state <| { phase: ComputerAnimating coord nextStep }
 
 type GameState -> GameState
-func advanceComputerAnimation = state => state.phase
+func advanceComputerAnimation = state { phase! }
  ||> ComputerAnimating coord step -> stepComputerAnimation state coord step
  ||> _                            -> state
 
@@ -420,7 +427,7 @@ func stepGame = event state => event
  ||> Reset             -> initialGame
  ||> StartComputerTurn -> beginComputerTurn state
  ||> ComputerFlashTick -> advanceComputerAnimation state
- ||> Click coord       -> clickGameState state coord
+ ||> Click coord       -> clickGameState coord state
  ||> Idle              -> state
 
 type Score -> Text
@@ -444,13 +451,14 @@ func coordAt = opt x y => opt
  ||> Some (Coord px py) -> px == x and py == y
 
 type Bool -> Text
-func legalMoveLabel = legal => legal
+func legalMoveLabel = .
  T|> "◌"
  F|> "·"
 
 type Option Coord -> Bool -> Int -> Int -> Bool
-func targetVisibleAt = target visible x y =>
-    visible and coordAt target x y
+func targetVisibleAt = target visible x y => visible
+ T|> coordAt target x y
+ F|> False
 
 type List Coord -> Option Coord -> Bool -> Int -> Int -> Text
 func emptyCellLabel = currentMoves target visible x y => targetVisibleAt target visible x y
@@ -458,8 +466,8 @@ func emptyCellLabel = currentMoves target visible x y => targetVisibleAt target 
  F|> legalMoveLabel (listContains coordEq (Coord x y) currentMoves)
 
 type Int -> Int -> Int
-func cellKey = y x =>
-    y * boardSize + x
+func cellKey = y x!
+  |> y * boardSize + .
 
 type Matrix Disc -> List Coord -> Option Coord -> Bool -> Int -> Int -> Text
 func boardCellLabelAt = board currentMoves target visible x y => matrixAt board x y
@@ -469,8 +477,9 @@ func boardCellLabelAt = board currentMoves target visible x y => matrixAt board 
  ||> None       -> "·"
 
 type Bool -> List Coord -> Int -> Int -> Bool
-func cellEnabledAt = humanTurn currentMoves x y =>
-    humanTurn and listContains coordEq (Coord x y) currentMoves
+func cellEnabledAt = humanTurn currentMoves x y => humanTurn
+ T|> listContains coordEq (Coord x y) currentMoves
+ F|> False
 
 signal placeCoord : Signal Coord
 signal restartClick : Signal Unit
