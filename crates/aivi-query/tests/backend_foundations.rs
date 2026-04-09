@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
+use aivi_backend::cache::compute_program_fingerprint;
 use aivi_core::{IncludedItems, RuntimeFragmentSpec};
 use aivi_hir::GeneralExprOutcome;
 use aivi_query::{
@@ -188,4 +189,42 @@ fn runtime_fragment_backend_unit_reuses_cached_result_until_fragment_changes() {
 
     assert!(!Arc::ptr_eq(&first, &third));
     assert_ne!(first.fingerprint(), third.fingerprint());
+}
+
+#[test]
+fn whole_program_backend_fingerprint_matches_backend_content_fingerprint() {
+    let db = RootDatabase::new();
+    let file = SourceFile::new(
+        &db,
+        PathBuf::from("whole-program-fingerprint.aivi"),
+        "value answer = 42\n".to_owned(),
+    );
+
+    let unit = whole_program_backend_unit(&db, file)
+        .expect("whole-program lowering should produce a backend unit");
+
+    assert_eq!(
+        unit.fingerprint().as_u64(),
+        compute_program_fingerprint(unit.backend())
+    );
+}
+
+#[test]
+fn runtime_fragment_backend_fingerprint_matches_backend_content_fingerprint() {
+    let db = RootDatabase::new();
+    let file = SourceFile::new(
+        &db,
+        PathBuf::from("fragment-fingerprint.aivi"),
+        "type Int -> Int\nfunc addOne = x =>\n    x + 1\n".to_owned(),
+    );
+
+    let hir = hir_module(&db, file);
+    let fragment = first_general_expr_fragment(hir.module());
+    let unit = runtime_fragment_backend_unit(&db, file, &fragment)
+        .expect("runtime fragment lowering should produce a backend unit");
+
+    assert_eq!(
+        unit.fingerprint().as_u64(),
+        compute_program_fingerprint(unit.backend())
+    );
 }

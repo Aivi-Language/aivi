@@ -6,7 +6,7 @@ use std::{
 };
 
 use aivi_backend::{
-    self as backend, cache::compute_program_cache_key, lower_module as lower_backend_module,
+    self as backend, cache::compute_program_fingerprint, lower_module as lower_backend_module,
     validate_program,
 };
 use aivi_core::{
@@ -639,7 +639,7 @@ fn runtime_fragment_cache_key(
 }
 
 fn stable_fingerprint(program: &backend::Program) -> StableFingerprint {
-    StableFingerprint::new(compute_program_cache_key(program))
+    StableFingerprint::new(compute_program_fingerprint(program))
 }
 
 fn workspace_modules_match(left: &[WorkspaceHirModule], right: &[WorkspaceHirModule]) -> bool {

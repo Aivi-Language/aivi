@@ -1,16 +1,20 @@
 //! Persistent cache surfaces for compiled backend artifacts.
 //!
-//! Program cache key: FNV hash of the backend program's canonical debug representation XOR'd with
-//! a rotated hash of the compiler version string.
-//! Kernel cache key: stable kernel fingerprint XOR'd with that same rotated compiler-version hash.
-//! Artifact format: custom binary with magic headers for validation.
+//! The backend keeps two related identities:
+//! - a stable content fingerprint for a backend program or kernel, used by query/runtime layers to
+//!   decide whether a compilation unit is semantically unchanged, and
+//! - a disk-cache key that layers compiler-version and codegen-target namespace data on top of that
+//!   stable fingerprint before reading or writing machine-code artifacts under XDG cache.
+//!
+//! Cache misses and corrupt entries are treated as non-fatal misses; the backend simply recompiles
+//! and rewrites a fresh artifact.
 
 use std::{
     collections::{BTreeMap, btree_map::Entry},
     env, fs,
     hash::{Hash, Hasher},
     io::{Cursor, Read},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use rustc_hash::FxHasher;
@@ -27,6 +31,8 @@ const PROGRAM_CACHE_MAGIC: &[u8; 5] = b"AIVI\x02";
 const KERNEL_CACHE_MAGIC: &[u8; 5] = b"AIVK\x01";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
+    &[("enable_llvm_abi_extensions", "1"), ("opt_level", "speed")];
 
 /// In-memory cache for per-kernel object artifacts owned by the backend layer.
 #[derive(Clone, Debug, Default)]
@@ -88,24 +94,57 @@ impl BackendKernelArtifactCache {
     }
 }
 
-/// Compute a stable 64-bit cache key combining the backend program content
-/// with the compiler version so stale entries are automatically invalidated
-/// after an upgrade.
-pub fn compute_program_cache_key(program: &Program) -> u64 {
+/// Compute a stable content fingerprint for one backend program.
+pub fn compute_program_fingerprint(program: &Program) -> u64 {
     let mut hasher = FxHasher::default();
     format!("{program:?}").hash(&mut hasher);
-    hasher.finish() ^ compiler_version_hash().rotate_left(32)
+    hasher.finish()
+}
+
+/// Compute a stable 64-bit disk-cache key by layering compiler/codegen namespace
+/// identity over a stable backend-program fingerprint.
+pub fn compute_program_cache_key_from_fingerprint(fingerprint: u64) -> u64 {
+    fingerprint ^ cache_namespace_hash().rotate_left(32)
+}
+
+/// Compute a stable 64-bit cache key for a backend program.
+pub fn compute_program_cache_key(program: &Program) -> u64 {
+    compute_program_cache_key_from_fingerprint(compute_program_fingerprint(program))
 }
 
 /// Compute a disk-cache key for one kernel artifact from its stable content fingerprint.
 pub fn compute_kernel_cache_key(fingerprint: KernelFingerprint) -> u64 {
-    fingerprint.as_raw() ^ compiler_version_hash().rotate_left(32)
+    compute_program_cache_key_from_fingerprint(fingerprint.as_raw())
 }
 
 fn compiler_version_hash() -> u64 {
     let mut version_hasher = FxHasher::default();
     COMPILER_VERSION.hash(&mut version_hasher);
     version_hasher.finish()
+}
+
+fn cache_namespace_hash() -> u64 {
+    let mut hasher = FxHasher::default();
+    compiler_version_hash().hash(&mut hasher);
+    native_codegen_target_identity().hash(&mut hasher);
+    for (name, value) in SHARED_CODEGEN_SETTINGS {
+        name.hash(&mut hasher);
+        value.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+fn native_codegen_target_identity() -> String {
+    cranelift_native::builder()
+        .map(|builder| builder.triple().to_string())
+        .unwrap_or_else(|_| {
+            format!(
+                "{}-{}-{}",
+                std::env::consts::ARCH,
+                std::env::consts::OS,
+                std::env::consts::FAMILY
+            )
+        })
 }
 
 fn cache_dir() -> Option<PathBuf> {
@@ -115,12 +154,12 @@ fn cache_dir() -> Option<PathBuf> {
     Some(base.join("aivi").join("compiled"))
 }
 
-fn program_cache_path(key: u64) -> Option<PathBuf> {
-    Some(cache_dir()?.join(format!("program-{key:016x}.bin")))
+fn program_cache_path_in(cache_root: &Path, key: u64) -> PathBuf {
+    cache_root.join(format!("program-{key:016x}.bin"))
 }
 
-fn kernel_cache_path(key: u64) -> Option<PathBuf> {
-    Some(cache_dir()?.join("kernels").join(format!("{key:016x}.bin")))
+fn kernel_cache_path_in(cache_root: &Path, key: u64) -> PathBuf {
+    cache_root.join("kernels").join(format!("{key:016x}.bin"))
 }
 
 fn read_u32(cursor: &mut Cursor<&[u8]>) -> Option<u32> {
@@ -239,7 +278,12 @@ fn deserialize_kernel_artifact(bytes: &[u8]) -> Option<CompiledKernelArtifact> {
 
 /// Load a cached `CompiledProgram` for the given key, if a valid entry exists.
 pub fn load_cached_program(key: u64) -> Option<CompiledProgram> {
-    let path = program_cache_path(key)?;
+    let cache_root = cache_dir()?;
+    load_cached_program_from(&cache_root, key)
+}
+
+fn load_cached_program_from(cache_root: &Path, key: u64) -> Option<CompiledProgram> {
+    let path = program_cache_path_in(cache_root, key);
     let bytes = fs::read(&path).ok()?;
     deserialize_program(&bytes)
 }
@@ -247,9 +291,14 @@ pub fn load_cached_program(key: u64) -> Option<CompiledProgram> {
 /// Persist a `CompiledProgram` to the disk cache under the given key.
 /// Silently ignores I/O failures so a missing or read-only cache never breaks compilation.
 pub fn store_cached_program(key: u64, compiled: &CompiledProgram) {
-    let Some(path) = program_cache_path(key) else {
+    let Some(cache_root) = cache_dir() else {
         return;
     };
+    store_cached_program_in(&cache_root, key, compiled);
+}
+
+fn store_cached_program_in(cache_root: &Path, key: u64, compiled: &CompiledProgram) {
+    let path = program_cache_path_in(cache_root, key);
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -260,7 +309,15 @@ pub fn store_cached_program(key: u64, compiled: &CompiledProgram) {
 pub fn load_cached_kernel_artifact(
     fingerprint: KernelFingerprint,
 ) -> Option<CompiledKernelArtifact> {
-    let path = kernel_cache_path(compute_kernel_cache_key(fingerprint))?;
+    let cache_root = cache_dir()?;
+    load_cached_kernel_artifact_from(&cache_root, fingerprint)
+}
+
+fn load_cached_kernel_artifact_from(
+    cache_root: &Path,
+    fingerprint: KernelFingerprint,
+) -> Option<CompiledKernelArtifact> {
+    let path = kernel_cache_path_in(cache_root, compute_kernel_cache_key(fingerprint));
     let bytes = fs::read(&path).ok()?;
     let artifact = deserialize_kernel_artifact(&bytes)?;
     (artifact.fingerprint() == fingerprint).then_some(artifact)
@@ -275,9 +332,18 @@ pub fn store_cached_kernel_artifact(
     if artifact.fingerprint() != fingerprint {
         return;
     }
-    let Some(path) = kernel_cache_path(compute_kernel_cache_key(fingerprint)) else {
+    let Some(cache_root) = cache_dir() else {
         return;
     };
+    store_cached_kernel_artifact_in(&cache_root, fingerprint, artifact);
+}
+
+fn store_cached_kernel_artifact_in(
+    cache_root: &Path,
+    fingerprint: KernelFingerprint,
+    artifact: &CompiledKernelArtifact,
+) {
+    let path = kernel_cache_path_in(cache_root, compute_kernel_cache_key(fingerprint));
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -288,12 +354,22 @@ pub fn store_cached_kernel_artifact(
 /// codegen for unchanged programs. Falls back to full compilation on cache miss
 /// or any deserialization error.
 pub fn compile_program_cached(program: &Program) -> Result<CompiledProgram, CodegenErrors> {
+    let Some(cache_root) = cache_dir() else {
+        return compile_program(program);
+    };
+    compile_program_cached_in_dir(&cache_root, program)
+}
+
+fn compile_program_cached_in_dir(
+    cache_root: &Path,
+    program: &Program,
+) -> Result<CompiledProgram, CodegenErrors> {
     let key = compute_program_cache_key(program);
-    if let Some(cached) = load_cached_program(key) {
+    if let Some(cached) = load_cached_program_from(cache_root, key) {
         return Ok(cached);
     }
     let compiled = compile_program(program)?;
-    store_cached_program(key, &compiled);
+    store_cached_program_in(cache_root, key, &compiled);
     Ok(compiled)
 }
 
@@ -306,11 +382,177 @@ pub fn compile_kernel_cached(
     if !program.kernels().contains(kernel_id) {
         return compile_kernel(program, kernel_id);
     }
+    let Some(cache_root) = cache_dir() else {
+        return compile_kernel(program, kernel_id);
+    };
+    compile_kernel_cached_in_dir(&cache_root, program, kernel_id)
+}
+
+fn compile_kernel_cached_in_dir(
+    cache_root: &Path,
+    program: &Program,
+    kernel_id: KernelId,
+) -> Result<CompiledKernelArtifact, CodegenErrors> {
     let fingerprint = compute_kernel_fingerprint(program, kernel_id);
-    if let Some(cached) = load_cached_kernel_artifact(fingerprint) {
+    if let Some(cached) = load_cached_kernel_artifact_from(cache_root, fingerprint) {
         return Ok(cached);
     }
     let compiled = compile_kernel(program, kernel_id)?;
-    store_cached_kernel_artifact(fingerprint, &compiled);
+    store_cached_kernel_artifact_in(cache_root, fingerprint, &compiled);
     Ok(compiled)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use aivi_base::SourceDatabase;
+    use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
+    use aivi_lambda::{
+        lower_module as lower_lambda_module, validate_module as validate_lambda_module,
+    };
+    use aivi_syntax::parse_module;
+
+    use super::*;
+    use crate::{lower_module as lower_backend_module, validate_program};
+
+    fn lower_text(path: &str, text: &str) -> Program {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, text);
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "backend test input should parse: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let hir = aivi_hir::lower_module(&parsed.module);
+        assert!(
+            !hir.has_errors(),
+            "backend test input should lower to HIR: {:?}",
+            hir.diagnostics()
+        );
+
+        let core = lower_core_module(hir.module()).expect("HIR should lower into typed core");
+        validate_core_module(&core).expect("typed core should validate before backend lowering");
+
+        let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
+        validate_lambda_module(&lambda)
+            .expect("typed lambda should validate before backend lowering");
+
+        let backend = lower_backend_module(&lambda).expect("backend lowering should succeed");
+        validate_program(&backend).expect("backend program should validate");
+        backend
+    }
+
+    fn find_item(program: &Program, name: &str) -> crate::ItemId {
+        program
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == name)
+            .map(|(id, _)| id)
+            .unwrap_or_else(|| panic!("expected backend item `{name}`"))
+    }
+
+    fn with_temp_cache_dir<R>(f: impl FnOnce(&Path) -> R) -> R {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "aivi-backend-cache-test-{}-{unique}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("temp cache root should be created");
+        let result = f(&dir);
+        let _ = fs::remove_dir_all(&dir);
+        result
+    }
+
+    #[test]
+    fn program_cache_key_reuses_stable_fingerprint_with_namespace_layering() {
+        let backend = lower_text(
+            "cache-program-fingerprint.aivi",
+            "value total:Int = 21 + 21\nvalue other:Int = 1 + 1\n",
+        );
+        let changed = lower_text(
+            "cache-program-fingerprint.aivi",
+            "value total:Int = 21 + 21\nvalue other:Int = 2 + 2\n",
+        );
+
+        let fingerprint = compute_program_fingerprint(&backend);
+
+        assert_eq!(
+            compute_program_cache_key(&backend),
+            compute_program_cache_key_from_fingerprint(fingerprint)
+        );
+        assert_ne!(fingerprint, compute_program_fingerprint(&changed));
+        assert_ne!(
+            compute_program_cache_key(&backend),
+            compute_program_cache_key(&changed)
+        );
+    }
+
+    #[test]
+    fn compile_program_cached_recovers_from_corrupt_disk_entry() {
+        let backend = lower_text("cache-program-corrupt.aivi", "value total:Int = 21 + 21\n");
+
+        with_temp_cache_dir(|cache_root| {
+            let key = compute_program_cache_key(&backend);
+            let path = program_cache_path_in(cache_root, key);
+            fs::create_dir_all(
+                path.parent()
+                    .expect("cache file should have a parent directory"),
+            )
+            .expect("program cache parent should be created");
+            fs::write(&path, b"corrupt-program-cache")
+                .expect("corrupt program cache entry should be written");
+
+            let compiled = compile_program_cached_in_dir(cache_root, &backend)
+                .expect("corrupt program cache should recompile");
+            let loaded = load_cached_program_from(cache_root, key)
+                .expect("recompiled program cache entry should deserialize cleanly");
+
+            assert_eq!(compiled, loaded);
+            assert_ne!(
+                fs::read(&path).expect("recompiled cache file should be readable"),
+                b"corrupt-program-cache"
+            );
+        });
+    }
+
+    #[test]
+    fn compile_kernel_cached_recovers_from_corrupt_disk_entry() {
+        let backend = lower_text("cache-kernel-corrupt.aivi", "value total:Int = 21 + 21\n");
+        let total = backend.items()[find_item(&backend, "total")]
+            .body
+            .expect("total should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let fingerprint = compute_kernel_fingerprint(&backend, total);
+            let path = kernel_cache_path_in(cache_root, compute_kernel_cache_key(fingerprint));
+            fs::create_dir_all(
+                path.parent()
+                    .expect("cache file should have a parent directory"),
+            )
+            .expect("kernel cache parent should be created");
+            fs::write(&path, b"corrupt-kernel-cache")
+                .expect("corrupt kernel cache entry should be written");
+
+            let compiled = compile_kernel_cached_in_dir(cache_root, &backend, total)
+                .expect("corrupt kernel cache should recompile");
+            let loaded = load_cached_kernel_artifact_from(cache_root, fingerprint)
+                .expect("recompiled kernel cache entry should deserialize cleanly");
+
+            assert_eq!(compiled, loaded);
+            assert_ne!(
+                fs::read(&path).expect("recompiled cache file should be readable"),
+                b"corrupt-kernel-cache"
+            );
+        });
+    }
 }

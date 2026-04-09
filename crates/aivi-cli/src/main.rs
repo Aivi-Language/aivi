@@ -25,7 +25,7 @@ use std::os::unix::fs::PermissionsExt;
 use aivi_backend::{
     BackendExecutableProgram, BackendExecutionEngineHandle, DetachedRuntimeValue,
     ItemId as BackendItemId, KernelEvaluationProfile, Program as BackendProgram, RuntimeFloat,
-    RuntimeRecordField, RuntimeValue, cache::compute_program_cache_key, compile_program_cached,
+    RuntimeRecordField, RuntimeValue, cache::compute_program_fingerprint, compile_program_cached,
     lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
@@ -4073,7 +4073,7 @@ fn compile_local_runtime_fragment_backend_unit(
         .map_err(|error| format!("{error_context} into backend IR: {error}"))?;
     validate_program(&backend)
         .map_err(|error| format!("{error_context} during backend validation: {error}"))?;
-    let execution_cache_key = compute_program_cache_key(&backend);
+    let execution_cache_key = compute_program_fingerprint(&backend);
     Ok(CompiledRuntimeFragmentUnit {
         core: Arc::new(core),
         backend: Arc::new(backend),

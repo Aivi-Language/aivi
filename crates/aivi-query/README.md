@@ -54,6 +54,10 @@ resolve_v1_entrypoint(db: &RootDatabase, path: &Path) -> Result<ResolvedEntrypoi
 - Whole-program and runtime-fragment backend queries cache successful and failed lowering results
   against the current HIR snapshot identity, so transitive import invalidation naturally evicts
   stale backend units without guessing a global revision counter.
+- Whole-program and runtime-fragment backend fingerprints are content-stable identities for the
+  lowered backend IR. Persistent machine-code cache keys live one layer down in `aivi-backend`,
+  where compiler-version and codegen-target namespace data are combined with those fingerprints
+  before reading or writing disk artifacts.
 
 ## Diagnostic codes
 
