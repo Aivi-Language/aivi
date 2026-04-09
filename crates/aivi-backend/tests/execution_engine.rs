@@ -158,6 +158,34 @@ fn jit_engine_falls_back_for_unsupported_kernel_layouts() {
 }
 
 #[test]
+fn jit_engine_matches_interpreter_results_for_supported_and_fallback_items() {
+    let backend = lower_text(
+        "backend-engine-parity.aivi",
+        r#"
+value host:Text = "Ada"
+value greeting:Text = "hello {host}"
+value ids:List Int = [1, 2, 3]
+"#,
+    );
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut jit = executable.create_engine();
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+
+    assert_eq!(jit.kind(), BackendExecutionEngineKind::Jit);
+    for item in ["greeting", "ids"] {
+        let item_id = find_item(&backend, item);
+        assert_eq!(
+            jit.evaluate_item(item_id, &globals)
+                .expect("JIT engine should evaluate the item"),
+            interpreter
+                .evaluate_item(item_id, &globals)
+                .expect("interpreter should evaluate the same item")
+        );
+    }
+}
+
+#[test]
 fn kernel_fingerprints_stay_stable_for_unchanged_kernels() {
     let original = lower_text(
         "backend-engine-fingerprint.aivi",

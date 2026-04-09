@@ -998,14 +998,21 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         requested_kernel: KernelId,
         artifact: &CachedJitKernelArtifact,
     ) -> Result<CompiledJitKernel, CodegenErrors> {
-        let kernel_ids = jit_dependency_kernel_ids(self.program, requested_kernel).map_err(wrap_one)?;
+        let kernel_ids =
+            jit_dependency_kernel_ids(self.program, requested_kernel).map_err(wrap_one)?;
         if artifact.requested_kernel != requested_kernel
-            || artifact.kernels.iter().map(|kernel| kernel.kernel).collect::<Vec<_>>() != kernel_ids
+            || artifact
+                .kernels
+                .iter()
+                .map(|kernel| kernel.kernel)
+                .collect::<Vec<_>>()
+                != kernel_ids
         {
             return Err(wrap_one(CodegenError::CraneliftModule {
                 kernel: Some(requested_kernel),
-                message: "cached JIT artifact does not match the requested kernel dependency closure"
-                    .into(),
+                message:
+                    "cached JIT artifact does not match the requested kernel dependency closure"
+                        .into(),
             }));
         }
 
@@ -1164,16 +1171,18 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         target: &ModuleRelocTarget,
     ) -> Option<CachedJitRelocTarget> {
         match target {
-            ModuleRelocTarget::User { namespace: 0, index } => {
-                Some(CachedJitRelocTarget::Function(
-                    self.cacheable_jit_function_target(FuncId::from_u32(*index))?,
-                ))
-            }
-            ModuleRelocTarget::User { namespace: 1, index } => {
-                Some(CachedJitRelocTarget::Data(
-                    self.cacheable_jit_data_target(DataId::from_u32(*index))?,
-                ))
-            }
+            ModuleRelocTarget::User {
+                namespace: 0,
+                index,
+            } => Some(CachedJitRelocTarget::Function(
+                self.cacheable_jit_function_target(FuncId::from_u32(*index))?,
+            )),
+            ModuleRelocTarget::User {
+                namespace: 1,
+                index,
+            } => Some(CachedJitRelocTarget::Data(
+                self.cacheable_jit_data_target(DataId::from_u32(*index))?,
+            )),
             ModuleRelocTarget::FunctionOffset(func_id, offset) => {
                 Some(CachedJitRelocTarget::FunctionOffset {
                     target: self.cacheable_jit_function_target(*func_id)?,
@@ -1229,7 +1238,8 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
             })
             .or_else(|| {
                 self.literal_data.iter().find_map(|(symbol, record)| {
-                    (record.data_id == data_id).then_some(CachedJitDataTarget::Literal(symbol.clone()))
+                    (record.data_id == data_id)
+                        .then_some(CachedJitDataTarget::Literal(symbol.clone()))
                 })
             })
     }
@@ -1251,15 +1261,15 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         target: &CachedJitRelocTarget,
     ) -> Result<ModuleRelocTarget, CodegenError> {
         match target {
-            CachedJitRelocTarget::Function(target) => Ok(self
-                .resolve_cached_jit_function_target(target)?
-                .into()),
-            CachedJitRelocTarget::FunctionOffset { target, offset } => Ok(
-                ModuleRelocTarget::FunctionOffset(
+            CachedJitRelocTarget::Function(target) => {
+                Ok(self.resolve_cached_jit_function_target(target)?.into())
+            }
+            CachedJitRelocTarget::FunctionOffset { target, offset } => {
+                Ok(ModuleRelocTarget::FunctionOffset(
                     self.resolve_cached_jit_function_target(target)?,
                     *offset,
-                ),
-            ),
+                ))
+            }
             CachedJitRelocTarget::Data(target) => {
                 Ok(self.resolve_cached_jit_data_target(target)?.into())
             }
@@ -1295,9 +1305,12 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 .declared_external_funcs
                 .get(symbol)
                 .copied()
-                .ok_or_else(|| CodegenError::UnsupportedJitSymbol {
-                    kernel: KernelId::from_raw(0),
-                    symbol: symbol.clone(),
+                .ok_or_else(|| CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!(
+                        "cached JIT artifact references unknown external symbol `{symbol}`"
+                    )
+                    .into(),
                 }),
         }
     }
@@ -1329,7 +1342,8 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 .copied()
                 .ok_or_else(|| CodegenError::CraneliftModule {
                     kernel: None,
-                    message: format!("missing cached JIT callable descriptor for item{item}").into(),
+                    message: format!("missing cached JIT callable descriptor for item{item}")
+                        .into(),
                 }),
             CachedJitDataTarget::Literal(symbol) => self
                 .literal_data
@@ -1342,7 +1356,10 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         }
     }
 
-    fn ensure_named_external_func_declared(&mut self, symbol: &str) -> Result<FuncId, CodegenError> {
+    fn ensure_named_external_func_declared(
+        &mut self,
+        symbol: &str,
+    ) -> Result<FuncId, CodegenError> {
         if let Some(&func_id) = self.declared_external_funcs.get(symbol) {
             return Ok(func_id);
         }
@@ -1365,9 +1382,12 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
             _ => {
-                return Err(CodegenError::UnsupportedJitSymbol {
-                    kernel: KernelId::from_raw(0),
-                    symbol: symbol.into(),
+                return Err(CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!(
+                        "cached JIT artifact references external symbol `{symbol}` without a known lazy-JIT signature"
+                    )
+                    .into(),
                 });
             }
         }

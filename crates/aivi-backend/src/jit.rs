@@ -16,10 +16,8 @@ use crate::{
     BackendExecutionEngine, BackendExecutionEngineKind, EvalFrame, EvaluationCallProfile,
     EvaluationError, ItemId, KernelEvaluationProfile, KernelEvaluator, KernelFingerprint, KernelId,
     LayoutId, LayoutKind, PrimitiveType, Program, RuntimeCallable, RuntimeFloat, RuntimeValue,
-    TASK_COMPOSITION_KERNEL_ID, TaskFunctionApplier,
-    codegen::{CompiledJitKernel, compile_kernel_jit},
-    compute_kernel_fingerprint,
-    program::ItemKind,
+    TASK_COMPOSITION_KERNEL_ID, TaskFunctionApplier, cache::compile_kernel_jit_cached,
+    codegen::CompiledJitKernel, compute_kernel_fingerprint, program::ItemKind,
 };
 
 pub(crate) struct LazyJitExecutionEngine<'a> {
@@ -484,7 +482,7 @@ impl CompiledKernelPlan {
             .map(|layout| MarshalPlan::for_layout(program, *layout))
             .collect::<Option<Vec<_>>>()?;
         let result_plan = MarshalPlan::for_layout(program, kernel.result_layout)?;
-        let artifact = compile_kernel_jit(program, kernel_id).ok()?;
+        let artifact = compile_kernel_jit_cached(program, kernel_id).ok()?;
         let signal_slot_plans = artifact
             .signal_slots
             .iter()

@@ -57,7 +57,9 @@ resolve_v1_entrypoint(db: &RootDatabase, path: &Path) -> Result<ResolvedEntrypoi
 - Whole-program and runtime-fragment backend fingerprints are content-stable identities for the
   lowered backend IR. Persistent machine-code cache keys live one layer down in `aivi-backend`,
   where compiler-version and codegen-target namespace data are combined with those fingerprints
-  before reading or writing disk artifacts.
+  before reading or writing disk artifacts. Runtime-fragment fingerprints include fragment
+  parameter environments, so changing a fragment's captured inputs naturally invalidates the live
+  JIT cache instead of reusing a stale execution unit.
 
 ## Diagnostic codes
 

@@ -2,12 +2,13 @@
 
 ## Purpose
 
-Backend IR, layout decisions, and Cranelift AOT codegen.
+Backend IR, layout decisions, and Cranelift codegen/runtime execution.
 `aivi-backend` consumes the validated `aivi-lambda` module and re-expresses it as layout-aware,
 ABI-explicit backend structures: `Program`, `Pipeline`, `Kernel`, `SourcePlan`, `DecodePlan`,
-and `Layout` tables. It then lowers backend-owned scalar kernels through Cranelift into object
-bytes. The full `aivi build` bundle (linking, runtime embedding) is performed by `aivi-cli`; this
-crate stops at object emission.
+and `Layout` tables. It lowers backend-owned kernels through Cranelift into object bytes for AOT
+surfaces and into a lazy JIT engine for live `aivi run` / runtime-fragment execution. The full
+`aivi build` bundle (linking, runtime embedding) is performed by `aivi-cli`; this crate owns the
+backend-side machine-code caches and runtime execution engine.
 
 ## Entry points
 
@@ -22,11 +23,12 @@ validate_program(program: &Program) -> Result<(), ValidationErrors>
 compile_program(program: &Program) -> Result<CompiledProgram, CodegenErrors>
 ```
 
-Key runtime types used by the interpreter path:
+Key runtime types used by the live execution path:
 
 ```rust
-RuntimeValue         // Dynamically-typed runtime value (interpreter/GTK path)
-KernelEvaluator      // Evaluates a backend kernel against RuntimeValues
+RuntimeValue               // Dynamically-typed runtime value (GTK/runtime path)
+BackendExecutableProgram   // Builds the active lazy-JIT execution surface
+KernelEvaluator            // Reference interpreter and fallback engine
 RuntimeTaskPlan      // Describes an async task to execute
 execute_runtime_value(kernel: &Kernel, args: &[RuntimeValue]) -> Result<RuntimeValue, EvaluationError>
 ```
@@ -38,6 +40,10 @@ execute_runtime_value(kernel: &Kernel, args: &[RuntimeValue]) -> Result<RuntimeV
 - `Kernel` calling conventions are explicit (`CallingConvention`); no implicit ABI inference occurs.
 - Cranelift codegen touches only backend-owned kernel bodies; pure core / HIR types are not re-parsed.
 - `CompiledProgram` carries object bytes and a symbol table; linking is the caller's responsibility.
+- Live execution routes through a lazy per-kernel JIT engine first and falls back to
+  `KernelEvaluator` for unsupported layouts/helpers.
+- Persistent per-kernel disk artifacts store replayable JIT machine-code bundles keyed by backend
+  fingerprint plus compiler/target namespace; corrupt entries degrade to cache misses.
 - `RuntimeGcHandle` and `MovingRuntimeValueStore` are the only types that own heap-allocated values at runtime; all other `RuntimeValue` variants are inline or reference-counted.
 - GTK main thread: this crate has no GTK dependency and is safe to use from worker threads.
 

@@ -35,7 +35,7 @@ AIVI is not a thin syntax layer over Rust or GTK. It has a pure semantic core an
 - GTK4/libadwaita application development on GNOME Linux as the flagship use case
 - pure, explicit, analyzable user model
 - reactivity is a primitive of the language, not a library
-- native Cranelift-backed AOT compilation today, with JIT deferred
+- native Cranelift-backed AOT compilation plus lazy JIT execution for live runtime surfaces
 - correctness legible through closed types, explicit boundaries, and strong diagnostics
 
 ### 2.2 Non-goals
@@ -206,7 +206,7 @@ Responsibilities:
 - layout decisions
 - concrete calling conventions
 - Cranelift lowering
-- AOT support, with JIT deferred
+- AOT support plus lazy JIT execution for live runtime surfaces
 
 ---
 

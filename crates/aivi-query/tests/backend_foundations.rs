@@ -192,6 +192,34 @@ fn runtime_fragment_backend_unit_reuses_cached_result_until_fragment_changes() {
 }
 
 #[test]
+fn runtime_fragment_backend_unit_invalidates_when_fragment_environment_changes() {
+    let db = RootDatabase::new();
+    let file = SourceFile::new(
+        &db,
+        PathBuf::from("fragment-env.aivi"),
+        "type Int -> Int\nfunc echo = x =>\n    x\n".to_owned(),
+    );
+
+    let hir = hir_module(&db, file);
+    let first_fragment = first_general_expr_fragment(hir.module());
+    let first = runtime_fragment_backend_unit(&db, file, &first_fragment)
+        .expect("runtime fragment lowering should produce a backend unit");
+
+    assert!(file.set_text(
+        &db,
+        "type Int -> Int -> Int\nfunc echo = x y =>\n    x\n".to_owned(),
+    ));
+
+    let updated_hir = hir_module(&db, file);
+    let updated_fragment = first_general_expr_fragment(updated_hir.module());
+    let second = runtime_fragment_backend_unit(&db, file, &updated_fragment)
+        .expect("runtime fragment lowering should rebuild after parameter environment changes");
+
+    assert!(!Arc::ptr_eq(&first, &second));
+    assert_ne!(first.fingerprint(), second.fingerprint());
+}
+
+#[test]
 fn whole_program_backend_fingerprint_matches_backend_content_fingerprint() {
     let db = RootDatabase::new();
     let file = SourceFile::new(

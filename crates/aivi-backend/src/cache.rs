@@ -21,7 +21,8 @@ use cranelift_codegen::binemit::Reloc;
 use rustc_hash::FxHasher;
 
 use crate::{
-    CompiledKernel, CompiledKernelArtifact, CompiledProgram, KernelFingerprint, KernelId,
+    CodegenErrors, CompiledKernel, CompiledKernelArtifact, CompiledProgram, KernelFingerprint,
+    KernelId,
     codegen::{
         CachedJitCallableDescriptor, CachedJitCompiledKernel, CachedJitDataSlot,
         CachedJitFunctionTarget, CachedJitKernelArtifact, CachedJitLiteralData, CachedJitReloc,
@@ -171,7 +172,9 @@ fn kernel_cache_path_in(cache_root: &Path, key: u64) -> PathBuf {
 }
 
 fn jit_kernel_cache_path_in(cache_root: &Path, key: u64) -> PathBuf {
-    cache_root.join("jit-kernels").join(format!("{key:016x}.bin"))
+    cache_root
+        .join("jit-kernels")
+        .join(format!("{key:016x}.bin"))
 }
 
 fn read_u32(cursor: &mut Cursor<&[u8]>) -> Option<u32> {
@@ -312,6 +315,320 @@ fn deserialize_kernel_artifact(bytes: &[u8]) -> Option<CompiledKernelArtifact> {
     Some(CompiledKernelArtifact::new(object, metadata))
 }
 
+fn serialize_reloc_kind(buf: &mut Vec<u8>, reloc: Reloc) {
+    write_boxed_str(buf, &format!("{reloc:?}"));
+}
+
+fn deserialize_reloc_kind(cursor: &mut Cursor<&[u8]>) -> Option<Reloc> {
+    match read_boxed_str(cursor)?.as_ref() {
+        "Abs4" => Some(Reloc::Abs4),
+        "Abs8" => Some(Reloc::Abs8),
+        "X86PCRel4" => Some(Reloc::X86PCRel4),
+        "X86CallPCRel4" => Some(Reloc::X86CallPCRel4),
+        "X86CallPLTRel4" => Some(Reloc::X86CallPLTRel4),
+        "X86GOTPCRel4" => Some(Reloc::X86GOTPCRel4),
+        "X86SecRel" => Some(Reloc::X86SecRel),
+        "Arm32Call" => Some(Reloc::Arm32Call),
+        "Arm64Call" => Some(Reloc::Arm64Call),
+        "S390xPCRel32Dbl" => Some(Reloc::S390xPCRel32Dbl),
+        "S390xPLTRel32Dbl" => Some(Reloc::S390xPLTRel32Dbl),
+        "ElfX86_64TlsGd" => Some(Reloc::ElfX86_64TlsGd),
+        "MachOX86_64Tlv" => Some(Reloc::MachOX86_64Tlv),
+        "MachOAarch64TlsAdrPage21" => Some(Reloc::MachOAarch64TlsAdrPage21),
+        "MachOAarch64TlsAdrPageOff12" => Some(Reloc::MachOAarch64TlsAdrPageOff12),
+        "Aarch64TlsDescAdrPage21" => Some(Reloc::Aarch64TlsDescAdrPage21),
+        "Aarch64TlsDescLd64Lo12" => Some(Reloc::Aarch64TlsDescLd64Lo12),
+        "Aarch64TlsDescAddLo12" => Some(Reloc::Aarch64TlsDescAddLo12),
+        "Aarch64TlsDescCall" => Some(Reloc::Aarch64TlsDescCall),
+        "Aarch64AdrGotPage21" => Some(Reloc::Aarch64AdrGotPage21),
+        "Aarch64AdrPrelPgHi21" => Some(Reloc::Aarch64AdrPrelPgHi21),
+        "Aarch64AddAbsLo12Nc" => Some(Reloc::Aarch64AddAbsLo12Nc),
+        "Aarch64Ld64GotLo12Nc" => Some(Reloc::Aarch64Ld64GotLo12Nc),
+        "RiscvCallPlt" => Some(Reloc::RiscvCallPlt),
+        "RiscvTlsGdHi20" => Some(Reloc::RiscvTlsGdHi20),
+        "RiscvPCRelLo12I" => Some(Reloc::RiscvPCRelLo12I),
+        "RiscvGotHi20" => Some(Reloc::RiscvGotHi20),
+        "RiscvPCRelHi20" => Some(Reloc::RiscvPCRelHi20),
+        "S390xTlsGd64" => Some(Reloc::S390xTlsGd64),
+        "S390xTlsGdCall" => Some(Reloc::S390xTlsGdCall),
+        "PulleyPcRel" => Some(Reloc::PulleyPcRel),
+        "PulleyCallIndirectHost" => Some(Reloc::PulleyCallIndirectHost),
+        _ => None,
+    }
+}
+
+fn serialize_cached_jit_function_target(buf: &mut Vec<u8>, target: &CachedJitFunctionTarget) {
+    match target {
+        CachedJitFunctionTarget::Kernel(kernel) => {
+            buf.push(0);
+            buf.extend_from_slice(&kernel.as_raw().to_le_bytes());
+        }
+        CachedJitFunctionTarget::External(symbol) => {
+            buf.push(1);
+            write_boxed_str(buf, symbol);
+        }
+    }
+}
+
+fn deserialize_cached_jit_function_target(
+    cursor: &mut Cursor<&[u8]>,
+) -> Option<CachedJitFunctionTarget> {
+    match read_u8(cursor)? {
+        0 => Some(CachedJitFunctionTarget::Kernel(KernelId::from_raw(
+            read_u32(cursor)?,
+        ))),
+        1 => Some(CachedJitFunctionTarget::External(read_boxed_str(cursor)?)),
+        _ => None,
+    }
+}
+
+fn serialize_cached_jit_data_target(
+    buf: &mut Vec<u8>,
+    target: &crate::codegen::CachedJitDataTarget,
+) {
+    match target {
+        crate::codegen::CachedJitDataTarget::SignalSlot(item) => {
+            buf.push(0);
+            buf.extend_from_slice(&item.as_raw().to_le_bytes());
+        }
+        crate::codegen::CachedJitDataTarget::ImportedItemSlot(item) => {
+            buf.push(1);
+            buf.extend_from_slice(&item.as_raw().to_le_bytes());
+        }
+        crate::codegen::CachedJitDataTarget::CallableDescriptor(item) => {
+            buf.push(2);
+            buf.extend_from_slice(&item.as_raw().to_le_bytes());
+        }
+        crate::codegen::CachedJitDataTarget::Literal(symbol) => {
+            buf.push(3);
+            write_boxed_str(buf, symbol);
+        }
+    }
+}
+
+fn deserialize_cached_jit_data_target(
+    cursor: &mut Cursor<&[u8]>,
+) -> Option<crate::codegen::CachedJitDataTarget> {
+    match read_u8(cursor)? {
+        0 => Some(crate::codegen::CachedJitDataTarget::SignalSlot(
+            crate::ItemId::from_raw(read_u32(cursor)?),
+        )),
+        1 => Some(crate::codegen::CachedJitDataTarget::ImportedItemSlot(
+            crate::ItemId::from_raw(read_u32(cursor)?),
+        )),
+        2 => Some(crate::codegen::CachedJitDataTarget::CallableDescriptor(
+            crate::ItemId::from_raw(read_u32(cursor)?),
+        )),
+        3 => Some(crate::codegen::CachedJitDataTarget::Literal(
+            read_boxed_str(cursor)?,
+        )),
+        _ => None,
+    }
+}
+
+fn serialize_cached_jit_reloc_target(buf: &mut Vec<u8>, target: &CachedJitRelocTarget) {
+    match target {
+        CachedJitRelocTarget::Function(target) => {
+            buf.push(0);
+            serialize_cached_jit_function_target(buf, target);
+        }
+        CachedJitRelocTarget::FunctionOffset { target, offset } => {
+            buf.push(1);
+            serialize_cached_jit_function_target(buf, target);
+            buf.extend_from_slice(&offset.to_le_bytes());
+        }
+        CachedJitRelocTarget::Data(target) => {
+            buf.push(2);
+            serialize_cached_jit_data_target(buf, target);
+        }
+        CachedJitRelocTarget::LibCall(symbol) => {
+            buf.push(3);
+            write_boxed_str(buf, symbol);
+        }
+        CachedJitRelocTarget::KnownSymbol(symbol) => {
+            buf.push(4);
+            write_boxed_str(buf, symbol);
+        }
+    }
+}
+
+fn deserialize_cached_jit_reloc_target(cursor: &mut Cursor<&[u8]>) -> Option<CachedJitRelocTarget> {
+    match read_u8(cursor)? {
+        0 => Some(CachedJitRelocTarget::Function(
+            deserialize_cached_jit_function_target(cursor)?,
+        )),
+        1 => Some(CachedJitRelocTarget::FunctionOffset {
+            target: deserialize_cached_jit_function_target(cursor)?,
+            offset: read_u32(cursor)?,
+        }),
+        2 => Some(CachedJitRelocTarget::Data(
+            deserialize_cached_jit_data_target(cursor)?,
+        )),
+        3 => Some(CachedJitRelocTarget::LibCall(read_boxed_str(cursor)?)),
+        4 => Some(CachedJitRelocTarget::KnownSymbol(read_boxed_str(cursor)?)),
+        _ => None,
+    }
+}
+
+fn serialize_cached_jit_reloc(buf: &mut Vec<u8>, reloc: &CachedJitReloc) {
+    buf.extend_from_slice(&reloc.offset.to_le_bytes());
+    serialize_reloc_kind(buf, reloc.kind);
+    serialize_cached_jit_reloc_target(buf, &reloc.target);
+    buf.extend_from_slice(&reloc.addend.to_le_bytes());
+}
+
+fn deserialize_cached_jit_reloc(cursor: &mut Cursor<&[u8]>) -> Option<CachedJitReloc> {
+    Some(CachedJitReloc {
+        offset: read_u32(cursor)?,
+        kind: deserialize_reloc_kind(cursor)?,
+        target: deserialize_cached_jit_reloc_target(cursor)?,
+        addend: {
+            let mut buf = [0u8; 8];
+            cursor.read_exact(&mut buf).ok()?;
+            i64::from_le_bytes(buf)
+        },
+    })
+}
+
+fn serialize_cached_jit_kernel(buf: &mut Vec<u8>, kernel: &CachedJitCompiledKernel) {
+    buf.extend_from_slice(&kernel.kernel.as_raw().to_le_bytes());
+    write_boxed_bytes(buf, &kernel.bytes);
+    buf.extend_from_slice(&(kernel.relocs.len() as u32).to_le_bytes());
+    for reloc in &kernel.relocs {
+        serialize_cached_jit_reloc(buf, reloc);
+    }
+}
+
+fn deserialize_cached_jit_kernel(cursor: &mut Cursor<&[u8]>) -> Option<CachedJitCompiledKernel> {
+    let kernel = KernelId::from_raw(read_u32(cursor)?);
+    let bytes = read_boxed_bytes(cursor)?;
+    let reloc_count = read_u32(cursor)? as usize;
+    let mut relocs = Vec::with_capacity(reloc_count);
+    for _ in 0..reloc_count {
+        relocs.push(deserialize_cached_jit_reloc(cursor)?);
+    }
+    Some(CachedJitCompiledKernel {
+        kernel,
+        bytes,
+        relocs,
+    })
+}
+
+fn serialize_cached_jit_artifact(artifact: &CachedJitKernelArtifact) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(JIT_KERNEL_CACHE_MAGIC);
+    buf.extend_from_slice(&artifact.requested_kernel.as_raw().to_le_bytes());
+
+    buf.extend_from_slice(&(artifact.kernels.len() as u32).to_le_bytes());
+    for kernel in &artifact.kernels {
+        serialize_cached_jit_kernel(&mut buf, kernel);
+    }
+
+    buf.extend_from_slice(&(artifact.signal_slots.len() as u32).to_le_bytes());
+    for slot in &artifact.signal_slots {
+        buf.extend_from_slice(&slot.item.as_raw().to_le_bytes());
+        buf.extend_from_slice(&slot.layout.as_raw().to_le_bytes());
+    }
+
+    buf.extend_from_slice(&(artifact.imported_item_slots.len() as u32).to_le_bytes());
+    for slot in &artifact.imported_item_slots {
+        buf.extend_from_slice(&slot.item.as_raw().to_le_bytes());
+        buf.extend_from_slice(&slot.layout.as_raw().to_le_bytes());
+    }
+
+    buf.extend_from_slice(&(artifact.callable_descriptors.len() as u32).to_le_bytes());
+    for descriptor in &artifact.callable_descriptors {
+        buf.extend_from_slice(&descriptor.item.as_raw().to_le_bytes());
+        buf.extend_from_slice(&descriptor.body.as_raw().to_le_bytes());
+        buf.extend_from_slice(&descriptor.arity.to_le_bytes());
+    }
+
+    buf.extend_from_slice(&(artifact.literal_data.len() as u32).to_le_bytes());
+    for literal in &artifact.literal_data {
+        write_boxed_str(&mut buf, &literal.symbol);
+        buf.extend_from_slice(&literal.align.to_le_bytes());
+        write_boxed_bytes(&mut buf, &literal.bytes);
+    }
+
+    buf.extend_from_slice(&(artifact.external_funcs.len() as u32).to_le_bytes());
+    for symbol in &artifact.external_funcs {
+        write_boxed_str(&mut buf, symbol);
+    }
+
+    buf
+}
+
+fn deserialize_cached_jit_artifact(bytes: &[u8]) -> Option<CachedJitKernelArtifact> {
+    let mut cursor = Cursor::new(bytes);
+    let mut magic = [0u8; 5];
+    cursor.read_exact(&mut magic).ok()?;
+    if &magic != JIT_KERNEL_CACHE_MAGIC {
+        return None;
+    }
+
+    let requested_kernel = KernelId::from_raw(read_u32(&mut cursor)?);
+
+    let kernel_count = read_u32(&mut cursor)? as usize;
+    let mut kernels = Vec::with_capacity(kernel_count);
+    for _ in 0..kernel_count {
+        kernels.push(deserialize_cached_jit_kernel(&mut cursor)?);
+    }
+
+    let signal_count = read_u32(&mut cursor)? as usize;
+    let mut signal_slots = Vec::with_capacity(signal_count);
+    for _ in 0..signal_count {
+        signal_slots.push(CachedJitDataSlot {
+            item: crate::ItemId::from_raw(read_u32(&mut cursor)?),
+            layout: crate::LayoutId::from_raw(read_u32(&mut cursor)?),
+        });
+    }
+
+    let imported_count = read_u32(&mut cursor)? as usize;
+    let mut imported_item_slots = Vec::with_capacity(imported_count);
+    for _ in 0..imported_count {
+        imported_item_slots.push(CachedJitDataSlot {
+            item: crate::ItemId::from_raw(read_u32(&mut cursor)?),
+            layout: crate::LayoutId::from_raw(read_u32(&mut cursor)?),
+        });
+    }
+
+    let descriptor_count = read_u32(&mut cursor)? as usize;
+    let mut callable_descriptors = Vec::with_capacity(descriptor_count);
+    for _ in 0..descriptor_count {
+        callable_descriptors.push(CachedJitCallableDescriptor {
+            item: crate::ItemId::from_raw(read_u32(&mut cursor)?),
+            body: KernelId::from_raw(read_u32(&mut cursor)?),
+            arity: read_u32(&mut cursor)?,
+        });
+    }
+
+    let literal_count = read_u32(&mut cursor)? as usize;
+    let mut literal_data = Vec::with_capacity(literal_count);
+    for _ in 0..literal_count {
+        literal_data.push(CachedJitLiteralData {
+            symbol: read_boxed_str(&mut cursor)?,
+            align: read_u64(&mut cursor)?,
+            bytes: read_boxed_bytes(&mut cursor)?,
+        });
+    }
+
+    let external_count = read_u32(&mut cursor)? as usize;
+    let mut external_funcs = Vec::with_capacity(external_count);
+    for _ in 0..external_count {
+        external_funcs.push(read_boxed_str(&mut cursor)?);
+    }
+
+    Some(CachedJitKernelArtifact {
+        requested_kernel,
+        kernels,
+        signal_slots,
+        imported_item_slots,
+        callable_descriptors,
+        literal_data,
+        external_funcs,
+    })
+}
+
 /// Load a cached `CompiledProgram` for the given key, if a valid entry exists.
 pub fn load_cached_program(key: u64) -> Option<CompiledProgram> {
     let cache_root = cache_dir()?;
@@ -359,6 +676,15 @@ fn load_cached_kernel_artifact_from(
     (artifact.fingerprint() == fingerprint).then_some(artifact)
 }
 
+fn load_cached_jit_kernel_artifact_from(
+    cache_root: &Path,
+    fingerprint: KernelFingerprint,
+) -> Option<CachedJitKernelArtifact> {
+    let path = jit_kernel_cache_path_in(cache_root, compute_kernel_cache_key(fingerprint));
+    let bytes = fs::read(&path).ok()?;
+    deserialize_cached_jit_artifact(&bytes)
+}
+
 /// Persist a per-kernel object artifact to the disk cache.
 /// Silently ignores I/O failures so a missing or read-only cache never breaks compilation.
 pub fn store_cached_kernel_artifact(
@@ -384,6 +710,18 @@ fn store_cached_kernel_artifact_in(
         let _ = fs::create_dir_all(parent);
     }
     let _ = fs::write(&path, serialize_kernel_artifact(artifact));
+}
+
+fn store_cached_jit_kernel_artifact_in(
+    cache_root: &Path,
+    fingerprint: KernelFingerprint,
+    artifact: &CachedJitKernelArtifact,
+) {
+    let path = jit_kernel_cache_path_in(cache_root, compute_kernel_cache_key(fingerprint));
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(&path, serialize_cached_jit_artifact(artifact));
 }
 
 /// Compile a backend program, consulting the disk cache first to skip Cranelift
@@ -438,6 +776,37 @@ fn compile_kernel_cached_in_dir(
     Ok(compiled)
 }
 
+pub(crate) fn compile_kernel_jit_cached(
+    program: &Program,
+    kernel_id: KernelId,
+) -> Result<crate::codegen::CompiledJitKernel, CodegenErrors> {
+    if !program.kernels().contains(kernel_id) {
+        return crate::codegen::compile_kernel_jit(program, kernel_id);
+    }
+    let Some(cache_root) = cache_dir() else {
+        return crate::codegen::compile_kernel_jit(program, kernel_id);
+    };
+    compile_kernel_jit_cached_in_dir(&cache_root, program, kernel_id)
+}
+
+fn compile_kernel_jit_cached_in_dir(
+    cache_root: &Path,
+    program: &Program,
+    kernel_id: KernelId,
+) -> Result<crate::codegen::CompiledJitKernel, CodegenErrors> {
+    let fingerprint = compute_kernel_fingerprint(program, kernel_id);
+    if let Some(cached) = load_cached_jit_kernel_artifact_from(cache_root, fingerprint) {
+        if let Ok(compiled) = instantiate_cached_jit_kernel(program, kernel_id, &cached) {
+            return Ok(compiled);
+        }
+    }
+    let (compiled, artifact) = compile_kernel_jit_with_cache_artifact(program, kernel_id)?;
+    if let Some(artifact) = artifact.as_ref() {
+        store_cached_jit_kernel_artifact_in(cache_root, fingerprint, artifact);
+    }
+    Ok(compiled)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -447,6 +816,7 @@ mod tests {
 
     use aivi_base::SourceDatabase;
     use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
+    use aivi_ffi_call::AbiValue;
     use aivi_lambda::{
         lower_module as lower_lambda_module, validate_module as validate_lambda_module,
     };
@@ -588,6 +958,85 @@ mod tests {
             assert_ne!(
                 fs::read(&path).expect("recompiled cache file should be readable"),
                 b"corrupt-kernel-cache"
+            );
+        });
+    }
+
+    #[test]
+    fn cached_jit_kernel_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text("cache-jit-roundtrip.aivi", "value total:Int = 21 + 21\n");
+        let total = backend.items()[find_item(&backend, "total")]
+            .body
+            .expect("total should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, total)
+                .expect("JIT kernel should compile and store a replayable cache artifact");
+            let fingerprint = compute_kernel_fingerprint(&backend, total);
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                .expect("compiled JIT kernel should write a disk artifact");
+            let replayed = instantiate_cached_jit_kernel(&backend, total, &artifact)
+                .expect("serialized JIT artifact should replay into a live kernel");
+
+            assert_eq!(
+                compiled
+                    .caller
+                    .call(compiled.function, &[])
+                    .expect("compiled kernel should execute"),
+                AbiValue::I64(42)
+            );
+            assert_eq!(
+                replayed
+                    .caller
+                    .call(replayed.function, &[])
+                    .expect("replayed kernel should execute"),
+                AbiValue::I64(42)
+            );
+        });
+    }
+
+    #[test]
+    fn compile_kernel_jit_cached_recovers_from_corrupt_disk_entry() {
+        let backend = lower_text("cache-jit-corrupt.aivi", "value total:Int = 21 + 21\n");
+        let total = backend.items()[find_item(&backend, "total")]
+            .body
+            .expect("total should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let fingerprint = compute_kernel_fingerprint(&backend, total);
+            let path = jit_kernel_cache_path_in(cache_root, compute_kernel_cache_key(fingerprint));
+            fs::create_dir_all(
+                path.parent()
+                    .expect("JIT cache file should have a parent directory"),
+            )
+            .expect("JIT kernel cache parent should be created");
+            fs::write(&path, b"corrupt-jit-kernel-cache")
+                .expect("corrupt JIT kernel cache entry should be written");
+
+            let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, total)
+                .expect("corrupt JIT kernel cache should recompile");
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, fingerprint)
+                .expect("recompiled JIT cache entry should deserialize cleanly");
+            let replayed = instantiate_cached_jit_kernel(&backend, total, &artifact)
+                .expect("recompiled JIT artifact should replay cleanly");
+
+            assert_eq!(
+                compiled
+                    .caller
+                    .call(compiled.function, &[])
+                    .expect("recompiled kernel should execute"),
+                AbiValue::I64(42)
+            );
+            assert_eq!(
+                replayed
+                    .caller
+                    .call(replayed.function, &[])
+                    .expect("replayed kernel should execute"),
+                AbiValue::I64(42)
+            );
+            assert_ne!(
+                fs::read(&path).expect("recompiled JIT cache file should be readable"),
+                b"corrupt-jit-kernel-cache"
             );
         });
     }
