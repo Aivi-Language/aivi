@@ -310,38 +310,62 @@ impl Formatter {
     }
 
     fn format_from_entry(&self, entry: &FromEntry) -> Vec<String> {
+        let mut rendered = Vec::new();
+        if let Some(annotation) = &entry.annotation {
+            rendered.push(format!(
+                "{}type {}",
+                spaces(INDENT_WIDTH),
+                self.format_signature_annotation_inline(&entry.constraints, annotation)
+            ));
+        }
+        let prefix = self.format_from_entry_prefix(entry);
         match &entry.body {
             Some(body) => {
-                let inline = format!("{}: {}", entry.name.text, self.format_expr_inline(body, 0));
+                let inline = format!("{prefix}: {}", self.format_expr_inline(body, 0));
                 if display_width(&inline) <= INLINE_LIMIT {
-                    return vec![format!("{}{}", spaces(INDENT_WIDTH), inline)];
+                    rendered.push(format!("{}{}", spaces(INDENT_WIDTH), inline));
+                    return rendered;
                 }
 
                 if let ExprKind::Pipe(pipe) = &body.kind {
                     if let Some(lines) =
-                        self.format_pipe_with_head_lines(&format!("{}:", entry.name.text), pipe)
+                        self.format_pipe_with_head_lines(&format!("{prefix}:"), pipe)
                     {
-                        return lines
-                            .into_iter()
-                            .map(|line| format!("{}{}", spaces(INDENT_WIDTH), line))
-                            .collect();
+                        rendered.extend(
+                            lines
+                                .into_iter()
+                                .map(|line| format!("{}{}", spaces(INDENT_WIDTH), line)),
+                        );
+                        return rendered;
                     }
                 }
 
                 let block = self.format_expr_block(body, true);
                 let block = if block.is_inline() {
                     Block::inline(format!(
-                        "{}: {}",
-                        entry.name.text,
+                        "{prefix}: {}",
                         block.inline_text().expect("inline entry block")
                     ))
                 } else {
-                    block.prefixed(&format!("{}: ", entry.name.text))
+                    block.prefixed(&format!("{prefix}: "))
                 };
-                block.indented(INDENT_WIDTH).into_lines()
+                rendered.extend(block.indented(INDENT_WIDTH).into_lines());
+                rendered
             }
-            None => vec![format!("{}{}:", spaces(INDENT_WIDTH), entry.name.text)],
+            None => {
+                rendered.push(format!("{}{}:", spaces(INDENT_WIDTH), prefix));
+                rendered
+            }
         }
+    }
+
+    fn format_from_entry_prefix(&self, entry: &FromEntry) -> String {
+        let mut prefix = entry.name.text.clone();
+        for parameter in &entry.parameters {
+            prefix.push(' ');
+            prefix.push_str(&self.format_function_param(parameter));
+        }
+        prefix
     }
 
     fn format_signal_reactive_arm(&self, arm: &SignalReactiveArm) -> Vec<String> {
@@ -4461,6 +4485,24 @@ value view =
                 "    gameOver: .status\n",
                 "     ||> Running  -> False\n",
                 "     ||> GameOver -> True\n",
+                "}\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_normalizes_parameterized_from_entries() {
+        let formatted = format_text(
+            "from state={\ntype Int->Bool\natLeast threshold:.score>=threshold\ntype Bool\nreadyNow:.ready\n}\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "from state = {\n",
+                "    type Int -> Bool\n",
+                "    atLeast threshold: .score >= threshold\n",
+                "    type Bool\n",
+                "    readyNow: .ready\n",
                 "}\n",
             )
         );

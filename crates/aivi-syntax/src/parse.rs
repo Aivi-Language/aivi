@@ -752,17 +752,44 @@ impl<'a> Parser<'a> {
         }
         let entry_indent = self.line_indent_of_token(first_index);
         let mut entries = Vec::new();
+        let mut pending_type_annotation = None;
         while let Some(index) = self.peek_nontrivia(*cursor, end) {
+            if self.starts_from_type_annotation(index, entry_indent) {
+                let annotation_end = self
+                    .find_next_from_block_item_start(index + 1, end, entry_indent)
+                    .unwrap_or(end);
+                if let Some(pending) = self.parse_from_type_annotation(index, annotation_end) {
+                    if let Some(previous) = pending_type_annotation.replace(pending) {
+                        self.emit_orphan_from_type_annotation(&previous, None);
+                    }
+                }
+                *cursor = annotation_end;
+                continue;
+            }
             if !self.starts_from_entry(index, end, entry_indent) {
                 break;
             }
             let entry_end = self
-                .find_next_from_entry_start(index + 1, end, entry_indent)
+                .find_next_from_block_item_start(index + 1, end, entry_indent)
                 .unwrap_or(end);
-            entries.push(self.parse_from_entry(index, entry_end));
+            let mut entry = self.parse_from_entry(index, entry_end);
+            if let Some(pending) = pending_type_annotation.take() {
+                self.apply_pending_from_type_annotation(&mut entry, pending);
+            }
+            entries.push(entry);
             *cursor = entry_end;
         }
+        if let Some(pending) = pending_type_annotation.take() {
+            self.emit_orphan_from_type_annotation(&pending, None);
+        }
         entries
+    }
+
+    fn starts_from_type_annotation(&self, index: usize, entry_indent: usize) -> bool {
+        let token = self.tokens[index];
+        token.kind() == TokenKind::TypeKw
+            && token.line_start()
+            && self.line_indent_of_token(index) == entry_indent
     }
 
     fn starts_from_entry(&self, index: usize, end: usize, entry_indent: usize) -> bool {
@@ -770,18 +797,41 @@ impl<'a> Parser<'a> {
         token.kind() == TokenKind::Identifier
             && token.line_start()
             && self.line_indent_of_token(index) == entry_indent
-            && self.peek_kind(index + 1, end) == Some(TokenKind::Colon)
+            && self.find_from_entry_header_colon(index, end).is_some()
     }
 
     fn parse_from_entry(&mut self, start: usize, end: usize) -> FromEntry {
+        let Some(header_colon) = self.find_from_entry_header_colon(start, end) else {
+            return FromEntry {
+                name: self.identifier_from_token(start),
+                constraints: Vec::new(),
+                annotation: None,
+                parameters: Vec::new(),
+                body: None,
+                span: self.source_span_for_range(start, end),
+            };
+        };
         let mut cursor = start;
         let name = self
-            .parse_identifier(&mut cursor, end)
+            .parse_identifier(&mut cursor, header_colon)
             .unwrap_or_else(|| Identifier {
                 text: "<missing>".to_owned(),
                 span: self.source_span_of_token(start),
             });
-        let _ = self.consume_kind(&mut cursor, end, TokenKind::Colon);
+        let mut parameters = Vec::new();
+        while let Some(parameter) = self.parse_from_entry_param(&mut cursor, header_colon) {
+            parameters.push(parameter);
+        }
+        if let Some(trailing_index) = self.next_significant_in_range(cursor, header_colon) {
+            self.diagnostics.push(
+                Diagnostic::error("`from` entry headers only accept unannotated parameters before `:`")
+                    .with_primary_label(
+                        self.source_span_of_token(trailing_index),
+                        "remove this token or move its type into a preceding `type` line",
+                    ),
+            );
+        }
+        cursor = header_colon + 1;
         let body = self.parse_expr(&mut cursor, end, ExprStop::default());
         match &body {
             Some(_) => {
@@ -809,12 +859,15 @@ impl<'a> Parser<'a> {
 
         FromEntry {
             name,
+            constraints: Vec::new(),
+            annotation: None,
+            parameters,
             body,
             span: self.source_span_for_range(start, end),
         }
     }
 
-    fn find_next_from_entry_start(
+    fn find_next_from_block_item_start(
         &self,
         from: usize,
         end: usize,
@@ -826,7 +879,10 @@ impl<'a> Parser<'a> {
             if token.kind().is_trivia() {
                 continue;
             }
-            if depth == 0 && self.starts_from_entry(index, end, entry_indent) {
+            if depth == 0
+                && (self.starts_from_type_annotation(index, entry_indent)
+                    || self.starts_from_entry(index, end, entry_indent))
+            {
                 return Some(index);
             }
             match token.kind() {
@@ -838,6 +894,83 @@ impl<'a> Parser<'a> {
             }
         }
         None
+    }
+
+    fn find_from_entry_header_colon(&self, start: usize, end: usize) -> Option<usize> {
+        let mut depth = 0usize;
+        let mut saw_token = false;
+        for index in start..end {
+            let token = self.tokens[index];
+            if token.kind().is_trivia() {
+                continue;
+            }
+            if saw_token && token.line_start() && depth == 0 {
+                break;
+            }
+            saw_token = true;
+            match token.kind() {
+                TokenKind::LParen | TokenKind::LBrace | TokenKind::LBracket => depth += 1,
+                TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                    depth = depth.saturating_sub(1)
+                }
+                TokenKind::Colon if depth == 0 => return Some(index),
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn parse_from_entry_param(&mut self, cursor: &mut usize, end: usize) -> Option<FunctionParam> {
+        let index = self.peek_nontrivia(*cursor, end)?;
+        if !self.is_function_param_token(index) {
+            return None;
+        }
+        *cursor = index + 1;
+        let identifier = self.identifier_from_token(index);
+        let name = (identifier.text != "_").then_some(identifier);
+        Some(FunctionParam {
+            name,
+            annotation: None,
+            span: self.source_span_of_token(index),
+        })
+    }
+
+    fn parse_from_type_annotation(
+        &mut self,
+        start: usize,
+        end: usize,
+    ) -> Option<PendingTypeAnnotation> {
+        let mut cursor = start + 1;
+        let (constraints, annotation) = self.parse_constrained_type(&mut cursor, end);
+        let annotation = match annotation {
+            Some(annotation) => annotation,
+            None => {
+                self.diagnostics.push(
+                    Diagnostic::error("standalone `type` annotations inside `from` blocks require a type expression")
+                        .with_code(MISSING_STANDALONE_TYPE_ANNOTATION)
+                        .with_primary_label(
+                            self.source_span_of_token(start),
+                            "expected a type expression after `type`",
+                        )
+                        .with_help("write a payload/result type such as `type Bool` or `type Coord -> Bool`"),
+                );
+                return None;
+            }
+        };
+        if let Some(trailing_index) = self.next_significant_in_range(cursor, end) {
+            self.diagnostics.push(
+                Diagnostic::error("`from`-block type annotations must contain exactly one type expression")
+                    .with_primary_label(
+                        self.source_span_of_token(trailing_index),
+                        "this token is outside the attached type annotation",
+                    ),
+            );
+        }
+        Some(PendingTypeAnnotation {
+            span: self.source_span_for_range(start, end),
+            constraints,
+            annotation,
+        })
     }
 
     /// Parse a signal body after `=`. This may be:
@@ -6498,6 +6631,26 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn apply_pending_from_type_annotation(
+        &mut self,
+        entry: &mut FromEntry,
+        pending: PendingTypeAnnotation,
+    ) {
+        if !entry.constraints.is_empty() || entry.annotation.is_some() {
+            self.diagnostics.push(
+                Diagnostic::error(
+                    "standalone `type` annotations inside `from` blocks cannot be combined with another attached annotation",
+                )
+                .with_code(DUPLICATE_STANDALONE_TYPE_ANNOTATION)
+                .with_primary_label(pending.span, "remove this standalone `type` line")
+                .with_secondary_label(entry.span, "this derived entry already carries an annotation"),
+            );
+            return;
+        }
+        entry.constraints = pending.constraints;
+        entry.annotation = Some(pending.annotation);
+    }
+
     fn emit_orphan_standalone_type_annotation(
         &mut self,
         pending: &PendingTypeAnnotation,
@@ -6515,6 +6668,29 @@ impl<'a> Parser<'a> {
             diagnostic.with_secondary_label(
                 span,
                 "only the immediately following `func`, `value`, or `signal` can receive a standalone annotation",
+            )
+        } else {
+            diagnostic
+        });
+    }
+
+    fn emit_orphan_from_type_annotation(
+        &mut self,
+        pending: &PendingTypeAnnotation,
+        next_item_span: Option<SourceSpan>,
+    ) {
+        let diagnostic = Diagnostic::error(
+            "standalone `type` annotations inside `from` blocks must attach to the immediately following derived entry",
+        )
+        .with_code(ORPHAN_FROM_TYPE_ANNOTATION)
+        .with_primary_label(
+            pending.span,
+            "this `type` line is not attached to a derived entry in the same `from` block",
+        );
+        self.diagnostics.push(if let Some(span) = next_item_span {
+            diagnostic.with_secondary_label(
+                span,
+                "only the immediately following derived entry can receive this `type` line",
             )
         } else {
             diagnostic
@@ -8222,6 +8398,54 @@ signal flashed: Signal Int = clicks
         assert!(matches!(
             item.entries[2].body.as_ref().map(|expr| &expr.kind),
             Some(ExprKind::Pipe(_))
+        ));
+    }
+
+    #[test]
+    fn parser_builds_parameterized_from_entries_with_attached_type_lines() {
+        let (_, parsed) = load(
+            r#"from state = {
+    type Int -> Bool
+    atLeast threshold: .score >= threshold
+    type Bool
+    readyNow: .ready
+}
+"#,
+        );
+
+        assert!(
+            !parsed.has_errors(),
+            "{:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let Item::From(item) = &parsed.module.items[0] else {
+            panic!("expected from item");
+        };
+        assert_eq!(item.entries.len(), 2);
+
+        let at_least = &item.entries[0];
+        assert_eq!(at_least.name.text, "atLeast");
+        assert_eq!(at_least.parameters.len(), 1);
+        assert_eq!(
+            at_least.parameters[0]
+                .name
+                .as_ref()
+                .expect("parameter name")
+                .text,
+            "threshold"
+        );
+        assert!(at_least.constraints.is_empty());
+        assert!(matches!(
+            at_least.annotation.as_ref().map(|annotation| &annotation.kind),
+            Some(TypeExprKind::Arrow { .. })
+        ));
+
+        let ready_now = &item.entries[1];
+        assert_eq!(ready_now.name.text, "readyNow");
+        assert!(ready_now.parameters.is_empty());
+        assert!(matches!(
+            ready_now.annotation.as_ref().map(|annotation| &annotation.kind),
+            Some(TypeExprKind::Name(name)) if name.text == "Bool"
         ));
     }
 

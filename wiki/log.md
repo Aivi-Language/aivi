@@ -165,3 +165,12 @@ Refactored `demos/reversi.aivi` to showcase a wider cross-section of the impleme
   pipe memos, and `T|>` / `F|>` routing across the pure game-logic helpers
 - Kept the live GTK boolean helper chain on its older call shape after validation showed that path is
   the stable one currently exercised by the Reversi run-session tests
+
+## [2026-04-09] ingest | parameterized from selectors
+
+Implemented parameterized entries inside top-level `from source = { ... }` fan-out blocks.
+
+- `crates/aivi-syntax/`: `from` entries now carry attached standalone `type` lines plus optional parameters, with parser/formatter coverage and orphan-annotation diagnostics
+- `crates/aivi-hir/src/lower.rs`: zero-parameter entries still lower to synthetic `Signal` items; parameterized entries lower to synthetic `Function` items whose final result type is wrapped in builtin `Signal`
+- `crates/aivi-cli/tests/check.rs`, `crates/aivi-hir/src/lower.rs`, and `crates/aivi-syntax/tests/`: end-to-end, lowering, formatter, parser, and snapshot coverage
+- `syntax.md`, `manual/guide/signals.md`, `manual/guide/surface-feature-matrix.md`, and `wiki/signal-model.md`: docs updated to describe the new selector surface

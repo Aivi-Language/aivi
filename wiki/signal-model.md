@@ -32,11 +32,13 @@ A `signal` declaration:
 
 ## `from` Signal Fan-Out Sugar
 
-`from` is surface sugar for defining several derived signals from one shared upstream signal:
+`from` is surface sugar for defining several reactive bindings from one shared upstream signal:
 
 ```aivi
 from state = {
     boardText: renderBoard
+    type Int -> Bool
+    atLeast threshold: .score >= threshold
     dirLine: .dir |> dirLabel
     gameOver: .status
         ||> Running -> False
@@ -46,10 +48,15 @@ from state = {
 
 Semantics:
 
-- Each entry lowers to an ordinary top-level `signal`.
+- Zero-parameter entries lower to ordinary top-level `signal`s.
+- Parameterized entries lower to ordinary top-level `func`s.
 - The shared source is piped into each entry body.
 - Headless pipe entries such as `.dir |> dirLabel` become `state |> .dir |> dirLabel`.
 - Plain expressions such as `renderBoard` become `state |> renderBoard`.
+- Parameterized entries still produce reactive results, so a surface annotation like
+  `type Int -> Bool` is wrapped internally as `Int -> Signal Bool`.
+- A standalone `type` line inside the block attaches to the immediately following
+  entry only.
 - Entry boundaries are indentation-sensitive: a peer `name:` line starts a new derived signal; deeper-indented lines stay attached to the current entry.
 
 **Source**: `crates/aivi-syntax/src/parse.rs` (`parse_from_item`, `parse_from_entries`), `crates/aivi-hir/src/lower.rs` (`lower_from_item`, `prepend_from_source`)

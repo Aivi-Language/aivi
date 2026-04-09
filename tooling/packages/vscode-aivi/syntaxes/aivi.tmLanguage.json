@@ -16,6 +16,7 @@
     { "include": "#pipe-stage-head" },
     { "include": "#function-call-head" },
     { "include": "#markup" },
+    { "include": "#from-entry-parameterized" },
     { "include": "#record-key" },
     { "include": "#type-expression" },
     { "include": "#operators" },
@@ -699,9 +700,18 @@
       ]
     },
 
+    "from-entry-parameterized": {
+      "comment": "parameterized from-entry header: name param1 param2:",
+      "match": "^(\\s+)([a-z_][a-zA-Z0-9_]*)(\\s+[a-z_][a-zA-Z0-9_]*(?:\\s+[a-z_][a-zA-Z0-9_]*)*)(?=\\s*:(?!:))",
+      "captures": {
+        "2": { "name": "entity.name.function.aivi" },
+        "3": { "name": "variable.parameter.function.aivi" }
+      }
+    },
+
     "record-key": {
       "comment": "Identifier immediately followed by : with no space — record/struct field. Excludes 'name : Type' style annotations which use a space.",
-      "match": "\\b([a-z_][a-zA-Z0-9_]*)(?=:(?!:))",
+      "match": "(?<![a-zA-Z0-9_]\\s)([a-z_][a-zA-Z0-9_]*)(?=:(?!:))",
       "captures": {
         "1": { "name": "variable.other.property.aivi" }
       }

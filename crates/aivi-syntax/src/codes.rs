@@ -53,6 +53,8 @@ pub const MISSING_FROM_OPEN_BRACE: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-from-open-brace");
 pub const MISSING_FROM_SOURCE: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-from-source");
+pub const ORPHAN_FROM_TYPE_ANNOTATION: DiagnosticCode =
+    DiagnosticCode::new("syntax", "orphan-from-type-annotation");
 pub const MISSING_INSTANCE_CLASS: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-instance-class");
 pub const MISSING_INSTANCE_MEMBER_BODY: DiagnosticCode =

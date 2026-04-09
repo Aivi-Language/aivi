@@ -96,6 +96,9 @@ Module {
                                 },
                             },
                         },
+                        constraints: [],
+                        annotation: None,
+                        parameters: [],
                         body: Some(
                             Expr {
                                 kind: Name(
@@ -162,6 +165,9 @@ Module {
                                 },
                             },
                         },
+                        constraints: [],
+                        annotation: None,
+                        parameters: [],
                         body: Some(
                             Expr {
                                 kind: Pipe(

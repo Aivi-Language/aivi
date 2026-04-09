@@ -930,6 +930,9 @@ pub struct UseItem {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FromEntry {
     pub name: Identifier,
+    pub constraints: Vec<TypeExpr>,
+    pub annotation: Option<TypeExpr>,
+    pub parameters: Vec<FunctionParam>,
     pub body: Option<Expr>,
     pub span: SourceSpan,
 }

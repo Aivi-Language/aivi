@@ -34,6 +34,38 @@ signal doubledCount = count
   |> double
 ```
 
+## Grouping derivations with `from`
+
+When several reactive projections all hang off the same upstream signal, group
+them with `from`:
+
+```aivi
+type State = {
+    score: Int,
+    ready: Bool
+}
+
+signal state : Signal State = {
+    score: 0,
+    ready: True
+}
+
+from state = {
+    type Bool
+    readyNow: .ready
+    type Int -> Bool
+    atLeast threshold: .score >= threshold
+}
+
+signal thresholdMet : Signal Bool = atLeast 10
+```
+
+- Plain entries like `readyNow` create ordinary derived `signal`s.
+- Parameterized entries like `atLeast threshold` create ordinary top-level
+  selector helpers whose *surface* type omits the final `Signal`.
+- The preceding standalone `type` line attaches to the next `from` entry only.
+- Every entry still reads reactively from the shared upstream source.
+
 ## Signal branching
 
 Signals can use the same truthy/falsy shorthand as ordinary values. `Signal Bool`

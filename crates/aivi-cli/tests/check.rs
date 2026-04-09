@@ -150,6 +150,44 @@ fn check_accepts_pattern_armed_reactive_updates() {
 }
 
 #[test]
+fn check_accepts_parameterized_from_selectors() {
+    let dir = TempDir::new("check-parameterized-from-selectors");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "type State = { score: Int, ready: Bool }\n",
+            "signal state : Signal State = { score: 0, ready: True }\n",
+            "\n",
+            "from state = {\n",
+            "    type Bool\n",
+            "    readyNow: .ready\n",
+            "    type Int -> Bool\n",
+            "    atLeast threshold: .score >= threshold\n",
+            "}\n",
+            "\n",
+            "signal currentReady : Signal Bool = readyNow\n",
+            "signal thresholdMet : Signal Bool = atLeast 0\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected parameterized from-selector program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for parameterized from-selector program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn check_accepts_source_pattern_reactive_updates() {
     let dir = TempDir::new("check-source-pattern-reactive-update");
     let path = dir.write(

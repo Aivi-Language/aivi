@@ -931,8 +931,8 @@ impl<'a> Lowerer<'a> {
         }
 
         if let syn::Item::From(item) = item {
-            for signal in self.lower_from_item(item) {
-                self.store_item(Item::Signal(signal), ambient);
+            for lowered in self.lower_from_item(item) {
+                self.store_item(lowered, ambient);
             }
             return;
         }
@@ -1182,11 +1182,23 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn lower_from_item(&mut self, item: &syn::FromItem) -> Vec<SignalItem> {
+    fn lower_from_item(&mut self, item: &syn::FromItem) -> Vec<Item> {
         item.entries
             .iter()
-            .map(|entry| self.lower_from_entry_signal(item, entry))
+            .map(|entry| self.lower_from_entry_item(item, entry))
             .collect()
+    }
+
+    fn lower_from_entry_item(
+        &mut self,
+        from_item: &syn::FromItem,
+        entry: &syn::FromEntry,
+    ) -> Item {
+        if entry.parameters.is_empty() {
+            Item::Signal(self.lower_from_entry_signal(from_item, entry))
+        } else {
+            Item::Function(self.lower_from_entry_function(from_item, entry))
+        }
     }
 
     fn lower_from_entry_signal(
@@ -1204,8 +1216,11 @@ impl<'a> Lowerer<'a> {
             keyword_span: from_item.keyword_span,
             name: Some(entry.name.clone()),
             type_parameters: Vec::new(),
-            constraints: Vec::new(),
-            annotation: None,
+            constraints: entry.constraints.clone(),
+            annotation: entry
+                .annotation
+                .as_ref()
+                .map(|annotation| self.wrap_from_entry_annotation_result_in_signal(annotation)),
             function_form: syn::cst::FunctionSurfaceForm::Explicit,
             parameters: Vec::new(),
             body: Some(syn::NamedItemBody::Expr(self.synthesize_from_entry_body(
@@ -1215,6 +1230,47 @@ impl<'a> Lowerer<'a> {
             ))),
         };
         self.lower_signal_item(&synthetic)
+    }
+
+    fn lower_from_entry_function(
+        &mut self,
+        from_item: &syn::FromItem,
+        entry: &syn::FromEntry,
+    ) -> FunctionItem {
+        if entry.annotation.is_none() {
+            self.emit_error(
+                entry.span,
+                format!(
+                    "parameterized `from` entry `{}` is missing a preceding type annotation",
+                    entry.name.text
+                ),
+                code("missing-from-entry-type"),
+            );
+        }
+        let synthetic = syn::NamedItem {
+            base: syn::ItemBase {
+                span: entry.span,
+                token_range: from_item.base.token_range,
+                decorators: from_item.base.decorators.clone(),
+                leading_comments: Vec::new(),
+            },
+            keyword_span: from_item.keyword_span,
+            name: Some(entry.name.clone()),
+            type_parameters: Vec::new(),
+            constraints: entry.constraints.clone(),
+            annotation: entry
+                .annotation
+                .as_ref()
+                .map(|annotation| self.wrap_from_entry_annotation_result_in_signal(annotation)),
+            function_form: syn::cst::FunctionSurfaceForm::Explicit,
+            parameters: entry.parameters.clone(),
+            body: Some(syn::NamedItemBody::Expr(self.synthesize_from_entry_body(
+                from_item.source.as_ref(),
+                entry.body.as_ref(),
+                entry.span,
+            ))),
+        };
+        self.lower_function_item(&synthetic)
     }
 
     fn synthesize_from_entry_body(
@@ -1233,6 +1289,31 @@ impl<'a> Lowerer<'a> {
                     text: "invalid".to_owned(),
                     span: fallback_span,
                 }),
+            },
+        }
+    }
+
+    fn wrap_from_entry_annotation_result_in_signal(&self, annotation: &syn::TypeExpr) -> syn::TypeExpr {
+        match &annotation.kind {
+            syn::TypeExprKind::Arrow { parameter, result } => syn::TypeExpr {
+                span: annotation.span,
+                kind: syn::TypeExprKind::Arrow {
+                    parameter: parameter.clone(),
+                    result: Box::new(self.wrap_from_entry_annotation_result_in_signal(result)),
+                },
+            },
+            _ => syn::TypeExpr {
+                span: annotation.span,
+                kind: syn::TypeExprKind::Apply {
+                    callee: Box::new(syn::TypeExpr {
+                        span: annotation.span,
+                        kind: syn::TypeExprKind::Name(syn::Identifier {
+                            text: "Signal".to_owned(),
+                            span: annotation.span,
+                        }),
+                    }),
+                    arguments: vec![annotation.clone()],
+                },
             },
         }
     }
@@ -12258,6 +12339,95 @@ signal game : Signal Int = stepOnTick tick
             vec!["state".to_owned()],
             "pipe-case fan-out entries should preserve the upstream signal dependency"
         );
+    }
+
+    #[test]
+    fn lowers_parameterized_from_entries_into_selector_functions() {
+        let lowered = lower_text(
+            "from-parameterized-selectors.aivi",
+            "type State = { score: Int, ready: Bool }\n\
+             signal state : Signal State = { score: 0, ready: True }\n\
+             from state = {\n\
+             \x20\x20\x20\x20type Bool\n\
+             \x20\x20\x20\x20readyNow: .ready\n\
+             \x20\x20\x20\x20type Int -> Bool\n\
+             \x20\x20\x20\x20atLeast threshold: .score >= threshold\n\
+             }\n\
+             signal thresholdMet : Signal Bool = atLeast 0\n",
+        );
+        assert!(
+            !lowered.has_errors(),
+            "parameterized from-entry example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            report.is_ok(),
+            "parameterized from-entry example should validate cleanly: {:?}",
+            report.diagnostics()
+        );
+
+        let ready_now = find_signal(lowered.module(), "readyNow");
+        assert_eq!(
+            signal_dependency_names(lowered.module(), ready_now),
+            vec!["state".to_owned()],
+            "zero-parameter from entries should keep lowering to derived signals"
+        );
+
+        let at_least = match find_named_item(lowered.module(), "atLeast") {
+            Item::Function(item) => item,
+            other => panic!("expected `atLeast` to lower as a function item, found {other:?}"),
+        };
+        assert_eq!(at_least.parameters.len(), 1);
+
+        let parameter_annotation = at_least.parameters[0]
+            .annotation
+            .expect("parameterized from entry should synthesize its parameter annotation");
+        match &lowered.module().types()[parameter_annotation].kind {
+            TypeKind::Name(reference) => assert!(
+                matches!(
+                    reference.resolution.as_ref(),
+                    ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Int))
+                ),
+                "expected selector parameter annotation to resolve to builtin `Int`, found {:?}",
+                reference.resolution.as_ref()
+            ),
+            other => panic!("expected builtin `Int` parameter annotation, found {other:?}"),
+        }
+
+        let result_annotation = at_least
+            .annotation
+            .expect("parameterized from entry should keep its synthesized reactive result type");
+        let TypeKind::Apply { callee, arguments } = &lowered.module().types()[result_annotation].kind
+        else {
+            panic!("expected selector result to be wrapped in `Signal`");
+        };
+        assert_eq!(arguments.len(), 1);
+        match &lowered.module().types()[*arguments.first()].kind {
+            TypeKind::Name(reference) => assert!(
+                matches!(
+                    reference.resolution.as_ref(),
+                    ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Bool))
+                ),
+                "expected selector payload to resolve to builtin `Bool`, found {:?}",
+                reference.resolution.as_ref()
+            ),
+            other => panic!("expected builtin `Bool` payload, found {other:?}"),
+        }
+        match &lowered.module().types()[*callee].kind {
+            TypeKind::Name(reference) => assert!(
+                matches!(
+                    reference.resolution.as_ref(),
+                    ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Signal))
+                ),
+                "expected selector result wrapper to resolve to builtin `Signal`, found {:?}",
+                reference.resolution.as_ref()
+            ),
+            other => panic!("expected builtin `Signal` callee, found {other:?}"),
+        }
     }
 
     #[test]

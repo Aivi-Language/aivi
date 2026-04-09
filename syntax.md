@@ -98,6 +98,7 @@ Rules:
 - `value` = constant binding only; uses `=`.
 - `func` = function declaration; uses `=` after the name, then either parameters plus `=>`, unary subject sugar rooted at `.`, or selected-subject header sugar rooted at `param!` / `param { path! }`.
 - Function signatures live on a preceding `type` line: `type Int -> Int -> Int`.
+- Inside `from` blocks, the same standalone `type` line form attaches to the immediately following entry.
 - `func` headers keep parameters unannotated: `func add = x y => ...`.
 - Unary subject sugar is available for single-argument functions whose body starts from that argument: `func headOrFallback = .`, `func status = .status`, `func scoreLineFor = "Score: {.}"`.
 - Selected-subject header sugar is available when one explicit parameter should seed the following continuation: `func addFrom = amount value! |> add amount`, `func bump = counter! delta <| { total: counter.total + delta }`.
@@ -236,6 +237,9 @@ Rules:
 from state = {
     boardText: renderBoard
     dirLine: .dir |> dirLabel
+    type Int -> Bool
+    atLeast threshold: .score >= threshold
+    type Bool
     gameOver: .status
         ||> Running -> False
         ||> GameOver -> True
@@ -244,10 +248,15 @@ from state = {
 
 Rules:
 
-- `from source = { ... }` creates one derived `signal` per entry.
+- `from source = { ... }` creates one top-level binding per entry.
+- Zero-parameter entries lower to derived `signal`s.
+- Parameterized entries require a preceding standalone `type` line inside the same block.
+- That `type` line attaches only to the immediately following entry; leaving it orphaned at the end of the block is an error.
 - Each entry body is desugared as if `source` were piped into it.
 - `label: renderBoard` becomes `signal label = source |> renderBoard`.
 - `label: .dir |> dirLabel` becomes `signal label = source |> .dir |> dirLabel`.
+- `atLeast threshold: .score >= threshold` lowers to a top-level selector function. Its surface annotation is written without the final `Signal`, so `type Int -> Bool` means `Int -> Signal Bool` internally.
+- Later entries may reference earlier entries from the same `from` block.
 - Deeper-indented continuation lines belong to the current entry, so `||>` pipe-case arms stay inside that derived signal body.
 
 ### 2.7 `@source`
