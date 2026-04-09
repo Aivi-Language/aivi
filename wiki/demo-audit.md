@@ -74,6 +74,7 @@ func resolveMoveGrow = st h =>
 - **Rich animation state machine** (`AnimState`) — properly modelled as a closed ADT.
 - **AI player** implemented purely as positional-weight scoring + `listMaximum`.
 - **Ray-scan algorithm** cleanly expressed as reducible steps over `boardIndices`.
+- **Pipe memos** now name intermediate ray, snapshot, board, and step values in helper-heavy flows without breaking the logic into throwaway helpers.
 - **All game logic is pure** — no side-effectful operations in the computation layer.
 - **Correct signal merge syntax** and recurrence with `+|>`.
 - **Markup**: Good use of `<each>`, `<with>`, `<show>`, `HeaderBar`.

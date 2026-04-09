@@ -130,3 +130,9 @@ single-payload constructors, and corrected the surface feature matrix note.
 Documented `#name` as the way to remember stage inputs/results inside ordinary pipe flows, added
 manual examples framing it as the local-`let` replacement for pipes, and recorded the grouped
 branch memo behavior plus the `&|>` cluster boundary in the wiki.
+
+## [2026-04-09] ingest | reversi pipe memo cleanup
+
+Updated the Reversi demo audit after `demos/reversi.aivi` switched several helper-heavy flows to
+`#name` memos, using the demo as a concrete example of naming intermediate ray, board, snapshot,
+and animation-step values without introducing throwaway helpers.
