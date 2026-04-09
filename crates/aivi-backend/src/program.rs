@@ -119,8 +119,14 @@ impl fmt::Display for Program {
                             f.write_str(", ")?;
                         }
                         write!(f, "{}", self.item_name(*dependency))?;
+                        if let Some(layout) = signal.dependency_layouts.get(index) {
+                            write!(f, ": layout{layout}")?;
+                        }
                     }
                     writeln!(f, "]")?;
+                }
+                if let Some(body_kernel) = signal.body_kernel {
+                    writeln!(f, "  signal-body = kernel{body_kernel}")?;
                 }
                 if let Some(source_id) = signal.source {
                     let source = &self.sources[source_id];
@@ -443,6 +449,8 @@ impl ItemKind {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SignalInfo {
     pub dependencies: Vec<ItemId>,
+    pub dependency_layouts: Vec<LayoutId>,
+    pub body_kernel: Option<KernelId>,
     pub source: Option<SourceId>,
 }
 

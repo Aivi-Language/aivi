@@ -250,6 +250,7 @@ impl<'a> ProgramLowerer<'a> {
         self.seed_signal_dependencies().map_err(wrap_one)?;
         self.check_global_item_cycles().map_err(wrap_one)?;
         self.lower_item_bodies().map_err(wrap_one)?;
+        self.lower_signal_body_kernels().map_err(wrap_one)?;
         self.lower_pipelines().map_err(wrap_one)?;
         self.lower_sources().map_err(wrap_one)?;
         self.attach_opaque_variants().map_err(wrap_one)?;
@@ -460,6 +461,34 @@ impl<'a> ProgramLowerer<'a> {
                 .get_mut(item_id)
                 .expect("seeded backend item should exist")
                 .body = Some(kernel);
+        }
+        Ok(())
+    }
+
+    fn lower_signal_body_kernels(&mut self) -> Result<(), LoweringError> {
+        for (core_id, item) in self.lambda.items().iter() {
+            let core::ItemKind::Signal(signal) = &item.kind else {
+                continue;
+            };
+            let Some(body) = item.body else {
+                continue;
+            };
+            let item_id = self.require_item(core_id, item.span)?;
+            let Some((body_kernel, dependency_layouts)) =
+                self.try_lower_signal_body_kernel(item, item_id, body, &signal.dependencies)?
+            else {
+                continue;
+            };
+            let backend_item = self
+                .program
+                .items_mut()
+                .get_mut(item_id)
+                .expect("seeded backend item should exist");
+            let ItemKind::Signal(info) = &mut backend_item.kind else {
+                unreachable!("signal body kernels only lower for signal items");
+            };
+            info.dependency_layouts = dependency_layouts;
+            info.body_kernel = Some(body_kernel);
         }
         Ok(())
     }
@@ -1471,8 +1500,10 @@ impl<'a> ProgramLowerer<'a> {
             .as_ref()
             .map(|subject| self.intern_core_type(subject))
             .transpose()?;
-        let contract = self.collect_kernel_contract(&closure, input_hint)?;
-        let lowered = self.lower_kernel_exprs(closure.root, input_hint, &contract.env_map)?;
+        let item_env_map = HashMap::new();
+        let contract = self.collect_kernel_contract(&closure, input_hint, &item_env_map)?;
+        let lowered =
+            self.lower_kernel_exprs(closure.root, input_hint, &contract.env_map, &item_env_map)?;
         let result_layout = self.runtime_expr_layout(closure.root)?;
         let input_subject = input_hint.filter(|_| contract.uses_input_subject);
         self.alloc_kernel(
@@ -1512,9 +1543,16 @@ impl<'a> ProgramLowerer<'a> {
             env_map.insert(capture.binding.as_raw(), slot);
         }
 
-        let contract =
-            self.collect_root_kernel_contract(closure.root, None, environment, env_map)?;
-        let lowered = self.lower_kernel_exprs(closure.root, None, &contract.env_map)?;
+        let item_env_map = HashMap::new();
+        let contract = self.collect_root_kernel_contract(
+            closure.root,
+            None,
+            environment,
+            env_map,
+            &item_env_map,
+        )?;
+        let lowered =
+            self.lower_kernel_exprs(closure.root, None, &contract.env_map, &item_env_map)?;
         let result_layout = self.runtime_item_body_layout(item, closure.root)?;
         self.alloc_kernel(
             owner,
@@ -1534,10 +1572,64 @@ impl<'a> ProgramLowerer<'a> {
         kind: KernelOriginKind,
         root: core::ExprId,
     ) -> Result<KernelId, LoweringError> {
-        let contract = self.collect_root_kernel_contract(root, None, Vec::new(), HashMap::new())?;
-        let lowered = self.lower_kernel_exprs(root, None, &contract.env_map)?;
+        let item_env_map = HashMap::new();
+        let contract = self.collect_root_kernel_contract(
+            root,
+            None,
+            Vec::new(),
+            HashMap::new(),
+            &item_env_map,
+        )?;
+        let lowered = self.lower_kernel_exprs(root, None, &contract.env_map, &item_env_map)?;
         let result_layout = self.runtime_expr_layout(root)?;
         self.alloc_kernel(owner, span, kind, None, contract, lowered, result_layout)
+    }
+
+    fn try_lower_signal_body_kernel(
+        &mut self,
+        item: &lambda::Item,
+        owner: ItemId,
+        closure_id: lambda::ClosureId,
+        dependencies: &[core::ItemId],
+    ) -> Result<Option<(KernelId, Vec<LayoutId>)>, LoweringError> {
+        let closure = self.lambda.closures()[closure_id].clone();
+        if !item.parameters.is_empty() || !closure.captures.is_empty() {
+            return Ok(None);
+        }
+
+        let dependency_types = self.collect_signal_dependency_types(closure.root, dependencies);
+        let Some(dependency_types) = dependency_types else {
+            return Ok(None);
+        };
+        let dependency_layouts = dependency_types
+            .iter()
+            .map(|ty| self.intern_core_type(ty))
+            .collect::<Result<Vec<_>, _>>()?;
+        let item_env_map = dependencies
+            .iter()
+            .enumerate()
+            .map(|(index, dependency)| (*dependency, EnvSlotId::from_raw(index as u32)))
+            .collect::<HashMap<_, _>>();
+        let contract = self.collect_root_kernel_contract(
+            closure.root,
+            None,
+            dependency_layouts.clone(),
+            HashMap::new(),
+            &item_env_map,
+        )?;
+        let lowered =
+            self.lower_kernel_exprs(closure.root, None, &contract.env_map, &item_env_map)?;
+        let result_layout = self.runtime_item_body_layout(item, closure.root)?;
+        let kernel = self.alloc_kernel(
+            owner,
+            closure.span,
+            KernelOriginKind::SignalBody { item: owner },
+            None,
+            contract,
+            lowered,
+            result_layout,
+        )?;
+        Ok(Some((kernel, dependency_layouts)))
     }
 
     fn alloc_kernel(
@@ -1576,6 +1668,7 @@ impl<'a> ProgramLowerer<'a> {
         &mut self,
         closure: &lambda::Closure,
         input_hint: Option<LayoutId>,
+        item_env_map: &HashMap<core::ItemId, EnvSlotId>,
     ) -> Result<KernelContract, LoweringError> {
         let mut environment = Vec::with_capacity(closure.captures.len());
         let mut env_map = HashMap::with_capacity(closure.captures.len());
@@ -1584,7 +1677,13 @@ impl<'a> ProgramLowerer<'a> {
             environment.push(self.intern_core_type(&capture.ty)?);
             env_map.insert(capture.binding.as_raw(), EnvSlotId::from_raw(index as u32));
         }
-        self.collect_root_kernel_contract(closure.root, input_hint, environment, env_map)
+        self.collect_root_kernel_contract(
+            closure.root,
+            input_hint,
+            environment,
+            env_map,
+            item_env_map,
+        )
     }
 
     fn collect_root_kernel_contract(
@@ -1593,12 +1692,11 @@ impl<'a> ProgramLowerer<'a> {
         input_hint: Option<LayoutId>,
         environment: Vec<LayoutId>,
         env_map: HashMap<u32, EnvSlotId>,
+        item_env_map: &HashMap<core::ItemId, EnvSlotId>,
     ) -> Result<KernelContract, LoweringError> {
         let mut globals = BTreeSet::new();
         let mut uses_input_subject = false;
-        let mut work = vec![(root, SubjectKind::Input)];
-
-        while let Some((expr_id, subject)) = work.pop() {
+        self.walk_runtime_expr(root, |expr_id, subject| {
             let expr = &self.lambda.exprs()[expr_id];
             match &expr.kind {
                 core::ExprKind::AmbientSubject => {
@@ -1609,17 +1707,12 @@ impl<'a> ProgramLowerer<'a> {
                         uses_input_subject = true;
                     }
                 }
-                core::ExprKind::OptionSome { payload } => work.push((*payload, subject)),
-                core::ExprKind::OptionNone
-                | core::ExprKind::Integer(_)
-                | core::ExprKind::Float(_)
-                | core::ExprKind::Decimal(_)
-                | core::ExprKind::BigInt(_)
-                | core::ExprKind::SuffixedInteger(_) => {}
                 core::ExprKind::Reference(reference) => match reference {
                     core::Reference::Local(_) => {}
                     core::Reference::Item(item) => {
-                        globals.insert(self.require_item(*item, expr.span)?);
+                        if !item_env_map.contains_key(item) {
+                            globals.insert(self.require_item(*item, expr.span)?);
+                        }
                     }
                     core::Reference::SumConstructor(_) => {}
                     core::Reference::DomainMember(_) => {}
@@ -1630,31 +1723,6 @@ impl<'a> ProgramLowerer<'a> {
                     }
                     core::Reference::Builtin(_) => {}
                 },
-                core::ExprKind::Text(text) => {
-                    for segment in text.segments.iter().rev() {
-                        if let core::TextSegment::Interpolation { expr, .. } = segment {
-                            work.push((*expr, subject));
-                        }
-                    }
-                }
-                core::ExprKind::Tuple(elements)
-                | core::ExprKind::List(elements)
-                | core::ExprKind::Set(elements) => {
-                    for child in elements.iter().rev() {
-                        work.push((*child, subject));
-                    }
-                }
-                core::ExprKind::Map(entries) => {
-                    for entry in entries.iter().rev() {
-                        work.push((entry.value, subject));
-                        work.push((entry.key, subject));
-                    }
-                }
-                core::ExprKind::Record(fields) => {
-                    for field in fields.iter().rev() {
-                        work.push((field.value, subject));
-                    }
-                }
                 core::ExprKind::Projection { base, .. } => match base {
                     core::ProjectionBase::AmbientSubject => {
                         if matches!(subject, SubjectKind::Input) {
@@ -1664,46 +1732,12 @@ impl<'a> ProgramLowerer<'a> {
                             uses_input_subject = true;
                         }
                     }
-                    core::ProjectionBase::Expr(base) => work.push((*base, subject)),
+                    core::ProjectionBase::Expr(_) => {}
                 },
-                core::ExprKind::Apply { callee, arguments } => {
-                    for argument in arguments.iter().rev() {
-                        work.push((*argument, subject));
-                    }
-                    work.push((*callee, subject));
-                }
-                core::ExprKind::Unary { expr, .. } => work.push((*expr, subject)),
-                core::ExprKind::Binary { left, right, .. } => {
-                    work.push((*right, subject));
-                    work.push((*left, subject));
-                }
-                core::ExprKind::Pipe(pipe) => {
-                    for stage in pipe.stages.iter().rev() {
-                        match &stage.kind {
-                            core::PipeStageKind::Transform { expr, .. }
-                            | core::PipeStageKind::Tap { expr }
-                            | core::PipeStageKind::FanOut { map_expr: expr } => {
-                                work.push((*expr, SubjectKind::Inline));
-                            }
-                            core::PipeStageKind::Debug { .. } => {}
-                            core::PipeStageKind::Gate { predicate, .. } => {
-                                work.push((*predicate, SubjectKind::Inline));
-                            }
-                            core::PipeStageKind::Case { arms } => {
-                                for arm in arms.iter().rev() {
-                                    work.push((arm.body, SubjectKind::Inline));
-                                }
-                            }
-                            core::PipeStageKind::TruthyFalsy(pair) => {
-                                work.push((pair.falsy.body, SubjectKind::Inline));
-                                work.push((pair.truthy.body, SubjectKind::Inline));
-                            }
-                        }
-                    }
-                    work.push((pipe.head, subject));
-                }
+                _ => {}
             }
-        }
+            Ok(())
+        })?;
 
         // `global_items` stays kernel-local here. Global item dependency cycles are already
         // rejected earlier by `check_global_item_cycles()` and revalidated by
@@ -1721,6 +1755,7 @@ impl<'a> ProgramLowerer<'a> {
         root: core::ExprId,
         input_hint: Option<LayoutId>,
         env_map: &HashMap<u32, EnvSlotId>,
+        item_env_map: &HashMap<core::ItemId, EnvSlotId>,
     ) -> Result<LoweredKernelExprs, LoweringError> {
         enum Task {
             Visit(core::ExprId, Option<SubjectContext>, LocalBindings),
@@ -1927,7 +1962,11 @@ impl<'a> ProgramLowerer<'a> {
                                     }
                                 }
                                 core::Reference::Item(item) => {
-                                    KernelExprKind::Item(self.require_item(*item, expr.span)?)
+                                    if let Some(slot) = item_env_map.get(item).copied() {
+                                        KernelExprKind::Environment(slot)
+                                    } else {
+                                        KernelExprKind::Item(self.require_item(*item, expr.span)?)
+                                    }
                                 }
                                 core::Reference::SumConstructor(handle) => {
                                     KernelExprKind::SumConstructor(handle.clone())
@@ -2625,6 +2664,133 @@ impl<'a> ProgramLowerer<'a> {
             inline_subjects,
             exprs,
         })
+    }
+
+    fn walk_runtime_expr<F>(&self, root: core::ExprId, mut visit: F) -> Result<(), LoweringError>
+    where
+        F: FnMut(core::ExprId, SubjectKind) -> Result<(), LoweringError>,
+    {
+        let mut work = vec![(root, SubjectKind::Input)];
+        while let Some((expr_id, subject)) = work.pop() {
+            visit(expr_id, subject)?;
+            let expr = &self.lambda.exprs()[expr_id];
+            match &expr.kind {
+                core::ExprKind::AmbientSubject
+                | core::ExprKind::OptionNone
+                | core::ExprKind::Integer(_)
+                | core::ExprKind::Float(_)
+                | core::ExprKind::Decimal(_)
+                | core::ExprKind::BigInt(_)
+                | core::ExprKind::SuffixedInteger(_)
+                | core::ExprKind::Reference(_) => {}
+                core::ExprKind::OptionSome { payload } => work.push((*payload, subject)),
+                core::ExprKind::Text(text) => {
+                    for segment in text.segments.iter().rev() {
+                        if let core::TextSegment::Interpolation { expr, .. } = segment {
+                            work.push((*expr, subject));
+                        }
+                    }
+                }
+                core::ExprKind::Tuple(elements)
+                | core::ExprKind::List(elements)
+                | core::ExprKind::Set(elements) => {
+                    for child in elements.iter().rev() {
+                        work.push((*child, subject));
+                    }
+                }
+                core::ExprKind::Map(entries) => {
+                    for entry in entries.iter().rev() {
+                        work.push((entry.value, subject));
+                        work.push((entry.key, subject));
+                    }
+                }
+                core::ExprKind::Record(fields) => {
+                    for field in fields.iter().rev() {
+                        work.push((field.value, subject));
+                    }
+                }
+                core::ExprKind::Projection {
+                    base: core::ProjectionBase::Expr(base),
+                    ..
+                } => work.push((*base, subject)),
+                core::ExprKind::Projection {
+                    base: core::ProjectionBase::AmbientSubject,
+                    ..
+                } => {}
+                core::ExprKind::Apply { callee, arguments } => {
+                    for argument in arguments.iter().rev() {
+                        work.push((*argument, subject));
+                    }
+                    work.push((*callee, subject));
+                }
+                core::ExprKind::Unary { expr, .. } => work.push((*expr, subject)),
+                core::ExprKind::Binary { left, right, .. } => {
+                    work.push((*right, subject));
+                    work.push((*left, subject));
+                }
+                core::ExprKind::Pipe(pipe) => {
+                    for stage in pipe.stages.iter().rev() {
+                        match &stage.kind {
+                            core::PipeStageKind::Transform { expr, .. }
+                            | core::PipeStageKind::Tap { expr }
+                            | core::PipeStageKind::FanOut { map_expr: expr } => {
+                                work.push((*expr, SubjectKind::Inline));
+                            }
+                            core::PipeStageKind::Debug { .. } => {}
+                            core::PipeStageKind::Gate { predicate, .. } => {
+                                work.push((*predicate, SubjectKind::Inline));
+                            }
+                            core::PipeStageKind::Case { arms } => {
+                                for arm in arms.iter().rev() {
+                                    work.push((arm.body, SubjectKind::Inline));
+                                }
+                            }
+                            core::PipeStageKind::TruthyFalsy(pair) => {
+                                work.push((pair.falsy.body, SubjectKind::Inline));
+                                work.push((pair.truthy.body, SubjectKind::Inline));
+                            }
+                        }
+                    }
+                    work.push((pipe.head, subject));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_signal_dependency_types(
+        &self,
+        root: core::ExprId,
+        dependencies: &[core::ItemId],
+    ) -> Option<Vec<core::Type>> {
+        let dependency_positions = dependencies
+            .iter()
+            .enumerate()
+            .map(|(index, dependency)| (*dependency, index))
+            .collect::<HashMap<_, _>>();
+        let mut dependency_types = vec![None; dependencies.len()];
+        let mut consistent = true;
+        self.walk_runtime_expr(root, |expr_id, _subject| {
+            let expr = &self.lambda.exprs()[expr_id];
+            let core::ExprKind::Reference(core::Reference::Item(item)) = &expr.kind else {
+                return Ok(());
+            };
+            let Some(&index) = dependency_positions.get(item) else {
+                return Ok(());
+            };
+            let ty = self.runtime_expr_type(expr_id);
+            match &dependency_types[index] {
+                Some(existing) if *existing != ty => consistent = false,
+                Some(_) => {}
+                None => dependency_types[index] = Some(ty),
+            }
+            Ok(())
+        })
+        .ok()?;
+        if !consistent {
+            return None;
+        }
+        dependency_types.into_iter().collect()
     }
 
     fn lower_inline_truthy_falsy_branch_spec(

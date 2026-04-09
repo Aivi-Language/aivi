@@ -58,6 +58,40 @@ pub enum ValidationError {
         item: ItemId,
         dependency: ItemId,
     },
+    SignalUnknownBodyKernel {
+        item: ItemId,
+        kernel: KernelId,
+    },
+    SignalBodyOwnerMismatch {
+        item: ItemId,
+        kernel: KernelId,
+        expected_owner: ItemId,
+        found_owner: ItemId,
+    },
+    SignalBodyHasInput {
+        item: ItemId,
+        kernel: KernelId,
+        layout: LayoutId,
+    },
+    SignalBodyDependencyCountMismatch {
+        item: ItemId,
+        kernel: KernelId,
+        expected: usize,
+        found: usize,
+    },
+    SignalBodyDependencyLayoutMismatch {
+        item: ItemId,
+        kernel: KernelId,
+        dependency_index: usize,
+        expected: LayoutId,
+        found: LayoutId,
+    },
+    SignalBodyResultMismatch {
+        item: ItemId,
+        kernel: KernelId,
+        expected: LayoutId,
+        found: LayoutId,
+    },
     LayoutChildMissing {
         layout: LayoutId,
         child: LayoutId,
@@ -282,6 +316,54 @@ impl fmt::Display for ValidationError {
                     "signal item {item} depends on non-signal item {dependency}"
                 )
             }
+            Self::SignalUnknownBodyKernel { item, kernel } => {
+                write!(f, "signal item {item} references unknown body kernel {kernel}")
+            }
+            Self::SignalBodyOwnerMismatch {
+                item,
+                kernel,
+                expected_owner,
+                found_owner,
+            } => write!(
+                f,
+                "signal item {item} body kernel {kernel} belongs to item {found_owner}, expected {expected_owner}"
+            ),
+            Self::SignalBodyHasInput {
+                item,
+                kernel,
+                layout,
+            } => write!(
+                f,
+                "signal item {item} body kernel {kernel} unexpectedly requires input layout {layout}"
+            ),
+            Self::SignalBodyDependencyCountMismatch {
+                item,
+                kernel,
+                expected,
+                found,
+            } => write!(
+                f,
+                "signal item {item} body kernel {kernel} expects {found} environment slot(s), but the signal declares {expected} dependency layout(s)"
+            ),
+            Self::SignalBodyDependencyLayoutMismatch {
+                item,
+                kernel,
+                dependency_index,
+                expected,
+                found,
+            } => write!(
+                f,
+                "signal item {item} body kernel {kernel} dependency {dependency_index} changed layout unexpectedly: expected {expected}, found {found}"
+            ),
+            Self::SignalBodyResultMismatch {
+                item,
+                kernel,
+                expected,
+                found,
+            } => write!(
+                f,
+                "signal item {item} body kernel {kernel} changed result layout unexpectedly: expected {expected}, found {found}"
+            ),
             Self::LayoutChildMissing { layout, child } => {
                 write!(f, "layout {layout} references unknown child layout {child}")
             }
@@ -581,6 +663,75 @@ pub fn validate_program(program: &Program) -> Result<(), ValidationErrors> {
                     Some(_) | None => errors.push(ValidationError::SignalDependencyNotSignal {
                         item: item_id,
                         dependency: *dependency,
+                    }),
+                }
+            }
+            if let Some(kernel_id) = signal.body_kernel {
+                match program.kernels().get(kernel_id) {
+                    Some(kernel) => {
+                        if kernel.origin.item != item_id {
+                            errors.push(ValidationError::SignalBodyOwnerMismatch {
+                                item: item_id,
+                                kernel: kernel_id,
+                                expected_owner: item_id,
+                                found_owner: kernel.origin.item,
+                            });
+                        }
+                        if let Some(layout) = kernel.input_subject {
+                            errors.push(ValidationError::SignalBodyHasInput {
+                                item: item_id,
+                                kernel: kernel_id,
+                                layout,
+                            });
+                        }
+                        if signal.dependency_layouts.len() != signal.dependencies.len() {
+                            errors.push(ValidationError::SignalBodyDependencyCountMismatch {
+                                item: item_id,
+                                kernel: kernel_id,
+                                expected: signal.dependencies.len(),
+                                found: signal.dependency_layouts.len(),
+                            });
+                        }
+                        if kernel.environment.len() != signal.dependency_layouts.len() {
+                            errors.push(ValidationError::SignalBodyDependencyCountMismatch {
+                                item: item_id,
+                                kernel: kernel_id,
+                                expected: signal.dependency_layouts.len(),
+                                found: kernel.environment.len(),
+                            });
+                        } else {
+                            for (dependency_index, (expected, found)) in signal
+                                .dependency_layouts
+                                .iter()
+                                .zip(kernel.environment.iter())
+                                .enumerate()
+                            {
+                                if expected != found {
+                                    errors.push(ValidationError::SignalBodyDependencyLayoutMismatch {
+                                        item: item_id,
+                                        kernel: kernel_id,
+                                        dependency_index,
+                                        expected: *expected,
+                                        found: *found,
+                                    });
+                                }
+                            }
+                        }
+                        if let Some(fallback_body) = item.body {
+                            let fallback = &program.kernels()[fallback_body];
+                            if kernel.result_layout != fallback.result_layout {
+                                errors.push(ValidationError::SignalBodyResultMismatch {
+                                    item: item_id,
+                                    kernel: kernel_id,
+                                    expected: fallback.result_layout,
+                                    found: kernel.result_layout,
+                                });
+                            }
+                        }
+                    }
+                    None => errors.push(ValidationError::SignalUnknownBodyKernel {
+                        item: item_id,
+                        kernel: kernel_id,
                     }),
                 }
             }

@@ -41,7 +41,7 @@ pub use codegen::{
 };
 pub use engine::{
     BackendExecutableProgram, BackendExecutionEngine, BackendExecutionEngineHandle,
-    BackendExecutionEngineKind,
+    BackendExecutionEngineKind, BackendExecutionOptions,
 };
 pub use gc::{
     CommittedValueStore, InlineCommittedValueStore, MovingRuntimeValueStore, RuntimeGcHandle,

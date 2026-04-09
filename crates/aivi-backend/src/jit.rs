@@ -15,16 +15,13 @@ use aivi_ffi_call::{
 };
 
 use crate::{
-    AbiPassMode, BackendExecutionEngine, BackendExecutionEngineKind, EvalFrame,
-    EvaluationCallProfile, EvaluationError, ItemId, KernelEvaluationProfile, KernelEvaluator,
-    KernelExprId, KernelFingerprint, KernelId, LayoutId, LayoutKind, PrimitiveType, Program,
-    RuntimeBigInt, RuntimeCallable, RuntimeDecimal, RuntimeFloat, RuntimeMap, RuntimeMapEntry,
-    RuntimeRecordField, RuntimeValue, TASK_COMPOSITION_KERNEL_ID, TaskFunctionApplier,
-    cache::compile_kernel_jit_cached,
-    codegen::CompiledJitKernel,
-    compute_kernel_fingerprint,
-    program::ItemKind,
-    runtime::{coerce_runtime_value, strip_signal},
+    BackendExecutionEngine, BackendExecutionEngineKind, BackendExecutionOptions, EvalFrame,
+    AbiPassMode, EvaluationCallProfile, EvaluationError, ItemId, KernelEvaluationProfile,
+    KernelEvaluator, KernelExprId, KernelFingerprint, KernelId, LayoutId, LayoutKind,
+    PrimitiveType, Program, RuntimeBigInt, RuntimeCallable, RuntimeDecimal, RuntimeFloat,
+    RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeValue, TASK_COMPOSITION_KERNEL_ID,
+    TaskFunctionApplier, cache::compile_kernel_jit_cached, codegen::CompiledJitKernel,
+    compute_kernel_fingerprint, program::ItemKind, runtime::{coerce_runtime_value, strip_signal},
 };
 
 pub(crate) struct LazyJitExecutionEngine<'a> {
@@ -40,15 +37,15 @@ pub(crate) struct LazyJitExecutionEngine<'a> {
 }
 
 impl<'a> LazyJitExecutionEngine<'a> {
-    pub(crate) fn new(program: &'a Program) -> Self {
-        Self::with_profile(program, false)
+    pub(crate) fn new(program: &'a Program, options: BackendExecutionOptions) -> Self {
+        Self::with_profile(program, options, false)
     }
 
-    pub(crate) fn new_profiled(program: &'a Program) -> Self {
-        Self::with_profile(program, true)
+    pub(crate) fn new_profiled(program: &'a Program, options: BackendExecutionOptions) -> Self {
+        Self::with_profile(program, options, true)
     }
 
-    fn with_profile(program: &'a Program, profiled: bool) -> Self {
+    fn with_profile(program: &'a Program, options: BackendExecutionOptions, profiled: bool) -> Self {
         let fallback = if profiled {
             KernelEvaluator::new_profiled(program)
         } else {
@@ -65,6 +62,9 @@ impl<'a> LazyJitExecutionEngine<'a> {
             jit_profile: profiled.then(KernelEvaluationProfile::default),
             combined_profile: profiled.then(KernelEvaluationProfile::default),
         };
+        if options.eagerly_compile_signals {
+            engine.prepare_signal_body_plans();
+        }
         engine.refresh_profile();
         engine
     }
@@ -103,6 +103,21 @@ impl<'a> LazyJitExecutionEngine<'a> {
             .entry(fingerprint)
             .or_insert_with(|| CachedKernelPlan::build(self.program, kernel_id));
         fingerprint
+    }
+
+    fn prepare_signal_body_plans(&mut self) {
+        let kernels = self
+            .program
+            .items()
+            .iter()
+            .filter_map(|(_, item)| match &item.kind {
+                ItemKind::Signal(signal) => signal.body_kernel,
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for kernel_id in kernels {
+            self.prepare_kernel_plan(kernel_id);
+        }
     }
 }
 
@@ -218,6 +233,93 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
             input_subject: input_subject.cloned(),
+            environment: environment.to_vec().into_boxed_slice(),
+            result: result.clone(),
+            result_layout: kernel.result_layout,
+        });
+        Ok(result)
+    }
+
+    fn evaluate_signal_body_kernel(
+        &mut self,
+        kernel_id: KernelId,
+        environment: &[RuntimeValue],
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        let started_at = self.jit_profile.as_ref().map(|_| Instant::now());
+        let kernel = self
+            .program
+            .kernels()
+            .get(kernel_id)
+            .cloned()
+            .ok_or(EvaluationError::UnknownKernel { kernel: kernel_id })?;
+        if let Some((cached_result, cached_layout)) =
+            self.last_kernel_call.as_ref().and_then(|last| {
+                (last.kernel_id == kernel_id
+                    && last.input_subject.is_none()
+                    && last.environment.as_ref() == environment)
+                    .then(|| (last.result.clone(), last.result_layout))
+            })
+        {
+            self.record_kernel_profile(
+                kernel_id,
+                started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                true,
+            );
+            if cached_layout != kernel.result_layout {
+                return Err(EvaluationError::KernelResultLayoutMismatch {
+                    kernel: kernel_id,
+                    expected: kernel.result_layout,
+                    found: cached_result,
+                });
+            }
+            return Ok(cached_result);
+        }
+
+        let fingerprint = self.prepare_kernel_plan(kernel_id);
+        let execution = {
+            let plan = self
+                .kernel_plans
+                .get_mut(&fingerprint)
+                .expect("prepared plan should remain cached");
+            match plan {
+                CachedKernelPlan::Compiled(compiled) => {
+                    validate_compiled_inputs(kernel_id, &kernel, compiled, None, environment)?;
+                    execute_compiled_kernel(kernel_id, compiled, None, environment, globals)
+                }
+                CachedKernelPlan::Fallback => Err(CompiledKernelFailure::Fallback),
+            }
+        };
+
+        let raw_result = match execution {
+            Ok(result) => {
+                self.record_kernel_profile(
+                    kernel_id,
+                    started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                    false,
+                );
+                result
+            }
+            Err(CompiledKernelFailure::Evaluation(error)) => return Err(error),
+            Err(CompiledKernelFailure::Fallback) => {
+                self.kernel_plans
+                    .insert(fingerprint, CachedKernelPlan::Fallback);
+                let result = self
+                    .fallback
+                    .evaluate_signal_body_kernel(kernel_id, environment, globals)?;
+                self.refresh_profile();
+                result
+            }
+        };
+        let result = crate::runtime::normalize_signal_kernel_result(
+            self.program,
+            kernel_id,
+            raw_result,
+            kernel.result_layout,
+        )?;
+        self.last_kernel_call = Some(LastKernelCall {
+            kernel_id,
+            input_subject: None,
             environment: environment.to_vec().into_boxed_slice(),
             result: result.clone(),
             result_layout: kernel.result_layout,
@@ -379,6 +481,106 @@ impl TaskFunctionApplier for LazyJitExecutionEngine<'_> {
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
         self.apply_runtime_callable(TASK_COMPOSITION_KERNEL_ID, function, args, globals)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LazyJitExecutionEngine;
+    use crate::{
+        BackendExecutionOptions, ItemId, ItemKind, Program, compute_kernel_fingerprint,
+        lower_module as lower_backend_module, validate_program,
+    };
+    use aivi_base::SourceDatabase;
+    use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
+    use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
+    use aivi_syntax::parse_module;
+
+    fn lower_text(path: &str, text: &str) -> Program {
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, text);
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "backend test input should parse: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let hir = aivi_hir::lower_module(&parsed.module);
+        assert!(
+            !hir.has_errors(),
+            "backend test input should lower to HIR: {:?}",
+            hir.diagnostics()
+        );
+
+        let core = lower_core_module(hir.module()).expect("HIR should lower into typed core");
+        validate_core_module(&core).expect("typed core should validate before backend lowering");
+        let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
+        validate_lambda_module(&lambda).expect("typed lambda should validate before backend lowering");
+
+        let backend = lower_backend_module(&lambda).expect("backend lowering should succeed");
+        validate_program(&backend).expect("backend program should validate");
+        backend
+    }
+
+    fn find_item(program: &Program, name: &str) -> ItemId {
+        program
+            .items()
+            .iter()
+            .find(|(_, item)| item.name.as_ref() == name)
+            .map(|(id, _)| id)
+            .unwrap_or_else(|| panic!("expected backend item `{name}`"))
+    }
+
+    #[test]
+    fn default_jit_engine_keeps_signal_body_kernels_lazy() {
+        let backend = lower_text(
+            "jit-signal-body-lazy.aivi",
+            r#"
+signal base = 1
+signal derived = base
+"#,
+        );
+        let derived = find_item(&backend, "derived");
+        let body_kernel = match &backend.items()[derived].kind {
+            ItemKind::Signal(signal) => signal
+                .body_kernel
+                .expect("direct signal dependency should lower a body kernel"),
+            other => panic!("expected signal item, found {other:?}"),
+        };
+        let fingerprint = compute_kernel_fingerprint(&backend, body_kernel);
+
+        let engine = LazyJitExecutionEngine::new(&backend, BackendExecutionOptions::default());
+
+        assert!(!engine.kernel_plans.contains_key(&fingerprint));
+    }
+
+    #[test]
+    fn eager_signal_compilation_prepares_signal_body_kernels() {
+        let backend = lower_text(
+            "jit-signal-body-eager.aivi",
+            r#"
+signal base = 1
+signal derived = base
+"#,
+        );
+        let derived = find_item(&backend, "derived");
+        let body_kernel = match &backend.items()[derived].kind {
+            ItemKind::Signal(signal) => signal
+                .body_kernel
+                .expect("direct signal dependency should lower a body kernel"),
+            other => panic!("expected signal item, found {other:?}"),
+        };
+        let fingerprint = compute_kernel_fingerprint(&backend, body_kernel);
+
+        let engine = LazyJitExecutionEngine::new(
+            &backend,
+            BackendExecutionOptions {
+                eagerly_compile_signals: true,
+            },
+        );
+
+        assert!(engine.kernel_plans.contains_key(&fingerprint));
     }
 }
 

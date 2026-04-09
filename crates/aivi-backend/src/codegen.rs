@@ -10564,6 +10564,7 @@ fn kernel_symbol_for(program: &Program, kernel_id: KernelId, kernel: &Kernel) ->
         kernel_id.as_raw(),
         match kernel.origin.kind {
             KernelOriginKind::ItemBody { .. } => "item_body".to_owned(),
+            KernelOriginKind::SignalBody { .. } => "signal_body".to_owned(),
             KernelOriginKind::GateTrue { stage_index, .. } => format!("gate_true_s{stage_index}"),
             KernelOriginKind::GateFalse { stage_index, .. } => format!("gate_false_s{stage_index}"),
             KernelOriginKind::SignalFilterPredicate { stage_index, .. } => {

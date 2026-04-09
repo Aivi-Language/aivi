@@ -881,6 +881,7 @@ pub struct LinkedDerivedSignal {
     pub item: hir::ItemId,
     pub signal: DerivedHandle,
     pub backend_item: BackendItemId,
+    pub body_kernel: Option<KernelId>,
     pub dependency_items: Box<[BackendItemId]>,
     pub source_input: Option<InputHandle>,
     /// Backend pipeline IDs that must be applied to the body result in order.
@@ -2138,11 +2139,14 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
 
         let mut globals = self.committed_signals.clone();
         globals.remove(&binding.backend_item);
+        let mut dependency_environment = Vec::with_capacity(binding.dependency_items.len());
         for (index, dependency) in binding.dependency_items.iter().copied().enumerate() {
             let Some(value) = inputs.value(index) else {
                 return Ok(DerivedSignalUpdate::Clear);
             };
-            globals.insert(dependency, RuntimeValue::Signal(Box::new(value.clone())));
+            let signal_value = RuntimeValue::Signal(Box::new(value.clone()));
+            dependency_environment.push(signal_value.clone());
+            globals.insert(dependency, signal_value);
         }
 
         let binding_item = binding.item;
@@ -2166,9 +2170,15 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
             );
         }
 
-        let value = engine
-            .evaluate_item(binding.backend_item, &globals)
-            .map_err(|error| self.derived_eval_error(signal, binding.item, error))?;
+        let value = if let Some(body_kernel) = binding.body_kernel {
+            engine
+                .evaluate_signal_body_kernel(body_kernel, &dependency_environment, &globals)
+                .map_err(|error| self.derived_eval_error(signal, binding.item, error))?
+        } else {
+            engine
+                .evaluate_item(binding.backend_item, &globals)
+                .map_err(|error| self.derived_eval_error(signal, binding.item, error))?
+        };
 
         self.apply_pipelines_from(
             signal,
@@ -3438,16 +3448,22 @@ impl<'a> LinkBuilder<'a> {
                     });
                 continue;
             }
-            let Some(body) = item.body else {
+            let body = item.body;
+            let body_kernel = info.body_kernel;
+            if body.is_none() && body_kernel.is_none() {
                 self.errors
                     .push(BackendRuntimeLinkError::MissingSignalBody {
                         item: binding.item,
                         backend_item,
                     });
                 continue;
-            };
+            }
 
-            let required = self.collect_required_signal_items(binding.item, body);
+            let required = if let Some(body) = body {
+                self.collect_required_signal_items(binding.item, body)
+            } else {
+                info.dependencies.clone().into_boxed_slice()
+            };
             let declared = info.dependencies.clone().into_boxed_slice();
             if !same_items(&required, &declared) {
                 self.errors
@@ -3492,6 +3508,7 @@ impl<'a> LinkBuilder<'a> {
                     item: binding.item,
                     signal: derived,
                     backend_item,
+                    body_kernel,
                     dependency_items: info.dependencies.clone().into_boxed_slice(),
                     source_input: binding.source_input,
                     pipeline_ids: item
@@ -4188,6 +4205,63 @@ signal users : Signal Text
         assert!(
             config.options.is_empty(),
             "scheduler-owned lifecycle options should not leak into provider config"
+        );
+    }
+
+    #[test]
+    fn linked_runtime_uses_dedicated_signal_body_kernels_without_item_body() {
+        let mut lowered = lower_text(
+            "runtime-startup-signal-body-kernel.aivi",
+            r#"
+signal id = 7
+signal next = id
+"#,
+        );
+        let next_item = item_id(lowered.hir.module(), "next");
+        let next_signal = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build")
+            .signal(next_item)
+            .expect("next signal binding should exist")
+            .derived()
+            .expect("next should be a derived signal");
+        let backend_next = backend_item_id(&lowered.backend, "next");
+        let body_kernel = match &lowered.backend.items()[backend_next].kind {
+            BackendItemKind::Signal(info) => info
+                .body_kernel
+                .expect("derived signals should carry a dedicated signal body kernel"),
+            other => panic!("next should lower as a backend signal, found {other:?}"),
+        };
+        lowered
+            .backend
+            .items_mut()
+            .get_mut(backend_next)
+            .expect("next backend item should remain addressable")
+            .body = None;
+
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+            .expect("runtime assembly should build");
+        let mut linked = link_backend_runtime(
+            assembly,
+            &lowered.core,
+            std::sync::Arc::new(lowered.backend.clone()),
+        )
+        .expect("startup link should succeed with a dedicated signal body kernel");
+
+        assert_eq!(
+            linked
+                .derived_signal(next_signal)
+                .expect("next derived signal should link")
+                .body_kernel,
+            Some(body_kernel)
+        );
+
+        linked.tick().expect("linked runtime tick should succeed");
+        assert_eq!(
+            linked
+                .runtime()
+                .current_value(next_signal.as_signal())
+                .expect("next signal lookup should succeed"),
+            Some(&RuntimeValue::Int(7))
         );
     }
 

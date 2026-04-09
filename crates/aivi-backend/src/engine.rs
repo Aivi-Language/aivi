@@ -29,6 +29,13 @@ pub trait BackendExecutionEngine: TaskFunctionApplier {
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError>;
 
+    fn evaluate_signal_body_kernel(
+        &mut self,
+        kernel_id: KernelId,
+        environment: &[RuntimeValue],
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError>;
+
     fn apply_runtime_callable(
         &mut self,
         kernel_id: KernelId,
@@ -62,6 +69,14 @@ pub enum BackendExecutionEngineKind {
     Jit,
 }
 
+/// Execution-time backend options that do not change backend IR or object emission.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BackendExecutionOptions {
+    /// Precompile dedicated signal body kernels when the JIT engine is created instead of waiting
+    /// for the first call site to touch them.
+    pub eagerly_compile_signals: bool,
+}
+
 impl BackendExecutionEngine for KernelEvaluator<'_> {
     fn kind(&self) -> BackendExecutionEngineKind {
         BackendExecutionEngineKind::Interpreter
@@ -91,6 +106,15 @@ impl BackendExecutionEngine for KernelEvaluator<'_> {
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
         KernelEvaluator::evaluate_kernel(self, kernel_id, input_subject, environment, globals)
+    }
+
+    fn evaluate_signal_body_kernel(
+        &mut self,
+        kernel_id: KernelId,
+        environment: &[RuntimeValue],
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        KernelEvaluator::evaluate_signal_body_kernel(self, kernel_id, environment, globals)
     }
 
     fn apply_runtime_callable(
@@ -129,6 +153,7 @@ impl BackendExecutionEngine for KernelEvaluator<'_> {
 pub struct BackendExecutableProgram<'a> {
     program: &'a Program,
     compiled_object: Option<CompiledProgram>,
+    execution_options: BackendExecutionOptions,
 }
 
 impl<'a> BackendExecutableProgram<'a> {
@@ -137,6 +162,7 @@ impl<'a> BackendExecutableProgram<'a> {
         Self {
             program,
             compiled_object: None,
+            execution_options: BackendExecutionOptions::default(),
         }
     }
 
@@ -145,6 +171,7 @@ impl<'a> BackendExecutableProgram<'a> {
         Self {
             program,
             compiled_object: Some(compiled_object),
+            execution_options: BackendExecutionOptions::default(),
         }
     }
 
@@ -164,6 +191,15 @@ impl<'a> BackendExecutableProgram<'a> {
 
     pub fn program(&self) -> &'a Program {
         self.program
+    }
+
+    pub fn execution_options(&self) -> BackendExecutionOptions {
+        self.execution_options
+    }
+
+    pub fn with_execution_options(mut self, execution_options: BackendExecutionOptions) -> Self {
+        self.execution_options = execution_options;
+        self
     }
 
     pub fn kernel_fingerprint(&self, kernel_id: KernelId) -> KernelFingerprint {
@@ -197,10 +233,16 @@ impl<'a> BackendExecutableProgram<'a> {
     }
 
     pub fn create_engine(&self) -> BackendExecutionEngineHandle<'a> {
-        Box::new(LazyJitExecutionEngine::new(self.program))
+        Box::new(LazyJitExecutionEngine::new(
+            self.program,
+            self.execution_options,
+        ))
     }
 
     pub fn create_profiled_engine(&self) -> BackendExecutionEngineHandle<'a> {
-        Box::new(LazyJitExecutionEngine::new_profiled(self.program))
+        Box::new(LazyJitExecutionEngine::new_profiled(
+            self.program,
+            self.execution_options,
+        ))
     }
 }
