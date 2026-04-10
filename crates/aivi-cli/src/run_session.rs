@@ -471,10 +471,7 @@ impl<S> MainContextRequestQueue<S> {
     }
 
     fn try_pop(&self) -> Option<MainContextTask<S>> {
-        match self.request_rx.try_recv() {
-            Ok(task) => Some(task),
-            Err(sync_mpsc::TryRecvError::Empty | sync_mpsc::TryRecvError::Disconnected) => None,
-        }
+        self.request_rx.try_recv().ok()
     }
 }
 
@@ -569,8 +566,7 @@ impl HydrationRevisionState {
     }
 
     fn should_apply(&self, revision: u64) -> bool {
-        self.latest_applied
-            .map_or(true, |applied| revision > applied)
+        self.latest_applied.is_none_or(|applied| revision > applied)
     }
 
     fn mark_applied(&mut self, revision: u64) {
@@ -655,8 +651,7 @@ impl RunHydrationCoordinator {
         }
         let latest = responses
             .into_iter()
-            .filter(|response| self.revisions.should_apply(response.revision))
-            .last();
+            .rfind(|response| self.revisions.should_apply(response.revision));
         let Some(response) = latest else {
             return Ok(());
         };
@@ -1642,6 +1637,70 @@ mod tests {
         predicate()
     }
 
+    fn pump_run_session_step(harness: &super::RunSessionHarness, context: &gtk::glib::MainContext) {
+        let control = harness.control();
+        let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let error = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let done = finished.clone();
+        let failure = error.clone();
+        control
+            .request_on_main_context(move |access| {
+                if let Err(err) = access.process_pending_work() {
+                    *failure.lock().expect("run-session failure lock") = Some(err);
+                }
+                done.store(true, std::sync::atomic::Ordering::SeqCst);
+            })
+            .expect("run-session test should queue a main-context work step");
+        let deadline = Instant::now() + Duration::from_millis(50);
+        while Instant::now() < deadline && !finished.load(std::sync::atomic::Ordering::SeqCst) {
+            while context.pending() {
+                context.iteration(false);
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        while context.pending() {
+            context.iteration(false);
+        }
+        assert!(
+            finished.load(std::sync::atomic::Ordering::SeqCst),
+            "run-session step should complete promptly"
+        );
+        if let Some(err) = error.lock().expect("run-session failure lock").take() {
+            panic!("run-session step should process cleanly: {err}");
+        }
+    }
+
+    fn pump_run_session_context(
+        harness: &super::RunSessionHarness,
+        context: &gtk::glib::MainContext,
+        duration: Duration,
+    ) {
+        let deadline = Instant::now() + duration;
+        while Instant::now() < deadline {
+            pump_run_session_step(harness, context);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        pump_run_session_step(harness, context);
+    }
+
+    fn pump_run_session_until(
+        harness: &super::RunSessionHarness,
+        context: &gtk::glib::MainContext,
+        timeout: Duration,
+        mut predicate: impl FnMut() -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            pump_run_session_step(harness, context);
+            if predicate() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        pump_run_session_step(harness, context);
+        predicate()
+    }
+
     fn required_signal_item(artifact: &crate::RunArtifact, name: &str) -> aivi_backend::ItemId {
         artifact
             .required_signal_globals
@@ -1737,10 +1796,10 @@ mod tests {
     }
 
     fn find_button_by_label(widget: &gtk::Widget, label: &str) -> Option<gtk::Button> {
-        if let Ok(button) = widget.clone().downcast::<gtk::Button>() {
-            if button.label().as_deref() == Some(label) {
-                return Some(button);
-            }
+        if let Ok(button) = widget.clone().downcast::<gtk::Button>()
+            && button.label().as_deref() == Some(label)
+        {
+            return Some(button);
         }
         let mut child = widget.first_child();
         while let Some(current) = child {
