@@ -218,3 +218,12 @@ Implemented parameterized entries inside top-level `from source = { ... }` fan-o
 - `crates/aivi-hir/src/lower.rs`: zero-parameter entries still lower to synthetic `Signal` items; parameterized entries lower to synthetic `Function` items whose final result type is wrapped in builtin `Signal`
 - `crates/aivi-cli/tests/check.rs`, `crates/aivi-hir/src/lower.rs`, and `crates/aivi-syntax/tests/`: end-to-end, lowering, formatter, parser, and snapshot coverage
 - `syntax.md`, `manual/guide/signals.md`, `manual/guide/surface-feature-matrix.md`, and `wiki/signal-model.md`: docs updated to describe the new selector surface
+
+## [2026-04-10] query | Structural equality vs comparator helpers
+
+Read `wiki/type-system.md`, `crates/aivi-hir/src/typecheck/checker.rs`, `crates/aivi-typing/src/eq.rs`, `stdlib/aivi/list.aivi`, `stdlib/aivi/prelude.aivi`, `demos/snake.aivi`, and `demos/reversi.aivi`.
+
+Created [equality-semantics.md](equality-semantics.md) to capture current behavior:
+- concrete closed sums/records/domains do get compiler-derived structural `Eq`
+- open type parameters still need explicit `Eq` constraints
+- `coordEq` / `cellEq` in demos mainly exist to pass equality into comparator-taking list helpers, not because direct `Coord == Coord` is unsupported

@@ -13,6 +13,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [architecture.md](architecture.md) | High-level system overview: layers, crates, data flow |
 | [compiler-pipeline.md](compiler-pipeline.md) | CST → HIR → Core → Lambda → Backend → Cranelift codegen |
 | [type-system.md](type-system.md) | Types, kinds, HKT, type classes, Eq derivation, constraints |
+| [equality-semantics.md](equality-semantics.md) | Concrete structural Eq, generic constraints, and why demos still use comparator helpers |
 | [signal-model.md](signal-model.md) | Reactive signals, sources, merge syntax, signal graph |
 | [pipe-algebra.md](pipe-algebra.md) | Pipe operators, `#name` memos, grouped branch behavior, cluster boundary |
 | [surface-syntax.md](surface-syntax.md) | Audit summary of recent main-branch surface syntax additions and where they are documented |
