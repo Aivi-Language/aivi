@@ -1,9 +1,9 @@
 {
   "root": "manual",
-  "scanned_files": 75,
-  "scanned_blocks": 885,
-  "rewritten_blocks": 191,
-  "unresolved_fragments": 154,
+  "scanned_files": 78,
+  "scanned_blocks": 949,
+  "rewritten_blocks": 3,
+  "unresolved_fragments": 176,
   "entries": [
     {
       "markdown_path": "manual/guide/building-snake.md",
@@ -831,8 +831,8 @@
       "end_line": 312,
       "formatting_changed": false,
       "syntax_problem_count": 0,
-      "lsp_problem_count": 4,
-      "compiler_problem_count": 4,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
       "diagnostics": [
         {
           "severity": "error",
@@ -848,12 +848,6 @@
         },
         {
           "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `step`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `step`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_19.aivi:2:14\n  |\n 2 |  +|> initial step\n  |              ^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `GameState`",
           "rendered": "error[hir::unresolved-type-name]: unknown type `GameState`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_19.aivi:1:16\n  |\n 1 | signal state : GameState = event\n  |                ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
@@ -866,93 +860,63 @@
       "block_index": 20,
       "fence_info": "aivi",
       "start_line": 320,
-      "end_line": 341,
+      "end_line": 345,
       "formatting_changed": false,
       "syntax_problem_count": 0,
-      "lsp_problem_count": 12,
-      "compiler_problem_count": 12,
+      "lsp_problem_count": 11,
+      "compiler_problem_count": 11,
       "diagnostics": [
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `dirLabel`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `dirLabel`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:6:6\n  |\n 6 |   |> dirLabel\n  |      ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `dirLabel`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:15:14\n  |\n15 |     dirLine: dirLabel\n  |              ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `finalScoreLineFor`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `finalScoreLineFor`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:22:6\n  |\n22 |   |> finalScoreLineFor\n  |      ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `finalScoreLineFor`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:25:21\n  |\n25 |     finalScoreLine: finalScoreLineFor\n  |                     ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `isGameOver`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `isGameOver`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:18:6\n  |\n18 |   |> isGameOver\n  |      ^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `isGameOver`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:20:15\n  |\n20 |     gameOver: isGameOver\n  |               ^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `renderBoard`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `renderBoard`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:2:6\n  |\n 2 |   |> renderBoard\n  |      ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `renderBoard`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:12:6\n  |\n12 |   |> renderBoard\n  |      ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `scoreLineFor`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `scoreLineFor`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:14:6\n  |\n14 |   |> scoreLineFor\n  |      ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `scoreLineFor`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:24:16\n  |\n24 |     scoreLine: scoreLineFor\n  |                ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:12:20\n  |\n12 | signal scoreLine = state\n  |                    ^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:16:19\n  |\n16 | signal gameOver = state\n  |                   ^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:20\n  |\n 1 | signal boardText = state\n  |                    ^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:20:25\n  |\n20 | signal finalScoreLine = state\n  |                         ^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:4:18\n  |\n 4 | signal dirLine = state\n  |                  ^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:8:21\n  |\n 8 | signal statusLine = state\n  |                     ^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `status`?"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `statusLineFor`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `statusLineFor`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:10:6\n  |\n10 |   |> statusLineFor\n  |      ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `statusLineFor`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:19:17\n  |\n19 |     statusLine: statusLineFor\n  |                 ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "signal boardText = state\n  |> renderBoard\n\nsignal dirLine = state\n  |> .dir\n  |> dirLabel\n\nsignal statusLine = state\n  |> .status\n  |> statusLineFor\n\nsignal scoreLine = state\n  |> .score\n  |> scoreLineFor\n\nsignal gameOver = state\n  |> .status\n  |> isGameOver\n\nsignal finalScoreLine = state\n  |> .score\n  |> finalScoreLineFor\n"
+      "suggested_snippet": "from state = {\n    snake: .snake\n    dir: .dir\n    food: .food\n    score: .score\n    status: .status\n}\n\nsignal boardText : Signal Text =\n &|> snake\n &|> food\n  |> renderBoard\n\nfrom dir = {\n    dirLine: dirLabel\n}\n\nfrom status = {\n    statusLine: statusLineFor\n    gameOver: isGameOver\n}\n\nfrom score = {\n    scoreLine: scoreLineFor\n    finalScoreLine: finalScoreLineFor\n}\n"
     },
     {
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 21,
       "fence_info": "aivi",
-      "start_line": 351,
-      "end_line": 356,
+      "start_line": 355,
+      "end_line": 360,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 5,
@@ -962,41 +926,41 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:34\n  |\n 2 | func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)\n  |                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:41\n  |\n 2 | func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)\n  |                                         ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:82\n  |\n 2 | func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)\n  |                                                                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:80\n  |\n 2 | func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)\n  |                                                                                ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:98\n  |\n 2 | func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)\n  |                                                                                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:96\n  |\n 2 | func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)\n  |                                                                                                ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `cellEq`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `cellEq`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:74\n  |\n 2 | func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)\n  |                                                                          ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `cellEq`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:72\n  |\n 2 | func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)\n  |                                                                        ^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `listContains`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `listContains`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:61\n  |\n 2 | func cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)\n  |                                                             ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `listContains`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_21.aivi:2:59\n  |\n 2 | func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)\n  |                                                           ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "type List Cell -> GameState -> Int -> Int -> Text\nfunc cellGlyph = body st y x => (Cell x y == st.snake.head, listContains cellEq (Cell x y) body, Cell x y == st.food)\n ||> (True, _, _)          -> \"@\"\n ||> (_, True, _)          -> \"o\"\n ||> (_, _, True)          -> \"*\"\n ||> (False, False, False) -> \"·\"\n"
+      "suggested_snippet": "type List Cell -> Cell -> Cell -> Int -> Int -> Text\nfunc cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)\n ||> (True, _, _)          -> \"@\"\n ||> (_, True, _)          -> \"o\"\n ||> (_, _, True)          -> \"*\"\n ||> (False, False, False) -> \"·\"\n"
     },
     {
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 22,
       "fence_info": "aivi",
-      "start_line": 364,
-      "end_line": 372,
+      "start_line": 368,
+      "end_line": 376,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -1006,29 +970,29 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `boardH`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `boardH`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_22.aivi:7:34\n  |\n 7 | func renderBoard = st => indices boardH\n  |                                  ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `boardH`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_22.aivi:7:42\n  |\n 7 | func renderBoard = snake food => indices boardH\n  |                                          ^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `boardW`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `boardW`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_22.aivi:2:41\n  |\n 2 | func renderRowAt = body st y => indices boardW\n  |                                         ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `boardW`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_22.aivi:2:48\n  |\n 2 | func renderRowAt = body head food y => indices boardW\n  |                                                ^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `cellGlyph`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `cellGlyph`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_22.aivi:3:11\n  |\n 3 |   |> map (cellGlyph body st y)\n  |           ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `cellGlyph`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_22.aivi:3:11\n  |\n 3 |   |> map (cellGlyph body head food y)\n  |           ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "type List Cell -> GameState -> Int -> Text\nfunc renderRowAt = body st y => indices boardW\n  |> map (cellGlyph body st y)\n  |> concat\n\ntype GameState -> Text\nfunc renderBoard = st => indices boardH\n  |> map (renderRowAt (toList st.snake.carrier) st)\n  |> join \"\\n\"\n"
+      "suggested_snippet": "type List Cell -> Cell -> Cell -> Int -> Text\nfunc renderRowAt = body head food y => indices boardW\n  |> map (cellGlyph body head food y)\n  |> concat\n\ntype Snake -> Cell -> Text\nfunc renderBoard = snake food => indices boardH\n  |> map (renderRowAt snake.cells snake.head food)\n  |> join \"\\n\"\n"
     },
     {
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 23,
       "fence_info": "aivi",
-      "start_line": 384,
-      "end_line": 405,
+      "start_line": 388,
+      "end_line": 409,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 8,
@@ -1089,8 +1053,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 24,
       "fence_info": "aivi",
-      "start_line": 415,
-      "end_line": 428,
+      "start_line": 419,
+      "end_line": 432,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 6,
@@ -1446,6 +1410,570 @@
       "suggested_snippet": "domain Snake over NonEmptyList Cell\n\nvalue cells : List Cell = nelToList mySnake.carrier\n"
     },
     {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 1,
+      "fence_info": "aivi",
+      "start_line": 20,
+      "end_line": 37,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_1.aivi:3:50\n  |\n 3 | signal usersRaw : Signal (Result HttpError (List User))\n  |                                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_1.aivi:5:29\n  |\n 5 | signal users : Signal (List User) = usersRaw\n  |                             ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// 1. Declare the source\n@source http.get \"https://api.example.com/users\"\nsignal usersRaw : Signal (Result HttpError (List User))\n\nsignal users : Signal (List User) = usersRaw\n  |> .ok\n  |> withDefault []\n\nsignal userCount : Signal Text = users\n  |> length\n  |> \"Users: {.}\"\n\nvalue main =\n    <Window title=\"Users\">\n        <Label text={userCount} />\n    </Window>\n\nexport main\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 62,
+      "end_line": 64,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::literal-suffix-too-short",
+          "message": "literal suffix `s` is too short; domain literal suffixes must be at least two characters long",
+          "rendered": "error[hir::literal-suffix-too-short]: literal suffix `s` is too short; domain literal suffixes must be at least two characters long\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_3.aivi:2:22\n  |\n 2 | @source timer.after 2s\n  |                      ^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// Fire once after a 2-second delay\n@source timer.after 2s\nsignal startupDone : Signal Unit\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 74,
+      "end_line": 78,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `defaultConfig`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `defaultConfig`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_4.aivi:5:18\n  |\n 5 |   |> withDefault defaultConfig\n  |                  ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `AppConfig`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `AppConfig`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_4.aivi:2:50\n  |\n 2 | signal configResponse : Signal (Result HttpError AppConfig)\n  |                                                  ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `AppConfig`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `AppConfig`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_4.aivi:4:24\n  |\n 4 | signal config : Signal AppConfig = configResponse\n  |                        ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source http.get \"https://api.example.com/config\"\nsignal configResponse : Signal (Result HttpError AppConfig)\n\nsignal config : Signal AppConfig = configResponse\n  |> withDefault defaultConfig\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 86,
+      "end_line": 96,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::literal-suffix-too-short",
+          "message": "literal suffix `s` is too short; domain literal suffixes must be at least two characters long",
+          "rendered": "error[hir::literal-suffix-too-short]: literal suffix `s` is too short; domain literal suffixes must be at least two characters long\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_5.aivi:1:23\n  |\n 1 | @source timer.every 30s with {\n  |                       ^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::literal-suffix-too-short",
+          "message": "literal suffix `s` is too short; domain literal suffixes must be at least two characters long",
+          "rendered": "error[hir::literal-suffix-too-short]: literal suffix `s` is too short; domain literal suffixes must be at least two characters long\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_5.aivi:9:16\n  |\n 9 |     timeout: 10s\n  |                ^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `trigger` for `http.get`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `trigger` for `http.get`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_5.aivi:8:5\n  |\n 8 |     trigger: refreshTick,\n  |     ^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `FeedItem`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `FeedItem`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_5.aivi:11:54\n  |\n11 | signal feedResponse : Signal (Result HttpError (List FeedItem))\n  |                                                      ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source timer.every 30s with {\n    immediate: True,\n    coalesce: True\n}\nsignal refreshTick : Signal Unit\n\n@source http.get \"https://api.example.com/feed\" with {\n    trigger: refreshTick,\n    timeout: 10s\n}\nsignal feedResponse : Signal (Result HttpError (List FeedItem))\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 6,
+      "fence_info": "aivi",
+      "start_line": 104,
+      "end_line": 110,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `trigger` for `http.post`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `trigger` for `http.post`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_6.aivi:4:5\n  |\n 4 |     trigger: submitPayload,\n  |     ^^^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `CreateUserRequest`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `CreateUserRequest`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_6.aivi:1:31\n  |\n 1 | signal submitPayload : Signal CreateUserRequest\n  |                               ^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_6.aivi:7:48\n  |\n 7 | signal createResult : Signal (Result HttpError User)\n  |                                                ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "signal submitPayload : Signal CreateUserRequest\n\n@source http.post \"https://api.example.com/users\" with {\n    trigger: submitPayload,\n    body: submitPayload\n}\nsignal createResult : Signal (Result HttpError User)\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 7,
+      "fence_info": "aivi",
+      "start_line": 122,
+      "end_line": 125,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `AppConfig`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `AppConfig`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_7.aivi:4:44\n  |\n 4 | signal configText : Signal (Result FsError AppConfig)\n  |                                            ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "value configPath = \"/etc/myapp/config.json\"\n\n@source fs.read configPath\nsignal configText : Signal (Result FsError AppConfig)\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 8,
+      "fence_info": "aivi",
+      "start_line": 131,
+      "end_line": 139,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `trigger` for `fs.read`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `trigger` for `fs.read`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_8.aivi:7:5\n  |\n 7 |     trigger: notesChanged\n  |     ^^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        }
+      ],
+      "suggested_snippet": "@source fs.watch \"/home/user/notes\" with {\n    recursive: False\n}\nsignal notesChanged : Signal FsEvent\n\n@source fs.read \"/home/user/notes/index.md\" with {\n    trigger: notesChanged\n}\nsignal notesIndex : Signal (Result FsError Text)\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 165,
+      "end_line": 169,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_10.aivi:2:28\n  |\n 2 | signal db : Signal (Result DbError DbHandle)\n  |                            ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_10.aivi:5:31\n  |\n 5 | signal users : Signal (Result DbError (List User))\n  |                               ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbHandle`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbHandle`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_10.aivi:2:36\n  |\n 2 | signal db : Signal (Result DbError DbHandle)\n  |                                    ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_10.aivi:5:45\n  |\n 5 | signal users : Signal (Result DbError (List User))\n  |                                             ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source db.connect \"sqlite:///var/lib/myapp/data.db\"\nsignal db : Signal (Result DbError DbHandle)\n\n@source db.live db \"SELECT id, name FROM users ORDER BY name\"\nsignal users : Signal (Result DbError (List User))\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 11,
+      "fence_info": "aivi",
+      "start_line": 177,
+      "end_line": 182,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `params` for `db.live`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `params` for `db.live`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_11.aivi:4:5\n  |\n 4 |     params: [selectedTag]\n  |     ^^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `db`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `db`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_11.aivi:3:17\n  |\n 3 | @source db.live db \"SELECT * FROM posts WHERE tag = $1\" with {\n  |                 ^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_11.aivi:6:37\n  |\n 6 | signal taggedPosts : Signal (Result DbError (List Post))\n  |                                     ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Post`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Post`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_11.aivi:6:51\n  |\n 6 | signal taggedPosts : Signal (Result DbError (List Post))\n  |                                                   ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "signal selectedTag : Signal Text\n\n@source db.live db \"SELECT * FROM posts WHERE tag = $1\" with {\n    params: [selectedTag]\n}\nsignal taggedPosts : Signal (Result DbError (List Post))\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 12,
+      "fence_info": "aivi",
+      "start_line": 194,
+      "end_line": 200,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 4,
+      "compiler_problem_count": 4,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `destination` for `dbus.signal`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `destination` for `dbus.signal`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_12.aivi:2:5\n  |\n 2 |     destination: \"org.freedesktop.NetworkManager\",\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `path` for `dbus.signal`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `path` for `dbus.signal`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_12.aivi:3:5\n  |\n 3 |     path: \"/org/freedesktop/NetworkManager\",\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbusError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbusError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_12.aivi:7:38\n  |\n 7 | signal nmProperties : Signal (Result DbusError DbusMessage)\n  |                                      ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbusMessage`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbusMessage`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_12.aivi:7:48\n  |\n 7 | signal nmProperties : Signal (Result DbusError DbusMessage)\n  |                                                ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source dbus.signal with {\n    destination: \"org.freedesktop.NetworkManager\",\n    path: \"/org/freedesktop/NetworkManager\",\n    interface: \"org.freedesktop.DBus.Properties\",\n    member: \"PropertiesChanged\"\n}\nsignal nmProperties : Signal (Result DbusError DbusMessage)\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 13,
+      "fence_info": "aivi",
+      "start_line": 206,
+      "end_line": 212,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `destination` for `dbus.method`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `destination` for `dbus.method`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_13.aivi:2:5\n  |\n 2 |     destination: \"org.freedesktop.NetworkManager\",\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbusError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbusError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_13.aivi:7:33\n  |\n 7 | signal devices : Signal (Result DbusError (List Text))\n  |                                 ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source dbus.method with {\n    destination: \"org.freedesktop.NetworkManager\",\n    path: \"/org/freedesktop/NetworkManager\",\n    interface: \"org.freedesktop.NetworkManager\",\n    member: \"GetDevices\"\n}\nsignal devices : Signal (Result DbusError (List Text))\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 14,
+      "fence_info": "aivi",
+      "start_line": 222,
+      "end_line": 228,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `DbusError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `DbusError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_14.aivi:7:38\n  |\n 7 | signal networkState : Signal (Result DbusError NetworkState)\n  |                                      ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "type NetworkState = {\n    connectivity: Int,\n    state: Int\n}\n\n@source dbus.method with {}\nsignal networkState : Signal (Result DbusError NetworkState)\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 15,
+      "fence_info": "aivi",
+      "start_line": 236,
+      "end_line": 241,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Dict`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Dict`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_15.aivi:6:42\n  |\n 6 | signal envMap : Signal (Result EnvError (Dict Text Text))\n  |                                          ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `EnvError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `EnvError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_15.aivi:3:33\n  |\n 3 | signal homeDir : Signal (Result EnvError Text)\n  |                                 ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `EnvError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `EnvError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_15.aivi:6:32\n  |\n 6 | signal envMap : Signal (Result EnvError (Dict Text Text))\n  |                                ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// Snapshot env on startup — no reactive re-reads needed\n@source env.get \"HOME\"\nsignal homeDir : Signal (Result EnvError Text)\n\n@source env.getAll\nsignal envMap : Signal (Result EnvError (Dict Text Text))\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 16,
+      "fence_info": "aivi",
+      "start_line": 251,
+      "end_line": 265,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 6,
+      "compiler_problem_count": 6,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::literal-suffix-too-short",
+          "message": "literal suffix `s` is too short; domain literal suffixes must be at least two characters long",
+          "rendered": "error[hir::literal-suffix-too-short]: literal suffix `s` is too short; domain literal suffixes must be at least two characters long\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_16.aivi:3:23\n  |\n 3 | @source timer.every 60s with {\n  |                       ^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::short-tuple-expr",
+          "message": "tuple expressions require at least two elements",
+          "rendered": "error[hir::short-tuple-expr]: tuple expressions require at least two elements\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_16.aivi:10:14\n  |\n10 |   ||> _ _ => ()\n  |              ^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-source-option",
+          "message": "unknown source option `trigger` for `http.get`",
+          "rendered": "error[hir::unknown-source-option]: unknown source option `trigger` for `http.get`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_16.aivi:13:5\n  |\n13 |     trigger: refresh\n  |     ^^^^^^^^^^^^^^^^\n  = this option is not supported for the selected source provider"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `invalid`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_16.aivi:10:14\n  |\n10 |   ||> _ _ => ()\n  |              ^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Item`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Item`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_16.aivi:15:46\n  |\n15 | signal data : Signal (Result HttpError (List Item))\n  |                                              ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "signal refreshClick : Signal Unit\n\n@source timer.every 60s with {\n    immediate: True,\n    coalesce: True\n}\nsignal autoRefresh : Signal Unit\n\nsignal refresh : Signal Unit = refreshClick | autoRefresh\n  ||> _ _ => ()\n\n@source http.get \"https://api.example.com/data\" with {\n    trigger: refresh\n}\nsignal data : Signal (Result HttpError (List Item))\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 17,
+      "fence_info": "aivi",
+      "start_line": 277,
+      "end_line": 283,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-source-provider",
+          "message": "source decorators must name a provider variant such as `timer.every`",
+          "rendered": "error[hir::invalid-source-provider]: source decorators must name a provider variant such as `timer.every`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_17.aivi:2:9\n  |\n 2 | @source BluetoothScanner with {\n  |         ^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `BluetoothDevice`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `BluetoothDevice`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_17.aivi:6:42\n  |\n 6 | signal device : Signal (Result ScanError BluetoothDevice)\n  |                                          ^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `ScanError`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `ScanError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_17.aivi:6:32\n  |\n 6 | signal device : Signal (Result ScanError BluetoothDevice)\n  |                                ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// <unparseable item>\n@source BluetoothScanner with {\n    scanDurationMs: 5000,\n    nameFilter: Some \"MyDevice\"\n}\nsignal device : Signal (Result ScanError BluetoothDevice)\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 18,
+      "fence_info": "aivi",
+      "start_line": 297,
+      "end_line": 305,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 6,
+      "compiler_problem_count": 6,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::duplicate-item-name",
+          "message": "duplicate item name `user`",
+          "rendered": "error[hir::duplicate-item-name]: duplicate item name `user`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:8:1\n  |\n 8 | signal user = userJson\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = this declaration reuses an existing top-level name\n  ::: /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:2:1\n  |\n 2 | @source http.get url\n  | -----------------------------------------------------------------\n  | note: previous declaration here"
+        },
+        {
+          "severity": "error",
+          "code": "hir::duplicate-term-name",
+          "message": "duplicate term name `user`",
+          "rendered": "error[hir::duplicate-term-name]: duplicate term name `user`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:8:1\n  |\n 8 | signal user = userJson\n  | ^^^^^^^^^^^^^^^^^^^^^^\n  = this declaration reuses an existing top-level name\n  ::: /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:2:1\n  |\n 2 | @source http.get url\n  | -----------------------------------------------------------------\n  | note: previous declaration here"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `parseUser`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `parseUser`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:9:10\n  |\n 9 |   |> map parseUser\n  |          ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `url`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `url`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:2:18\n  |\n 2 | @source http.get url\n  |                  ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `url`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `url`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:5:18\n  |\n 5 | @source http.get url\n  |                  ^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_18.aivi:3:40\n  |\n 3 | signal user : Signal (Result HttpError User)\n  |                                        ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// Good — decode at the source boundary\n@source http.get url\nsignal user : Signal (Result HttpError User)\n\n@source http.get url\nsignal userJson : Signal (Result HttpError Text)\n\nsignal user = userJson\n  |> map parseUser\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 20,
+      "fence_info": "aivi",
+      "start_line": 327,
+      "end_line": 331,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `authToken`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `authToken`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_20.aivi:3:39\n  |\n 3 | signal userProfile : Signal Profile = authToken\n  |                                       ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `fetchProfile`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `fetchProfile`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_20.aivi:5:6\n  |\n 5 |   |> fetchProfile\n  |      ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Profile`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Profile`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_20.aivi:3:29\n  |\n 3 | signal userProfile : Signal Profile = authToken\n  |                             ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "signal isLoggedIn : Signal Bool\n\nsignal userProfile : Signal Profile = authToken\n ?|> isLoggedIn\n  |> fetchProfile\n"
+    },
+    {
+      "markdown_path": "manual/guide/integrations.md",
+      "block_index": 21,
+      "fence_info": "aivi",
+      "start_line": 341,
+      "end_line": 352,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `renderFsError`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `renderFsError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_21.aivi:5:21\n  |\n 5 |  ||> Err e -> Some (renderFsError e)\n  |                     ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `AppConfig`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `AppConfig`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/integrations/block_21.aivi:1:46\n  |\n 1 | signal configResult : Signal (Result FsError AppConfig)\n  |                                              ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "signal configResult : Signal (Result FsError AppConfig)\n\nsignal configError : Signal (Option Text) = configResult\n ||> Ok _  -> None\n ||> Err e -> Some (renderFsError e)\n\nvalue main =\n    <Window title=\"App\">\n        <show when={configError |> isSome}>\n            <Label text={configError |> withDefault \"\"} />\n        </show>\n    </Window>\n"
+    },
+    {
       "markdown_path": "manual/guide/modules.md",
       "block_index": 12,
       "fence_info": "aivi",
@@ -1496,6 +2024,142 @@
       "suggested_snippet": "value numbers = [1, 2, 3]\nvalue doubled\nvalue maybeName = Some \"Alice\"\nvalue greeting\n"
     },
     {
+      "markdown_path": "manual/guide/openapi-source.md",
+      "block_index": 1,
+      "fence_info": "aivi",
+      "start_line": 10,
+      "end_line": 15,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `apiToken`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `apiToken`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_1.aivi:3:23\n  |\n 3 |     auth: BearerToken apiToken,\n  |                       ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `serverUrl`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `serverUrl`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_1.aivi:2:14\n  |\n 2 |     baseUrl: serverUrl,\n  |              ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source api \"./petstore.yaml\" with {\n    baseUrl: serverUrl,\n    auth: BearerToken apiToken,\n    timeout: 30sec\n}\nsignal petstore : ApiSource\n"
+    },
+    {
+      "markdown_path": "manual/guide/openapi-source.md",
+      "block_index": 2,
+      "fence_info": "aivi",
+      "start_line": 35,
+      "end_line": 35,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `petstore`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `petstore`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_2.aivi:1:56\n  |\n 1 | signal allPets : Signal (Result ApiError (List Pet)) = petstore.listPets\n  |                                                        ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Pet`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Pet`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_2.aivi:1:48\n  |\n 1 | signal allPets : Signal (Result ApiError (List Pet)) = petstore.listPets\n  |                                                ^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "signal allPets : Signal (Result ApiError (List Pet)) = petstore.listPets\n"
+    },
+    {
+      "markdown_path": "manual/guide/openapi-source.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 45,
+      "end_line": 45,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `petstore`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `petstore`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_3.aivi:1:54\n  |\n 1 | value createNewPet : (NewPet -> Task ApiError Pet) = petstore.createPet\n  |                                                      ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `NewPet`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `NewPet`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_3.aivi:1:23\n  |\n 1 | value createNewPet : (NewPet -> Task ApiError Pet) = petstore.createPet\n  |                       ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Pet`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Pet`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_3.aivi:1:47\n  |\n 1 | value createNewPet : (NewPet -> Task ApiError Pet) = petstore.createPet\n  |                                               ^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "value createNewPet : (NewPet -> Task ApiError Pet) = petstore.createPet\n"
+    },
+    {
+      "markdown_path": "manual/guide/openapi-source.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 69,
+      "end_line": 69,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::empty-use-imports",
+          "message": "use declaration must import at least one member",
+          "rendered": "error[hir::empty-use-imports]: use declaration must import at least one member\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_4.aivi:1:1\n  |\n 1 | use _\n  | ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-import-module",
+          "message": "unknown import module `_`",
+          "rendered": "error[hir::unknown-import-module]: unknown import module `_`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_4.aivi:1:1\n  |\n 1 | use _\n  | ^^^^^\n  = this workspace does not contain the imported module\n  ::: /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_4.aivi:1:1\n  |\n 1 | use _\n  | -----\n  | note: declared by this `use` item"
+        }
+      ],
+      "suggested_snippet": "use _\n"
+    },
+    {
+      "markdown_path": "manual/guide/openapi-source.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 87,
+      "end_line": 110,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-source-capability-signal-member",
+          "message": "capability member `listPets` is a one-shot command or query; use `value` instead of `signal`",
+          "rendered": "error[hir::invalid-source-capability-signal-member]: capability member `listPets` is a one-shot command or query; use `value` instead of `signal`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_5.aivi:24:53\n  |\n24 | signal pets : Signal (Result ApiError (List Pet)) = petstore.listPets\n  |                                                     ^^^^^^^^^^^^^^^^^\n  = lower this capability use into a top-level value"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-api-operation",
+          "message": "operation `listPets` not found in OpenAPI spec `./petstore.yaml`",
+          "rendered": "error[hir::unknown-api-operation]: operation `listPets` not found in OpenAPI spec `./petstore.yaml`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/openapi-source/block_5.aivi:24:53\n  |\n24 | signal pets : Signal (Result ApiError (List Pet)) = petstore.listPets\n  |                                                     ^^^^^^^^^^^^^^^^^\n  = check the operationId in the spec file"
+        }
+      ],
+      "suggested_snippet": "use aivi.api (\n    ApiSource\n    ApiError\n    BearerToken\n)\n\ntype Pet = {\n    id: Int,\n    name: Text,\n    status: Option Text\n}\n\ntype NewPet = { name: Text }\n\nvalue serverUrl : Text = \"https://api.petstore.io/v2\"\nvalue apiToken : Text = \"secret\"\n\n@source api \"./petstore.yaml\" with {\n    baseUrl: serverUrl,\n    auth: BearerToken apiToken\n}\nsignal petstore : ApiSource\n\nsignal pets : Signal (Result ApiError (List Pet)) = petstore.listPets\n"
+    },
+    {
       "markdown_path": "manual/guide/pipes.md",
       "block_index": 1,
       "fence_info": "aivi",
@@ -1523,10 +2187,10 @@
     },
     {
       "markdown_path": "manual/guide/pipes.md",
-      "block_index": 11,
+      "block_index": 18,
       "fence_info": "aivi",
-      "start_line": 193,
-      "end_line": 199,
+      "start_line": 318,
+      "end_line": 324,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1536,17 +2200,17 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `log`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `log`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_11.aivi:6:5\n  |\n 6 |   | log \"processing\"\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `log`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_18.aivi:6:5\n  |\n 6 |   | log \"processing\"\n  |     ^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type Text -> Text\nfunc greet = name =>\n    \"Hello, {name}\"\n\nvalue result = \"Ada\"\n  | log \"processing\"\n  |> greet\n"
     },
     {
       "markdown_path": "manual/guide/pipes.md",
-      "block_index": 13,
+      "block_index": 20,
       "fence_info": "aivi",
-      "start_line": 235,
-      "end_line": 243,
+      "start_line": 360,
+      "end_line": 368,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1556,17 +2220,17 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `User`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_13.aivi:1:32\n  |\n 1 | signal userList : Signal (List User) = [\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_20.aivi:1:32\n  |\n 1 | signal userList : Signal (List User) = [\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "signal userList : Signal (List User) = [\n    {\n        name: \"Ada\",\n        email: \"ada@example.com\"\n    }\n]\n\nsignal emailList : Signal (List Text) = userList\n *|> .email\n"
     },
     {
       "markdown_path": "manual/guide/pipes.md",
-      "block_index": 15,
+      "block_index": 22,
       "fence_info": "aivi",
-      "start_line": 287,
-      "end_line": 309,
+      "start_line": 412,
+      "end_line": 434,
       "formatting_changed": false,
       "syntax_problem_count": 2,
       "lsp_problem_count": 8,
@@ -1576,59 +2240,59 @@
           "severity": "error",
           "code": "hir::missing-function-body",
           "message": "function declaration is missing a body",
-          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:11:1\n  |\n11 | func validateEmail = email =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:11:1\n  |\n11 | func validateEmail = email =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::missing-function-body",
           "message": "function declaration is missing a body",
-          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:8:1\n  |\n 8 | func validateName = name =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:8:1\n  |\n 8 | func validateName = name =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `ValidatedUser`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `ValidatedUser`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:23:6\n  |\n23 |   |> ValidatedUser\n  |      ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `ValidatedUser`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:23:6\n  |\n23 |   |> ValidatedUser\n  |      ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:11:1\n  |\n11 | func validateEmail = email =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:11:1\n  |\n11 | func validateEmail = email =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:8:1\n  |\n 8 | func validateName = name =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:8:1\n  |\n 8 | func validateName = name =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `unit`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `unit`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:19:15\n  |\n19 | value draft = unit\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `unit`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:19:15\n  |\n19 | value draft = unit\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "syntax::missing-declaration-body",
           "message": "func declaration is missing its body after `=>`",
-          "rendered": "error[syntax::missing-declaration-body]: func declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:11:1\n  |\n11 | func validateEmail = email =>\n  | ^^^^\n  = expected a body expression after `=>`\nhelp: expected `=` followed by the function body"
+          "rendered": "error[syntax::missing-declaration-body]: func declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:11:1\n  |\n11 | func validateEmail = email =>\n  | ^^^^\n  = expected a body expression after `=>`\nhelp: expected `=` followed by the function body"
         },
         {
           "severity": "error",
           "code": "syntax::missing-declaration-body",
           "message": "func declaration is missing its body after `=>`",
-          "rendered": "error[syntax::missing-declaration-body]: func declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_15.aivi:8:1\n  |\n 8 | func validateName = name =>\n  | ^^^^\n  = expected a body expression after `=>`\nhelp: expected `=` followed by the function body"
+          "rendered": "error[syntax::missing-declaration-body]: func declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_22.aivi:8:1\n  |\n 8 | func validateName = name =>\n  | ^^^^\n  = expected a body expression after `=>`\nhelp: expected `=` followed by the function body"
         }
       ],
       "suggested_snippet": "type ValidatedUser = {\n    name: Text,\n    email: Text,\n    age: Int\n}\n\ntype Text -> Validation (List Text) Text\nfunc validateName = name =>\n\ntype Text -> Validation (List Text) Text\nfunc validateEmail = email =>\n\ntype Text -> Validation (List Text) Int\nfunc validateAge = ageText => ageText\n  |> parseInt\n T|> .\n F|> Invalid [\"Age must be a number\"]\n\nvalue draft = unit\n &|> validateName \"Ada\"\n &|> validateEmail \"ada@example.com\"\n &|> validateAge \"30\"\n  |> ValidatedUser\n"
     },
     {
       "markdown_path": "manual/guide/pipes.md",
-      "block_index": 16,
+      "block_index": 23,
       "fence_info": "aivi",
-      "start_line": 323,
-      "end_line": 327,
+      "start_line": 448,
+      "end_line": 452,
       "formatting_changed": false,
       "syntax_problem_count": 1,
       "lsp_problem_count": 3,
@@ -1638,29 +2302,29 @@
           "severity": "error",
           "code": "hir::missing-function-body",
           "message": "function declaration is missing a body",
-          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_16.aivi:2:1\n  |\n 2 | func nonEmpty = text =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::missing-function-body]: function declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_23.aivi:2:1\n  |\n 2 | func nonEmpty = text =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_16.aivi:2:1\n  |\n 2 | func nonEmpty = text =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_23.aivi:2:1\n  |\n 2 | func nonEmpty = text =>\n  | ^^^^^^^^^^^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "syntax::missing-declaration-body",
           "message": "func declaration is missing its body after `=>`",
-          "rendered": "error[syntax::missing-declaration-body]: func declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_16.aivi:2:1\n  |\n 2 | func nonEmpty = text =>\n  | ^^^^\n  = expected a body expression after `=>`\nhelp: expected `=` followed by the function body"
+          "rendered": "error[syntax::missing-declaration-body]: func declaration is missing its body after `=>`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_23.aivi:2:1\n  |\n 2 | func nonEmpty = text =>\n  | ^^^^\n  = expected a body expression after `=>`\nhelp: expected `=` followed by the function body"
         }
       ],
       "suggested_snippet": "type Text -> Result Text Text\nfunc nonEmpty = text =>\n\nvalue checked : Result Text Text = \"hello\"\n !|> nonEmpty\n"
     },
     {
       "markdown_path": "manual/guide/pipes.md",
-      "block_index": 17,
+      "block_index": 24,
       "fence_info": "aivi",
-      "start_line": 335,
-      "end_line": 352,
+      "start_line": 460,
+      "end_line": 477,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 9,
@@ -1670,25 +2334,25 @@
           "severity": "error",
           "code": "hir::merge-unknown-source",
           "message": "merge source `keyDown` must name a previously declared signal",
-          "rendered": "error[hir::merge-unknown-source]: merge source `keyDown` must name a previously declared signal\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_17.aivi:12:31\n  |\n12 | signal event : Signal Event = keyDown\n  |                               ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::merge-unknown-source]: merge source `keyDown` must name a previously declared signal\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_24.aivi:12:31\n  |\n12 | signal event : Signal Event = keyDown\n  |                               ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Key`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Key`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_17.aivi:13:7\n  |\n13 |   ||> Key \"ArrowUp\" => Increment\n  |       ^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Key`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_24.aivi:13:7\n  |\n13 |   ||> Key \"ArrowUp\" => Increment\n  |       ^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Key`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Key`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_17.aivi:14:7\n  |\n14 |   ||> Key \"ArrowDown\" => Decrement\n  |       ^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Key`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_24.aivi:14:7\n  |\n14 |   ||> Key \"ArrowDown\" => Decrement\n  |       ^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `keyDown`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `keyDown`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_17.aivi:12:31\n  |\n12 | signal event : Signal Event = keyDown\n  |                               ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `keyDown`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/pipes/block_24.aivi:12:31\n  |\n12 | signal event : Signal Event = keyDown\n  |                               ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type Event =\n  | Increment\n  | Decrement\n  | Reset\n\ntype Event -> Int -> Int\nfunc step = event count => event\n ||> Increment -> count + 1\n ||> Decrement -> count - 1\n ||> Reset     -> 0\n\nsignal event : Signal Event = keyDown\n  ||> Key \"ArrowUp\" => Increment\n  ||> Key \"ArrowDown\" => Decrement\n  ||> _ => Increment\n\nsignal count = event\n +|> 0 step\n"
@@ -1697,8 +2361,8 @@
       "markdown_path": "manual/guide/predicates.md",
       "block_index": 5,
       "fence_info": "aivi",
-      "start_line": 82,
-      "end_line": 90,
+      "start_line": 80,
+      "end_line": 88,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1717,8 +2381,8 @@
       "markdown_path": "manual/guide/predicates.md",
       "block_index": 6,
       "fence_info": "aivi",
-      "start_line": 100,
-      "end_line": 107,
+      "start_line": 98,
+      "end_line": 105,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1737,8 +2401,8 @@
       "markdown_path": "manual/guide/predicates.md",
       "block_index": 7,
       "fence_info": "aivi",
-      "start_line": 117,
-      "end_line": 117,
+      "start_line": 115,
+      "end_line": 115,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1757,8 +2421,8 @@
       "markdown_path": "manual/guide/record-patterns.md",
       "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 108,
-      "end_line": 109,
+      "start_line": 107,
+      "end_line": 108,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
@@ -1777,8 +2441,8 @@
       "markdown_path": "manual/guide/record-patterns.md",
       "block_index": 10,
       "fence_info": "aivi",
-      "start_line": 115,
-      "end_line": 117,
+      "start_line": 114,
+      "end_line": 116,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1795,36 +2459,10 @@
     },
     {
       "markdown_path": "manual/guide/record-patterns.md",
-      "block_index": 11,
-      "fence_info": "aivi",
-      "start_line": 125,
-      "end_line": 127,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 2,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `toUpperCase`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `toUpperCase`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_11.aivi:3:6\n  |\n 3 |   |> toUpperCase\n  |      ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `user`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `user`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_11.aivi:1:24\n  |\n 1 | value uppercasedCity = user\n  |                        ^^^^\n  = reported during Milestone 2 HIR lowering"
-        }
-      ],
-      "suggested_snippet": "value uppercasedCity = user\n  |> { address.city.name: . }\n  |> toUpperCase\n"
-    },
-    {
-      "markdown_path": "manual/guide/record-patterns.md",
       "block_index": 12,
       "fence_info": "aivi",
-      "start_line": 133,
-      "end_line": 137,
+      "start_line": 145,
+      "end_line": 147,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -1834,7 +2472,7 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `toUpperCase`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `toUpperCase`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_12.aivi:5:6\n  |\n 5 |   |> toUpperCase\n  |      ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `toUpperCase`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_12.aivi:3:6\n  |\n 3 |   |> toUpperCase\n  |      ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
@@ -1843,14 +2481,40 @@
           "rendered": "error[hir::unresolved-term-name]: unknown term `user`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_12.aivi:1:24\n  |\n 1 | value uppercasedCity = user\n  |                        ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "value uppercasedCity = user\n  |> .address\n  |> .city\n  |> .name\n  |> toUpperCase\n"
+      "suggested_snippet": "value uppercasedCity = user\n  |> { address.city.name: . }\n  |> toUpperCase\n"
     },
     {
       "markdown_path": "manual/guide/record-patterns.md",
       "block_index": 13,
       "fence_info": "aivi",
-      "start_line": 145,
-      "end_line": 152,
+      "start_line": 153,
+      "end_line": 157,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `toUpperCase`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `toUpperCase`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_13.aivi:5:6\n  |\n 5 |   |> toUpperCase\n  |      ^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `user`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `user`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_13.aivi:1:24\n  |\n 1 | value uppercasedCity = user\n  |                        ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "value uppercasedCity = user\n  |> .address\n  |> .city\n  |> .name\n  |> toUpperCase\n"
+    },
+    {
+      "markdown_path": "manual/guide/record-patterns.md",
+      "block_index": 14,
+      "fence_info": "aivi",
+      "start_line": 165,
+      "end_line": 172,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
@@ -1860,17 +2524,17 @@
           "severity": "error",
           "code": "hir::type-mismatch",
           "message": "expected `{ name: Text, email: Text }` but found `{ name: Text, email: Text, debug: Bool }`",
-          "rendered": "error[hir::type-mismatch]: expected `{ name: Text, email: Text }` but found `{ name: Text, email: Text, debug: Bool }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_13.aivi:8:19\n  |\n 8 | func stripDebug = .\n  |                   ^\n  = found `{ name: Text, email: Text, debug: Bool }` here, expected `{ name: Text, email: Text }`"
+          "rendered": "error[hir::type-mismatch]: expected `{ name: Text, email: Text }` but found `{ name: Text, email: Text, debug: Bool }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/record-patterns/block_14.aivi:8:19\n  |\n 8 | func stripDebug = .\n  |                   ^\n  = found `{ name: Text, email: Text, debug: Bool }` here, expected `{ name: Text, email: Text }`"
         }
       ],
       "suggested_snippet": "type Full = {\n    name: Text,\n    email: Text,\n    debug: Bool\n}\n\ntype Full -> { name: Text, email: Text }\nfunc stripDebug = .\n"
     },
     {
       "markdown_path": "manual/guide/signals.md",
-      "block_index": 4,
+      "block_index": 5,
       "fence_info": "aivi",
-      "start_line": 54,
-      "end_line": 72,
+      "start_line": 89,
+      "end_line": 107,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
@@ -1880,43 +2544,23 @@
           "severity": "error",
           "code": "hir::invalid-signal-annotation",
           "message": "signal bodies require a `Signal A` annotation, found `{ active: Bool, email: Text }`",
-          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `{ active: Bool, email: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_4.aivi:17:29\n  |\n17 | signal activeUsers : User = sessions\n  |                             ^^^^^^^^\n  = this signal body is checked against the payload type of `Signal A`"
+          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `{ active: Bool, email: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_5.aivi:17:29\n  |\n17 | signal activeUsers : User = sessions\n  |                             ^^^^^^^^\n  = this signal body is checked against the payload type of `Signal A`"
         },
         {
           "severity": "error",
           "code": "hir::invalid-signal-annotation",
           "message": "signal bodies require a `Signal A` annotation, found `{ user: { active: Bool, email: Text } }`",
-          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `{ user: { active: Bool, email: Text } }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_4.aivi:13:29\n  |\n13 | signal sessions : Session = {\n  |                             ^\n  = this signal body is checked against the payload type of `Signal A`"
+          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `{ user: { active: Bool, email: Text } }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_5.aivi:13:29\n  |\n13 | signal sessions : Session = {\n  |                             ^\n  = this signal body is checked against the payload type of `Signal A`"
         }
       ],
       "suggested_snippet": "type User = {\n    active: Bool,\n    email: Text\n}\n\ntype Session = { user: User }\n\nvalue seed : User = {\n    active: True,\n    email: \"ada@example.com\"\n}\n\nsignal sessions : Session = {\n    user: seed\n}\n\nsignal activeUsers : User = sessions\n  |> .user\n ?|> .active\n"
     },
     {
       "markdown_path": "manual/guide/signals.md",
-      "block_index": 5,
+      "block_index": 12,
       "fence_info": "aivi",
-      "start_line": 84,
-      "end_line": 90,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::type-mismatch",
-          "message": "expected `Option Int` but found `Signal Option Signal Int`",
-          "rendered": "error[hir::type-mismatch]: expected `Option Int` but found `Signal Option Signal Int`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_5.aivi:6:3\n  |\n 6 |   ||> True => left + right\n  |   ^^^^^^^^^^^^^^^^^^^^^^^^\n  = found `Signal Option Signal Int` here, expected `Option Int`"
-        }
-      ],
-      "suggested_snippet": "signal left = 20\nsignal right = 22\nsignal ready = True\n\nsignal total : Signal Int = ready\n  ||> True => left + right\n  ||> _ => 0\n"
-    },
-    {
-      "markdown_path": "manual/guide/signals.md",
-      "block_index": 10,
-      "fence_info": "aivi",
-      "start_line": 206,
-      "end_line": 237,
+      "start_line": 260,
+      "end_line": 291,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -1926,10 +2570,96 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `formatInt`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `formatInt`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_10.aivi:25:6\n  |\n25 |   |> formatInt\n  |      ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `formatInt`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_12.aivi:25:6\n  |\n25 |   |> formatInt\n  |      ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type Event = Tick | Reset\n\ntype Key = Key Text\n\n@source timer.every 1sec\nsignal tick : Signal Unit\n\n@source window.keyDown\nsignal keyDown : Signal Key\n\nsignal event : Signal Event = tick | keyDown\n  ||> tick _ => Tick\n  ||> keyDown (Key \"Space\") => Reset\n  ||> _ => Tick\n\ntype Event -> Int -> Int\nfunc step = event count => event\n ||> Tick  -> count + 1\n ||> Reset -> 0\n\nsignal elapsed = event\n +|> 0 step\n\nsignal label = elapsed\n  |> formatInt\n\nvalue main =\n    <Window title=\"Timer\">\n        <Label text={label} />\n    </Window>\n\nexport main\n"
+    },
+    {
+      "markdown_path": "manual/guide/signals.md",
+      "block_index": 14,
+      "fence_info": "aivi",
+      "start_line": 330,
+      "end_line": 357,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-pipe-stage-input",
+          "message": "`+|>` stage expects `AsyncTracker E A -> Result E A -> AsyncTracker E A` but the current subject is `Result HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text }`",
+          "rendered": "error[hir::invalid-pipe-stage-input]: `+|>` stage expects `AsyncTracker E A -> Result E A -> AsyncTracker E A` but the current subject is `Result HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_14.aivi:28:19\n  |\n28 |  +|> initialUsers step\n  |                   ^^^^\n  = this pipe stage cannot accept the current subject type"
+        }
+      ],
+      "suggested_snippet": "use aivi.async (\n    AsyncTracker\n    step\n)\n\nuse aivi.http (\n    HttpError\n    HttpSource\n)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\n@source http \"https://api.example.com\"\nsignal api : HttpSource\n\nsignal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n\nvalue initialUsers : AsyncTracker HttpError (List User) = {\n    pending: True,\n    done: None,\n    error: None\n}\n\nsignal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n +|> initialUsers step\n"
+    },
+    {
+      "markdown_path": "manual/guide/signals.md",
+      "block_index": 16,
+      "fence_info": "aivi",
+      "start_line": 369,
+      "end_line": 380,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `items`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `items`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_16.aivi:8:27\n  |\n 8 |             <Label text=\"{items}\" />\n  |                           ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "value main =\n    <Window title=\"Users\">\n        <Box>\n            <Spinner />\n            <Box />\n            <Label text=\"Failed to load\" />\n            <Label text=\"No data yet\" />\n            <Label text=\"{items}\" />\n        </Box>\n    </Window>\n\nexport main\n"
+    },
+    {
+      "markdown_path": "manual/guide/signals.md",
+      "block_index": 17,
+      "fence_info": "aivi",
+      "start_line": 393,
+      "end_line": 402,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `users`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/signals/block_17.aivi:9:38\n  |\n 9 | signal firstLoadDone : Signal Bool = users.done\n  |                                      ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// A Bool that becomes True on the first success and never resets\ntype Bool -> Option A -> Bool\nfunc trackFirstDone = hasFired newDone => hasFired\n ||> True   -> True\n ||> False  -> newDone\n ||> None   -> False\n ||> Some _ -> True\n\nsignal firstLoadDone : Signal Bool = users.done\n +|> False trackFirstDone\n"
+    },
+    {
+      "markdown_path": "manual/guide/source-catalog.md",
+      "block_index": 1,
+      "fence_info": "aivi",
+      "start_line": 130,
+      "end_line": 135,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 2,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `apiToken`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `apiToken`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/source-catalog/block_1.aivi:3:23\n  |\n 3 |     auth: BearerToken apiToken,\n  |                       ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `serverUrl`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `serverUrl`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/source-catalog/block_1.aivi:2:14\n  |\n 2 |     baseUrl: serverUrl,\n  |              ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "@source api \"./spec.yaml\" with {\n    baseUrl: serverUrl,\n    auth: BearerToken apiToken,\n    timeout: 30sec\n}\nsignal petstore : ApiSource\n"
     },
     {
       "markdown_path": "manual/guide/sources.md",
@@ -1991,6 +2721,32 @@
     },
     {
       "markdown_path": "manual/guide/sources.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 120,
+      "end_line": 151,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::missing-source-contract-type",
+          "message": "source option `retry` for `http.get` expects `Retry`, but `Retry` is not available as a same-module type",
+          "rendered": "error[hir::missing-source-contract-type]: source option `retry` for `http.get` expects `Retry`, but `Retry` is not available as a same-module type\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_5.aivi:24:5\n  |\n24 |     retry: 3times,\n  |     ^^^^^^^^^^^^^\n  = declare a same-module `type` or `domain` named `Retry` to satisfy this source contract\nnote: current source-contract type resolution maps RFC helper names only through compiler builtins plus unique same-module `type`/`domain` items; imported helpers and option-value typing remain later work"
+        },
+        {
+          "severity": "error",
+          "code": "hir::missing-source-contract-type",
+          "message": "source option `timeout` for `http.get` expects `Duration`, but `Duration` is not available as a same-module type",
+          "rendered": "error[hir::missing-source-contract-type]: source option `timeout` for `http.get` expects `Duration`, but `Duration` is not available as a same-module type\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_5.aivi:25:5\n  |\n25 |     timeout: 5sec\n  |     ^^^^^^^^^^^^^\n  = declare a same-module `type` or `domain` named `Duration` to satisfy this source contract\nnote: current source-contract type resolution maps RFC helper names only through compiler builtins plus unique same-module `type`/`domain` items; imported helpers and option-value typing remain later work"
+        }
+      ],
+      "suggested_snippet": "type HttpError =\n  | Timeout\n  | DecodeFailure Text\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\ntype DecodeMode =\n  | Strict\n  | Permissive\n\ntype Map K V =\n  | EmptyMap\n\nvalue authHeaders : Map Text Text = EmptyMap\n\nsignal apiHost = \"https://api.example.com\"\n\n@source http.get \"{apiHost}/users\" with {\n    headers: authHeaders,\n    decode: Strict,\n    retry: 3times,\n    timeout: 5sec\n}\nsignal users : Signal (Result HttpError (List User))\n\nvalue view =\n    <Window title=\"Users\">\n        <Label text=\"Loading users\" />\n    </Window>\n"
+    },
+    {
+      "markdown_path": "manual/guide/sources.md",
       "block_index": 8,
       "fence_info": "aivi",
       "start_line": 203,
@@ -2002,9 +2758,9 @@
       "diagnostics": [
         {
           "severity": "error",
-          "code": "hir::unsupported-source-provider-contract-type",
-          "message": "provider contract option `timeout` for `custom.feed` uses unsupported schema type `Duration`",
-          "rendered": "error[hir::unsupported-source-provider-contract-type]: provider contract option `timeout` for `custom.feed` uses unsupported schema type `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_8.aivi:6:5\n  |\n 6 |     option timeout : Duration\n  |     ^^^^^^^^^^^^^^^^^^^^^^^^^\n  = this custom source contract schema falls outside the current closed proof surface\nnote: custom provider schemas currently support only compiler-known primitive types, same-module `type`/`domain` items, and those shapes under `List` or `Signal`\nnote: records, tuples, arrows, `Option`/`Result`/`Task`, imported type constructors, and other richer schema forms remain later work"
+          "code": "hir::source-option-type-mismatch",
+          "message": "source option `timeout` for `custom.feed` expects `Duration`, but this expression proves `Duration`",
+          "rendered": "error[hir::source-option-type-mismatch]: source option `timeout` for `custom.feed` expects `Duration`, but this expression proves `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_8.aivi:13:14\n  |\n13 |     timeout: 5ms,\n  |              ^^^\n  = this source option expression proves `Duration`\n  ::: /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_8.aivi:13:5\n  |\n13 |     timeout: 5ms,\n  |     ------------\n  |     note: `timeout` expects `Duration`\nnote: current source option typing checks only the resolved-HIR cases it can prove honestly: same-module annotations, same-module unannotated value bodies rechecked through that same proof slice, suffixed domain literals including any generic arguments the resolved literal-member result proves, same-module constructors checked against the expected contract type or re-inferred as bare roots with `_` holes for any still-unproven generic arguments, built-in `Option` / `Result` / `Validation` constructors including bare roots that only prove a local container shape, imported bindings whose compiler-known import metadata lowers into the current closed type surface, tuple/record/list/map/set expressions whose nested values stay within that same slice, and reactive `Signal` payloads used as ordinary source configuration values\nnote: bare contract-parameter roots now also cover nested same-module generic constructor applications, unannotated local value bodies, tuple/record/list literals, `Some` roots, context-free `None` / `Ok` / `Err` / `Valid` / `Invalid` holes carried through local source-option bindings, and constructor fields whose tuple/record or built-in container shape can be proved locally; imports without compiler-known type metadata and otherwise unproven ordinary expressions still wait for fuller expression typing"
         }
       ],
       "suggested_snippet": "type Mode =\n  | Stream\n\nprovider custom.feed\n    argument path : Text\n    option timeout : Duration\n    option mode : Mode\n    operation read : Text -> Signal Int\n    command delete : Text -> Task Text Unit\n    wakeup: providerTrigger\n\n@source custom.feed \"/tmp/demo.txt\" with {\n    timeout: 5ms,\n    mode: Stream\n}\nsignal updates : Signal Int\n\nvalue view =\n    <Window title=\"Feed\">\n        <Label text=\"Custom provider\" />\n    </Window>\n"
@@ -2013,8 +2769,8 @@
       "markdown_path": "manual/guide/thinking-in-aivi.md",
       "block_index": 5,
       "fence_info": "aivi",
-      "start_line": 85,
-      "end_line": 94,
+      "start_line": 87,
+      "end_line": 96,
       "formatting_changed": false,
       "syntax_problem_count": 1,
       "lsp_problem_count": 3,
@@ -2045,8 +2801,8 @@
       "markdown_path": "manual/guide/thinking-in-aivi.md",
       "block_index": 6,
       "fence_info": "aivi",
-      "start_line": 112,
-      "end_line": 127,
+      "start_line": 114,
+      "end_line": 129,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2063,30 +2819,10 @@
     },
     {
       "markdown_path": "manual/guide/thinking-in-aivi.md",
-      "block_index": 7,
-      "fence_info": "aivi",
-      "start_line": 159,
-      "end_line": 162,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::invalid-projection",
-          "message": "projection `.name` cannot be applied to `User`",
-          "rendered": "error[hir::invalid-projection]: projection `.name` cannot be applied to `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/thinking-in-aivi/block_7.aivi:2:29\n  |\n 2 | func process = user => user.name\n  |                             ^^^^\n  = this projection target does not support field access"
-        }
-      ],
-      "suggested_snippet": "type User -> Text\nfunc process = user => user.name\n  |> trim\n  |> \"Hello, {.}!\"\n"
-    },
-    {
-      "markdown_path": "manual/guide/thinking-in-aivi.md",
       "block_index": 8,
       "fence_info": "aivi",
-      "start_line": 168,
-      "end_line": 174,
+      "start_line": 176,
+      "end_line": 182,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
@@ -2105,8 +2841,8 @@
       "markdown_path": "manual/guide/thinking-in-aivi.md",
       "block_index": 11,
       "fence_info": "aivi",
-      "start_line": 232,
-      "end_line": 236,
+      "start_line": 240,
+      "end_line": 244,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2123,10 +2859,10 @@
     },
     {
       "markdown_path": "manual/guide/types.md",
-      "block_index": 7,
+      "block_index": 8,
       "fence_info": "aivi",
-      "start_line": 112,
-      "end_line": 116,
+      "start_line": 149,
+      "end_line": 153,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 6,
@@ -2136,47 +2872,47 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Day`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Day`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_7.aivi:2:34\n  |\n 2 |   Date year:Year month:Month day:Day\n  |                                  ^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Day`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:2:34\n  |\n 2 |   Date year:Year month:Month day:Day\n  |                                  ^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Hour`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Hour`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_7.aivi:5:18\n  |\n 5 |   TimeOfDay hour:Hour minute:Minute second:Second\n  |                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Hour`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:5:18\n  |\n 5 |   TimeOfDay hour:Hour minute:Minute second:Second\n  |                  ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Minute`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Minute`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_7.aivi:5:30\n  |\n 5 |   TimeOfDay hour:Hour minute:Minute second:Second\n  |                              ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Minute`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:5:30\n  |\n 5 |   TimeOfDay hour:Hour minute:Minute second:Second\n  |                              ^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Month`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Month`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_7.aivi:2:24\n  |\n 2 |   Date year:Year month:Month day:Day\n  |                        ^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Month`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:2:24\n  |\n 2 |   Date year:Year month:Month day:Day\n  |                        ^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Second`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Second`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_7.aivi:5:44\n  |\n 5 |   TimeOfDay hour:Hour minute:Minute second:Second\n  |                                            ^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Second`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:5:44\n  |\n 5 |   TimeOfDay hour:Hour minute:Minute second:Second\n  |                                            ^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Year`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Year`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_7.aivi:2:13\n  |\n 2 |   Date year:Year month:Month day:Day\n  |             ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Year`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:2:13\n  |\n 2 |   Date year:Year month:Month day:Day\n  |             ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type Date =\n  Date year:Year month:Month day:Day\n\ntype TimeOfDay =\n  TimeOfDay hour:Hour minute:Minute second:Second\n"
     },
     {
       "markdown_path": "manual/guide/types.md",
-      "block_index": 8,
+      "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 124,
-      "end_line": 126,
+      "start_line": 161,
+      "end_line": 163,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -2186,29 +2922,29 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Date`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Date`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:3:15\n  |\n 3 | value today = Date 2024 6 15\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Date`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_9.aivi:3:15\n  |\n 3 | value today = Date 2024 6 15\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Vec2`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:1:16\n  |\n 1 | value origin = Vec2 0 0\n  |                ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_9.aivi:1:16\n  |\n 1 | value origin = Vec2 0 0\n  |                ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Vec2`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_8.aivi:2:16\n  |\n 2 | value corner = Vec2 10 20\n  |                ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_9.aivi:2:16\n  |\n 2 | value corner = Vec2 10 20\n  |                ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "value origin = Vec2 0 0\nvalue corner = Vec2 10 20\nvalue today = Date 2024 6 15\n"
     },
     {
       "markdown_path": "manual/guide/types.md",
-      "block_index": 9,
+      "block_index": 10,
       "fence_info": "aivi",
-      "start_line": 132,
-      "end_line": 133,
+      "start_line": 169,
+      "end_line": 170,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2218,17 +2954,17 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_9.aivi:1:15\n  |\n 1 | value mkRow = Cell 5\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_10.aivi:1:15\n  |\n 1 | value mkRow = Cell 5\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
         }
       ],
       "suggested_snippet": "value mkRow = Cell 5\nvalue cell = mkRow 3\n"
     },
     {
       "markdown_path": "manual/guide/types.md",
-      "block_index": 10,
+      "block_index": 11,
       "fence_info": "aivi",
-      "start_line": 139,
-      "end_line": 149,
+      "start_line": 176,
+      "end_line": 186,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 5,
@@ -2238,41 +2974,41 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_10.aivi:11:6\n  |\n11 |  ||> Cell _ y -> y\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellY`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:11:6\n  |\n11 |  ||> Cell _ y -> y\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellX`?"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_10.aivi:7:6\n  |\n 7 |  ||> Cell x _ -> x\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellY`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:7:6\n  |\n 7 |  ||> Cell x _ -> x\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellX`?"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Vec2`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_10.aivi:3:19\n  |\n 3 |  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n  |                   ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:3:19\n  |\n 3 |  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n  |                   ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Vec2`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_10.aivi:3:34\n  |\n 3 |  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n  |                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:3:34\n  |\n 3 |  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n  |                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Vec2`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_10.aivi:3:7\n  |\n 3 |  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n  |       ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Vec2`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:3:7\n  |\n 3 |  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n  |       ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type Vec2 -> Vec2 -> Vec2\nfunc addVec = a b => (a, b)\n ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)\n\ntype Cell -> Int\nfunc cellX = .\n ||> Cell x _ -> x\n\ntype Cell -> Int\nfunc cellY = .\n ||> Cell _ y -> y\n"
     },
     {
       "markdown_path": "manual/guide/types.md",
-      "block_index": 18,
+      "block_index": 19,
       "fence_info": "aivi",
-      "start_line": 301,
-      "end_line": 301,
+      "start_line": 338,
+      "end_line": 338,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2282,17 +3018,17 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `User`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_18.aivi:1:19\n  |\n 1 | type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }\n  |                   ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_19.aivi:1:19\n  |\n 1 | type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }\n  |                   ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }\n"
     },
     {
       "markdown_path": "manual/guide/values-and-functions.md",
-      "block_index": 9,
+      "block_index": 11,
       "fence_info": "aivi",
-      "start_line": 111,
-      "end_line": 115,
+      "start_line": 138,
+      "end_line": 142,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
@@ -2302,17 +3038,17 @@
           "severity": "error",
           "code": "hir::invalid-projection",
           "message": "projection `.status` cannot be applied to `GameState`",
-          "rendered": "error[hir::invalid-projection]: projection `.status` cannot be applied to `GameState`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_9.aivi:2:23\n  |\n 2 | func statusLineFor = .status\n  |                       ^^^^^^\n  = this projection target does not support field access"
+          "rendered": "error[hir::invalid-projection]: projection `.status` cannot be applied to `GameState`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_11.aivi:2:23\n  |\n 2 | func statusLineFor = .status\n  |                       ^^^^^^\n  = this projection target does not support field access"
         }
       ],
       "suggested_snippet": "type GameState -> Text\nfunc statusLineFor = .status\n\ntype Int -> Text\nfunc scoreLineFor = \"Score: {.}\"\n"
     },
     {
       "markdown_path": "manual/guide/values-and-functions.md",
-      "block_index": 10,
+      "block_index": 12,
       "fence_info": "aivi",
-      "start_line": 121,
-      "end_line": 123,
+      "start_line": 148,
+      "end_line": 150,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2322,17 +3058,17 @@
           "severity": "error",
           "code": "hir::missing-name",
           "message": "function parameter is missing a name",
-          "rendered": "error[hir::missing-name]: function parameter is missing a name\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_10.aivi:2:22\n  |\n 2 | func constantLabel = _ =>\n  |                      ^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::missing-name]: function parameter is missing a name\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_12.aivi:2:22\n  |\n 2 | func constantLabel = _ =>\n  |                      ^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "type Int -> Text\nfunc constantLabel = _ =>\n    \"ready\"\n"
     },
     {
       "markdown_path": "manual/guide/values-and-functions.md",
-      "block_index": 16,
+      "block_index": 23,
       "fence_info": "aivi",
-      "start_line": 209,
-      "end_line": 212,
+      "start_line": 333,
+      "end_line": 336,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -2342,13 +3078,13 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `User`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_16.aivi:1:18\n  |\n 1 | value promote : (User -> User) =\n  |                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_23.aivi:1:18\n  |\n 1 | value promote : (User -> User) =\n  |                  ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `User`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_16.aivi:1:26\n  |\n 1 | value promote : (User -> User) =\n  |                          ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/values-and-functions/block_23.aivi:1:26\n  |\n 1 | value promote : (User -> User) =\n  |                          ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "value promote : (User -> User) =\n    patch {\n        isAdmin: True,\n    }\n"
@@ -2507,20 +3243,14 @@
       "end_line": 146,
       "formatting_changed": false,
       "syntax_problem_count": 0,
-      "lsp_problem_count": 2,
-      "compiler_problem_count": 2,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
       "diagnostics": [
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `event`",
           "rendered": "error[hir::unresolved-term-name]: unknown term `event`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/your-first-app/block_9.aivi:1:16\n  |\n 1 | signal count = event\n  |                ^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `step`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `step`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/your-first-app/block_9.aivi:2:8\n  |\n 2 |  +|> 0 step\n  |        ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "signal count = event\n +|> 0 step\n"
@@ -2578,6 +3308,122 @@
       "suggested_snippet": "use aivi.app.lifecycle (AppLifecycle)\n\nsignal lifecycle : AppLifecycle = source Starting\n\ntype AppLifecycle -> Bool\nfunc isRunning = state => state\n ||> Running -> True\n ||> _       -> False\n"
     },
     {
+      "markdown_path": "manual/stdlib/async.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 56,
+      "end_line": 83,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_4.aivi:19:50\n  |\n19 | signal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n  |                                                  ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_4.aivi:21:51\n  |\n21 | value initialUsers : AsyncTracker HttpError (List User) = {\n  |                                                   ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `User`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `User`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_4.aivi:27:53\n  |\n27 | signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n  |                                                     ^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.async (\n    AsyncTracker\n    step\n)\n\nuse aivi.http (\n    HttpError\n    HttpSource\n)\n\ntype List User = {\n    id: Int,\n    name: Text\n}\n\n@source http \"https://api.example.com\"\nsignal api : HttpSource\n\nsignal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n\nvalue initialUsers : AsyncTracker HttpError (List User) = {\n    pending: True,\n    done: None,\n    error: None\n}\n\nsignal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n +|> initialUsers step\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/async.md",
+      "block_index": 5,
+      "fence_info": "aivi",
+      "start_line": 89,
+      "end_line": 93,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 3,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `users`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_5.aivi:2:18\n  |\n 2 | signal loading = users.pending\n  |                  ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `users`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_5.aivi:4:19\n  |\n 4 | signal userList = users.done\n  |                   ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `users`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_5.aivi:5:21\n  |\n 5 | signal fetchError = users.error\n  |                     ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "// Spinner visible while loading\nsignal loading = users.pending\n\nsignal userList = users.done\nsignal fetchError = users.error\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/async.md",
+      "block_index": 9,
+      "fence_info": "aivi",
+      "start_line": 158,
+      "end_line": 198,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `items`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `items`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_9.aivi:37:27\n  |\n37 |             <Label text=\"{items}\" />\n  |                           ^^^^^\n  = reported during Milestone 2 HIR lowering"
+        }
+      ],
+      "suggested_snippet": "use aivi.async (\n    AsyncTracker\n    step\n)\n\nuse aivi.http (\n    HttpError\n    HttpSource\n)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\n@source http \"https://api.example.com\"\nsignal api : HttpSource\n\nsignal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n\nvalue initialUsers : AsyncTracker HttpError (List User) = {\n    pending: True,\n    done: None,\n    error: None\n}\n\nsignal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n +|> initialUsers step\n\nvalue main =\n    <Window title=\"Users\">\n        <Box>\n            <Spinner />\n            <Box />\n            <Label text=\"Failed to load\" />\n            <Label text=\"No data yet\" />\n            <Label text=\"{items}\" />\n        </Box>\n    </Window>\n\nexport main\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/async.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 210,
+      "end_line": 247,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 3,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::case-branch-type-mismatch",
+          "message": "case split branches must agree on one result type, found `Bool` and `Option List { id: Int, name: Text }`",
+          "rendered": "error[hir::case-branch-type-mismatch]: case split branches must agree on one result type, found `Bool` and `Option List { id: Int, name: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_10.aivi:33:2\n  |\n33 |  ||> False  -> newDone\n  |  ^^^^^^^^^^^^^^^^^^^^^\n  = this branch produces a different type than earlier branches in the same case split"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-pipe-stage-input",
+          "message": "`+|>` stage expects `AsyncTracker E A -> Result E A -> AsyncTracker E A` but the current subject is `Result HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text }`",
+          "rendered": "error[hir::invalid-pipe-stage-input]: `+|>` stage expects `AsyncTracker E A -> Result E A -> AsyncTracker E A` but the current subject is `Result HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text } -> AsyncTracker HttpError List { id: Int, name: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_10.aivi:28:19\n  |\n28 |  +|> initialUsers step\n  |                   ^^^^\n  = this pipe stage cannot accept the current subject type"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-projection",
+          "message": "projection `.done` cannot be applied to `Signal AsyncTracker HttpError List { id: Int, name: Text }`",
+          "rendered": "error[hir::invalid-projection]: projection `.done` cannot be applied to `Signal AsyncTracker HttpError List { id: Int, name: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_10.aivi:37:44\n  |\n37 | signal firstLoadDone : Signal Bool = users.done\n  |                                            ^^^^\n  = this projection target does not support field access"
+        }
+      ],
+      "suggested_snippet": "use aivi.async (\n    AsyncTracker\n    step\n)\n\nuse aivi.http (\n    HttpError\n    HttpSource\n)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\n@source http \"https://api.example.com\"\nsignal api : HttpSource\n\nsignal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n\nvalue initialUsers : AsyncTracker HttpError (List User) = {\n    pending: True,\n    done: None,\n    error: None\n}\n\nsignal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n +|> initialUsers step\n\ntype Bool -> Option (List User) -> Bool\nfunc trackFirstLoad = hasFired newDone => hasFired\n ||> True   -> True\n ||> False  -> newDone\n ||> None   -> False\n ||> Some _ -> True\n\nsignal firstLoadDone : Signal Bool = users.done\n +|> False trackFirstLoad\n"
+    },
+    {
       "markdown_path": "manual/stdlib/auth.md",
       "block_index": 7,
       "fence_info": "aivi",
@@ -2607,8 +3453,8 @@
       "markdown_path": "manual/stdlib/bigint.md",
       "block_index": 7,
       "fence_info": "aivi",
-      "start_line": 127,
-      "end_line": 132,
+      "start_line": 124,
+      "end_line": 129,
       "formatting_changed": false,
       "syntax_problem_count": 1,
       "lsp_problem_count": 3,
@@ -2639,8 +3485,8 @@
       "markdown_path": "manual/stdlib/bigint.md",
       "block_index": 28,
       "fence_info": "aivi",
-      "start_line": 305,
-      "end_line": 311,
+      "start_line": 285,
+      "end_line": 291,
       "formatting_changed": false,
       "syntax_problem_count": 1,
       "lsp_problem_count": 3,
@@ -2671,8 +3517,8 @@
       "markdown_path": "manual/stdlib/bigint.md",
       "block_index": 29,
       "fence_info": "aivi",
-      "start_line": 317,
-      "end_line": 322,
+      "start_line": 297,
+      "end_line": 302,
       "formatting_changed": false,
       "syntax_problem_count": 1,
       "lsp_problem_count": 3,
@@ -2769,8 +3615,8 @@
       "markdown_path": "manual/stdlib/color.md",
       "block_index": 7,
       "fence_info": "aivi",
-      "start_line": 89,
-      "end_line": 95,
+      "start_line": 86,
+      "end_line": 92,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2789,8 +3635,8 @@
       "markdown_path": "manual/stdlib/color.md",
       "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 108,
-      "end_line": 117,
+      "start_line": 104,
+      "end_line": 113,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -2897,8 +3743,8 @@
       "markdown_path": "manual/stdlib/date.md",
       "block_index": 8,
       "fence_info": "aivi",
-      "start_line": 205,
-      "end_line": 223,
+      "start_line": 203,
+      "end_line": 221,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -2938,26 +3784,6 @@
         }
       ],
       "suggested_snippet": "type TableRef A = {\n    name: Text,\n    conn: Connection,\n    changed: Signal Unit\n}\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/db.md",
-      "block_index": 5,
-      "fence_info": "aivi",
-      "start_line": 84,
-      "end_line": 100,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::type-mismatch",
-          "message": "expected `TableRef { id: Int, email: Text }` but found `{ name: Text, conn: Connection, changed: Signal Unit }`",
-          "rendered": "error[hir::type-mismatch]: expected `TableRef { id: Int, email: Text }` but found `{ name: Text, conn: Connection, changed: Signal Unit }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/db/block_5.aivi:13:5\n  |\n13 |     {\n  |     ^\n  = found `{ name: Text, conn: Connection, changed: Signal Unit }` here, expected `TableRef { id: Int, email: Text }`"
-        }
-      ],
-      "suggested_snippet": "use aivi.db (\n    Connection\n    TableRef\n)\n\ntype User = {\n    id: Int,\n    email: Text\n}\n\ntype Connection -> Signal Unit -> TableRef User\nfunc usersTable = conn changed =>\n    {\n        name: \"users\",\n        conn: conn,\n        changed: changed\n    }\n"
     },
     {
       "markdown_path": "manual/stdlib/db.md",
@@ -3219,8 +4045,8 @@
       "markdown_path": "manual/stdlib/duration.md",
       "block_index": 4,
       "fence_info": "aivi",
-      "start_line": 64,
-      "end_line": 69,
+      "start_line": 63,
+      "end_line": 68,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -3245,8 +4071,8 @@
       "markdown_path": "manual/stdlib/duration.md",
       "block_index": 6,
       "fence_info": "aivi",
-      "start_line": 82,
-      "end_line": 88,
+      "start_line": 80,
+      "end_line": 86,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -3271,8 +4097,8 @@
       "markdown_path": "manual/stdlib/duration.md",
       "block_index": 7,
       "fence_info": "aivi",
-      "start_line": 97,
-      "end_line": 100,
+      "start_line": 95,
+      "end_line": 98,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -3297,8 +4123,8 @@
       "markdown_path": "manual/stdlib/duration.md",
       "block_index": 8,
       "fence_info": "aivi",
-      "start_line": 108,
-      "end_line": 114,
+      "start_line": 106,
+      "end_line": 112,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 6,
@@ -3347,8 +4173,8 @@
       "markdown_path": "manual/stdlib/duration.md",
       "block_index": 10,
       "fence_info": "aivi",
-      "start_line": 128,
-      "end_line": 133,
+      "start_line": 126,
+      "end_line": 131,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -3830,198 +4656,6 @@
       "suggested_snippet": "use aivi.app.lifecycle (\n    AppEvent\n    LifecycleChanged\n    CommandRequested\n    NotificationIssued\n)\n\ntype AppEvent -> Text\nfunc eventLabel = event => event\n ||> LifecycleChanged state -> \"Lifecycle changed\"\n ||> CommandRequested cmd   -> \"Command: {cmd.label}\"\n ||> NotificationIssued n   -> \"Notification: {n.title}\"\n"
     },
     {
-      "markdown_path": "manual/stdlib/list.md",
-      "block_index": 21,
-      "fence_info": "aivi",
-      "start_line": 261,
-      "end_line": 267,
-      "formatting_changed": false,
-      "syntax_problem_count": 1,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::missing-value-body",
-          "message": "value declaration is missing a body",
-          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_21.aivi:7:1\n  |\n 7 | value result\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_21.aivi:7:1\n  |\n 7 | value result\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "syntax::missing-declaration-body",
-          "message": "value declaration is missing its body",
-          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_21.aivi:7:1\n  |\n 7 | value result\n  | ^^^^^\n  = expected `=` followed by an expression\nhelp: expected `=` followed by the function body"
-        }
-      ],
-      "suggested_snippet": "use aivi.list (filter)\n\ntype Int -> Bool\nfunc isPositive = n =>\n    n > 0\n\nvalue result\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/list.md",
-      "block_index": 41,
-      "fence_info": "aivi",
-      "start_line": 488,
-      "end_line": 494,
-      "formatting_changed": false,
-      "syntax_problem_count": 1,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::missing-value-body",
-          "message": "value declaration is missing a body",
-          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_41.aivi:7:1\n  |\n 7 | value result\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_41.aivi:7:1\n  |\n 7 | value result\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "syntax::missing-declaration-body",
-          "message": "value declaration is missing its body",
-          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_41.aivi:7:1\n  |\n 7 | value result\n  | ^^^^^\n  = expected `=` followed by an expression\nhelp: expected `=` followed by the function body"
-        }
-      ],
-      "suggested_snippet": "use aivi.list (any)\n\ntype Int -> Bool\nfunc isNegative = n =>\n    n < 0\n\nvalue result\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/list.md",
-      "block_index": 43,
-      "fence_info": "aivi",
-      "start_line": 508,
-      "end_line": 521,
-      "formatting_changed": false,
-      "syntax_problem_count": 1,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::missing-value-body",
-          "message": "value declaration is missing a body",
-          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_43.aivi:14:1\n  |\n14 | value someNeg\n  | ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_43.aivi:14:1\n  |\n14 | value someNeg\n  | ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "syntax::missing-declaration-body",
-          "message": "value declaration is missing its body",
-          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_43.aivi:14:1\n  |\n14 | value someNeg\n  | ^^^^^\n  = expected `=` followed by an expression\nhelp: expected `=` followed by the function body"
-        }
-      ],
-      "suggested_snippet": "use aivi.list (all)\n\ntype Int -> Bool\nfunc isPositive = n =>\n    n > 0\n\nvalue allPositive : Bool =\n    all isPositive [\n        1,\n        2,\n        3\n    ]\n\nvalue someNeg\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/list.md",
-      "block_index": 45,
-      "fence_info": "aivi",
-      "start_line": 535,
-      "end_line": 541,
-      "formatting_changed": false,
-      "syntax_problem_count": 1,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::missing-value-body",
-          "message": "value declaration is missing a body",
-          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_45.aivi:7:1\n  |\n 7 | value n\n  | ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_45.aivi:7:1\n  |\n 7 | value n\n  | ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "syntax::missing-declaration-body",
-          "message": "value declaration is missing its body",
-          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_45.aivi:7:1\n  |\n 7 | value n\n  | ^^^^^\n  = expected `=` followed by an expression\nhelp: expected `=` followed by the function body"
-        }
-      ],
-      "suggested_snippet": "use aivi.list (count)\n\ntype Int -> Bool\nfunc isPositive = n =>\n    n > 0\n\nvalue n\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/list.md",
-      "block_index": 49,
-      "fence_info": "aivi",
-      "start_line": 582,
-      "end_line": 589,
-      "formatting_changed": false,
-      "syntax_problem_count": 1,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::missing-value-body",
-          "message": "value declaration is missing a body",
-          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_49.aivi:8:1\n  |\n 8 | value result\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_49.aivi:8:1\n  |\n 8 | value result\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "syntax::missing-declaration-body",
-          "message": "value declaration is missing its body",
-          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_49.aivi:8:1\n  |\n 8 | value result\n  | ^^^^^\n  = expected `=` followed by an expression\nhelp: expected `=` followed by the function body"
-        }
-      ],
-      "suggested_snippet": "use aivi.list (findMap)\n\ntype Int -> Option Int\nfunc asPositive = n => n > 0\n T|> Some n\n F|> None\n\nvalue result\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/list.md",
-      "block_index": 68,
-      "fence_info": "aivi",
-      "start_line": 855,
-      "end_line": 866,
-      "formatting_changed": false,
-      "syntax_problem_count": 1,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 2,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::missing-value-body",
-          "message": "value declaration is missing a body",
-          "rendered": "error[hir::missing-value-body]: value declaration is missing a body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_68.aivi:10:1\n  |\n10 | value groups\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unresolved-term-name",
-          "message": "unknown term `invalid`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `invalid`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_68.aivi:10:1\n  |\n10 | value groups\n  | ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "syntax::missing-declaration-body",
-          "message": "value declaration is missing its body",
-          "rendered": "error[syntax::missing-declaration-body]: value declaration is missing its body\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/list/block_68.aivi:10:1\n  |\n10 | value groups\n  | ^^^^^\n  = expected `=` followed by an expression\nhelp: expected `=` followed by the function body"
-        }
-      ],
-      "suggested_snippet": "use aivi.list (\n    Partition\n    partition\n)\n\ntype Int -> Bool\nfunc isPositive = n =>\n    n > 0\n\nvalue groups\nvalue positive : (List Int) = groups.matched\nvalue negative : (List Int) = groups.unmatched\n"
-    },
-    {
       "markdown_path": "manual/stdlib/log.md",
       "block_index": 2,
       "fence_info": "aivi",
@@ -4110,26 +4744,6 @@
         }
       ],
       "suggested_snippet": "type GoaAccount = {\n    id: GoaAccountId\n}\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/onlineAccounts.md",
-      "block_index": 6,
-      "fence_info": "aivi",
-      "start_line": 92,
-      "end_line": 96,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::type-mismatch",
-          "message": "expected `GoaAccountId` but found `Text`",
-          "rendered": "error[hir::type-mismatch]: expected `GoaAccountId` but found `Text`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/onlineAccounts/block_6.aivi:4:9\n  |\n 4 |     id: \"personal-mail\"\n  |         ^^^^^^^^^^^^^^^\n  = found `Text` here, expected `GoaAccountId`"
-        }
-      ],
-      "suggested_snippet": "use aivi.gnome.onlineAccounts (GoaAccount)\n\nvalue account : GoaAccount = {\n    id: \"personal-mail\"\n}\n"
     },
     {
       "markdown_path": "manual/stdlib/onlineAccounts.md",
@@ -4563,8 +5177,8 @@
       "markdown_path": "manual/stdlib/url.md",
       "block_index": 3,
       "fence_info": "aivi",
-      "start_line": 52,
-      "end_line": 58,
+      "start_line": 51,
+      "end_line": 57,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -4589,8 +5203,8 @@
       "markdown_path": "manual/stdlib/url.md",
       "block_index": 6,
       "fence_info": "aivi",
-      "start_line": 86,
-      "end_line": 95,
+      "start_line": 84,
+      "end_line": 93,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 4,
@@ -4627,8 +5241,8 @@
       "markdown_path": "manual/stdlib/url.md",
       "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 120,
-      "end_line": 132,
+      "start_line": 116,
+      "end_line": 128,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 4,
@@ -4665,8 +5279,8 @@
       "markdown_path": "manual/stdlib/url.md",
       "block_index": 11,
       "fence_info": "aivi",
-      "start_line": 146,
-      "end_line": 153,
+      "start_line": 142,
+      "end_line": 149,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,

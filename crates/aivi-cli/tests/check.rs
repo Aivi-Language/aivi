@@ -188,6 +188,40 @@ fn check_accepts_parameterized_from_selectors() {
 }
 
 #[test]
+fn check_accepts_anonymous_lambda_expressions() {
+    let dir = TempDir::new("check-anonymous-lambdas");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "type Coord = Coord Int Int\n",
+            "value items : List Coord = [Coord 0 0, Coord 1 1]\n",
+            "value cell : Coord = Coord 1 1\n",
+            "value explicitMatch : Bool = any (coord => coord == cell) items\n",
+            "value shorthandMatch : Bool = any (. == cell) items\n",
+            "value addPair : Int -> Int -> Int = left right => left + right\n",
+            "value total : Int = addPair 2 3\n",
+            "value next : Int = 0 |> x => x + 1\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+
+    assert!(
+        output.status.success(),
+        "expected anonymous lambda program to pass check, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("syntax + HIR passed"),
+        "expected success output for anonymous lambda program, got stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
 fn check_accepts_negative_constructor_arguments() {
     let dir = TempDir::new("check-negative-constructor-arguments");
     let path = dir.write(

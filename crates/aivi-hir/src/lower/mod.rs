@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use aivi_base::{Diagnostic, DiagnosticCode, Severity, SourceSpan};
 use aivi_syntax as syn;

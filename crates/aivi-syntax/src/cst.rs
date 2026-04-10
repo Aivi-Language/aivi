@@ -433,6 +433,7 @@ fn expr_contains_self(expr: &Expr) -> bool {
             .entries
             .iter()
             .any(|e| expr_contains_self(&e.key) || expr_contains_self(&e.value)),
+        ExprKind::Lambda(lambda) => expr_contains_self(&lambda.body),
         ExprKind::Record(rec) => rec
             .fields
             .iter()
@@ -583,6 +584,19 @@ pub struct PatchInstruction {
     pub span: SourceSpan,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LambdaSurfaceForm {
+    Explicit,
+    SubjectShorthand,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LambdaExpr {
+    pub parameters: Vec<FunctionParam>,
+    pub body: Box<Expr>,
+    pub surface_form: LambdaSurfaceForm,
+}
+
 /// Patch instruction forms from the surface grammar.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatchInstructionKind {
@@ -607,6 +621,7 @@ pub enum ExprKind {
     List(Vec<Expr>),
     Map(MapExpr),
     Set(Vec<Expr>),
+    Lambda(LambdaExpr),
     Record(RecordExpr),
     SubjectPlaceholder,
     AmbientProjection(ProjectionPath),

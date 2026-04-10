@@ -405,6 +405,26 @@ impl Validator<'_> {
                         self.require_expr(expr.span, "expression", "set element", *element);
                     }
                 }
+                ExprKind::Lambda(lambda) => {
+                    for parameter in &lambda.parameters {
+                        self.check_span("lambda parameter", parameter.span);
+                        self.require_binding(
+                            parameter.span,
+                            "lambda parameter",
+                            "binding",
+                            parameter.binding,
+                        );
+                        if let Some(annotation) = parameter.annotation {
+                            self.require_type(
+                                parameter.span,
+                                "lambda parameter",
+                                "annotation",
+                                annotation,
+                            );
+                        }
+                    }
+                    self.require_expr(expr.span, "expression", "lambda body", lambda.body);
+                }
                 ExprKind::Record(record) => {
                     for field in &record.fields {
                         self.check_span("record field", field.span);
@@ -5002,6 +5022,12 @@ impl Validator<'_> {
                                     env: env.clone(),
                                 });
                             }
+                        }
+                        ExprKind::Lambda(lambda) => {
+                            work.push(CaseExhaustivenessWork::Expr {
+                                expr: lambda.body,
+                                env,
+                            });
                         }
                         ExprKind::Record(record) => {
                             for field in record.fields.into_iter().rev() {

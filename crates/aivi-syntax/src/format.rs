@@ -3,15 +3,15 @@ use std::fmt::Write;
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
     DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FromEntry, FromItem,
-    FunctionParam, FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, MapExpr,
-    MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock,
-    PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment,
-    Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
-    RecordExpr, RecordField, RecordPatternField, ResultBinding, ResultBlockExpr, SignalMergeBody,
-    SignalReactiveArm, SourceDecorator, SourceProviderContractItem, SourceProviderContractMember,
-    SourceProviderContractSchemaMember, SuffixedIntegerLiteral, TextInterpolation, TextLiteral,
-    TextSegment, TypeDeclBody, TypeExpr, TypeExprKind, TypeField, TypeVariant, UnaryOperator,
-    UseItem,
+    FunctionParam, FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, LambdaExpr,
+    LambdaSurfaceForm, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode,
+    Module, NamedItem, PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind,
+    PatchSelector, PatchSelectorSegment, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind,
+    ProjectionPath, QualifiedName, RecordExpr, RecordField, RecordPatternField, ResultBinding,
+    ResultBlockExpr, SignalMergeBody, SignalReactiveArm, SourceDecorator,
+    SourceProviderContractItem, SourceProviderContractMember, SourceProviderContractSchemaMember,
+    SuffixedIntegerLiteral, TextInterpolation, TextLiteral, TextSegment, TypeDeclBody, TypeExpr,
+    TypeExprKind, TypeField, TypeVariant, UnaryOperator, UseItem,
 };
 
 const INDENT_WIDTH: usize = 4;
@@ -20,6 +20,7 @@ const TYPE_VARIANT_INDENT: usize = 2;
 const PIPE_STAGE_INDENT: usize = 1;
 const SIGNAL_REACTIVE_ARM_INDENT: usize = 2;
 
+const EXPR_LAMBDA_PREC: u8 = 0;
 const EXPR_PIPE_PREC: u8 = 0;
 const EXPR_RANGE_PREC: u8 = 1;
 const EXPR_OR_PREC: u8 = 2;
@@ -2548,6 +2549,7 @@ impl Formatter {
             ExprKind::List(elements) => self.format_list_inline(elements),
             ExprKind::Map(map) => self.format_map_inline(map),
             ExprKind::Set(elements) => self.format_set_inline(elements),
+            ExprKind::Lambda(lambda) => self.format_lambda_inline(lambda, parent_prec),
             ExprKind::Record(record) => self.format_record_inline(record),
             ExprKind::SubjectPlaceholder => ".".to_owned(),
             ExprKind::AmbientProjection(path) => self.format_projection_path(path),
@@ -2619,6 +2621,27 @@ impl Formatter {
             }
             ExprKind::Markup(node) => self.format_markup_inline(node),
         }
+    }
+
+    fn format_lambda_inline(&self, lambda: &LambdaExpr, parent_prec: u8) -> String {
+        let rendered = match lambda.surface_form {
+            LambdaSurfaceForm::Explicit => {
+                let parameters = lambda
+                    .parameters
+                    .iter()
+                    .map(|parameter| self.format_function_param(parameter))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!(
+                    "{parameters} => {}",
+                    self.format_expr_inline(&lambda.body, EXPR_LAMBDA_PREC)
+                )
+            }
+            LambdaSurfaceForm::SubjectShorthand => {
+                self.format_expr_inline(&lambda.body, EXPR_LAMBDA_PREC)
+            }
+        };
+        wrap_if_needed(rendered, EXPR_LAMBDA_PREC, parent_prec)
     }
 
     fn format_patch_apply_block(

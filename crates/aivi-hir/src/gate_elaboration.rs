@@ -1126,6 +1126,9 @@ fn lower_gate_runtime_expr_with_purity(
                             kind: GateRuntimeExprKind::AmbientSubject,
                         });
                     }
+                    ExprKind::Lambda(_) => {
+                        unreachable!("lambda expressions must hoist before gate elaboration")
+                    }
                     // --- Text: bounded interpolation segments (not a source of deep nesting) ---
                     ExprKind::Text(text) => {
                         let lowered = lower_runtime_text_literal(

@@ -2,6 +2,7 @@ struct Lowerer<'a> {
     module: Module,
     diagnostics: Vec<Diagnostic>,
     resolver: &'a dyn crate::resolver::ImportResolver,
+    next_lambda_id: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -24,6 +25,36 @@ enum AmbientProjectionWork {
 struct NamedSite<T> {
     value: T,
     span: SourceSpan,
+}
+
+#[derive(Clone, Default)]
+struct LambdaOwnerContext {
+    type_parameters: Vec<TypeParameterId>,
+    context: Vec<TypeId>,
+}
+
+#[derive(Clone, Default)]
+struct LambdaScopeStack {
+    scopes: Vec<Vec<BindingId>>,
+}
+
+impl LambdaScopeStack {
+    fn with_bindings(bindings: impl IntoIterator<Item = BindingId>) -> Self {
+        let mut scope = Self::default();
+        scope.push(bindings);
+        scope
+    }
+
+    fn push(&mut self, bindings: impl IntoIterator<Item = BindingId>) {
+        self.scopes.push(bindings.into_iter().collect());
+    }
+
+    fn contains(&self, binding: BindingId) -> bool {
+        self.scopes
+            .iter()
+            .rev()
+            .any(|scope| scope.contains(&binding))
+    }
 }
 
 #[derive(Default)]
@@ -86,6 +117,7 @@ impl<'a> Lowerer<'a> {
             module: Module::new(file),
             diagnostics: Vec::new(),
             resolver,
+            next_lambda_id: 0,
         }
     }
 
@@ -94,6 +126,7 @@ impl<'a> Lowerer<'a> {
             module,
             diagnostics: Vec::new(),
             resolver,
+            next_lambda_id: 0,
         }
     }
 
@@ -2327,6 +2360,29 @@ impl<'a> Lowerer<'a> {
                 self.alloc_expr(Expr {
                     span: expr.span,
                     kind: ExprKind::Set(lowered_elements),
+                })
+            }
+            syn::ExprKind::Lambda(lambda) => {
+                let parameters = lambda
+                    .parameters
+                    .iter()
+                    .map(|parameter| self.lower_function_parameter(parameter))
+                    .collect();
+                let body = self.lower_expr(&lambda.body);
+                self.alloc_expr(Expr {
+                    span: expr.span,
+                    kind: ExprKind::Lambda(crate::hir::LambdaExpr {
+                        parameters,
+                        body,
+                        surface_form: match lambda.surface_form {
+                            syn::cst::LambdaSurfaceForm::Explicit => {
+                                crate::hir::LambdaSurfaceForm::Explicit
+                            }
+                            syn::cst::LambdaSurfaceForm::SubjectShorthand => {
+                                crate::hir::LambdaSurfaceForm::SubjectShorthand
+                            }
+                        },
+                    }),
                 })
             }
             syn::ExprKind::Record(record) => {
@@ -5253,6 +5309,1664 @@ impl<'a> Lowerer<'a> {
         }
     }
 
+    fn hoist_lambdas(&mut self) {
+        for item_id in self.module.root_items().to_vec() {
+            self.hoist_lambdas_in_item(item_id);
+        }
+        for item_id in self.module.ambient_items().to_vec() {
+            self.hoist_lambdas_in_item(item_id);
+        }
+    }
+
+    fn hoist_lambdas_in_item(&mut self, item_id: ItemId) {
+        let item = self.module.items()[item_id].clone();
+        let hoisted = match item {
+            Item::Type(item) => {
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &LambdaOwnerContext::default());
+                }
+                Item::Type(item)
+            }
+            Item::Value(mut item) => {
+                let owner = LambdaOwnerContext::default();
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &owner);
+                }
+                item.body = self.hoist_expr(item.body, &owner);
+                Item::Value(item)
+            }
+            Item::Function(mut item) => {
+                let owner = LambdaOwnerContext {
+                    type_parameters: item.type_parameters.clone(),
+                    context: item.context.clone(),
+                };
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &owner);
+                }
+                item.body = self.hoist_expr(item.body, &owner);
+                Item::Function(item)
+            }
+            Item::Signal(mut item) => {
+                let owner = LambdaOwnerContext::default();
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &owner);
+                }
+                if let Some(body) = item.body {
+                    item.body = Some(self.hoist_expr(body, &owner));
+                }
+                for update in &mut item.reactive_updates {
+                    update.guard = self.hoist_expr(update.guard, &owner);
+                    update.body = self.hoist_expr(update.body, &owner);
+                }
+                Item::Signal(item)
+            }
+            Item::Class(item) => {
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &LambdaOwnerContext::default());
+                }
+                Item::Class(item)
+            }
+            Item::Domain(mut item) => {
+                let owner = LambdaOwnerContext {
+                    type_parameters: item.parameters.clone(),
+                    context: Vec::new(),
+                };
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &owner);
+                }
+                for member in &mut item.members {
+                    if let Some(body) = member.body {
+                        member.body = Some(self.hoist_expr(body, &owner));
+                    }
+                }
+                Item::Domain(item)
+            }
+            Item::SourceProviderContract(item) => {
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &LambdaOwnerContext::default());
+                }
+                Item::SourceProviderContract(item)
+            }
+            Item::Instance(mut item) => {
+                let owner = LambdaOwnerContext {
+                    type_parameters: item.type_parameters.clone(),
+                    context: item.context.clone(),
+                };
+                for decorator_id in &item.header.decorators {
+                    self.hoist_lambda_decorator(*decorator_id, &owner);
+                }
+                for member in &mut item.members {
+                    member.body = self.hoist_expr(member.body, &owner);
+                }
+                Item::Instance(item)
+            }
+            Item::Use(item) => Item::Use(item),
+            Item::Export(item) => Item::Export(item),
+            Item::Hoist(item) => Item::Hoist(item),
+        };
+        *self
+            .module
+            .arenas
+            .items
+            .get_mut(item_id)
+            .expect("item id should remain valid during lambda hoisting") = hoisted;
+    }
+
+    fn hoist_lambda_decorator(&mut self, decorator_id: DecoratorId, owner: &LambdaOwnerContext) {
+        let decorator = self.module.decorators()[decorator_id].clone();
+        let payload = match decorator.payload {
+            DecoratorPayload::Bare => DecoratorPayload::Bare,
+            DecoratorPayload::Call(mut call) => {
+                call.arguments = call
+                    .arguments
+                    .into_iter()
+                    .map(|argument| self.hoist_expr(argument, owner))
+                    .collect();
+                call.options = call.options.map(|options| self.hoist_expr(options, owner));
+                DecoratorPayload::Call(call)
+            }
+            DecoratorPayload::RecurrenceWakeup(mut wakeup) => {
+                wakeup.witness = self.hoist_expr(wakeup.witness, owner);
+                DecoratorPayload::RecurrenceWakeup(wakeup)
+            }
+            DecoratorPayload::Source(mut source) => {
+                source.arguments = source
+                    .arguments
+                    .into_iter()
+                    .map(|argument| self.hoist_expr(argument, owner))
+                    .collect();
+                source.options = source.options.map(|options| self.hoist_expr(options, owner));
+                DecoratorPayload::Source(source)
+            }
+            DecoratorPayload::Test(test) => DecoratorPayload::Test(test),
+            DecoratorPayload::Debug(debug) => DecoratorPayload::Debug(debug),
+            DecoratorPayload::Deprecated(mut deprecated) => {
+                deprecated.message = deprecated
+                    .message
+                    .map(|message| self.hoist_expr(message, owner));
+                deprecated.options = deprecated
+                    .options
+                    .map(|options| self.hoist_expr(options, owner));
+                DecoratorPayload::Deprecated(deprecated)
+            }
+            DecoratorPayload::Mock(mut mock) => {
+                mock.target = self.hoist_expr(mock.target, owner);
+                mock.replacement = self.hoist_expr(mock.replacement, owner);
+                DecoratorPayload::Mock(mock)
+            }
+        };
+        *self
+            .module
+            .arenas
+            .decorators
+            .get_mut(decorator_id)
+            .expect("decorator id should remain valid during lambda hoisting") = Decorator {
+            span: decorator.span,
+            name: decorator.name,
+            payload,
+        };
+    }
+
+    fn hoist_expr(&mut self, expr_id: ExprId, owner: &LambdaOwnerContext) -> ExprId {
+        let expr = self.module.exprs()[expr_id].clone();
+        let kind = match expr.kind {
+            ExprKind::Name(_)
+            | ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::SuffixedInteger(_)
+            | ExprKind::AmbientSubject
+            | ExprKind::Regex(_) => return expr_id,
+            ExprKind::Text(mut text) => {
+                self.hoist_text_literal(&mut text, owner);
+                ExprKind::Text(text)
+            }
+            ExprKind::Tuple(elements) => {
+                let lowered = elements
+                    .into_vec()
+                    .into_iter()
+                    .map(|element| self.hoist_expr(element, owner))
+                    .collect::<Vec<_>>();
+                ExprKind::Tuple(AtLeastTwo::from_vec(lowered).expect("tuple arity should stay valid"))
+            }
+            ExprKind::List(elements) => ExprKind::List(
+                elements
+                    .into_iter()
+                    .map(|element| self.hoist_expr(element, owner))
+                    .collect(),
+            ),
+            ExprKind::Map(mut map) => {
+                for entry in &mut map.entries {
+                    entry.key = self.hoist_expr(entry.key, owner);
+                    entry.value = self.hoist_expr(entry.value, owner);
+                }
+                ExprKind::Map(map)
+            }
+            ExprKind::Set(elements) => ExprKind::Set(
+                elements
+                    .into_iter()
+                    .map(|element| self.hoist_expr(element, owner))
+                    .collect(),
+            ),
+            ExprKind::Lambda(mut lambda) => {
+                lambda.body = self.hoist_expr(lambda.body, owner);
+                return self.hoist_lambda_expr(expr.span, lambda, owner);
+            }
+            ExprKind::Record(mut record) => {
+                for field in &mut record.fields {
+                    field.value = self.hoist_expr(field.value, owner);
+                }
+                ExprKind::Record(record)
+            }
+            ExprKind::Projection { base, path } => ExprKind::Projection {
+                base: match base {
+                    ProjectionBase::Ambient => ProjectionBase::Ambient,
+                    ProjectionBase::Expr(base) => ProjectionBase::Expr(self.hoist_expr(base, owner)),
+                },
+                path,
+            },
+            ExprKind::Apply { callee, arguments } => {
+                let callee = self.hoist_expr(callee, owner);
+                let arguments = arguments
+                    .into_vec()
+                    .into_iter()
+                    .map(|argument| self.hoist_expr(argument, owner))
+                    .collect::<Vec<_>>();
+                ExprKind::Apply {
+                    callee,
+                    arguments: NonEmpty::from_vec(arguments)
+                        .expect("applications should keep at least one argument"),
+                }
+            }
+            ExprKind::Unary { operator, expr } => ExprKind::Unary {
+                operator,
+                expr: self.hoist_expr(expr, owner),
+            },
+            ExprKind::Binary {
+                left,
+                operator,
+                right,
+            } => ExprKind::Binary {
+                left: self.hoist_expr(left, owner),
+                operator,
+                right: self.hoist_expr(right, owner),
+            },
+            ExprKind::PatchApply { target, mut patch } => {
+                let target = self.hoist_expr(target, owner);
+                self.hoist_patch_block(&mut patch, owner);
+                ExprKind::PatchApply { target, patch }
+            }
+            ExprKind::PatchLiteral(mut patch) => {
+                self.hoist_patch_block(&mut patch, owner);
+                ExprKind::PatchLiteral(patch)
+            }
+            ExprKind::Pipe(mut pipe) => {
+                pipe.head = self.hoist_expr(pipe.head, owner);
+                let stages = pipe
+                    .stages
+                    .into_vec()
+                    .into_iter()
+                    .map(|stage| self.hoist_pipe_stage(stage, owner))
+                    .collect::<Vec<_>>();
+                pipe.stages =
+                    NonEmpty::from_vec(stages).expect("pipes should keep at least one stage");
+                ExprKind::Pipe(pipe)
+            }
+            ExprKind::Cluster(cluster_id) => {
+                self.hoist_cluster(cluster_id, owner);
+                ExprKind::Cluster(cluster_id)
+            }
+            ExprKind::Markup(node_id) => {
+                self.hoist_markup_node(node_id, owner);
+                ExprKind::Markup(node_id)
+            }
+        };
+        *self
+            .module
+            .arenas
+            .exprs
+            .get_mut(expr_id)
+            .expect("expr id should remain valid during lambda hoisting") = Expr {
+            span: expr.span,
+            kind,
+        };
+        expr_id
+    }
+
+    fn hoist_text_literal(&mut self, text: &mut TextLiteral, owner: &LambdaOwnerContext) {
+        for segment in &mut text.segments {
+            if let TextSegment::Interpolation(interpolation) = segment {
+                interpolation.expr = self.hoist_expr(interpolation.expr, owner);
+            }
+        }
+    }
+
+    fn hoist_patch_block(&mut self, patch: &mut PatchBlock, owner: &LambdaOwnerContext) {
+        for entry in &mut patch.entries {
+            for segment in &mut entry.selector.segments {
+                if let PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                    *expr = self.hoist_expr(*expr, owner);
+                }
+            }
+            match &mut entry.instruction.kind {
+                PatchInstructionKind::Replace(expr) | PatchInstructionKind::Store(expr) => {
+                    *expr = self.hoist_expr(*expr, owner);
+                }
+                PatchInstructionKind::Remove => {}
+            }
+        }
+    }
+
+    fn hoist_pipe_stage(&mut self, mut stage: PipeStage, owner: &LambdaOwnerContext) -> PipeStage {
+        stage.kind = match stage.kind {
+            PipeStageKind::Transform { expr } => PipeStageKind::Transform {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Gate { expr } => PipeStageKind::Gate {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Case { pattern, body } => {
+                self.hoist_pattern(pattern, owner);
+                PipeStageKind::Case {
+                    pattern,
+                    body: self.hoist_expr(body, owner),
+                }
+            }
+            PipeStageKind::Map { expr } => PipeStageKind::Map {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Apply { expr } => PipeStageKind::Apply {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Tap { expr } => PipeStageKind::Tap {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::FanIn { expr } => PipeStageKind::FanIn {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Truthy { expr } => PipeStageKind::Truthy {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Falsy { expr } => PipeStageKind::Falsy {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::RecurStart { expr } => PipeStageKind::RecurStart {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::RecurStep { expr } => PipeStageKind::RecurStep {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Validate { expr } => PipeStageKind::Validate {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Previous { expr } => PipeStageKind::Previous {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Accumulate { seed, step } => PipeStageKind::Accumulate {
+                seed: self.hoist_expr(seed, owner),
+                step: self.hoist_expr(step, owner),
+            },
+            PipeStageKind::Diff { expr } => PipeStageKind::Diff {
+                expr: self.hoist_expr(expr, owner),
+            },
+            PipeStageKind::Delay { duration } => PipeStageKind::Delay {
+                duration: self.hoist_expr(duration, owner),
+            },
+            PipeStageKind::Burst { every, count } => PipeStageKind::Burst {
+                every: self.hoist_expr(every, owner),
+                count: self.hoist_expr(count, owner),
+            },
+        };
+        stage
+    }
+
+    fn hoist_cluster(&mut self, cluster_id: crate::ClusterId, owner: &LambdaOwnerContext) {
+        let mut cluster = self.module.clusters()[cluster_id].clone();
+        let members = cluster
+            .members
+            .into_vec()
+            .into_iter()
+            .map(|member| self.hoist_expr(member, owner))
+            .collect::<Vec<_>>();
+        cluster.members =
+            AtLeastTwo::from_vec(members).expect("clusters should keep at least two members");
+        cluster.finalizer = match cluster.finalizer {
+            ClusterFinalizer::Explicit(expr) => {
+                ClusterFinalizer::Explicit(self.hoist_expr(expr, owner))
+            }
+            ClusterFinalizer::ImplicitTuple => ClusterFinalizer::ImplicitTuple,
+        };
+        *self
+            .module
+            .arenas
+            .clusters
+            .get_mut(cluster_id)
+            .expect("cluster id should remain valid during lambda hoisting") = cluster;
+    }
+
+    fn hoist_markup_node(&mut self, node_id: MarkupNodeId, owner: &LambdaOwnerContext) {
+        let node = self.module.markup_nodes()[node_id].clone();
+        let kind = match node.kind {
+            MarkupNodeKind::Element(mut element) => {
+                for attribute in &mut element.attributes {
+                    match &mut attribute.value {
+                        MarkupAttributeValue::Expr(expr) => {
+                            *expr = self.hoist_expr(*expr, owner);
+                        }
+                        MarkupAttributeValue::Text(text) => self.hoist_text_literal(text, owner),
+                        MarkupAttributeValue::ImplicitTrue => {}
+                    }
+                }
+                for child in &element.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                MarkupNodeKind::Element(element)
+            }
+            MarkupNodeKind::Control(control_id) => {
+                self.hoist_control_node(control_id, owner);
+                MarkupNodeKind::Control(control_id)
+            }
+        };
+        *self
+            .module
+            .arenas
+            .markup_nodes
+            .get_mut(node_id)
+            .expect("markup node id should remain valid during lambda hoisting") = MarkupNode {
+            span: node.span,
+            kind,
+        };
+    }
+
+    fn hoist_control_node(&mut self, control_id: ControlNodeId, owner: &LambdaOwnerContext) {
+        let control = self.module.control_nodes()[control_id].clone();
+        let lowered = match control {
+            ControlNode::Show(mut node) => {
+                node.when = self.hoist_expr(node.when, owner);
+                if let Some(expr) = node.keep_mounted {
+                    node.keep_mounted = Some(self.hoist_expr(expr, owner));
+                }
+                for child in &node.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                ControlNode::Show(node)
+            }
+            ControlNode::Each(mut node) => {
+                node.collection = self.hoist_expr(node.collection, owner);
+                if let Some(key) = node.key {
+                    node.key = Some(self.hoist_expr(key, owner));
+                }
+                for child in &node.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                if let Some(empty) = node.empty {
+                    self.hoist_control_node(empty, owner);
+                }
+                ControlNode::Each(node)
+            }
+            ControlNode::Match(mut node) => {
+                node.scrutinee = self.hoist_expr(node.scrutinee, owner);
+                for case in node.cases.iter() {
+                    self.hoist_control_node(*case, owner);
+                }
+                ControlNode::Match(node)
+            }
+            ControlNode::Empty(node) => {
+                for child in &node.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                ControlNode::Empty(node)
+            }
+            ControlNode::Case(mut node) => {
+                self.hoist_pattern(node.pattern, owner);
+                for child in &node.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                ControlNode::Case(node)
+            }
+            ControlNode::Fragment(node) => {
+                for child in &node.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                ControlNode::Fragment(node)
+            }
+            ControlNode::With(mut node) => {
+                node.value = self.hoist_expr(node.value, owner);
+                for child in &node.children {
+                    self.hoist_markup_node(*child, owner);
+                }
+                ControlNode::With(node)
+            }
+        };
+        *self
+            .module
+            .arenas
+            .control_nodes
+            .get_mut(control_id)
+            .expect("control node id should remain valid during lambda hoisting") = lowered;
+    }
+
+    fn hoist_pattern(&mut self, pattern_id: PatternId, owner: &LambdaOwnerContext) {
+        let pattern = self.module.patterns()[pattern_id].clone();
+        let kind = match pattern.kind {
+            PatternKind::Wildcard
+            | PatternKind::Binding(_)
+            | PatternKind::Integer(_)
+            | PatternKind::UnresolvedName(_) => return,
+            PatternKind::Text(mut text) => {
+                self.hoist_text_literal(&mut text, owner);
+                PatternKind::Text(text)
+            }
+            PatternKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.hoist_pattern(*element, owner);
+                }
+                PatternKind::Tuple(elements)
+            }
+            PatternKind::List { elements, rest } => {
+                for element in &elements {
+                    self.hoist_pattern(*element, owner);
+                }
+                if let Some(rest) = rest {
+                    self.hoist_pattern(rest, owner);
+                }
+                PatternKind::List { elements, rest }
+            }
+            PatternKind::Record(fields) => {
+                for field in &fields {
+                    self.hoist_pattern(field.pattern, owner);
+                }
+                PatternKind::Record(fields)
+            }
+            PatternKind::Constructor { callee, arguments } => {
+                for argument in &arguments {
+                    self.hoist_pattern(*argument, owner);
+                }
+                PatternKind::Constructor { callee, arguments }
+            }
+        };
+        *self
+            .module
+            .arenas
+            .patterns
+            .get_mut(pattern_id)
+            .expect("pattern id should remain valid during lambda hoisting") = Pattern {
+            span: pattern.span,
+            kind,
+        };
+    }
+
+    fn hoist_lambda_expr(
+        &mut self,
+        span: SourceSpan,
+        mut lambda: crate::hir::LambdaExpr,
+        owner: &LambdaOwnerContext,
+    ) -> ExprId {
+        if matches!(
+            lambda.surface_form,
+            crate::hir::LambdaSurfaceForm::SubjectShorthand
+        ) {
+            if let Some(parameter) = lambda.parameters.first() {
+                self.rewrite_subject_shorthand_expr(lambda.body, parameter.binding, false);
+            }
+        }
+
+        let lambda_bindings = lambda
+            .parameters
+            .iter()
+            .map(|parameter| parameter.binding)
+            .collect::<Vec<_>>();
+        let captures = self.collect_lambda_captures(lambda.body, &lambda_bindings);
+
+        let capture_parameters = captures
+            .iter()
+            .map(|binding| self.synthetic_capture_parameter(*binding))
+            .collect::<Vec<_>>();
+        let capture_map = captures
+            .iter()
+            .zip(capture_parameters.iter())
+            .map(|(outer, parameter)| (*outer, parameter.binding))
+            .collect::<HashMap<_, _>>();
+        if !capture_map.is_empty() {
+            self.rewrite_captured_bindings_expr(lambda.body, &capture_map);
+        }
+
+        let mut parameters = capture_parameters;
+        parameters.extend(lambda.parameters);
+
+        let item_name = self.synthetic_lambda_name(span);
+        let item_id = self.push_root_item(Item::Function(FunctionItem {
+            header: ItemHeader {
+                span,
+                decorators: Vec::new(),
+            },
+            name: item_name.clone(),
+            type_parameters: owner.type_parameters.clone(),
+            context: owner.context.clone(),
+            parameters,
+            annotation: None,
+            body: lambda.body,
+        }));
+
+        let callee = self.alloc_expr(Expr {
+            span,
+            kind: ExprKind::Name(self.resolved_item_reference(item_name.text(), span, item_id)),
+        });
+        if captures.is_empty() {
+            callee
+        } else {
+            let arguments = captures
+                .into_iter()
+                .map(|binding| self.synthetic_local_expr(binding, span))
+                .collect::<Vec<_>>();
+            self.alloc_expr(Expr {
+                span,
+                kind: ExprKind::Apply {
+                    callee,
+                    arguments: NonEmpty::from_vec(arguments)
+                        .expect("captured lambda application should keep arguments"),
+                },
+            })
+        }
+    }
+
+    fn synthetic_lambda_name(&mut self, span: SourceSpan) -> Name {
+        let name = format!("__aivi_lambda_{}", self.next_lambda_id);
+        self.next_lambda_id += 1;
+        Name::new(name, span).expect("synthetic lambda names should be valid")
+    }
+
+    fn push_root_item(&mut self, item: Item) -> ItemId {
+        self.module.push_item(item).unwrap_or_else(|_| {
+            self.emit_arena_overflow("HIR item arena");
+            std::process::exit(1);
+        })
+    }
+
+    fn synthetic_capture_parameter(&mut self, outer_binding: BindingId) -> FunctionParameter {
+        let outer = self.module.bindings()[outer_binding].clone();
+        let binding = self.alloc_binding(Binding {
+            span: outer.span,
+            name: outer.name.clone(),
+            kind: BindingKind::FunctionParameter,
+        });
+        FunctionParameter {
+            span: outer.span,
+            binding,
+            annotation: None,
+        }
+    }
+
+    fn resolved_item_reference(
+        &self,
+        text: &str,
+        span: SourceSpan,
+        item_id: ItemId,
+    ) -> TermReference {
+        let name = Name::new(text, span).expect("synthetic item reference names should be valid");
+        let path = NamePath::from_vec(vec![name]).expect("single-segment item path should be valid");
+        TermReference::resolved(path, TermResolution::Item(item_id))
+    }
+
+    fn synthetic_local_expr(&mut self, binding: BindingId, span: SourceSpan) -> ExprId {
+        let binding_name = self.module.bindings()[binding].name.text().to_owned();
+        let name = Name::new(binding_name, span).expect("synthetic local names should be valid");
+        let path =
+            NamePath::from_vec(vec![name]).expect("single-segment local path should be valid");
+        self.alloc_expr(Expr {
+            span,
+            kind: ExprKind::Name(TermReference::resolved(path, TermResolution::Local(binding))),
+        })
+    }
+
+    fn collect_lambda_captures(&self, body: ExprId, lambda_bindings: &[BindingId]) -> Vec<BindingId> {
+        let mut ordered = Vec::new();
+        let mut seen = HashSet::new();
+        let scope = LambdaScopeStack::with_bindings(lambda_bindings.iter().copied());
+        self.collect_captures_expr(body, &scope, &mut seen, &mut ordered);
+        ordered
+    }
+
+    fn collect_captures_expr(
+        &self,
+        expr_id: ExprId,
+        scope: &LambdaScopeStack,
+        seen: &mut HashSet<BindingId>,
+        ordered: &mut Vec<BindingId>,
+    ) {
+        let expr = self.module.exprs()[expr_id].clone();
+        match expr.kind {
+            ExprKind::Name(reference) => {
+                if let ResolutionState::Resolved(TermResolution::Local(binding)) = reference.resolution
+                {
+                    if !scope.contains(binding) && seen.insert(binding) {
+                        ordered.push(binding);
+                    }
+                }
+            }
+            ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::SuffixedInteger(_)
+            | ExprKind::AmbientSubject
+            | ExprKind::Regex(_) => {}
+            ExprKind::Text(text) => {
+                for segment in text.segments {
+                    if let TextSegment::Interpolation(interpolation) = segment {
+                        self.collect_captures_expr(interpolation.expr, scope, seen, ordered);
+                    }
+                }
+            }
+            ExprKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.collect_captures_expr(*element, scope, seen, ordered);
+                }
+            }
+            ExprKind::List(elements) | ExprKind::Set(elements) => {
+                for element in elements {
+                    self.collect_captures_expr(element, scope, seen, ordered);
+                }
+            }
+            ExprKind::Map(map) => {
+                for entry in map.entries {
+                    self.collect_captures_expr(entry.key, scope, seen, ordered);
+                    self.collect_captures_expr(entry.value, scope, seen, ordered);
+                }
+            }
+            ExprKind::Lambda(_) => {}
+            ExprKind::Record(record) => {
+                for field in record.fields {
+                    self.collect_captures_expr(field.value, scope, seen, ordered);
+                }
+            }
+            ExprKind::Projection { base, .. } => {
+                if let ProjectionBase::Expr(base) = base {
+                    self.collect_captures_expr(base, scope, seen, ordered);
+                }
+            }
+            ExprKind::Apply { callee, arguments } => {
+                self.collect_captures_expr(callee, scope, seen, ordered);
+                for argument in arguments.iter() {
+                    self.collect_captures_expr(*argument, scope, seen, ordered);
+                }
+            }
+            ExprKind::Unary { expr, .. } => {
+                self.collect_captures_expr(expr, scope, seen, ordered);
+            }
+            ExprKind::Binary { left, right, .. } => {
+                self.collect_captures_expr(left, scope, seen, ordered);
+                self.collect_captures_expr(right, scope, seen, ordered);
+            }
+            ExprKind::PatchApply { target, patch } => {
+                self.collect_captures_expr(target, scope, seen, ordered);
+                self.collect_captures_patch(&patch, scope, seen, ordered);
+            }
+            ExprKind::PatchLiteral(patch) => {
+                self.collect_captures_patch(&patch, scope, seen, ordered);
+            }
+            ExprKind::Pipe(pipe) => self.collect_captures_pipe(&pipe, scope, seen, ordered),
+            ExprKind::Cluster(cluster_id) => {
+                let cluster = self.module.clusters()[cluster_id].clone();
+                for member in cluster.members.iter() {
+                    self.collect_captures_expr(*member, scope, seen, ordered);
+                }
+                if let ClusterFinalizer::Explicit(expr) = cluster.finalizer {
+                    self.collect_captures_expr(expr, scope, seen, ordered);
+                }
+            }
+            ExprKind::Markup(node_id) => {
+                self.collect_captures_markup(node_id, scope, seen, ordered);
+            }
+        }
+    }
+
+    fn collect_captures_patch(
+        &self,
+        patch: &PatchBlock,
+        scope: &LambdaScopeStack,
+        seen: &mut HashSet<BindingId>,
+        ordered: &mut Vec<BindingId>,
+    ) {
+        for entry in &patch.entries {
+            for segment in &entry.selector.segments {
+                if let PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                    self.collect_captures_expr(*expr, scope, seen, ordered);
+                }
+            }
+            match entry.instruction.kind {
+                PatchInstructionKind::Replace(expr) | PatchInstructionKind::Store(expr) => {
+                    self.collect_captures_expr(expr, scope, seen, ordered);
+                }
+                PatchInstructionKind::Remove => {}
+            }
+        }
+    }
+
+    fn collect_captures_pipe(
+        &self,
+        pipe: &PipeExpr,
+        scope: &LambdaScopeStack,
+        seen: &mut HashSet<BindingId>,
+        ordered: &mut Vec<BindingId>,
+    ) {
+        self.collect_captures_expr(pipe.head, scope, seen, ordered);
+        let stages = pipe.stages.iter().collect::<Vec<_>>();
+        let mut pipe_scope = scope.clone();
+        let mut index = 0usize;
+        while index < stages.len() {
+            let stage = stages[index];
+            match &stage.kind {
+                PipeStageKind::Case { .. } => {
+                    let mut case_scope = pipe_scope.clone();
+                    if let Some(binding) = stage.subject_memo {
+                        case_scope.push([binding]);
+                    }
+                    while index < stages.len() {
+                        let PipeStageKind::Case { pattern, body } = &stages[index].kind else {
+                            break;
+                        };
+                        self.collect_captures_pattern(*pattern, &case_scope, seen, ordered);
+                        let mut branch_scope = case_scope.clone();
+                        branch_scope.push(self.pattern_bindings(*pattern));
+                        self.collect_captures_expr(*body, &branch_scope, seen, ordered);
+                        index += 1;
+                    }
+                }
+                PipeStageKind::Transform { expr }
+                | PipeStageKind::Gate { expr }
+                | PipeStageKind::Map { expr }
+                | PipeStageKind::Apply { expr }
+                | PipeStageKind::Tap { expr }
+                | PipeStageKind::FanIn { expr }
+                | PipeStageKind::Truthy { expr }
+                | PipeStageKind::Falsy { expr }
+                | PipeStageKind::RecurStart { expr }
+                | PipeStageKind::RecurStep { expr }
+                | PipeStageKind::Validate { expr }
+                | PipeStageKind::Previous { expr }
+                | PipeStageKind::Diff { expr }
+                | PipeStageKind::Delay { duration: expr } => {
+                    let mut stage_scope = pipe_scope.clone();
+                    if let Some(binding) = stage.subject_memo {
+                        stage_scope.push([binding]);
+                    }
+                    self.collect_captures_expr(*expr, &stage_scope, seen, ordered);
+                    index += 1;
+                }
+                PipeStageKind::Accumulate { seed, step } => {
+                    let mut stage_scope = pipe_scope.clone();
+                    if let Some(binding) = stage.subject_memo {
+                        stage_scope.push([binding]);
+                    }
+                    self.collect_captures_expr(*seed, &stage_scope, seen, ordered);
+                    self.collect_captures_expr(*step, &stage_scope, seen, ordered);
+                    index += 1;
+                }
+                PipeStageKind::Burst { every, count } => {
+                    let mut stage_scope = pipe_scope.clone();
+                    if let Some(binding) = stage.subject_memo {
+                        stage_scope.push([binding]);
+                    }
+                    self.collect_captures_expr(*every, &stage_scope, seen, ordered);
+                    self.collect_captures_expr(*count, &stage_scope, seen, ordered);
+                    index += 1;
+                }
+            }
+            if let Some(binding) = stage.subject_memo {
+                pipe_scope.push([binding]);
+            }
+            if let Some(binding) = stage.result_memo {
+                pipe_scope.push([binding]);
+            }
+        }
+    }
+
+    fn collect_captures_markup(
+        &self,
+        node_id: MarkupNodeId,
+        scope: &LambdaScopeStack,
+        seen: &mut HashSet<BindingId>,
+        ordered: &mut Vec<BindingId>,
+    ) {
+        let node = self.module.markup_nodes()[node_id].clone();
+        match node.kind {
+            MarkupNodeKind::Element(element) => {
+                for attribute in &element.attributes {
+                    match &attribute.value {
+                        MarkupAttributeValue::Expr(expr) => {
+                            self.collect_captures_expr(*expr, scope, seen, ordered);
+                        }
+                        MarkupAttributeValue::Text(text) => {
+                            for segment in &text.segments {
+                                if let TextSegment::Interpolation(interpolation) = segment {
+                                    self.collect_captures_expr(
+                                        interpolation.expr,
+                                        scope,
+                                        seen,
+                                        ordered,
+                                    );
+                                }
+                            }
+                        }
+                        MarkupAttributeValue::ImplicitTrue => {}
+                    }
+                }
+                for child in element.children {
+                    self.collect_captures_markup(child, scope, seen, ordered);
+                }
+            }
+            MarkupNodeKind::Control(control_id) => {
+                self.collect_captures_control(control_id, scope, seen, ordered);
+            }
+        }
+    }
+
+    fn collect_captures_control(
+        &self,
+        control_id: ControlNodeId,
+        scope: &LambdaScopeStack,
+        seen: &mut HashSet<BindingId>,
+        ordered: &mut Vec<BindingId>,
+    ) {
+        let control = self.module.control_nodes()[control_id].clone();
+        match control {
+            ControlNode::Show(node) => {
+                self.collect_captures_expr(node.when, scope, seen, ordered);
+                if let Some(expr) = node.keep_mounted {
+                    self.collect_captures_expr(expr, scope, seen, ordered);
+                }
+                for child in node.children {
+                    self.collect_captures_markup(child, scope, seen, ordered);
+                }
+            }
+            ControlNode::Each(node) => {
+                self.collect_captures_expr(node.collection, scope, seen, ordered);
+                let mut child_scope = scope.clone();
+                child_scope.push([node.binding]);
+                if let Some(key) = node.key {
+                    self.collect_captures_expr(key, &child_scope, seen, ordered);
+                }
+                for child in node.children {
+                    self.collect_captures_markup(child, &child_scope, seen, ordered);
+                }
+                if let Some(empty) = node.empty {
+                    self.collect_captures_control(empty, scope, seen, ordered);
+                }
+            }
+            ControlNode::Match(node) => {
+                self.collect_captures_expr(node.scrutinee, scope, seen, ordered);
+                for case in node.cases.iter() {
+                    self.collect_captures_control(*case, scope, seen, ordered);
+                }
+            }
+            ControlNode::Empty(node) => {
+                for child in node.children {
+                    self.collect_captures_markup(child, scope, seen, ordered);
+                }
+            }
+            ControlNode::Fragment(node) => {
+                for child in node.children {
+                    self.collect_captures_markup(child, scope, seen, ordered);
+                }
+            }
+            ControlNode::Case(node) => {
+                self.collect_captures_pattern(node.pattern, scope, seen, ordered);
+                let mut child_scope = scope.clone();
+                child_scope.push(self.pattern_bindings(node.pattern));
+                for child in node.children {
+                    self.collect_captures_markup(child, &child_scope, seen, ordered);
+                }
+            }
+            ControlNode::With(node) => {
+                self.collect_captures_expr(node.value, scope, seen, ordered);
+                let mut child_scope = scope.clone();
+                child_scope.push([node.binding]);
+                for child in node.children {
+                    self.collect_captures_markup(child, &child_scope, seen, ordered);
+                }
+            }
+        }
+    }
+
+    fn collect_captures_pattern(
+        &self,
+        pattern_id: PatternId,
+        scope: &LambdaScopeStack,
+        seen: &mut HashSet<BindingId>,
+        ordered: &mut Vec<BindingId>,
+    ) {
+        let pattern = self.module.patterns()[pattern_id].clone();
+        match pattern.kind {
+            PatternKind::Text(text) => {
+                for segment in text.segments {
+                    if let TextSegment::Interpolation(interpolation) = segment {
+                        self.collect_captures_expr(interpolation.expr, scope, seen, ordered);
+                    }
+                }
+            }
+            PatternKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.collect_captures_pattern(*element, scope, seen, ordered);
+                }
+            }
+            PatternKind::List { elements, rest } => {
+                for element in elements {
+                    self.collect_captures_pattern(element, scope, seen, ordered);
+                }
+                if let Some(rest) = rest {
+                    self.collect_captures_pattern(rest, scope, seen, ordered);
+                }
+            }
+            PatternKind::Record(fields) => {
+                for field in fields {
+                    self.collect_captures_pattern(field.pattern, scope, seen, ordered);
+                }
+            }
+            PatternKind::Constructor { arguments, .. } => {
+                for argument in arguments {
+                    self.collect_captures_pattern(argument, scope, seen, ordered);
+                }
+            }
+            PatternKind::Wildcard
+            | PatternKind::Binding(_)
+            | PatternKind::Integer(_)
+            | PatternKind::UnresolvedName(_) => {}
+        }
+    }
+
+    fn pattern_bindings(&self, pattern_id: PatternId) -> Vec<BindingId> {
+        let pattern = self.module.patterns()[pattern_id].clone();
+        match pattern.kind {
+            PatternKind::Binding(binding) => vec![binding.binding],
+            PatternKind::Tuple(elements) => elements
+                .iter()
+                .flat_map(|element| self.pattern_bindings(*element))
+                .collect(),
+            PatternKind::List { elements, rest } => {
+                let mut bindings = elements
+                    .into_iter()
+                    .flat_map(|element| self.pattern_bindings(element))
+                    .collect::<Vec<_>>();
+                if let Some(rest) = rest {
+                    bindings.extend(self.pattern_bindings(rest));
+                }
+                bindings
+            }
+            PatternKind::Record(fields) => fields
+                .into_iter()
+                .flat_map(|field| self.pattern_bindings(field.pattern))
+                .collect(),
+            PatternKind::Constructor { arguments, .. } => arguments
+                .into_iter()
+                .flat_map(|argument| self.pattern_bindings(argument))
+                .collect(),
+            PatternKind::Wildcard
+            | PatternKind::Integer(_)
+            | PatternKind::Text(_)
+            | PatternKind::UnresolvedName(_) => Vec::new(),
+        }
+    }
+
+    fn rewrite_captured_bindings_expr(
+        &mut self,
+        expr_id: ExprId,
+        captures: &HashMap<BindingId, BindingId>,
+    ) {
+        let expr = self.module.exprs()[expr_id].clone();
+        let kind = match expr.kind {
+            ExprKind::Name(mut reference) => {
+                if let ResolutionState::Resolved(TermResolution::Local(binding)) = reference.resolution
+                {
+                    if let Some(mapped) = captures.get(&binding) {
+                        let text = self.module.bindings()[*mapped].name.text().to_owned();
+                        reference = self.resolved_local_reference(&text, expr.span, *mapped);
+                    }
+                }
+                ExprKind::Name(reference)
+            }
+            ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::SuffixedInteger(_)
+            | ExprKind::AmbientSubject
+            | ExprKind::Regex(_) => return,
+            ExprKind::Text(mut text) => {
+                for segment in &mut text.segments {
+                    if let TextSegment::Interpolation(interpolation) = segment {
+                        self.rewrite_captured_bindings_expr(interpolation.expr, captures);
+                    }
+                }
+                ExprKind::Text(text)
+            }
+            ExprKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.rewrite_captured_bindings_expr(*element, captures);
+                }
+                ExprKind::Tuple(elements)
+            }
+            ExprKind::List(elements) => {
+                for element in &elements {
+                    self.rewrite_captured_bindings_expr(*element, captures);
+                }
+                ExprKind::List(elements)
+            }
+            ExprKind::Map(map) => {
+                for entry in &map.entries {
+                    self.rewrite_captured_bindings_expr(entry.key, captures);
+                    self.rewrite_captured_bindings_expr(entry.value, captures);
+                }
+                ExprKind::Map(map)
+            }
+            ExprKind::Set(elements) => {
+                for element in &elements {
+                    self.rewrite_captured_bindings_expr(*element, captures);
+                }
+                ExprKind::Set(elements)
+            }
+            ExprKind::Lambda(_) => return,
+            ExprKind::Record(record) => {
+                for field in &record.fields {
+                    self.rewrite_captured_bindings_expr(field.value, captures);
+                }
+                ExprKind::Record(record)
+            }
+            ExprKind::Projection { base, path } => {
+                if let ProjectionBase::Expr(base) = base {
+                    self.rewrite_captured_bindings_expr(base, captures);
+                    ExprKind::Projection {
+                        base: ProjectionBase::Expr(base),
+                        path,
+                    }
+                } else {
+                    ExprKind::Projection { base, path }
+                }
+            }
+            ExprKind::Apply { callee, arguments } => {
+                self.rewrite_captured_bindings_expr(callee, captures);
+                for argument in arguments.iter() {
+                    self.rewrite_captured_bindings_expr(*argument, captures);
+                }
+                ExprKind::Apply { callee, arguments }
+            }
+            ExprKind::Unary { operator, expr } => {
+                self.rewrite_captured_bindings_expr(expr, captures);
+                ExprKind::Unary { operator, expr }
+            }
+            ExprKind::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                self.rewrite_captured_bindings_expr(left, captures);
+                self.rewrite_captured_bindings_expr(right, captures);
+                ExprKind::Binary {
+                    left,
+                    operator,
+                    right,
+                }
+            }
+            ExprKind::PatchApply { target, mut patch } => {
+                self.rewrite_captured_bindings_expr(target, captures);
+                self.rewrite_captured_bindings_patch(&mut patch, captures);
+                ExprKind::PatchApply { target, patch }
+            }
+            ExprKind::PatchLiteral(mut patch) => {
+                self.rewrite_captured_bindings_patch(&mut patch, captures);
+                ExprKind::PatchLiteral(patch)
+            }
+            ExprKind::Pipe(pipe) => {
+                self.rewrite_captured_bindings_expr(pipe.head, captures);
+                for stage in pipe.stages.iter() {
+                    self.rewrite_captured_bindings_stage(stage, captures);
+                }
+                ExprKind::Pipe(pipe)
+            }
+            ExprKind::Cluster(cluster_id) => {
+                let cluster = self.module.clusters()[cluster_id].clone();
+                for member in cluster.members.iter() {
+                    self.rewrite_captured_bindings_expr(*member, captures);
+                }
+                if let ClusterFinalizer::Explicit(expr) = cluster.finalizer {
+                    self.rewrite_captured_bindings_expr(expr, captures);
+                }
+                ExprKind::Cluster(cluster_id)
+            }
+            ExprKind::Markup(node_id) => {
+                self.rewrite_captured_bindings_markup(node_id, captures);
+                ExprKind::Markup(node_id)
+            }
+        };
+        *self
+            .module
+            .arenas
+            .exprs
+            .get_mut(expr_id)
+            .expect("expr id should remain valid during capture rewrite") = Expr {
+            span: expr.span,
+            kind,
+        };
+    }
+
+    fn rewrite_captured_bindings_patch(
+        &mut self,
+        patch: &mut PatchBlock,
+        captures: &HashMap<BindingId, BindingId>,
+    ) {
+        for entry in &mut patch.entries {
+            for segment in &mut entry.selector.segments {
+                if let PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                    self.rewrite_captured_bindings_expr(*expr, captures);
+                }
+            }
+            match entry.instruction.kind {
+                PatchInstructionKind::Replace(expr) | PatchInstructionKind::Store(expr) => {
+                    self.rewrite_captured_bindings_expr(expr, captures);
+                }
+                PatchInstructionKind::Remove => {}
+            }
+        }
+    }
+
+    fn rewrite_captured_bindings_stage(
+        &mut self,
+        stage: &PipeStage,
+        captures: &HashMap<BindingId, BindingId>,
+    ) {
+        match &stage.kind {
+            PipeStageKind::Transform { expr }
+            | PipeStageKind::Gate { expr }
+            | PipeStageKind::Map { expr }
+            | PipeStageKind::Apply { expr }
+            | PipeStageKind::Tap { expr }
+            | PipeStageKind::FanIn { expr }
+            | PipeStageKind::Truthy { expr }
+            | PipeStageKind::Falsy { expr }
+            | PipeStageKind::RecurStart { expr }
+            | PipeStageKind::RecurStep { expr }
+            | PipeStageKind::Validate { expr }
+            | PipeStageKind::Previous { expr }
+            | PipeStageKind::Diff { expr }
+            | PipeStageKind::Delay { duration: expr } => {
+                self.rewrite_captured_bindings_expr(*expr, captures);
+            }
+            PipeStageKind::Case { body, .. } => {
+                self.rewrite_captured_bindings_expr(*body, captures);
+            }
+            PipeStageKind::Accumulate { seed, step } => {
+                self.rewrite_captured_bindings_expr(*seed, captures);
+                self.rewrite_captured_bindings_expr(*step, captures);
+            }
+            PipeStageKind::Burst { every, count } => {
+                self.rewrite_captured_bindings_expr(*every, captures);
+                self.rewrite_captured_bindings_expr(*count, captures);
+            }
+        }
+    }
+
+    fn rewrite_captured_bindings_markup(
+        &mut self,
+        node_id: MarkupNodeId,
+        captures: &HashMap<BindingId, BindingId>,
+    ) {
+        let node = self.module.markup_nodes()[node_id].clone();
+        match node.kind {
+            MarkupNodeKind::Element(element) => {
+                for attribute in &element.attributes {
+                    match &attribute.value {
+                        MarkupAttributeValue::Expr(expr) => {
+                            self.rewrite_captured_bindings_expr(*expr, captures);
+                        }
+                        MarkupAttributeValue::Text(text) => {
+                            for segment in &text.segments {
+                                if let TextSegment::Interpolation(interpolation) = segment {
+                                    self.rewrite_captured_bindings_expr(
+                                        interpolation.expr,
+                                        captures,
+                                    );
+                                }
+                            }
+                        }
+                        MarkupAttributeValue::ImplicitTrue => {}
+                    }
+                }
+                for child in element.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+            }
+            MarkupNodeKind::Control(control_id) => {
+                self.rewrite_captured_bindings_control(control_id, captures);
+            }
+        }
+    }
+
+    fn rewrite_captured_bindings_control(
+        &mut self,
+        control_id: ControlNodeId,
+        captures: &HashMap<BindingId, BindingId>,
+    ) {
+        let control = self.module.control_nodes()[control_id].clone();
+        match control {
+            ControlNode::Show(node) => {
+                self.rewrite_captured_bindings_expr(node.when, captures);
+                if let Some(expr) = node.keep_mounted {
+                    self.rewrite_captured_bindings_expr(expr, captures);
+                }
+                for child in node.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+            }
+            ControlNode::Each(node) => {
+                self.rewrite_captured_bindings_expr(node.collection, captures);
+                if let Some(key) = node.key {
+                    self.rewrite_captured_bindings_expr(key, captures);
+                }
+                for child in node.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+                if let Some(empty) = node.empty {
+                    self.rewrite_captured_bindings_control(empty, captures);
+                }
+            }
+            ControlNode::Match(node) => {
+                self.rewrite_captured_bindings_expr(node.scrutinee, captures);
+                for case in node.cases.iter() {
+                    self.rewrite_captured_bindings_control(*case, captures);
+                }
+            }
+            ControlNode::Empty(node) => {
+                for child in node.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+            }
+            ControlNode::Fragment(node) => {
+                for child in node.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+            }
+            ControlNode::Case(node) => {
+                for child in node.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+            }
+            ControlNode::With(node) => {
+                self.rewrite_captured_bindings_expr(node.value, captures);
+                for child in node.children {
+                    self.rewrite_captured_bindings_markup(child, captures);
+                }
+            }
+        }
+    }
+
+    fn rewrite_subject_shorthand_expr(
+        &mut self,
+        expr_id: ExprId,
+        binding: BindingId,
+        ambient_allowed: bool,
+    ) {
+        let expr = self.module.exprs()[expr_id].clone();
+        let kind = match expr.kind {
+            ExprKind::AmbientSubject if !ambient_allowed => {
+                ExprKind::Name(self.resolved_local_reference(
+                    self.module.bindings()[binding].name.text(),
+                    expr.span,
+                    binding,
+                ))
+            }
+            ExprKind::Name(_)
+            | ExprKind::Integer(_)
+            | ExprKind::Float(_)
+            | ExprKind::Decimal(_)
+            | ExprKind::BigInt(_)
+            | ExprKind::SuffixedInteger(_)
+            | ExprKind::Regex(_)
+            | ExprKind::AmbientSubject => return,
+            ExprKind::Text(text) => {
+                for segment in &text.segments {
+                    if let TextSegment::Interpolation(interpolation) = segment {
+                        self.rewrite_subject_shorthand_expr(
+                            interpolation.expr,
+                            binding,
+                            ambient_allowed,
+                        );
+                    }
+                }
+                ExprKind::Text(text)
+            }
+            ExprKind::Tuple(elements) => {
+                for element in elements.iter() {
+                    self.rewrite_subject_shorthand_expr(*element, binding, ambient_allowed);
+                }
+                ExprKind::Tuple(elements)
+            }
+            ExprKind::List(elements) => {
+                for element in &elements {
+                    self.rewrite_subject_shorthand_expr(*element, binding, ambient_allowed);
+                }
+                ExprKind::List(elements)
+            }
+            ExprKind::Map(map) => {
+                for entry in &map.entries {
+                    self.rewrite_subject_shorthand_expr(entry.key, binding, ambient_allowed);
+                    self.rewrite_subject_shorthand_expr(entry.value, binding, ambient_allowed);
+                }
+                ExprKind::Map(map)
+            }
+            ExprKind::Set(elements) => {
+                for element in &elements {
+                    self.rewrite_subject_shorthand_expr(*element, binding, ambient_allowed);
+                }
+                ExprKind::Set(elements)
+            }
+            ExprKind::Lambda(_) => return,
+            ExprKind::Record(record) => {
+                for field in &record.fields {
+                    self.rewrite_subject_shorthand_expr(field.value, binding, ambient_allowed);
+                }
+                ExprKind::Record(record)
+            }
+            ExprKind::Projection { base, path } => match base {
+                ProjectionBase::Ambient if !ambient_allowed => ExprKind::Projection {
+                    base: ProjectionBase::Expr(self.synthetic_local_expr(binding, expr.span)),
+                    path,
+                },
+                ProjectionBase::Ambient => ExprKind::Projection {
+                    base: ProjectionBase::Ambient,
+                    path,
+                },
+                ProjectionBase::Expr(base) => {
+                    self.rewrite_subject_shorthand_expr(base, binding, ambient_allowed);
+                    ExprKind::Projection {
+                        base: ProjectionBase::Expr(base),
+                        path,
+                    }
+                }
+            },
+            ExprKind::Apply { callee, arguments } => {
+                self.rewrite_subject_shorthand_expr(callee, binding, ambient_allowed);
+                for argument in arguments.iter() {
+                    self.rewrite_subject_shorthand_expr(*argument, binding, ambient_allowed);
+                }
+                ExprKind::Apply { callee, arguments }
+            }
+            ExprKind::Unary { operator, expr } => {
+                self.rewrite_subject_shorthand_expr(expr, binding, ambient_allowed);
+                ExprKind::Unary { operator, expr }
+            }
+            ExprKind::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                self.rewrite_subject_shorthand_expr(left, binding, ambient_allowed);
+                self.rewrite_subject_shorthand_expr(right, binding, ambient_allowed);
+                ExprKind::Binary {
+                    left,
+                    operator,
+                    right,
+                }
+            }
+            ExprKind::PatchApply { target, patch } => {
+                self.rewrite_subject_shorthand_expr(target, binding, ambient_allowed);
+                self.rewrite_subject_shorthand_patch(&patch, binding, ambient_allowed);
+                ExprKind::PatchApply { target, patch }
+            }
+            ExprKind::PatchLiteral(patch) => {
+                self.rewrite_subject_shorthand_patch(&patch, binding, ambient_allowed);
+                ExprKind::PatchLiteral(patch)
+            }
+            ExprKind::Pipe(pipe) => {
+                self.rewrite_subject_shorthand_expr(pipe.head, binding, ambient_allowed);
+                for stage in pipe.stages.iter() {
+                    self.rewrite_subject_shorthand_stage(stage, binding);
+                }
+                ExprKind::Pipe(pipe)
+            }
+            ExprKind::Cluster(cluster_id) => {
+                let cluster = self.module.clusters()[cluster_id].clone();
+                for member in cluster.members.iter() {
+                    self.rewrite_subject_shorthand_expr(*member, binding, ambient_allowed);
+                }
+                if let ClusterFinalizer::Explicit(expr) = cluster.finalizer {
+                    self.rewrite_subject_shorthand_expr(expr, binding, ambient_allowed);
+                }
+                ExprKind::Cluster(cluster_id)
+            }
+            ExprKind::Markup(node_id) => {
+                self.rewrite_subject_shorthand_markup(node_id, binding, ambient_allowed);
+                ExprKind::Markup(node_id)
+            }
+        };
+        *self
+            .module
+            .arenas
+            .exprs
+            .get_mut(expr_id)
+            .expect("expr id should remain valid during subject shorthand rewrite") = Expr {
+            span: expr.span,
+            kind,
+        };
+    }
+
+    fn rewrite_subject_shorthand_patch(
+        &mut self,
+        patch: &PatchBlock,
+        binding: BindingId,
+        ambient_allowed: bool,
+    ) {
+        for entry in &patch.entries {
+            for segment in &entry.selector.segments {
+                if let PatchSelectorSegment::BracketExpr { expr, .. } = segment {
+                    self.rewrite_subject_shorthand_expr(*expr, binding, ambient_allowed);
+                }
+            }
+            match entry.instruction.kind {
+                PatchInstructionKind::Replace(expr) | PatchInstructionKind::Store(expr) => {
+                    self.rewrite_subject_shorthand_expr(expr, binding, ambient_allowed);
+                }
+                PatchInstructionKind::Remove => {}
+            }
+        }
+    }
+
+    fn rewrite_subject_shorthand_stage(&mut self, stage: &PipeStage, binding: BindingId) {
+        match &stage.kind {
+            PipeStageKind::Transform { expr }
+            | PipeStageKind::Gate { expr }
+            | PipeStageKind::Map { expr }
+            | PipeStageKind::Apply { expr }
+            | PipeStageKind::Tap { expr }
+            | PipeStageKind::FanIn { expr }
+            | PipeStageKind::Truthy { expr }
+            | PipeStageKind::Falsy { expr }
+            | PipeStageKind::RecurStart { expr }
+            | PipeStageKind::RecurStep { expr }
+            | PipeStageKind::Validate { expr }
+            | PipeStageKind::Previous { expr }
+            | PipeStageKind::Diff { expr }
+            | PipeStageKind::Delay { duration: expr } => {
+                self.rewrite_subject_shorthand_expr(*expr, binding, true);
+            }
+            PipeStageKind::Case { body, .. } => {
+                self.rewrite_subject_shorthand_expr(*body, binding, true);
+            }
+            PipeStageKind::Accumulate { seed, step } => {
+                self.rewrite_subject_shorthand_expr(*seed, binding, true);
+                self.rewrite_subject_shorthand_expr(*step, binding, true);
+            }
+            PipeStageKind::Burst { every, count } => {
+                self.rewrite_subject_shorthand_expr(*every, binding, true);
+                self.rewrite_subject_shorthand_expr(*count, binding, true);
+            }
+        }
+    }
+
+    fn rewrite_subject_shorthand_markup(
+        &mut self,
+        node_id: MarkupNodeId,
+        binding: BindingId,
+        ambient_allowed: bool,
+    ) {
+        let node = self.module.markup_nodes()[node_id].clone();
+        match node.kind {
+            MarkupNodeKind::Element(element) => {
+                for attribute in &element.attributes {
+                    match &attribute.value {
+                        MarkupAttributeValue::Expr(expr) => {
+                            self.rewrite_subject_shorthand_expr(*expr, binding, ambient_allowed);
+                        }
+                        MarkupAttributeValue::Text(text) => {
+                            for segment in &text.segments {
+                                if let TextSegment::Interpolation(interpolation) = segment {
+                                    self.rewrite_subject_shorthand_expr(
+                                        interpolation.expr,
+                                        binding,
+                                        ambient_allowed,
+                                    );
+                                }
+                            }
+                        }
+                        MarkupAttributeValue::ImplicitTrue => {}
+                    }
+                }
+                for child in element.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+            }
+            MarkupNodeKind::Control(control_id) => {
+                self.rewrite_subject_shorthand_control(control_id, binding, ambient_allowed);
+            }
+        }
+    }
+
+    fn rewrite_subject_shorthand_control(
+        &mut self,
+        control_id: ControlNodeId,
+        binding: BindingId,
+        ambient_allowed: bool,
+    ) {
+        let control = self.module.control_nodes()[control_id].clone();
+        match control {
+            ControlNode::Show(node) => {
+                self.rewrite_subject_shorthand_expr(node.when, binding, ambient_allowed);
+                if let Some(expr) = node.keep_mounted {
+                    self.rewrite_subject_shorthand_expr(expr, binding, ambient_allowed);
+                }
+                for child in node.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+            }
+            ControlNode::Each(node) => {
+                self.rewrite_subject_shorthand_expr(node.collection, binding, ambient_allowed);
+                if let Some(key) = node.key {
+                    self.rewrite_subject_shorthand_expr(key, binding, ambient_allowed);
+                }
+                for child in node.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+                if let Some(empty) = node.empty {
+                    self.rewrite_subject_shorthand_control(empty, binding, ambient_allowed);
+                }
+            }
+            ControlNode::Match(node) => {
+                self.rewrite_subject_shorthand_expr(node.scrutinee, binding, ambient_allowed);
+                for case in node.cases.iter() {
+                    self.rewrite_subject_shorthand_control(*case, binding, ambient_allowed);
+                }
+            }
+            ControlNode::Empty(node) => {
+                for child in node.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+            }
+            ControlNode::Fragment(node) => {
+                for child in node.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+            }
+            ControlNode::Case(node) => {
+                for child in node.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+            }
+            ControlNode::With(node) => {
+                self.rewrite_subject_shorthand_expr(node.value, binding, ambient_allowed);
+                for child in node.children {
+                    self.rewrite_subject_shorthand_markup(child, binding, ambient_allowed);
+                }
+            }
+        }
+    }
+
+    fn resolved_local_reference(&self, text: &str, span: SourceSpan, binding: BindingId) -> TermReference {
+        let name = Name::new(text, span).expect("synthetic local reference names should be valid");
+        let path =
+            NamePath::from_vec(vec![name]).expect("single-segment local path should be valid");
+        TermReference::resolved(path, TermResolution::Local(binding))
+    }
+
     fn normalize_function_signature_annotations(&mut self) {
         let function_ids = self
             .module
@@ -5674,6 +7388,15 @@ impl<'a> Lowerer<'a> {
                     | ExprKind::SuffixedInteger(_)
                     | ExprKind::AmbientSubject
                     | ExprKind::Regex(_) => {}
+                    ExprKind::Lambda(lambda) => {
+                        work.push(AmbientProjectionWork::Expr {
+                            expr: lambda.body,
+                            ambient_allowed: matches!(
+                                lambda.surface_form,
+                                crate::hir::LambdaSurfaceForm::SubjectShorthand
+                            ),
+                        });
+                    }
                     ExprKind::Text(text) => {
                         for segment in text.segments.iter().rev() {
                             if let TextSegment::Interpolation(interpolation) = segment {
@@ -6345,6 +8068,22 @@ impl<'a> Lowerer<'a> {
                 Expr {
                     span: expr.span,
                     kind: ExprKind::Set(elements),
+                }
+            }
+            ExprKind::Lambda(lambda) => {
+                let mut lambda_env = env.clone();
+                lambda_env.push_term_scope(
+                    self.binding_scope(lambda.parameters.iter().map(|parameter| parameter.binding)),
+                );
+                for parameter in &lambda.parameters {
+                    if let Some(annotation) = parameter.annotation {
+                        self.resolve_type(annotation, namespaces, &mut lambda_env);
+                    }
+                }
+                self.resolve_expr(lambda.body, namespaces, &lambda_env);
+                Expr {
+                    span: expr.span,
+                    kind: ExprKind::Lambda(lambda),
                 }
             }
             ExprKind::Record(record) => {

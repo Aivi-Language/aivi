@@ -11,6 +11,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | Page | Summary |
 |------|---------|
 | [architecture.md](architecture.md) | High-level system overview: layers, crates, data flow |
+| [anonymous-lambdas.md](anonymous-lambdas.md) | Expression lambda surface, shorthand boundary, and hoisting model |
 | [compiler-pipeline.md](compiler-pipeline.md) | CST → HIR → Core → Lambda → Backend → Cranelift codegen |
 | [type-system.md](type-system.md) | Types, kinds, HKT, type classes, Eq derivation, constraints |
 | [equality-semantics.md](equality-semantics.md) | Concrete structural Eq, generic constraints, and why demos still use comparator helpers |

@@ -64,7 +64,9 @@ impl<'a> Parser<'a> {
         let checkpoint = *cursor;
         let parameter =
             self.implicit_function_subject_parameter_at(self.source_span_of_token(head_start));
-        let head = self.parse_range_expr(cursor, end, ExprStop::default().with_pipe_stage())?;
+        let head = self.with_implicit_lambda_disabled(|parser| {
+            parser.parse_range_expr(cursor, end, ExprStop::default().with_pipe_stage())
+        })?;
         let (head, rewrote_subject) =
             self.rewrite_free_function_subject_expr(head, &parameter, false);
         if !rewrote_subject {
@@ -72,7 +74,15 @@ impl<'a> Parser<'a> {
             return None;
         }
         let body = self
-            .parse_subject_root_expr_from_head(head_start, head, cursor, end, ExprStop::default())
+            .with_implicit_lambda_disabled(|parser| {
+                parser.parse_subject_root_expr_from_head(
+                    head_start,
+                    head,
+                    cursor,
+                    end,
+                    ExprStop::default(),
+                )
+            })
             .and_then(|expr| self.finish_expression_body(cursor, end, "func declaration", expr))
             .or_else(|| {
                 self.missing_body_diagnostic(
@@ -179,13 +189,15 @@ impl<'a> Parser<'a> {
         };
 
         let body = self
-            .parse_subject_root_expr_from_head(
-                head.start_index,
-                head.expr,
-                cursor,
-                end,
-                ExprStop::default(),
-            )
+            .with_implicit_lambda_disabled(|parser| {
+                parser.parse_subject_root_expr_from_head(
+                    head.start_index,
+                    head.expr,
+                    cursor,
+                    end,
+                    ExprStop::default(),
+                )
+            })
             .and_then(|expr| self.finish_expression_body(cursor, end, declaration_name, expr));
         Some((parameters, body))
     }

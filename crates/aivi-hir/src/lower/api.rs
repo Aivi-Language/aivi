@@ -63,6 +63,7 @@ pub fn resolve_imports(module: Module<Unresolved>) -> LoweringResult {
     let mut lowerer = Lowerer::from_module(module.mark_resolved(), &null_resolver);
     let namespaces = lowerer.build_namespaces();
     lowerer.resolve_module(&namespaces);
+    lowerer.hoist_lambdas();
     lowerer.validate_cluster_normalization();
     LoweringResult::new(lowerer.module, lowerer.diagnostics)
 }
@@ -83,6 +84,7 @@ pub fn lower_module_with_resolver(
     lowerer.lower_ambient_prelude();
     let namespaces = lowerer.build_namespaces();
     lowerer.resolve_module(&namespaces);
+    lowerer.hoist_lambdas();
     lowerer.normalize_function_signature_annotations();
     lowerer.validate_cluster_normalization();
     crate::capability_handle_elaboration::elaborate_capability_handles(
@@ -92,4 +94,3 @@ pub fn lower_module_with_resolver(
     crate::signal_metadata_elaboration::populate_signal_metadata(&mut lowerer.module);
     LoweringResult::new(lowerer.module, lowerer.diagnostics)
 }
-

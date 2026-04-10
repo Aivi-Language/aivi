@@ -251,9 +251,51 @@ value double = multiply 2
 value ten = double 5
 ```
 
-## Named helpers instead of inline lambdas
+## Inline lambdas
 
-For examples and playground-friendly snippets, prefer a named helper over an inline anonymous function:
+Anonymous lambdas are ordinary expressions. Explicit lambdas can take one or more named parameters.
+Use them when you want an inline adapter or predicate:
+
+```aivi
+type Coord = Coord Int Int
+
+value items : List Coord = [
+    Coord 0 0,
+    Coord 1 1
+]
+
+value cell : Coord = Coord 1 1
+value explicitMatch : Bool = any (coord => coord == cell) items
+
+value next : Int = 0
+  |> x => x + 1
+```
+
+For short unary predicates, AIVI also accepts a narrow shorthand based on the existing subject
+syntax:
+
+```aivi
+type Score = { score: Int }
+
+value items : List Int = [
+    1,
+    2,
+    3
+]
+
+value threshold : Int = 2
+value shorthandMatch : Bool = any (. == threshold) items
+value highScore : Score -> Bool = .score >= 10
+```
+
+That shorthand is always unary and only applies to **composed** dot-rooted expressions such as
+`. == cell` or `.score >= 10`. Bare `.` and `.field` keep their established ambient-subject meaning
+so existing pipe, patch, and unary-subject code keeps reading the same way.
+
+## Named helpers and inline lambdas
+
+Inline lambdas now work, but named helpers are still better when logic is reused or deserves a
+stable name:
 
 ```aivi
 type Text -> Text
@@ -270,7 +312,7 @@ value shownStatus = " ready "
   |> decorateStatus
 ```
 
-That style gives each step a reusable name and stays inside the current language surface.
+That style gives each step a reusable name and often reads better in longer pipes.
 
 ## Structural patches
 

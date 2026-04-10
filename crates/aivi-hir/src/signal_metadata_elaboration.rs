@@ -302,6 +302,9 @@ fn collect_signal_deps_internal(
                     ExprKind::Set(elements) => {
                         work.extend(elements.iter().copied().map(DependencyWork::Expr));
                     }
+                    ExprKind::Lambda(lambda) => {
+                        work.push(DependencyWork::Expr(lambda.body));
+                    }
                     ExprKind::Record(record) => {
                         work.extend(
                             record

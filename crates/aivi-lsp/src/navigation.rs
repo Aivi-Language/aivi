@@ -362,6 +362,7 @@ impl NavigationAnalysis {
                 | ExprKind::List(_)
                 | ExprKind::Map(_)
                 | ExprKind::Set(_)
+                | ExprKind::Lambda(_)
                 | ExprKind::Record(_)
                 | ExprKind::AmbientSubject
                 | ExprKind::Projection { .. }
@@ -632,6 +633,7 @@ impl NavigationAnalysis {
                 | ExprKind::List(_)
                 | ExprKind::Map(_)
                 | ExprKind::Set(_)
+                | ExprKind::Lambda(_)
                 | ExprKind::Record(_)
                 | ExprKind::AmbientSubject
                 | ExprKind::Projection { .. }

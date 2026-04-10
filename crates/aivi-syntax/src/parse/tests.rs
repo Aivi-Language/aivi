@@ -2010,6 +2010,77 @@ fun scoreLineFor:Text = "Score: {.}"
 }
 
 #[test]
+fn parser_accepts_anonymous_lambda_expressions() {
+    let (_, parsed) = load(
+        r#"type Coord = Coord Int Int
+value cell = Coord 1 1
+value explicit = coord => coord == cell
+value shorthand = . == cell
+value next = 0 |> x => x + 1
+"#,
+    );
+
+    assert!(
+        !parsed.has_errors(),
+        "expected anonymous lambda expressions to parse cleanly: {:?}",
+        parsed.all_diagnostics().collect::<Vec<_>>()
+    );
+
+    let Item::Value(explicit) = &parsed.module.items[2] else {
+        panic!("expected explicit lambda value item");
+    };
+    let explicit_body = explicit
+        .expr_body()
+        .expect("explicit lambda value should keep its body");
+    let ExprKind::Lambda(lambda) = &explicit_body.kind else {
+        panic!("expected explicit lambda expression");
+    };
+    assert!(matches!(
+        lambda.surface_form,
+        crate::cst::LambdaSurfaceForm::Explicit
+    ));
+    assert_eq!(lambda.parameters.len(), 1);
+    assert!(matches!(&lambda.body.kind, ExprKind::Binary { .. }));
+
+    let Item::Value(shorthand) = &parsed.module.items[3] else {
+        panic!("expected shorthand lambda value item");
+    };
+    let shorthand_body = shorthand
+        .expr_body()
+        .expect("shorthand lambda value should keep its body");
+    let ExprKind::Lambda(lambda) = &shorthand_body.kind else {
+        panic!("expected shorthand lambda expression");
+    };
+    assert!(matches!(
+        lambda.surface_form,
+        crate::cst::LambdaSurfaceForm::SubjectShorthand
+    ));
+    assert_eq!(lambda.parameters.len(), 1);
+    assert!(matches!(&lambda.body.kind, ExprKind::Binary { .. }));
+
+    let Item::Value(next) = &parsed.module.items[4] else {
+        panic!("expected pipe value item");
+    };
+    let next_body = next.expr_body().expect("pipe value should keep its body");
+    let ExprKind::Pipe(pipe) = &next_body.kind else {
+        panic!("expected pipe expression");
+    };
+    let [stage] = pipe.stages.as_slice() else {
+        panic!("expected single pipe stage");
+    };
+    let PipeStageKind::Transform { expr } = &stage.kind else {
+        panic!("expected transform pipe stage");
+    };
+    let ExprKind::Lambda(lambda) = &expr.kind else {
+        panic!("expected explicit lambda inside pipe stage");
+    };
+    assert!(matches!(
+        lambda.surface_form,
+        crate::cst::LambdaSurfaceForm::Explicit
+    ));
+}
+
+#[test]
 fn parser_accepts_selected_subject_pipe_bodies_without_arrows() {
     let (_, parsed) = load(
         r#"fun flipsFromDirection = board player coord vector!

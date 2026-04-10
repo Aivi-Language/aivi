@@ -285,6 +285,7 @@ impl<'a> Parser<'a> {
     fn probe_function_signature(&self, split: usize, start: usize, body_arrow: usize) -> bool {
         let mut probe = Parser::new(self.source, self.tokens);
         probe.depth = self.depth;
+        probe.implicit_lambda_disabled = self.implicit_lambda_disabled;
 
         let mut annotation_cursor = start;
         let (_, annotation) =
@@ -792,6 +793,7 @@ impl<'a> Parser<'a> {
 
         let mut parser = Parser::new(self.source, lexed.tokens());
         parser.depth = self.depth;
+        parser.implicit_lambda_disabled = self.implicit_lambda_disabled;
         let mut cursor = 0usize;
         let expr = parser.parse_expr(&mut cursor, lexed.tokens().len(), ExprStop::default());
         let trailing = parser.next_significant_from(cursor);

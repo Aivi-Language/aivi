@@ -67,6 +67,7 @@ It answers "what checks, executes, runs, or compiles today?" rather than "what t
 | Surface form | Check | Execute | Run | Compile | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Ambient subject (`.`, `.field`, `.field.subfield`) | yes | yes | yes | yes | This is part of the stable checked/runtime expression surface. |
+| Anonymous lambda expressions (`x => ...`, `. == value`) | yes | yes | yes | yes | Lowered by hoisting to synthetic hidden function items before later IR passes. Shorthand stays narrow: bare `.` and `.field` remain ambient-subject syntax, while composed dot-rooted expressions like `. == cell` become unary lambdas. |
 | Basic transform pipe `\|>` | yes | yes | yes | yes | Core transform pipelines are compile-safe when their stage bodies stay inside the codegen slice. |
 | Pipe memos `#name` | yes | yes | yes | yes | Pipe memos name stage inputs/results without leaving the pipe. Current support covers ordinary pipe stages, including grouped `\|\|>` runs, `T\|>` / `F\|>` pairs, temporal signal stages, accumulation, and recurrence. Applicative clusters use separate `&\|>` lowering rather than this memo flow. |
 | `result { ... }` | yes | yes | yes | yes | Checked and runtime-backed. Compile emits Cranelift IR for result block expressions through the standard transform codegen path. |

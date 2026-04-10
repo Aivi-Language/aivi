@@ -975,6 +975,19 @@ pub struct FunctionParameter {
     pub annotation: Option<TypeId>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LambdaSurfaceForm {
+    Explicit,
+    SubjectShorthand,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LambdaExpr {
+    pub parameters: Vec<FunctionParameter>,
+    pub body: ExprId,
+    pub surface_form: LambdaSurfaceForm,
+}
+
 /// One `sig` declaration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignalItem {
@@ -1389,6 +1402,7 @@ pub enum ExprKind {
     List(Vec<ExprId>),
     Map(MapExpr),
     Set(Vec<ExprId>),
+    Lambda(LambdaExpr),
     Record(RecordExpr),
     AmbientSubject,
     Projection {

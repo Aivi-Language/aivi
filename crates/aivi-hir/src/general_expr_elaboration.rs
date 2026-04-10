@@ -1096,7 +1096,15 @@ impl<'a> GeneralExprElaborator<'a> {
         owner: ItemId,
         function: &FunctionItem,
     ) -> GeneralExprItemElaboration {
-        let (parameters, env) = match self.lower_parameters(&function.parameters) {
+        let inferred_signature = self
+            .typing
+            .item_value_type(owner)
+            .and_then(|ty| self.function_signature(&ty, function.parameters.len()));
+        let inferred_parameter_types = inferred_signature
+            .as_ref()
+            .map(|(parameters, _)| parameters.as_slice());
+        let (parameters, env) = match self.lower_parameters(&function.parameters, inferred_parameter_types)
+        {
             Ok(lowered) => lowered,
             Err(blockers) => {
                 return GeneralExprItemElaboration {
@@ -1109,7 +1117,8 @@ impl<'a> GeneralExprElaborator<'a> {
         };
         let expected = function
             .annotation
-            .and_then(|annotation| self.typing.lower_open_annotation(annotation));
+            .and_then(|annotation| self.typing.lower_open_annotation(annotation))
+            .or_else(|| inferred_signature.as_ref().map(|(_, result)| result.clone()));
         let outcome = match self.lower_expr_with_signal_result_fallback(
             function.body,
             &env,
@@ -1376,22 +1385,27 @@ impl<'a> GeneralExprElaborator<'a> {
     fn lower_parameters(
         &mut self,
         parameters: &[FunctionParameter],
+        inferred_types: Option<&[GateType]>,
     ) -> Result<(Vec<GeneralExprParameter>, GateExprEnv), Vec<GeneralExprBlocker>> {
         let mut env = GateExprEnv::default();
         let mut lowered = Vec::with_capacity(parameters.len());
         let mut blockers = Vec::new();
-        for parameter in parameters {
+        for (index, parameter) in parameters.iter().enumerate() {
             let binding = &self.module.bindings()[parameter.binding];
-            let Some(annotation) = parameter.annotation else {
+            let ty = if let Some(annotation) = parameter.annotation {
+                let Some(ty) = self.typing.lower_open_annotation(annotation) else {
+                    blockers.push(GeneralExprBlocker::UnknownExprType {
+                        span: parameter.span,
+                    });
+                    continue;
+                };
+                ty
+            } else if let Some(ty) = inferred_types.and_then(|types| types.get(index)).cloned() {
+                ty
+            } else {
                 blockers.push(GeneralExprBlocker::MissingParameterType {
                     span: parameter.span,
                     name: binding.name.text().into(),
-                });
-                continue;
-            };
-            let Some(ty) = self.typing.lower_open_annotation(annotation) else {
-                blockers.push(GeneralExprBlocker::UnknownExprType {
-                    span: parameter.span,
                 });
                 continue;
             };
@@ -1747,6 +1761,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 )
             }
             ExprKind::AmbientSubject => GateRuntimeExprKind::AmbientSubject,
+            ExprKind::Lambda(_) => {
+                unreachable!("lambda expressions must hoist before runtime elaboration")
+            }
             ExprKind::Projection { base, path } => {
                 self.lower_projection_expr(expr_id, &base, &path, env, ambient)?
             }

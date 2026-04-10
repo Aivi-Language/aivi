@@ -97,10 +97,12 @@ Rules:
 
 - `value` = constant binding only; uses `=`.
 - `func` = function declaration; uses `=` after the name, then either parameters plus `=>`, unary subject sugar rooted at `.`, or selected-subject header sugar rooted at `param!` / `param { path! }`.
+- Anonymous lambda expressions also use `=>` and may take one or more named parameters: `value isCell = coord => coord == cell`, `value next = 0 |> x => x + 1`.
 - Function signatures live on a preceding `type` line: `type Int -> Int -> Int`.
 - Inside `from` blocks, the same standalone `type` line form attaches to the immediately following entry.
 - `func` headers keep parameters unannotated: `func add = x y => ...`.
 - Unary subject sugar is available for single-argument functions whose body starts from that argument: `func headOrFallback = .`, `func status = .status`, `func scoreLineFor = "Score: {.}"`.
+- Shorthand subject lambdas are available only for unary composed dot-rooted expressions: `. == cell` means `value => value == cell`, `.score >= threshold` means `value => value.score >= threshold`. Bare `.` and `.field` keep their existing ambient-subject meaning.
 - Selected-subject header sugar is available when one explicit parameter should seed the following continuation: `func addFrom = amount value! |> add amount`, `func bump = counter! delta <| { total: counter.total + delta }`.
 - Record-selector subject picks are projection sugar over the immediately preceding named parameter: `func readNested = state { x.y.z! } |> addOne`.
 - Ignored unary inputs stay explicit: `func constant = _ => ...`.
@@ -1133,7 +1135,6 @@ The RFC and repo evidence above do **not** give a stable authoring contract here
 
 - standalone local `let ... in ...`
 - `where` clauses
-- anonymous lambda syntax
 - standalone `match ... with` expression syntax
 - Haskell-style guards on `||>` arms
 - open-record row-polymorphic programming styles

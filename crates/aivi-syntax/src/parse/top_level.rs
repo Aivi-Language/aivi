@@ -6,7 +6,19 @@ impl<'a> Parser<'a> {
             cursor: 0,
             diagnostics: Vec::new(),
             depth: 0,
+            implicit_lambda_disabled: 0,
         }
+    }
+
+    fn implicit_lambda_enabled(&self) -> bool {
+        self.implicit_lambda_disabled == 0
+    }
+
+    fn with_implicit_lambda_disabled<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.implicit_lambda_disabled += 1;
+        let result = f(self);
+        self.implicit_lambda_disabled -= 1;
+        result
     }
 
     /// Attempt to enter a recursive parse frame. Returns `true` if the caller
@@ -747,7 +759,9 @@ impl<'a> Parser<'a> {
             );
         }
         cursor = header_colon + 1;
-        let body = self.parse_expr(&mut cursor, end, ExprStop::default());
+        let body = self.with_implicit_lambda_disabled(|parser| {
+            parser.parse_expr(&mut cursor, end, ExprStop::default())
+        });
         match &body {
             Some(_) => {
                 if let Some(trailing_index) = self.next_significant_in_range(cursor, end) {

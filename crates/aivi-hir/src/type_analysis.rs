@@ -136,6 +136,12 @@ pub(crate) fn walk_expr_tree(
                             });
                         }
                     }
+                    ExprKind::Lambda(lambda) => {
+                        work.push(ExprWalkWork::Expr {
+                            expr: lambda.body,
+                            is_root: false,
+                        });
+                    }
                     ExprKind::Record(record) => {
                         for field in record.fields.into_iter().rev() {
                             work.push(ExprWalkWork::Expr {

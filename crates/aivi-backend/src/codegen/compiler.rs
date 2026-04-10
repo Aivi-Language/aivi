@@ -4000,6 +4000,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             {
                 Ok(value)
             }
+            (LayoutKind::Arrow { .. }, LayoutKind::Arrow { .. })
+                if self.layouts_call_compatible(from, to) =>
+            {
+                Ok(value)
+            }
             (
                 LayoutKind::List {
                     element: from_element,

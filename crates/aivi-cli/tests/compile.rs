@@ -179,6 +179,57 @@ fn compile_accepts_inline_pipe_gate_programs() {
 }
 
 #[test]
+fn compile_accepts_anonymous_lambda_programs() {
+    let input = TempFile::new(
+        "compile-anonymous-lambdas",
+        "aivi",
+        concat!(
+            "type Coord = Coord Int Int\n",
+            "value items : List Coord = [Coord 0 0, Coord 1 1]\n",
+            "value cell : Coord = Coord 1 1\n",
+            "value explicitMatch : Bool = any (coord => coord == cell) items\n",
+            "value shorthandMatch : Bool = any (. == cell) items\n",
+            "value next : Int = 0 |> x => x + 1\n",
+        ),
+    );
+    let output_dir = TempDir::new("compile-anonymous-lambdas");
+    let output_path = output_dir.path().join("anonymous-lambdas.o");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("compile")
+        .arg(input.path())
+        .arg("-o")
+        .arg(&output_path)
+        .output()
+        .expect("compile command should run");
+
+    assert!(
+        output.status.success(),
+        "expected anonymous lambda compile to succeed, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata =
+        fs::metadata(&output_path).expect("anonymous lambda compile should write an object file");
+    assert!(
+        metadata.len() > 0,
+        "anonymous lambda object file should not be empty"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("compile pipeline passed"),
+        "expected compile summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("codegen: ok"),
+        "expected codegen success in summary, got stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains("runtime startup/link integration is not available yet"),
+        "expected explicit runtime/link boundary, got stdout: {stdout}"
+    );
+}
+
+#[test]
 fn compile_accepts_pattern_armed_reactive_update_program() {
     let input = TempFile::new(
         "compile-pattern-reactive-update",

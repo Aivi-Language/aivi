@@ -1522,6 +1522,7 @@ impl<'a> TypeChecker<'a> {
             ExprKind::PatchLiteral(patch) => {
                 Some(self.check_patch_literal_expr(expr_id, &patch, env, expected, value_stack))
             }
+            ExprKind::Lambda(_) => None,
             ExprKind::AmbientSubject => None,
             ExprKind::Integer(_)
             | ExprKind::Float(_)
@@ -4091,4 +4092,3 @@ impl<'a> TypeChecker<'a> {
         );
     }
 }
-

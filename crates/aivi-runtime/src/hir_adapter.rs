@@ -1908,6 +1908,9 @@ fn collect_direct_signal_dependencies(
                     work.push_back(entry.value);
                 }
             }
+            hir::ExprKind::Lambda(lambda) => {
+                work.push_back(lambda.body);
+            }
             hir::ExprKind::Record(record) => {
                 work.extend(record.fields.iter().map(|field| field.value));
             }

@@ -5,6 +5,11 @@ Parse with: `grep "^## \[" log.md | tail -10`
 
 ---
 
+## [2026-04-10] ingest | anonymous lambdas
+
+Read syntax/parser/HIR lowering and docs around expression lambdas. Added [anonymous-lambdas.md](anonymous-lambdas.md).  
+Captured explicit `x => ...`, narrow `. == value` shorthand, and hoisting-to-hidden-functions implementation model.
+
 ## [2026-04-06] ingest | Initial wiki seeded from codebase
 
 Seeded wiki from source files in `src/`, `crates/`, `manual/`, `stdlib/`, `syntax.md`, `AIVI_RFC.md`.  

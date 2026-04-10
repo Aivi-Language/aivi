@@ -14,8 +14,145 @@ impl<'a> Parser<'a> {
         end: usize,
         stop: ExprStop,
     ) -> Option<Expr> {
+        self.parse_patch_apply_expr_with_lambda(cursor, end, stop, true)
+    }
+
+    fn parse_patch_apply_expr_with_lambda(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+        allow_implicit_lambda: bool,
+    ) -> Option<Expr> {
+        if let Some(lambda) = self.parse_lambda_expr(
+            cursor,
+            end,
+            stop,
+            allow_implicit_lambda && self.implicit_lambda_enabled(),
+        )
+        {
+            return Some(lambda);
+        }
         let expr = self.parse_pipe_expr(cursor, end, stop)?;
         Some(self.parse_patch_apply_suffix(expr, cursor, end, stop))
+    }
+
+    fn parse_pipe_stage_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+    ) -> Option<Expr> {
+        self.with_implicit_lambda_disabled(|parser| {
+            parser.parse_patch_apply_expr_with_lambda(cursor, end, stop, false)
+        })
+    }
+
+    fn parse_lambda_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+        allow_implicit_lambda: bool,
+    ) -> Option<Expr> {
+        let checkpoint = *cursor;
+        if let Some(lambda) = self.parse_explicit_lambda_expr(cursor, end, stop) {
+            return Some(lambda);
+        }
+        *cursor = checkpoint;
+        if allow_implicit_lambda {
+            if let Some(lambda) = self.parse_subject_lambda_expr(cursor, end, stop) {
+                return Some(lambda);
+            }
+            *cursor = checkpoint;
+        }
+        None
+    }
+
+    fn parse_explicit_lambda_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+    ) -> Option<Expr> {
+        let checkpoint = *cursor;
+        let mut parameters = Vec::new();
+        while self.starts_function_param(*cursor, end) {
+            let Some(parameter) = self.parse_function_param(cursor, end) else {
+                break;
+            };
+            parameters.push(parameter);
+        }
+        if parameters.is_empty() {
+            *cursor = checkpoint;
+            return None;
+        }
+        let Some(arrow_index) = self.consume_kind(cursor, end, TokenKind::Arrow) else {
+            *cursor = checkpoint;
+            return None;
+        };
+        let Some(body) = self.parse_expr(cursor, end, stop) else {
+            self.missing_body_diagnostic(
+                arrow_index,
+                "lambda expression is missing its body after `=>`",
+                "expected an expression after `=>`",
+            );
+            *cursor = checkpoint;
+            return None;
+        };
+        let span = self.join_spans(
+            parameters
+                .first()
+                .map(|parameter| parameter.span)
+                .unwrap_or_else(|| self.source_span_of_token(arrow_index)),
+            body.span,
+        );
+        Some(Expr {
+            span,
+            kind: ExprKind::Lambda(crate::cst::LambdaExpr {
+                parameters,
+                body: Box::new(body),
+                surface_form: crate::cst::LambdaSurfaceForm::Explicit,
+            }),
+        })
+    }
+
+    fn parse_subject_lambda_expr(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        stop: ExprStop,
+    ) -> Option<Expr> {
+        let checkpoint = *cursor;
+        let head_start = self.peek_nontrivia(*cursor, end)?;
+        if self.tokens[head_start].kind() != TokenKind::Dot {
+            return None;
+        }
+        let parameter =
+            self.implicit_function_subject_parameter_at(self.source_span_of_token(head_start));
+        let body = self.parse_pipe_expr(cursor, end, stop)?;
+        let body = self.parse_patch_apply_suffix(body, cursor, end, stop);
+        if matches!(
+            body.kind,
+            ExprKind::SubjectPlaceholder | ExprKind::AmbientProjection(_)
+        ) {
+            *cursor = checkpoint;
+            return None;
+        }
+        let (_, rewrote_subject) =
+            self.rewrite_free_function_subject_expr(body.clone(), &parameter, false);
+        if !rewrote_subject {
+            *cursor = checkpoint;
+            return None;
+        }
+        Some(Expr {
+            span: body.span,
+            kind: ExprKind::Lambda(crate::cst::LambdaExpr {
+                parameters: vec![parameter],
+                body: Box::new(body),
+                surface_form: crate::cst::LambdaSurfaceForm::SubjectShorthand,
+            }),
+        })
     }
 
     fn parse_patch_apply_suffix(
@@ -109,7 +246,7 @@ impl<'a> Parser<'a> {
                         let result_memo = self.parse_optional_pipe_memo(cursor, end);
                         (subject_memo, stage_kind, result_memo)
                     } else {
-                        let expr = self.parse_patch_apply_expr(
+                        let expr = self.parse_pipe_stage_expr(
                             cursor,
                             end,
                             stop.with_pipe_stage().with_hash(),
@@ -130,7 +267,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeGate => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -149,7 +286,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeMap => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -159,7 +296,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::PipeApply => {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -171,7 +308,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeRecurStart => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -186,7 +323,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeRecurStep => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -197,7 +334,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeTap => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -208,7 +345,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeFanIn => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -219,7 +356,7 @@ impl<'a> Parser<'a> {
                 TokenKind::TruthyBranch => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -230,7 +367,7 @@ impl<'a> Parser<'a> {
                 TokenKind::FalsyBranch => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -241,7 +378,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeValidate => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -252,7 +389,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipePrevious => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -269,7 +406,7 @@ impl<'a> Parser<'a> {
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
                     let seed =
                         self.parse_atomic_expr(cursor, end, stop.with_pipe_stage().with_hash())?;
-                    let step = self.parse_patch_apply_expr(
+                    let step = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -284,7 +421,7 @@ impl<'a> Parser<'a> {
                 TokenKind::PipeDiff => {
                     cluster_active = false;
                     let subject_memo = self.parse_optional_pipe_memo(cursor, end);
-                    let expr = self.parse_patch_apply_expr(
+                    let expr = self.parse_pipe_stage_expr(
                         cursor,
                         end,
                         stop.with_pipe_stage().with_hash(),
@@ -817,7 +954,9 @@ impl<'a> Parser<'a> {
                 span: self.source_span_for_range(start, close + 1),
             });
         }
-        let expr = self.parse_expr(cursor, end, ExprStop::list_context())?;
+        let expr = self.with_implicit_lambda_disabled(|parser| {
+            parser.parse_expr(cursor, end, ExprStop::list_context())
+        })?;
         let _ = self.consume_kind(cursor, end, TokenKind::RBracket)?;
         Some(PatchSelectorSegment::BracketExpr {
             span: self.source_span_for_range(start, *cursor),
@@ -831,7 +970,9 @@ impl<'a> Parser<'a> {
         end: usize,
     ) -> Option<PatchInstruction> {
         if let Some(start) = self.consume_kind(cursor, end, TokenKind::ColonEquals) {
-            let expr = self.parse_expr(cursor, end, ExprStop::patch_entry_context())?;
+            let expr = self.with_implicit_lambda_disabled(|parser| {
+                parser.parse_expr(cursor, end, ExprStop::patch_entry_context())
+            })?;
             return Some(PatchInstruction {
                 span: self.source_span_for_range(start, *cursor),
                 kind: PatchInstructionKind::Store(Box::new(expr)),
@@ -843,7 +984,9 @@ impl<'a> Parser<'a> {
                 kind: PatchInstructionKind::Remove,
             });
         }
-        let expr = self.parse_expr(cursor, end, ExprStop::patch_entry_context())?;
+        let expr = self.with_implicit_lambda_disabled(|parser| {
+            parser.parse_expr(cursor, end, ExprStop::patch_entry_context())
+        })?;
         Some(PatchInstruction {
             span: expr.span,
             kind: PatchInstructionKind::Replace(Box::new(expr)),

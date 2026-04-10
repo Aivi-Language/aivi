@@ -76,6 +76,7 @@ struct Parser<'a> {
     cursor: usize,
     diagnostics: Vec<Diagnostic>,
     depth: usize,
+    implicit_lambda_disabled: usize,
 }
 
 #[derive(Clone, Debug)]

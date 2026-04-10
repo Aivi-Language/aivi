@@ -3512,6 +3512,7 @@ impl<'a> GateTypeContext<'a> {
                 }
                 info
             }
+            ExprKind::Lambda(_) => GateExprInfo::default(),
             ExprKind::Record(record) => {
                 let mut info = GateExprInfo::default();
                 let field_count = record.fields.len();
