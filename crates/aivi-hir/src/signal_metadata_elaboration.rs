@@ -25,11 +25,16 @@ pub fn populate_signal_metadata(module: &mut Module) {
                 Item::Signal(item) => compute_signal_metadata(module, item),
                 _ => continue,
             };
+        let temporal_input_dependencies = match &module.items()[item_id] {
+            Item::Signal(item) => compute_temporal_input_dependencies(module, item),
+            _ => Vec::new(),
+        };
         let Some(Item::Signal(item)) = module.arenas.items.get_mut(item_id) else {
             continue;
         };
         item.signal_dependencies = signal_dependencies;
         item.import_signal_dependencies = import_signal_dependencies;
+        item.temporal_input_dependencies = temporal_input_dependencies;
         item.source_metadata = source_metadata;
     }
 }
@@ -117,6 +122,67 @@ fn compute_signal_metadata(
         import_signal_dependencies,
         source_metadata,
     )
+}
+
+/// Identifies signal dependencies that flow through a temporal pipe stage
+/// (delay or burst). These stages dispatch work to an async worker thread,
+/// making them a genuine asynchronous boundary — analogous to `@source`
+/// lifecycle dependencies — and safe to exclude from cycle detection.
+fn compute_temporal_input_dependencies(module: &Module, item: &SignalItem) -> Vec<ItemId> {
+    let Some(body) = item.body else {
+        return Vec::new();
+    };
+    let ExprKind::Pipe(pipe) = &module.exprs()[body].kind else {
+        return Vec::new();
+    };
+    let has_temporal = pipe.stages.iter().any(|stage| {
+        matches!(
+            stage.kind,
+            PipeStageKind::Delay { .. } | PipeStageKind::Burst { .. }
+        )
+    });
+    if !has_temporal {
+        return Vec::new();
+    }
+    // Collect signal dependencies from the pipe head and all stages before the
+    // first temporal boundary. These dependencies feed into the async worker
+    // and do not participate in synchronous evaluation order.
+    let mut work = vec![DependencyWork::Expr(pipe.head)];
+    for stage in pipe.stages.iter() {
+        if matches!(
+            stage.kind,
+            PipeStageKind::Delay { .. } | PipeStageKind::Burst { .. }
+        ) {
+            break;
+        }
+        match &stage.kind {
+            PipeStageKind::Transform { expr }
+            | PipeStageKind::Gate { expr }
+            | PipeStageKind::Map { expr }
+            | PipeStageKind::Apply { expr }
+            | PipeStageKind::Tap { expr }
+            | PipeStageKind::FanIn { expr }
+            | PipeStageKind::Truthy { expr }
+            | PipeStageKind::Falsy { expr }
+            | PipeStageKind::RecurStart { expr }
+            | PipeStageKind::RecurStep { expr }
+            | PipeStageKind::Validate { expr }
+            | PipeStageKind::Previous { expr }
+            | PipeStageKind::Diff { expr } => {
+                work.push(DependencyWork::Expr(*expr));
+            }
+            PipeStageKind::Case { pattern, body } => {
+                work.push(DependencyWork::Pattern(*pattern));
+                work.push(DependencyWork::Expr(*body));
+            }
+            PipeStageKind::Accumulate { seed, step } => {
+                work.push(DependencyWork::Expr(*seed));
+                work.push(DependencyWork::Expr(*step));
+            }
+            PipeStageKind::Delay { .. } | PipeStageKind::Burst { .. } => unreachable!(),
+        }
+    }
+    collect_signal_dependencies(module, work)
 }
 
 fn compute_source_lifecycle_dependencies(

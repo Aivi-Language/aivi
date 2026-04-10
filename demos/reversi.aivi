@@ -77,7 +77,6 @@ type State = {
 }
 
 type Event =
-  | StartComputerTurn
   | Click Coord
   | ComputerFlash
   | Reset
@@ -136,13 +135,11 @@ func scanStop = scan valid =>
 
 type RayScan -> Coord -> Disc -> Disc -> RayScan
 func scanStepHit = scan cell hit disc => hit == otherDisc disc
-  |> .
  T|> scanKeep scan cell
  F|> scanStop scan (hit == disc and nonEmpty scan.flips)
 
 type Matrix Disc -> Disc -> RayScan -> Coord -> RayScan
 func scanStep = board disc scan cell => scan.scanning
-  |> .
  T|> scanStepHit scan cell (discAt board cell) disc
  F|> scan
 
@@ -156,7 +153,6 @@ func newRayScan = ignored =>
 
 type RayScan -> List Coord
 func scanResult = scan => scan.valid
-  |> .
  T|> scan.flips
  F|> []
 
@@ -166,7 +162,6 @@ func directionFlips = board disc cell delta =>
 
 type Matrix Disc -> Disc -> Coord -> List Coord
 func flipsForMove = board disc cell => discAt board cell == Empty
-  |> .
  T|> flatMap (directionFlips board disc cell) [Delta -1 -1, Delta 0 -1, Delta 1 -1, Delta -1 0, Delta 1 0, Delta -1 1, Delta 0 1, Delta 1 1]
  F|> []
 
@@ -188,7 +183,6 @@ func legalMoves = board disc =>
 
 type Disc -> Matrix Disc -> Coord -> List Coord -> Matrix Disc
 func placeWithFlips = disc board cell flips => length flips == 0
-  |> .
  T|> board
  F|> paintMany disc board (append [cell] flips)
 
@@ -212,13 +206,7 @@ func prepareComputerFrom = state => head state.computerMoves
  ||> None      -> state
 
 type State -> State
-func startComputerFrom = state { phase! }
- ||> ComputerPreparing cell -> state <| { phase: ComputerAnimating cell 0 }
- ||> _                      -> state
-
-type State -> State
 func settleComputerTurn = state => nonEmpty state.humanMoves
-  |> .
  T|> state
  F|> prepareComputerFrom state
 
@@ -236,14 +224,13 @@ func openingBoard = ignored =>
 
 type Coord -> State -> State
 func clickState = cell state => stateLegalAt cell state
-  |> .
  T|> prepareComputerTurn (applyMove state.board Black cell)
  F|> state
 
 type State -> State
 func flashState = state { phase! }
+ ||> ComputerPreparing cell      -> state <| { phase: ComputerAnimating cell 0 }
  ||> ComputerAnimating cell step -> stepAnimation state cell step
- ||> ComputerPreparing _         -> state
  ||> HumanReady                  -> state
 
 type State -> Coord -> Int -> State
@@ -255,21 +242,18 @@ func stepAnimation = state cell step!
 
 type Event -> State -> State
 func step = event state => event
- ||> StartComputerTurn -> startComputerFrom state
- ||> Click cell        -> clickState cell state
- ||> ComputerFlash     -> flashState state
- ||> Reset             -> stateFor (openingBoard 0) HumanReady
- ||> Idle              -> state
+ ||> Click cell    -> clickState cell state
+ ||> ComputerFlash -> flashState state
+ ||> Reset         -> stateFor (openingBoard 0) HumanReady
+ ||> Idle          -> state
 
 type Int -> Int -> Text
 func trailingWinnerLine = black white => white > black
-  |> .
  T|> "Computer wins."
  F|> "Draw."
 
 type Int -> Int -> Text
 func winnerText = black white => black > white
-  |> .
  T|> "You win."
  F|> trailingWinnerLine black white
 
@@ -278,19 +262,17 @@ func winnerLine = board =>
     winnerText (matrixCount isBlackDisc board) (matrixCount isWhiteDisc board)
 
 type Bool -> Text
-func emptyCellLabel = legal => legal
-  |> .
+func emptyCellLabel = legal!
  T|> "◌"
  F|> "·"
 
 type Coord -> Bool -> Coord -> Phase -> Matrix Disc -> Text
 func renderTargetCell = cell legal target phase board => phaseShowsTarget phase and cell == target
-  |> .
  T|> "⚪"
  F|> baseCellLabel legal (discAt board cell)
 
 type Bool -> Disc -> Text
-func baseCellLabel = legal disc => disc
+func baseCellLabel = legal disc!
  ||> Black -> "🔴"
  ||> White -> "⚪"
  ||> Empty -> emptyCellLabel legal
@@ -340,14 +322,13 @@ signal computerFlashSchedule : Signal ComputerFlashSchedule = computerTurnReques
   ||> _                     => CancelComputerFlash
 
 signal delayedComputerFlash : Signal ComputerFlashSchedule = computerFlashSchedule
-  |> burst 120ms 4times
+  |> burst 120ms 5times
 
 signal computerFlashTick : Signal Event = delayedComputerFlash
   ||> ArmComputerFlash    => ComputerFlash
   ||> CancelComputerFlash => Idle
 
-signal event = computerTurnRequest | placeCell | computerFlashTick | restartClick
-  ||> computerTurnRequest _           => StartComputerTurn
+signal event = placeCell | computerFlashTick | restartClick
   ||> placeCell cell                  => Click cell
   ||> computerFlashTick computerEvent => computerEvent
   ||> restartClick _                  => Reset

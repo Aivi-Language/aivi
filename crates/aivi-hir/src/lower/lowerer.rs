@@ -424,6 +424,7 @@ impl<'a> Lowerer<'a> {
             reactive_updates,
             signal_dependencies: Vec::new(),
             import_signal_dependencies: Vec::new(),
+            temporal_input_dependencies: Vec::new(),
             source_metadata: None,
             is_source_capability_handle: false,
         }
