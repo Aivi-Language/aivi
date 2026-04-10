@@ -17,6 +17,7 @@ use aivi_typing::{
 
 use crate::{
     graph::{InputHandle, OwnerHandle, SignalGraph, SignalHandle},
+    reactive_program::ReactiveProgram,
     scheduler::{
         DerivedNodeEvaluator, Generation, Publication, PublicationStamp, Scheduler,
         SchedulerAccessError, TickOutcome, TryDerivedNodeEvaluator, WorkerPublicationSender,
@@ -736,6 +737,21 @@ where
         E: TryDerivedNodeEvaluator<V>,
     {
         let outcome = self.scheduler.try_tick(evaluator)?;
+        self.pending_owner_disposals.clear();
+        Ok(outcome)
+    }
+
+    pub(crate) fn try_tick_with_reactive_program<E>(
+        &mut self,
+        program: &ReactiveProgram,
+        evaluator: &mut E,
+    ) -> Result<TickOutcome, E::Error>
+    where
+        E: TryDerivedNodeEvaluator<V>,
+    {
+        let outcome = self
+            .scheduler
+            .try_tick_with_reactive_program(program, evaluator)?;
         self.pending_owner_disposals.clear();
         Ok(outcome)
     }

@@ -3123,6 +3123,92 @@ signal thresholdMet : Signal Bool = atLeast 0
     }
 
     #[test]
+    fn reactive_program_splits_disjoint_same_batch_signals_into_root_partitions() {
+        let lowered = lower_text(
+            "runtime-hir-adapter-root-partitions.aivi",
+            r#"
+signal leftInput = 1
+signal rightInput = 10
+
+signal left = leftInput + 1
+signal right = rightInput + 1
+signal total = left + right
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "root-partition fixture should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let assembly = assemble_hir_runtime(lowered.module())
+            .expect("root-partition fixture should assemble");
+        let program = assembly.reactive_program();
+        let left_input = assembly
+            .signal(item_id(lowered.module(), "leftInput"))
+            .expect("leftInput signal binding should exist")
+            .signal();
+        let right_input = assembly
+            .signal(item_id(lowered.module(), "rightInput"))
+            .expect("rightInput signal binding should exist")
+            .signal();
+        let left = assembly
+            .signal(item_id(lowered.module(), "left"))
+            .expect("left signal binding should exist")
+            .signal();
+        let right = assembly
+            .signal(item_id(lowered.module(), "right"))
+            .expect("right signal binding should exist")
+            .signal();
+        let total = assembly
+            .signal(item_id(lowered.module(), "total"))
+            .expect("total signal binding should exist")
+            .signal();
+
+        let left_node = program
+            .signal(left)
+            .expect("left should appear in the reactive program");
+        let right_node = program
+            .signal(right)
+            .expect("right should appear in the reactive program");
+        let total_node = program
+            .signal(total)
+            .expect("total should appear in the reactive program");
+
+        assert_ne!(
+            left_node.partition(),
+            right_node.partition(),
+            "disjoint same-batch derived signals should land in separate partitions",
+        );
+        let left_partition = program
+            .partition(left_node.partition())
+            .expect("left partition should exist");
+        let right_partition = program
+            .partition(right_node.partition())
+            .expect("right partition should exist");
+        let total_partition = program
+            .partition(total_node.partition())
+            .expect("total partition should exist");
+
+        assert_eq!(left_partition.root_signals(), &[left_input]);
+        assert_eq!(right_partition.root_signals(), &[right_input]);
+        assert_eq!(left_partition.signals(), &[left]);
+        assert_eq!(right_partition.signals(), &[right]);
+        assert_eq!(total_partition.root_signals(), &[left_input, right_input]);
+        assert_eq!(total_partition.signals(), &[total]);
+        assert_eq!(
+            &program.topo_order()[left_partition.topo_range().clone()],
+            left_partition.signals(),
+            "partition topo slices should remain contiguous in topo order",
+        );
+        assert_eq!(
+            &program.topo_order()[right_partition.topo_range().clone()],
+            right_partition.signals(),
+            "partition topo slices should remain contiguous in topo order",
+        );
+    }
+
+    #[test]
     fn reports_unsupported_source_option_expressions_explicitly() {
         let lowered = lower_text(
             "runtime-hir-adapter-unsupported-source-option.aivi",

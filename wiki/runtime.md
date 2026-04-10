@@ -77,6 +77,37 @@ WorkerPublicationSender  →  Scheduler queue  →  tick()  →  TickOutcome
 - `DependencyValues` snapshots dependency values for derived node evaluation
 - `DerivedNodeEvaluator` / `TryDerivedNodeEvaluator` are function-pointer traits called per derived node
 
+### Slot storage model
+
+Phase 4 of the signal-engine rewrite replaced the scheduler's old split between committed
+`SignalRuntimeState` and tick-local `PendingValue` vectors with an explicit:
+
+```rust
+SlotStore {
+    committed: Vec<CommittedSlot>,
+    pending: Vec<PendingSlot>,
+}
+```
+
+Current slot classes:
+
+- `CommittedSlot::Empty` — no committed value
+- `CommittedSlot::Raw` — raw bytes plus the decoded value shadow needed by the current
+  borrow-based runtime API
+- `CommittedSlot::Stored` — store-managed committed state; for the linked runtime's
+  `MovingRuntimeValueStore` this is the heap-backed GC-root path
+
+Pending tick state is now explicit too:
+
+- `PendingSlot::Unchanged`
+- `PendingSlot::Clear`
+- `PendingSlot::NextRaw`
+- `PendingSlot::NextStored`
+
+This change keeps the scheduler semantics the same — topological, transactional, glitch-free
+reads within a tick — but makes the storage class visible in the runtime model so later phases
+can route native kernels directly into raw slots without rewriting commit logic again.
+
 Thread model: `WorkerPublicationSender` is `Send`; the scheduler itself is single-threaded (main thread).
 
 ### 2026-04-08 live-click latency note

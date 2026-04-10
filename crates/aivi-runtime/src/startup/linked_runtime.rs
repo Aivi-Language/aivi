@@ -207,7 +207,13 @@ impl BackendLinkedRuntime {
             temporal_states: &mut temporal_states,
             pending_temporal_schedules: &mut pending_temporal_schedules,
         };
-        let outcome = self.runtime.try_tick(&mut evaluator)?;
+        let reactive_program = self.assembly.reactive_program();
+        let outcome = if reactive_program.signal_count() == self.runtime.graph().signal_count() {
+            self.runtime
+                .try_tick_with_reactive_program(reactive_program, &mut evaluator)?
+        } else {
+            self.runtime.try_tick(&mut evaluator)?
+        };
         self.temporal_states = temporal_states;
         self.arm_pending_temporal_schedules(pending_temporal_schedules)?;
         Ok(outcome)

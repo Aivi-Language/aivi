@@ -305,6 +305,8 @@ impl ReactivePartitionId {
 pub struct ReactivePartition {
     id: ReactivePartitionId,
     batch_index: usize,
+    topo_range: std::ops::Range<usize>,
+    root_signals: Box<[SignalHandle]>,
     signals: Box<[SignalHandle]>,
 }
 
@@ -317,9 +319,24 @@ impl ReactivePartition {
         self.batch_index
     }
 
+    pub fn topo_range(&self) -> &std::ops::Range<usize> {
+        &self.topo_range
+    }
+
+    pub fn root_signals(&self) -> &[SignalHandle] {
+        &self.root_signals
+    }
+
     pub fn signals(&self) -> &[SignalHandle] {
         &self.signals
     }
+}
+
+struct PartitionBuilder {
+    batch_index: usize,
+    topo_start: usize,
+    root_signals: Vec<SignalHandle>,
+    signals: Vec<SignalHandle>,
 }
 
 struct ClauseBindingInfo<'a> {
@@ -383,39 +400,22 @@ pub(crate) fn build_reactive_program(
         })
         .collect::<BTreeMap<_, _>>();
 
-    let mut partition_by_signal = vec![ReactivePartitionId::from_raw(0); graph.signal_count()];
-    let mut topo_order = Vec::with_capacity(graph.signal_count());
     let input_signals = graph
         .signals()
         .filter_map(|(signal, spec)| spec.is_input().then_some(signal))
         .collect::<Vec<_>>();
-    let input_partition_offset = usize::from(!input_signals.is_empty());
-    let mut partitions = Vec::with_capacity(graph.batches().len() + input_partition_offset);
+    let input_batch_offset = usize::from(!input_signals.is_empty());
+    let mut batch_index_by_signal = vec![0_usize; graph.signal_count()];
     if !input_signals.is_empty() {
-        let id = ReactivePartitionId::from_raw(0);
         for &signal in &input_signals {
-            partition_by_signal[signal.index()] = id;
-            topo_order.push(signal);
+            batch_index_by_signal[signal.index()] = 0;
         }
-        partitions.push(ReactivePartition {
-            id,
-            batch_index: 0,
-            signals: input_signals.into_boxed_slice(),
-        });
     }
     for (batch_index, batch) in graph.batches().iter().enumerate() {
-        let id = ReactivePartitionId::from_raw((batch_index + input_partition_offset) as u32);
         for &signal in batch.signals() {
-            partition_by_signal[signal.index()] = id;
-            topo_order.push(signal);
+            batch_index_by_signal[signal.index()] = batch_index + input_batch_offset;
         }
-        partitions.push(ReactivePartition {
-            id,
-            batch_index: batch_index + input_partition_offset,
-            signals: batch.signals().to_vec().into_boxed_slice(),
-        });
     }
-    let partitions = partitions.into_boxed_slice();
 
     let mut clause_nodes = vec![None; clause_binding_by_handle.len()];
     for (&handle, info) in &clause_binding_by_handle {
@@ -443,6 +443,53 @@ pub(crate) fn build_reactive_program(
         .into_boxed_slice();
 
     let mut root_signals = vec![Vec::<SignalHandle>::new(); graph.signal_count()];
+    let mut graph_topo_order = Vec::with_capacity(graph.signal_count());
+    graph_topo_order.extend(input_signals.iter().copied());
+    for batch in graph.batches() {
+        graph_topo_order.extend(batch.signals().iter().copied());
+    }
+    for signal in graph_topo_order.iter().copied() {
+        let dependencies = graph
+            .signal_dependencies(signal)
+            .expect("topological signal order should only reference live graph signals");
+        let roots = if dependencies.is_empty() {
+            vec![signal]
+        } else {
+            let mut roots = Vec::new();
+            for dependency in dependencies {
+                for &root in &root_signals[dependency.index()] {
+                    push_unique_signal(&mut roots, root);
+                }
+            }
+            roots
+        };
+        root_signals[signal.index()] = roots;
+    }
+
+    let mut partitions = Vec::<PartitionBuilder>::new();
+    let mut partition_by_signal = vec![ReactivePartitionId::from_raw(0); graph.signal_count()];
+    let mut topo_order = Vec::with_capacity(graph.signal_count());
+    if !input_signals.is_empty() {
+        build_partitions_for_signals(
+            &input_signals,
+            0,
+            &root_signals,
+            &mut partition_by_signal,
+            &mut partitions,
+            &mut topo_order,
+        );
+    }
+    for (batch_index, batch) in graph.batches().iter().enumerate() {
+        build_partitions_for_signals(
+            batch.signals(),
+            batch_index + input_batch_offset,
+            &root_signals,
+            &mut partition_by_signal,
+            &mut partitions,
+            &mut topo_order,
+        );
+    }
+
     let mut signal_nodes = vec![None; graph.signal_count()];
     for (topo_index, signal) in topo_order.iter().copied().enumerate() {
         let spec = graph
@@ -456,18 +503,7 @@ pub(crate) fn build_reactive_program(
             .dependents(signal)
             .expect("live graph signal should resolve dependents")
             .to_vec();
-        let roots = if dependencies.is_empty() {
-            vec![signal]
-        } else {
-            let mut roots = Vec::new();
-            for dependency in &dependencies {
-                for &root in &root_signals[dependency.index()] {
-                    push_unique_signal(&mut roots, root);
-                }
-            }
-            roots
-        };
-        root_signals[signal.index()] = roots.clone();
+        let roots = root_signals[signal.index()].clone();
         let item = signal_item_by_handle.get(&signal).copied();
         let kind = match spec.kind() {
             SignalKind::Input => {
@@ -517,6 +553,19 @@ pub(crate) fn build_reactive_program(
         });
     }
 
+    let partitions = partitions
+        .into_iter()
+        .enumerate()
+        .map(|(index, builder)| ReactivePartition {
+            id: ReactivePartitionId::from_raw(index as u32),
+            batch_index: builder.batch_index,
+            topo_range: builder.topo_start..builder.topo_start + builder.signals.len(),
+            root_signals: builder.root_signals.into_boxed_slice(),
+            signals: builder.signals.into_boxed_slice(),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+
     ReactiveProgram {
         signals: signal_nodes
             .into_iter()
@@ -532,5 +581,41 @@ pub(crate) fn build_reactive_program(
 fn push_unique_signal(target: &mut Vec<SignalHandle>, signal: SignalHandle) {
     if !target.contains(&signal) {
         target.push(signal);
+    }
+}
+
+fn build_partitions_for_signals(
+    signals: &[SignalHandle],
+    batch_index: usize,
+    root_signals: &[Vec<SignalHandle>],
+    partition_by_signal: &mut [ReactivePartitionId],
+    partitions: &mut Vec<PartitionBuilder>,
+    topo_order: &mut Vec<SignalHandle>,
+) {
+    let mut groups = Vec::<(Vec<SignalHandle>, Vec<SignalHandle>)>::new();
+    for &signal in signals {
+        let roots = root_signals[signal.index()].clone();
+        if let Some((_, grouped_signals)) =
+            groups.iter_mut().find(|(existing, _)| *existing == roots)
+        {
+            grouped_signals.push(signal);
+            continue;
+        }
+        groups.push((roots, vec![signal]));
+    }
+
+    for (roots, grouped_signals) in groups {
+        let id = ReactivePartitionId::from_raw(partitions.len() as u32);
+        let topo_start = topo_order.len();
+        topo_order.extend(grouped_signals.iter().copied());
+        for &signal in &grouped_signals {
+            partition_by_signal[signal.index()] = id;
+        }
+        partitions.push(PartitionBuilder {
+            batch_index,
+            topo_start,
+            root_signals: roots,
+            signals: grouped_signals,
+        });
     }
 }

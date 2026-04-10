@@ -607,6 +607,83 @@ signal next = id
 }
 
 #[test]
+fn linked_runtime_commits_only_the_touched_disjoint_partition_path() {
+    let lowered = lower_text(
+        "runtime-startup-disjoint-partition-commit-path.aivi",
+        r#"
+@source dbus.signal "left"
+signal leftInput : Signal Int
+
+@source dbus.signal "right"
+signal rightInput : Signal Int
+
+signal left = leftInput + 1
+signal right = rightInput + 1
+signal total = left + right
+"#,
+    );
+    let assembly =
+        crate::assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+    let mut linked = link_backend_runtime(
+        assembly,
+        &lowered.core,
+        std::sync::Arc::new(lowered.backend.clone()),
+    )
+    .expect("startup link should succeed");
+    let left_input = signal_handle(&linked, lowered.hir.module(), "leftInput");
+    let right_input = signal_handle(&linked, lowered.hir.module(), "rightInput");
+    let left = signal_handle(&linked, lowered.hir.module(), "left");
+    let right = signal_handle(&linked, lowered.hir.module(), "right");
+    let total = signal_handle(&linked, lowered.hir.module(), "total");
+
+    let first = linked
+        .tick_with_source_lifecycle()
+        .expect("initial source activation tick should succeed");
+    let left_port = activation_port_for_owner(&linked, lowered.hir.module(), &first, "leftInput");
+    let right_port = activation_port_for_owner(&linked, lowered.hir.module(), &first, "rightInput");
+    left_port
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(1)))
+        .expect("left input publication should succeed");
+    right_port
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(10)))
+        .expect("right input publication should succeed");
+    linked
+        .tick_with_source_lifecycle()
+        .expect("initial value commit tick should succeed");
+    assert_eq!(
+        linked.runtime().current_value(right).unwrap(),
+        Some(&RuntimeValue::Int(11))
+    );
+
+    left_port
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(20)))
+        .expect("left update publication should succeed");
+    let outcome = linked.tick().expect("follow-up linked runtime tick should succeed");
+
+    assert_eq!(
+        outcome.committed(),
+        &[left_input, left, total],
+        "updating one disjoint root should not commit the untouched sibling path",
+    );
+    assert_eq!(
+        linked.runtime().current_value(left).unwrap(),
+        Some(&RuntimeValue::Int(21))
+    );
+    assert_eq!(
+        linked.runtime().current_value(right_input).unwrap(),
+        Some(&RuntimeValue::Int(10))
+    );
+    assert_eq!(
+        linked.runtime().current_value(right).unwrap(),
+        Some(&RuntimeValue::Int(11))
+    );
+    assert_eq!(
+        linked.runtime().current_value(total).unwrap(),
+        Some(&RuntimeValue::Int(32))
+    );
+}
+
+#[test]
 fn linked_runtime_reports_missing_signal_snapshots_for_source_config() {
     let lowered = lower_text(
         "runtime-startup-missing-snapshot.aivi",

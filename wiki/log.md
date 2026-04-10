@@ -118,6 +118,18 @@ Compared two designs for delayed/finite repeated signal triggering: a new source
 versus a recurrence/pipe-shaped temporal transform. Concluded that recurrence/temporal pipe is the
 more AIVI-like long-term home, while a narrow source helper is a pragmatic short-term fallback.  
 
+## [2026-04-10] ingest | Phase 4 slot store runtime model
+
+Documented the scheduler storage rewrite that introduced explicit committed/pending slot state for
+signal values.
+
+- `crates/aivi-runtime/src/scheduler.rs`: new `SlotStore`, `CommittedSlot`, `PendingSlot`,
+  `RawBytes`, `RawSlotPlanId`, and `PendingRawValue` types
+- Raw slots now carry bytes plus a decoded value shadow, while store-managed slots preserve the
+  existing `CommittedValueStore` path
+- Added runtime tests covering raw commit/clear, raw-to-store-managed transitions, and mixed
+  pending dependency reads
+
 ## [2026-04-09] ingest | From selector body signal lifting
 
 Documented the HIR/typecheck fix that lets parameterized `from` selector bodies read earlier

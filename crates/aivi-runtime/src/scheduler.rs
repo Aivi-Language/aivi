@@ -9,6 +9,7 @@ use aivi_backend::{CommittedValueStore, InlineCommittedValueStore};
 use crate::graph::{
     DerivedHandle, InputHandle, OwnerHandle, ReactiveClauseHandle, SignalGraph, SignalHandle,
 };
+use crate::reactive_program::ReactiveProgram;
 
 pub trait DerivedNodeEvaluator<V> {
     fn evaluate(
@@ -188,6 +189,153 @@ impl<V> From<Option<V>> for DerivedSignalUpdate<V> {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RawSlotPlanId(u32);
+
+impl RawSlotPlanId {
+    pub const fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    pub const fn as_raw(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RawBytes {
+    Inline {
+        bytes: [u8; Self::INLINE_CAPACITY],
+        len: u8,
+    },
+    Heap(Box<[u8]>),
+}
+
+impl RawBytes {
+    pub const INLINE_CAPACITY: usize = 32;
+
+    pub fn from_slice(bytes: &[u8]) -> Self {
+        if bytes.len() <= Self::INLINE_CAPACITY {
+            let mut inline = [0_u8; Self::INLINE_CAPACITY];
+            inline[..bytes.len()].copy_from_slice(bytes);
+            Self::Inline {
+                bytes: inline,
+                len: bytes.len() as u8,
+            }
+        } else {
+            Self::Heap(bytes.into())
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Inline { len, .. } => *len as usize,
+            Self::Heap(bytes) => bytes.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Inline { bytes, len } => &bytes[..*len as usize],
+            Self::Heap(bytes) => bytes,
+        }
+    }
+}
+
+impl From<&[u8]> for RawBytes {
+    fn from(bytes: &[u8]) -> Self {
+        Self::from_slice(bytes)
+    }
+}
+
+impl<const N: usize> From<[u8; N]> for RawBytes {
+    fn from(bytes: [u8; N]) -> Self {
+        Self::from_slice(&bytes)
+    }
+}
+
+impl From<Vec<u8>> for RawBytes {
+    fn from(bytes: Vec<u8>) -> Self {
+        if bytes.len() <= Self::INLINE_CAPACITY {
+            Self::from_slice(&bytes)
+        } else {
+            Self::Heap(bytes.into_boxed_slice())
+        }
+    }
+}
+
+impl From<Box<[u8]>> for RawBytes {
+    fn from(bytes: Box<[u8]>) -> Self {
+        if bytes.len() <= Self::INLINE_CAPACITY {
+            Self::from_slice(&bytes)
+        } else {
+            Self::Heap(bytes)
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RawSlot<V> {
+    plan: RawSlotPlanId,
+    bytes: RawBytes,
+    value: V,
+}
+
+impl<V> RawSlot<V> {
+    pub fn plan(&self) -> RawSlotPlanId {
+        self.plan
+    }
+
+    pub fn bytes(&self) -> &RawBytes {
+        &self.bytes
+    }
+
+    pub fn value(&self) -> &V {
+        &self.value
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingRawValue<V> {
+    plan: RawSlotPlanId,
+    bytes: RawBytes,
+    value: V,
+}
+
+impl<V> PendingRawValue<V> {
+    pub fn new(plan: RawSlotPlanId, bytes: impl Into<RawBytes>, value: V) -> Self {
+        Self {
+            plan,
+            bytes: bytes.into(),
+            value,
+        }
+    }
+
+    pub fn plan(&self) -> RawSlotPlanId {
+        self.plan
+    }
+
+    pub fn bytes(&self) -> &RawBytes {
+        &self.bytes
+    }
+
+    pub fn value(&self) -> &V {
+        &self.value
+    }
+
+    fn into_committed(self) -> RawSlot<V> {
+        RawSlot {
+            plan: self.plan,
+            bytes: self.bytes,
+            value: self.value,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Generation(u64);
 
 impl Generation {
@@ -346,10 +494,9 @@ where
     storage: S,
     owners: Vec<OwnerRuntimeState>,
     inputs: Vec<Option<InputRuntimeState>>,
-    signals: Vec<SignalRuntimeState<S::Slot>>,
+    slots: SlotStore<V, S::Slot>,
     queue: VecDeque<SchedulerMessage<V>>,
     queued_messages_scratch: Vec<SchedulerMessage<V>>,
-    pending_scratch: Vec<PendingValue<V>>,
     dirty_scratch: Vec<bool>,
     publications_scratch: Vec<Option<Publication<V>>>,
     dropped_scratch: Vec<DroppedPublication>,
@@ -358,6 +505,12 @@ where
     worker_publication_notifier: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
     initialized: bool,
     next_tick: u64,
+}
+
+#[derive(Clone, Copy)]
+enum TickEvaluationOrder<'a> {
+    GraphBatches,
+    ReactiveProgram(&'a ReactiveProgram),
 }
 
 impl<V> Scheduler<V, InlineCommittedValueStore<V>> {
@@ -372,6 +525,7 @@ where
 {
     pub fn with_value_store(graph: SignalGraph, storage: S) -> Self {
         let (worker_publication_tx, worker_publication_rx) = mpsc::sync_channel(128);
+        let signal_count = graph.signal_count();
         let owners = (0..graph.owner_count())
             .map(|_| OwnerRuntimeState { active: true })
             .collect();
@@ -385,21 +539,15 @@ where
                 },
             )
             .collect();
-        let signals = (0..graph.signal_count())
-            .map(|_| SignalRuntimeState {
-                current: Default::default(),
-            })
-            .collect();
 
         Self {
             graph,
             storage,
             owners,
             inputs,
-            signals,
+            slots: SlotStore::new(signal_count),
             queue: VecDeque::new(),
             queued_messages_scratch: Vec::new(),
-            pending_scratch: Vec::new(),
             dirty_scratch: Vec::new(),
             publications_scratch: Vec::new(),
             dropped_scratch: Vec::new(),
@@ -439,7 +587,7 @@ where
 
     pub fn current_value(&self, signal: SignalHandle) -> Result<Option<&V>, SchedulerAccessError> {
         self.validate_signal(signal)?;
-        Ok(self.storage.get(&self.signals[signal.index()].current))
+        Ok(self.slots.current_value(signal, &self.storage))
     }
 
     pub fn is_owner_active(&self, owner: OwnerHandle) -> Result<bool, SchedulerAccessError> {
@@ -517,7 +665,7 @@ where
         E: DerivedNodeEvaluator<V>,
     {
         let mut evaluator = InfallibleDerivedEvaluator(evaluator);
-        self.tick_with(&mut evaluator)
+        self.tick_with(&mut evaluator, TickEvaluationOrder::GraphBatches)
             .unwrap_or_else(|never| match never {})
     }
 
@@ -525,10 +673,25 @@ where
     where
         E: TryDerivedNodeEvaluator<V>,
     {
-        self.tick_with(evaluator)
+        self.tick_with(evaluator, TickEvaluationOrder::GraphBatches)
     }
 
-    fn tick_with<E>(&mut self, evaluator: &mut E) -> Result<TickOutcome, E::Error>
+    pub(crate) fn try_tick_with_reactive_program<E>(
+        &mut self,
+        program: &ReactiveProgram,
+        evaluator: &mut E,
+    ) -> Result<TickOutcome, E::Error>
+    where
+        E: TryDerivedNodeEvaluator<V>,
+    {
+        self.tick_with(evaluator, TickEvaluationOrder::ReactiveProgram(program))
+    }
+
+    fn tick_with<E>(
+        &mut self,
+        evaluator: &mut E,
+        order: TickEvaluationOrder<'_>,
+    ) -> Result<TickOutcome, E::Error>
     where
         E: TryDerivedNodeEvaluator<V>,
     {
@@ -538,9 +701,9 @@ where
         // in-flight ticks run simultaneously.
         self.next_tick = self.next_tick.wrapping_add(1);
 
-        let mut pending = std::mem::take(&mut self.pending_scratch);
+        let mut pending = std::mem::take(&mut self.slots.pending);
         pending.clear();
-        pending.resize_with(self.signals.len(), || PendingValue::Unchanged);
+        pending.resize_with(self.slots.committed.len(), || PendingSlot::Unchanged);
 
         let mut messages = std::mem::take(&mut self.queued_messages_scratch);
         messages.clear();
@@ -552,7 +715,7 @@ where
         dropped.clear();
         let mut publications = std::mem::take(&mut self.publications_scratch);
         publications.clear();
-        publications.resize_with(self.signals.len(), || None::<Publication<V>>);
+        publications.resize_with(self.slots.committed.len(), || None::<Publication<V>>);
 
         for message in messages.drain(..) {
             let SchedulerMessage::Publish(publication) = message else {
@@ -590,13 +753,13 @@ where
 
         for publication in publications.drain(..).flatten() {
             let (stamp, value) = publication.into_parts();
-            pending[stamp.input.index()] = PendingValue::NextSome(value);
+            pending[stamp.input.index()] = PendingSlot::NextStored(value);
         }
         self.publications_scratch = publications;
 
         let mut dirty = std::mem::take(&mut self.dirty_scratch);
         dirty.clear();
-        dirty.resize(self.signals.len(), false);
+        dirty.resize(self.slots.committed.len(), false);
         if self.initialized {
             self.mark_dirty_dependents(&pending, &mut dirty);
         } else {
@@ -609,67 +772,21 @@ where
             }
         }
 
-        {
-            let committed_values = self
-                .signals
-                .iter()
-                .map(|state| self.storage.get(&state.current))
-                .collect::<Vec<_>>();
-            for batch in self.graph.batches() {
-                for &signal in batch.signals() {
-                    if !dirty[signal.index()] || !self.signal_active(signal) {
-                        continue;
-                    }
-
-                    let next = match self
-                        .graph
-                        .signal(signal)
-                        .expect("topology batches only contain graph signals")
-                        .kind()
-                    {
-                        crate::graph::SignalKind::Input => continue,
-                        crate::graph::SignalKind::Derived(spec) => {
-                            let inputs = DependencyValues {
-                                dependencies: spec.dependencies(),
-                                pending: &pending,
-                                committed: &committed_values,
-                            };
-                            pending_value_from_update(
-                                evaluator.try_evaluate(signal.as_derived(), inputs)?,
-                            )
-                        }
-                        crate::graph::SignalKind::Reactive(spec) => self.evaluate_reactive_signal(
-                            evaluator,
-                            signal,
-                            spec,
-                            &committed_values,
-                            &pending,
-                        )?,
-                    };
-                    pending[signal.index()] = next;
-                }
-            }
-        }
+        self.evaluate_dirty_signals(order, evaluator, &mut pending, &dirty)?;
         self.dirty_scratch = dirty;
 
         let mut committed = Vec::new();
         for (index, pending_value) in pending.drain(..).enumerate() {
             let handle = SignalHandle::from_raw(index as u32);
-            match pending_value {
-                PendingValue::Unchanged => {}
-                PendingValue::NextNone => {
-                    if self.storage.clear(&mut self.signals[index].current) {
-                        committed.push(handle);
-                    }
-                }
-                PendingValue::NextSome(value) => {
-                    self.storage
-                        .replace(&mut self.signals[index].current, value);
-                    committed.push(handle);
-                }
+            if commit_pending_slot(
+                &mut self.storage,
+                &mut self.slots.committed[index],
+                pending_value,
+            ) {
+                committed.push(handle);
             }
         }
-        self.pending_scratch = pending;
+        self.slots.pending = pending;
         self.collect_committed_values();
 
         self.initialized = true;
@@ -686,11 +803,128 @@ where
 
     fn collect_committed_values(&mut self) {
         let roots = self
-            .signals
+            .slots
+            .committed
             .iter()
-            .map(|state| &state.current)
+            .filter_map(|slot| match slot {
+                CommittedSlot::Stored(slot) => Some(slot),
+                CommittedSlot::Empty | CommittedSlot::Raw(_) => None,
+            })
             .collect::<Vec<_>>();
         self.storage.collect(&roots);
+    }
+
+    fn evaluate_dirty_signals<E>(
+        &self,
+        order: TickEvaluationOrder<'_>,
+        evaluator: &mut E,
+        pending: &mut [PendingSlot<V>],
+        dirty: &[bool],
+    ) -> Result<(), E::Error>
+    where
+        E: TryDerivedNodeEvaluator<V>,
+    {
+        let committed_values = self
+            .slots
+            .committed
+            .iter()
+            .map(|slot| slot.current_value(&self.storage))
+            .collect::<Vec<_>>();
+        match order {
+            TickEvaluationOrder::GraphBatches => {
+                for batch in self.graph.batches() {
+                    self.evaluate_signals(
+                        batch.signals(),
+                        evaluator,
+                        pending,
+                        dirty,
+                        &committed_values,
+                    )?;
+                }
+            }
+            TickEvaluationOrder::ReactiveProgram(program) => {
+                debug_assert_eq!(
+                    program.signal_count(),
+                    self.graph.signal_count(),
+                    "reactive program and signal graph must describe the same scheduler graph",
+                );
+                for partition in self.dirty_partitions(program, dirty) {
+                    self.evaluate_signals(
+                        partition.signals(),
+                        evaluator,
+                        pending,
+                        dirty,
+                        &committed_values,
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn dirty_partitions<'a>(
+        &self,
+        program: &'a ReactiveProgram,
+        dirty: &[bool],
+    ) -> Vec<&'a crate::ReactivePartition> {
+        program
+            .partitions()
+            .iter()
+            .filter(|partition| {
+                partition.signals().iter().copied().any(|signal| {
+                    dirty[signal.index()]
+                        && self.signal_active(signal)
+                        && self
+                            .graph
+                            .signal(signal)
+                            .is_some_and(|spec| !spec.is_input())
+                })
+            })
+            .collect()
+    }
+
+    fn evaluate_signals<E>(
+        &self,
+        signals: &[SignalHandle],
+        evaluator: &mut E,
+        pending: &mut [PendingSlot<V>],
+        dirty: &[bool],
+        committed_values: &[Option<&V>],
+    ) -> Result<(), E::Error>
+    where
+        E: TryDerivedNodeEvaluator<V>,
+    {
+        for &signal in signals {
+            if !dirty[signal.index()] || !self.signal_active(signal) {
+                continue;
+            }
+
+            let next = match self
+                .graph
+                .signal(signal)
+                .expect("scheduled signals must exist in the graph")
+                .kind()
+            {
+                crate::graph::SignalKind::Input => continue,
+                crate::graph::SignalKind::Derived(spec) => {
+                    let inputs = DependencyValues {
+                        dependencies: spec.dependencies(),
+                        pending,
+                        committed: committed_values,
+                    };
+                    pending_slot_from_update(evaluator.try_evaluate(signal.as_derived(), inputs)?)
+                }
+                crate::graph::SignalKind::Reactive(spec) => self.evaluate_reactive_signal(
+                    evaluator,
+                    signal,
+                    spec,
+                    committed_values,
+                    pending,
+                )?,
+            };
+            pending[signal.index()] = next;
+        }
+        Ok(())
     }
 
     fn collect_disposed_owners(&self, messages: &[SchedulerMessage<V>]) -> BTreeSet<OwnerHandle> {
@@ -729,7 +963,7 @@ where
     fn apply_owner_disposals(
         &mut self,
         disposed: &BTreeSet<OwnerHandle>,
-        pending: &mut [PendingValue<V>],
+        pending: &mut [PendingSlot<V>],
     ) {
         for &owner in disposed {
             let state = &mut self.owners[owner.index()];
@@ -743,7 +977,7 @@ where
                 .owner(owner)
                 .expect("disposed owners are validated on enqueue");
             for &signal in spec.signals() {
-                pending[signal.index()] = PendingValue::NextNone;
+                pending[signal.index()] = PendingSlot::Clear;
                 if let Some(input) = self.inputs[signal.index()].as_mut() {
                     input.generation = input.generation.advance();
                 }
@@ -751,7 +985,7 @@ where
         }
     }
 
-    fn mark_dirty_dependents(&self, pending: &[PendingValue<V>], dirty: &mut [bool]) {
+    fn mark_dirty_dependents(&self, pending: &[PendingSlot<V>], dirty: &mut [bool]) {
         let mut worklist = pending
             .iter()
             .enumerate()
@@ -868,15 +1102,15 @@ where
         signal: SignalHandle,
         spec: &crate::graph::ReactiveSignalSpec,
         committed: &[Option<&V>],
-        pending: &[PendingValue<V>],
-    ) -> Result<PendingValue<V>, E::Error>
+        pending: &[PendingSlot<V>],
+    ) -> Result<PendingSlot<V>, E::Error>
     where
         E: TryDerivedNodeEvaluator<V>,
     {
         let mut next = if self.initialized {
-            PendingValue::Unchanged
+            PendingSlot::Unchanged
         } else {
-            pending_value_from_update(evaluator.try_evaluate_reactive_seed(
+            pending_slot_from_update(evaluator.try_evaluate_reactive_seed(
                 signal,
                 DependencyValues {
                     dependencies: spec.seed_dependencies(),
@@ -908,7 +1142,7 @@ where
             if !should_commit {
                 continue;
             }
-            let update = pending_value_from_update(evaluator.try_evaluate_reactive_body(
+            let update = pending_slot_from_update(evaluator.try_evaluate_reactive_body(
                 signal,
                 clause,
                 DependencyValues {
@@ -926,11 +1160,11 @@ where
     }
 }
 
-fn pending_value_from_update<V>(update: DerivedSignalUpdate<V>) -> PendingValue<V> {
+fn pending_slot_from_update<V>(update: DerivedSignalUpdate<V>) -> PendingSlot<V> {
     match update {
-        DerivedSignalUpdate::Unchanged => PendingValue::Unchanged,
-        DerivedSignalUpdate::Clear => PendingValue::NextNone,
-        DerivedSignalUpdate::Value(value) => PendingValue::NextSome(value),
+        DerivedSignalUpdate::Unchanged => PendingSlot::Unchanged,
+        DerivedSignalUpdate::Clear => PendingSlot::Clear,
+        DerivedSignalUpdate::Value(value) => PendingSlot::NextStored(value),
     }
 }
 
@@ -942,7 +1176,7 @@ fn pending_value_from_update<V>(update: DerivedSignalUpdate<V>) -> PendingValue<
 /// mixed intermediate state.
 pub struct DependencyValues<'a, V> {
     dependencies: &'a [SignalHandle],
-    pending: &'a [PendingValue<V>],
+    pending: &'a [PendingSlot<V>],
     committed: &'a [Option<&'a V>],
 }
 
@@ -1000,9 +1234,10 @@ impl<'a, V> DependencyValues<'a, V> {
 
     fn resolve(&self, signal: SignalHandle) -> Option<&'a V> {
         match &self.pending[signal.index()] {
-            PendingValue::Unchanged => self.committed[signal.index()],
-            PendingValue::NextNone => None,
-            PendingValue::NextSome(value) => Some(value),
+            PendingSlot::Unchanged => self.committed[signal.index()],
+            PendingSlot::Clear => None,
+            PendingSlot::NextRaw(value) => Some(value.value()),
+            PendingSlot::NextStored(value) => Some(value),
         }
     }
 }
@@ -1032,23 +1267,114 @@ struct InputRuntimeState {
     generation: Generation,
 }
 
-struct SignalRuntimeState<S> {
-    current: S,
+struct SlotStore<V, S> {
+    committed: Vec<CommittedSlot<V, S>>,
+    pending: Vec<PendingSlot<V>>,
 }
 
-enum PendingValue<V> {
+impl<V, S> SlotStore<V, S> {
+    fn new(signal_count: usize) -> Self {
+        let committed = (0..signal_count).map(|_| CommittedSlot::Empty).collect();
+        let pending = (0..signal_count).map(|_| PendingSlot::Unchanged).collect();
+        Self { committed, pending }
+    }
+
+    fn current_value<'a, Store>(
+        &'a self,
+        signal: SignalHandle,
+        storage: &'a Store,
+    ) -> Option<&'a V>
+    where
+        Store: CommittedValueStore<V, Slot = S>,
+    {
+        self.committed[signal.index()].current_value(storage)
+    }
+}
+
+pub(crate) enum CommittedSlot<V, S> {
+    Empty,
+    Raw(RawSlot<V>),
+    Stored(S),
+}
+
+impl<V, S> CommittedSlot<V, S> {
+    fn current_value<'a, Store>(&'a self, storage: &'a Store) -> Option<&'a V>
+    where
+        Store: CommittedValueStore<V, Slot = S>,
+    {
+        match self {
+            Self::Empty => None,
+            Self::Raw(slot) => Some(slot.value()),
+            Self::Stored(slot) => storage.get(slot),
+        }
+    }
+}
+
+// Phase 4 lands the raw slot state model before Phase 5 wires native evaluators to emit it.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) enum PendingSlot<V> {
     Unchanged,
-    NextNone,
-    NextSome(V),
+    Clear,
+    NextRaw(PendingRawValue<V>),
+    NextStored(V),
 }
 
-impl<V> PendingValue<V> {
+impl<V> PendingSlot<V> {
     fn is_unchanged(&self) -> bool {
         matches!(self, Self::Unchanged)
     }
 
     fn is_updated(&self) -> bool {
         !self.is_unchanged()
+    }
+}
+
+fn commit_pending_slot<V, S, Store>(
+    storage: &mut Store,
+    committed: &mut CommittedSlot<V, S>,
+    pending: PendingSlot<V>,
+) -> bool
+where
+    Store: CommittedValueStore<V, Slot = S>,
+    S: Default,
+{
+    match pending {
+        PendingSlot::Unchanged => false,
+        PendingSlot::Clear => clear_committed_slot(storage, committed),
+        PendingSlot::NextRaw(raw) => {
+            discard_stored_slot(storage, committed);
+            *committed = CommittedSlot::Raw(raw.into_committed());
+            true
+        }
+        PendingSlot::NextStored(value) => {
+            let mut slot = match std::mem::replace(committed, CommittedSlot::Empty) {
+                CommittedSlot::Stored(slot) => slot,
+                CommittedSlot::Empty | CommittedSlot::Raw(_) => S::default(),
+            };
+            storage.replace(&mut slot, value);
+            *committed = CommittedSlot::Stored(slot);
+            true
+        }
+    }
+}
+
+fn clear_committed_slot<V, S, Store>(storage: &mut Store, committed: &mut CommittedSlot<V, S>) -> bool
+where
+    Store: CommittedValueStore<V, Slot = S>,
+{
+    match std::mem::replace(committed, CommittedSlot::Empty) {
+        CommittedSlot::Empty => false,
+        CommittedSlot::Raw(_) => true,
+        CommittedSlot::Stored(mut slot) => storage.clear(&mut slot),
+    }
+}
+
+fn discard_stored_slot<V, S, Store>(storage: &mut Store, committed: &mut CommittedSlot<V, S>)
+where
+    Store: CommittedValueStore<V, Slot = S>,
+{
+    if let CommittedSlot::Stored(mut slot) = std::mem::replace(committed, CommittedSlot::Empty) {
+        let _ = storage.clear(&mut slot);
     }
 }
 
@@ -1066,7 +1392,11 @@ mod tests {
         scheduler::{Publication, PublicationDropReason, Scheduler, SchedulerAccessError},
     };
 
-    use super::{DependencyValues, DerivedNodeEvaluator, DerivedSignalUpdate, DroppedPublication};
+    use super::{
+        CommittedSlot, DependencyValues, DerivedNodeEvaluator, DerivedSignalUpdate,
+        DroppedPublication, PendingRawValue, PendingSlot, RawSlotPlanId, clear_committed_slot,
+        commit_pending_slot,
+    };
 
     fn text_ptr(value: &RuntimeValue) -> *const u8 {
         let RuntimeValue::Text(text) = value else {
@@ -1808,12 +2138,16 @@ mod tests {
 
         assert_eq!(scheduler.storage.live_root_count(), 2);
         assert_eq!(scheduler.storage.allocated_value_count(), 2);
-        let first_input_handle = scheduler.signals[input.index()]
-            .current
-            .expect("input signal should hold a GC root");
-        let first_mirror_handle = scheduler.signals[mirror.as_signal().index()]
-            .current
-            .expect("derived signal should hold a GC root");
+        let CommittedSlot::Stored(first_input_slot) = &scheduler.slots.committed[input.index()] else {
+            panic!("input signal should hold a store-managed slot");
+        };
+        let first_input_handle = first_input_slot.expect("input signal should hold a GC root");
+        let CommittedSlot::Stored(first_mirror_slot) =
+            &scheduler.slots.committed[mirror.as_signal().index()]
+        else {
+            panic!("derived signal should hold a store-managed slot");
+        };
+        let first_mirror_handle = first_mirror_slot.expect("derived signal should hold a GC root");
         let first_input_ptr = text_ptr(
             scheduler
                 .current_value(input.as_signal())
@@ -1836,12 +2170,23 @@ mod tests {
         );
         assert_eq!(scheduler.storage.live_root_count(), 2);
         assert_eq!(
-            scheduler.signals[input.index()].current,
+            scheduler.slots.current_value(input.as_signal(), &scheduler.storage),
+            scheduler.current_value(input.as_signal()).unwrap(),
+            "slot store reads should stay aligned with current_value"
+        );
+        assert_eq!(
+            match &scheduler.slots.committed[input.index()] {
+                CommittedSlot::Stored(slot) => *slot,
+                CommittedSlot::Empty | CommittedSlot::Raw(_) => None,
+            },
             Some(first_input_handle),
             "stable GC handles must survive relocation"
         );
         assert_eq!(
-            scheduler.signals[mirror.as_signal().index()].current,
+            match &scheduler.slots.committed[mirror.as_signal().index()] {
+                CommittedSlot::Stored(slot) => *slot,
+                CommittedSlot::Empty | CommittedSlot::Raw(_) => None,
+            },
             Some(first_mirror_handle),
             "stable GC handles must survive relocation for derived signals too"
         );
@@ -1878,6 +2223,82 @@ mod tests {
             0,
             "owner disposal should leave no retained GC objects after the collection safe point"
         );
+    }
+
+    #[test]
+    fn slot_store_commits_raw_slots_and_clears_them_without_store_state() {
+        let mut storage = aivi_backend::InlineCommittedValueStore::<i32>::default();
+        let mut committed = CommittedSlot::Empty;
+        let raw_plan = RawSlotPlanId::from_raw(7);
+        let raw = PendingRawValue::new(raw_plan, 42_i32.to_le_bytes(), 42_i32);
+
+        assert!(commit_pending_slot(
+            &mut storage,
+            &mut committed,
+            PendingSlot::NextRaw(raw),
+        ));
+        let CommittedSlot::Raw(raw) = &committed else {
+            panic!("raw commit should keep the slot in raw form");
+        };
+        assert_eq!(raw.plan(), raw_plan);
+        assert_eq!(raw.bytes().as_slice(), &42_i32.to_le_bytes());
+        assert_eq!(committed.current_value(&storage), Some(&42_i32));
+
+        assert!(clear_committed_slot(&mut storage, &mut committed));
+        assert!(matches!(committed, CommittedSlot::Empty));
+    }
+
+    #[test]
+    fn slot_store_transitions_from_raw_to_store_managed_value() {
+        let mut storage = aivi_backend::InlineCommittedValueStore::<i32>::default();
+        let mut committed = CommittedSlot::Empty;
+        assert!(commit_pending_slot(
+            &mut storage,
+            &mut committed,
+            PendingSlot::NextRaw(PendingRawValue::new(
+                RawSlotPlanId::from_raw(3),
+                7_i32.to_le_bytes(),
+                7_i32,
+            )),
+        ));
+
+        assert!(commit_pending_slot(
+            &mut storage,
+            &mut committed,
+            PendingSlot::NextStored(9_i32),
+        ));
+        let CommittedSlot::Stored(slot) = &committed else {
+            panic!("store-managed commit should replace the raw slot");
+        };
+        assert_eq!(*slot, Some(9_i32));
+        assert_eq!(committed.current_value(&storage), Some(&9_i32));
+    }
+
+    #[test]
+    fn dependency_values_resolve_raw_and_store_managed_pending_updates_before_committed_values() {
+        let raw_signal = SignalHandle::from_raw(0);
+        let stored_signal = SignalHandle::from_raw(1);
+        let raw_committed = 100_i32;
+        let stored_committed = 200_i32;
+        let pending = vec![
+            PendingSlot::NextRaw(PendingRawValue::new(
+                RawSlotPlanId::from_raw(1),
+                5_i32.to_le_bytes(),
+                5_i32,
+            )),
+            PendingSlot::NextStored(9_i32),
+        ];
+        let committed = vec![Some(&raw_committed), Some(&stored_committed)];
+        let inputs = DependencyValues {
+            dependencies: &[raw_signal, stored_signal],
+            pending: &pending,
+            committed: &committed,
+        };
+
+        assert_eq!(inputs.value_for(raw_signal).copied(), Some(5_i32));
+        assert_eq!(inputs.value_for(stored_signal).copied(), Some(9_i32));
+        assert!(inputs.updated_signal(raw_signal));
+        assert!(inputs.updated_signal(stored_signal));
     }
 
     #[test]
