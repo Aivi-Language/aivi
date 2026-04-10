@@ -681,7 +681,7 @@ value result : Option Int =
 
 ### contains
 
-Returns `True` if any element equals the target, using the provided equality function.
+Returns `True` if any element matches the predicate. The common membership shape is `(. == needle)`.
 
 ```aivi
 ```
@@ -689,12 +689,8 @@ Returns `True` if any element equals the target, using the provided equality fun
 ```aivi
 use aivi.list (contains)
 
-type Int -> Int -> Bool
-func intEq = a b =>
-    a == b
-
 value found : Bool =
-    contains intEq 3 [
+    contains (. == 3) [
         1,
         2,
         3,
@@ -702,8 +698,11 @@ value found : Bool =
         5
     ]
 
+value foundPipe : Bool = [1, 2, 3, 4, 5]
+  |> contains (. == 3)
+
 value missing : Bool =
-    contains intEq 9 [
+    contains (. == 9) [
         1,
         2,
         3

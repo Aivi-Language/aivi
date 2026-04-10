@@ -48,7 +48,7 @@ use aivi.list (
     drop as listDrop
     takeWhile as listTakeWhile
     dropWhile as listDropWhile
-    contains as listContains
+    contains
     indexOf as listIndexOf
     sum as listSum
     product as listProduct
@@ -245,10 +245,6 @@ func drop = n items =>
 type List Int -> Int
 func sum = items =>
     listSum items
-
-type (A -> A -> Bool) -> A -> (List A) -> Bool
-func contains = eq item items =>
-    listContains eq item items
 
 type (A -> Bool) -> (List A) -> Bool
 func any = predicate items =>

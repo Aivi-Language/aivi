@@ -66,14 +66,16 @@ impl FunctionInferenceState {
             .map(|parameter| InferenceSlot {
                 ty: parameter
                     .annotation
-                    .and_then(|annotation| typing.lower_open_annotation(annotation)),
+                    .and_then(|annotation| typing.lower_open_annotation(annotation))
+                    .filter(|ty| !ty.has_type_params()),
                 conflict: false,
             })
             .collect();
         let result_slot = InferenceSlot {
             ty: function
                 .annotation
-                .and_then(|annotation| typing.lower_open_annotation(annotation)),
+                .and_then(|annotation| typing.lower_open_annotation(annotation))
+                .filter(|ty| !ty.has_type_params()),
             conflict: false,
         };
         Self {
@@ -262,6 +264,15 @@ fn collect_contextual_signature_evidence(
         typing,
         function_set,
     )
+    .into_iter()
+    .filter(|evidence| {
+        !evidence.result_type.has_type_params()
+            && evidence
+                .parameter_types
+                .iter()
+                .all(|parameter| !parameter.has_type_params())
+    })
+    .collect()
 }
 
 fn parameter_types_from_signature(ty: &GateType, arity: usize) -> Option<Vec<GateType>> {

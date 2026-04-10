@@ -99,10 +99,6 @@ type RayScan = {
     flips: List Coord
 }
 
-type Coord -> Coord -> Bool
-func coordEq = left right => (left, right)
- ||> (Coord lx ly, Coord rx ry) -> lx == rx and ly == ry
-
 type Matrix Disc -> Coord -> Disc
 func discAt = board cell!
  ||> Coord x y -> getOrElse Empty (matrixAt board x y)
@@ -146,13 +142,11 @@ func scanStop = scan valid =>
 
 type RayScan -> Coord -> Disc -> Disc -> RayScan
 func scanStepHit = scan cell hit disc => hit == otherDisc disc
-  |> .
  T|> scanKeep scan cell
  F|> scanStop scan (hit == disc and nonEmpty scan.flips)
 
 type Matrix Disc -> Disc -> RayScan -> Coord -> RayScan
 func scanStep = board disc scan cell => scan.scanning
-  |> .
  T|> scanStepHit scan cell (discAt board cell) disc
  F|> scan
 
@@ -166,7 +160,6 @@ func newRayScan = ignored =>
 
 type RayScan -> List Coord
 func scanResult = scan => scan.valid
-  |> .
  T|> scan.flips
  F|> []
 
@@ -176,7 +169,6 @@ func directionFlips = board disc cell delta =>
 
 type Matrix Disc -> Disc -> Coord -> List Coord
 func flipsForMove = board disc cell => discAt board cell == Empty
-  |> .
  T|> flatMap (directionFlips board disc cell) [Delta -1 -1, Delta 0 -1, Delta 1 -1, Delta -1 0, Delta 1 0, Delta -1 1, Delta 0 1, Delta 1 1]
  F|> []
 
@@ -198,7 +190,6 @@ func legalMoves = board disc =>
 
 type Disc -> Matrix Disc -> Coord -> List Coord -> Matrix Disc
 func placeWithFlips = disc board cell flips => length flips == 0
-  |> .
  T|> board
  F|> paintMany disc board (append [cell] flips)
 
@@ -227,7 +218,6 @@ func startComputer = board =>
 
 type State -> State
 func settleComputerTurn = state => nonEmpty state.humanMoves
-  |> .
  T|> state
  F|> startComputerFrom state
 
@@ -244,8 +234,7 @@ func openingBoard = ignored =>
     matrixFilled 8 8 buildInitialDisc
 
 type Coord -> State -> State
-func clickState = cell state => phaseAllowsHumanInput state.phase and listContains coordEq cell state.humanMoves
-  |> .
+func clickState = cell state => phaseAllowsHumanInput state.phase and listContains (. == cell) state.humanMoves
  T|> prepareComputerTurn (applyMove state.board Black cell)
  F|> state
 
@@ -288,13 +277,11 @@ func winnerLine = board =>
 
 type Bool -> Text
 func emptyCellLabel = legal => legal
-  |> .
  T|> "◌"
  F|> "·"
 
 type Coord -> Bool -> Coord -> Phase -> Matrix Disc -> Text
-func renderTargetCell = cell legal target phase board => phaseShowsTarget phase and coordEq cell target
-  |> .
+func renderTargetCell = cell legal target phase board => phaseShowsTarget phase and cell == target
  T|> "⚪"
  F|> baseCellLabel legal (discAt board cell)
 
@@ -319,7 +306,7 @@ func stateWinnerLine = state =>
 
 type Coord -> State -> Bool
 func stateLegalAt = cell state =>
-    phaseAllowsHumanInput state.phase and listContains coordEq cell state.humanMoves
+    phaseAllowsHumanInput state.phase and listContains (. == cell) state.humanMoves
 
 type Coord -> State -> Text
 func stateCellLabel = cell state =>
@@ -381,9 +368,9 @@ value main =
             </show>
             <Button label="Restart" onClick={restartClick} />
             <Box orientation="vertical" spacing={2}>
-                <each of={[0, 1, 2, 3, 4, 5, 6, 7]} as={y} key={y}>
+                <each of={[0..8]} as={y} key={y}>
                     <Box orientation="horizontal" spacing={2}>
-                        <each of={[0, 1, 2, 3, 4, 5, 6, 7]} as={x} key={y * 8 + x}>
+                        <each of={[0..8]} as={x} key={y * 8 + x}>
                             <Button label={cellLabel (Coord x y)} onClick={placeCell (Coord x y)} sensitive={legalAt (Coord x y)} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
                         </each>
                     </Box>

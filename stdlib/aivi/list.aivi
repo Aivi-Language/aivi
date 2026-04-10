@@ -393,14 +393,9 @@ func minimum = compare items => head items
  ||> None       -> None
  ||> Some first -> Some (reduce (chooseLesser compare) first (tailOrEmpty items))
 
-type (A -> A -> Bool) -> A -> Bool -> A -> Bool
-func containsStep = eq target found item => found
- T|> True
- F|> eq target item
-
-type (A -> A -> Bool) -> A -> (List A) -> Bool
-func contains = eq target items => items
-  |> reduce (containsStep eq target) False
+type (A -> Bool) -> (List A) -> Bool
+func contains = predicate items =>
+    any predicate items
 
 type IndexState A = {
     index: Int,

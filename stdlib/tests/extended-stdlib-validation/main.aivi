@@ -277,7 +277,12 @@ value total : Int = sum numbers
 value productVal : Int = product numbers
 value maxNum : Option Int = maximum smaller numbers
 value minNum : Option Int = minimum smaller numbers
-value hasThree : Bool = contains intEq 3 numbers
+value hasThree : Bool = contains (. == 3) numbers
+value hasThreeViaPipe : Bool = numbers
+  |> contains (. == 3)
+value missesNine : Bool = contains (. == 9) numbers
+value missesNineViaPipe : Bool = numbers
+  |> contains (. == 9)
 value threeIndex : Option Int = indexOf isThree numbers
 value anyPos : Bool = any isPositive numbers
 value allPos : Bool = all isPositive numbers
@@ -529,7 +534,14 @@ value matrixUpdateOk : Result MatrixError Bool = coordinateMatrix
 value extended_validation_covers_bool_and_math : Task Text Bool = pure (squareTest == 25)
 
 @test
-value extended_validation_covers_list_ops : Task Text Bool = pure (sorted == [1, 1, 3, 4, 5])
+value extended_validation_covers_list_ops : Task Text Bool =
+    pure (
+        sorted == [1, 1, 3, 4, 5] and
+        hasThree and
+        hasThreeViaPipe and
+        not missesNine and
+        not missesNineViaPipe
+    )
 
 @test
 value extended_validation_covers_list_index_ops : Task Text Bool = pure (secondNumber == Some 2 and missingNumber == None and replacedNumbers == [1, 2, 99, 4, 5] and unchangedNumbers == numbers)

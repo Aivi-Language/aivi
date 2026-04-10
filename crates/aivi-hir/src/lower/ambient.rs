@@ -304,14 +304,9 @@ func __aivi_option_map = transform opt => opt
     ||> Some item -> Some (transform item)
     ||> None      -> None
 
-type (A -> Bool) -> Bool -> A -> Bool
-func __aivi_list_containsStep = eq found item => found
-    T|> True
-    F|> eq item
-
-type (A -> A -> Bool) -> A -> (List A) -> Bool
-func __aivi_list_contains = eq target items => items
-    |> reduce (__aivi_list_containsStep (eq target)) False
+type (A -> Bool) -> (List A) -> Bool
+func __aivi_list_contains = predicate items =>
+    __aivi_list_any predicate items
 
 type (A -> B) -> (List B) -> A -> (List B)
 func __aivi_list_mapStep = transform acc item =>

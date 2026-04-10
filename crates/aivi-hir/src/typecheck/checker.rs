@@ -1729,6 +1729,36 @@ impl<'a> TypeChecker<'a> {
             });
     }
 
+    /// When an argument expression is a direct reference to a same-module
+    /// function eligible for inference (e.g. a hoisted lambda helper), record
+    /// `FunctionSignatureEvidence` so the iterative inference loop can
+    /// determine the function's parameter types from the call-site context.
+    fn record_argument_function_evidence(&mut self, argument: ExprId, expected: &GateType) {
+        let GateType::Arrow { .. } = expected else {
+            return;
+        };
+        let ExprKind::Name(reference) = &self.module.exprs()[argument].kind else {
+            return;
+        };
+        let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return;
+        };
+        let Item::Function(function) = &self.module.items()[*item_id] else {
+            return;
+        };
+        if !supports_same_module_function_inference(function) {
+            return;
+        }
+        let Some((parameter_types, result_type)) =
+            self.expected_function_signature(expected, function.parameters.len())
+        else {
+            return;
+        };
+        self.record_function_signature_evidence(*item_id, &parameter_types, &result_type);
+    }
+
     fn check_builtin_constructor_name(
         &self,
         reference: &TermReference,
@@ -2117,6 +2147,13 @@ impl<'a> TypeChecker<'a> {
                 parameter_types
             }
         };
+
+        // Record signature evidence for same-module inference-target functions
+        // used as arguments. This enables hoisted lambda helpers to have their
+        // parameter types inferred from the callee's resolved Arrow type.
+        for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
+            self.record_argument_function_evidence(*argument, parameter);
+        }
 
         for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
             if !self.check_expr(*argument, env, Some(parameter), value_stack) {

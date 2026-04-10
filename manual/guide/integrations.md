@@ -275,7 +275,6 @@ When no built-in source fits, declare a custom provider with a contract:
 
 ```aivi
 // <unparseable item>
-
 @source BluetoothScanner with {
     scanDurationMs: 5000,
     nameFilter: Some "MyDevice"

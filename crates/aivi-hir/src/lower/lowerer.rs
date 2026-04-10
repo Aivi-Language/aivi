@@ -31,6 +31,11 @@ struct NamedSite<T> {
 struct LambdaOwnerContext {
     type_parameters: Vec<TypeParameterId>,
     context: Vec<TypeId>,
+    /// Bindings + annotation from the enclosing function, used to propagate
+    /// types onto capture parameters so the typechecker can resolve operators
+    /// like `==` inside hoisted lambdas.
+    owner_parameters: Vec<BindingId>,
+    owner_annotation: Option<TypeId>,
 }
 
 #[derive(Clone, Default)]
@@ -5339,6 +5344,12 @@ impl<'a> Lowerer<'a> {
                 let owner = LambdaOwnerContext {
                     type_parameters: item.type_parameters.clone(),
                     context: item.context.clone(),
+                    owner_parameters: item
+                        .parameters
+                        .iter()
+                        .map(|p| p.binding)
+                        .collect(),
+                    owner_annotation: item.annotation,
                 };
                 for decorator_id in &item.header.decorators {
                     self.hoist_lambda_decorator(*decorator_id, &owner);
@@ -5370,6 +5381,7 @@ impl<'a> Lowerer<'a> {
                 let owner = LambdaOwnerContext {
                     type_parameters: item.parameters.clone(),
                     context: Vec::new(),
+                    ..Default::default()
                 };
                 for decorator_id in &item.header.decorators {
                     self.hoist_lambda_decorator(*decorator_id, &owner);
@@ -5391,6 +5403,7 @@ impl<'a> Lowerer<'a> {
                 let owner = LambdaOwnerContext {
                     type_parameters: item.type_parameters.clone(),
                     context: item.context.clone(),
+                    ..Default::default()
                 };
                 for decorator_id in &item.header.decorators {
                     self.hoist_lambda_decorator(*decorator_id, &owner);
@@ -5511,7 +5524,7 @@ impl<'a> Lowerer<'a> {
             ),
             ExprKind::Lambda(mut lambda) => {
                 lambda.body = self.hoist_expr(lambda.body, owner);
-                return self.hoist_lambda_expr(expr.span, lambda, owner);
+                return self.hoist_lambda_expr(expr.span, &lambda, owner, None);
             }
             ExprKind::Record(mut record) => {
                 for field in &mut record.fields {
@@ -5528,10 +5541,24 @@ impl<'a> Lowerer<'a> {
             },
             ExprKind::Apply { callee, arguments } => {
                 let callee = self.hoist_expr(callee, owner);
+                // Before hoisting arguments, try to resolve the callee's type
+                // annotation so that lambda arguments can derive their parameter
+                // types from the callee's expected argument types.
+                let callee_annotation = self.callee_type_annotation(callee);
                 let arguments = arguments
                     .into_vec()
                     .into_iter()
-                    .map(|argument| self.hoist_expr(argument, owner))
+                    .enumerate()
+                    .map(|(index, argument)| {
+                        let arg_expr = &self.module.exprs()[argument];
+                        if matches!(arg_expr.kind, ExprKind::Lambda(_)) {
+                            let expected =
+                                callee_annotation.and_then(|ty| self.arrow_at_position(ty, index));
+                            self.hoist_expr_with_lambda_hint(argument, owner, expected)
+                        } else {
+                            self.hoist_expr(argument, owner)
+                        }
+                    })
                     .collect::<Vec<_>>();
                 ExprKind::Apply {
                     callee,
@@ -5592,6 +5619,22 @@ impl<'a> Lowerer<'a> {
             kind,
         };
         expr_id
+    }
+
+    /// Like `hoist_expr` but when the top-level expression is a lambda, pass
+    /// `lambda_hint` as the expected type so the hoisted function gets an annotation.
+    fn hoist_expr_with_lambda_hint(
+        &mut self,
+        expr_id: ExprId,
+        owner: &LambdaOwnerContext,
+        lambda_hint: Option<TypeId>,
+    ) -> ExprId {
+        let expr = self.module.exprs()[expr_id].clone();
+        if let ExprKind::Lambda(mut lambda) = expr.kind {
+            lambda.body = self.hoist_expr(lambda.body, owner);
+            return self.hoist_lambda_expr(expr.span, &lambda, owner, lambda_hint);
+        }
+        self.hoist_expr(expr_id, owner)
     }
 
     fn hoist_text_literal(&mut self, text: &mut TextLiteral, owner: &LambdaOwnerContext) {
@@ -5778,7 +5821,7 @@ impl<'a> Lowerer<'a> {
                 }
                 ControlNode::Empty(node)
             }
-            ControlNode::Case(mut node) => {
+            ControlNode::Case(node) => {
                 self.hoist_pattern(node.pattern, owner);
                 for child in &node.children {
                     self.hoist_markup_node(*child, owner);
@@ -5860,8 +5903,11 @@ impl<'a> Lowerer<'a> {
     fn hoist_lambda_expr(
         &mut self,
         span: SourceSpan,
-        mut lambda: crate::hir::LambdaExpr,
+        lambda: &crate::hir::LambdaExpr,
         owner: &LambdaOwnerContext,
+        // Expected type for the entire lambda (e.g. `Int -> Bool`),
+        // derived from the callee's annotation at the call site.
+        callee_hint: Option<TypeId>,
     ) -> ExprId {
         if matches!(
             lambda.surface_form,
@@ -5881,7 +5927,16 @@ impl<'a> Lowerer<'a> {
 
         let capture_parameters = captures
             .iter()
-            .map(|binding| self.synthetic_capture_parameter(*binding))
+            .map(|binding| {
+                let mut param = self.synthetic_capture_parameter(*binding);
+                // Propagate the type annotation from the enclosing function's
+                // arrow signature so the typechecker can resolve operators (e.g.
+                // `==`) inside the hoisted lambda body.
+                if let Some(ty) = self.owner_annotation_for_capture(*binding, owner) {
+                    param.annotation = Some(ty);
+                }
+                param
+            })
             .collect::<Vec<_>>();
         let capture_map = captures
             .iter()
@@ -5893,7 +5948,23 @@ impl<'a> Lowerer<'a> {
         }
 
         let mut parameters = capture_parameters;
-        parameters.extend(lambda.parameters);
+        // Propagate parameter types from the callee's expected argument type
+        // so the typechecker can resolve operators inside the hoisted body.
+        // Skip polymorphic (type-parameter-containing) types — they would
+        // conflict with the concrete types inferred later.
+        let mut lambda_params = lambda.parameters.clone();
+        if let Some(hint) = callee_hint {
+            for (index, param) in lambda_params.iter_mut().enumerate() {
+                if param.annotation.is_none() {
+                    if let Some(ty) = self.arrow_at_position(hint, index) {
+                        if !self.type_contains_type_params(ty) {
+                            param.annotation = Some(ty);
+                        }
+                    }
+                }
+            }
+        }
+        parameters.extend(lambda_params);
 
         let item_name = self.synthetic_lambda_name(span);
         let item_id = self.push_root_item(Item::Function(FunctionItem {
@@ -5955,6 +6026,96 @@ impl<'a> Lowerer<'a> {
             span: outer.span,
             binding,
             annotation: None,
+        }
+    }
+
+    /// Extract the type of a captured binding from the enclosing function's
+    /// arrow annotation. Walks the `Arrow { parameter, result }` chain to
+    /// the position that matches the capture's binding in the owner's
+    /// parameter list.
+    fn owner_annotation_for_capture(
+        &self,
+        capture: BindingId,
+        owner: &LambdaOwnerContext,
+    ) -> Option<TypeId> {
+        let annotation = owner.owner_annotation?;
+        let position = owner
+            .owner_parameters
+            .iter()
+            .position(|b| *b == capture)?;
+        self.arrow_at_position(annotation, position)
+    }
+
+    /// Walk an Arrow type chain and return the parameter type at `position`.
+    /// Position 0 is the first arrow's `parameter`, position 1 is the next
+    /// arrow's `parameter` (from the first arrow's `result`), etc.
+    fn arrow_at_position(&self, mut ty: TypeId, position: usize) -> Option<TypeId> {
+        for _ in 0..position {
+            match &self.module.types()[ty].kind {
+                TypeKind::Arrow { result, .. } => ty = *result,
+                _ => return None,
+            }
+        }
+        match &self.module.types()[ty].kind {
+            TypeKind::Arrow { parameter, .. } => Some(*parameter),
+            _ => None,
+        }
+    }
+
+    /// Check whether a HIR type tree rooted at `ty` references any type
+    /// parameters. Used to avoid propagating polymorphic annotations from
+    /// callee signatures to hoisted lambda parameters.
+    fn type_contains_type_params(&self, ty: TypeId) -> bool {
+        match &self.module.types()[ty].kind {
+            TypeKind::Name(reference) => matches!(
+                reference.resolution,
+                ResolutionState::Resolved(TypeResolution::TypeParameter(_))
+            ),
+            TypeKind::Arrow { parameter, result } => {
+                self.type_contains_type_params(*parameter)
+                    || self.type_contains_type_params(*result)
+            }
+            TypeKind::Tuple(members) => members
+                .iter()
+                .any(|m| self.type_contains_type_params(*m)),
+            TypeKind::Record(fields) => fields
+                .iter()
+                .any(|f| self.type_contains_type_params(f.ty)),
+            TypeKind::Apply { callee, arguments } => {
+                self.type_contains_type_params(*callee)
+                    || arguments
+                        .iter()
+                        .any(|a| self.type_contains_type_params(*a))
+            }
+            TypeKind::RecordTransform { source, .. } => self.type_contains_type_params(*source),
+        }
+    }
+
+    /// Try to resolve the type annotation of a callee expression. When the
+    /// callee is a resolved item reference to a function (possibly imported),
+    /// returns the function's type annotation (the full Arrow chain). For
+    /// stdlib imports that resolve to `Import { target }`, follows the target
+    /// chain to find the underlying function annotation.
+    fn callee_type_annotation(&self, callee: ExprId) -> Option<TypeId> {
+        let expr = &self.module.exprs()[callee];
+        let ExprKind::Name(reference) = &expr.kind else {
+            return None;
+        };
+        let ResolutionState::Resolved(resolution) = &reference.resolution else {
+            return None;
+        };
+        match resolution {
+            TermResolution::Item(item_id) => self.item_type_annotation(*item_id),
+            _ => None,
+        }
+    }
+
+    /// Resolve a same-module item's type annotation.
+    fn item_type_annotation(&self, item_id: ItemId) -> Option<TypeId> {
+        match &self.module.items()[item_id] {
+            Item::Function(function) => function.annotation,
+            Item::Value(value) => value.annotation,
+            _ => None,
         }
     }
 

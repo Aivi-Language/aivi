@@ -136,11 +136,11 @@ The game uses a simple linear congruential generator for pseudo-random numbers. 
 
 ```aivi
 type Cell -> Cell -> Bool
-func cellEq = a b =>
-    a == b
+func cellEq = target candidate =>
+    candidate == target
 ```
 
-This wraps the built-in equality operator into a named function, which we pass to higher-order list functions like `listContains`.
+`Cell` is a closed constructor type, so the helper body is just `==`. `contains` now takes a unary predicate, so the helper is partially applied as `cellEq cell`.
 
 ## Domains: the snake itself
 
@@ -153,7 +153,7 @@ domain Snake over NonEmptyList Cell = {
     type Cell
     head = nelHead self
     type Cell -> Bool
-    contains cell = listContains cellEq cell (toList self)
+    contains cell = listContains (cellEq cell) (toList self)
     type Int
     length = nelLength self
     type Cell -> Snake
@@ -353,7 +353,7 @@ The board renders as text. Instead of nested loops, we use `matrixIndices` to ge
 
 ```aivi
 type List Cell -> Cell -> Cell -> Int -> Int -> Text
-func cellGlyph = body head food y x => (Cell x y == head, listContains cellEq (Cell x y) body, Cell x y == food)
+func cellGlyph = body head food y x => (Cell x y == head, listContains (cellEq (Cell x y)) body, Cell x y == food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
