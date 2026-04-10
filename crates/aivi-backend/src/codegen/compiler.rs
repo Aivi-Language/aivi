@@ -3740,6 +3740,52 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 )?;
                 Ok(IntrinsicCallPlan::BytesSlice)
             }
+            IntrinsicValue::BitAnd
+            | IntrinsicValue::BitOr
+            | IntrinsicValue::BitXor
+            | IntrinsicValue::ShiftLeft
+            | IntrinsicValue::ShiftRight
+            | IntrinsicValue::ShiftRightUnsigned => {
+                let [a, b] = arguments else {
+                    unreachable!("saturated binary bit intrinsic call should keep exactly two arguments");
+                };
+                self.require_int_expression(
+                    kernel_id,
+                    *a,
+                    kernel.exprs()[*a].layout,
+                    &format!("{detail} lhs"),
+                )?;
+                self.require_int_expression(
+                    kernel_id,
+                    *b,
+                    kernel.exprs()[*b].layout,
+                    &format!("{detail} rhs"),
+                )?;
+                self.require_int_expression(kernel_id, expr_id, result_layout, &format!("{detail} result"))?;
+                let op = match intrinsic {
+                    IntrinsicValue::BitAnd => BitBinaryOp::And,
+                    IntrinsicValue::BitOr => BitBinaryOp::Or,
+                    IntrinsicValue::BitXor => BitBinaryOp::Xor,
+                    IntrinsicValue::ShiftLeft => BitBinaryOp::ShiftLeft,
+                    IntrinsicValue::ShiftRight => BitBinaryOp::ShiftRight,
+                    IntrinsicValue::ShiftRightUnsigned => BitBinaryOp::ShiftRightUnsigned,
+                    _ => unreachable!(),
+                };
+                Ok(IntrinsicCallPlan::BitBinary(op))
+            }
+            IntrinsicValue::BitNot => {
+                let [a] = arguments else {
+                    unreachable!("saturated `BitNot` call should keep exactly one argument");
+                };
+                self.require_int_expression(
+                    kernel_id,
+                    *a,
+                    kernel.exprs()[*a].layout,
+                    "bits.not argument",
+                )?;
+                self.require_int_expression(kernel_id, expr_id, result_layout, "bits.not result")?;
+                Ok(IntrinsicCallPlan::BitNot)
+            }
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -4861,6 +4907,34 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let func_ref = self.declare_bytes_slice_func(kernel_id, builder)?;
                 let call = builder.ins().call(func_ref, &[*from, *to, *bytes]);
                 Ok(builder.inst_results(call)[0])
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BitBinary(op)) => {
+                let [a, b] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct bitwise binary op lowering expected exactly two materialized arguments",
+                    ));
+                };
+                let result = match op {
+                    BitBinaryOp::And => builder.ins().band(*a, *b),
+                    BitBinaryOp::Or => builder.ins().bor(*a, *b),
+                    BitBinaryOp::Xor => builder.ins().bxor(*a, *b),
+                    BitBinaryOp::ShiftLeft => builder.ins().ishl(*a, *b),
+                    BitBinaryOp::ShiftRight => builder.ins().sshr(*a, *b),
+                    BitBinaryOp::ShiftRightUnsigned => builder.ins().ushr(*a, *b),
+                };
+                Ok(result)
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BitNot) => {
+                let [a] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct bits.not lowering expected exactly one materialized argument",
+                    ));
+                };
+                Ok(builder.ins().bnot(*a))
             }
         }
     }

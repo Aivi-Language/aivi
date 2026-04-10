@@ -3159,5 +3159,12 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         | IntrinsicValue::BigIntEq
         | IntrinsicValue::BigIntGt
         | IntrinsicValue::BigIntLt => 2,
+        IntrinsicValue::BitNot => 1,
+        IntrinsicValue::BitAnd
+        | IntrinsicValue::BitOr
+        | IntrinsicValue::BitXor
+        | IntrinsicValue::ShiftLeft
+        | IntrinsicValue::ShiftRight
+        | IntrinsicValue::ShiftRightUnsigned => 2,
     }
 }
