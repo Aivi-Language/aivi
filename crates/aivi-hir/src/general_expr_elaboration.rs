@@ -4934,7 +4934,8 @@ export Envelope
                 .annotation
                 .and_then(|annotation| GateTypeContext::new(module).lower_annotation(annotation))
                 .expect("lifted annotation should lower");
-            let ExprKind::Apply { callee, arguments } = module.exprs()[value.body].kind.clone() else {
+            let ExprKind::Apply { callee, arguments } = module.exprs()[value.body].kind.clone()
+            else {
                 panic!("lifted body should be an apply expression");
             };
             let ExprKind::Name(reference) = &module.exprs()[callee].kind else {
@@ -4943,7 +4944,12 @@ export Envelope
             let mut typing = GateTypeContext::new(module);
             let argument_infos = arguments
                 .iter()
-                .map(|argument| (*argument, typing.infer_expr(*argument, &GateExprEnv::default(), None)))
+                .map(|argument| {
+                    (
+                        *argument,
+                        typing.infer_expr(*argument, &GateExprEnv::default(), None),
+                    )
+                })
                 .collect::<Vec<_>>();
             let argument_types = argument_infos
                 .iter()

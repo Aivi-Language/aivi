@@ -1,4 +1,3 @@
-
 use std::{collections::HashSet, fs, path::PathBuf};
 
 use aivi_base::{FileId, SourceDatabase, SourceSpan};

@@ -1,4 +1,3 @@
-
 use aivi_base::{ByteIndex, DiagnosticCode, FileId, LabelStyle, SourceDatabase, SourceSpan, Span};
 use aivi_syntax::parse_module;
 use aivi_typing::SourceTypeParameter;

@@ -171,11 +171,8 @@ impl<'a> SourceContractTypeResolver<'a> {
             return *lookup;
         }
 
-        let mut matches = self
-            .module
-            .root_items()
-            .iter()
-            .filter_map(|item_id| match &self.module.items()[*item_id] {
+        let mut matches = self.module.root_items().iter().filter_map(|item_id| {
+            match &self.module.items()[*item_id] {
                 Item::Type(item) => {
                     (item.name.text() == name).then_some((*item_id, item.parameters.len()))
                 }
@@ -191,7 +188,8 @@ impl<'a> SourceContractTypeResolver<'a> {
                 | Item::Use(_)
                 | Item::Export(_)
                 | Item::Hoist(_) => None,
-            });
+            }
+        });
 
         let lookup = match (matches.next(), matches.next()) {
             (None, _) => LocalTypeLookup::Missing,

@@ -43,7 +43,6 @@ pub use engine::{
     BackendExecutableProgram, BackendExecutionEngine, BackendExecutionEngineHandle,
     BackendExecutionEngineKind, BackendExecutionOptions,
 };
-pub use jit::{NativeKernelExecutionError, NativeKernelPlan};
 pub use gc::{
     CommittedValueStore, InlineCommittedValueStore, MovingRuntimeValueStore, RuntimeGcHandle,
 };
@@ -51,6 +50,7 @@ pub use ids::{
     DecodePlanId, DecodeStepId, EnvSlotId, InlineSubjectId, ItemId, KernelExprId, KernelId,
     LayoutId, PipelineId, SourceId,
 };
+pub use jit::{NativeKernelExecutionError, NativeKernelPlan};
 pub use kernel::{
     AbiParameter, AbiResult, BigIntLiteral, BinaryOperator, BuiltinAppendCarrier,
     BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,

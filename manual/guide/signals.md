@@ -53,6 +53,7 @@ signal state : Signal State = {
 from state = {
     type Bool
     readyNow: .ready
+
     type Int -> Bool
     atLeast threshold: .score >= threshold
 }

@@ -317,7 +317,10 @@ impl fmt::Display for ValidationError {
                 )
             }
             Self::SignalUnknownBodyKernel { item, kernel } => {
-                write!(f, "signal item {item} references unknown body kernel {kernel}")
+                write!(
+                    f,
+                    "signal item {item} references unknown body kernel {kernel}"
+                )
             }
             Self::SignalBodyOwnerMismatch {
                 item,
@@ -707,13 +710,15 @@ pub fn validate_program(program: &Program) -> Result<(), ValidationErrors> {
                                 .enumerate()
                             {
                                 if expected != found {
-                                    errors.push(ValidationError::SignalBodyDependencyLayoutMismatch {
-                                        item: item_id,
-                                        kernel: kernel_id,
-                                        dependency_index,
-                                        expected: *expected,
-                                        found: *found,
-                                    });
+                                    errors.push(
+                                        ValidationError::SignalBodyDependencyLayoutMismatch {
+                                            item: item_id,
+                                            kernel: kernel_id,
+                                            dependency_index,
+                                            expected: *expected,
+                                            found: *found,
+                                        },
+                                    );
                                 }
                             }
                         }

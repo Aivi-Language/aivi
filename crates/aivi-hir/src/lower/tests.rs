@@ -1,4 +1,3 @@
-
 use std::{fs, path::PathBuf};
 
 use aivi_base::{Severity, SourceDatabase};

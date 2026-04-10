@@ -69,7 +69,8 @@ impl BackendKernelArtifactCache {
         program: &Program,
         fingerprint: KernelFingerprint,
     ) -> Option<&CompiledKernelArtifact> {
-        self.artifacts.get(&program_kernel_cache_key(program, fingerprint))
+        self.artifacts
+            .get(&program_kernel_cache_key(program, fingerprint))
     }
 
     pub fn get_by_kernel(
@@ -88,8 +89,10 @@ impl BackendKernelArtifactCache {
         program: &Program,
         artifact: CompiledKernelArtifact,
     ) -> Option<CompiledKernelArtifact> {
-        self.artifacts
-            .insert(program_kernel_cache_key(program, artifact.fingerprint()), artifact)
+        self.artifacts.insert(
+            program_kernel_cache_key(program, artifact.fingerprint()),
+            artifact,
+        )
     }
 
     pub fn get_or_compile(
@@ -160,7 +163,10 @@ pub fn compute_kernel_cache_key(fingerprint: KernelFingerprint) -> u64 {
     compute_program_cache_key_from_fingerprint(fingerprint.as_raw())
 }
 
-fn compute_program_scoped_kernel_cache_key(program: &Program, fingerprint: KernelFingerprint) -> u64 {
+fn compute_program_scoped_kernel_cache_key(
+    program: &Program,
+    fingerprint: KernelFingerprint,
+) -> u64 {
     let mut hasher = FxHasher::default();
     program_kernel_cache_key(program, fingerprint).hash(&mut hasher);
     compute_program_cache_key_from_fingerprint(hasher.finish())
@@ -1135,8 +1141,7 @@ fun makeBlob:Bytes = seed:Int=>
                 "helper-backed JIT kernel should compile and persist a replayable cache artifact",
             );
             let fingerprint = compute_kernel_fingerprint(&backend, make_blob);
-            let artifact =
-                load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
                 .expect("compiled helper-backed JIT kernel should write a disk artifact");
             let replayed = instantiate_cached_jit_kernel(&backend, make_blob, &artifact)
                 .expect("serialized helper-backed JIT artifact should replay into a live kernel");
@@ -1197,7 +1202,7 @@ value headers:Map Text Text =
                 let fingerprint = compute_kernel_fingerprint(&backend, kernel);
                 let artifact =
                     load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
-                    .expect("compiled collection kernel should write a disk artifact");
+                        .expect("compiled collection kernel should write a disk artifact");
                 let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact)
                     .expect("serialized collection artifact should replay into a live kernel");
 
@@ -1325,7 +1330,7 @@ value bigintTotal:BigInt = 123456789012345678901234567890n + 10n
                 let fingerprint = compute_kernel_fingerprint(&backend, kernel);
                 let artifact =
                     load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
-                    .expect("compiled numeric helper kernel should write a disk artifact");
+                        .expect("compiled numeric helper kernel should write a disk artifact");
                 let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact)
                     .expect("serialized numeric helper artifact should replay into a live kernel");
 
@@ -1407,8 +1412,9 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
                     .expect("inline scalar option kernel should compile and persist a replayable cache artifact");
                 let fingerprint = compute_kernel_fingerprint(&backend, kernel);
                 let artifact =
-                    load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
-                    .expect("compiled inline scalar option kernel should write a disk artifact");
+                    load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint).expect(
+                        "compiled inline scalar option kernel should write a disk artifact",
+                    );
                 let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact).expect(
                     "serialized inline scalar option artifact should replay into a live kernel",
                 );

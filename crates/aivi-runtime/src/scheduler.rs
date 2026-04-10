@@ -1279,11 +1279,7 @@ impl<V, S> SlotStore<V, S> {
         Self { committed, pending }
     }
 
-    fn current_value<'a, Store>(
-        &'a self,
-        signal: SignalHandle,
-        storage: &'a Store,
-    ) -> Option<&'a V>
+    fn current_value<'a, Store>(&'a self, signal: SignalHandle, storage: &'a Store) -> Option<&'a V>
     where
         Store: CommittedValueStore<V, Slot = S>,
     {
@@ -1358,7 +1354,10 @@ where
     }
 }
 
-fn clear_committed_slot<V, S, Store>(storage: &mut Store, committed: &mut CommittedSlot<V, S>) -> bool
+fn clear_committed_slot<V, S, Store>(
+    storage: &mut Store,
+    committed: &mut CommittedSlot<V, S>,
+) -> bool
 where
     Store: CommittedValueStore<V, Slot = S>,
 {
@@ -2138,7 +2137,8 @@ mod tests {
 
         assert_eq!(scheduler.storage.live_root_count(), 2);
         assert_eq!(scheduler.storage.allocated_value_count(), 2);
-        let CommittedSlot::Stored(first_input_slot) = &scheduler.slots.committed[input.index()] else {
+        let CommittedSlot::Stored(first_input_slot) = &scheduler.slots.committed[input.index()]
+        else {
             panic!("input signal should hold a store-managed slot");
         };
         let first_input_handle = first_input_slot.expect("input signal should hold a GC root");
@@ -2170,7 +2170,9 @@ mod tests {
         );
         assert_eq!(scheduler.storage.live_root_count(), 2);
         assert_eq!(
-            scheduler.slots.current_value(input.as_signal(), &scheduler.storage),
+            scheduler
+                .slots
+                .current_value(input.as_signal(), &scheduler.storage),
             scheduler.current_value(input.as_signal()).unwrap(),
             "slot store reads should stay aligned with current_value"
         );

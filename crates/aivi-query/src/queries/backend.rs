@@ -439,8 +439,8 @@ fn lower_whole_program_backend_unit(
     let lambda = lower_lambda_module(&core).map_err(BackendUnitError::LambdaLowering)?;
     validate_lambda_module(&lambda).map_err(BackendUnitError::LambdaValidation)?;
 
-    let backend =
-        lower_backend_module(&lambda, entry_hir.module()).map_err(BackendUnitError::BackendLowering)?;
+    let backend = lower_backend_module(&lambda, entry_hir.module())
+        .map_err(BackendUnitError::BackendLowering)?;
     validate_program(&backend).map_err(BackendUnitError::BackendValidation)?;
 
     let fingerprint = WholeProgramFingerprint(stable_fingerprint(&backend));
@@ -468,8 +468,8 @@ fn lower_runtime_fragment_backend_unit(
     let lambda = lower_lambda_module(&core.module).map_err(BackendUnitError::LambdaLowering)?;
     validate_lambda_module(&lambda).map_err(BackendUnitError::LambdaValidation)?;
 
-    let backend =
-        lower_backend_module(&lambda, entry_hir.module()).map_err(BackendUnitError::BackendLowering)?;
+    let backend = lower_backend_module(&lambda, entry_hir.module())
+        .map_err(BackendUnitError::BackendLowering)?;
     validate_program(&backend).map_err(BackendUnitError::BackendValidation)?;
 
     let fingerprint = RuntimeFragmentFingerprint(stable_fingerprint(&backend));

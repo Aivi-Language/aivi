@@ -149,8 +149,8 @@ signal next = increment base
             .expect("derived signals should lower a dedicated body kernel"),
         other => panic!("expected signal item, found {other:?}"),
     };
-    let mut plan =
-        NativeKernelPlan::compile(&backend, body_kernel).expect("supported signal body should compile natively");
+    let mut plan = NativeKernelPlan::compile(&backend, body_kernel)
+        .expect("supported signal body should compile natively");
 
     assert_eq!(plan.kernel_id(), body_kernel);
     assert_eq!(

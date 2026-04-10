@@ -206,10 +206,8 @@ impl Type {
                                     .collect::<Vec<_>>()
                                     .into_boxed_slice(),
                             );
-                            values.push(Self::lower_import_with_substitutions(
-                                alias,
-                                substitutions,
-                            ));
+                            values
+                                .push(Self::lower_import_with_substitutions(alias, substitutions));
                         }
                         Some(ImportTypeDefinition::Sum(_)) | None => {
                             tasks.push(Task::BuildOpaqueImport {
@@ -342,10 +340,7 @@ impl Type {
     }
 
     pub fn lower_import(root: &ImportValueType) -> Self {
-        Self::lower_import_with_substitutions(
-            root,
-            Rc::from(Vec::<Type>::new().into_boxed_slice()),
-        )
+        Self::lower_import_with_substitutions(root, Rc::from(Vec::<Type>::new().into_boxed_slice()))
     }
 
     fn lower_import_with_substitutions(root: &ImportValueType, substitutions: Rc<[Type]>) -> Self {
@@ -362,7 +357,10 @@ impl Type {
             BuildValidation,
             BuildSignal,
             BuildTask,
-            BuildOpaqueImport { name: Box<str>, arguments: usize },
+            BuildOpaqueImport {
+                name: Box<str>,
+                arguments: usize,
+            },
             EnterAlias {
                 alias: &'a ImportValueType,
                 arguments: usize,
@@ -552,7 +550,8 @@ impl Type {
                     });
                 }
                 Task::EnterAlias { alias, arguments } => {
-                    let substitutions = Rc::from(drain_tail(&mut values, arguments).into_boxed_slice());
+                    let substitutions =
+                        Rc::from(drain_tail(&mut values, arguments).into_boxed_slice());
                     tasks.push(Task::Visit(alias, substitutions));
                 }
             }
@@ -708,19 +707,21 @@ mod tests {
         let ty = ImportValueType::Named {
             type_name: "Wrap".into(),
             arguments: vec![ImportValueType::Primitive(BuiltinType::Int)],
-            definition: Some(Box::new(ImportTypeDefinition::Alias(ImportValueType::Named {
-                type_name: "Envelope".into(),
-                arguments: vec![ImportValueType::TypeVariable {
-                    index: 0,
-                    name: "A".into(),
-                }],
-                definition: Some(Box::new(ImportTypeDefinition::Alias(
-                    ImportValueType::Option(Box::new(ImportValueType::TypeVariable {
+            definition: Some(Box::new(ImportTypeDefinition::Alias(
+                ImportValueType::Named {
+                    type_name: "Envelope".into(),
+                    arguments: vec![ImportValueType::TypeVariable {
                         index: 0,
-                        name: "B".into(),
-                    })),
-                ))),
-            }))),
+                        name: "A".into(),
+                    }],
+                    definition: Some(Box::new(ImportTypeDefinition::Alias(
+                        ImportValueType::Option(Box::new(ImportValueType::TypeVariable {
+                            index: 0,
+                            name: "B".into(),
+                        })),
+                    ))),
+                },
+            ))),
         };
 
         assert_eq!(

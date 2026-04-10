@@ -1133,7 +1133,9 @@ impl<'a> ProgramLowerer<'a> {
                                 handle.variant_name.clone(),
                                 arguments
                                     .iter()
-                                    .map(|argument| self.lambda.core().exprs()[*argument].ty.clone())
+                                    .map(|argument| {
+                                        self.lambda.core().exprs()[*argument].ty.clone()
+                                    })
                                     .collect(),
                             );
                         }

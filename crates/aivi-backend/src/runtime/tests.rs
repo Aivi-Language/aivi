@@ -1,4 +1,3 @@
-
 use std::collections::BTreeSet;
 
 use aivi_hir::{ItemId as HirItemId, SumConstructorHandle};

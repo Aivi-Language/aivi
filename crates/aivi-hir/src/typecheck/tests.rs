@@ -1,4 +1,3 @@
-
 use aivi_base::{DiagnosticCode, FileId, SourceDatabase, SourceSpan};
 use aivi_syntax::parse_module;
 

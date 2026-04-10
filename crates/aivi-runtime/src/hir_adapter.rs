@@ -505,9 +505,12 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         };
                         stats.reactive_guard_fragments += 1;
                         let guard_started = Instant::now();
-                        let guard_name =
-                            format!("__reactive_guard_{}_{}", binding.item.as_raw(), clause_index)
-                                .into_boxed_str();
+                        let guard_name = format!(
+                            "__reactive_guard_{}_{}",
+                            binding.item.as_raw(),
+                            clause_index
+                        )
+                        .into_boxed_str();
                         let guard_fragment = match if update.body_mode
                             == hir::ReactiveUpdateBodyMode::OptionalPayload
                         {
@@ -3141,8 +3144,8 @@ signal total = left + right
             lowered.diagnostics()
         );
 
-        let assembly = assemble_hir_runtime(lowered.module())
-            .expect("root-partition fixture should assemble");
+        let assembly =
+            assemble_hir_runtime(lowered.module()).expect("root-partition fixture should assemble");
         let program = assembly.reactive_program();
         let left_input = assembly
             .signal(item_id(lowered.module(), "leftInput"))

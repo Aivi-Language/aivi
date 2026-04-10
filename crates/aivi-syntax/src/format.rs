@@ -302,11 +302,20 @@ impl Formatter {
             Some(source) => format!("from {} = {{", self.format_expr_inline(source, 0)),
             None => "from = {".to_owned(),
         }];
-        for entry in &item.entries {
+        for (index, entry) in item.entries.iter().enumerate() {
+            if index > 0
+                && self.needs_blank_line_between_from_entries(&item.entries[index - 1], entry)
+            {
+                lines.push(String::new());
+            }
             lines.extend(self.format_from_entry(entry));
         }
         lines.push("}".to_owned());
         lines
+    }
+
+    fn needs_blank_line_between_from_entries(&self, left: &FromEntry, right: &FromEntry) -> bool {
+        !left.parameters.is_empty() || !right.parameters.is_empty()
     }
 
     fn format_from_entry(&self, entry: &FromEntry) -> Vec<String> {
@@ -4501,8 +4510,46 @@ value view =
                 "from state = {\n",
                 "    type Int -> Bool\n",
                 "    atLeast threshold: .score >= threshold\n",
+                "\n",
                 "    type Bool\n",
                 "    readyNow: .ready\n",
+                "}\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_separates_parameterized_from_entries_with_blank_lines() {
+        let formatted = format_text(concat!(
+            "from state={\n",
+            "score:.score\n",
+            "ready:.ready\n",
+            "type Int->Bool\n",
+            "atLeast threshold:ready\n",
+            " T|>score>=threshold\n",
+            " F|>False\n",
+            "type Text->Text\n",
+            "label fallback:ready\n",
+            " T|>\"ok\"\n",
+            " F|>fallback\n",
+            "}\n",
+        ));
+        assert_eq!(
+            formatted,
+            concat!(
+                "from state = {\n",
+                "    score: .score\n",
+                "    ready: .ready\n",
+                "\n",
+                "    type Int -> Bool\n",
+                "    atLeast threshold: ready\n",
+                "     T|> score >= threshold\n",
+                "     F|> False\n",
+                "\n",
+                "    type Text -> Text\n",
+                "    label fallback: ready\n",
+                "     T|> \"ok\"\n",
+                "     F|> fallback\n",
                 "}\n",
             )
         );

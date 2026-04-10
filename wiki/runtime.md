@@ -108,6 +108,21 @@ This change keeps the scheduler semantics the same — topological, transactiona
 reads within a tick — but makes the storage class visible in the runtime model so later phases
 can route native kernels directly into raw slots without rewriting commit logic again.
 
+### Partition-driven linked runtime ticks
+
+Phase 5 moved the linked runtime off the coarse `SignalGraph::batches()` traversal and onto the
+`ReactiveProgram` sidecar:
+
+- `ReactiveProgram` partitions are now root-cone slices, not just batch aliases
+- disjoint same-batch cones split into separate partitions with contiguous topo slices
+- `BackendLinkedRuntime::tick()` uses a `ReactiveProgram`-driven scheduler path when the linked
+  assembly graph matches the runtime graph
+- task-only helper runtimes whose scheduler graph is synthesized separately still fall back to the
+  generic batch tick
+
+This keeps ordinary scheduler semantics unchanged while letting linked runtime execution skip
+unaffected partitions in deterministic partition order.
+
 Thread model: `WorkerPublicationSender` is `Send`; the scheduler itself is single-threaded (main thread).
 
 ### 2026-04-08 live-click latency note

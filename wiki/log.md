@@ -130,6 +130,19 @@ signal values.
 - Added runtime tests covering raw commit/clear, raw-to-store-managed transitions, and mixed
   pending dependency reads
 
+## [2026-04-10] ingest | Phase 5 partition-driven linked ticks
+
+Documented the final signal-refactor phase that switched linked-runtime ticking onto `ReactiveProgram`
+partitions.
+
+- `crates/aivi-runtime/src/reactive_program.rs`: partitions now group disjoint same-batch signals by
+  identical root-signal cones and expose contiguous topo slices plus partition root metadata
+- `crates/aivi-runtime/src/scheduler.rs`: added a `ReactiveProgram`-driven tick order alongside the
+  existing graph-batch traversal
+- `crates/aivi-runtime/src/startup/linked_runtime.rs`: linked ticks use the program-driven path when
+  the assembly graph matches the runtime graph, with a fallback to the generic path for task-only
+  helper runtimes
+
 ## [2026-04-09] ingest | From selector body signal lifting
 
 Documented the HIR/typecheck fix that lets parameterized `from` selector bodies read earlier

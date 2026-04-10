@@ -15,13 +15,17 @@ use aivi_ffi_call::{
 };
 
 use crate::{
-    BackendExecutionEngine, BackendExecutionEngineKind, BackendExecutionOptions, EvalFrame,
-    AbiPassMode, EvaluationCallProfile, EvaluationError, ItemId, KernelEvaluationProfile,
+    AbiPassMode, BackendExecutionEngine, BackendExecutionEngineKind, BackendExecutionOptions,
+    EvalFrame, EvaluationCallProfile, EvaluationError, ItemId, KernelEvaluationProfile,
     KernelEvaluator, KernelExprId, KernelFingerprint, KernelId, LayoutId, LayoutKind,
     PrimitiveType, Program, RuntimeBigInt, RuntimeCallable, RuntimeDecimal, RuntimeFloat,
     RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeValue, TASK_COMPOSITION_KERNEL_ID,
-    TaskFunctionApplier, cache::compile_kernel_jit_cached, codegen::CompiledJitKernel,
-    compute_kernel_fingerprint, program::ItemKind, runtime::{coerce_runtime_value, strip_signal},
+    TaskFunctionApplier,
+    cache::compile_kernel_jit_cached,
+    codegen::CompiledJitKernel,
+    compute_kernel_fingerprint,
+    program::ItemKind,
+    runtime::{coerce_runtime_value, strip_signal},
 };
 
 pub(crate) struct LazyJitExecutionEngine<'a> {
@@ -45,7 +49,11 @@ impl<'a> LazyJitExecutionEngine<'a> {
         Self::with_profile(program, options, true)
     }
 
-    fn with_profile(program: &'a Program, options: BackendExecutionOptions, profiled: bool) -> Self {
+    fn with_profile(
+        program: &'a Program,
+        options: BackendExecutionOptions,
+        profiled: bool,
+    ) -> Self {
         let fallback = if profiled {
             KernelEvaluator::new_profiled(program)
         } else {
@@ -298,9 +306,9 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             Err(CompiledKernelFailure::Fallback) => {
                 self.kernel_plans
                     .insert(fingerprint, CachedKernelPlan::Fallback);
-                let result = self
-                    .fallback
-                    .evaluate_signal_body_kernel(kernel_id, environment, globals)?;
+                let result =
+                    self.fallback
+                        .evaluate_signal_body_kernel(kernel_id, environment, globals)?;
                 self.refresh_profile();
                 result
             }
@@ -487,7 +495,9 @@ mod tests {
     };
     use aivi_base::SourceDatabase;
     use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
-    use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
+    use aivi_lambda::{
+        lower_module as lower_lambda_module, validate_module as validate_lambda_module,
+    };
     use aivi_syntax::parse_module;
 
     fn lower_text(path: &str, text: &str) -> Program {
@@ -510,7 +520,8 @@ mod tests {
         let core = lower_core_module(hir.module()).expect("HIR should lower into typed core");
         validate_core_module(&core).expect("typed core should validate before backend lowering");
         let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
-        validate_lambda_module(&lambda).expect("typed lambda should validate before backend lowering");
+        validate_lambda_module(&lambda)
+            .expect("typed lambda should validate before backend lowering");
 
         let backend = lower_backend_module(&lambda).expect("backend lowering should succeed");
         validate_program(&backend).expect("backend program should validate");

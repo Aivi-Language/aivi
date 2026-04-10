@@ -459,7 +459,10 @@ signal next = increment base
                 native.dependency_layouts.as_ref(),
                 linked_next.dependency_layouts.as_ref()
             );
-            assert_eq!(native.result_layout, lowered.backend.kernels()[body_kernel].result_layout);
+            assert_eq!(
+                native.result_layout,
+                lowered.backend.kernels()[body_kernel].result_layout
+            );
         }
         LinkedEvalLane::Fallback => {
             panic!("simple arithmetic derived signal should link onto the native lane")
@@ -642,10 +645,14 @@ signal total = left + right
     let left_port = activation_port_for_owner(&linked, lowered.hir.module(), &first, "leftInput");
     let right_port = activation_port_for_owner(&linked, lowered.hir.module(), &first, "rightInput");
     left_port
-        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(1)))
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            1,
+        )))
         .expect("left input publication should succeed");
     right_port
-        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(10)))
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            10,
+        )))
         .expect("right input publication should succeed");
     linked
         .tick_with_source_lifecycle()
@@ -656,9 +663,13 @@ signal total = left + right
     );
 
     left_port
-        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(20)))
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            20,
+        )))
         .expect("left update publication should succeed");
-    let outcome = linked.tick().expect("follow-up linked runtime tick should succeed");
+    let outcome = linked
+        .tick()
+        .expect("follow-up linked runtime tick should succeed");
 
     assert_eq!(
         outcome.committed(),
@@ -1703,7 +1714,11 @@ signal total : Signal Int = ready | readyAndEnabled
         .values()
         .filter(|clause| clause.target == total_signal)
         .collect::<Vec<_>>();
-    assert_eq!(clauses.len(), 2, "fixture should link all non-seed reactive clauses");
+    assert_eq!(
+        clauses.len(),
+        2,
+        "fixture should link all non-seed reactive clauses"
+    );
     for clause in clauses {
         assert!(
             matches!(clause.guard_eval_lane, LinkedEvalLane::Fallback),
