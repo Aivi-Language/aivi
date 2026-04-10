@@ -1460,7 +1460,7 @@ mod tests {
             .expect("reversi fixture should expose the initial legal human move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, terminal_timeout, || {
+            pump_run_session_until(&harness, &context, terminal_timeout, || {
                 debug_signal_value_for(&harness, "phase").contains("HumanReady")
                     && !has_sensitive_button_by_label(&harness, "◌")
                     && debug_signal_value_for(&harness, "state") != opening_state
@@ -1486,7 +1486,7 @@ mod tests {
         );
         restart.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(250), || {
                 debug_signal_value_for(&harness, "state") == opening_state
                     && has_sensitive_button_by_label(&harness, "◌")
             }),
@@ -1529,6 +1529,75 @@ mod tests {
         while context.pending() {
             context.iteration(false);
         }
+        predicate()
+    }
+
+    fn pump_run_session_step(
+        harness: &super::RunSessionHarness,
+        context: &gtk::glib::MainContext,
+    ) {
+        let control = harness.control();
+        let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let error = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let done = finished.clone();
+        let failure = error.clone();
+        control
+            .request_on_main_context(move |access| {
+                if let Err(err) = access.process_pending_work() {
+                    *failure.lock().expect("run-session failure lock") = Some(err);
+                }
+                done.store(true, std::sync::atomic::Ordering::SeqCst);
+            })
+            .expect("run-session test should queue a main-context work step");
+        let deadline = Instant::now() + Duration::from_millis(50);
+        while Instant::now() < deadline
+            && !finished.load(std::sync::atomic::Ordering::SeqCst)
+        {
+            while context.pending() {
+                context.iteration(false);
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        while context.pending() {
+            context.iteration(false);
+        }
+        assert!(
+            finished.load(std::sync::atomic::Ordering::SeqCst),
+            "run-session step should complete promptly"
+        );
+        if let Some(err) = error.lock().expect("run-session failure lock").take() {
+            panic!("run-session step should process cleanly: {err}");
+        }
+    }
+
+    fn pump_run_session_context(
+        harness: &super::RunSessionHarness,
+        context: &gtk::glib::MainContext,
+        duration: Duration,
+    ) {
+        let deadline = Instant::now() + duration;
+        while Instant::now() < deadline {
+            pump_run_session_step(harness, context);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        pump_run_session_step(harness, context);
+    }
+
+    fn pump_run_session_until(
+        harness: &super::RunSessionHarness,
+        context: &gtk::glib::MainContext,
+        timeout: Duration,
+        mut predicate: impl FnMut() -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            pump_run_session_step(harness, context);
+            if predicate() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        pump_run_session_step(harness, context);
         predicate()
     }
 
@@ -1921,7 +1990,7 @@ export main
         harness
             .present_root_windows()
             .expect("presenting the run-session window should release startup timers");
-        pump_context(&context, Duration::from_millis(650));
+        pump_run_session_context(&harness, &context, Duration::from_millis(650));
         let advanced_board = board_text_for(&harness, board_item);
         assert!(
             head_x(&advanced_board) > initial_head_x,
@@ -2151,7 +2220,7 @@ export main
             .expect("presenting the reversi window should release startup-held timers");
         let initial_hydration = harness.with_access(|access| access.latest_applied_hydration());
         let opening_red_count = button_label_count_for(&harness, "🔴");
-        pump_context(&context, Duration::from_millis(650));
+        pump_run_session_context(&harness, &context, Duration::from_millis(650));
         assert_eq!(
             harness.with_access(|access| access.latest_applied_hydration()),
             initial_hydration,
@@ -2165,7 +2234,7 @@ export main
             .expect("reversi board should still expose a legal opening move after idling");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "an idle reversi session should still accept the first human move"
@@ -2200,7 +2269,7 @@ export main
 
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "the opening human move should land before attempting a restart"
@@ -2208,7 +2277,7 @@ export main
 
         restart.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(250), || {
                 debug_signal_value_for(&harness, "state") == opening_state
             }),
             "restart should restore the opening board even if the AI turn had already started (phase: {}, state: {})",
@@ -2269,13 +2338,13 @@ export main
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "the first human move should paint its red stones without waiting for the AI turn"
         );
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_run_session_until(&harness, &context, Duration::from_secs(4), || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌")
                         .is_some_and(|button| button.is_sensitive())
@@ -2295,7 +2364,7 @@ export main
         let second_turn_red_count = button_label_count_for(&harness, "🔴");
         second_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > second_turn_red_count
             }),
             "the second human move should also paint its red stones right away"
@@ -2325,12 +2394,12 @@ export main
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "clicking a legal move should put the new red stone on the board right away"
         );
-        pump_context(&context, Duration::from_millis(100));
+        pump_run_session_context(&harness, &context, Duration::from_millis(100));
         assert!(
             !has_sensitive_button_by_label(&harness, "◌"),
             "the first move should promptly hand control away from the human player"
@@ -2342,20 +2411,20 @@ export main
             "the board should stay visually unchanged while the computer is only thinking"
         );
         assert!(
-            pump_until(&context, Duration::from_millis(600), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(600), || {
                 button_label_count_for(&harness, "⚪") > thinking_white_count
                     && !has_sensitive_button_by_label(&harness, "◌")
             }),
             "the computer target should flash onto the board before the move commits"
         );
         assert!(
-            !pump_until(&context, Duration::from_millis(600), || {
+            !pump_run_session_until(&harness, &context, Duration::from_millis(600), || {
                 has_sensitive_button_by_label(&harness, "◌")
             }),
             "the computer move should not commit before the flash sequence finishes"
         );
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_run_session_until(&harness, &context, Duration::from_secs(4), || {
                 has_sensitive_button_by_label(&harness, "◌")
             }),
             "after the computer flash sequence the game should return to a playable human turn (phase: {}, state: {})",
@@ -2364,7 +2433,7 @@ export main
         );
 
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_run_session_until(&harness, &context, Duration::from_secs(4), || {
                 has_sensitive_button_by_label(&harness, "◌")
             }),
             "after the AI reply the GTK tree should expose a clickable human move"
@@ -2374,7 +2443,7 @@ export main
         let second_turn_red_count = button_label_count_for(&harness, "🔴");
         second_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > second_turn_red_count
             }),
             "the second human move should still land without crashing (phase: {}, state: {})",
@@ -2411,12 +2480,12 @@ export main
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_run_session_until(&harness, &context, Duration::from_millis(100), || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "opening move should land before profiling hydration"
         );
-        pump_context(&context, Duration::from_millis(100));
+        pump_run_session_context(&harness, &context, Duration::from_millis(100));
         assert!(
             !has_sensitive_button_by_label(&harness, "◌"),
             "profiling should sample the live reversi session after it has left the opening human turn"

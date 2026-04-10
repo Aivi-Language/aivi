@@ -165,6 +165,13 @@ The tiebreaker semantics (fewer flips wins when positional scores are equal) ali
 - Pure helper flows lean much harder on selected-subject headers, record-selector subject picks, record shorthand, pipe memos, and `T|>` / `F|>` routing.
 - The live GTK-facing boolean helper chain kept its older argument order after refactoring, because that remains the stable shape exercised by the Reversi run-session tests.
 
+### 2026-04-10 run-path compatibility note
+
+- `aivi check demos/reversi.aivi` can succeed while the live run path still fails later in typed-core/runtime preparation if demo helpers lean on implicit `. == value` comparator lambdas.
+- Reversi now uses an explicit `coordEq : Coord -> Coord -> Bool` helper in the `listContains` sites that feed both gameplay checks and markup-facing state helpers.
+- `clickState` also routes through `stateLegalAt` instead of branching directly on the inline legality expression, keeping the truthy/falsy subject shape explicit for the run path.
+- This was handled as a demo cleanup, not a compiler semantics expansion: the goal was to put the showcase back onto the stable subset already exercised by `aivi run` / MCP tests.
+
 ---
 
 ## Summary table

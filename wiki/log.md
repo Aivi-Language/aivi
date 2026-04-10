@@ -232,3 +232,12 @@ Created [equality-semantics.md](equality-semantics.md) to capture current behavi
 - concrete closed sums/records/domains do get compiler-derived structural `Eq`
 - open type parameters still need explicit `Eq` constraints
 - `coordEq` / `cellEq` in demos mainly exist to pass equality into comparator-taking list helpers, not because direct `Coord == Coord` is unsupported
+
+## [2026-04-10] ingest | reversi run-path cleanup
+
+Read `demos/reversi.aivi`, `crates/aivi-hir/src/general_expr_elaboration.rs`, `crates/aivi-hir/src/truthy_falsy_elaboration.rs`, `crates/aivi-cli/src/run_session.rs`, and `crates/aivi-cli/src/mcp.rs`.
+
+Updated [demo-audit.md](demo-audit.md) with the Reversi run-path compatibility fix:
+- replaced implicit `. == cell` comparator lambdas with explicit `coordEq`
+- routed `clickState` through `stateLegalAt` so the run path sees an explicit Bool helper instead of an inline branch subject
+- documented that this fixes the typed-core/runtime launch blocker without widening compiler semantics
