@@ -4,7 +4,7 @@ fn lowers_domain_operators_into_backend_gate_kernels() {
         "backend-domain-operators.aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
     type Duration -> Duration -> Bool
@@ -59,19 +59,57 @@ signal slowWindows : Signal Window =
                         &predicate_kernel.exprs()[arguments[0]].kind,
                         KernelExprKind::Projection { .. }
                     ));
-                    assert!(matches!(
-                        &predicate_kernel.exprs()[arguments[1]].kind,
-                        KernelExprKind::SuffixedInteger(_)
-                    ));
+                    match &predicate_kernel.exprs()[arguments[1]].kind {
+                        KernelExprKind::Apply {
+                            callee,
+                            arguments: suffix_args,
+                        } => {
+                            assert_eq!(suffix_args.len(), 1);
+                            assert!(matches!(
+                                &predicate_kernel.exprs()[suffix_args[0]].kind,
+                                KernelExprKind::Integer(_)
+                            ));
+                            match &predicate_kernel.exprs()[*callee].kind {
+                                KernelExprKind::Item(item_id) => {
+                                    assert!(backend.items()[*item_id].name.ends_with("::ms"));
+                                }
+                                other => panic!(
+                                    "expected nested add suffix operand to lower as an item apply, found {other:?}"
+                                ),
+                            }
+                        }
+                        other => panic!(
+                            "expected nested add suffix operand to lower as a constructor call, found {other:?}"
+                        ),
+                    }
                 }
                 other => panic!(
                     "expected outer comparison left operand to be a nested apply tree, found {other:?}"
                 ),
             }
-            assert!(matches!(
-                &predicate_kernel.exprs()[arguments[1]].kind,
-                KernelExprKind::SuffixedInteger(_)
-            ));
+            match &predicate_kernel.exprs()[arguments[1]].kind {
+                KernelExprKind::Apply {
+                    callee,
+                    arguments: suffix_args,
+                } => {
+                    assert_eq!(suffix_args.len(), 1);
+                    assert!(matches!(
+                        &predicate_kernel.exprs()[suffix_args[0]].kind,
+                        KernelExprKind::Integer(_)
+                    ));
+                    match &predicate_kernel.exprs()[*callee].kind {
+                        KernelExprKind::Item(item_id) => {
+                            assert!(backend.items()[*item_id].name.ends_with("::ms"));
+                        }
+                        other => panic!(
+                            "expected outer comparison suffix operand to lower as an item apply, found {other:?}"
+                        ),
+                    }
+                }
+                other => panic!(
+                    "expected outer comparison suffix operand to lower as a constructor call, found {other:?}"
+                ),
+            }
         }
         other => panic!(
             "expected predicate kernel to lower into an explicit apply tree, found {other:?}"
@@ -89,10 +127,7 @@ fn runtime_evaluates_domain_operator_items_and_structural_equality() {
         evaluator
             .evaluate_item(find_item(&backend, "total"), &globals)
             .expect("domain operator item should evaluate"),
-        RuntimeValue::SuffixedInteger {
-            raw: "15".into(),
-            suffix: "ms".into(),
-        }
+        RuntimeValue::Int(15)
     );
     assert_eq!(
         evaluator
@@ -105,7 +140,7 @@ fn runtime_evaluates_domain_operator_items_and_structural_equality() {
         "backend-domain-equality-runtime.aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
 
@@ -185,14 +220,16 @@ fn runtime_evaluates_inline_pipe_domain_member_calls() {
         "backend-inline-pipe-domain-member-runtime.aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
+    type Duration -> Int
+    extract duration = duration.carrier
 
 type Duration -> Int
-func extract = d => d.carrier
+func unwrap = duration => extract duration
 
 value raw : Int =
     10ms
-     |> extract
+     |> unwrap
 "#,
     );
     let mut evaluator = KernelEvaluator::new(&backend);
@@ -213,9 +250,9 @@ type Builder = Int -> Duration
 
 domain Duration over Int
     type Builder
-    make raw = raw
+    make raw = Duration raw
     type Duration -> Int
-    extract duration = duration
+    extract duration = duration.carrier
 
 value raw : Int = extract (make 10)
 "#,
@@ -235,7 +272,7 @@ fn runtime_evaluates_domain_operator_gate_predicates() {
         "backend-domain-operators-runtime.aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
     type Duration -> Duration -> Bool
@@ -262,17 +299,11 @@ signal slowWindows : Signal Window =
 
     let subject = RuntimeValue::Record(vec![RuntimeRecordField {
         label: "delay".into(),
-        value: RuntimeValue::SuffixedInteger {
-            raw: "10".into(),
-            suffix: "ms".into(),
-        },
+        value: RuntimeValue::Int(10),
     }]);
     let faster = RuntimeValue::Record(vec![RuntimeRecordField {
         label: "delay".into(),
-        value: RuntimeValue::SuffixedInteger {
-            raw: "6".into(),
-            suffix: "ms".into(),
-        },
+        value: RuntimeValue::Int(6),
     }]);
     let mut evaluator = KernelEvaluator::new(&backend);
     assert_eq!(
@@ -288,4 +319,3 @@ signal slowWindows : Signal Window =
         RuntimeValue::Bool(false)
     );
 }
-

@@ -1030,7 +1030,7 @@ fn linked_runtime_keeps_recurrent_task_body_gap_explicit() {
         "runtime-startup-task-body-gap.aivi",
         r#"
 domain Retry over Int
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 
 fun step:Int = n:Int=>    n
 
@@ -2122,7 +2122,7 @@ fn linked_runtime_task_values_lower_to_zero_parameter_backend_items() {
         "runtime-startup-task-parameters-invariant.aivi",
         r#"
 domain Retry over Int
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 
 fun keep:Int = n:Int=>    n
 
@@ -2304,7 +2304,7 @@ fn linked_runtime_reemits_delay_stage_once_after_interval() {
         "runtime-startup-delay-signal.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 }
 
 provider custom.feed
@@ -2395,11 +2395,11 @@ fn linked_runtime_reemits_burst_stage_exactly_n_times() {
         "runtime-startup-burst-signal.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 provider custom.feed
@@ -2484,11 +2484,11 @@ fn linked_runtime_does_not_burst_initial_reactive_default_values() {
         "runtime-startup-burst-reactive-default.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 provider custom.feed
@@ -2572,7 +2572,7 @@ fn linked_runtime_replaces_in_flight_delay_schedules_with_newer_payloads() {
         "runtime-startup-delay-retrigger-signal.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 }
 
 provider custom.feed
@@ -2678,11 +2678,11 @@ fn linked_runtime_resumes_composed_temporal_stages_after_helper_wakeups() {
         "runtime-startup-delay-burst-composed-signal.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 provider custom.feed

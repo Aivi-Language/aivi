@@ -1,8 +1,8 @@
 use aivi.api (ApiSource, ApiError)
 use aivi.http (DecodeMode)
 
-domain Duration over Int = { literal sec : Int -> Duration }
-domain Retry over Int = { literal times : Int -> Retry }
+domain Duration over Int = { suffix sec : Int = value => Duration value }
+domain Retry over Int = { suffix times : Int = value => Retry value }
 
 type Pet = { id: Int, name: Text, status: Option Text }
 type NewPet = { name: Text, status: Option Text }

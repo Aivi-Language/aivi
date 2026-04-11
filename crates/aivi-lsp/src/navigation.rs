@@ -707,12 +707,17 @@ impl NavigationAnalysis {
                 text.contains(binary_operator_text(*operator))
             }
             NavigationSite::LiteralSuffix { resolution } => match resolution {
-                ResolutionState::Resolved(resolution) => self
-                    .domain_member_name_text(DomainMemberResolution {
-                        domain: resolution.domain,
-                        member_index: resolution.member_index,
-                    })
+                ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(resolution)) => self
+                    .domain_member_name_text(*resolution)
                     .is_some_and(|name| span_text_matches_name(text, name)),
+                ResolutionState::Resolved(LiteralSuffixResolution::Import(import)) => self
+                    .module()
+                    .imports()
+                    .get(*import)
+                    .is_some_and(|binding| {
+                        span_text_matches_name(text, binding.imported_name.text())
+                            || span_text_matches_name(text, binding.local_name.text())
+                    }),
                 ResolutionState::Unresolved => true,
             },
             NavigationSite::ItemDecl { item } => self
@@ -746,7 +751,7 @@ impl NavigationAnalysis {
                 self.definition_targets_for_type_reference(db, name, resolution)
             }
             NavigationSite::LiteralSuffix { resolution } => {
-                self.definition_targets_for_literal_suffix(resolution)
+                self.definition_targets_for_literal_suffix(db, resolution)
             }
             NavigationSite::BindingDecl { binding } => self.binding_targets(*binding),
             NavigationSite::TypeParameterDecl { parameter } => {
@@ -859,6 +864,9 @@ impl NavigationAnalysis {
             ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => {
                 self.domain_member_targets(*resolution)
             }
+            ResolutionState::Resolved(TermResolution::DomainConstructor(item)) => {
+                self.item_targets(*item, Some(name))
+            }
             ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(candidates)) => {
                 let mut targets = Vec::new();
                 for candidate in candidates.iter().copied() {
@@ -917,15 +925,16 @@ impl NavigationAnalysis {
 
     fn definition_targets_for_literal_suffix(
         &self,
+        db: &RootDatabase,
         resolution: &ResolutionState<LiteralSuffixResolution>,
     ) -> Vec<NavigationTarget> {
         match resolution {
             ResolutionState::Unresolved => Vec::new(),
-            ResolutionState::Resolved(resolution) => {
-                self.domain_member_targets(DomainMemberResolution {
-                    domain: resolution.domain,
-                    member_index: resolution.member_index,
-                })
+            ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(resolution)) => {
+                self.domain_member_targets(*resolution)
+            }
+            ResolutionState::Resolved(LiteralSuffixResolution::Import(import)) => {
+                self.import_definition_targets_for_import_id(db, *import)
             }
         }
     }
@@ -975,6 +984,7 @@ impl NavigationAnalysis {
             | ResolutionState::Resolved(TermResolution::Import(_))
             | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
+            | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => Vec::new(),
@@ -1205,6 +1215,7 @@ impl NavigationAnalysis {
             }
             ImportBindingMetadata::Value { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
+            | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::BuiltinTerm(_) => {

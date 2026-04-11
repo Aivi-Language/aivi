@@ -1,7 +1,7 @@
 domain Duration over Int
 
 domain Path over Text = {
-    literal root : Text -> Path
+    suffix root : Text = value => Path value
     type Path -> Text -> Path
     (/)
 }

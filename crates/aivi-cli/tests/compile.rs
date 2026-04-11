@@ -786,7 +786,7 @@ fn compile_reports_codegen_limits_without_emitting_fake_artifacts() {
         "aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
     type Duration -> Duration -> Bool

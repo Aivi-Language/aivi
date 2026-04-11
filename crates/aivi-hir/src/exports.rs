@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crate::{
-    BuiltinTerm, DecoratorPayload, DeprecatedDecorator, DeprecationNotice, DomainMemberKind,
-    ExportItem, ExportResolution, ImportBindingMetadata, ImportBundleKind, ImportId,
-    ImportRecordField, ImportSumVariant, ImportTypeDefinition, ImportValueType,
-    ImportedDomainLiteralSuffix, Item, ItemId, Module, RecordExpr, ResolutionState, TypeId,
-    TypeItemBody, TypeKind, TypeParameterId, TypeReference, TypeResolution,
+    BuiltinTerm, BuiltinType, DecoratorPayload, DeprecatedDecorator, DeprecationNotice,
+    DomainMemberKind, ExportItem, ExportResolution, ImportBindingMetadata, ImportBundleKind,
+    ImportId, ImportRecordField, ImportSumVariant, ImportTypeDefinition, ImportValueType,
+    ImportedDomainLiteralSuffix, Item, ItemId, LiteralSuffixBase, Module, RecordExpr,
+    ResolutionState, TypeId, TypeItemBody, TypeKind, TypeParameterId, TypeReference,
+    TypeResolution,
 };
 
 /// The kind of an exported name.
@@ -53,6 +54,19 @@ impl ExportedNames {
 
     pub fn len(&self) -> usize {
         self.names.len()
+    }
+}
+
+fn domain_suffix_base(module: &Module, annotation: TypeId) -> Option<LiteralSuffixBase> {
+    let type_node = module.types().get(annotation)?;
+    let parameter = match &type_node.kind {
+        TypeKind::Arrow { parameter, .. } => *parameter,
+        _ => annotation,
+    };
+    match import_value_type(module, parameter)? {
+        ImportValueType::Primitive(BuiltinType::Int) => Some(LiteralSuffixBase::Int),
+        ImportValueType::Primitive(BuiltinType::Decimal) => Some(LiteralSuffixBase::Decimal),
+        _ => None,
     }
 }
 
@@ -390,9 +404,13 @@ fn explicit_item_exported_name(
                     .filter(|&(_i, m)| {
                         m.kind == DomainMemberKind::Literal && m.name.text().chars().count() >= 2
                     })
-                    .map(|(i, m)| ImportedDomainLiteralSuffix {
-                        name: m.name.text().into(),
-                        member_index: i,
+                    .filter_map(|(i, m)| {
+                        Some(ImportedDomainLiteralSuffix {
+                            name: m.name.text().into(),
+                            member_index: i,
+                            base: domain_suffix_base(module, m.annotation)?,
+                            callable_type: import_value_type(module, m.annotation),
+                        })
                     })
                     .collect();
                 ImportBindingMetadata::Domain {
@@ -509,9 +527,13 @@ fn item_to_exported_name(module: &Module, item_id: ItemId, item: &Item) -> Optio
                     .filter(|&(_i, m)| {
                         m.kind == DomainMemberKind::Literal && m.name.text().chars().count() >= 2
                     })
-                    .map(|(i, m)| ImportedDomainLiteralSuffix {
-                        name: m.name.text().into(),
-                        member_index: i,
+                    .filter_map(|(i, m)| {
+                        Some(ImportedDomainLiteralSuffix {
+                            name: m.name.text().into(),
+                            member_index: i,
+                            base: domain_suffix_base(module, m.annotation)?,
+                            callable_type: import_value_type(module, m.annotation),
+                        })
                     })
                     .collect();
                 ImportBindingMetadata::Domain {
@@ -1068,6 +1090,7 @@ fn resolve_type_constructor(
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::TypeConstructor { .. }
             | ImportBindingMetadata::Domain { .. }
+            | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::InstanceMember { .. } => None,

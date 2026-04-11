@@ -218,7 +218,10 @@ func __aivi_binary_neq = left right =>
 
 domain NonEmptyList A over List A = {
     type (List A) -> (NonEmptyList A)
-    lift items = items
+    lift items = NonEmptyList items
+
+    type NonEmptyList A -> (List A)
+    __aivi_nel_carrier nel = nel.carrier
 }
 
 type A -> (NonEmptyList A)
@@ -227,16 +230,16 @@ func __aivi_nel_singleton = item =>
 
 type A -> (NonEmptyList A) -> (NonEmptyList A)
 func __aivi_nel_cons = item nel =>
-    lift (append [item] nel.carrier)
+    lift (append [item] (__aivi_nel_carrier nel))
 
 type NonEmptyList A -> A
 func __aivi_nel_head = nel =>
-    nel.carrier
+    __aivi_nel_carrier nel
     ||> [h, ...ignored] -> h
 
 type NonEmptyList A -> (List A)
 func __aivi_nel_toList = nel =>
-    nel.carrier
+    __aivi_nel_carrier nel
 
 type A -> (List A) -> (NonEmptyList A)
 func __aivi_nel_fromHeadTail = h t =>
@@ -244,7 +247,7 @@ func __aivi_nel_fromHeadTail = h t =>
 
 type NonEmptyList A -> Int
 func __aivi_nel_length = nel =>
-    __aivi_list_length nel.carrier
+    __aivi_list_length (__aivi_nel_carrier nel)
 
 type A -> A -> A
 func __aivi_nel_lastStep = prev item =>
@@ -256,16 +259,16 @@ func __aivi_nel_lastOf = h t => t
 
 type NonEmptyList A -> A
 func __aivi_nel_last = nel =>
-    nel.carrier
+    __aivi_nel_carrier nel
     ||> [h, ...t] -> __aivi_nel_lastOf h t
 
 type (A -> B) -> (NonEmptyList A) -> (NonEmptyList B)
 func __aivi_nel_mapNel = transform nel =>
-    lift (__aivi_list_map transform nel.carrier)
+    lift (__aivi_list_map transform (__aivi_nel_carrier nel))
 
 type (NonEmptyList A) -> (NonEmptyList A) -> (NonEmptyList A)
 func __aivi_nel_appendNel = left right =>
-    lift (append left.carrier right.carrier)
+    lift (append (__aivi_nel_carrier left) (__aivi_nel_carrier right))
 
 type (List A) -> (Option A) -> (List A)
 func __aivi_nel_initAppendPrev = items prev => prev
@@ -286,14 +289,14 @@ func __aivi_nel_initExtract = state => state
 
 type NonEmptyList A -> (List A)
 func __aivi_nel_init = nel =>
-    nel.carrier
+    __aivi_nel_carrier nel
     |> reduce __aivi_nel_initStep ([], None)
     |> __aivi_nel_initExtract
 
 type (Option (NonEmptyList A)) -> A -> (Option (NonEmptyList A))
 func __aivi_nel_fromListStep = acc item => acc
     ||> None     -> Some (lift [item])
-    ||> Some nel -> Some (lift (append nel.carrier [item]))
+    ||> Some nel -> Some (lift (append (__aivi_nel_carrier nel) [item]))
 
 type (List A) -> (Option (NonEmptyList A))
 func __aivi_nel_fromList = items => items
@@ -655,11 +658,11 @@ func __aivi_text_nonEmpty = text => text == ""
     F|> True
 
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 "#;

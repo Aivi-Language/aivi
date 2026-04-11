@@ -1113,11 +1113,9 @@ fn lower_gate_runtime_expr_with_purity(
                         });
                     }
                     ExprKind::SuffixedInteger(literal) => {
-                        results.push(GateRuntimeExpr {
-                            span: expr.span,
-                            ty,
-                            kind: GateRuntimeExprKind::SuffixedInteger(literal),
-                        });
+                        results.push(lower_suffixed_integer_runtime_expr(
+                            module, expr.span, &literal, &ty, typing,
+                        )?);
                     }
                     ExprKind::AmbientSubject => {
                         results.push(GateRuntimeExpr {
@@ -1997,6 +1995,10 @@ fn runtime_reference_for_name(
             .sum_constructor_handle(*item_id, reference.path.segments().last().text())
             .map(GateRuntimeReference::SumConstructor)
             .unwrap_or(GateRuntimeReference::Item(*item_id))),
+        crate::ResolutionState::Resolved(TermResolution::DomainConstructor(item_id)) => module
+            .domain_constructor_handle(*item_id)
+            .map(GateRuntimeReference::DomainMember)
+            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span }),
         crate::ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => module
             .domain_member_handle(*resolution)
             .map(GateRuntimeReference::DomainMember)
@@ -2022,6 +2024,72 @@ fn runtime_reference_for_name(
             Err(GateElaborationBlocker::UnknownRuntimeExprType { span })
         }
     }
+}
+
+fn runtime_reference_for_literal_suffix(
+    module: &Module,
+    span: SourceSpan,
+    resolution: crate::LiteralSuffixResolution,
+) -> Result<GateRuntimeReference, GateElaborationBlocker> {
+    match resolution {
+        crate::LiteralSuffixResolution::DomainMember(resolution) => module
+            .domain_member_handle(resolution)
+            .map(GateRuntimeReference::DomainMember)
+            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span }),
+        crate::LiteralSuffixResolution::Import(import_id) => {
+            if let Some(item_id) = ambient_item_for_import(module, import_id) {
+                Ok(GateRuntimeReference::Item(item_id))
+            } else {
+                Ok(GateRuntimeReference::Import(import_id))
+            }
+        }
+    }
+}
+
+fn lower_suffixed_integer_runtime_expr(
+    module: &Module,
+    span: SourceSpan,
+    literal: &crate::SuffixedIntegerLiteral,
+    expected: &GateType,
+    typing: &mut GateTypeContext<'_>,
+) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let Some(lowered) = typing.lower_suffixed_integer_call(literal, expected) else {
+        return Err(GateElaborationBlocker::UnknownRuntimeExprType { span });
+    };
+    let callee = GateRuntimeExpr {
+        span,
+        ty: lowered.callee_type,
+        kind: GateRuntimeExprKind::Reference(runtime_reference_for_literal_suffix(
+            module,
+            span,
+            lowered.resolution,
+        )?),
+    };
+    let argument = GateRuntimeExpr {
+        span,
+        ty: match lowered.base {
+            crate::LiteralSuffixBase::Int => GateType::Primitive(crate::BuiltinType::Int),
+            crate::LiteralSuffixBase::Decimal => GateType::Primitive(crate::BuiltinType::Decimal),
+        },
+        kind: match lowered.base {
+            crate::LiteralSuffixBase::Int => GateRuntimeExprKind::Integer(IntegerLiteral {
+                raw: literal.raw.clone(),
+            }),
+            crate::LiteralSuffixBase::Decimal => {
+                GateRuntimeExprKind::Decimal(DecimalLiteral {
+                    raw: literal.raw.clone(),
+                })
+            }
+        },
+    };
+    Ok(GateRuntimeExpr {
+        span,
+        ty: expected.clone(),
+        kind: GateRuntimeExprKind::Apply {
+            callee: Box::new(callee),
+            arguments: vec![argument],
+        },
+    })
 }
 
 fn nested_pipe_runtime_unsupported_kind(
@@ -2070,7 +2138,9 @@ fn blocker_for_issue(issue: GateIssue) -> GateElaborationBlocker {
         GateIssue::UnknownField { path, subject, .. } => {
             GateElaborationBlocker::UnknownField { path, subject }
         }
-        GateIssue::AmbiguousDomainMember { span, .. }
+        GateIssue::UnknownLiteralSuffix { span, .. }
+        | GateIssue::AmbiguousLiteralSuffix { span, .. }
+        | GateIssue::AmbiguousDomainMember { span, .. }
         | GateIssue::AmbientSubjectOutsidePipe { span, .. }
         | GateIssue::AmbiguousDomainOperator { span, .. }
         | GateIssue::InvalidPipeStageInput { span, .. }
@@ -2323,7 +2393,7 @@ signal activeUsers:Signal User =
             "signal-gate-domain-operators.aivi",
             r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     (+) : Duration -> Duration -> Duration
     (>) : Duration -> Duration -> Bool
 }
@@ -2376,10 +2446,33 @@ signal slowWindows:Signal Window =
                                     ..
                                 }
                             ));
-                            assert!(matches!(
-                                &arguments[1].kind,
-                                GateRuntimeExprKind::SuffixedInteger(_)
-                            ));
+                            match &arguments[1].kind {
+                                GateRuntimeExprKind::Apply {
+                                    callee,
+                                    arguments: suffix_args,
+                                } => {
+                                    assert_eq!(suffix_args.len(), 1);
+                                    assert!(matches!(
+                                        &suffix_args[0].kind,
+                                        GateRuntimeExprKind::Integer(crate::IntegerLiteral { raw })
+                                            if raw.as_ref() == "5"
+                                    ));
+                                    match &callee.kind {
+                                        GateRuntimeExprKind::Reference(
+                                            GateRuntimeReference::DomainMember(handle),
+                                        ) => {
+                                            assert_eq!(handle.domain_name.as_ref(), "Duration");
+                                            assert_eq!(handle.member_name.as_ref(), "ms");
+                                        }
+                                        other => panic!(
+                                            "expected explicit suffix-constructor reference for nested add, found {other:?}"
+                                        ),
+                                    }
+                                }
+                                other => panic!(
+                                    "expected nested add operand to lower as a suffix constructor call, found {other:?}"
+                                ),
+                            }
                             match &callee.kind {
                                 GateRuntimeExprKind::Reference(
                                     GateRuntimeReference::DomainMember(handle),
@@ -2396,10 +2489,33 @@ signal slowWindows:Signal Window =
                             "expected nested explicit apply for domain addition, found {other:?}"
                         ),
                     }
-                    assert!(matches!(
-                        &arguments[1].kind,
-                        GateRuntimeExprKind::SuffixedInteger(_)
-                    ));
+                    match &arguments[1].kind {
+                        GateRuntimeExprKind::Apply {
+                            callee,
+                            arguments: suffix_args,
+                        } => {
+                            assert_eq!(suffix_args.len(), 1);
+                            assert!(matches!(
+                                &suffix_args[0].kind,
+                                GateRuntimeExprKind::Integer(crate::IntegerLiteral { raw })
+                                    if raw.as_ref() == "12"
+                            ));
+                            match &callee.kind {
+                                GateRuntimeExprKind::Reference(
+                                    GateRuntimeReference::DomainMember(handle),
+                                ) => {
+                                    assert_eq!(handle.domain_name.as_ref(), "Duration");
+                                    assert_eq!(handle.member_name.as_ref(), "ms");
+                                }
+                                other => panic!(
+                                    "expected explicit suffix-constructor reference for outer comparison, found {other:?}"
+                                ),
+                            }
+                        }
+                        other => panic!(
+                            "expected outer comparison right operand to lower as a suffix constructor call, found {other:?}"
+                        ),
+                    }
                 }
                 other => panic!(
                     "expected explicit apply tree for domain operator predicate, found {other:?}"
@@ -2507,7 +2623,7 @@ value joinedEmails:Text =
             "gate-inside-recurrence.aivi",
             r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 type Cursor = {
     hasNext: Bool

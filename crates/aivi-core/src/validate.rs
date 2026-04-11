@@ -892,15 +892,12 @@ fn validate_stage(
 }
 
 fn is_duration_stage_type(ty: &crate::ty::Type) -> bool {
-    matches!(
-        ty,
-        crate::ty::Type::Domain { name, .. } if name.as_ref() == "Duration"
-    )
+    ty.has_named_type("Duration")
 }
 
 fn is_burst_count_stage_type(ty: &crate::ty::Type) -> bool {
     matches!(ty, crate::ty::Type::Primitive(aivi_hir::BuiltinType::Int))
-        || matches!(ty, crate::ty::Type::Domain { name, .. } if name.as_ref() == "Retry")
+        || ty.has_named_type("Retry")
 }
 
 fn signal_payload_type(ty: &crate::ty::Type) -> Option<&crate::ty::Type> {

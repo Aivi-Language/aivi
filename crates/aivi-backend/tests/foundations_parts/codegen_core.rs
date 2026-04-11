@@ -411,7 +411,7 @@ fn cranelift_codegen_compiles_static_interpolated_text_item_bodies() {
         "backend-static-interpolated-text-codegen.aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
 
 type Status =
   | Idle
@@ -433,7 +433,7 @@ value folded:Text =
             .evaluate_item(folded, &BTreeMap::new())
             .expect("static interpolation should evaluate"),
         RuntimeValue::Text(
-            "count=7 ok=True ratio=3.5 cost=19.25d big=123n dur=15ms pair=(7, False) list=[7, 8] maybe=Some 7 status=Ready 9 not=True cmp=True fcmp=True same=True diff=True".into()
+            "count=7 ok=True ratio=3.5 cost=19.25d big=123n dur=15 pair=(7, False) list=[7, 8] maybe=Some 7 status=Ready 9 not=True cmp=True fcmp=True same=True diff=True".into()
         )
     );
 
@@ -870,4 +870,3 @@ value missingGreeting : Option Text = "hello"
     );
     assert!(!compiled.object().is_empty());
 }
-

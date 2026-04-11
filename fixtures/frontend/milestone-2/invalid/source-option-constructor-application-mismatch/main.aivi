@@ -12,11 +12,11 @@ type Map K V =
   | Entry K V (Map K V)
 
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 @source http.get "/users" with {

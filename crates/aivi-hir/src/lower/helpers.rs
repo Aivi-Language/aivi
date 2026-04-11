@@ -90,6 +90,10 @@ impl ResolveEnv {
         self.prefer_ambient_names = true;
     }
 
+    fn set_current_domain(&mut self, item: ItemId) {
+        self.current_domain = Some(item);
+    }
+
     fn lookup_term(&self, name: &str) -> Option<BindingId> {
         self.term_scopes
             .iter()
@@ -110,6 +114,10 @@ impl ResolveEnv {
 
     fn prefer_ambient_names(&self) -> bool {
         self.prefer_ambient_names
+    }
+
+    fn current_domain(&self) -> Option<ItemId> {
+        self.current_domain
     }
 
     fn bind_implicit_type_parameter(
@@ -1947,4 +1955,3 @@ fn closest_name<'a>(target: &str, candidates: &[&'a str]) -> Option<&'a str> {
         .min_by_key(|(d, _)| *d)
         .map(|(_, name)| name)
 }
-

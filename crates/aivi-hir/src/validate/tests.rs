@@ -1779,7 +1779,7 @@ fn resolved_validation_accepts_custom_source_parameterized_domain_literal_option
     let report = validate_resolved_text(
         "source-option-parameterized-domain-literal-options.aivi",
         "domain Tagged A B over Int = {\n\
-             \x20\x20\x20\x20literal tg : Int -> Tagged Int B\n\
+             \x20\x20\x20\x20suffix tg : Int = value => Tagged value\n\
              }\n\
              \n\
              provider custom.feed\n\
@@ -1800,11 +1800,11 @@ fn resolved_validation_accepts_custom_source_parameterized_domain_literal_option
 }
 
 #[test]
-fn resolved_validation_rejects_custom_source_domain_literal_constraint_mismatches() {
+fn resolved_validation_accepts_contextual_parameterized_domain_suffix_options() {
     let report = validate_resolved_text(
         "source-option-domain-literal-constraint-mismatch.aivi",
         "domain Tagged A B over Int = {\n\
-             \x20\x20\x20\x20literal tg : Int -> Tagged Int B\n\
+             \x20\x20\x20\x20suffix tg : Int = value => Tagged value\n\
              }\n\
              \n\
              provider custom.feed\n\
@@ -1813,18 +1813,14 @@ fn resolved_validation_rejects_custom_source_domain_literal_constraint_mismatche
              \n\
              @source custom.feed with {\n\
              \x20\x20\x20\x20tag: 1tg\n\
-             }\n\
-             signal updates : Signal Int\n",
+              }\n\
+              signal updates : Signal Int\n",
     );
 
-    let diagnostic = report
-        .diagnostics()
-        .iter()
-        .find(|diagnostic| diagnostic.code == Some(crate::codes::SOURCE_OPTION_TYPE_MISMATCH))
-        .expect("expected source option mismatch diagnostic");
-    assert_eq!(
-        diagnostic.message,
-        "source option `tag` for `custom.feed` expects `Tagged Text Bool`, but this expression proves `Tagged Int _`"
+    assert!(
+        report.is_ok(),
+        "contextual domain suffix selection should accept the source option: {:?}",
+        report.diagnostics()
     );
 }
 
@@ -2673,7 +2669,7 @@ fn source_option_root_contract_parameters_bind_fixed_point_domain_literal_fields
     let file_id = sources.add_file(
         "source-option-domain-literal-constructor-root.aivi",
         "domain Tagged A B over Int = {\n\
-             \x20\x20\x20\x20literal tg : Int -> Tagged Int B\n\
+             \x20\x20\x20\x20suffix tg : Int = value => Tagged value\n\
              }\n\
              \n\
              type Wrap B =\n\

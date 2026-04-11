@@ -44,6 +44,7 @@ pub(crate) fn item_type_name(item: &Item) -> String {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GateExprEnv {
     pub(crate) locals: HashMap<BindingId, GateType>,
+    pub(crate) current_domain: Option<ItemId>,
 }
 
 pub(crate) fn pipe_stage_subject_memo_type(
@@ -314,6 +315,15 @@ pub(crate) struct PipeFunctionSignatureMatch {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum GateIssue {
+    UnknownLiteralSuffix {
+        span: SourceSpan,
+        suffix: String,
+    },
+    AmbiguousLiteralSuffix {
+        span: SourceSpan,
+        suffix: String,
+        candidates: Vec<String>,
+    },
     InvalidPipeStageInput {
         span: SourceSpan,
         stage: &'static str,
@@ -372,6 +382,29 @@ pub(crate) enum DomainMemberSelection<T> {
     Unique(T),
     Ambiguous,
     NoMatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LiteralSuffixSelection {
+    Unique {
+        resolution: LiteralSuffixResolution,
+        base: LiteralSuffixBase,
+        result: GateType,
+    },
+    Ambiguous {
+        candidates: Vec<String>,
+    },
+    NoMatch {
+        candidates: Vec<String>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LiteralSuffixCallLowering {
+    pub(crate) resolution: LiteralSuffixResolution,
+    pub(crate) base: LiteralSuffixBase,
+    pub(crate) callee_type: GateType,
+    pub(crate) result_type: GateType,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

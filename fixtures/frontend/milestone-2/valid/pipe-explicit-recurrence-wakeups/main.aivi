@@ -1,9 +1,9 @@
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 func step = x =>

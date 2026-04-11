@@ -1929,6 +1929,13 @@ impl<'a> ModuleLowerer<'a> {
                     })
                     .unwrap_or(Reference::HirItem(resolution.domain))
             }
+            aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::DomainConstructor(
+                item,
+            )) => self
+                .hir
+                .domain_constructor_handle(*item)
+                .map(Reference::DomainMember)
+                .unwrap_or(Reference::HirItem(*item)),
             aivi_hir::ResolutionState::Resolved(aivi_hir::TermResolution::Builtin(term)) => {
                 Reference::Builtin(*term)
             }
@@ -2490,6 +2497,11 @@ impl<'a> ModuleLowerer<'a> {
             ImportBindingMetadata::Value { ty }
             | ImportBindingMetadata::IntrinsicValue { ty, .. }
             | ImportBindingMetadata::InstanceMember { ty, .. } => ty,
+            ImportBindingMetadata::DomainSuffix { .. } => {
+                binding.callable_type.as_ref().ok_or_else(|| {
+                    unsupported("domain suffix imports do not carry a lowered callable type")
+                })?
+            }
             ImportBindingMetadata::AmbientValue { .. } => {
                 return Err(unsupported(
                     "ambient imports do not carry lowered value types",
@@ -3810,4 +3822,3 @@ impl TruthyFalsyArmSpec {
         }
     }
 }
-

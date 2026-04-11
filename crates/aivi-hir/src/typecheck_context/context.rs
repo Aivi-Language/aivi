@@ -1014,6 +1014,7 @@ impl<'a> GateTypeContext<'a> {
             }
             ImportBindingMetadata::TypeConstructor { .. }
             | ImportBindingMetadata::Domain { .. }
+            | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::BuiltinType(_)
@@ -1843,6 +1844,7 @@ impl<'a> GateTypeContext<'a> {
             | ResolutionState::Resolved(TermResolution::Import(_))
             | ResolutionState::Resolved(TermResolution::ClassMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
+            | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
             | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_)) => None,
@@ -1916,6 +1918,7 @@ impl<'a> GateTypeContext<'a> {
             | ResolutionState::Resolved(TermResolution::Import(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
+            | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
             | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_)) => None,
@@ -3348,19 +3351,34 @@ impl<'a> GateTypeContext<'a> {
                 ty: Some(GateType::Primitive(BuiltinType::BigInt)),
                 ..GateExprInfo::default()
             },
-            ExprKind::SuffixedInteger(literal) => GateExprInfo {
-                ty: match literal.resolution.as_ref() {
-                    ResolutionState::Resolved(resolution) => {
-                        let domain = &self.module.items()[resolution.domain];
-                        Some(GateType::Domain {
-                            item: resolution.domain,
-                            name: item_type_name(domain),
-                            arguments: Vec::new(),
-                        })
-                    }
-                    ResolutionState::Unresolved => None,
+            ExprKind::SuffixedInteger(literal) => match self
+                .select_suffixed_integer_candidate(&literal, None)
+            {
+                LiteralSuffixSelection::Unique { result, .. } => GateExprInfo {
+                    ty: Some(result),
+                    ..GateExprInfo::default()
                 },
-                ..GateExprInfo::default()
+                LiteralSuffixSelection::Ambiguous { candidates } => GateExprInfo {
+                    issues: vec![GateIssue::AmbiguousLiteralSuffix {
+                        span: literal.suffix.span(),
+                        suffix: literal.suffix.text().to_owned(),
+                        candidates,
+                    }],
+                    ..GateExprInfo::default()
+                },
+                LiteralSuffixSelection::NoMatch { candidates } => {
+                    if candidates.is_empty() {
+                        GateExprInfo {
+                            issues: vec![GateIssue::UnknownLiteralSuffix {
+                                span: literal.suffix.span(),
+                                suffix: literal.suffix.text().to_owned(),
+                            }],
+                            ..GateExprInfo::default()
+                        }
+                    } else {
+                        GateExprInfo::default()
+                    }
+                }
             },
             ExprKind::Text(text) => {
                 let mut info = GateExprInfo {
@@ -3552,7 +3570,7 @@ impl<'a> GateTypeContext<'a> {
                     }
                 };
                 if let Some(subject) = subject {
-                    match self.project_type(&subject, &path) {
+                    match self.project_type(&subject, &path, env.current_domain) {
                         Ok(projected) => info.ty = Some(projected),
                         Err(issue) => info.issues.push(issue),
                     }
@@ -3580,6 +3598,13 @@ impl<'a> GateTypeContext<'a> {
                 if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
                     if let Some(info) = self
                         .infer_builtin_constructor_apply_expr(reference, &arguments, env, ambient)
+                    {
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
+                    }
+                    if let Some(info) =
+                        self.infer_domain_constructor_apply_expr(reference, &arguments, env, ambient)
                     {
                         return self.finalize_expr_info(
                             self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
@@ -3850,6 +3875,10 @@ impl<'a> GateTypeContext<'a> {
                     ..GateExprInfo::default()
                 }
             }
+            ResolutionState::Resolved(TermResolution::DomainConstructor(item_id)) => GateExprInfo {
+                ty: self.infer_domain_constructor_name_type(*item_id),
+                ..GateExprInfo::default()
+            },
             ResolutionState::Resolved(TermResolution::DomainMember(_)) => GateExprInfo {
                 ty: self.infer_domain_member_name_type(reference),
                 ..GateExprInfo::default()
@@ -3945,6 +3974,385 @@ impl<'a> GateTypeContext<'a> {
             item.parameters.clone(),
             variant.fields.clone(),
         ))
+    }
+
+    fn domain_constructor_type(
+        &self,
+        item_id: ItemId,
+        substitutions: &HashMap<TypeParameterId, GateType>,
+    ) -> Option<GateType> {
+        let Item::Domain(domain) = &self.module.items()[item_id] else {
+            return None;
+        };
+        let arguments = domain
+            .parameters
+            .iter()
+            .map(|parameter| substitutions.get(parameter).cloned())
+            .collect::<Option<Vec<_>>>()?;
+        Some(GateType::Domain {
+            item: item_id,
+            name: domain.name.text().to_owned(),
+            arguments,
+        })
+    }
+
+    pub(crate) fn infer_domain_constructor_name_type(
+        &mut self,
+        item_id: ItemId,
+    ) -> Option<GateType> {
+        let Item::Domain(domain) = &self.module.items()[item_id] else {
+            return None;
+        };
+        if !domain.parameters.is_empty() {
+            return None;
+        }
+        let carrier = self.lower_open_annotation(domain.carrier)?;
+        let result = self.domain_constructor_type(item_id, &HashMap::new())?;
+        Some(GateType::Arrow {
+            parameter: Box::new(carrier),
+            result: Box::new(result),
+        })
+    }
+
+    pub(crate) fn infer_domain_constructor_apply(
+        &mut self,
+        item_id: ItemId,
+        argument_types: &[GateType],
+        expected_result: Option<&GateType>,
+    ) -> Option<GateType> {
+        let [argument_ty] = argument_types else {
+            return None;
+        };
+        let Item::Domain(domain) = &self.module.items()[item_id] else {
+            return None;
+        };
+        let mut substitutions = HashMap::new();
+        let mut item_stack = Vec::new();
+        if !self.match_hir_type(domain.carrier, argument_ty, &mut substitutions, &mut item_stack) {
+            return None;
+        }
+        let result = self.domain_constructor_type(item_id, &substitutions)?;
+        if let Some(expected) = expected_result
+            && !result.same_shape(expected)
+        {
+            return None;
+        }
+        Some(result)
+    }
+
+    pub(crate) fn infer_domain_constructor_apply_expr(
+        &mut self,
+        reference: &TermReference,
+        arguments: &crate::NonEmpty<ExprId>,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+    ) -> Option<GateExprInfo> {
+        let ResolutionState::Resolved(TermResolution::DomainConstructor(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let mut info = GateExprInfo::default();
+        let mut argument_types = Vec::with_capacity(arguments.len());
+        for argument in arguments.iter() {
+            let argument_info = self.infer_expr(*argument, env, ambient);
+            argument_types.push(argument_info.ty.clone());
+            info.merge(argument_info);
+        }
+        let Some(argument_types) = argument_types.into_iter().collect::<Option<Vec<_>>>() else {
+            return Some(info);
+        };
+        info.ty = self.infer_domain_constructor_apply(*item_id, &argument_types, None);
+        Some(info)
+    }
+
+    fn literal_suffix_resolution_label(
+        &self,
+        resolution: LiteralSuffixResolution,
+    ) -> Option<String> {
+        match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
+                    return None;
+                };
+                let member = domain.members.get(resolution.member_index)?;
+                Some(format!("{}.{}", domain.name.text(), member.name.text()))
+            }
+            LiteralSuffixResolution::Import(import_id) => {
+                let import = self.module.imports().get(import_id)?;
+                let ImportBindingMetadata::DomainSuffix {
+                    domain_name,
+                    suffix_name,
+                    ..
+                } = &import.metadata
+                else {
+                    return None;
+                };
+                Some(format!("{domain_name}.{suffix_name}"))
+            }
+        }
+    }
+
+    fn visible_integer_literal_suffix_candidates(
+        &self,
+        suffix: &Name,
+    ) -> Vec<LiteralSuffixResolution> {
+        let local = self
+            .module
+            .root_items()
+            .iter()
+            .filter_map(|item_id| match &self.module.items()[*item_id] {
+                Item::Domain(domain) => Some(
+                    domain
+                        .members
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, member)| {
+                            member.kind == DomainMemberKind::Literal && member.name.text() == suffix.text()
+                        })
+                        .map(|(member_index, _)| {
+                            LiteralSuffixResolution::DomainMember(DomainMemberResolution {
+                                domain: *item_id,
+                                member_index,
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+        if !local.is_empty() {
+            return local;
+        }
+
+        let imported = self
+            .module
+            .imports()
+            .iter()
+            .filter_map(|(import_id, import)| match &import.metadata {
+                ImportBindingMetadata::DomainSuffix { suffix_name, .. }
+                    if suffix_name.as_ref() == suffix.text() =>
+                {
+                    Some(LiteralSuffixResolution::Import(import_id))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if !imported.is_empty() {
+            return imported;
+        }
+
+        self.module
+            .ambient_items()
+            .iter()
+            .filter_map(|item_id| match &self.module.items()[*item_id] {
+                Item::Domain(domain) => Some(
+                    domain
+                        .members
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, member)| {
+                            member.kind == DomainMemberKind::Literal && member.name.text() == suffix.text()
+                        })
+                        .map(|(member_index, _)| {
+                            LiteralSuffixResolution::DomainMember(DomainMemberResolution {
+                                domain: *item_id,
+                                member_index,
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn literal_suffix_base(
+        &self,
+        resolution: LiteralSuffixResolution,
+    ) -> Option<LiteralSuffixBase> {
+        match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
+                    return None;
+                };
+                let member = domain.members.get(resolution.member_index)?;
+                let annotation = self.module.types().get(member.annotation)?;
+                let parameter = match &annotation.kind {
+                    TypeKind::Arrow { parameter, .. } => *parameter,
+                    _ => member.annotation,
+                };
+                match &self.module.types()[parameter].kind {
+                    TypeKind::Name(reference) => match reference.resolution.as_ref() {
+                        ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Int)) => {
+                            Some(LiteralSuffixBase::Int)
+                        }
+                        ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Decimal)) => {
+                            Some(LiteralSuffixBase::Decimal)
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            LiteralSuffixResolution::Import(import_id) => match &self.module.imports()[import_id].metadata
+            {
+                ImportBindingMetadata::DomainSuffix { base, .. } => Some(*base),
+                _ => None,
+            },
+        }
+    }
+
+    fn literal_suffix_result_type(
+        &mut self,
+        resolution: LiteralSuffixResolution,
+        expected_result: Option<&GateType>,
+    ) -> Option<GateType> {
+        match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
+                    return None;
+                };
+                let member = domain.members.get(resolution.member_index)?;
+                let annotation = self.module.types().get(member.annotation)?;
+                let result_type = match &annotation.kind {
+                    TypeKind::Arrow { result, .. } => *result,
+                    _ => {
+                        return Some(GateType::Domain {
+                            item: resolution.domain,
+                            name: item_type_name(&self.module.items()[resolution.domain]),
+                            arguments: Vec::new(),
+                        });
+                    }
+                };
+                let mut substitutions = HashMap::new();
+                if let Some(expected) = expected_result {
+                    let mut item_stack = Vec::new();
+                    if !self.match_hir_type(
+                        result_type,
+                        expected,
+                        &mut substitutions,
+                        &mut item_stack,
+                    ) {
+                        return None;
+                    }
+                }
+                self.lower_hir_type(result_type, &substitutions)
+            }
+            LiteralSuffixResolution::Import(import_id) => {
+                let ty = self.import_value_type(import_id)?;
+                let result = Self::arrow_result_type(&ty, 1)?;
+                if let Some(expected) = expected_result
+                    && !result.same_shape(expected)
+                {
+                    return None;
+                }
+                Some(result)
+            }
+        }
+    }
+
+    pub(crate) fn select_suffixed_integer_candidate(
+        &mut self,
+        literal: &crate::hir::SuffixedIntegerLiteral,
+        expected_result: Option<&GateType>,
+    ) -> LiteralSuffixSelection {
+        let visible = self.visible_integer_literal_suffix_candidates(&literal.suffix);
+        if visible.is_empty() {
+            return LiteralSuffixSelection::NoMatch {
+                candidates: Vec::new(),
+            };
+        }
+        let filtered = visible
+            .into_iter()
+            .filter(|candidate| {
+                self.literal_suffix_base(*candidate)
+                    .is_some_and(LiteralSuffixBase::accepts_integer_payload)
+            })
+            .collect::<Vec<_>>();
+        if filtered.is_empty() {
+            return LiteralSuffixSelection::NoMatch {
+                candidates: Vec::new(),
+            };
+        }
+        let mut matches = Vec::new();
+        for candidate in filtered.iter().copied() {
+            if let Some(result) = self.literal_suffix_result_type(candidate, expected_result) {
+                matches.push((candidate, result));
+            }
+        }
+        match matches.len() {
+            0 => LiteralSuffixSelection::NoMatch {
+                candidates: filtered
+                    .into_iter()
+                    .filter_map(|candidate| self.literal_suffix_resolution_label(candidate))
+                    .collect(),
+            },
+            1 => {
+                let (resolution, result) = matches
+                    .pop()
+                    .expect("exactly one literal suffix match should be available");
+                let base = self
+                    .literal_suffix_base(resolution)
+                    .expect("matched literal suffix should have a base family");
+                LiteralSuffixSelection::Unique {
+                    resolution,
+                    base,
+                    result,
+                }
+            }
+            _ => LiteralSuffixSelection::Ambiguous {
+                candidates: matches
+                    .into_iter()
+                    .filter_map(|(candidate, _)| self.literal_suffix_resolution_label(candidate))
+                    .collect(),
+            },
+        }
+    }
+
+    pub(crate) fn lower_suffixed_integer_call(
+        &mut self,
+        literal: &crate::hir::SuffixedIntegerLiteral,
+        expected_result: &GateType,
+    ) -> Option<LiteralSuffixCallLowering> {
+        let LiteralSuffixSelection::Unique {
+            resolution,
+            base,
+            result,
+        } = self.select_suffixed_integer_candidate(literal, Some(expected_result))
+        else {
+            return None;
+        };
+
+        let callee_type = match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
+                    return None;
+                };
+                let annotation = domain.members.get(resolution.member_index)?.annotation;
+                let TypeKind::Arrow { result, .. } = &self.module.types()[annotation].kind else {
+                    return None;
+                };
+                let mut substitutions = HashMap::new();
+                let mut item_stack = Vec::new();
+                if !self.match_hir_type(*result, expected_result, &mut substitutions, &mut item_stack)
+                {
+                    return None;
+                }
+                let mut lower_stack = Vec::new();
+                self.lower_type(annotation, &substitutions, &mut lower_stack, false)?
+            }
+            LiteralSuffixResolution::Import(import_id) => self.import_value_type(import_id)?,
+        };
+
+        Some(LiteralSuffixCallLowering {
+            resolution,
+            base,
+            callee_type,
+            result_type: result,
+        })
     }
 
     pub(crate) fn infer_builtin_constructor_actual(
@@ -5885,11 +6293,12 @@ impl<'a> GateTypeContext<'a> {
         &mut self,
         subject: &GateType,
         path: &NamePath,
+        current_domain: Option<ItemId>,
     ) -> Result<GateType, GateIssue> {
         let mut current = subject.clone();
         for segment in path.segments().iter() {
             current = self
-                .project_type_step(&current, segment, path)?
+                .project_type_step(&current, segment, path, current_domain)?
                 .result()
                 .clone();
         }
@@ -5901,6 +6310,7 @@ impl<'a> GateTypeContext<'a> {
         subject: &GateType,
         segment: &Name,
         path: &NamePath,
+        current_domain: Option<ItemId>,
     ) -> Result<GateProjectionStep, GateIssue> {
         match subject {
             GateType::Record(fields) => {
@@ -5918,7 +6328,14 @@ impl<'a> GateTypeContext<'a> {
             },
             GateType::Domain {
                 item, arguments, ..
-            } => self.project_domain_member_step(*item, arguments, subject, segment, path),
+            } => self.project_domain_member_step(
+                *item,
+                arguments,
+                subject,
+                segment,
+                path,
+                current_domain,
+            ),
             GateType::OpaqueImport { import, .. } => {
                 // Guard against the sentinel value (u32::MAX) used when a named type was not
                 // found in the current module's imports — `get` returns None safely.
@@ -5950,22 +6367,6 @@ impl<'a> GateTypeContext<'a> {
                             segment,
                             path,
                         )
-                    }
-                    ImportBindingMetadata::Domain {
-                        carrier: Some(carrier),
-                        ..
-                    } => {
-                        // Imported domain type: `.unwrap` / `.value` / `.carrier` return the carrier type.
-                        if segment.text() == "value" || segment.text() == "carrier" {
-                            let carrier_ty = self.lower_import_value_type(carrier);
-                            Ok(GateProjectionStep::RecordField { result: carrier_ty })
-                        } else {
-                            Err(GateIssue::InvalidProjection {
-                                span: path.span(),
-                                path: name_path_text(path),
-                                subject: subject.to_string(),
-                            })
-                        }
                     }
                     _ => Err(GateIssue::InvalidProjection {
                         span: path.span(),
@@ -6012,6 +6413,7 @@ impl<'a> GateTypeContext<'a> {
         subject: &GateType,
         segment: &Name,
         path: &NamePath,
+        current_domain: Option<ItemId>,
     ) -> Result<GateProjectionStep, GateIssue> {
         let Item::Domain(domain) = &self.module.items()[domain_item] else {
             return Err(GateIssue::InvalidProjection {
@@ -6021,8 +6423,7 @@ impl<'a> GateTypeContext<'a> {
             });
         };
 
-        // Built-in `.carrier` accessor: returns the underlying carrier type.
-        if segment.text() == "carrier" {
+        if segment.text() == "carrier" && current_domain == Some(domain_item) {
             let carrier_ty = self.lower_open_annotation(domain.carrier);
             if let Some(mut carrier_ty) = carrier_ty {
                 let substitutions: HashMap<_, _> = domain
@@ -6038,7 +6439,7 @@ impl<'a> GateTypeContext<'a> {
                     domain: domain_item,
                     domain_name: domain.name.text().into(),
                     member_name: "carrier".into(),
-                    member_index: usize::MAX,
+                    member_index: crate::hir::SYNTHETIC_DOMAIN_CARRIER_MEMBER_INDEX,
                 };
                 return Ok(GateProjectionStep::DomainMember {
                     handle,
@@ -6166,12 +6567,12 @@ pub(crate) fn is_numeric_gate_type(ty: &GateType) -> bool {
 }
 
 pub(crate) fn is_duration_gate_type(ty: &GateType) -> bool {
-    matches!(ty, GateType::Domain { name, .. } if name == "Duration")
+    ty.has_named_type("Duration")
 }
 
 pub(crate) fn is_burst_count_gate_type(ty: &GateType) -> bool {
     matches!(ty, GateType::Primitive(BuiltinType::Int))
-        || matches!(ty, GateType::Domain { name, .. } if name == "Retry")
+        || ty.has_named_type("Retry")
 }
 
 pub(crate) fn truthy_falsy_pair_stages<'a>(
@@ -6239,6 +6640,7 @@ pub(crate) fn case_constructor_key(reference: &TermReference) -> Option<CaseCons
         }
         ResolutionState::Unresolved
         | ResolutionState::Resolved(TermResolution::Local(_))
+        | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
         | ResolutionState::Resolved(TermResolution::DomainMember(_))
         | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | ResolutionState::Resolved(TermResolution::ClassMember(_))

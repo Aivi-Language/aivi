@@ -575,6 +575,15 @@ impl Type {
     pub fn same_shape(&self, other: &Self) -> bool {
         self == other
     }
+
+    pub fn has_named_type(&self, expected: &str) -> bool {
+        match self {
+            Self::Domain { name, .. }
+            | Self::OpaqueItem { name, .. }
+            | Self::OpaqueImport { name, .. } => name.as_ref() == expected,
+            _ => false,
+        }
+    }
 }
 
 fn drain_tail<T>(values: &mut Vec<T>, len: usize) -> Vec<T> {

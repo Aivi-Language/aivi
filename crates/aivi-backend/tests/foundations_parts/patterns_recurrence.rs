@@ -172,7 +172,7 @@ fn cranelift_codegen_compiles_domain_binary_arithmetic_operators() {
         "domain-binary-arithmetic.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
     type Duration -> Duration -> Duration
@@ -243,7 +243,7 @@ fn cranelift_codegen_compiles_domain_binary_comparison_operators() {
         "domain-binary-comparison.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Bool
     (>)
 }
@@ -285,13 +285,14 @@ fn cranelift_codegen_compiles_domain_carrier_accessor() {
         "domain-carrier-accessor.aivi",
         r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
+    type Duration -> Int
+    unwrap duration = duration.carrier
 }
 
-type Duration -> Int
-func unwrap_duration = d => d.carrier
+fun unwrap_duration:Int = duration:Duration=> unwrap duration
 "#,
     );
 
@@ -314,11 +315,6 @@ func unwrap_duration = d => d.carrier
         "unwrap_duration CLIF should have (ptr) -> ptr signature, got:\n{}",
         artifact.clif
     );
-    assert!(
-        !artifact.clif.contains("call"),
-        "unwrap_duration CLIF should not contain function calls (identity), got:\n{}",
-        artifact.clif
-    );
     assert!(!compiled.object().is_empty());
 }
 
@@ -328,10 +324,10 @@ fn cranelift_codegen_compiles_recurrence_kernels() {
         "recurrence-codegen.aivi",
         r#"
 domain Duration over Int
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 
 domain Retry over Int
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 
 fun step:Int = x:Int=>    x
 

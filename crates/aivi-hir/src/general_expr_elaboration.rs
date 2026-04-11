@@ -466,185 +466,18 @@ fn signal_pipe_body_runtime_supported(expr: &GateRuntimeExpr) -> bool {
     })
 }
 
-fn rewrite_domain_carrier_view(
-    ty: &GateType,
-    domain_item: ItemId,
-    domain_parameters: &[TypeParameterId],
-    carrier: &GateType,
-) -> GateType {
-    match ty {
-        GateType::Primitive(_) | GateType::TypeParameter { .. } => ty.clone(),
-        GateType::Tuple(elements) => GateType::Tuple(
-            elements
-                .iter()
-                .map(|element| {
-                    rewrite_domain_carrier_view(element, domain_item, domain_parameters, carrier)
-                })
-                .collect(),
-        ),
-        GateType::Record(fields) => GateType::Record(
-            fields
-                .iter()
-                .map(|field| GateRecordField {
-                    name: field.name.clone(),
-                    ty: rewrite_domain_carrier_view(
-                        &field.ty,
-                        domain_item,
-                        domain_parameters,
-                        carrier,
-                    ),
-                })
-                .collect(),
-        ),
-        GateType::Arrow { parameter, result } => GateType::Arrow {
-            parameter: Box::new(rewrite_domain_carrier_view(
-                parameter,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-            result: Box::new(rewrite_domain_carrier_view(
-                result,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-        },
-        GateType::List(element) => GateType::List(Box::new(rewrite_domain_carrier_view(
-            element,
-            domain_item,
-            domain_parameters,
-            carrier,
-        ))),
-        GateType::Map { key, value } => GateType::Map {
-            key: Box::new(rewrite_domain_carrier_view(
-                key,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-            value: Box::new(rewrite_domain_carrier_view(
-                value,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-        },
-        GateType::Set(element) => GateType::Set(Box::new(rewrite_domain_carrier_view(
-            element,
-            domain_item,
-            domain_parameters,
-            carrier,
-        ))),
-        GateType::Option(element) => GateType::Option(Box::new(rewrite_domain_carrier_view(
-            element,
-            domain_item,
-            domain_parameters,
-            carrier,
-        ))),
-        GateType::Result { error, value } => GateType::Result {
-            error: Box::new(rewrite_domain_carrier_view(
-                error,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-            value: Box::new(rewrite_domain_carrier_view(
-                value,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-        },
-        GateType::Validation { error, value } => GateType::Validation {
-            error: Box::new(rewrite_domain_carrier_view(
-                error,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-            value: Box::new(rewrite_domain_carrier_view(
-                value,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-        },
-        GateType::Signal(inner) => GateType::Signal(Box::new(rewrite_domain_carrier_view(
-            inner,
-            domain_item,
-            domain_parameters,
-            carrier,
-        ))),
-        GateType::Task { error, value } => GateType::Task {
-            error: Box::new(rewrite_domain_carrier_view(
-                error,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-            value: Box::new(rewrite_domain_carrier_view(
-                value,
-                domain_item,
-                domain_parameters,
-                carrier,
-            )),
-        },
-        GateType::Domain {
-            item, arguments, ..
-        } if *item == domain_item => {
-            let substitutions = domain_parameters
-                .iter()
-                .copied()
-                .zip(arguments.iter().cloned())
-                .collect::<HashMap<_, _>>();
-            substitute_gate_type(carrier, &substitutions)
-        }
-        GateType::Domain {
-            item,
-            name,
-            arguments,
-        } => GateType::Domain {
-            item: *item,
-            name: name.clone(),
-            arguments: arguments
-                .iter()
-                .map(|argument| {
-                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
-                })
-                .collect(),
-        },
-        GateType::OpaqueItem {
-            item,
-            name,
-            arguments,
-        } => GateType::OpaqueItem {
-            item: *item,
-            name: name.clone(),
-            arguments: arguments
-                .iter()
-                .map(|argument| {
-                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
-                })
-                .collect(),
-        },
-        GateType::OpaqueImport {
-            import,
-            name,
-            arguments,
-            definition,
-        } => GateType::OpaqueImport {
-            import: *import,
-            name: name.clone(),
-            arguments: arguments
-                .iter()
-                .map(|argument| {
-                    rewrite_domain_carrier_view(argument, domain_item, domain_parameters, carrier)
-                })
-                .collect(),
-            definition: definition.clone(),
-        },
+/// Build a TypeParameter substitution map by structurally matching template types (which may
+/// contain TypeParameter nodes) against concrete types. Used to specialize polymorphic callee
+/// types before emitting lambda IR that requires fully-closed types.
+fn collect_type_param_subs(
+    template_params: &[GateType],
+    actual_params: &[GateType],
+) -> HashMap<TypeParameterId, GateType> {
+    let mut subs = HashMap::new();
+    for (template, actual) in template_params.iter().zip(actual_params.iter()) {
+        collect_type_param_subs_inner(template, actual, &mut subs);
     }
+    subs
 }
 
 fn substitute_gate_type(
@@ -743,20 +576,6 @@ fn substitute_gate_type(
             definition: definition.clone(),
         },
     }
-}
-
-/// Build a TypeParameter substitution map by structurally matching template types (which may
-/// contain TypeParameter nodes) against concrete types. Used to specialize polymorphic callee
-/// types before emitting lambda IR that requires fully-closed types.
-fn collect_type_param_subs(
-    template_params: &[GateType],
-    actual_params: &[GateType],
-) -> HashMap<TypeParameterId, GateType> {
-    let mut subs = HashMap::new();
-    for (template, actual) in template_params.iter().zip(actual_params.iter()) {
-        collect_type_param_subs_inner(template, actual, &mut subs);
-    }
-    subs
 }
 
 fn collect_type_param_subs_inner(
@@ -1296,8 +1115,7 @@ impl<'a> GeneralExprElaborator<'a> {
             .enumerate()
             .filter_map(|(member_index, member)| {
                 let body_expr = member.body?;
-                let expected =
-                    self.domain_member_implementation_type(owner, domain, member.annotation)?;
+                let expected = self.domain_member_implementation_type(member.annotation)?;
                 Some(self.elaborate_domain_member(
                     owner,
                     member_index,
@@ -1317,8 +1135,44 @@ impl<'a> GeneralExprElaborator<'a> {
         body_expr: ExprId,
         expected: &GateType,
     ) -> GeneralExprDomainMemberElaboration {
+        if member.kind == crate::DomainMemberKind::Literal
+            && member.parameters.is_empty()
+            && let ExprKind::Lambda(lambda) = &self.module.exprs()[body_expr].kind
+        {
+            let (parameters, env, result_ty) = match self
+                .lower_domain_literal_lambda_parameters(owner, lambda, expected)
+            {
+                Ok(lowered) => lowered,
+                Err(blockers) => {
+                    return GeneralExprDomainMemberElaboration {
+                        domain_owner: owner,
+                        member_index,
+                        body_expr,
+                        parameters: Vec::new(),
+                        outcome: GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
+                    };
+                }
+            };
+            let outcome = match self.lower_expr_with_signal_result_fallback(
+                lambda.body,
+                &env,
+                None,
+                Some(&result_ty),
+            ) {
+                Ok(body) => GeneralExprOutcome::Lowered(body),
+                Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
+            };
+            return GeneralExprDomainMemberElaboration {
+                domain_owner: owner,
+                member_index,
+                body_expr,
+                parameters,
+                outcome,
+            };
+        }
+
         let (parameters, env, result_ty) =
-            match self.lower_domain_member_parameters(member, expected) {
+            match self.lower_domain_member_parameters(owner, member, expected) {
                 Ok(lowered) => lowered,
                 Err(blockers) => {
                     return GeneralExprDomainMemberElaboration {
@@ -1462,10 +1316,12 @@ impl<'a> GeneralExprElaborator<'a> {
 
     fn lower_domain_member_parameters(
         &mut self,
+        owner: ItemId,
         member: &DomainMember,
         expected: &GateType,
     ) -> Result<(Vec<GeneralExprParameter>, GateExprEnv, GateType), Vec<GeneralExprBlocker>> {
         let mut env = GateExprEnv::default();
+        env.current_domain = Some(owner);
         let mut lowered = Vec::with_capacity(member.parameters.len());
         let mut current = expected.clone();
         for parameter in &member.parameters {
@@ -1492,20 +1348,37 @@ impl<'a> GeneralExprElaborator<'a> {
         Ok((lowered, env, current))
     }
 
-    fn domain_member_implementation_type(
+    fn lower_domain_literal_lambda_parameters(
         &mut self,
         owner: ItemId,
-        domain: &DomainItem,
+        lambda: &crate::hir::LambdaExpr,
+        expected: &GateType,
+    ) -> Result<(Vec<GeneralExprParameter>, GateExprEnv, GateType), Vec<GeneralExprBlocker>> {
+        let mut inferred = Vec::with_capacity(lambda.parameters.len());
+        let mut current = expected.clone();
+        for parameter in &lambda.parameters {
+            let GateType::Arrow {
+                parameter: parameter_ty,
+                result,
+            } = current
+            else {
+                return Err(vec![GeneralExprBlocker::UnknownExprType {
+                    span: parameter.span,
+                }]);
+            };
+            inferred.push(parameter_ty.as_ref().clone());
+            current = *result;
+        }
+        let (parameters, mut env) = self.lower_parameters(&lambda.parameters, Some(&inferred))?;
+        env.current_domain = Some(owner);
+        Ok((parameters, env, current))
+    }
+
+    fn domain_member_implementation_type(
+        &mut self,
         annotation: crate::TypeId,
     ) -> Option<GateType> {
-        let surface = self.typing.lower_open_annotation(annotation)?;
-        let carrier = self.typing.lower_open_annotation(domain.carrier)?;
-        Some(rewrite_domain_carrier_view(
-            &surface,
-            owner,
-            &domain.parameters,
-            &carrier,
-        ))
+        self.typing.lower_open_annotation(annotation)
     }
 
     fn instance_class_item_id(&self, item: &InstanceItem) -> Option<ItemId> {
@@ -1618,7 +1491,9 @@ impl<'a> GeneralExprElaborator<'a> {
             ExprKind::BigInt(literal) => {
                 GateRuntimeExprKind::BigInt(BigIntLiteral { raw: literal.raw })
             }
-            ExprKind::SuffixedInteger(literal) => GateRuntimeExprKind::SuffixedInteger(literal),
+            ExprKind::SuffixedInteger(literal) => {
+                return self.lower_suffixed_integer_runtime_expr(expr.span, &literal, &ty);
+            }
             ExprKind::Text(text) => {
                 GateRuntimeExprKind::Text(self.lower_text_literal(&text, env, ambient)?)
             }
@@ -1863,7 +1738,7 @@ impl<'a> GeneralExprElaborator<'a> {
         for segment in path.segments().iter() {
             let step = self
                 .typing
-                .project_type_step(&current_ty, segment, path)
+                .project_type_step(&current_ty, segment, path, env.current_domain)
                 .map_err(|issue| self.blockers_from_issues(vec![issue]))?;
             match step {
                 GateProjectionStep::RecordField { result } => {
@@ -3420,6 +3295,11 @@ impl<'a> GeneralExprElaborator<'a> {
                 .sum_constructor_handle(*item_id, reference.path.segments().last().text())
                 .map(GateRuntimeReference::SumConstructor)
                 .unwrap_or(GateRuntimeReference::Item(*item_id))),
+            ResolutionState::Resolved(TermResolution::DomainConstructor(item_id)) => self
+                .module
+                .domain_constructor_handle(*item_id)
+                .map(GateRuntimeReference::DomainMember)
+                .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span }]),
             ResolutionState::Resolved(TermResolution::DomainMember(resolution)) => self
                 .module
                 .domain_member_handle(*resolution)
@@ -3469,6 +3349,74 @@ impl<'a> GeneralExprElaborator<'a> {
                 }
             }
             ResolutionState::Unresolved => Err(vec![GeneralExprBlocker::UnknownExprType { span }]),
+        }
+    }
+
+    fn lower_suffixed_integer_runtime_expr(
+        &mut self,
+        span: SourceSpan,
+        literal: &crate::SuffixedIntegerLiteral,
+        expected: &GateType,
+    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        let Some(lowered) = self.typing.lower_suffixed_integer_call(literal, expected) else {
+            return Err(vec![GeneralExprBlocker::UnknownExprType { span }]);
+        };
+        let callee = GateRuntimeExpr {
+            span,
+            ty: lowered.callee_type,
+            kind: GateRuntimeExprKind::Reference(
+                self.runtime_reference_for_literal_suffix(span, lowered.resolution)?,
+            ),
+        };
+        let argument = GateRuntimeExpr {
+            span,
+            ty: match lowered.base {
+                crate::LiteralSuffixBase::Int => GateType::Primitive(crate::BuiltinType::Int),
+                crate::LiteralSuffixBase::Decimal => {
+                    GateType::Primitive(crate::BuiltinType::Decimal)
+                }
+            },
+            kind: match lowered.base {
+                crate::LiteralSuffixBase::Int => {
+                    GateRuntimeExprKind::Integer(crate::IntegerLiteral {
+                        raw: literal.raw.clone(),
+                    })
+                }
+                crate::LiteralSuffixBase::Decimal => {
+                    GateRuntimeExprKind::Decimal(crate::DecimalLiteral {
+                        raw: literal.raw.clone(),
+                    })
+                }
+            },
+        };
+        Ok(GateRuntimeExpr {
+            span,
+            ty: expected.clone(),
+            kind: GateRuntimeExprKind::Apply {
+                callee: Box::new(callee),
+                arguments: vec![argument],
+            },
+        })
+    }
+
+    fn runtime_reference_for_literal_suffix(
+        &self,
+        span: SourceSpan,
+        resolution: crate::LiteralSuffixResolution,
+    ) -> Result<GateRuntimeReference, Vec<GeneralExprBlocker>> {
+        match resolution {
+            crate::LiteralSuffixResolution::DomainMember(resolution) => self
+                .module
+                .domain_member_handle(resolution)
+                .map(GateRuntimeReference::DomainMember)
+                .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span }]),
+            crate::LiteralSuffixResolution::Import(import_id) => {
+                if let Some(item_id) = ambient_item_for_import(self.module, import_id) {
+                    Ok(GateRuntimeReference::Item(item_id))
+                } else {
+                    Ok(GateRuntimeReference::Import(import_id))
+                }
+            }
         }
     }
 
@@ -3539,6 +3487,8 @@ impl<'a> GeneralExprElaborator<'a> {
                     actual,
                 },
                 GateIssue::AmbientSubjectOutsidePipe { span }
+                | GateIssue::UnknownLiteralSuffix { span, .. }
+                | GateIssue::AmbiguousLiteralSuffix { span, .. }
                 | GateIssue::InvalidPipeStageInput { span, .. }
                 | GateIssue::UnsupportedApplicativeClusterMember { span, .. }
                 | GateIssue::ApplicativeClusterMismatch { span, .. }
@@ -3734,6 +3684,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 Some(fields)
             }
             ResolutionState::Resolved(TermResolution::Local(_))
+            | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
             | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
@@ -4572,10 +4523,6 @@ instance Semigroup Blob = {
         );
 
         let report = elaborate_general_expressions(lowered.module());
-        assert!(
-            report.items().is_empty(),
-            "instance-member-only module should not synthesize ordinary item elaborations"
-        );
         let append = report
             .instance_members()
             .iter()
@@ -5002,9 +4949,11 @@ export Envelope
             r#"
 domain Path over Text = {
     fromText : Text -> Path
+    toText : Path -> Text
+    toText path = path.carrier
 }
 value home : Path = fromText "/tmp/app"
-value raw : Text = home.carrier
+value raw : Text = toText home
 "#,
         );
         assert!(
@@ -5028,7 +4977,7 @@ value raw : Text = home.carrier
                         GateRuntimeExprKind::Reference(
                             GateRuntimeReference::DomainMember(handle)
                         ) if handle.domain_name.as_ref() == "Path"
-                            && handle.member_name.as_ref() == "carrier"
+                            && handle.member_name.as_ref() == "toText"
                     ));
                     assert!(matches!(
                         arguments[0].kind,

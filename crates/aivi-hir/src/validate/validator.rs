@@ -2966,6 +2966,7 @@ impl Validator<'_> {
             | ResolutionState::Resolved(TermResolution::Local(_))
             | ResolutionState::Resolved(TermResolution::Builtin(_))
             | ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
+            | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
             | ResolutionState::Resolved(TermResolution::DomainMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
             | ResolutionState::Resolved(TermResolution::ClassMember(_))
@@ -3410,31 +3411,42 @@ impl Validator<'_> {
         &self,
         resolution: LiteralSuffixResolution,
     ) -> Option<SourceOptionActualType> {
-        let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
-            return None;
-        };
-        Some(SourceOptionActualType::Domain {
-            item: resolution.domain,
-            name: domain.name.text().to_owned(),
-            arguments: vec![SourceOptionActualType::Hole; domain.parameters.len()],
-        })
+        match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
+                    return None;
+                };
+                Some(SourceOptionActualType::Domain {
+                    item: resolution.domain,
+                    name: domain.name.text().to_owned(),
+                    arguments: vec![SourceOptionActualType::Hole; domain.parameters.len()],
+                })
+            }
+            LiteralSuffixResolution::Import(_) => None,
+        }
     }
 
     fn source_option_literal_suffix_result_type(
         &self,
         resolution: LiteralSuffixResolution,
     ) -> Option<TypeId> {
-        let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
-            return None;
-        };
-        let member = domain.members.get(resolution.member_index)?;
-        if member.kind != DomainMemberKind::Literal {
-            return None;
+        match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Item::Domain(domain) = &self.module.items()[resolution.domain] else {
+                    return None;
+                };
+                let member = domain.members.get(resolution.member_index)?;
+                if member.kind != DomainMemberKind::Literal {
+                    return None;
+                }
+                let TypeKind::Arrow { result, .. } = &self.module.types()[member.annotation].kind
+                else {
+                    return None;
+                };
+                Some(*result)
+            }
+            LiteralSuffixResolution::Import(_) => None,
         }
-        let TypeKind::Arrow { result, .. } = &self.module.types()[member.annotation].kind else {
-            return None;
-        };
-        Some(*result)
     }
 
     fn infer_source_option_expr_actual_type_inner(
@@ -3625,7 +3637,8 @@ impl Validator<'_> {
                     ),
                 }
             }
-            ResolutionState::Resolved(TermResolution::IntrinsicValue(_)) => None,
+            ResolutionState::Resolved(TermResolution::IntrinsicValue(_))
+            | ResolutionState::Resolved(TermResolution::DomainConstructor(_)) => None,
         }
     }
 
@@ -6775,6 +6788,31 @@ impl Validator<'_> {
 
     fn emit_gate_issue(&mut self, issue: GateIssue) {
         match issue {
+            GateIssue::UnknownLiteralSuffix { span, suffix } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("unknown literal suffix `{suffix}`"))
+                        .with_code(code("unknown-literal-suffix"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "this suffixed literal does not match any visible domain suffix",
+                        )),
+                );
+            }
+            GateIssue::AmbiguousLiteralSuffix {
+                span,
+                suffix,
+                candidates,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("literal suffix `{suffix}` is ambiguous"))
+                        .with_code(code("ambiguous-literal-suffix"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "add a type annotation to disambiguate which domain suffix you want",
+                        ))
+                        .with_note(format!("candidates: {}", candidates.join(", "))),
+                );
+            }
             GateIssue::InvalidPipeStageInput {
                 span,
                 expected,
@@ -6970,6 +7008,35 @@ impl Validator<'_> {
             crate::TruthyFalsyBranchKind::Falsy => "falsy",
         };
         match issue {
+            GateIssue::UnknownLiteralSuffix { span, suffix } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{branch_name} branch uses unknown literal suffix `{suffix}`"
+                    ))
+                    .with_code(code("unknown-literal-suffix"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "this suffixed literal does not match any visible domain suffix",
+                    )),
+                );
+            }
+            GateIssue::AmbiguousLiteralSuffix {
+                span,
+                suffix,
+                candidates,
+            } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{branch_name} branch literal suffix `{suffix}` is ambiguous"
+                    ))
+                    .with_code(code("ambiguous-literal-suffix"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "add a type annotation to disambiguate which domain suffix you want",
+                    ))
+                    .with_note(format!("candidates: {}", candidates.join(", "))),
+                );
+            }
             GateIssue::InvalidPipeStageInput {
                 span,
                 expected,
@@ -7170,6 +7237,49 @@ impl Validator<'_> {
 
     fn emit_fanout_issue(&mut self, context: FanoutIssueContext, issue: GateIssue) {
         match (context, issue) {
+            (
+                context,
+                GateIssue::UnknownLiteralSuffix { span, suffix },
+            ) => {
+                let subject = match context {
+                    FanoutIssueContext::MapElement => "fan-out body",
+                    FanoutIssueContext::JoinCollection => "fan-in body",
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} uses unknown literal suffix `{suffix}`"
+                    ))
+                    .with_code(code("unknown-literal-suffix"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "this suffixed literal does not match any visible domain suffix",
+                    )),
+                );
+            }
+            (
+                context,
+                GateIssue::AmbiguousLiteralSuffix {
+                    span,
+                    suffix,
+                    candidates,
+                },
+            ) => {
+                let subject = match context {
+                    FanoutIssueContext::MapElement => "fan-out body",
+                    FanoutIssueContext::JoinCollection => "fan-in body",
+                };
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "{subject} literal suffix `{suffix}` is ambiguous"
+                    ))
+                    .with_code(code("ambiguous-literal-suffix"))
+                    .with_label(DiagnosticLabel::primary(
+                        span,
+                        "add a type annotation to disambiguate which domain suffix you want",
+                    ))
+                    .with_note(format!("candidates: {}", candidates.join(", "))),
+                );
+            }
             (
                 context,
                 GateIssue::InvalidPipeStageInput {
@@ -7940,6 +8050,7 @@ impl Validator<'_> {
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::Bundle(_)
+            | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::InstanceMember { .. }
             | ImportBindingMetadata::Unknown => None,
         }
@@ -8042,6 +8153,9 @@ impl Validator<'_> {
                     this.require_import(reference.span(), "term reference", "import", *import);
                     this.emit_import_deprecation_warning(reference.span(), *import);
                 }
+                TermResolution::DomainConstructor(item_id) => {
+                    this.require_item(reference.span(), "term reference", "item", *item_id);
+                }
                 TermResolution::DomainMember(resolution) => {
                     this.require_domain_member_resolution(reference.span(), *resolution);
                 }
@@ -8086,19 +8200,9 @@ impl Validator<'_> {
 
     fn check_suffixed_integer(&mut self, literal: &crate::hir::SuffixedIntegerLiteral) {
         self.check_name(&literal.suffix);
-        self.check_resolution(
-            literal.suffix.span(),
-            "literal suffix",
-            literal.resolution.as_ref(),
-            Some(literal.suffix.text()),
-            |this, resolution| {
-                this.require_literal_suffix_resolution(
-                    literal.suffix.span(),
-                    &literal.suffix,
-                    *resolution,
-                );
-            },
-        );
+        if let ResolutionState::Resolved(resolution) = literal.resolution.as_ref() {
+            self.require_literal_suffix_resolution(literal.suffix.span(), &literal.suffix, *resolution);
+        }
     }
 
     fn validate_reactive_update_dependencies(&mut self, item_id: ItemId, item: &SignalItem) {
@@ -8495,50 +8599,83 @@ impl Validator<'_> {
         suffix: &Name,
         resolution: LiteralSuffixResolution,
     ) {
-        let Some(item) = self.module.items().get(resolution.domain) else {
-            self.diagnostics.push(
-                Diagnostic::error("literal suffix resolution points at a missing domain item")
-                    .with_code(code("invalid-literal-suffix-resolution"))
-                    .with_label(DiagnosticLabel::primary(
-                        span,
-                        "update the literal suffix resolution to target an existing domain item",
-                    )),
-            );
-            return;
-        };
-        let Item::Domain(domain) = item else {
-            self.diagnostics.push(
-                Diagnostic::error("literal suffix resolution does not target a domain item")
-                    .with_code(code("invalid-literal-suffix-resolution"))
-                    .with_label(DiagnosticLabel::primary(
-                        span,
-                        "literal suffixes must resolve to domain literal declarations",
-                    )),
-            );
-            return;
-        };
-        let Some(member) = domain.members.get(resolution.member_index) else {
-            self.diagnostics.push(
-                Diagnostic::error("literal suffix resolution points at a missing domain member")
-                    .with_code(code("invalid-literal-suffix-resolution"))
-                    .with_label(DiagnosticLabel::primary(
-                        span,
-                        "update the literal suffix resolution to target an existing literal member",
-                    )),
-            );
-            return;
-        };
-        if member.kind != DomainMemberKind::Literal || member.name.text() != suffix.text() {
-            self.diagnostics.push(
-                Diagnostic::error(
-                    "literal suffix resolution does not match the target domain literal",
-                )
-                .with_code(code("invalid-literal-suffix-resolution"))
-                .with_label(DiagnosticLabel::primary(
-                    span,
-                    "the resolved domain literal must match the suffix spelling used here",
-                )),
-            );
+        match resolution {
+            LiteralSuffixResolution::DomainMember(resolution) => {
+                let Some(item) = self.module.items().get(resolution.domain) else {
+                    self.diagnostics.push(
+                        Diagnostic::error("literal suffix resolution points at a missing domain item")
+                            .with_code(code("invalid-literal-suffix-resolution"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "update the literal suffix resolution to target an existing domain item",
+                            )),
+                    );
+                    return;
+                };
+                let Item::Domain(domain) = item else {
+                    self.diagnostics.push(
+                        Diagnostic::error("literal suffix resolution does not target a domain item")
+                            .with_code(code("invalid-literal-suffix-resolution"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "literal suffixes must resolve to domain suffix declarations",
+                            )),
+                    );
+                    return;
+                };
+                let Some(member) = domain.members.get(resolution.member_index) else {
+                    self.diagnostics.push(
+                        Diagnostic::error("literal suffix resolution points at a missing domain member")
+                            .with_code(code("invalid-literal-suffix-resolution"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "update the literal suffix resolution to target an existing suffix member",
+                            )),
+                    );
+                    return;
+                };
+                if member.kind != DomainMemberKind::Literal || member.name.text() != suffix.text() {
+                    self.diagnostics.push(
+                        Diagnostic::error(
+                            "literal suffix resolution does not match the target domain suffix",
+                        )
+                        .with_code(code("invalid-literal-suffix-resolution"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "the resolved domain suffix must match the suffix spelling used here",
+                        )),
+                    );
+                }
+            }
+            LiteralSuffixResolution::Import(import_id) => {
+                let Some(import) = self.module.imports().get(import_id) else {
+                    self.diagnostics.push(
+                        Diagnostic::error("literal suffix resolution points at a missing import")
+                            .with_code(code("invalid-literal-suffix-resolution"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "update the literal suffix resolution to target an existing import",
+                            )),
+                    );
+                    return;
+                };
+                match &import.metadata {
+                    ImportBindingMetadata::DomainSuffix { suffix_name, .. }
+                        if suffix_name.as_ref() == suffix.text() => {}
+                    _ => {
+                        self.diagnostics.push(
+                            Diagnostic::error(
+                                "literal suffix import resolution does not target a suffix constructor",
+                            )
+                            .with_code(code("invalid-literal-suffix-resolution"))
+                            .with_label(DiagnosticLabel::primary(
+                                span,
+                                "this resolved import does not match the suffix spelling used here",
+                            )),
+                        );
+                    }
+                }
+            }
         }
     }
 

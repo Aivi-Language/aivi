@@ -12,11 +12,11 @@ type DecodeMode =
   | Permissive
 
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Repeat over Int = {
-    literal times : Int -> Repeat
+    suffix times : Int = value => Repeat value
 }
 
 @source http.get "/users" with {

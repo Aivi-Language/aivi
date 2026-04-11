@@ -119,6 +119,11 @@ impl GateType {
         }
     }
 
+    pub(crate) fn has_named_type(&self, expected: &str) -> bool {
+        self.named_type_parts()
+            .is_some_and(|(name, _arguments)| name == expected)
+    }
+
     pub(crate) fn same_shape(&self, other: &Self) -> bool {
         let mut left_to_right = HashMap::new();
         let mut right_to_left = HashMap::new();

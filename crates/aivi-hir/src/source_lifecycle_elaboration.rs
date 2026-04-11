@@ -476,7 +476,7 @@ mod tests {
             "request_source_lifecycle.aivi",
             r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 signal apiHost = "https://api.example.com"
 signal refresh = 0

@@ -1007,10 +1007,12 @@ fn cranelift_codegen_compiles_direct_by_reference_domain_member_calls() {
 domain Path over Text
     type Text -> Path
     fromText
+    type Path -> Text
+    toText path = path.carrier
 
 fun wrapPath:Path = raw:Text=>    fromText raw
 
-fun carrierPath:Text = path:Path=>    path.carrier
+fun carrierPath:Text = path:Path=>    toText path
 "#,
     );
 
@@ -1047,7 +1049,10 @@ fun carrierPath:Text = path:Path=>    path.carrier
                 &carrier_kernel.exprs()[*callee].kind,
                 KernelExprKind::DomainMember(handle)
                     if handle.domain_name.as_ref() == "Path"
-                        && handle.member_name.as_ref() == "carrier"
+                        && handle.member_name.as_ref() == "toText"
+            ) || matches!(
+                &carrier_kernel.exprs()[*callee].kind,
+                KernelExprKind::Item(_)
             ));
         }
         other => {
@@ -1059,14 +1064,18 @@ fun carrierPath:Text = path:Path=>    path.carrier
         .expect("representational by-reference domain member calls should compile");
     let ptr = clif_pointer_ty();
 
-    for body in [wrap_body, carrier_body] {
-        let artifact = compiled
-            .kernel(body)
-            .expect("compiled program should retain domain-member kernel metadata");
-        assert!(artifact.code_size > 0);
-        assert!(artifact.clif.contains(&format!("({ptr}) -> {ptr}")));
-        assert!(!artifact.clif.contains("call"));
-    }
+    let wrap_artifact = compiled
+        .kernel(wrap_body)
+        .expect("compiled program should retain wrapPath kernel metadata");
+    assert!(wrap_artifact.code_size > 0);
+    assert!(wrap_artifact.clif.contains(&format!("({ptr}) -> {ptr}")));
+    assert!(!wrap_artifact.clif.contains("call"));
+
+    let carrier_artifact = compiled
+        .kernel(carrier_body)
+        .expect("compiled program should retain carrierPath kernel metadata");
+    assert!(carrier_artifact.code_size > 0);
+    assert!(carrier_artifact.clif.contains(&format!("({ptr}) -> {ptr}")));
     assert!(!compiled.object().is_empty());
 }
 
@@ -1078,9 +1087,11 @@ fn runtime_and_codegen_accept_domain_dot_projection_over_values() {
 domain Path over Text
     type Text -> Path
     fromText
+    type Path -> Text
+    toText path = path.carrier
 
 value home : Path = fromText "/tmp/app"
-value raw : Text = home.carrier
+value raw : Text = toText home
 "#,
     );
 
@@ -1525,7 +1536,7 @@ fn cranelift_codegen_rejects_nonrepresentational_domain_member_calls() {
         "backend-domain-operators-codegen.aivi",
         r#"
 domain Duration over Int
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
     type Duration -> Duration -> Bool
@@ -1553,4 +1564,3 @@ signal slowWindows : Signal Window =
         "expected codegen errors for domain literal gate predicate"
     );
 }
-

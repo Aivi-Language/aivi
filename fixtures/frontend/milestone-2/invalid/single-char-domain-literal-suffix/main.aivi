@@ -1,5 +1,5 @@
 domain Distance over Int = {
-    literal m : Int -> Distance
+    suffix m : Int = value => Distance value
 }
 
 value walk = 3m

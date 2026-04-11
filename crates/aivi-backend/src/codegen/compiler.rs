@@ -2866,12 +2866,59 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             return Ok(DirectApplyPlan::ExternalItem { item });
         }
         let body = item_decl.body.expect("body checked above");
+        let body_kernel = self
+            .program
+            .kernels()
+            .get(body)
+            .expect("validated backend programs keep item body kernels aligned with codegen");
         if arguments.is_empty() {
             if !item_decl.parameters.is_empty() {
                 // Unsaturated reference: emit function address of the body kernel.
                 return Ok(DirectApplyPlan::LocalFunctionAddress { body });
             }
         } else if arguments.len() != item_decl.parameters.len() {
+            if item_decl.parameters.is_empty()
+                && let KernelExprKind::Item(target_item) = body_kernel.exprs()[body_kernel.root].kind
+                && let Some(target_decl) = self.program.items().get(target_item)
+                && let Some(target_body) = target_decl.body
+                && arguments.len() == target_decl.parameters.len()
+            {
+                let target_kernel = self.program.kernels().get(target_body).expect(
+                    "validated backend programs keep thunk target kernels aligned with codegen",
+                );
+                let result_layout = kernel.exprs()[expr_id].layout;
+                self.require_layout_match(
+                    kernel_id,
+                    expr_id,
+                    result_layout,
+                    target_kernel.result_layout,
+                    &format!("direct item call result for `{}`", item_decl.name),
+                )?;
+                let mut argument_layouts = Vec::with_capacity(arguments.len());
+                for (index, (argument, expected_layout)) in arguments
+                    .iter()
+                    .zip(target_decl.parameters.iter())
+                    .enumerate()
+                {
+                    let found_layout = kernel.exprs()[*argument].layout;
+                    self.require_layout_match(
+                        kernel_id,
+                        *argument,
+                        *expected_layout,
+                        found_layout,
+                        &format!(
+                            "direct thunk item call argument {index} for `{}`",
+                            item_decl.name
+                        ),
+                    )?;
+                    argument_layouts.push((found_layout, *expected_layout));
+                }
+                return Ok(DirectApplyPlan::Item {
+                    body: target_body,
+                    arguments: argument_layouts.into_boxed_slice(),
+                    result: (target_kernel.result_layout, result_layout),
+                });
+            }
             return Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -2884,11 +2931,6 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             ));
         }
 
-        let body_kernel = self
-            .program
-            .kernels()
-            .get(body)
-            .expect("validated backend programs keep item body kernels aligned with codegen");
         let result_layout = kernel.exprs()[expr_id].layout;
         self.require_layout_match(
             kernel_id,
@@ -3149,18 +3191,48 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             let kernel = &self.program.kernels()[kernel_id];
                             let result_layout = kernel.exprs()[expr_id].layout;
                             let body_kernel = &self.program.kernels()[body];
-                            let mut argument_layouts = Vec::with_capacity(arguments.len());
-                            for (argument, &expected_layout) in
-                                arguments.iter().zip(item.parameters.iter())
-                            {
-                                let found_layout = kernel.exprs()[*argument].layout;
-                                argument_layouts.push((found_layout, expected_layout));
+                            let callable_item = if item.parameters.len() == arguments.len() {
+                                Some((item, body, body_kernel))
+                            } else if item.parameters.is_empty() && !arguments.is_empty() {
+                                match body_kernel.exprs()[body_kernel.root].kind {
+                                    KernelExprKind::Item(target_item) => self
+                                        .program
+                                        .items()
+                                        .get(target_item)
+                                        .zip(
+                                            self.program
+                                                .items()
+                                                .get(target_item)
+                                                .and_then(|target| target.body)
+                                                .map(|target_body| {
+                                                    let target_kernel =
+                                                        &self.program.kernels()[target_body];
+                                                    (target_body, target_kernel)
+                                                }),
+                                        )
+                                        .and_then(|(target, (target_body, target_kernel))| {
+                                            (target.parameters.len() == arguments.len())
+                                                .then_some((target, target_body, target_kernel))
+                                        }),
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            };
+                            if let Some((call_item, call_body, call_kernel)) = callable_item {
+                                let mut argument_layouts = Vec::with_capacity(arguments.len());
+                                for (argument, &expected_layout) in
+                                    arguments.iter().zip(call_item.parameters.iter())
+                                {
+                                    let found_layout = kernel.exprs()[*argument].layout;
+                                    argument_layouts.push((found_layout, expected_layout));
+                                }
+                                return Ok(DirectApplyPlan::Item {
+                                    body: call_body,
+                                    arguments: argument_layouts.into_boxed_slice(),
+                                    result: (call_kernel.result_layout, result_layout),
+                                });
                             }
-                            return Ok(DirectApplyPlan::Item {
-                                body,
-                                arguments: argument_layouts.into_boxed_slice(),
-                                result: (body_kernel.result_layout, result_layout),
-                            });
                         }
                     }
                 }

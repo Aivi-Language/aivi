@@ -294,6 +294,7 @@ fn resolve_decode_mode_name(
             }
         }
         ResolutionState::Resolved(TermResolution::Local(_))
+        | ResolutionState::Resolved(TermResolution::DomainConstructor(_))
         | ResolutionState::Resolved(TermResolution::DomainMember(_))
         | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_))
         | ResolutionState::Resolved(TermResolution::ClassMember(_))
@@ -971,6 +972,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::Bundle(_)
+            | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::InstanceMember { .. } => Ok(self.external_reference(name)),
         }
     }

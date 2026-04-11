@@ -220,6 +220,9 @@ pub struct DomainMemberResolution {
     pub member_index: usize,
 }
 
+pub const SYNTHETIC_DOMAIN_CONSTRUCTOR_MEMBER_INDEX: usize = usize::MAX - 1;
+pub const SYNTHETIC_DOMAIN_CARRIER_MEMBER_INDEX: usize = usize::MAX;
+
 /// Stable semantic handle for one domain-owned callable surfaced past HIR elaboration.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DomainMemberHandle {
@@ -669,6 +672,12 @@ pub enum ImportBindingMetadata {
         /// type could not be serialised to an `ImportValueType`.
         carrier: Option<ImportValueType>,
     },
+    /// Synthetic callable imported for one domain suffix constructor.
+    DomainSuffix {
+        domain_name: Box<str>,
+        suffix_name: Box<str>,
+        base: LiteralSuffixBase,
+    },
     BuiltinType(BuiltinType),
     BuiltinTerm(BuiltinTerm),
     AmbientType,
@@ -691,6 +700,10 @@ pub struct ImportedDomainLiteralSuffix {
     pub name: Box<str>,
     /// The index of this member in the domain's `members` vec.
     pub member_index: usize,
+    /// Accepted numeric payload family for this suffix constructor.
+    pub base: LiteralSuffixBase,
+    /// Callable constructor type when it can be serialised across imports.
+    pub callable_type: Option<ImportValueType>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -776,6 +789,7 @@ pub enum TermResolution {
     Item(ItemId),
     Import(ImportId),
     IntrinsicValue(IntrinsicValue),
+    DomainConstructor(ItemId),
     DomainMember(DomainMemberResolution),
     AmbiguousDomainMembers(NonEmpty<DomainMemberResolution>),
     ClassMember(ClassMemberResolution),
@@ -850,11 +864,23 @@ impl TypeReference {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LiteralSuffixBase {
+    Int,
+    Decimal,
+}
+
+impl LiteralSuffixBase {
+    pub const fn accepts_integer_payload(self) -> bool {
+        matches!(self, Self::Int | Self::Decimal)
+    }
+}
+
 /// Resolved destination for a domain literal suffix use site such as `250ms`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct LiteralSuffixResolution {
-    pub domain: ItemId,
-    pub member_index: usize,
+pub enum LiteralSuffixResolution {
+    DomainMember(DomainMemberResolution),
+    Import(ImportId),
 }
 
 /// Shared top-level metadata attached to every HIR item.
@@ -2450,6 +2476,18 @@ impl<S> Module<S> {
             domain_name: domain.name.text().into(),
             member_name: member.name.text().into(),
             member_index: resolution.member_index,
+        })
+    }
+
+    pub fn domain_constructor_handle(&self, item: ItemId) -> Option<DomainMemberHandle> {
+        let Item::Domain(domain) = self.arenas.items.get(item)? else {
+            return None;
+        };
+        Some(DomainMemberHandle {
+            domain: item,
+            domain_name: domain.name.text().into(),
+            member_name: domain.name.text().into(),
+            member_index: SYNTHETIC_DOMAIN_CONSTRUCTOR_MEMBER_INDEX,
         })
     }
 

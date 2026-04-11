@@ -2490,7 +2490,7 @@ mod tests {
             "runtime-hir-adapter-positive.aivi",
             r#"
 domain Duration over Int
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 
 fun keep = value=>    value
 
@@ -2780,7 +2780,7 @@ signal rows : Signal Int
             "runtime-hir-adapter-task.aivi",
             r#"
 domain Retry over Int
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 
 fun keep = value=>    value
 

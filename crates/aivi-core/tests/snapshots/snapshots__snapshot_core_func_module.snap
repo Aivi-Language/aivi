@@ -1,6 +1,5 @@
 ---
 source: crates/aivi-core/tests/snapshots.rs
-assertion_line: 35
 expression: core.pretty()
 ---
 func add:
@@ -62,289 +61,302 @@ func __aivi_binary_neq:
   body = #38 NotEquals #39
 func __aivi_nel_singleton:
   params = [item: A]
-  body = domain#47::member#0::lift [#41]
+  body = domain#47::member#0::lift [#42]
 func __aivi_nel_cons:
   params = [item: A, nel: NonEmptyList A]
-  body = domain#47::member#0::lift Append(List) [#42] NonEmptyList.carrier #43
+  body = domain#47::member#0::lift Append(List) [#43] domain#47::member#1::__aivi_nel_carrier #44
 func __aivi_nel_head:
   params = [nel: NonEmptyList A]
-  body = NonEmptyList.carrier #44 ||> [h, ...ignored] => #45
+  body = domain#47::member#1::__aivi_nel_carrier #45 ||> [h, ...ignored] => #46
 func __aivi_nel_toList:
   params = [nel: NonEmptyList A]
-  body = NonEmptyList.carrier #47
+  body = domain#47::member#1::__aivi_nel_carrier #48
 func __aivi_nel_fromHeadTail:
   params = [h: A, t: List A]
-  body = domain#47::member#0::lift Append(List) [#48] #49
+  body = domain#47::member#0::lift Append(List) [#49] #50
 func __aivi_nel_length:
   params = [nel: NonEmptyList A]
-  body = __aivi_list_length NonEmptyList.carrier #50
+  body = __aivi_list_length domain#47::member#1::__aivi_nel_carrier #51
 func __aivi_nel_lastStep:
   params = [prev: A, item: A]
-  body = #52
+  body = #53
 func __aivi_nel_lastOf:
   params = [h: A, t: List A]
-  body = #54 |> Reduce(List) __aivi_nel_lastStep #53 _
+  body = #55 |> Reduce(List) __aivi_nel_lastStep #54 _
 func __aivi_nel_last:
   params = [nel: NonEmptyList A]
-  body = NonEmptyList.carrier #55 ||> [h, ...t] => __aivi_nel_lastOf #56 #57
+  body = domain#47::member#1::__aivi_nel_carrier #56 ||> [h, ...t] => __aivi_nel_lastOf #57 #58
 func __aivi_nel_mapNel:
   params = [transform: A -> B, nel: NonEmptyList A]
-  body = domain#47::member#0::lift __aivi_list_map #58 NonEmptyList.carrier #59
+  body = domain#47::member#0::lift __aivi_list_map #59 domain#47::member#1::__aivi_nel_carrier #60
 func __aivi_nel_appendNel:
   params = [left: NonEmptyList A, right: NonEmptyList A]
-  body = domain#47::member#0::lift Append(List) NonEmptyList.carrier #60 NonEmptyList.carrier #61
+  body = domain#47::member#0::lift Append(List) domain#47::member#1::__aivi_nel_carrier #61 domain#47::member#1::__aivi_nel_carrier #62
 func __aivi_nel_initAppendPrev:
   params = [items: List A, prev: Option A]
-  body = #63 ||> Some p => Append(List) #62 [#64] ||> None => #62
+  body = #64 ||> Some p => Append(List) #63 [#65] ||> None => #63
 func __aivi_nel_initAccum:
   params = [items: List A, prev: Option A, item: A]
-  body = (__aivi_nel_initAppendPrev #65 #66, Some #67)
+  body = (__aivi_nel_initAppendPrev #66 #67, Some #68)
 func __aivi_nel_initStep:
   params = [state: (List A, Option A), item: A]
-  body = #68 ||> (items, prev) => __aivi_nel_initAccum #70 #71 #69
+  body = #69 ||> (items, prev) => __aivi_nel_initAccum #71 #72 #70
 func __aivi_nel_initExtract:
   params = [state: (List A, Option A)]
-  body = #72 ||> (items, prev) => #73
+  body = #73 ||> (items, prev) => #74
 func __aivi_nel_init:
   params = [nel: NonEmptyList A]
-  body = NonEmptyList.carrier #75 |> Reduce(List) __aivi_nel_initStep ([], None) _ |> __aivi_nel_initExtract _
+  body = domain#47::member#1::__aivi_nel_carrier #76 |> Reduce(List) __aivi_nel_initStep ([], None) _ |> __aivi_nel_initExtract _
 func __aivi_nel_fromListStep:
   params = [acc: Option NonEmptyList A, item: A]
-  body = #76 ||> None => Some domain#47::member#0::lift [#77] ||> Some nel => Some domain#47::member#0::lift Append(List) NonEmptyList.carrier #78 [#77]
+  body = #77 ||> None => Some domain#47::member#0::lift [#78] ||> Some nel => Some domain#47::member#0::lift Append(List) domain#47::member#1::__aivi_nel_carrier #79 [#78]
 func __aivi_nel_fromList:
   params = [items: List A]
-  body = #79 |> Reduce(List) __aivi_nel_fromListStep None _
+  body = #80 |> Reduce(List) __aivi_nel_fromListStep None _
 func __aivi_option_map:
   params = [transform: A -> B, opt: Option A]
-  body = #81 ||> Some item => Some #80 #82 ||> None => None
+  body = #82 ||> Some item => Some #81 #83 ||> None => None
 func __aivi_list_contains:
   params = [predicate: A -> Bool, items: List A]
-  body = __aivi_list_any #83 #84
+  body = __aivi_list_any #84 #85
 func __aivi_list_mapStep:
   params = [transform: A -> B, acc: List B, item: A]
-  body = Append(List) #86 [#85 #87]
+  body = Append(List) #87 [#86 #88]
 func __aivi_list_map:
   params = [transform: A -> B, items: List A]
-  body = #89 |> Reduce(List) __aivi_list_mapStep #88 [] _
+  body = #90 |> Reduce(List) __aivi_list_mapStep #89 [] _
 func __aivi_list_flatMapStep:
   params = [transform: A -> List B, acc: List B, item: A]
-  body = Append(List) #91 #90 #92
+  body = Append(List) #92 #91 #93
 func __aivi_list_flatMap:
   params = [transform: A -> List B, items: List A]
-  body = #94 |> Reduce(List) __aivi_list_flatMapStep #93 [] _
+  body = #95 |> Reduce(List) __aivi_list_flatMapStep #94 [] _
 func __aivi_list_filterAppend:
   params = [predicate: A -> Bool, acc: List A, item: A]
-  body = #95 #97 T|>[True] Append(List) #96 [#97] F|>[False] #96
+  body = #96 #98 T|>[True] Append(List) #97 [#98] F|>[False] #97
 func __aivi_list_filter:
   params = [predicate: A -> Bool, items: List A]
-  body = #99 |> Reduce(List) __aivi_list_filterAppend #98 [] _
+  body = #100 |> Reduce(List) __aivi_list_filterAppend #99 [] _
 func __aivi_list_countStep:
   params = [predicate: A -> Bool, acc: Int, item: A]
-  body = #100 #102 T|>[True] #101 Add 1 F|>[False] #101
+  body = #101 #103 T|>[True] #102 Add 1 F|>[False] #102
 func __aivi_list_count:
   params = [predicate: A -> Bool, items: List A]
-  body = #104 |> Reduce(List) __aivi_list_countStep #103 0 _
+  body = #105 |> Reduce(List) __aivi_list_countStep #104 0 _
 func __aivi_list_sumStep:
   params = [acc: Int, item: Int]
-  body = #105 Add #106
+  body = #106 Add #107
 func __aivi_list_sum:
   params = [items: List Int]
-  body = #107 |> Reduce(List) __aivi_list_sumStep 0 _
+  body = #108 |> Reduce(List) __aivi_list_sumStep 0 _
 func __aivi_list_maxPick:
   params = [gt: A -> A -> Bool, item: A, prev: A]
-  body = #108 #109 #110 T|>[True] Some #109 F|>[False] Some #110
+  body = #109 #110 #111 T|>[True] Some #110 F|>[False] Some #111
 func __aivi_list_maximumStep:
   params = [gt: A -> A -> Bool, best: Option A, item: A]
-  body = #112 ||> None => Some #113 ||> Some prev => __aivi_list_maxPick #111 #113 #114
+  body = #113 ||> None => Some #114 ||> Some prev => __aivi_list_maxPick #112 #114 #115
 func __aivi_list_maximum:
   params = [gt: A -> A -> Bool, items: List A]
-  body = #116 |> Reduce(List) __aivi_list_maximumStep #115 None _
+  body = #117 |> Reduce(List) __aivi_list_maximumStep #116 None _
 func __aivi_list_rangeDesc:
   params = [current: Int, acc: List Int]
-  body = #117 LessThan 0 T|>[True] #118 F|>[False] __aivi_list_rangeDesc #117 Subtract 1 Append(List) [#117] #118
+  body = #118 LessThan 0 T|>[True] #119 F|>[False] __aivi_list_rangeDesc #118 Subtract 1 Append(List) [#118] #119
 func __aivi_list_range:
   params = [n: Int]
-  body = #119 LessThanOrEqual 0 T|>[True] [] F|>[False] __aivi_list_rangeDesc #119 Subtract 1 []
+  body = #120 LessThanOrEqual 0 T|>[True] [] F|>[False] __aivi_list_rangeDesc #120 Subtract 1 []
 func __aivi_text_joinFirst:
   params = [sep: Text, result: Text, item: Text]
-  body = (False, #122)
+  body = (False, #123)
 func __aivi_text_joinNext:
   params = [sep: Text, result: Text, item: Text]
-  body = (False, Append(Text) Append(Text) #124 #123 #125)
+  body = (False, Append(Text) Append(Text) #125 #124 #126)
 func __aivi_text_joinPick:
   params = [isFirst: Bool, sep: Text, result: Text, item: Text]
-  body = #126 T|>[True] __aivi_text_joinFirst #127 #128 #129 F|>[False] __aivi_text_joinNext #127 #128 #129
+  body = #127 T|>[True] __aivi_text_joinFirst #128 #129 #130 F|>[False] __aivi_text_joinNext #128 #129 #130
 func __aivi_text_joinStep:
   params = [sep: Text, state: (Bool, Text), item: Text]
-  body = #131 ||> (isFirst, result) => __aivi_text_joinPick #133 #130 #134 #132
+  body = #132 ||> (isFirst, result) => __aivi_text_joinPick #134 #131 #135 #133
 func __aivi_text_joinExtract:
   params = [state: (Bool, Text)]
-  body = #135 ||> (isFirst, result) => #137
+  body = #136 ||> (isFirst, result) => #138
 func __aivi_text_join:
   params = [sep: Text, items: List Text]
-  body = #139 |> Reduce(List) __aivi_text_joinStep #138 (True, "") _ |> __aivi_text_joinExtract _
+  body = #140 |> Reduce(List) __aivi_text_joinStep #139 (True, "") _ |> __aivi_text_joinExtract _
 func __aivi_matrix_rows:
   params = [matrix: Matrix A]
-  body = #140 ||> MkMatrix w h data => #143
+  body = #141 ||> MkMatrix w h data => #144
 func __aivi_matrix_width:
   params = [matrix: Matrix A]
-  body = #144 ||> MkMatrix w h data => #145
+  body = #145 ||> MkMatrix w h data => #146
 func __aivi_matrix_height:
   params = [matrix: Matrix A]
-  body = #148 ||> MkMatrix w h data => #150
+  body = #149 ||> MkMatrix w h data => #151
 func __aivi_listAt_match:
   params = [matches: Bool, idx: Int, item: A]
-  body = #152 T|>[True] (#153 Add 1, Some #154) F|>[False] (#153 Add 1, None)
+  body = #153 T|>[True] (#154 Add 1, Some #155) F|>[False] (#154 Add 1, None)
 func __aivi_listAt_check:
   params = [target: Int, idx: Int, found: Option A, item: A]
-  body = #157 ||> Some already => (#156 Add 1, Some #159) ||> None => __aivi_listAt_match #156 Equals #155 #156 #158
+  body = #158 ||> Some already => (#157 Add 1, Some #160) ||> None => __aivi_listAt_match #157 Equals #156 #157 #159
 func __aivi_listAt_step:
   params = [target: Int, state: (Int, Option A), item: A]
-  body = #161 ||> (idx, found) => __aivi_listAt_check #160 #163 #164 #162
+  body = #162 ||> (idx, found) => __aivi_listAt_check #161 #164 #165 #163
 func __aivi_listAt_extract:
   params = [state: (Int, Option A)]
-  body = #165 ||> (idx, found) => #167
+  body = #166 ||> (idx, found) => #168
 func __aivi_listAt:
   params = [target: Int, items: List A]
-  body = #169 |> Reduce(List) __aivi_listAt_step #168 (0, None) _ |> __aivi_listAt_extract _
+  body = #170 |> Reduce(List) __aivi_listAt_step #169 (0, None) _ |> __aivi_listAt_extract _
 func __aivi_matrix_atRow:
   params = [rowOpt: Option List A, x: Int]
-  body = #170 ||> Some row => __aivi_listAt #171 #172 ||> None => None
+  body = #171 ||> Some row => __aivi_listAt #172 #173 ||> None => None
 func __aivi_matrix_at:
   params = [matrix: Matrix A, x: Int, y: Int]
-  body = #173 ||> MkMatrix w h data => __aivi_matrix_atRow __aivi_listAt #175 #178 #174
+  body = #174 ||> MkMatrix w h data => __aivi_matrix_atRow __aivi_listAt #176 #179 #175
 func __aivi_listReplace_pick:
   params = [matches: Bool, newVal: A, idx: Int, result: List A, item: A]
-  body = #179 T|>[True] (#181 Add 1, Append(List) #182 [#180]) F|>[False] (#181 Add 1, Append(List) #182 [#183])
+  body = #180 T|>[True] (#182 Add 1, Append(List) #183 [#181]) F|>[False] (#182 Add 1, Append(List) #183 [#184])
 func __aivi_listReplace_check:
   params = [target: Int, newVal: A, idx: Int, result: List A, item: A]
-  body = __aivi_listReplace_pick #186 Equals #184 #185 #186 #187 #188
+  body = __aivi_listReplace_pick #187 Equals #185 #186 #187 #188 #189
 func __aivi_listReplace_step:
   params = [target: Int, newVal: A, state: (Int, List A), item: A]
-  body = #191 ||> (idx, result) => __aivi_listReplace_check #189 #190 #193 #194 #192
+  body = #192 ||> (idx, result) => __aivi_listReplace_check #190 #191 #194 #195 #193
 func __aivi_listReplace_extract:
   params = [state: (Int, List A)]
-  body = #195 ||> (idx, result) => #197
+  body = #196 ||> (idx, result) => #198
 func __aivi_listReplace:
   params = [target: Int, newVal: A, items: List A]
-  body = #200 |> Reduce(List) __aivi_listReplace_step #198 #199 (0, []) _ |> __aivi_listReplace_extract _
+  body = #201 |> Reduce(List) __aivi_listReplace_step #199 #200 (0, []) _ |> __aivi_listReplace_extract _
 func __aivi_matrix_doReplace:
   params = [x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = __aivi_listAt #202 #205 ||> Some row => Some Matrix.MkMatrix #203 #204 __aivi_listReplace #202 __aivi_listReplace #201 #206 #207 #205 ||> None => None
+  body = __aivi_listAt #203 #206 ||> Some row => Some Matrix.MkMatrix #204 #205 __aivi_listReplace #203 __aivi_listReplace #202 #207 #208 #206 ||> None => None
 func __aivi_matrix_boundsCheck:
   params = [xOk: Bool, yOk: Bool, xLt: Bool, yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = #208 T|>[True] __aivi_matrix_boundsCheck2 #209 #210 #211 #212 #213 #214 #215 #216 #217 F|>[False] None
+  body = #209 T|>[True] __aivi_matrix_boundsCheck2 #210 #211 #212 #213 #214 #215 #216 #217 #218 F|>[False] None
 func __aivi_matrix_boundsCheck2:
   params = [yOk: Bool, xLt: Bool, yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = #218 T|>[True] __aivi_matrix_boundsCheck3 #219 #220 #221 #222 #223 #224 #225 #226 F|>[False] None
+  body = #219 T|>[True] __aivi_matrix_boundsCheck3 #220 #221 #222 #223 #224 #225 #226 #227 F|>[False] None
 func __aivi_matrix_boundsCheck3:
   params = [xLt: Bool, yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = #227 T|>[True] __aivi_matrix_boundsCheck4 #228 #229 #230 #231 #232 #233 #234 F|>[False] None
+  body = #228 T|>[True] __aivi_matrix_boundsCheck4 #229 #230 #231 #232 #233 #234 #235 F|>[False] None
 func __aivi_matrix_boundsCheck4:
   params = [yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = #235 T|>[True] __aivi_matrix_doReplace #236 #237 #238 #239 #240 #241 F|>[False] None
+  body = #236 T|>[True] __aivi_matrix_doReplace #237 #238 #239 #240 #241 #242 F|>[False] None
 func __aivi_matrix_replaceCoord:
   params = [matrix: Matrix A, x: Int, y: Int, value: A]
-  body = #242 ||> MkMatrix w h data => __aivi_matrix_boundsCheck #243 GreaterThanOrEqual 0 #244 GreaterThanOrEqual 0 #243 LessThan #246 #244 LessThan #247 #243 #244 #246 #247 #248 #245
+  body = #243 ||> MkMatrix w h data => __aivi_matrix_boundsCheck #244 GreaterThanOrEqual 0 #245 GreaterThanOrEqual 0 #244 LessThan #247 #245 LessThan #248 #244 #245 #247 #248 #249 #246
 func __aivi_matrix_replaceAt:
   params = [matrix: Matrix A, coord: (Int, Int), value: A]
-  body = #250 ||> (x, y) => __aivi_matrix_replaceCoord #249 #252 #253 #251
+  body = #251 ||> (x, y) => __aivi_matrix_replaceCoord #250 #253 #254 #252
 func __aivi_matrix_validateFirstRow:
   params = [rowIdx: Int, expectedWidth: Int, row: List A]
-  body = (1, __aivi_list_length #256, None)
+  body = (1, __aivi_list_length #257, None)
 func __aivi_matrix_validateLengthMatch:
   params = [matches: Bool, rowIdx: Int, expectedWidth: Int, row: List A]
-  body = #257 T|>[True] (#258 Add 1, #259, None) F|>[False] (#258 Add 1, #259, Some MatrixError.RaggedRows #258 #259 __aivi_list_length #260)
+  body = #258 T|>[True] (#259 Add 1, #260, None) F|>[False] (#259 Add 1, #260, Some MatrixError.RaggedRows #259 #260 __aivi_list_length #261)
 func __aivi_matrix_validateSubsequentRow:
   params = [isFirst: Bool, rowIdx: Int, expectedWidth: Int, row: List A]
-  body = #261 T|>[True] __aivi_matrix_validateFirstRow #262 #263 #264 F|>[False] __aivi_matrix_validateLengthMatch __aivi_list_length #264 Equals #263 #262 #263 #264
+  body = #262 T|>[True] __aivi_matrix_validateFirstRow #263 #264 #265 F|>[False] __aivi_matrix_validateLengthMatch __aivi_list_length #265 Equals #264 #263 #264 #265
 func __aivi_matrix_validateRow:
   params = [prevError: Option MatrixError, rowIdx: Int, expectedWidth: Int, row: List A]
-  body = #265 ||> Some e => (#266 Add 1, #267, Some #269) ||> None => __aivi_matrix_validateSubsequentRow #266 Equals 0 #266 #267 #268
+  body = #266 ||> Some e => (#267 Add 1, #268, Some #270) ||> None => __aivi_matrix_validateSubsequentRow #267 Equals 0 #267 #268 #269
 func __aivi_matrix_fromRowsStep:
   params = [state: (Int, Int, Option MatrixError), row: List A]
-  body = #270 ||> (rowIdx, width, error) => __aivi_matrix_validateRow #274 #272 #273 #271
+  body = #271 ||> (rowIdx, width, error) => __aivi_matrix_validateRow #275 #273 #274 #272
 func __aivi_matrix_fromRowsDecide:
   params = [error: Option MatrixError, rowCount: Int, width: Int, inputRows: List List A]
-  body = #275 ||> Some e => Err #279 ||> None => Ok Matrix.MkMatrix #277 #276 #278
+  body = #276 ||> Some e => Err #280 ||> None => Ok Matrix.MkMatrix #278 #277 #279
 func __aivi_matrix_fromRowsFinish:
   params = [inputRows: List List A, state: (Int, Int, Option MatrixError)]
-  body = #281 ||> (rowCount, width, error) => __aivi_matrix_fromRowsDecide #284 #282 #283 #280
+  body = #282 ||> (rowCount, width, error) => __aivi_matrix_fromRowsDecide #285 #283 #284 #281
 func __aivi_matrix_fromRows:
   params = [inputRows: List List A]
-  body = #285 |> Reduce(List) __aivi_matrix_fromRowsStep (0, 0, None) _ |> __aivi_matrix_fromRowsFinish #285 _
+  body = #286 |> Reduce(List) __aivi_matrix_fromRowsStep (0, 0, None) _ |> __aivi_matrix_fromRowsFinish #286 _
 func __aivi_matrix_initCellAt:
   params = [build: Int -> Int -> A, y: Int, x: Int]
-  body = #286 #288 #287
+  body = #287 #289 #288
 func __aivi_matrix_buildRow:
   params = [width: Int, build: Int -> Int -> A, y: Int]
-  body = __aivi_list_map __aivi_matrix_initCellAt #290 #291 __aivi_list_range #289
+  body = __aivi_list_map __aivi_matrix_initCellAt #291 #292 __aivi_list_range #290
 func __aivi_matrix_buildRows:
   params = [width: Int, height: Int, build: Int -> Int -> A]
-  body = __aivi_list_map __aivi_matrix_buildRow #292 #294 __aivi_list_range #293
+  body = __aivi_list_map __aivi_matrix_buildRow #293 #295 __aivi_list_range #294
 func __aivi_matrix_initHeight:
   params = [width: Int, height: Int, build: Int -> Int -> A]
-  body = #296 LessThan 0 T|>[True] Err MatrixError.NegativeHeight #296 F|>[False] Ok Matrix.MkMatrix #295 #296 __aivi_matrix_buildRows #295 #296 #297
+  body = #297 LessThan 0 T|>[True] Err MatrixError.NegativeHeight #297 F|>[False] Ok Matrix.MkMatrix #296 #297 __aivi_matrix_buildRows #296 #297 #298
 func __aivi_matrix_init:
   params = [width: Int, height: Int, build: Int -> Int -> A]
-  body = #298 LessThan 0 T|>[True] Err MatrixError.NegativeWidth #298 F|>[False] __aivi_matrix_initHeight #298 #299 #300
+  body = #299 LessThan 0 T|>[True] Err MatrixError.NegativeWidth #299 F|>[False] __aivi_matrix_initHeight #299 #300 #301
 func __aivi_matrix_filled:
   params = [w: Int, h: Int, build: Int -> Int -> A]
-  body = #301 LessThan 0 Or #302 LessThan 0 T|>[True] Matrix.MkMatrix 0 0 [] F|>[False] Matrix.MkMatrix #301 #302 __aivi_matrix_buildRows #301 #302 #303
+  body = #302 LessThan 0 Or #303 LessThan 0 T|>[True] Matrix.MkMatrix 0 0 [] F|>[False] Matrix.MkMatrix #302 #303 __aivi_matrix_buildRows #302 #303 #304
 func __aivi_matrix_countCell:
   params = [predicate: A -> Bool, total: Int, item: A]
-  body = #304 #306 T|>[True] #305 Add 1 F|>[False] #305
+  body = #305 #307 T|>[True] #306 Add 1 F|>[False] #306
 func __aivi_matrix_countRow:
   params = [predicate: A -> Bool, total: Int, row: List A]
-  body = Reduce(List) __aivi_matrix_countCell #307 #308 #309
+  body = Reduce(List) __aivi_matrix_countCell #308 #309 #310
 func __aivi_matrix_count:
   params = [predicate: A -> Bool, matrix: Matrix A]
-  body = Reduce(List) __aivi_matrix_countRow #310 0 __aivi_matrix_rows #311
+  body = Reduce(List) __aivi_matrix_countRow #311 0 __aivi_matrix_rows #312
 func __aivi_list_findTry:
   params = [predicate: A -> Bool, item: A]
-  body = #312 #313 T|>[True] Some #313 F|>[False] None
+  body = #313 #314 T|>[True] Some #314 F|>[False] None
 func __aivi_list_findStep:
   params = [predicate: A -> Bool, acc: Option A, item: A]
-  body = #315 ||> Some v => Some #317 ||> None => __aivi_list_findTry #314 #316
+  body = #316 ||> Some v => Some #318 ||> None => __aivi_list_findTry #315 #317
 func __aivi_list_find:
   params = [predicate: A -> Bool, items: List A]
-  body = #319 |> Reduce(List) __aivi_list_findStep #318 None _
+  body = #320 |> Reduce(List) __aivi_list_findStep #319 None _
 func __aivi_list_takeHelp:
   params = [n: Int, count: Int, acc: List A, item: A]
-  body = #321 GreaterThanOrEqual #320 T|>[True] (#321, #322) F|>[False] (#321 Add 1, Append(List) #322 [#323])
+  body = #322 GreaterThanOrEqual #321 T|>[True] (#322, #323) F|>[False] (#322 Add 1, Append(List) #323 [#324])
 func __aivi_list_takeStep:
   params = [n: Int, state: (Int, List A), item: A]
-  body = #325 ||> (count, acc) => __aivi_list_takeHelp #324 #327 #328 #326
+  body = #326 ||> (count, acc) => __aivi_list_takeHelp #325 #328 #329 #327
 func __aivi_list_takeExtract:
   params = [state: (Int, List A)]
-  body = #329 ||> (_, acc) => #330
+  body = #330 ||> (_, acc) => #331
 func __aivi_list_take:
   params = [n: Int, items: List A]
-  body = #332 |> Reduce(List) __aivi_list_takeStep #331 (0, []) _ |> __aivi_list_takeExtract _
+  body = #333 |> Reduce(List) __aivi_list_takeStep #332 (0, []) _ |> __aivi_list_takeExtract _
 func __aivi_list_sortByInsertFalse:
   params = [cmp: A -> A -> Bool, newItem: A, current: A, acc: List A]
-  body = #333 #334 #335 T|>[True] (True, Append(List) Append(List) #336 [#334] [#335]) F|>[False] (False, Append(List) #336 [#335])
+  body = #334 #335 #336 T|>[True] (True, Append(List) Append(List) #337 [#335] [#336]) F|>[False] (False, Append(List) #337 [#336])
 func __aivi_list_sortByInsertStep:
   params = [cmp: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
-  body = #339 ||> (True, acc) => (True, Append(List) #341 [#340]) ||> (False, acc) => __aivi_list_sortByInsertFalse #337 #338 #340 #342
+  body = #340 ||> (True, acc) => (True, Append(List) #342 [#341]) ||> (False, acc) => __aivi_list_sortByInsertFalse #338 #339 #341 #343
 func __aivi_list_sortByInsertFinish:
   params = [cmp: A -> A -> Bool, newItem: A, state: (Bool, List A)]
-  body = #345 ||> (True, result) => #346 ||> (False, acc) => Append(List) #347 [#344]
+  body = #346 ||> (True, result) => #347 ||> (False, acc) => Append(List) #348 [#345]
 func __aivi_list_sortByInsert:
   params = [cmp: A -> A -> Bool, newItem: A, sorted: List A]
-  body = #350 |> Reduce(List) __aivi_list_sortByInsertStep #348 #349 (False, []) _ |> __aivi_list_sortByInsertFinish #348 #349 _
+  body = #351 |> Reduce(List) __aivi_list_sortByInsertStep #349 #350 (False, []) _ |> __aivi_list_sortByInsertFinish #349 #350 _
 func __aivi_list_sortByStep:
   params = [cmp: A -> A -> Bool, sorted: List A, item: A]
-  body = __aivi_list_sortByInsert #351 #353 #352
+  body = __aivi_list_sortByInsert #352 #354 #353
 func __aivi_list_sortBy:
   params = [cmp: A -> A -> Bool, items: List A]
-  body = #355 |> Reduce(List) __aivi_list_sortByStep #354 [] _
+  body = #356 |> Reduce(List) __aivi_list_sortByStep #355 [] _
 func __aivi_text_isEmpty:
   params = [text: Text]
-  body = #356 Equals ""
+  body = #357 Equals ""
 func __aivi_text_nonEmpty:
   params = [text: Text]
-  body = #357 Equals "" T|>[True] False F|>[False] True
+  body = #358 Equals "" T|>[True] False F|>[False] True
+func __aivi_lambda_0:
+  params = [value: Int]
+  body = Duration.Duration #359
+func __aivi_lambda_1:
+  params = [value: Int]
+  body = Retry.Retry #360
 func domain#47::member#0::lift:
   params = [items: List A]
-  body = #40
+  body = NonEmptyList.NonEmptyList #40
+func domain#47::member#1::__aivi_nel_carrier:
+  params = [nel: NonEmptyList A]
+  body = NonEmptyList.carrier #41
+value domain#145::member#0::ms:
+  body = __aivi_lambda_0
+value domain#146::member#0::times:
+  body = __aivi_lambda_1

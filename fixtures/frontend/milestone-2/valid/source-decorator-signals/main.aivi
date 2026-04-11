@@ -28,11 +28,11 @@ type Map K V =
   | EmptyMap
 
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 value authHeaders : Map Text Text = EmptyMap

@@ -7,9 +7,9 @@ use aivi_typing::{BuiltinSourceProvider, Kind};
 use super::{lower_module, path_text};
 use crate::{
     ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClusterFinalizer, ClusterPresentation,
-    DecoratorPayload, DomainMemberKind, ExportResolution, ExprKind, HoistKindFilter,
-    ImportBindingMetadata, ImportBundleKind, ImportValueType, IntrinsicValue, Item,
-    LiteralSuffixResolution, PipeStageKind, ReactiveUpdateBodyMode, RecordRowTransform,
+    DecoratorPayload, DomainMemberKind, DomainMemberResolution, ExportResolution, ExprKind,
+    HoistKindFilter, ImportBindingMetadata, ImportBundleKind, ImportValueType, IntrinsicValue,
+    Item, LiteralSuffixResolution, PipeStageKind, ReactiveUpdateBodyMode, RecordRowTransform,
     RecurrenceWakeupDecoratorKind, ResolutionState, SourceProviderRef, TermResolution, TextSegment,
     TypeItemBody, TypeKind, TypeResolution, ValidationMode, exports,
 };
@@ -540,7 +540,6 @@ fn reports_invalid_fixture_corpus_but_keeps_structural_hir() {
         "milestone-2/invalid/source-decorator-non-signal/main.aivi",
         "milestone-2/invalid/unknown-import-module/main.aivi",
         "milestone-2/invalid/domain-recursive-carrier/main.aivi",
-        "milestone-2/invalid/ambiguous-domain-literal-suffix/main.aivi",
         "milestone-2/invalid/unpaired-truthy-falsy/main.aivi",
         "milestone-2/invalid/fanin-without-map/main.aivi",
         "milestone-2/invalid/cluster-ambient-projection/main.aivi",
@@ -799,7 +798,7 @@ type User = {
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 fun keepCount:Int = response:(Result HttpError (List User)) current:Int=>    current
 
@@ -834,7 +833,7 @@ fn resolved_validation_accepts_reactive_source_option_payloads() {
         "reactive_source_option_payloads.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 signal enabled : Signal Bool =
     True
@@ -1458,10 +1457,10 @@ fn recurrence_wakeup_decorators_reject_invalid_shapes_and_source_mix() {
         "invalid_recurrence_wakeup_decorators.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 fun step = x=>    x
 
@@ -1604,7 +1603,7 @@ fn classifies_source_lifecycle_dependency_roles() {
         "source_lifecycle_dependency_roles.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 provider custom.feed
     argument path: Text
@@ -2733,7 +2732,7 @@ fn allows_recurrence_guards_before_steps() {
     let lowered = lower_text(
         "recurrence-guard-view.aivi",
         r#"domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 type Cursor = { hasNext: Bool }
 fun keep:Cursor = cursor:Cursor => cursor
@@ -3684,10 +3683,12 @@ fn resolves_suffixed_integers_to_domain_literal_declarations() {
             assert_eq!(literal.suffix.text(), "ms");
             assert_eq!(
                 literal.resolution,
-                ResolutionState::Resolved(LiteralSuffixResolution {
-                    domain: duration_domain_id,
-                    member_index: 0,
-                })
+                ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(
+                    DomainMemberResolution {
+                        domain: duration_domain_id,
+                        member_index: 0,
+                    }
+                ))
             );
         }
         other => panic!("expected suffixed integer expression, found {other:?}"),
@@ -4130,11 +4131,11 @@ fn local_domain_literal_suffixes_shadow_ambient_stdlib_suffixes() {
         "local-domain-suffix-shadowing.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 value timeout : Duration = 5sec
@@ -4175,10 +4176,12 @@ value retries : Retry = 3times
             assert_eq!(literal.suffix.text(), "sec");
             assert_eq!(
                 literal.resolution,
-                ResolutionState::Resolved(LiteralSuffixResolution {
-                    domain: duration_domain_id,
-                    member_index: 0,
-                })
+                ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(
+                    DomainMemberResolution {
+                        domain: duration_domain_id,
+                        member_index: 0,
+                    }
+                ))
             );
         }
         other => panic!("expected timeout body to be a suffixed integer, found {other:?}"),
@@ -4193,10 +4196,12 @@ value retries : Retry = 3times
             assert_eq!(literal.suffix.text(), "times");
             assert_eq!(
                 literal.resolution,
-                ResolutionState::Resolved(LiteralSuffixResolution {
-                    domain: retry_domain_id,
-                    member_index: 0,
-                })
+                ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(
+                    DomainMemberResolution {
+                        domain: retry_domain_id,
+                        member_index: 0,
+                    }
+                ))
             );
         }
         other => panic!("expected retries body to be a suffixed integer, found {other:?}"),

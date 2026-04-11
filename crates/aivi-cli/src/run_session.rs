@@ -2256,6 +2256,72 @@ export main
     }
 
     #[gtk::test]
+    fn parameterized_from_selectors_refresh_markup_after_signal_updates() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let artifact = prepare_run_from_text(
+            "from-selector-refresh-run.aivi",
+            r#"
+type Coord = Coord Int Int
+
+type State = {
+    on: Bool
+}
+
+type Coord -> State -> Text
+func stateCellLabel = cell state => state.on
+ T|> "On"
+ F|> "Off"
+
+signal click : Signal Unit
+type Unit -> State -> State
+func step = input current => { on: not current.on }
+
+value initialState = { on: False }
+
+signal state : Signal State = click
+ +|> initialState step
+
+from state = {
+    type Coord -> Text
+    cellLabel cell: stateCellLabel cell
+}
+
+value main =
+    <Window title="From selector refresh">
+        <Button label={cellLabel (Coord 0 0)} onClick={click} />
+    </Window>
+
+export main
+"#,
+        );
+        let harness = start_run_session_with_launch_config(
+            Path::new("from-selector-refresh-run.aivi"),
+            artifact,
+            RunLaunchConfig::default(),
+        )
+        .expect("from-selector refresh fixture should start a run session");
+        let context = harness.control().context();
+        let button = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Off"))
+            .expect("fixture should render the initial Off label");
+
+        button.emit_clicked();
+        assert!(
+            pump_until(&context, Duration::from_millis(250), || {
+                harness.root_windows().iter().any(|window| {
+                    find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "On").is_some()
+                })
+            }),
+            "parameterized from selectors should refresh markup labels after signal updates (state: {})",
+            debug_signal_value_for(&harness, "state"),
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
     fn reversi_run_session_exposes_human_opening_move() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let (path, artifact) = prepare_reversi_run();

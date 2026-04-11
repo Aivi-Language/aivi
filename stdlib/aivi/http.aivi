@@ -19,7 +19,7 @@ type DecodeMode =
   | Permissive
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = n => Retry n
 }
 
 value contentTypeJson : ContentType = "application/json"

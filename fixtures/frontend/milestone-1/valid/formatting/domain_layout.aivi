@@ -1,11 +1,11 @@
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Int -> Duration
     (*)
 }
 
 domain Path over Text = {
-    literal root : Text -> Path
+    suffix root : Text = value => Path value
     type Path -> Text -> Path
     (/)
 }

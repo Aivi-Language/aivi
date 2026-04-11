@@ -193,7 +193,7 @@ mod tests {
             "domain-operator-duration.aivi",
             r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (+)
 }
@@ -213,7 +213,7 @@ value total = 10ms + 5ms
             "domain-operator-duration-subtract.aivi",
             r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Duration -> Duration
     (-)
 }
@@ -278,7 +278,7 @@ value nested = root "/tmp" / "config"
             "domain-operator-scale.aivi",
             r#"
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     type Duration -> Int -> Duration
     (*)
 }

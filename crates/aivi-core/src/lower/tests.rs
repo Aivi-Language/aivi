@@ -609,11 +609,11 @@ fn lowers_recurrence_reports_into_pipe_nodes() {
         "typed-core-recurrence.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 fun step:Int = n:Int=>    n
@@ -660,7 +660,7 @@ fn lowers_recurrence_guards_into_pipe_nodes() {
         "typed-core-recurrence-guard.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 type Cursor = {
@@ -1466,11 +1466,11 @@ fn validator_catches_broken_recurrence_closure() {
         "typed-core-recurrence.aivi",
         r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 
 domain Retry over Int = {
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 }
 
 fun step:Int = n:Int=>    n

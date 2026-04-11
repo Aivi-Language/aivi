@@ -101,6 +101,7 @@ struct ResolveEnv {
     implicit_type_parameters: Vec<TypeParameterId>,
     allow_implicit_type_parameters: bool,
     prefer_ambient_names: bool,
+    current_domain: Option<ItemId>,
 }
 
 #[derive(Clone, Copy)]
@@ -1115,15 +1116,6 @@ impl<'a> Lowerer<'a> {
             ),
         };
 
-        let uses_self = member
-            .body
-            .as_ref()
-            .is_some_and(|body| body.contains_self_reference());
-        let has_explicit_self_parameter = member
-            .parameters
-            .first()
-            .is_some_and(|parameter| parameter.text == "self");
-
         let annotation = member
             .annotation
             .as_ref()
@@ -1140,50 +1132,60 @@ impl<'a> Lowerer<'a> {
                 self.placeholder_type(member.span)
             });
 
-        // When `self` is used, prepend `DomainType ->` to the annotation.
-        let annotation = if uses_self {
-            if let Some(domain_id) = domain_name {
-                let domain_type_id =
-                    self.synthesise_owner_self_type(domain_id, domain_type_parameters);
-                self.alloc_type(TypeNode {
-                    span: member.span,
-                    kind: TypeKind::Arrow {
-                        parameter: domain_type_id,
-                        result: annotation,
-                    },
-                })
-            } else {
-                annotation
+        let annotation = if kind == DomainMemberKind::Literal {
+            match self.module.types()[annotation].kind {
+                TypeKind::Arrow { .. } => annotation,
+                _ => {
+                    let Some(domain_id) = domain_name else {
+                        return DomainMember {
+                            span: member.span,
+                            kind,
+                            name,
+                            annotation,
+                            parameters: Vec::new(),
+                            body: member.body.as_ref().map(|body| self.lower_expr(body)),
+                        };
+                    };
+                    let domain_type_id =
+                        self.synthesise_owner_self_type(domain_id, domain_type_parameters);
+                    self.alloc_type(TypeNode {
+                        span: member.span,
+                        kind: TypeKind::Arrow {
+                            parameter: annotation,
+                            result: domain_type_id,
+                        },
+                    })
+                }
             }
         } else {
             annotation
         };
 
-        // Synthesise implicit `self` binding before explicit parameters.
-        let mut parameters: Vec<FunctionParameter> = if uses_self && !has_explicit_self_parameter {
-            let self_name = self.make_name("self", member.span);
-            let self_binding = self.alloc_binding(Binding {
-                span: member.span,
-                name: self_name,
-                kind: BindingKind::FunctionParameter,
-            });
-            vec![FunctionParameter {
-                span: member.span,
-                binding: self_binding,
-                annotation: None,
-            }]
-        } else {
+        let parameters: Vec<FunctionParameter> = if kind == DomainMemberKind::Literal {
             Vec::new()
-        };
-
-        parameters.extend(
+        } else {
             member
                 .parameters
                 .iter()
-                .map(|parameter| self.lower_instance_parameter(parameter)),
-        );
+                .map(|parameter| self.lower_instance_parameter(parameter))
+                .collect()
+        };
 
-        let body = member.body.as_ref().map(|body| self.lower_expr(body));
+        let body = member.body.as_ref().map(|body| self.lower_expr(body)).or_else(|| {
+            if kind == DomainMemberKind::Literal {
+                self.emit_error(
+                    member.span,
+                    format!(
+                        "domain member `{}` is missing a body",
+                        domain_member_surface_name(&member.name)
+                    ),
+                    code("missing-domain-member-body"),
+                );
+                Some(self.placeholder_expr(member.span))
+            } else {
+                None
+            }
+        });
 
         DomainMember {
             span: member.span,
@@ -4739,10 +4741,10 @@ impl<'a> Lowerer<'a> {
                             insert_site(
                                 &mut namespaces.literal_suffixes,
                                 member.name.text(),
-                                LiteralSuffixResolution {
+                                LiteralSuffixResolution::DomainMember(DomainMemberResolution {
                                     domain: item_id,
                                     member_index,
-                                },
+                                }),
                                 member.span,
                             );
                             continue;
@@ -4856,10 +4858,10 @@ impl<'a> Lowerer<'a> {
                             insert_site(
                                 &mut namespaces.ambient_literal_suffixes,
                                 member.name.text(),
-                                LiteralSuffixResolution {
+                                LiteralSuffixResolution::DomainMember(DomainMemberResolution {
                                     domain: item_id,
                                     member_index,
-                                },
+                                }),
                                 member.span,
                             );
                             continue;
@@ -4961,7 +4963,9 @@ impl<'a> Lowerer<'a> {
                         );
                     }
                 }
-                ImportBindingMetadata::Bundle(_) | ImportBindingMetadata::InstanceMember { .. } => {
+                ImportBindingMetadata::Bundle(_)
+                | ImportBindingMetadata::DomainSuffix { .. }
+                | ImportBindingMetadata::InstanceMember { .. } => {
                 }
                 ImportBindingMetadata::Unknown => {
                     self.diagnostics.push(
@@ -5190,12 +5194,8 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    /// Synthesise a minimal `Item::Domain` stub in the current module so that
-    /// `LiteralSuffixResolution.domain` has a valid `ItemId` to point at.
-    /// The stub is allocated but NOT appended to `root_items`, so it is invisible
-    /// to name resolution and exports — it exists only to satisfy look-up code
-    /// that accesses `module.items()[resolution.domain]` at the type-checking
-    /// and validation layer.
+    /// Register imported domain suffix constructors as synthetic hidden imports so compact
+    /// suffixed literals can elaborate to ordinary imported calls.
     fn register_imported_domain_literal_suffixes(
         &mut self,
         domain_name: &Name,
@@ -5203,98 +5203,36 @@ impl<'a> Lowerer<'a> {
         literal_suffixes: &[ImportedDomainLiteralSuffix],
         target: &mut HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
     ) {
-        // Allocate a placeholder carrier type — resolved to Unit so validation
-        // does not report spurious "unresolved-name" errors on synthetic stubs.
-        let stub_path = self.make_path(&[self.make_name("Unit", span)]);
-        let stub_type_kind = || {
-            TypeKind::Name(TypeReference {
-                path: stub_path.clone(),
-                resolution: ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Unit)),
-            })
-        };
-
-        let carrier = self.alloc_type(TypeNode {
-            span,
-            kind: stub_type_kind(),
-        });
-
-        // Build stub members — one per literal suffix, in member_index order.
-        // We need indices stable across the allocated slice, so compute the
-        // max member_index first and pre-fill with placeholder members at
-        // non-suffix positions.
-        let max_index = literal_suffixes
-            .iter()
-            .map(|s| s.member_index)
-            .max()
-            .unwrap_or(0);
-        let mut members: Vec<Option<DomainMember>> = vec![None; max_index + 1];
         for suffix in literal_suffixes {
-            let annotation = self.alloc_type(TypeNode {
+            let hidden_name = self.make_name(
+                &format!("__domain_suffix_{}_{}", domain_name.text(), suffix.name),
                 span,
-                kind: stub_type_kind(),
+            );
+            let import = ImportBinding {
+                span,
+                source_module: None,
+                imported_name: hidden_name.clone(),
+                local_name: hidden_name,
+                resolution: ImportBindingResolution::Resolved,
+                metadata: ImportBindingMetadata::DomainSuffix {
+                    domain_name: domain_name.text().into(),
+                    suffix_name: suffix.name.clone(),
+                    base: suffix.base,
+                },
+                callable_type: suffix.callable_type.clone(),
+                deprecation: None,
+            };
+            let import_id = self.module.alloc_import(import).unwrap_or_else(|_| {
+                self.emit_arena_overflow("HIR import arena (domain suffix)");
+                std::process::exit(1);
             });
-            members[suffix.member_index] = Some(DomainMember {
-                span,
-                kind: DomainMemberKind::Literal,
-                name: self.make_name(&suffix.name, span),
-                annotation,
-                parameters: Vec::new(),
-                body: None,
-            });
-        }
-        // Fill gaps with placeholder members so member indices are consistent.
-        let members: Vec<DomainMember> = members
-            .into_iter()
-            .enumerate()
-            .map(|(i, m)| {
-                m.unwrap_or_else(|| {
-                    let annotation = self.alloc_type(TypeNode {
-                        span,
-                        kind: stub_type_kind(),
-                    });
-                    DomainMember {
-                        span,
-                        kind: DomainMemberKind::Literal,
-                        name: self.make_name(&format!("__stub_{i}"), span),
-                        annotation,
-                        parameters: Vec::new(),
-                        body: None,
-                    }
-                })
-            })
-            .collect();
-
-        let domain_stub = Item::Domain(DomainItem {
-            header: ItemHeader {
-                span,
-                decorators: Vec::new(),
-            },
-            name: domain_name.clone(),
-            parameters: Vec::new(),
-            carrier,
-            members: members.clone(),
-        });
-
-        let domain_item_id = self.module.alloc_item(domain_stub).unwrap_or_else(|_| {
-            self.emit_arena_overflow("HIR item arena (imported domain stub)");
-            std::process::exit(1);
-        });
-
-        // Register each literal suffix entry.
-        for (member_index, member) in members.iter().enumerate() {
-            if member.kind != DomainMemberKind::Literal {
-                continue;
-            }
-            if member.name.text().starts_with("__stub_") {
+            if suffix.name.chars().count() < 2 {
                 continue;
             }
             insert_site(
                 target,
-                member.name.text(),
-                LiteralSuffixResolution {
-                    domain: domain_item_id,
-                    member_index,
-                },
+                &suffix.name,
+                LiteralSuffixResolution::Import(import_id),
                 span,
             );
         }
@@ -8028,6 +7966,7 @@ impl<'a> Lowerer<'a> {
                     self.resolve_type(member.annotation, namespaces, &mut env);
                     if let Some(body) = member.body {
                         let mut member_env = env.clone();
+                        member_env.set_current_domain(item_id);
                         member_env.push_term_scope(self.binding_scope(
                             member.parameters.iter().map(|parameter| parameter.binding),
                         ));
@@ -8788,6 +8727,14 @@ impl<'a> Lowerer<'a> {
             reference.resolution = ResolutionState::Resolved(TermResolution::Local(binding));
             return;
         }
+        if let Some(domain_item) = env.current_domain()
+            && let Some(Item::Domain(domain)) = self.module.items().get(domain_item)
+            && domain.name.text() == name
+        {
+            reference.resolution =
+                ResolutionState::Resolved(TermResolution::DomainConstructor(domain_item));
+            return;
+        }
         if env.prefer_ambient_names() {
             match lookup_item(&namespaces.ambient_term_items, name) {
                 LookupResult::Unique(item) => {
@@ -9426,7 +9373,12 @@ impl<'a> Lowerer<'a> {
             .into_iter()
             .flatten()
             .copied()
-            .filter(|candidate| self.module.root_items().contains(&candidate.value.domain))
+            .filter(|candidate| match candidate.value {
+                LiteralSuffixResolution::DomainMember(resolution) => {
+                    self.module.root_items().contains(&resolution.domain)
+                }
+                LiteralSuffixResolution::Import(_) => false,
+            })
             .collect();
         if !local_root_candidates.is_empty() {
             return self.finish_literal_suffix_resolution(suffix, &local_root_candidates);
@@ -9438,18 +9390,13 @@ impl<'a> Lowerer<'a> {
             .into_iter()
             .flatten()
             .copied()
-            .filter(|candidate| !self.module.root_items().contains(&candidate.value.domain))
+            .filter(|candidate| matches!(candidate.value, LiteralSuffixResolution::Import(_)))
             .collect();
         if !imported_candidates.is_empty() {
             return self.finish_literal_suffix_resolution(suffix, &imported_candidates);
         }
 
         let Some(candidates) = namespaces.ambient_literal_suffixes.get(suffix.text()) else {
-            self.emit_error(
-                suffix.span(),
-                format!("unknown literal suffix `{}`", suffix.text()),
-                code("unknown-literal-suffix"),
-            );
             return ResolutionState::Unresolved;
         };
 
@@ -9458,22 +9405,10 @@ impl<'a> Lowerer<'a> {
 
     fn finish_literal_suffix_resolution(
         &mut self,
-        suffix: &Name,
+        _suffix: &Name,
         candidates: &[NamedSite<LiteralSuffixResolution>],
     ) -> ResolutionState<LiteralSuffixResolution> {
         if candidates.len() > 1 {
-            let mut diagnostic =
-                Diagnostic::error(format!("literal suffix `{}` is ambiguous", suffix.text()))
-                    .with_code(code("ambiguous-literal-suffix"))
-                    .with_primary_label(
-                        suffix.span(),
-                        "this suffixed literal matches multiple domain literal declarations",
-                    );
-            for candidate in candidates.iter().take(3) {
-                diagnostic = diagnostic
-                    .with_secondary_label(candidate.span, "matching literal suffix declared here");
-            }
-            self.diagnostics.push(diagnostic);
             return ResolutionState::Unresolved;
         }
 

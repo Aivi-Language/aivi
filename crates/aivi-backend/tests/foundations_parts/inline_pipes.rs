@@ -835,10 +835,10 @@ fn lowers_recurrence_targets_and_witnesses() {
         "backend-recurrence.aivi",
         r#"
 domain Duration over Int
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 
 domain Retry over Int
-    literal times : Int -> Retry
+    suffix times : Int = value => Retry value
 
 fun step:Int = x:Int=>    x
 

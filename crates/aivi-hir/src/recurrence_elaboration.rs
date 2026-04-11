@@ -772,6 +772,8 @@ fn recurrence_guard_issue_blocker(
             RecurrenceRuntimeStageBlocker::UnknownField { path, subject }
         }
         GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::UnknownLiteralSuffix { .. }
+        | GateIssue::AmbiguousLiteralSuffix { .. }
         | GateIssue::AmbientSubjectOutsidePipe { .. }
         | GateIssue::AmbiguousDomainOperator { .. }
         | GateIssue::InvalidPipeStageInput { .. }
@@ -1079,10 +1081,33 @@ mod tests {
                     witness.cause,
                     aivi_typing::NonSourceWakeupCause::ExplicitTimer
                 );
-                assert!(matches!(
-                    witness.runtime_witness.kind,
-                    GateRuntimeExprKind::SuffixedInteger(_)
-                ));
+                match &witness.runtime_witness.kind {
+                    GateRuntimeExprKind::Apply {
+                        callee,
+                        arguments,
+                    } => {
+                        assert_eq!(arguments.len(), 1);
+                        assert!(matches!(
+                            &arguments[0].kind,
+                            GateRuntimeExprKind::Integer(crate::IntegerLiteral { raw })
+                                if raw.as_ref() == "5"
+                        ));
+                        match &callee.kind {
+                            GateRuntimeExprKind::Reference(
+                                crate::GateRuntimeReference::DomainMember(handle),
+                            ) => {
+                                assert_eq!(handle.domain_name.as_ref(), "Duration");
+                                assert_eq!(handle.member_name.as_ref(), "sec");
+                            }
+                            other => panic!(
+                                "expected timer witness to lower as an explicit suffix constructor call, found {other:?}"
+                            ),
+                        }
+                    }
+                    other => panic!(
+                        "expected timer witness runtime expr to be a suffix constructor call, found {other:?}"
+                    ),
+                }
             }
             other => panic!("expected planned signal recurrence node, found {other:?}"),
         }
@@ -1105,10 +1130,33 @@ mod tests {
                     witness.cause,
                     aivi_typing::NonSourceWakeupCause::ExplicitBackoff
                 );
-                assert!(matches!(
-                    witness.runtime_witness.kind,
-                    GateRuntimeExprKind::SuffixedInteger(_)
-                ));
+                match &witness.runtime_witness.kind {
+                    GateRuntimeExprKind::Apply {
+                        callee,
+                        arguments,
+                    } => {
+                        assert_eq!(arguments.len(), 1);
+                        assert!(matches!(
+                            &arguments[0].kind,
+                            GateRuntimeExprKind::Integer(crate::IntegerLiteral { raw })
+                                if raw.as_ref() == "3"
+                        ));
+                        match &callee.kind {
+                            GateRuntimeExprKind::Reference(
+                                crate::GateRuntimeReference::DomainMember(handle),
+                            ) => {
+                                assert_eq!(handle.domain_name.as_ref(), "Retry");
+                                assert_eq!(handle.member_name.as_ref(), "times");
+                            }
+                            other => panic!(
+                                "expected backoff witness to lower as an explicit suffix constructor call, found {other:?}"
+                            ),
+                        }
+                    }
+                    other => panic!(
+                        "expected backoff witness runtime expr to be a suffix constructor call, found {other:?}"
+                    ),
+                }
             }
             other => panic!("expected planned task recurrence node, found {other:?}"),
         }
@@ -1243,7 +1291,7 @@ signal gated : Signal Int =
             "recurrence-guard.aivi",
             r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 type Cursor = {
     hasNext: Bool
@@ -1319,7 +1367,7 @@ signal cursor : Signal Cursor =
             "recurrence-step-chain-mismatch.aivi",
             r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 fun keep = n:Int=>    n
 
@@ -1364,7 +1412,7 @@ signal broken : Signal Int =
             "recurrence-signal-reads-in-update-stages.aivi",
             r#"
 domain Duration over Int = {
-    literal sec : Int -> Duration
+    suffix sec : Int = value => Duration value
 }
 fun advance:Int = pressed:Bool n:Int=>    pressed
      T|> n + 1

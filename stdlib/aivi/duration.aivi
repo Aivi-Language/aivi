@@ -8,38 +8,46 @@ use aivi.arithmetic (
 type DurationError = Text
 
 domain Duration over Int = {
-    literal ms : Int -> Duration
-    ms n = n
-    literal sec : Int -> Duration
-    sec n = mul n 1000
-    literal min : Int -> Duration
-    min n = mul n 60000
-    literal hr : Int -> Duration
-    hr n = mul n 3600000
-    literal dy : Int -> Duration
-    dy n = mul n 86400000
+    suffix ms : Int = n => Duration n
+    suffix sec : Int = n => Duration (mul n 1000)
+    suffix min : Int = n => Duration (mul n 60000)
+    suffix hr : Int = n => Duration (mul n 3600000)
+    suffix dy : Int = n => Duration (mul n 86400000)
+
     type Int -> Duration
-    millis
-    type Int
-    toMillis = self
-    type Int
-    toSeconds = div self 1000
-    type Int
-    toMinutes = div self 60000
-    type Int
-    toHours = div self 3600000
-    type Int
-    toDays = div self 86400000
+    millis n = Duration n
+
+    type Duration -> Int
+    toMillis duration = duration.carrier
+
+    type Duration -> Int
+    toSeconds duration = div duration.carrier 1000
+
+    type Duration -> Int
+    toMinutes duration = div duration.carrier 60000
+
+    type Duration -> Int
+    toHours duration = div duration.carrier 3600000
+
+    type Duration -> Int
+    toDays duration = div duration.carrier 86400000
+
     type Int -> Result DurationError Duration
-    trySeconds
+    trySeconds seconds = seconds < 0
+     T|> Err "Duration cannot be negative"
+     F|> Ok (Duration (mul seconds 1000))
+
     type Duration -> Duration -> Duration
-    (+)
+    (+) left right = Duration (left.carrier + right.carrier)
+
     type Duration -> Duration -> Duration
-    (-)
+    (-) left right = Duration (left.carrier - right.carrier)
+
     type Duration -> Int -> Duration
-    (*)
+    (*) duration n = Duration (mul duration.carrier n)
+
     type Duration -> Duration -> Bool
-    (<)
+    (<) left right = left.carrier < right.carrier
 }
 
 export DurationError

@@ -444,23 +444,26 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn check_domain_item(&mut self, owner: ItemId, item: &crate::DomainItem) {
-        let Some(carrier) = self.typing.lower_open_annotation(item.carrier) else {
-            return;
-        };
         for member in &item.members {
             let Some(body) = member.body else {
                 continue;
             };
-            let Some(surface) = self.typing.lower_open_annotation(member.annotation) else {
+            let Some(expected) = self.typing.lower_open_annotation(member.annotation) else {
                 continue;
             };
-            let expected = rewrite_domain_carrier_view(&surface, owner, &item.parameters, &carrier);
-            self.check_domain_member(member, body, &expected);
+            self.check_domain_member(owner, member, body, &expected);
         }
     }
 
-    fn check_domain_member(&mut self, member: &DomainMember, body: ExprId, expected: &GateType) {
+    fn check_domain_member(
+        &mut self,
+        owner: ItemId,
+        member: &DomainMember,
+        body: ExprId,
+        expected: &GateType,
+    ) {
         let mut env = GateExprEnv::default();
+        env.current_domain = Some(owner);
         let mut current = expected.clone();
         for parameter in &member.parameters {
             let GateType::Arrow {
@@ -1505,6 +1508,7 @@ impl<'a> TypeChecker<'a> {
             ExprKind::Projection { base, path } => {
                 self.check_projection_expr(expr_id, &base, &path, env, expected, value_stack)
             }
+            ExprKind::SuffixedInteger(literal) => Some(self.check_suffixed_integer_expr(&literal, expected)),
             ExprKind::PatchApply { target, patch } => Some(self.check_patch_apply_expr(
                 expr_id,
                 target,
@@ -1522,7 +1526,6 @@ impl<'a> TypeChecker<'a> {
             | ExprKind::Float(_)
             | ExprKind::Decimal(_)
             | ExprKind::BigInt(_)
-            | ExprKind::SuffixedInteger(_)
             | ExprKind::Text(_)
             | ExprKind::Regex(_)
             | ExprKind::Unary { .. }
@@ -1530,6 +1533,63 @@ impl<'a> TypeChecker<'a> {
             | ExprKind::Pipe(_)
             | ExprKind::Cluster(_)
             | ExprKind::Markup(_) => None,
+        }
+    }
+
+    fn check_suffixed_integer_expr(
+        &mut self,
+        literal: &crate::SuffixedIntegerLiteral,
+        expected: &GateType,
+    ) -> bool {
+        match self
+            .typing
+            .select_suffixed_integer_candidate(literal, Some(expected))
+        {
+            LiteralSuffixSelection::Unique { result, .. } => result.same_shape(expected),
+            LiteralSuffixSelection::Ambiguous { candidates } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "literal suffix `{}` is ambiguous",
+                        literal.suffix.text()
+                    ))
+                    .with_code(code("ambiguous-literal-suffix"))
+                    .with_primary_label(
+                        literal.suffix.span(),
+                        "add a type annotation to disambiguate which domain suffix you want",
+                    )
+                    .with_note(format!("candidates: {}", candidates.join(", "))),
+                );
+                false
+            }
+            LiteralSuffixSelection::NoMatch { candidates } if candidates.is_empty() => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "unknown literal suffix `{}`",
+                        literal.suffix.text()
+                    ))
+                    .with_code(code("unknown-literal-suffix"))
+                    .with_primary_label(
+                        literal.suffix.span(),
+                        "this suffixed literal does not match any visible domain suffix",
+                    ),
+                );
+                false
+            }
+            LiteralSuffixSelection::NoMatch { candidates } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "literal suffix `{}` does not produce expected type `{expected}`",
+                        literal.suffix.text()
+                    ))
+                    .with_code(code("literal-suffix-type-mismatch"))
+                    .with_primary_label(
+                        literal.suffix.span(),
+                        "this suffix constructor does not match the expected type here",
+                    )
+                    .with_note(format!("visible candidates: {}", candidates.join(", "))),
+                );
+                false
+            }
         }
     }
 
@@ -2318,7 +2378,7 @@ impl<'a> TypeChecker<'a> {
             return Some(false);
         }
 
-        match self.typing.project_type(&subject, path) {
+        match self.typing.project_type(&subject, path, env.current_domain) {
             Ok(actual) => Some(self.check_result_type(expr_id, Some(expected), &actual)),
             Err(issue) => {
                 self.emit_expr_issues(&[issue]);
@@ -2840,6 +2900,25 @@ impl<'a> TypeChecker<'a> {
     fn emit_expr_issues(&mut self, issues: &[GateIssue]) {
         for issue in issues {
             let diagnostic = match issue {
+                GateIssue::UnknownLiteralSuffix { span, suffix } => {
+                    Diagnostic::error(format!("unknown literal suffix `{suffix}`"))
+                        .with_code(code("unknown-literal-suffix"))
+                        .with_primary_label(
+                            *span,
+                            "this suffixed literal does not match any visible domain suffix",
+                        )
+                }
+                GateIssue::AmbiguousLiteralSuffix {
+                    span,
+                    suffix,
+                    candidates,
+                } => Diagnostic::error(format!("literal suffix `{suffix}` is ambiguous"))
+                    .with_code(code("ambiguous-literal-suffix"))
+                    .with_primary_label(
+                        *span,
+                        "add a type annotation to disambiguate which domain suffix you want",
+                    )
+                    .with_note(format!("candidates: {}", candidates.join(", "))),
                 GateIssue::InvalidPipeStageInput {
                     span,
                     stage,

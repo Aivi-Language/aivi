@@ -39,7 +39,7 @@ instance Eq Blob = {
     (==) left right = same left right
 }
 domain Duration over Int = {
-    literal ms : Int -> Duration
+    suffix ms : Int = value => Duration value
     (*) : Duration -> Int -> Duration
 }
 signal flow = value |> compute ?|> ready ||> Ready -> keep *|> .email &|> build @|> loop <|@ step | debug <|* merge T|> start F|> stop
@@ -1396,7 +1396,7 @@ fn parser_builds_provider_contract_members_from_fixture() {
 #[test]
 fn parser_distinguishes_compact_literal_suffixes_from_spaced_application() {
     let (_, parsed) = load(
-        "domain Duration over Int = {\n    literal ms : Int -> Duration\n}\nvalue compact = 250ms\nvalue spaced = 250 ms\n",
+        "domain Duration over Int = {\n    suffix ms : Int = value => Duration value\n}\nvalue compact = 250ms\nvalue spaced = 250 ms\n",
     );
 
     assert!(!parsed.has_errors());
@@ -1546,7 +1546,7 @@ fn parser_accepts_adjacent_negative_numeric_literals() {
     }
 
     let (_, parsed) = load(
-        "domain Duration over Int = {\n    literal ms : Int -> Duration\n}\nvalue negativeInt = -1\nvalue negativeFloat = -3.4\nvalue negativeDecimal = -19d\nvalue negativePreciseDecimal = -19.25d\nvalue negativeBigInt = -123n\nvalue negativeDuration = -250ms\nvalue subtract = 4 - 3\n",
+        "domain Duration over Int = {\n    suffix ms : Int = value => Duration value\n}\nvalue negativeInt = -1\nvalue negativeFloat = -3.4\nvalue negativeDecimal = -19d\nvalue negativePreciseDecimal = -19.25d\nvalue negativeBigInt = -123n\nvalue negativeDuration = -250ms\nvalue subtract = 4 - 3\n",
     );
 
     assert!(

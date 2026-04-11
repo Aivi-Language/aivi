@@ -1783,14 +1783,14 @@ impl<'a> Parser<'a> {
     ) -> Option<DomainMember> {
         let start = *cursor;
 
-        // Literal members keep the colon syntax: `literal ms : Int -> Duration`
+        // Suffix members use `suffix ms : Int = n => Duration (...)`.
         if self
-            .consume_identifier_text(cursor, end, "literal")
+            .consume_identifier_text(cursor, end, "suffix")
             .is_some()
         {
             let Some(suffix) = self.parse_identifier(cursor, end) else {
                 self.diagnostics.push(
-                    Diagnostic::error("domain literal declaration is missing its suffix name")
+                    Diagnostic::error("domain suffix declaration is missing its suffix name")
                         .with_code(MISSING_DOMAIN_MEMBER_NAME)
                         .with_primary_label(
                             self.source_span_for_range(start, *cursor),
@@ -1799,33 +1799,78 @@ impl<'a> Parser<'a> {
                 );
                 return None;
             };
+            let member_end = self
+                .find_next_domain_member_start(*cursor, end, member_indent)
+                .unwrap_or(end);
             let annotation = if self.consume_kind(cursor, end, TokenKind::Colon).is_some() {
-                self.parse_type_expr(cursor, end, TypeStop::default())
+                let mut annotation_end = member_end;
+                let mut scan = *cursor;
+                while let Some(index) = self.next_significant_in_range(scan, member_end) {
+                    if self.tokens[index].kind() == TokenKind::Equals {
+                        annotation_end = index;
+                        break;
+                    }
+                    scan = index + 1;
+                }
+                self.parse_type_expr(cursor, annotation_end, TypeStop::default())
                     .or_else(|| {
                         self.diagnostics.push(
-                            Diagnostic::error("domain literal is missing its type after `:`")
+                            Diagnostic::error("domain suffix is missing its base type after `:`")
                                 .with_code(MISSING_DOMAIN_MEMBER_TYPE)
                                 .with_primary_label(
                                     suffix.span,
-                                    "expected a member type such as `Int -> Duration`",
+                                    "expected a base type such as `Int` or `Decimal`",
                                 ),
                         );
                         None
                     })
             } else {
                 self.diagnostics.push(
-                    Diagnostic::error("domain literal is missing `:` before its type")
+                    Diagnostic::error("domain suffix is missing `:` before its base type")
                         .with_code(MISSING_DOMAIN_MEMBER_TYPE)
-                        .with_primary_label(suffix.span, "expected `:` followed by a member type"),
+                        .with_primary_label(suffix.span, "expected `:` followed by a base type"),
                 );
                 None
             };
+            let body = if let Some(eq_index) = self.consume_kind(cursor, member_end, TokenKind::Equals)
+            {
+                let equals_span = self.source_span_of_token(eq_index);
+                let body = self
+                    .parse_expr(cursor, member_end, ExprStop::default())
+                    .or_else(|| {
+                        self.diagnostics.push(
+                            Diagnostic::error("domain suffix is missing its body after `=`")
+                                .with_code(MISSING_DOMAIN_MEMBER_BODY)
+                                .with_primary_label(
+                                    equals_span,
+                                    "expected a constructor expression for this suffix",
+                                ),
+                        );
+                        None
+                    });
+                if body.is_some()
+                    && let Some(trailing_index) = self.next_significant_in_range(*cursor, member_end)
+                {
+                    self.diagnostics.push(
+                        Diagnostic::error("domain suffix body must contain exactly one expression")
+                            .with_code(TRAILING_DECLARATION_BODY_TOKEN)
+                            .with_primary_label(
+                                self.source_span_of_token(trailing_index),
+                                "this token is outside the domain suffix body",
+                            ),
+                    );
+                }
+                body
+            } else {
+                None
+            };
+            *cursor = member_end;
             return Some(DomainMember {
                 name: DomainMemberName::Literal(suffix),
                 annotation,
                 parameters: Vec::new(),
-                body: None,
-                span: self.source_span_for_range(start, *cursor),
+                body,
+                span: self.source_span_for_range(start, member_end),
             });
         }
 

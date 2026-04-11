@@ -14,6 +14,7 @@ use crate::{
         ValueItem,
     },
     ids::{BindingId, ExprId, ImportId, ItemId, PatternId, TypeId, TypeParameterId},
+    typecheck_context::LiteralSuffixSelection,
     validate::{
         ClassConstraintBinding, ClassMemberCallMatch, DomainMemberSelection, GateExprEnv,
         GateIssue, GateRecordField, GateType, GateTypeContext, PolyTypeBindings, TypeBinding,

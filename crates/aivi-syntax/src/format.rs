@@ -1866,43 +1866,20 @@ impl Formatter {
     fn format_domain_member(&self, member: &DomainMember) -> Vec<String> {
         let mut lines = Vec::new();
 
-        // Literal members use the colon syntax: `literal ms : Int -> Duration`
+        // Suffix members keep their authored `suffix ms : Int = ...` surface.
         if matches!(member.name, DomainMemberName::Literal(_)) {
+            let mut header = format!(
+                "{}{}",
+                spaces(INDENT_WIDTH),
+                self.format_domain_member_name(&member.name)
+            );
             if let Some(annotation) = &member.annotation {
-                let prefix = format!(
-                    "{}{}{}",
-                    spaces(INDENT_WIDTH),
-                    self.format_domain_member_name(&member.name),
-                    self.type_annotation_separator(&[], annotation)
-                );
-                let force_break = self.should_force_type_break(display_width(&prefix), annotation);
-                let block = self.format_type_block(annotation, force_break);
-                if block.is_inline() {
-                    lines.push(format!(
-                        "{prefix}{}",
-                        block.inline_text().expect("inline block")
-                    ));
-                } else {
-                    lines.extend(block.prefixed(&prefix).into_lines());
-                }
+                header.push_str(" : ");
+                header.push_str(&self.format_type_inline(annotation, 0));
             } else {
-                lines.push(format!(
-                    "{}{}:",
-                    spaces(INDENT_WIDTH),
-                    self.format_domain_member_name(&member.name)
-                ));
+                header.push(':');
             }
-            // If a literal member also carries a body, emit `name params = body`
             if let Some(body) = &member.body {
-                let bare_name = match &member.name {
-                    DomainMemberName::Literal(ident) => ident.text.as_str().to_owned(),
-                    other => self.format_domain_member_name(other),
-                };
-                let mut header = format!("{}{}", spaces(INDENT_WIDTH), bare_name);
-                for parameter in &member.parameters {
-                    header.push(' ');
-                    header.push_str(&parameter.text);
-                }
                 let force_break =
                     self.should_force_expr_break(display_width(&format!("{header} = ")), body);
                 let block = self.format_expr_block(body, force_break);
@@ -1917,6 +1894,8 @@ impl Formatter {
                     lines.push(format!("{header} ="));
                     lines.extend(block.indented(INDENT_WIDTH).into_lines());
                 }
+            } else {
+                lines.push(header);
             }
             return lines;
         }
@@ -3607,7 +3586,7 @@ impl Formatter {
     fn format_domain_member_name(&self, name: &DomainMemberName) -> String {
         match name {
             DomainMemberName::Signature(name) => self.format_class_member_name(name),
-            DomainMemberName::Literal(identifier) => format!("literal {}", identifier.text),
+            DomainMemberName::Literal(identifier) => format!("suffix {}", identifier.text),
         }
     }
 
@@ -4020,13 +3999,13 @@ value view =
             formatted,
             concat!(
                 "domain Duration over Int = {\n",
-                "    literal ms : Int -> Duration\n",
+                "    suffix ms : Int = value => Duration value\n",
                 "    type Duration -> Int -> Duration\n",
                 "    (*)\n",
                 "}\n",
                 "\n",
                 "domain Path over Text = {\n",
-                "    literal root : Text -> Path\n",
+                "    suffix root : Text = value => Path value\n",
                 "    type Path -> Text -> Path\n",
                 "    (/)\n",
                 "}\n",
@@ -4136,13 +4115,13 @@ value view =
     #[test]
     fn formatter_keeps_compact_domain_literal_suffixes() {
         let formatted = format_text(
-            "domain Duration over Int = {\n    literal ms:Int -> Duration\n}\nvalue delay:Duration=250ms\nvalue applied=wrap 250ms\n",
+            "domain Duration over Int = {\n    suffix ms : Int = value => Duration value\n}\nvalue delay:Duration=250ms\nvalue applied=wrap 250ms\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "domain Duration over Int = {\n",
-                "    literal ms : Int -> Duration\n",
+                "    suffix ms : Int = value => Duration value\n",
                 "}\n",
                 "\n",
                 "value delay : Duration = 250ms\n",

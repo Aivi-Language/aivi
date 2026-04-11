@@ -708,10 +708,10 @@ fn is_numeric_payload(ty: &GateType) -> bool {
 }
 
 fn is_duration_stage_type(ty: &GateType) -> bool {
-    matches!(ty, GateType::Domain { name, .. } if name == "Duration")
+    ty.has_named_type("Duration")
 }
 
 fn is_burst_count_stage_type(ty: &GateType) -> bool {
     matches!(ty, GateType::Primitive(BuiltinType::Int))
-        || matches!(ty, GateType::Domain { name, .. } if name == "Retry")
+        || ty.has_named_type("Retry")
 }
