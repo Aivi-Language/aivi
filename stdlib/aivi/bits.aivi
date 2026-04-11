@@ -44,16 +44,16 @@ func shiftRightUnsignedBy = a b =>
     shiftRightUnsigned a b
 
 @test
-value bits_and_basic : Task Text Bool = pure (bitAnd 0xFF 0x0F == 0x0F)
+value bits_and_basic : Task Text Bool = pure (bitAnd 255 15 == 15)
 
 @test
-value bits_and_zero : Task Text Bool = pure (bitAnd 0xAB 0 == 0)
+value bits_and_zero : Task Text Bool = pure (bitAnd 171 0 == 0)
 
 @test
-value bits_or_basic : Task Text Bool = pure (bitOr 0xF0 0x0F == 0xFF)
+value bits_or_basic : Task Text Bool = pure (bitOr 240 15 == 255)
 
 @test
-value bits_xor_basic : Task Text Bool = pure (bitXor 0xFF 0x0F == 0xF0)
+value bits_xor_basic : Task Text Bool = pure (bitXor 255 15 == 240)
 
 @test
 value bits_not_zero : Task Text Bool = pure (bitNot 0 == -1)
@@ -65,10 +65,10 @@ value bits_shift_left : Task Text Bool = pure (shiftLeftBy 1 8 == 256)
 value bits_shift_right : Task Text Bool = pure (shiftRightBy 256 8 == 1)
 
 @test
-value bits_shift_right_unsigned : Task Text Bool = pure (shiftRightUnsignedBy 0xFF00 8 == 0xFF)
+value bits_shift_right_unsigned : Task Text Bool = pure (shiftRightUnsignedBy 65280 8 == 255)
 
 @test
-value bits_mask_byte : Task Text Bool = pure (bitAnd (shiftRightUnsignedBy 0x00FF0000 16) 0xFF == 0xFF)
+value bits_mask_byte : Task Text Bool = pure (bitAnd (shiftRightUnsignedBy 16711680 16) 255 == 255)
 
 export (
     and
