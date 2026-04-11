@@ -1078,6 +1078,36 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
+    /// When an import carries `ImportBindingMetadata::Domain`, look up the
+    /// matching local or ambient `Item::Domain` and return `GateType::Domain`
+    /// instead of `GateType::OpaqueImport`.  Falls back to the opaque import
+    /// path when no local domain item is found.
+    fn import_type_for_domain_or_opaque(
+        &self,
+        import_id: ImportId,
+        name: String,
+        arguments: Vec<GateType>,
+    ) -> GateType {
+        let binding = &self.module.imports()[import_id];
+        if matches!(&binding.metadata, ImportBindingMetadata::Domain { .. }) {
+            let domain_item = self
+                .module
+                .root_items()
+                .iter()
+                .chain(self.module.ambient_items().iter())
+                .copied()
+                .find(|&id| matches!(&self.module.items()[id], Item::Domain(d) if d.name.text() == name));
+            if let Some(item_id) = domain_item {
+                return GateType::Domain {
+                    item: item_id,
+                    name,
+                    arguments,
+                };
+            }
+        }
+        self.opaque_import_type(import_id, name, arguments)
+    }
+
     pub(crate) fn lower_import_value_type(&self, ty: &ImportValueType) -> GateType {
         match ty {
             ImportValueType::Primitive(builtin) => GateType::Primitive(*builtin),
@@ -1158,7 +1188,7 @@ impl<'a> GateTypeContext<'a> {
                     })
                     .map(|(id, _)| id);
                 if let Some(import) = import_id {
-                    self.opaque_import_type(import, type_name.clone(), lowered_args)
+                    self.import_type_for_domain_or_opaque(import, type_name.clone(), lowered_args)
                 } else {
                     // Fallback: create an opaque import with a sentinel; the type checker
                     // will treat this as an unknown opaque type.
@@ -2664,7 +2694,7 @@ impl<'a> GateTypeContext<'a> {
                     .local_name
                     .text()
                     .to_owned();
-                Some(self.opaque_import_type(*import_id, name, Vec::new()))
+                Some(self.import_type_for_domain_or_opaque(*import_id, name, Vec::new()))
             }
         }
     }
@@ -2728,7 +2758,7 @@ impl<'a> GateTypeContext<'a> {
                     .local_name
                     .text()
                     .to_owned();
-                Some(self.opaque_import_type(*import_id, name, arguments.to_vec()))
+                Some(self.import_type_for_domain_or_opaque(*import_id, name, arguments.to_vec()))
             }
             ResolutionState::Resolved(TypeResolution::Builtin(
                 BuiltinType::Int

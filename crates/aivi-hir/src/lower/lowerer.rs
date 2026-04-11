@@ -4957,6 +4957,7 @@ impl<'a> Lowerer<'a> {
                     if !literal_suffixes.is_empty() {
                         self.register_imported_domain_literal_suffixes(
                             &import.local_name,
+                            Some(&module_name),
                             import.span,
                             &literal_suffixes,
                             &mut namespaces.literal_suffixes,
@@ -5147,6 +5148,7 @@ impl<'a> Lowerer<'a> {
                     if !suffixes.is_empty() {
                         self.register_imported_domain_literal_suffixes(
                             &imported_name,
+                            Some(module_name),
                             span,
                             &suffixes,
                             &mut namespaces.literal_suffixes,
@@ -5199,19 +5201,20 @@ impl<'a> Lowerer<'a> {
     fn register_imported_domain_literal_suffixes(
         &mut self,
         domain_name: &Name,
+        source_module: Option<&str>,
         span: SourceSpan,
         literal_suffixes: &[ImportedDomainLiteralSuffix],
         target: &mut HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
     ) {
         for suffix in literal_suffixes {
-            let hidden_name = self.make_name(
-                &format!("__domain_suffix_{}_{}", domain_name.text(), suffix.name),
-                span,
-            );
+            let synthetic_key =
+                format!("__domain_suffix_{}_{}", domain_name.text(), suffix.name);
+            let hidden_name = self.make_name(&synthetic_key, span);
+            let imported_name = self.make_name(&synthetic_key, span);
             let import = ImportBinding {
                 span,
-                source_module: None,
-                imported_name: hidden_name.clone(),
+                source_module: source_module.map(Into::into),
+                imported_name,
                 local_name: hidden_name,
                 resolution: ImportBindingResolution::Resolved,
                 metadata: ImportBindingMetadata::DomainSuffix {
@@ -5321,7 +5324,19 @@ impl<'a> Lowerer<'a> {
                 }
                 for member in &mut item.members {
                     if let Some(body) = member.body {
-                        member.body = Some(self.hoist_expr(body, &owner));
+                        // Suffix (Literal) members whose body is a lambda must NOT be
+                        // hoisted: the domain-member elaboration needs to see the inline
+                        // Lambda to extract its parameter list. Hoisting would replace
+                        // the lambda with a reference to a separate Function item,
+                        // causing the elaboration to produce zero parameters.
+                        let skip_hoist = member.kind == crate::DomainMemberKind::Literal
+                            && matches!(
+                                self.module.exprs()[body].kind,
+                                ExprKind::Lambda(_)
+                            );
+                        if !skip_hoist {
+                            member.body = Some(self.hoist_expr(body, &owner));
+                        }
                     }
                 }
                 Item::Domain(item)

@@ -305,6 +305,33 @@ impl<'a> ModuleLowerer<'a> {
                 Some((name, core_id))
             })
             .collect();
+        // Expose domain suffix members under their synthetic import key so that
+        // downstream modules importing a domain's suffixes can resolve the real
+        // compiled item instead of creating a bodyless stub.
+        for (hir_id, item) in ws_hir.items().iter() {
+            let HirItem::Domain(domain) = item else {
+                continue;
+            };
+            for (member_index, member) in domain.members.iter().enumerate() {
+                if member.kind != aivi_hir::DomainMemberKind::Literal {
+                    continue;
+                }
+                let key = DomainMemberKey {
+                    domain: hir_id,
+                    member_index,
+                };
+                let Some(core_id) = self.domain_member_item_map.get(&key).copied() else {
+                    continue;
+                };
+                let synthetic_name: Box<str> = format!(
+                    "__domain_suffix_{}_{}",
+                    domain.name.text(),
+                    member.name.text()
+                )
+                .into();
+                name_map.entry(synthetic_name).or_insert(core_id);
+            }
+        }
         // Also include all non-signal imports so that downstream modules that import through
         // a re-export shim resolve to the original implementation item (with body) rather than
         // a bodyless stub. Two passes: first from import_item_map (already-resolved imports from
@@ -856,6 +883,14 @@ impl<'a> ModuleLowerer<'a> {
                 };
                 core_item.parameters = parameters;
                 core_item.body = Some(body);
+                // When the elaboration produced parameters that weren't present at seed time
+                // (e.g. suffix lambda extraction), update the kind to Function so downstream
+                // lowering stages (lambda, backend) recognise it as callable.
+                if !core_item.parameters.is_empty()
+                    && matches!(core_item.kind, ItemKind::Value)
+                {
+                    core_item.kind = ItemKind::Function;
+                }
             }
             GeneralExprOutcome::Blocked(blocked) => {
                 // Ambient prelude items that fail elaboration (e.g. due to open types in
@@ -2593,6 +2628,20 @@ impl<'a> ModuleLowerer<'a> {
                         return Ok(core_item_id);
                     }
 
+        // Domain suffix imports in a flattened HIR (no workspace modules) resolve to
+        // the domain member item that was already seeded from the merged domain declaration.
+        if let ImportBindingMetadata::DomainSuffix {
+            domain_name,
+            suffix_name,
+            ..
+        } = &binding.metadata
+        {
+            if let Some(core_id) = self.find_domain_suffix_member(domain_name, suffix_name) {
+                self.import_item_map.insert(import, core_id);
+                return Ok(core_id);
+            }
+        }
+
         // Use a deterministic synthetic origin for Signal imports so that the runtime assembly
         // builder can independently derive the same HirItemId for the same import without
         // coordination: signal import N gets hir_item_count + N.
@@ -2625,6 +2674,38 @@ impl<'a> ModuleLowerer<'a> {
             })?;
         self.import_item_map.insert(import, item_id);
         Ok(item_id)
+    }
+
+    /// Resolve a DomainSuffix import to the core item for the matching domain member.
+    /// Works in flattened HIR (no workspace modules) by scanning the current HIR for a
+    /// domain with the given name and a Literal member with the given suffix name.
+    fn find_domain_suffix_member(
+        &self,
+        domain_name: &str,
+        suffix_name: &str,
+    ) -> Option<ItemId> {
+        for (hir_id, item) in self.hir.items().iter() {
+            let HirItem::Domain(domain) = item else {
+                continue;
+            };
+            if domain.name.text() != domain_name {
+                continue;
+            }
+            for (member_index, member) in domain.members.iter().enumerate() {
+                if member.kind != aivi_hir::DomainMemberKind::Literal {
+                    continue;
+                }
+                if member.name.text() != suffix_name {
+                    continue;
+                }
+                let key = DomainMemberKey {
+                    domain: hir_id,
+                    member_index,
+                };
+                return self.domain_member_item_map.get(&key).copied();
+            }
+        }
+        None
     }
 
     /// Eagerly seeds stub Input signal items for all workspace Signal import bindings.
