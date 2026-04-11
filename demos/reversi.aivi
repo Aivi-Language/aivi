@@ -290,9 +290,13 @@ type State -> Text
 func stateWinnerLine = state =>
     winnerLine state.board
 
+type Coord -> Coord -> Bool
+func sameCoord = target candidate =>
+    target == candidate
+
 type Coord -> State -> Bool
 func stateLegalAt = cell state =>
-    phaseAllowsHumanInput state.phase and listContains (coord: Coord => coord == cell) state.humanMoves
+    phaseAllowsHumanInput state.phase and listContains (sameCoord cell) state.humanMoves
 
 type Coord -> State -> Text
 func stateCellLabel = cell state =>
@@ -321,6 +325,7 @@ signal computerFlashSchedule : Signal ComputerFlashSchedule = computerTurnReques
   ||> restartClick _        => CancelComputerFlash
   ||> _                     => CancelComputerFlash
 
+// Reversi animation must stay click-driven. Do not rewrite this to use a timer source.
 signal delayedComputerFlash : Signal ComputerFlashSchedule = computerFlashSchedule
   |> burst 120ms 5times
 
