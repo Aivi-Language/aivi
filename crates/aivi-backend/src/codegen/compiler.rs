@@ -3138,9 +3138,37 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 Ok(DirectApplyPlan::SumConstruction { variant_tag, payload_layout })
             }
-            KernelExprKind::DomainMember(handle) => self
-                .require_compilable_domain_member_call(kernel_id, expr_id, callee, handle, arguments)
-                .map(DirectApplyPlan::DomainMember),
+            KernelExprKind::DomainMember(handle) => {
+                // Prefer a compiled body when one exists for this domain member.
+                if let Some(item_id) = self
+                    .program
+                    .domain_member_item(handle.domain, handle.member_index)
+                {
+                    if let Some(item) = self.program.items().get(item_id) {
+                        if let Some(body) = item.body {
+                            let kernel = &self.program.kernels()[kernel_id];
+                            let result_layout = kernel.exprs()[expr_id].layout;
+                            let body_kernel = &self.program.kernels()[body];
+                            let mut argument_layouts = Vec::with_capacity(arguments.len());
+                            for (argument, &expected_layout) in
+                                arguments.iter().zip(item.parameters.iter())
+                            {
+                                let found_layout = kernel.exprs()[*argument].layout;
+                                argument_layouts.push((found_layout, expected_layout));
+                            }
+                            return Ok(DirectApplyPlan::Item {
+                                body,
+                                arguments: argument_layouts.into_boxed_slice(),
+                                result: (body_kernel.result_layout, result_layout),
+                            });
+                        }
+                    }
+                }
+                self.require_compilable_domain_member_call(
+                    kernel_id, expr_id, callee, handle, arguments,
+                )
+                .map(DirectApplyPlan::DomainMember)
+            }
             KernelExprKind::Builtin(term) => {
                 // Ok/Err/Valid/Invalid are sum constructors for Result-like types
                 match term {
