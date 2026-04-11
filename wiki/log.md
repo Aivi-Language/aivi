@@ -247,3 +247,18 @@ Updated [demo-audit.md](demo-audit.md) with the Reversi run-path compatibility f
 - Found 7 critical, 5 high, 3 medium, 2 low findings — overall risk: HIGH
 - Three main patterns: domain-member-as-standalone-export (url.md, duration.md, color.md), stale source option names (integrations.md), and nonexistent/placeholder stdlib names (record-patterns.md, modules.md, openapi-source.md)
 - See wiki/manual-hallucination-report.md for full findings
+
+## [2026-04-10] feat | aivi.bits stdlib + domain body dispatch + color.aivi bodies
+
+Implemented three phases on branch `copilot/bits-stdlib`, merged to main:
+
+- **Phase 1**: 7 bitwise intrinsics (BitAnd, BitOr, BitXor, BitNot, ShiftLeft, ShiftRight,
+  ShiftRightUnsigned) wired through HIR → evaluator → Cranelift codegen; `stdlib/aivi/bits.aivi`
+  exports thin wrappers with `@test` values.
+- **Phase 2**: Domain body dispatch — `program.rs` now holds a `domain_member_items` map;
+  evaluator and codegen prefer compiled item bodies over the Rust fallback when present.
+- **Phase 3**: `stdlib/aivi/color.aivi` now has authored AIVI bodies for all extractors
+  and constructors using `aivi.bits` intrinsics; bodies written in carrier view (return Int,
+  not Color). `blend` remains body-less pending float arithmetic.
+- Key invariant: domain member bodies must return the **carrier type**, not the nominal domain
+  type — carrier-view checking is applied by `rewrite_domain_carrier_view` in the type checker.
