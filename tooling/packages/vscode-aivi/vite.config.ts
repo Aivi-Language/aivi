@@ -1,5 +1,16 @@
 import { defineConfig } from "vite";
+import { builtinModules } from "module";
 import { resolve } from "path";
+
+// Externalize every Node.js built-in (both bare and node:-prefixed)
+// plus the vscode host module. Missing entries here cause Vite to
+// replace the module with an empty browser stub, which silently
+// breaks vscode-languageclient's JSON-RPC layer at runtime.
+const nodeExternals = [
+  "vscode",
+  ...builtinModules,
+  ...builtinModules.map((m) => `node:${m}`),
+];
 
 export default defineConfig({
   build: {
@@ -10,7 +21,7 @@ export default defineConfig({
     },
     outDir: "dist",
     rollupOptions: {
-      external: ["vscode", "path", "fs", "child_process", "net", "os", "crypto"],
+      external: nodeExternals,
     },
     sourcemap: true,
     minify: false,

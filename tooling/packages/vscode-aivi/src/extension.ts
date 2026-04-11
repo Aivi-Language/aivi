@@ -7,7 +7,7 @@ import { getConfig } from "./config";
 
 let client: LanguageClient | undefined;
 let statusBar: StatusBarItem | undefined;
-let outputChannel: vscode.OutputChannel;
+let outputChannel: vscode.OutputChannel | undefined;
 
 const THEME_NAME = "AIVI Dark";
 const THEME_PROMPTED_KEY = "aivi.themePrompted";
@@ -79,7 +79,7 @@ export async function activate(
       statusBar?.setStatus("starting");
       statusBar?.show();
       log("Creating language client");
-      client = createClient(context, outputChannel, traceOutputChannel);
+      client = createClient(context, outputChannel!, traceOutputChannel);
       log("Registering state handler");
       client.onDidChangeState((event) => {
         log(`Client state: ${event.oldState} -> ${event.newState}`);
@@ -109,7 +109,7 @@ export async function activate(
   registerCommands(context, () => client, restart, outputChannel);
 
   context.subscriptions.push(
-    vscode.workspace.onWillSaveTextDocument(async (event) => {
+    vscode.workspace.onWillSaveTextDocument((event) => {
       if (event.document.languageId !== "aivi") return;
       const cfg = vscode.workspace.getConfiguration("aivi");
       if (!cfg.get<boolean>("format.onSave")) return;
@@ -117,7 +117,7 @@ export async function activate(
         vscode.commands.executeCommand<vscode.TextEdit[]>(
           "vscode.executeFormatDocumentProvider",
           event.document.uri
-        )
+        ).then(edits => edits ?? [])
       );
     })
   );
@@ -137,7 +137,9 @@ export async function activate(
     })
   );
 
-  // Defer LSP start: don't block activate()
+  // With onLanguage:aivi activation, an AIVI file should already be open.
+  // Start the LSP server immediately; fall back to waiting if the document
+  // hasn't been registered yet.
   const hasAiviFile = vscode.workspace.textDocuments.some(
     (d) => d.languageId === "aivi"
   );
@@ -146,7 +148,7 @@ export async function activate(
     log("AIVI file already open — starting LSP");
     restart().catch((err) => log(`Unhandled restart error: ${err}`));
   } else {
-    log("No AIVI file open — waiting for one");
+    log("No AIVI file registered yet — waiting for one");
     const sub = vscode.workspace.onDidOpenTextDocument((doc) => {
       if (doc.languageId !== "aivi") return;
       sub.dispose();
