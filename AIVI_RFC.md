@@ -2562,7 +2562,7 @@ Use a domain when a value should:
 
 - have the runtime representation of an existing type
 - remain distinct at the type level
-- optionally support domain-specific literal suffixes
+- optionally support domain-specific suffix constructors
 - optionally expose domain-specific operators and smart constructors
 - reject accidental mixing with the raw carrier or other domains over the same carrier
 

@@ -1,5 +1,4 @@
-type Pair =
-  | Pair Text Text
+type Pair = Pair Text Text
 
 type SaveState =
   | Saved

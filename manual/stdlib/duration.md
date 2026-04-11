@@ -16,17 +16,17 @@ use aivi.duration (
 )
 ```
 
-Because `aivi.duration` declares `hoist`, the literal suffixes (`ms`, `sec`, `min`, `hr`, `dy`) and constructor helpers (`millis`, `trySeconds`) are available project-wide in every AIVI file without any `use` statement. The type names `Duration` and `DurationError` are also hoisted, so no `use` is needed at all in most files. Import them explicitly only when you want them to appear in your module's own `export` list or if your tooling requires an explicit declaration.
+Because `aivi.duration` declares `hoist`, the suffix constructors (`ms`, `sec`, `min`, `hr`, `dy`) and constructor helpers (`millis`, `trySeconds`) are available project-wide in every AIVI file without any `use` statement. The type names `Duration` and `DurationError` are also hoisted, so no `use` is needed at all in most files. Import them explicitly only when you want them to appear in your module's own `export` list or if your tooling requires an explicit declaration.
 
 ## Overview
 
 | Member | Type | Description |
 | --- | --- | --- |
-| `ms` | `Int -> Duration` | Literal suffix for milliseconds, as in `250ms` |
-| `sec` | `Int -> Duration` | Literal suffix for seconds, as in `5sec` |
-| `min` | `Int -> Duration` | Literal suffix for minutes, as in `2min` |
-| `hr` | `Int -> Duration` | Literal suffix for hours, as in `1hr` |
-| `dy` | `Int -> Duration` | Literal suffix for days, as in `7dy` |
+| `ms` | `Int -> Duration` | Suffix constructor for milliseconds, as in `250ms` |
+| `sec` | `Int -> Duration` | Suffix constructor for seconds, as in `5sec` |
+| `min` | `Int -> Duration` | Suffix constructor for minutes, as in `2min` |
+| `hr` | `Int -> Duration` | Suffix constructor for hours, as in `1hr` |
+| `dy` | `Int -> Duration` | Suffix constructor for days, as in `7dy` |
 | `millis` | `Int -> Duration` | Build a duration from a raw millisecond count |
 | `trySeconds` | `Int -> Result DurationError Duration` | Smart constructor that can fail |
 | `(+)` | `Duration -> Duration -> Duration` | Add two durations |
@@ -34,7 +34,7 @@ Because `aivi.duration` declares `hoist`, the literal suffixes (`ms`, `sec`, `mi
 | `(*)` | `Duration -> Int -> Duration` | Multiply a duration by a whole number |
 | `(<)` | `Duration -> Duration -> Bool` | Compare two durations |
 
-## Literal suffixes
+## Suffix constructors
 
 The shortest way to make a duration is with a suffix literal:
 
