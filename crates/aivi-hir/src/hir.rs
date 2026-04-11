@@ -437,6 +437,13 @@ pub enum IntrinsicValue {
     ShiftLeft,
     ShiftRight,
     ShiftRightUnsigned,
+    // Integer arithmetic intrinsics (pure/synchronous)
+    IntAdd,
+    IntSub,
+    IntMul,
+    IntDiv,
+    IntMod,
+    IntNeg,
 }
 
 impl fmt::Display for IntrinsicValue {
@@ -592,6 +599,12 @@ impl fmt::Display for IntrinsicValue {
             Self::ShiftLeft => f.write_str("aivi.bits.shiftLeft"),
             Self::ShiftRight => f.write_str("aivi.bits.shiftRight"),
             Self::ShiftRightUnsigned => f.write_str("aivi.bits.shiftRightUnsigned"),
+            Self::IntAdd => f.write_str("aivi.arithmetic.add"),
+            Self::IntSub => f.write_str("aivi.arithmetic.sub"),
+            Self::IntMul => f.write_str("aivi.arithmetic.mul"),
+            Self::IntDiv => f.write_str("aivi.arithmetic.div"),
+            Self::IntMod => f.write_str("aivi.arithmetic.mod"),
+            Self::IntNeg => f.write_str("aivi.arithmetic.neg"),
         }
     }
 }

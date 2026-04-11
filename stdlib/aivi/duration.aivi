@@ -1,15 +1,35 @@
 hoist
 
+use aivi.arithmetic (
+    mul
+    div
+)
+
 type DurationError = Text
 
 domain Duration over Int = {
     literal ms : Int -> Duration
+    ms n = n
     literal sec : Int -> Duration
+    sec n = mul n 1000
     literal min : Int -> Duration
+    min n = mul n 60000
     literal hr : Int -> Duration
+    hr n = mul n 3600000
     literal dy : Int -> Duration
+    dy n = mul n 86400000
     type Int -> Duration
     millis
+    type Int
+    toMillis = self
+    type Int
+    toSeconds = div self 1000
+    type Int
+    toMinutes = div self 60000
+    type Int
+    toHours = div self 3600000
+    type Int
+    toDays = div self 86400000
     type Int -> Result DurationError Duration
     trySeconds
     type Duration -> Duration -> Duration

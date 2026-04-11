@@ -1039,18 +1039,6 @@ impl Validator<'_> {
                             }
                         }
                         if let Some(body) = member.body {
-                            if member.kind == DomainMemberKind::Literal {
-                                self.diagnostics.push(
-                                    Diagnostic::error(
-                                        "domain literal declarations cannot carry authored bodies",
-                                    )
-                                    .with_code(code("invalid-domain-literal-body"))
-                                    .with_label(DiagnosticLabel::primary(
-                                        member.span,
-                                        "move this logic to a callable domain member instead of a literal suffix",
-                                    )),
-                                );
-                            }
                             self.require_expr(member.span, "domain member", "body", body);
                         }
                     }

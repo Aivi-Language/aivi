@@ -1124,6 +1124,35 @@ fn evaluate_intrinsic_value(
             let b = expect_intrinsic_i64(kernel, expr, value, 1, b)?;
             Ok(RuntimeValue::Int(((a as u64) >> (b as u32)) as i64))
         }
+        (IntrinsicValue::IntAdd, [a, b]) => {
+            let a = expect_intrinsic_i64(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_i64(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Int(a.wrapping_add(b)))
+        }
+        (IntrinsicValue::IntSub, [a, b]) => {
+            let a = expect_intrinsic_i64(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_i64(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Int(a.wrapping_sub(b)))
+        }
+        (IntrinsicValue::IntMul, [a, b]) => {
+            let a = expect_intrinsic_i64(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_i64(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Int(a.wrapping_mul(b)))
+        }
+        (IntrinsicValue::IntDiv, [a, b]) => {
+            let a = expect_intrinsic_i64(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_i64(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Int(a.wrapping_div(b)))
+        }
+        (IntrinsicValue::IntMod, [a, b]) => {
+            let a = expect_intrinsic_i64(kernel, expr, value, 0, a)?;
+            let b = expect_intrinsic_i64(kernel, expr, value, 1, b)?;
+            Ok(RuntimeValue::Int(a.wrapping_rem(b)))
+        }
+        (IntrinsicValue::IntNeg, [a]) => {
+            let a = expect_intrinsic_i64(kernel, expr, value, 0, a)?;
+            Ok(RuntimeValue::Int(a.wrapping_neg()))
+        }
         _ => unreachable!("intrinsic arity should be enforced before evaluation"),
     }
 }
@@ -1494,6 +1523,18 @@ fn expect_intrinsic_i64(
 ) -> Result<i64, EvaluationError> {
     match strip_signal(argument.clone()) {
         RuntimeValue::Int(found) => Ok(found),
+        RuntimeValue::SuffixedInteger { raw, .. } => raw.parse::<i64>().map_err(|_| {
+            EvaluationError::InvalidIntrinsicArgument {
+                kernel,
+                expr,
+                value,
+                index,
+                found: RuntimeValue::SuffixedInteger {
+                    raw: raw.clone(),
+                    suffix: Box::from(""),
+                },
+            }
+        }),
         found => Err(EvaluationError::InvalidIntrinsicArgument {
             kernel,
             expr,

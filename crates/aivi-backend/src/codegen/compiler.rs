@@ -3814,6 +3814,50 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 self.require_int_expression(kernel_id, expr_id, result_layout, "bits.not result")?;
                 Ok(IntrinsicCallPlan::BitNot)
             }
+            IntrinsicValue::IntAdd
+            | IntrinsicValue::IntSub
+            | IntrinsicValue::IntMul
+            | IntrinsicValue::IntDiv
+            | IntrinsicValue::IntMod => {
+                let [a, b] = arguments else {
+                    unreachable!("saturated binary arithmetic intrinsic call should keep exactly two arguments");
+                };
+                self.require_int_expression(
+                    kernel_id,
+                    *a,
+                    kernel.exprs()[*a].layout,
+                    &format!("{detail} lhs"),
+                )?;
+                self.require_int_expression(
+                    kernel_id,
+                    *b,
+                    kernel.exprs()[*b].layout,
+                    &format!("{detail} rhs"),
+                )?;
+                self.require_int_expression(kernel_id, expr_id, result_layout, &format!("{detail} result"))?;
+                let op = match intrinsic {
+                    IntrinsicValue::IntAdd => IntArithOp::Add,
+                    IntrinsicValue::IntSub => IntArithOp::Sub,
+                    IntrinsicValue::IntMul => IntArithOp::Mul,
+                    IntrinsicValue::IntDiv => IntArithOp::Div,
+                    IntrinsicValue::IntMod => IntArithOp::Mod,
+                    _ => unreachable!(),
+                };
+                Ok(IntrinsicCallPlan::IntArithmetic(op))
+            }
+            IntrinsicValue::IntNeg => {
+                let [a] = arguments else {
+                    unreachable!("saturated `IntNeg` call should keep exactly one argument");
+                };
+                self.require_int_expression(
+                    kernel_id,
+                    *a,
+                    kernel.exprs()[*a].layout,
+                    "arithmetic.neg argument",
+                )?;
+                self.require_int_expression(kernel_id, expr_id, result_layout, "arithmetic.neg result")?;
+                Ok(IntrinsicCallPlan::IntNeg)
+            }
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -4963,6 +5007,33 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     ));
                 };
                 Ok(builder.ins().bnot(*a))
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::IntArithmetic(op)) => {
+                let [a, b] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct integer arithmetic intrinsic lowering expected exactly two materialized arguments",
+                    ));
+                };
+                let result = match op {
+                    IntArithOp::Add => builder.ins().iadd(*a, *b),
+                    IntArithOp::Sub => builder.ins().isub(*a, *b),
+                    IntArithOp::Mul => builder.ins().imul(*a, *b),
+                    IntArithOp::Div => builder.ins().sdiv(*a, *b),
+                    IntArithOp::Mod => builder.ins().srem(*a, *b),
+                };
+                Ok(result)
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::IntNeg) => {
+                let [a] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct arithmetic.neg lowering expected exactly one materialized argument",
+                    ));
+                };
+                Ok(builder.ins().ineg(*a))
             }
         }
     }

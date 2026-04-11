@@ -3185,5 +3185,11 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         | IntrinsicValue::ShiftLeft
         | IntrinsicValue::ShiftRight
         | IntrinsicValue::ShiftRightUnsigned => 2,
+        IntrinsicValue::IntNeg => 1,
+        IntrinsicValue::IntAdd
+        | IntrinsicValue::IntSub
+        | IntrinsicValue::IntMul
+        | IntrinsicValue::IntDiv
+        | IntrinsicValue::IntMod => 2,
     }
 }

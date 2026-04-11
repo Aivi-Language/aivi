@@ -1812,6 +1812,17 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::BitNot => {
                 arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Int))
             }
+            IntrinsicValue::IntAdd
+            | IntrinsicValue::IntSub
+            | IntrinsicValue::IntMul
+            | IntrinsicValue::IntDiv
+            | IntrinsicValue::IntMod => arrow(
+                primitive(BuiltinType::Int),
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Int)),
+            ),
+            IntrinsicValue::IntNeg => {
+                arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Int))
+            }
         }
     }
 

@@ -1878,20 +1878,47 @@ impl Formatter {
                 let force_break = self.should_force_type_break(display_width(&prefix), annotation);
                 let block = self.format_type_block(annotation, force_break);
                 if block.is_inline() {
-                    return vec![format!(
+                    lines.push(format!(
                         "{prefix}{}",
                         block.inline_text().expect("inline block")
-                    )];
+                    ));
                 } else {
-                    return block.prefixed(&prefix).into_lines();
+                    lines.extend(block.prefixed(&prefix).into_lines());
                 }
             } else {
-                return vec![format!(
+                lines.push(format!(
                     "{}{}:",
                     spaces(INDENT_WIDTH),
                     self.format_domain_member_name(&member.name)
-                )];
+                ));
             }
+            // If a literal member also carries a body, emit `name params = body`
+            if let Some(body) = &member.body {
+                let bare_name = match &member.name {
+                    DomainMemberName::Literal(ident) => ident.text.as_str().to_owned(),
+                    other => self.format_domain_member_name(other),
+                };
+                let mut header = format!("{}{}", spaces(INDENT_WIDTH), bare_name);
+                for parameter in &member.parameters {
+                    header.push(' ');
+                    header.push_str(&parameter.text);
+                }
+                let force_break =
+                    self.should_force_expr_break(display_width(&format!("{header} = ")), body);
+                let block = self.format_expr_block(body, force_break);
+                if block.is_inline() {
+                    lines.push(format!(
+                        "{header} = {}",
+                        block.inline_text().expect("inline block")
+                    ));
+                } else if block.starts_with_delimiter() {
+                    lines.extend(block.prefixed(&format!("{header} = ")).into_lines());
+                } else {
+                    lines.push(format!("{header} ="));
+                    lines.extend(block.indented(INDENT_WIDTH).into_lines());
+                }
+            }
+            return lines;
         }
 
         // Signature members: emit `type TypeExpr` line if annotated

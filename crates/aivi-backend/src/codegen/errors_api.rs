@@ -397,6 +397,17 @@ enum IntrinsicCallPlan {
     BytesSlice,
     BitBinary(BitBinaryOp),
     BitNot,
+    IntArithmetic(IntArithOp),
+    IntNeg,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IntArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

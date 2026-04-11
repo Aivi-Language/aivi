@@ -1582,7 +1582,12 @@ impl<'a> Parser<'a> {
                     let this_name = domain_member_surface_name_str(&member.name);
                     if held_name == this_name {
                         // Merge: attach the annotation from the held member.
+                        // If the held member was a `literal` declaration, preserve the Literal kind
+                        // so that formatters and tooling can distinguish it from regular members.
                         member.annotation = held.annotation;
+                        if matches!(held.name, DomainMemberName::Literal(_)) {
+                            member.name = held.name;
+                        }
                     } else {
                         // Different name — flush held first.
                         members.push(held);

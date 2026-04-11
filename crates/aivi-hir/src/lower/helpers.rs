@@ -341,6 +341,7 @@ fn is_known_module(module: &str) -> bool {
             | "aivi.http"
             | "aivi.bigint"
             | "aivi.bits"
+            | "aivi.arithmetic"
             | "aivi.nonEmpty"
             | "aivi.matrix"
             | "aivi.option"
@@ -1471,6 +1472,64 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                     primitive_import_type(BuiltinType::Int),
                     primitive_import_type(BuiltinType::Int),
                 ),
+            ),
+        )),
+        // Integer arithmetic intrinsics
+        ("aivi.arithmetic", "add") => Some(intrinsic_import_value(
+            IntrinsicValue::IntAdd,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.arithmetic", "sub") => Some(intrinsic_import_value(
+            IntrinsicValue::IntSub,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.arithmetic", "mul") => Some(intrinsic_import_value(
+            IntrinsicValue::IntMul,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.arithmetic", "div") => Some(intrinsic_import_value(
+            IntrinsicValue::IntDiv,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.arithmetic", "mod") => Some(intrinsic_import_value(
+            IntrinsicValue::IntMod,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                arrow_import_type(
+                    primitive_import_type(BuiltinType::Int),
+                    primitive_import_type(BuiltinType::Int),
+                ),
+            ),
+        )),
+        ("aivi.arithmetic", "neg") => Some(intrinsic_import_value(
+            IntrinsicValue::IntNeg,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                primitive_import_type(BuiltinType::Int),
             ),
         )),
         // NonEmptyList ambient types and values
