@@ -128,7 +128,10 @@ func scanKeep = scan cell =>
 
 type RayScan -> Bool -> RayScan
 func scanStop = scan valid =>
-    scan <| { scanning: False, valid: valid }
+    scan <| {
+        scanning: False,
+        valid: valid,
+    }
 
 type RayScan -> Coord -> Disc -> Disc -> RayScan
 func scanStepHit = scan cell hit disc => hit == otherDisc disc
@@ -347,9 +350,9 @@ value main =
             </show>
             <Button label="Restart" onClick={restartClick} />
             <Box orientation="vertical" spacing={2}>
-                <each of={[0..8]} as={y} key={y}>
+                <each of={[0..7]} as={y} key={y}>
                     <Box orientation="horizontal" spacing={2}>
-                        <each of={[0..8]} as={x} key={y * 8 + x}>
+                        <each of={[0..7]} as={x} key={y * 8 + x}>
                             <Button label={cellLabel (Coord x y)} onClick={placeCell (Coord x y)} sensitive={legalAt (Coord x y)} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
                         </each>
                     </Box>
