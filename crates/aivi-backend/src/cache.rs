@@ -32,6 +32,22 @@ use crate::{
     program::Program,
 };
 
+pub fn encode_program_json(program: &Program) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec(program)
+}
+
+pub fn decode_program_json(bytes: &[u8]) -> Result<Program, serde_json::Error> {
+    serde_json::from_slice(bytes)
+}
+
+pub fn encode_compiled_program_binary(compiled: &CompiledProgram) -> Vec<u8> {
+    serialize_program(compiled)
+}
+
+pub fn decode_compiled_program_binary(bytes: &[u8]) -> Option<CompiledProgram> {
+    deserialize_program(bytes)
+}
+
 /// Magic bytes: ASCII "AIVI" + format version byte.
 const PROGRAM_CACHE_MAGIC: &[u8; 5] = b"AIVI\x02";
 /// Magic bytes: ASCII "AIVK" + format version byte.

@@ -29,13 +29,14 @@ pub use glib_adapter::{
 pub use graph::{
     DerivedHandle, DerivedSpec, GraphBuildError, InputHandle, InputValidationError, OwnerHandle,
     OwnerSpec, ReactiveClauseBuilderSpec, ReactiveClauseHandle, ReactiveClauseSpec,
-    ReactiveSignalSpec, SignalGraph, SignalGraphBuilder, SignalHandle, SignalKind, SignalSpec,
-    TopologyBatch,
+    ReactiveSignalSpec, SignalGraph, SignalGraphBuilder, SignalGraphParts, SignalHandle,
+    SignalKind, SignalSpec, TopologyBatch,
 };
 pub use hir_adapter::{
-    HirGateStageBinding, HirGateStageId, HirOwnerBinding, HirReactiveUpdateBinding,
-    HirRecurrenceBinding, HirRecurrenceNodeId, HirRuntimeAdapterError, HirRuntimeAdapterErrors,
-    HirRuntimeAssembly, HirRuntimeAssemblyBuilder, HirRuntimeAssemblyStats, HirRuntimeGatePlan,
+    HirDbChangedBinding, HirGateStageBinding, HirGateStageId, HirOwnerBinding,
+    HirReactiveUpdateBinding, HirRecurrenceBinding, HirRecurrenceNodeId, HirRuntimeAdapterError,
+    HirRuntimeAdapterErrors, HirRuntimeAssembly, HirRuntimeAssemblyBuilder,
+    HirRuntimeAssemblyParts, HirRuntimeAssemblyStats, HirRuntimeGatePlan,
     HirRuntimeInstantiationError, HirSignalBinding, HirSignalBindingKind, HirSourceBinding,
     HirTaskBinding, ProfiledHirRuntimeAssembly, assemble_hir_runtime,
     assemble_hir_runtime_with_items, assemble_hir_runtime_with_items_profiled,
@@ -45,8 +46,8 @@ pub use providers::{
 };
 pub use reactive_program::{
     ReactiveClauseNode, ReactiveDerivedNode, ReactiveInputNode, ReactivePartition,
-    ReactivePartitionId, ReactiveProgram, ReactiveReactiveNode, ReactiveSignalNode,
-    ReactiveSignalNodeKind,
+    ReactivePartitionId, ReactiveProgram, ReactiveProgramParts, ReactiveReactiveNode,
+    ReactiveSignalNode, ReactiveSignalNodeKind,
 };
 pub use runtime_errors::render_runtime_error;
 pub use scheduler::{
@@ -63,10 +64,11 @@ pub use source_decode::{
 pub use source_map::{RuntimeSignalInfo, RuntimeSignalKind, RuntimeSourceInfo, RuntimeSourceMap};
 pub use startup::{
     BackendLinkedRuntime, BackendRuntimeError, BackendRuntimeLinkError, BackendRuntimeLinkErrors,
-    EvaluatedSourceConfig, EvaluatedSourceOption, LinkedDerivedSignal, LinkedSourceArgument,
-    LinkedSourceBinding, LinkedSourceLifecycleAction, LinkedSourceOption, LinkedSourceTickOutcome,
-    LinkedTaskBinding, LinkedTaskExecutionBinding, LinkedTaskExecutionBlocker,
-    LinkedTaskWorkerError, LinkedTaskWorkerOutcome, link_backend_runtime,
+    BackendRuntimeLinkSeed, EvaluatedSourceConfig, EvaluatedSourceOption, LinkedDerivedSignal,
+    LinkedSourceArgument, LinkedSourceBinding, LinkedSourceLifecycleAction, LinkedSourceOption,
+    LinkedSourceTickOutcome, LinkedTaskBinding, LinkedTaskExecutionBinding,
+    LinkedTaskExecutionBlocker, LinkedTaskWorkerError, LinkedTaskWorkerOutcome,
+    derive_backend_runtime_link_seed, link_backend_runtime, link_backend_runtime_with_seed,
     set_native_kernel_plans_enabled,
 };
 pub use task_executor::{

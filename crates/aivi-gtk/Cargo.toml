@@ -10,6 +10,7 @@ aivi-hir.workspace = true
 aivi-runtime = { path = "../aivi-runtime" }
 gtk = { package = "gtk4", version = "0.11.1" }
 libadwaita = { package = "libadwaita", version = "0.9", features = ["v1_3", "v1_4"] }
+serde.workspace = true
 
 [dev-dependencies]
 aivi-syntax.workspace = true

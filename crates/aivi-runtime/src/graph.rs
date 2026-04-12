@@ -2,7 +2,18 @@ use std::collections::{BTreeSet, VecDeque};
 
 macro_rules! define_handle {
     ($name:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            serde::Serialize,
+            serde::Deserialize,
+        )]
         pub struct $name(u32);
 
         impl $name {
@@ -41,7 +52,9 @@ impl SignalHandle {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct InputHandle(SignalHandle);
 
 impl InputHandle {
@@ -73,7 +86,9 @@ impl From<InputHandle> for SignalHandle {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct DerivedHandle(SignalHandle);
 
 impl DerivedHandle {
@@ -105,13 +120,22 @@ impl From<DerivedHandle> for SignalHandle {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignalGraph {
     owners: Vec<OwnerSpec>,
     signals: Vec<SignalSpec>,
     batches: Vec<TopologyBatch>,
     dependents: Vec<Box<[SignalHandle]>>,
     reactive_clauses: Vec<ReactiveClauseSpec>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SignalGraphParts {
+    pub owners: Vec<OwnerSpec>,
+    pub signals: Vec<SignalSpec>,
+    pub batches: Vec<TopologyBatch>,
+    pub dependents: Vec<Box<[SignalHandle]>>,
+    pub reactive_clauses: Vec<ReactiveClauseSpec>,
 }
 
 impl SignalGraph {
@@ -190,6 +214,40 @@ impl SignalGraph {
         handle.index() < self.owners.len()
     }
 
+    pub fn into_parts(self) -> SignalGraphParts {
+        let Self {
+            owners,
+            signals,
+            batches,
+            dependents,
+            reactive_clauses,
+        } = self;
+        SignalGraphParts {
+            owners,
+            signals,
+            batches,
+            dependents,
+            reactive_clauses,
+        }
+    }
+
+    pub fn from_parts(parts: SignalGraphParts) -> Self {
+        let SignalGraphParts {
+            owners,
+            signals,
+            batches,
+            dependents,
+            reactive_clauses,
+        } = parts;
+        Self {
+            owners,
+            signals,
+            batches,
+            dependents,
+            reactive_clauses,
+        }
+    }
+
     /// Validate that `input` refers to an existing input signal in this graph.
     ///
     /// Returns `Ok(())` only when the handle is in-bounds and the signal at that index has kind
@@ -211,7 +269,7 @@ impl SignalGraph {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OwnerSpec {
     name: Box<str>,
     parent: Option<OwnerHandle>,
@@ -237,7 +295,7 @@ impl OwnerSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignalSpec {
     name: Box<str>,
     owner: Option<OwnerHandle>,
@@ -270,7 +328,7 @@ impl SignalSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SignalKind {
     Input,
     Derived(DerivedSpec),
@@ -294,7 +352,7 @@ impl SignalKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DerivedSpec {
     dependencies: Box<[SignalHandle]>,
     batch: usize,
@@ -310,7 +368,7 @@ impl DerivedSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveSignalSpec {
     dependencies: Box<[SignalHandle]>,
     seed_dependencies: Box<[SignalHandle]>,
@@ -336,7 +394,7 @@ impl ReactiveSignalSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveClauseSpec {
     target: SignalHandle,
     source_order: usize,
@@ -367,7 +425,7 @@ impl ReactiveClauseSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TopologyBatch {
     index: usize,
     signals: Box<[SignalHandle]>,

@@ -26,7 +26,18 @@ use crate::{
 
 macro_rules! define_runtime_id {
     ($name:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            serde::Serialize,
+            serde::Deserialize,
+        )]
         pub struct $name(u32);
 
         impl $name {
@@ -44,7 +55,7 @@ macro_rules! define_runtime_id {
 define_runtime_id!(TaskInstanceId);
 
 /// Runtime-facing provider identity carried forward from source elaboration/lowering.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeSourceProvider {
     Builtin(BuiltinSourceProvider),
     Custom(Box<str>),
@@ -72,7 +83,7 @@ impl RuntimeSourceProvider {
 /// Only `DisposeSupersededBeforePublish` exists today.  A second variant
 /// (`HoldSupersededUntilPublish`) is anticipated when sources need to
 /// complete in-flight work before a replacement takes over.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceReplacementPolicy {
     /// Dispose superseded source work immediately before the replacement's
     /// first publication is applied to the scheduler state.
@@ -84,7 +95,7 @@ pub enum SourceReplacementPolicy {
 /// Only `DropStalePublications` exists today.  A second variant
 /// (`QueueStalePublications`) is anticipated for sources that must not lose
 /// results even when a reconfiguration races ahead of them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceStaleWorkPolicy {
     /// Discard any publication whose generation stamp predates the current
     /// scheduler generation for that source slot.
@@ -96,7 +107,7 @@ pub enum SourceStaleWorkPolicy {
 /// `D` intentionally stays generic so later lowering can store either the compiler's decode
 /// program directly or a lowered runtime-local decode reference without changing the scheduler
 /// boundary again.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceRuntimeSpec<D = ()> {
     pub instance: SourceInstanceId,
     pub input: InputHandle,
@@ -142,7 +153,7 @@ impl<D> SourceRuntimeSpec<D> {
 /// The current slice chooses the narrowest coherent scheduler contract: one live run per task
 /// instance. Starting the same task again supersedes the older run by cancelling it and advancing
 /// the scheduler generation on the task's sink input.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TaskRuntimeSpec {
     pub instance: TaskInstanceId,
     pub input: InputHandle,

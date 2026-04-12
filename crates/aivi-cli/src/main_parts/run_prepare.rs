@@ -147,6 +147,19 @@ where
     );
     let runtime_assembly = profiled_runtime_assembly.assembly;
     let runtime_backend_by_hir = backend_items_by_hir(&lowered.core, lowered.backend.as_ref());
+    let runtime_link =
+        aivi_runtime::derive_backend_runtime_link_seed(&lowered.core, lowered.backend.as_ref())
+            .map_err(|errors| {
+                let mut rendered = String::from(
+                    "failed to derive source-free runtime link seed for `aivi run`:\n",
+                );
+                for error in errors.errors() {
+                    rendered.push_str("- ");
+                    rendered.push_str(&error.to_string());
+                    rendered.push('\n');
+                }
+                rendered
+            })?;
     let markup_site_collection_started = Instant::now();
     let sites = collect_markup_runtime_expr_sites(module, view.body).map_err(|error| {
         let span_info = match &error {
@@ -180,6 +193,7 @@ where
     );
     metrics.hydration_fragment_count = hydration_metrics.compiled_fragment_count;
     let required_signal_globals = collect_run_required_signal_globals(&hydration_inputs);
+    let patterns = collect_run_patterns(sources, module, &bridge)?;
     let event_handler_resolution_started = Instant::now();
     let event_handlers =
         resolve_run_event_handlers(module, &sites, &bridge, &runtime_assembly, sources)?;
@@ -193,12 +207,12 @@ where
     Ok(PreparedRunArtifact {
         artifact: RunArtifact {
             view_name: view.name.text().into(),
-            module: module.clone(),
+            patterns,
             bridge,
             hydration_inputs,
             required_signal_globals,
             runtime_assembly,
-            core: lowered.core,
+            runtime_link,
             backend: lowered.backend,
             event_handlers,
             stub_signal_defaults,
@@ -408,6 +422,129 @@ fn validate_run_plan(sources: &SourceDatabase, bridge: &GtkBridgeGraph) -> Resul
         rendered.push('\n');
     }
     Err(rendered)
+}
+
+fn collect_run_patterns(
+    sources: &SourceDatabase,
+    module: &HirModule,
+    bridge: &GtkBridgeGraph,
+) -> Result<RunPatternTable, String> {
+    let mut patterns = RunPatternTable::default();
+    let mut visited = BTreeSet::new();
+    for node in bridge.nodes() {
+        match &node.kind {
+            GtkBridgeNodeKind::Match(match_node) => {
+                for branch in &match_node.cases {
+                    collect_run_pattern(sources, module, branch.pattern, &mut patterns, &mut visited)?;
+                }
+            }
+            GtkBridgeNodeKind::Case(case_node) => {
+                collect_run_pattern(sources, module, case_node.pattern, &mut patterns, &mut visited)?;
+            }
+            GtkBridgeNodeKind::Widget(_)
+            | GtkBridgeNodeKind::Group(_)
+            | GtkBridgeNodeKind::Show(_)
+            | GtkBridgeNodeKind::Each(_)
+            | GtkBridgeNodeKind::Empty(_)
+            | GtkBridgeNodeKind::Fragment(_)
+            | GtkBridgeNodeKind::With(_) => {}
+        }
+    }
+    Ok(patterns)
+}
+
+fn collect_run_pattern(
+    sources: &SourceDatabase,
+    module: &HirModule,
+    pattern_id: HirPatternId,
+    patterns: &mut RunPatternTable,
+    visited: &mut BTreeSet<HirPatternId>,
+) -> Result<(), String> {
+    if !visited.insert(pattern_id) {
+        return Ok(());
+    }
+    let pattern = &module.patterns()[pattern_id];
+    let kind = match &pattern.kind {
+        PatternKind::Wildcard => RunPatternKind::Wildcard,
+        PatternKind::Binding(binding) => RunPatternKind::Binding {
+            binding: binding.binding,
+            name: binding.name.text().into(),
+        },
+        PatternKind::Integer(integer) => RunPatternKind::Integer {
+            raw: integer.raw.clone(),
+        },
+        PatternKind::Text(text) => RunPatternKind::Text {
+            value: text_literal_static_text(text).ok_or_else(|| {
+                format!(
+                    "run artifact cannot serialize non-static text pattern at {}",
+                    source_location(sources, pattern.span)
+                )
+            })?
+            .into(),
+        },
+        PatternKind::Tuple(elements) => {
+            let children = elements.iter().copied().collect::<Vec<_>>();
+            for child in &children {
+                collect_run_pattern(sources, module, *child, patterns, visited)?;
+            }
+            RunPatternKind::Tuple(children.into_boxed_slice())
+        }
+        PatternKind::List { elements, rest } => {
+            for child in elements {
+                collect_run_pattern(sources, module, *child, patterns, visited)?;
+            }
+            if let Some(rest) = rest {
+                collect_run_pattern(sources, module, *rest, patterns, visited)?;
+            }
+            RunPatternKind::List {
+                elements: elements.clone().into_boxed_slice(),
+                rest: *rest,
+            }
+        }
+        PatternKind::Record(fields) => {
+            let mut run_fields = Vec::with_capacity(fields.len());
+            for field in fields {
+                collect_run_pattern(sources, module, field.pattern, patterns, visited)?;
+                run_fields.push(RunRecordPatternField {
+                    label: field.label.text().into(),
+                    pattern: field.pattern,
+                });
+            }
+            RunPatternKind::Record(run_fields.into_boxed_slice())
+        }
+        PatternKind::Constructor { callee, arguments } => {
+            for child in arguments {
+                collect_run_pattern(sources, module, *child, patterns, visited)?;
+            }
+            match callee.resolution.as_ref() {
+                aivi_hir::ResolutionState::Resolved(TermResolution::Builtin(term)) => {
+                    RunPatternKind::Constructor {
+                        callee: RunPatternConstructor::Builtin(*term),
+                        arguments: arguments.clone().into_boxed_slice(),
+                    }
+                }
+                aivi_hir::ResolutionState::Resolved(TermResolution::Item(item)) => {
+                    RunPatternKind::Constructor {
+                        callee: RunPatternConstructor::Item {
+                            item: *item,
+                            variant_name: callee
+                                .path
+                                .segments()
+                                .last()
+                                .text()
+                                .to_owned()
+                                .into_boxed_str(),
+                        },
+                        arguments: arguments.clone().into_boxed_slice(),
+                    }
+                }
+                _ => RunPatternKind::UnresolvedName,
+            }
+        }
+        PatternKind::UnresolvedName(_) => RunPatternKind::UnresolvedName,
+    };
+    patterns.insert(pattern_id, RunPattern { kind });
+    Ok(())
 }
 
 fn count_unnamed_widget_children(bridge: &GtkBridgeGraph, roots: &[GtkBridgeNodeRef]) -> usize {

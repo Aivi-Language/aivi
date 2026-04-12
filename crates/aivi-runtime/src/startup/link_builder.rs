@@ -12,12 +12,9 @@ struct LinkArtifacts {
 
 struct LinkBuilder<'a> {
     assembly: &'a HirRuntimeAssembly,
-    core: &'a core::Module,
     backend: &'a BackendProgram,
     errors: Vec<BackendRuntimeLinkError>,
-    core_to_hir: BTreeMap<core::ItemId, hir::ItemId>,
     hir_to_backend: BTreeMap<hir::ItemId, BackendItemId>,
-    backend_to_hir: BTreeMap<BackendItemId, hir::ItemId>,
     signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
     runtime_signal_by_item: BTreeMap<BackendItemId, SignalHandle>,
     derived_signals: BTreeMap<DerivedHandle, LinkedDerivedSignal>,
@@ -32,17 +29,25 @@ struct LinkBuilder<'a> {
 impl<'a> LinkBuilder<'a> {
     fn new(
         assembly: &'a HirRuntimeAssembly,
-        core: &'a core::Module,
         backend: &'a BackendProgram,
+        seed: &BackendRuntimeLinkSeed,
     ) -> Self {
+        let mut hir_to_backend = BTreeMap::new();
+        let mut errors = Vec::new();
+        for &(hir_item, backend_item) in seed.hir_to_backend.iter() {
+            if let Some(previous) = hir_to_backend.insert(hir_item, backend_item) {
+                errors.push(BackendRuntimeLinkError::DuplicateBackendOrigin {
+                    item: hir_item,
+                    first: previous,
+                    second: backend_item,
+                });
+            }
+        }
         Self {
             assembly,
-            core,
             backend,
-            errors: Vec::new(),
-            core_to_hir: BTreeMap::new(),
-            hir_to_backend: BTreeMap::new(),
-            backend_to_hir: BTreeMap::new(),
+            errors,
+            hir_to_backend,
             signal_items_by_handle: BTreeMap::new(),
             runtime_signal_by_item: BTreeMap::new(),
             derived_signals: BTreeMap::new(),
@@ -56,7 +61,6 @@ impl<'a> LinkBuilder<'a> {
     }
 
     fn build(&mut self) -> Result<LinkArtifacts, BackendRuntimeLinkErrors> {
-        self.index_origins();
         self.index_signal_items();
         self.link_sources();
         self.link_tasks();
@@ -79,31 +83,6 @@ impl<'a> LinkBuilder<'a> {
             Err(BackendRuntimeLinkErrors::new(std::mem::take(
                 &mut self.errors,
             )))
-        }
-    }
-
-    fn index_origins(&mut self) {
-        for (core_id, item) in self.core.items().iter() {
-            self.core_to_hir.insert(core_id, item.origin);
-        }
-        for (backend_item, item) in self.backend.items().iter() {
-            let Some(&hir_item) = self.core_to_hir.get(&item.origin) else {
-                self.errors
-                    .push(BackendRuntimeLinkError::MissingCoreItemOrigin {
-                        backend_item,
-                        core_item: item.origin,
-                    });
-                continue;
-            };
-            if let Some(previous) = self.hir_to_backend.insert(hir_item, backend_item) {
-                self.errors
-                    .push(BackendRuntimeLinkError::DuplicateBackendOrigin {
-                        item: hir_item,
-                        first: previous,
-                        second: backend_item,
-                    });
-            }
-            self.backend_to_hir.insert(backend_item, hir_item);
         }
     }
 
@@ -417,8 +396,8 @@ impl<'a> LinkBuilder<'a> {
                         });
                     continue;
                 };
-                let Some(wakeup_dependency_index) =
-                    self.recurrence_wakeup_dependency_index(binding, &recurrence_binding.plan)
+                let Some(wakeup_dependency_index) = self
+                    .recurrence_wakeup_dependency_index(binding, recurrence_binding.wakeup_signal)
                 else {
                     self.errors
                         .push(BackendRuntimeLinkError::MissingRecurrenceWakeupDependency {
@@ -574,9 +553,9 @@ impl<'a> LinkBuilder<'a> {
     fn recurrence_wakeup_dependency_index(
         &self,
         binding: &crate::hir_adapter::HirSignalBinding,
-        plan: &hir::RecurrenceNodePlan,
+        wakeup_signal: Option<hir::ItemId>,
     ) -> Option<usize> {
-        if let Some(wakeup_signal) = plan.wakeup_signal {
+        if let Some(wakeup_signal) = wakeup_signal {
             let wakeup_handle = self.assembly.signal(wakeup_signal)?.signal();
             return binding
                 .dependencies()

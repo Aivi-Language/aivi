@@ -70,7 +70,7 @@ pub enum GateStageOutcome {
     Blocked(BlockedGateStage),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OrdinaryGateStage {
     pub input_subject: GateType,
     pub result_type: GateType,
@@ -78,7 +78,7 @@ pub struct OrdinaryGateStage {
     pub when_false: GateCoreExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignalGateFilter {
     pub input_subject: GateType,
     pub payload_type: GateType,
@@ -186,27 +186,27 @@ impl fmt::Display for GateRuntimeUnsupportedPipeStageKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateCoreExpr {
     pub ty: GateType,
     pub kind: GateCoreExprKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateCoreExprKind {
     AmbientSubject,
     OptionSome { payload: Box<GateCoreExpr> },
     OptionNone,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeExpr {
     pub span: SourceSpan,
     pub ty: GateType,
     pub kind: GateRuntimeExprKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeExprKind {
     AmbientSubject,
     Reference(GateRuntimeReference),
@@ -241,7 +241,7 @@ pub enum GateRuntimeExprKind {
     Pipe(GateRuntimePipeExpr),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeReference {
     Local(BindingId),
     Item(ItemId),
@@ -253,42 +253,42 @@ pub enum GateRuntimeReference {
     IntrinsicValue(IntrinsicValue),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeProjectionBase {
     AmbientSubject,
     Expr(Box<GateRuntimeExpr>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeTextLiteral {
     pub segments: Vec<GateRuntimeTextSegment>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeTextSegment {
     Fragment(TextFragment),
     Interpolation(Box<GateRuntimeExpr>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeRecordField {
     pub label: Name,
     pub value: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeMapEntry {
     pub key: GateRuntimeExpr,
     pub value: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimePipeExpr {
     pub head: Box<GateRuntimeExpr>,
     pub stages: Vec<GateRuntimePipeStage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimePipeStage {
     pub span: SourceSpan,
     pub subject_memo: Option<BindingId>,
@@ -298,14 +298,14 @@ pub struct GateRuntimePipeStage {
     pub kind: GateRuntimePipeStageKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeCaseArm {
     pub span: SourceSpan,
     pub pattern: PatternId,
     pub body: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeTruthyFalsyBranch {
     pub span: SourceSpan,
     pub constructor: BuiltinTerm,
@@ -314,7 +314,7 @@ pub struct GateRuntimeTruthyFalsyBranch {
     pub body: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimePipeStageKind {
     Transform {
         mode: PipeTransformMode,

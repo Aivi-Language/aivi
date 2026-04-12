@@ -17,12 +17,14 @@ cranelift-jit = "0.130.0"
 cranelift-module = "0.130.0"
 cranelift-native = "0.130.0"
 cranelift-object = "0.130.0"
-indexmap = "2"
-num-bigint = "0.4.6"
+indexmap = { version = "2", features = ["serde"] }
+num-bigint = { version = "0.4.6", features = ["serde"] }
 num-traits = "0.2"
 rayon = "1"
-rust_decimal = "1.40.0"
+rust_decimal = { version = "1.40.0", features = ["serde"] }
 rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 aivi-query.workspace = true

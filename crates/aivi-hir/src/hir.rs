@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// One source-stable surface name preserved into HIR for diagnostics.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Name {
     text: Box<str>,
     span: SourceSpan,
@@ -59,7 +59,7 @@ impl Name {
 }
 
 /// Non-empty dotted path used by references, decorators, projections, and markup names.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NamePath {
     segments: NonEmpty<Name>,
     span: SourceSpan,
@@ -139,7 +139,7 @@ impl fmt::Display for NamePath {
 }
 
 /// Resolution marker used until Milestone 2 lowering populates every reference honestly.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ResolutionState<T> {
     #[default]
     Unresolved,
@@ -214,7 +214,7 @@ pub enum ImportBindingResolution {
 }
 
 /// Resolved destination for one domain-owned term member.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DomainMemberResolution {
     pub domain: ItemId,
     pub member_index: usize,
@@ -224,7 +224,7 @@ pub const SYNTHETIC_DOMAIN_CONSTRUCTOR_MEMBER_INDEX: usize = usize::MAX - 1;
 pub const SYNTHETIC_DOMAIN_CARRIER_MEMBER_INDEX: usize = usize::MAX;
 
 /// Stable semantic handle for one domain-owned callable surfaced past HIR elaboration.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DomainMemberHandle {
     pub domain: ItemId,
     pub domain_name: Box<str>,
@@ -233,14 +233,14 @@ pub struct DomainMemberHandle {
 }
 
 /// Stable semantic handle for one class-owned callable surfaced past HIR elaboration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ClassMemberResolution {
     pub class: ItemId,
     pub member_index: usize,
 }
 
 /// Stable semantic handle for one same-module closed-sum constructor.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SumConstructorHandle {
     pub item: ItemId,
     pub type_name: Box<str>,
@@ -249,7 +249,7 @@ pub struct SumConstructorHandle {
 }
 
 /// Compiler-known builtin term references that live outside the current module graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinTerm {
     True,
     False,
@@ -261,7 +261,7 @@ pub enum BuiltinTerm {
     Invalid,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct CustomCapabilityCommandSpec {
     pub provider_key: Box<str>,
     pub command: Box<str>,
@@ -449,6 +449,217 @@ pub enum IntrinsicValue {
     IntNeg,
 }
 
+macro_rules! intrinsic_unit_variants {
+    ($($variant:ident),* $(,)?) => {
+        #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+        enum IntrinsicValueWire {
+            TupleConstructor { arity: usize },
+            CustomCapabilityCommand(CustomCapabilityCommandSpec),
+            $($variant),*
+        }
+
+        impl From<IntrinsicValue> for IntrinsicValueWire {
+            fn from(value: IntrinsicValue) -> Self {
+                match value {
+                    IntrinsicValue::TupleConstructor { arity } => Self::TupleConstructor { arity },
+                    IntrinsicValue::CustomCapabilityCommand(spec) => {
+                        Self::CustomCapabilityCommand((*spec).clone())
+                    }
+                    $(IntrinsicValue::$variant => Self::$variant,)*
+                }
+            }
+        }
+
+        impl From<IntrinsicValueWire> for IntrinsicValue {
+            fn from(value: IntrinsicValueWire) -> Self {
+                match value {
+                    IntrinsicValueWire::TupleConstructor { arity } => Self::TupleConstructor { arity },
+                    IntrinsicValueWire::CustomCapabilityCommand(spec) => {
+                        // Intrinsic custom-command specs currently live behind leaked
+                        // process-lifetime storage; deserializing the run artifact must
+                        // rebuild that stable backing reference.
+                        Self::CustomCapabilityCommand(Box::leak(Box::new(spec)))
+                    }
+                    $(IntrinsicValueWire::$variant => Self::$variant,)*
+                }
+            }
+        }
+    };
+}
+
+intrinsic_unit_variants!(
+    RandomInt,
+    RandomBytes,
+    StdoutWrite,
+    StderrWrite,
+    FsWriteText,
+    FsWriteBytes,
+    FsCreateDirAll,
+    FsDeleteFile,
+    DbParamBool,
+    DbParamInt,
+    DbParamFloat,
+    DbParamDecimal,
+    DbParamBigInt,
+    DbParamText,
+    DbParamBytes,
+    DbStatement,
+    DbQuery,
+    DbCommit,
+    FloatFloor,
+    FloatCeil,
+    FloatRound,
+    FloatSqrt,
+    FloatAbs,
+    FloatToInt,
+    FloatFromInt,
+    FloatToText,
+    FloatParseText,
+    FsReadText,
+    FsReadDir,
+    FsExists,
+    FsReadBytes,
+    FsRename,
+    FsCopy,
+    FsDeleteDir,
+    PathParent,
+    PathFilename,
+    PathStem,
+    PathExtension,
+    PathJoin,
+    PathIsAbsolute,
+    PathNormalize,
+    BytesLength,
+    BytesGet,
+    BytesSlice,
+    BytesAppend,
+    BytesFromText,
+    BytesToText,
+    BytesRepeat,
+    BytesEmpty,
+    JsonValidate,
+    JsonGet,
+    JsonAt,
+    JsonKeys,
+    JsonPretty,
+    JsonMinify,
+    XdgDataHome,
+    XdgConfigHome,
+    XdgCacheHome,
+    XdgStateHome,
+    XdgRuntimeDir,
+    XdgDataDirs,
+    XdgConfigDirs,
+    TextLength,
+    TextByteLen,
+    TextSlice,
+    TextFind,
+    TextContains,
+    TextStartsWith,
+    TextEndsWith,
+    TextToUpper,
+    TextToLower,
+    TextTrim,
+    TextTrimStart,
+    TextTrimEnd,
+    TextReplace,
+    TextReplaceAll,
+    TextSplit,
+    TextRepeat,
+    TextFromInt,
+    TextParseInt,
+    TextFromBool,
+    TextParseBool,
+    TextConcat,
+    FloatSin,
+    FloatCos,
+    FloatTan,
+    FloatAsin,
+    FloatAcos,
+    FloatAtan,
+    FloatAtan2,
+    FloatExp,
+    FloatLog,
+    FloatLog2,
+    FloatLog10,
+    FloatPow,
+    FloatHypot,
+    FloatTrunc,
+    FloatFrac,
+    TimeNowMs,
+    TimeMonotonicMs,
+    TimeFormat,
+    TimeParse,
+    EnvGet,
+    EnvList,
+    LogEmit,
+    LogEmitContext,
+    RandomFloat,
+    I18nTranslate,
+    I18nTranslatePlural,
+    RegexIsMatch,
+    RegexFind,
+    RegexFindText,
+    RegexFindAll,
+    RegexReplace,
+    RegexReplaceAll,
+    HttpGet,
+    HttpGetBytes,
+    HttpGetStatus,
+    HttpPost,
+    HttpPut,
+    HttpDelete,
+    HttpHead,
+    HttpPostJson,
+    BigIntFromInt,
+    BigIntFromText,
+    BigIntToInt,
+    BigIntToText,
+    BigIntAdd,
+    BigIntSub,
+    BigIntMul,
+    BigIntDiv,
+    BigIntMod,
+    BigIntPow,
+    BigIntNeg,
+    BigIntAbs,
+    BigIntCmp,
+    BigIntEq,
+    BigIntGt,
+    BigIntLt,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BitNot,
+    ShiftLeft,
+    ShiftRight,
+    ShiftRightUnsigned,
+    IntAdd,
+    IntSub,
+    IntMul,
+    IntDiv,
+    IntMod,
+    IntNeg,
+);
+
+impl serde::Serialize for IntrinsicValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        IntrinsicValueWire::from(*self).serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for IntrinsicValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        IntrinsicValueWire::deserialize(deserializer).map(Self::from)
+    }
+}
+
 impl fmt::Display for IntrinsicValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -613,7 +824,7 @@ impl fmt::Display for IntrinsicValue {
 }
 
 /// Compiler-known builtin type references that live outside the current module graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinType {
     Int,
     Float,
@@ -711,19 +922,19 @@ pub enum ImportBundleKind {
     BuiltinOption,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportRecordField {
     pub name: Box<str>,
     pub ty: ImportValueType,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ImportSumVariant {
     pub name: Box<str>,
     pub fields: Vec<ImportValueType>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ImportTypeDefinition {
     Alias(ImportValueType),
     Sum(Vec<ImportSumVariant>),
@@ -735,7 +946,7 @@ pub enum ImportTypeDefinition {
 /// Supports both closed (monomorphic) and open (polymorphic) function signatures.
 /// `TypeVariable` and `Named` extend the original closed surface to allow polymorphic
 /// function types to cross module boundaries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ImportValueType {
     Primitive(BuiltinType),
     Tuple(Vec<Self>),
@@ -877,7 +1088,7 @@ impl LiteralSuffixBase {
 }
 
 /// Resolved destination for a domain literal suffix use site such as `250ms`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LiteralSuffixResolution {
     DomainMember(DomainMemberResolution),
     Import(ImportId),
@@ -1073,7 +1284,7 @@ pub struct ReactiveUpdateClause {
     pub trigger_source: Option<ItemId>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ReactiveUpdateBodyMode {
     Payload,
     OptionalPayload,
@@ -1345,31 +1556,31 @@ pub struct HoistItem {
 }
 
 /// One integer literal preserved in raw form.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IntegerLiteral {
     pub raw: Box<str>,
 }
 
 /// One float literal preserved in raw form.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FloatLiteral {
     pub raw: Box<str>,
 }
 
 /// One decimal literal preserved in raw form.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecimalLiteral {
     pub raw: Box<str>,
 }
 
 /// One BigInt literal preserved in raw form.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BigIntLiteral {
     pub raw: Box<str>,
 }
 
 /// One integer literal immediately suffixed by a resolved-or-resolvable domain suffix.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SuffixedIntegerLiteral {
     pub raw: Box<str>,
     pub suffix: Name,
@@ -1377,7 +1588,7 @@ pub struct SuffixedIntegerLiteral {
 }
 
 /// One text literal preserved as explicit text fragments plus interpolation holes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextLiteral {
     pub segments: Vec<TextSegment>,
 }
@@ -1390,20 +1601,20 @@ impl TextLiteral {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TextSegment {
     Text(TextFragment),
     Interpolation(TextInterpolation),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextFragment {
     /// Decoded text content between interpolation holes.
     pub raw: Box<str>,
     pub span: SourceSpan,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextInterpolation {
     pub span: SourceSpan,
     pub expr: ExprId,
@@ -1416,13 +1627,13 @@ pub struct RegexLiteral {
 }
 
 /// Unary operators preserved through HIR.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum UnaryOperator {
     Not,
 }
 
 /// Binary operators preserved through HIR.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -1629,7 +1840,7 @@ impl PipeStage {
 }
 
 /// Typed runtime semantics for one `|>` transform stage after elaboration.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PipeTransformMode {
     /// Evaluate the stage as a callable transform over the current subject.
     Apply,

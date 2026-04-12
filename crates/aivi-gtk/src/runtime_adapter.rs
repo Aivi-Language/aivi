@@ -2,7 +2,9 @@ use std::{error::Error, fmt};
 
 use aivi_base::SourceSpan;
 use aivi_hir::{BindingId, ExprId, Name, NamePath, PatternId};
-use aivi_runtime::{GraphBuildError, InputHandle, OwnerHandle, SignalGraph, SignalGraphBuilder};
+use aivi_runtime::{
+    GraphBuildError, InputHandle, OwnerHandle, SignalGraph, SignalGraphBuilder, SignalGraphParts,
+};
 
 use crate::plan::{
     AttributeSite, ChildOp, EventHookStrategy, EventHookTeardown, PlanNode, PlanNodeId,
@@ -516,6 +518,15 @@ pub struct WidgetRuntimeAssembly {
     nodes: Box<[RuntimePlanNode]>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WidgetRuntimeAssemblyParts {
+    pub graph: SignalGraphParts,
+    pub root: PlanNodeId,
+    pub plan_to_owner: Box<[OwnerHandle]>,
+    pub owner_to_plan: Box<[PlanNodeId]>,
+    pub nodes: Box<[RuntimePlanNode]>,
+}
+
 impl WidgetRuntimeAssembly {
     pub fn graph(&self) -> &SignalGraph {
         &self.graph
@@ -551,15 +562,49 @@ impl WidgetRuntimeAssembly {
     pub fn node_for_owner(&self, owner: OwnerHandle) -> Option<&RuntimePlanNode> {
         self.plan_for_owner(owner).and_then(|plan| self.node(plan))
     }
+
+    pub fn into_parts(self) -> WidgetRuntimeAssemblyParts {
+        let Self {
+            graph,
+            root,
+            plan_to_owner,
+            owner_to_plan,
+            nodes,
+        } = self;
+        WidgetRuntimeAssemblyParts {
+            graph: graph.into_parts(),
+            root,
+            plan_to_owner,
+            owner_to_plan,
+            nodes,
+        }
+    }
+
+    pub fn from_parts(parts: WidgetRuntimeAssemblyParts) -> Self {
+        let WidgetRuntimeAssemblyParts {
+            graph,
+            root,
+            plan_to_owner,
+            owner_to_plan,
+            nodes,
+        } = parts;
+        Self {
+            graph: SignalGraph::from_parts(graph),
+            root,
+            plan_to_owner,
+            owner_to_plan,
+            nodes,
+        }
+    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeNodeRef {
     pub plan: PlanNodeId,
     pub owner: OwnerHandle,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimePlanNode {
     pub plan: PlanNodeId,
     pub stable_id: StableNodeId,
@@ -569,7 +614,7 @@ pub struct RuntimePlanNode {
     pub kind: RuntimePlanNodeKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RuntimePlanNodeKind {
     Widget(RuntimeWidgetNode),
     Group(RuntimeGroupNode),
@@ -582,7 +627,7 @@ pub enum RuntimePlanNodeKind {
     With(RuntimeWithNode),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeWidgetNode {
     pub widget: NamePath,
     pub properties: Box<[RuntimePropertyBinding]>,
@@ -590,14 +635,14 @@ pub struct RuntimeWidgetNode {
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeGroupNode {
     pub widget: NamePath,
     pub group: Name,
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RuntimePropertyBinding {
     Static(StaticPropertyPlan),
     Setter(RuntimeSetterBinding),
@@ -612,7 +657,7 @@ impl RuntimePropertyBinding {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeSetterBinding {
     pub site: AttributeSite,
     pub name: Name,
@@ -623,7 +668,7 @@ pub struct RuntimeSetterBinding {
     pub teardown: SetterTeardown,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeEventBinding {
     pub site: AttributeSite,
     pub name: Name,
@@ -634,20 +679,20 @@ pub struct RuntimeEventBinding {
     pub teardown: EventHookTeardown,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeShowNode {
     pub when: RuntimeExprInput,
     pub mount: RuntimeShowMountPolicy,
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeShowMountPolicy {
     UnmountWhenHidden,
     KeepMounted { decision: RuntimeExprInput },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeEachNode {
     pub collection: RuntimeExprInput,
     pub key_input: Option<RuntimeExprInput>,
@@ -657,49 +702,49 @@ pub struct RuntimeEachNode {
     pub empty_branch: Option<RuntimeNodeRef>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeEmptyNode {
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeMatchNode {
     pub scrutinee: RuntimeExprInput,
     pub cases: Box<[RuntimeCaseBranch]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeCaseBranch {
     pub case: RuntimeNodeRef,
     pub pattern: PatternId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeCaseNode {
     pub pattern: PatternId,
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeFragmentNode {
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeWithNode {
     pub value: RuntimeExprInput,
     pub binding: BindingId,
     pub children: Box<[RuntimeChildOp]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeExprInput {
     pub owner: OwnerHandle,
     pub expr: ExprId,
     pub input: InputHandle,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeChildOp {
     Append(RuntimeNodeRef),
 }

@@ -6,7 +6,19 @@ use std::{
 };
 
 /// Byte offset into a source file.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct ByteIndex(u32);
 
 impl ByteIndex {
@@ -32,7 +44,9 @@ impl From<u32> for ByteIndex {
 }
 
 /// Half-open byte span over a source file.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Span {
     start: ByteIndex,
     end: ByteIndex,
@@ -96,7 +110,19 @@ impl fmt::Display for Span {
 /// correspond to any registered file, causing out-of-bounds access or silent data corruption
 /// when the id is used to index the source file table. Always obtain `FileId` values through
 /// [`SourceDatabase::add_file`] or the equivalent source-manager API.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct FileId(u32);
 
 impl FileId {
@@ -116,7 +142,9 @@ impl fmt::Display for FileId {
 }
 
 /// File-qualified source span.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct SourceSpan {
     file: FileId,
     span: Span,
@@ -145,7 +173,7 @@ impl SourceSpan {
 }
 
 /// Value paired with a source span.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Spanned<T> {
     pub value: T,
     pub span: SourceSpan,

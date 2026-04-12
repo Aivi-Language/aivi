@@ -10,7 +10,7 @@ use crate::{
     layout::{Layout, PrimitiveType},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Program {
     items: Arena<ItemId, Item>,
     pipelines: Arena<PipelineId, Pipeline>,
@@ -20,7 +20,65 @@ pub struct Program {
     decode_plans: Arena<DecodePlanId, DecodePlan>,
     /// Maps `(HIR domain ItemId, member index)` → backend `ItemId` for domain members
     /// that have compiled bodies. Populated during backend lowering for fast dispatch.
+    #[serde(with = "domain_member_items_serde")]
     domain_member_items: HashMap<(HirItemId, usize), ItemId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct DomainMemberItemWire {
+    domain: HirItemId,
+    member_index: usize,
+    item: ItemId,
+}
+
+mod domain_member_items_serde {
+    use std::collections::HashMap;
+
+    use aivi_hir::ItemId as HirItemId;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
+
+    use crate::ItemId;
+
+    use super::DomainMemberItemWire;
+
+    pub fn serialize<S>(
+        value: &HashMap<(HirItemId, usize), ItemId>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut entries = value
+            .iter()
+            .map(|(&(domain, member_index), &item)| DomainMemberItemWire {
+                domain,
+                member_index,
+                item,
+            })
+            .collect::<Vec<_>>();
+        entries.sort_by_key(|entry| (entry.domain.as_raw(), entry.member_index));
+        entries.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<HashMap<(HirItemId, usize), ItemId>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let entries = Vec::<DomainMemberItemWire>::deserialize(deserializer)?;
+        let mut map = HashMap::with_capacity(entries.len());
+        for entry in entries {
+            let key = (entry.domain, entry.member_index);
+            if map.insert(key, entry.item).is_some() {
+                return Err(D::Error::custom(format!(
+                    "duplicate domain member backend item mapping for domain{} member {}",
+                    entry.domain, entry.member_index
+                )));
+            }
+        }
+        Ok(map)
+    }
 }
 
 impl Default for Program {
@@ -433,7 +491,7 @@ impl fmt::Display for Program {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Item {
     pub origin: aivi_core::ItemId,
     pub span: SourceSpan,
@@ -444,7 +502,7 @@ pub struct Item {
     pub pipelines: Vec<PipelineId>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ItemKind {
     Value,
     Function,
@@ -463,7 +521,7 @@ impl ItemKind {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignalInfo {
     pub dependencies: Vec<ItemId>,
     pub dependency_layouts: Vec<LayoutId>,
@@ -471,13 +529,13 @@ pub struct SignalInfo {
     pub source: Option<SourceId>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PipelineOrigin {
     pub span: SourceSpan,
     pub core_pipe: aivi_core::PipeId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Pipeline {
     pub owner: ItemId,
     pub origin: PipelineOrigin,
@@ -485,7 +543,7 @@ pub struct Pipeline {
     pub recurrence: Option<Recurrence>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Stage {
     pub index: usize,
     pub span: SourceSpan,
@@ -494,7 +552,7 @@ pub struct Stage {
     pub kind: StageKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StageKind {
     Gate(GateStage),
     TruthyFalsy(TruthyFalsyStage),
@@ -513,7 +571,7 @@ impl StageKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateStage {
     Ordinary {
         when_true: KernelId,
@@ -526,7 +584,7 @@ pub enum GateStage {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TruthyFalsyStage {
     pub truthy_stage_index: usize,
     pub truthy_stage_span: SourceSpan,
@@ -536,14 +594,14 @@ pub struct TruthyFalsyStage {
     pub falsy: TruthyFalsyBranch,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TruthyFalsyBranch {
     pub constructor: BuiltinTerm,
     pub payload_layout: Option<LayoutId>,
     pub result_layout: LayoutId,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum FanoutCarrier {
     Ordinary,
     Signal,
@@ -558,7 +616,7 @@ impl fmt::Display for FanoutCarrier {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FanoutStage {
     pub carrier: FanoutCarrier,
     pub element_layout: LayoutId,
@@ -569,7 +627,7 @@ pub struct FanoutStage {
     pub join: Option<FanoutJoin>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FanoutFilter {
     pub stage_index: usize,
     pub stage_span: SourceSpan,
@@ -577,7 +635,7 @@ pub struct FanoutFilter {
     pub predicate: KernelId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FanoutJoin {
     pub stage_index: usize,
     pub stage_span: SourceSpan,
@@ -588,7 +646,7 @@ pub struct FanoutJoin {
     pub result_layout: LayoutId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TemporalStage {
     Previous {
         payload_layout: LayoutId,
@@ -618,7 +676,7 @@ pub enum TemporalStage {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceTarget {
     Signal,
     Task,
@@ -635,7 +693,7 @@ impl fmt::Display for RecurrenceTarget {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceWakeupKind {
     Timer,
     Backoff,
@@ -654,7 +712,7 @@ impl fmt::Display for RecurrenceWakeupKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Recurrence {
     pub target: RecurrenceTarget,
     pub wakeup_kind: RecurrenceWakeupKind,
@@ -664,7 +722,7 @@ pub struct Recurrence {
     pub non_source_wakeup: Option<NonSourceWakeup>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RecurrenceStage {
     pub stage_index: usize,
     pub stage_span: SourceSpan,
@@ -673,7 +731,7 @@ pub struct RecurrenceStage {
     pub kernel: KernelId,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum NonSourceWakeupCause {
     ExplicitTimer,
     ExplicitBackoff,
@@ -688,13 +746,15 @@ impl fmt::Display for NonSourceWakeupCause {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NonSourceWakeup {
     pub cause: NonSourceWakeupCause,
     pub kernel: KernelId,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct SourceInstanceId(u32);
 
 impl SourceInstanceId {
@@ -713,7 +773,7 @@ impl fmt::Display for SourceInstanceId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SourceProvider {
     Missing,
     Builtin(Box<str>),
@@ -730,22 +790,22 @@ impl fmt::Display for SourceProvider {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceTeardownPolicy {
     DisposeOnOwnerTeardown,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceReplacementPolicy {
     DisposeSupersededBeforePublish,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceStaleWorkPolicy {
     DropStalePublications,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceCancellationPolicy {
     ProviderManaged,
     CancelInFlight,
@@ -760,24 +820,24 @@ impl fmt::Display for SourceCancellationPolicy {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceOptionBinding {
     pub option_span: SourceSpan,
     pub option_name: Box<str>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceArgumentKernel {
     pub kernel: KernelId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceOptionKernel {
     pub option_name: Box<str>,
     pub kernel: KernelId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourcePlan {
     pub owner: ItemId,
     pub span: SourceSpan,
@@ -795,36 +855,38 @@ pub struct SourcePlan {
     pub decode: Option<DecodePlanId>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum DecodeMode {
     #[default]
     Strict,
     Permissive,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeExtraFieldPolicy {
     Reject,
     Ignore,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeFieldRequirement {
     Required,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeSumStrategy {
     Explicit,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DomainDecodeSurfaceKind {
     Direct,
     FallibleResult,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DomainDecodeSurface {
     pub member_index: usize,
     pub member_name: Box<str>,
@@ -832,7 +894,7 @@ pub struct DomainDecodeSurface {
     pub span: SourceSpan,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecodePlan {
     pub owner: ItemId,
     pub mode: DecodeMode,
@@ -864,13 +926,13 @@ impl DecodePlan {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeStep {
     pub layout: LayoutId,
     pub kind: DecodeStepKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DecodeStepKind {
     Scalar {
         scalar: PrimitiveType,
@@ -926,14 +988,14 @@ impl DecodeStepKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeField {
     pub name: Box<str>,
     pub requirement: DecodeFieldRequirement,
     pub step: DecodeStepId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeVariant {
     pub name: Box<str>,
     pub payload: Option<DecodeStepId>,

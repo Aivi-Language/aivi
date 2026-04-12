@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use num_bigint::{BigInt, Sign};
 use rust_decimal::Decimal;
 
-#[derive(Clone, Copy, Debug, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialOrd, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeFloat(f64);
 
 impl RuntimeFloat {
@@ -47,7 +47,9 @@ impl std::fmt::Display for RuntimeFloat {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct RuntimeDecimal(Decimal);
 
 impl RuntimeDecimal {
@@ -86,7 +88,9 @@ impl std::fmt::Display for RuntimeDecimal {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct RuntimeBigInt(BigInt);
 
 impl RuntimeBigInt {

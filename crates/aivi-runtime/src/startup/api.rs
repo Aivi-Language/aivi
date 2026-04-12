@@ -1,7 +1,59 @@
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackendRuntimeLinkSeed {
+    pub hir_to_backend: Box<[(hir::ItemId, BackendItemId)]>,
+}
+
+pub fn derive_backend_runtime_link_seed(
+    core: &core::Module,
+    backend: &BackendProgram,
+) -> Result<BackendRuntimeLinkSeed, BackendRuntimeLinkErrors> {
+    let mut errors = Vec::new();
+    let mut core_to_hir = BTreeMap::new();
+    let mut hir_to_backend = BTreeMap::new();
+    for (core_id, item) in core.items().iter() {
+        core_to_hir.insert(core_id, item.origin);
+    }
+    for (backend_item, item) in backend.items().iter() {
+        let Some(&hir_item) = core_to_hir.get(&item.origin) else {
+            errors.push(BackendRuntimeLinkError::MissingCoreItemOrigin {
+                backend_item,
+                core_item: item.origin,
+            });
+            continue;
+        };
+        if let Some(previous) = hir_to_backend.insert(hir_item, backend_item) {
+            errors.push(BackendRuntimeLinkError::DuplicateBackendOrigin {
+                item: hir_item,
+                first: previous,
+                second: backend_item,
+            });
+        }
+    }
+    if errors.is_empty() {
+        Ok(BackendRuntimeLinkSeed {
+            hir_to_backend: hir_to_backend
+                .into_iter()
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        })
+    } else {
+        Err(BackendRuntimeLinkErrors::new(errors))
+    }
+}
+
 pub fn link_backend_runtime(
     assembly: HirRuntimeAssembly,
     core: &core::Module,
     backend: Arc<BackendProgram>,
+) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors> {
+    let seed = derive_backend_runtime_link_seed(core, &backend)?;
+    link_backend_runtime_with_seed(assembly, backend, &seed)
+}
+
+pub fn link_backend_runtime_with_seed(
+    assembly: HirRuntimeAssembly,
+    backend: Arc<BackendProgram>,
+    seed: &BackendRuntimeLinkSeed,
 ) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors> {
     let runtime = assembly
         .instantiate_runtime_with_value_store::<RuntimeValue, _>(MovingRuntimeValueStore::default())
@@ -10,7 +62,7 @@ pub fn link_backend_runtime(
                 error,
             }])
         })?;
-    let mut builder = LinkBuilder::new(&assembly, core, &backend);
+    let mut builder = LinkBuilder::new(&assembly, &backend, seed);
     let linked = builder.build()?;
     let mut linked_runtime = BackendLinkedRuntime {
         assembly,

@@ -11,10 +11,10 @@ The `aivi` binary provides the developer-facing command-line interface.
 | Command | Description |
 |---------|-------------|
 | `aivi check <file>` | Type-check a file and report diagnostics |
-| `aivi run <file>` | Run an AIVI application (GTK app with live runtime) |
+| `aivi run <file>` | Run an AIVI application from source or a serialized run artifact |
 | `aivi execute <expr>` | Execute an expression and print the result |
 | `aivi compile <file>` | Compile to native object code; not yet a linked runnable app |
-| `aivi build` | Package the current runtime binary, stdlib, and reachable workspace files into a runnable bundle |
+| `aivi build` | Package the runtime binary plus a serialized run artifact into a runnable source-free bundle |
 | `aivi test` | Run AIVI test files |
 | `aivi fmt <file>` | Format a source file (idempotent) |
 | `aivi lsp` | Start the LSP server on stdio |
@@ -79,12 +79,16 @@ Pre-existing known failures:
 
 ## Execution boundary
 
-- `aivi compile` lowers through Cranelift and can emit an object file, but it stops before runtime
-  startup / final app linking.
+- `aivi compile` lowers through Cranelift and can emit an object file, but it stops before final
+  native app linking.
 - `aivi build` is the current runnable packaging path. It validates the same runnable surface as
-  `aivi run`, then assembles a bundle from the runtime binary, bundled stdlib, and reachable
-  workspace sources.
+  `aivi run`, then assembles a source-free bundle from the runtime binary, `run-artifact.json`,
+  backend payload sidecars, and a launcher script.
+- `aivi run` accepts either a source/workspace entry or a serialized run artifact. Artifact runs
+  keep the selected GTK view fixed at bundle time, so `--view` may be omitted or must match.
 - Backend execution can still attach compiled object artifacts while constructing a lazy-JIT engine,
   so object emission and runtime execution currently coexist rather than replacing each other.
+- Remaining AOT gap: the runnable bundle still serializes backend `Program` payloads rather than
+  launching directly from precompiled `CompiledProgram` / native sidecars emitted by `aivi compile`.
 
 *See also: [lsp-server.md](lsp-server.md), [architecture.md](architecture.md)*

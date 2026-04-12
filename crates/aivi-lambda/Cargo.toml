@@ -9,6 +9,7 @@ aivi-base.workspace = true
 aivi-core = { path = "../aivi-core" }
 aivi-hir.workspace = true
 aivi-typing.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 aivi-syntax.workspace = true

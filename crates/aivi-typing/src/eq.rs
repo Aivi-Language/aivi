@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
 /// The typeclass family modeled by this crate.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Class {
     Eq,
 }
@@ -12,7 +14,18 @@ pub enum Class {
 /// design. They follow the same structural pattern but stay private to internal table indexing.
 macro_rules! define_typing_id {
     ($vis:vis $name:ident, $overflow_msg:literal) => {
-        #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[derive(
+            Copy,
+            Clone,
+            Debug,
+            Eq,
+            PartialEq,
+            Ord,
+            PartialOrd,
+            Hash,
+            serde::Serialize,
+            serde::Deserialize,
+        )]
         $vis struct $name(u32);
 
         impl $name {
@@ -34,7 +47,9 @@ define_typing_id!(pub TypeParameterId, "type parameter table overflow");
 define_typing_id!(pub ExternalTypeId, "external type table overflow");
 define_typing_id!(pub EqPlanId, "eq plan table overflow");
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct FieldName(Box<str>);
 
 impl FieldName {
@@ -53,7 +68,9 @@ impl From<&str> for FieldName {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct VariantName(Box<str>);
 
 impl VariantName {
@@ -75,7 +92,9 @@ impl From<&str> for VariantName {
 /// Primitive builtins referenced by the structural type model.
 ///
 /// Only a subset currently receives compiler-derived `Eq` witnesses.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum PrimitiveType {
     Int,
     Float,
@@ -87,21 +106,25 @@ pub enum PrimitiveType {
     Bytes,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Closedness {
     Closed,
     Open,
 }
 
 /// A resolved leaf type whose `Eq` evidence must already exist in the surrounding environment.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum TypeReference {
     Parameter(TypeParameterId),
     External(ExternalTypeId),
 }
 
 /// The small structural type language shared by focused `Eq` and decode planning.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TypeNode {
     Primitive(PrimitiveType),
     Reference(TypeReference),
@@ -115,7 +138,7 @@ pub enum TypeNode {
     Validation { error: TypeId, value: TypeId },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DomainShape {
     name: Box<str>,
     carrier: TypeId,
@@ -138,7 +161,7 @@ impl DomainShape {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordShape {
     closedness: Closedness,
     fields: Vec<RecordField>,
@@ -159,7 +182,7 @@ impl RecordShape {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecordField {
     name: FieldName,
     ty: TypeId,
@@ -182,7 +205,7 @@ impl RecordField {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SumShape {
     closedness: Closedness,
     variants: Vec<SumVariant>,
@@ -206,7 +229,7 @@ impl SumShape {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SumVariant {
     name: VariantName,
     payload: Option<TypeId>,

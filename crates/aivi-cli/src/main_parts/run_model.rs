@@ -57,12 +57,12 @@ impl GtkHostValue for RunHostValue {
 #[derive(Clone, Debug)]
 struct RunArtifact {
     view_name: Box<str>,
-    module: HirModule,
+    patterns: RunPatternTable,
     bridge: GtkBridgeGraph,
     hydration_inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
     required_signal_globals: BTreeMap<BackendItemId, Box<str>>,
     runtime_assembly: HirRuntimeAssembly,
-    core: aivi_core::Module,
+    runtime_link: aivi_runtime::BackendRuntimeLinkSeed,
     backend: Arc<BackendProgram>,
     event_handlers: BTreeMap<HirExprId, ResolvedRunEventHandler>,
     /// Default values to publish into stub Input signal handles for cross-module
@@ -114,15 +114,20 @@ struct RunValidationBlocker {
 #[derive(Clone, Debug)]
 struct RunFragmentExecutionUnit {
     backend: Arc<BackendProgram>,
+    cache_key: u64,
 }
 
 impl RunFragmentExecutionUnit {
-    fn new(backend: Arc<BackendProgram>) -> Self {
-        Self { backend }
+    fn new(backend: Arc<BackendProgram>, cache_key: u64) -> Self {
+        Self { backend, cache_key }
     }
 
     fn backend(&self) -> &BackendProgram {
         self.backend.as_ref()
+    }
+
+    fn cache_key(&self) -> u64 {
+        self.cache_key
     }
 
     fn create_engine(&self, profiled: bool) -> BackendExecutionEngineHandle<'_> {
@@ -142,13 +147,19 @@ impl RunFragmentExecutionUnit {
 #[derive(Clone, Debug)]
 struct CompiledRunFragment {
     expr: HirExprId,
-    parameters: Vec<GeneralExprParameter>,
+    parameters: Vec<RunFragmentParameter>,
     execution: Arc<RunFragmentExecutionUnit>,
     item: BackendItemId,
     required_signal_globals: Vec<CompiledRunSignalGlobal>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct RunFragmentParameter {
+    binding: aivi_hir::BindingId,
+    name: Box<str>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct CompiledRunSignalGlobal {
     fragment_item: BackendItemId,
     runtime_item: BackendItemId,
@@ -178,6 +189,67 @@ enum RunInputSpec {
     Text(aivi_hir::TextLiteral),
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RunPatternTable {
+    patterns: BTreeMap<HirPatternId, RunPattern>,
+}
+
+impl RunPatternTable {
+    fn insert(&mut self, id: HirPatternId, pattern: RunPattern) {
+        self.patterns.insert(id, pattern);
+    }
+
+    fn get(&self, id: HirPatternId) -> Option<&RunPattern> {
+        self.patterns.get(&id)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct RunPattern {
+    kind: RunPatternKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum RunPatternKind {
+    Wildcard,
+    Binding {
+        binding: aivi_hir::BindingId,
+        name: Box<str>,
+    },
+    Integer {
+        raw: Box<str>,
+    },
+    Text {
+        value: Box<str>,
+    },
+    Tuple(Box<[HirPatternId]>),
+    List {
+        elements: Box<[HirPatternId]>,
+        rest: Option<HirPatternId>,
+    },
+    Record(Box<[RunRecordPatternField]>),
+    Constructor {
+        callee: RunPatternConstructor,
+        arguments: Box<[HirPatternId]>,
+    },
+    UnresolvedName,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct RunRecordPatternField {
+    label: Box<str>,
+    pattern: HirPatternId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum RunPatternConstructor {
+    Builtin(BuiltinTerm),
+    Item {
+        item: HirItemId,
+        variant_name: Box<str>,
+    },
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct RunInputCompilationMetrics {
     compiled_fragment_count: usize,
@@ -186,7 +258,7 @@ struct RunInputCompilationMetrics {
 #[derive(Clone, Debug)]
 struct RunHydrationStaticState {
     view_name: Box<str>,
-    module: HirModule,
+    patterns: RunPatternTable,
     bridge: GtkBridgeGraph,
     inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
 }
@@ -375,13 +447,13 @@ struct HydratedRunEachItem {
     children: Box<[HydratedRunNode]>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 enum ResolvedRunEventPayload {
     GtkPayload,
     ScopedInput,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct ResolvedRunEventHandler {
     signal_item: aivi_hir::ItemId,
     signal_name: Box<str>,

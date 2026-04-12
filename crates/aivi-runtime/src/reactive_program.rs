@@ -14,12 +14,20 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveProgram {
     signals: Box<[ReactiveSignalNode]>,
     clauses: Box<[ReactiveClauseNode]>,
     partitions: Box<[ReactivePartition]>,
     topo_order: Box<[SignalHandle]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReactiveProgramParts {
+    pub signals: Box<[ReactiveSignalNode]>,
+    pub clauses: Box<[ReactiveClauseNode]>,
+    pub partitions: Box<[ReactivePartition]>,
+    pub topo_order: Box<[SignalHandle]>,
 }
 
 impl ReactiveProgram {
@@ -62,9 +70,39 @@ impl ReactiveProgram {
     pub fn topo_order(&self) -> &[SignalHandle] {
         &self.topo_order
     }
+
+    pub fn into_parts(self) -> ReactiveProgramParts {
+        let Self {
+            signals,
+            clauses,
+            partitions,
+            topo_order,
+        } = self;
+        ReactiveProgramParts {
+            signals,
+            clauses,
+            partitions,
+            topo_order,
+        }
+    }
+
+    pub fn from_parts(parts: ReactiveProgramParts) -> Self {
+        let ReactiveProgramParts {
+            signals,
+            clauses,
+            partitions,
+            topo_order,
+        } = parts;
+        Self {
+            signals,
+            clauses,
+            partitions,
+            topo_order,
+        }
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveSignalNode {
     handle: SignalHandle,
     name: Box<str>,
@@ -120,7 +158,7 @@ impl ReactiveSignalNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ReactiveSignalNodeKind {
     Input(ReactiveInputNode),
     Derived(ReactiveDerivedNode),
@@ -150,7 +188,7 @@ impl ReactiveSignalNodeKind {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveInputNode {
     source_owner: Option<hir::ItemId>,
     source_instance: Option<SourceInstanceId>,
@@ -181,7 +219,7 @@ impl ReactiveInputNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveDerivedNode {
     source_input: Option<InputHandle>,
     temporal_helpers: Box<[InputHandle]>,
@@ -202,7 +240,7 @@ impl ReactiveDerivedNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveReactiveNode {
     source_input: Option<InputHandle>,
     seed_dependencies: Box<[SignalHandle]>,
@@ -223,7 +261,7 @@ impl ReactiveReactiveNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactiveClauseNode {
     handle: ReactiveClauseHandle,
     owner_signal: SignalHandle,
@@ -284,7 +322,9 @@ impl ReactiveClauseNode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct ReactivePartitionId(u32);
 
 impl ReactivePartitionId {
@@ -301,7 +341,7 @@ impl ReactivePartitionId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ReactivePartition {
     id: ReactivePartitionId,
     batch_index: usize,

@@ -9,7 +9,7 @@ use crate::{
     layout::AbiPassMode,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinTerm {
     True,
     False,
@@ -21,7 +21,7 @@ pub enum BuiltinTerm {
     Invalid,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinClassMemberIntrinsic {
     StructuralEq,
     Compare {
@@ -44,7 +44,7 @@ pub enum BuiltinClassMemberIntrinsic {
     FilterMap(BuiltinFilterableCarrier),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinFunctorCarrier {
     List,
     Option,
@@ -54,13 +54,13 @@ pub enum BuiltinFunctorCarrier {
     Task,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinBifunctorCarrier {
     Result,
     Validation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinApplicativeCarrier {
     List,
     Option,
@@ -70,7 +70,7 @@ pub enum BuiltinApplicativeCarrier {
     Task,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinApplyCarrier {
     List,
     Option,
@@ -80,7 +80,7 @@ pub enum BuiltinApplyCarrier {
     Task,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinMonadCarrier {
     List,
     Option,
@@ -88,7 +88,7 @@ pub enum BuiltinMonadCarrier {
     Task,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinFoldableCarrier {
     List,
     Option,
@@ -96,7 +96,7 @@ pub enum BuiltinFoldableCarrier {
     Validation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinTraversableCarrier {
     List,
     Option,
@@ -104,19 +104,19 @@ pub enum BuiltinTraversableCarrier {
     Validation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinFilterableCarrier {
     List,
     Option,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinAppendCarrier {
     Text,
     List,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinOrdSubject {
     Int,
     Float,
@@ -142,7 +142,7 @@ impl fmt::Display for BuiltinTerm {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum UnaryOperator {
     Not,
 }
@@ -155,7 +155,7 @@ impl fmt::Display for UnaryOperator {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BinaryOperator {
     Add,
     Subtract,
@@ -192,33 +192,33 @@ impl fmt::Display for BinaryOperator {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IntegerLiteral {
     pub raw: Box<str>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FloatLiteral {
     pub raw: Box<str>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecimalLiteral {
     pub raw: Box<str>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BigIntLiteral {
     pub raw: Box<str>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SuffixedIntegerLiteral {
     pub raw: Box<str>,
     pub suffix: Box<str>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SubjectRef {
     Input,
     Inline(InlineSubjectId),
@@ -233,7 +233,7 @@ impl fmt::Display for SubjectRef {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CallingConventionKind {
     RuntimeKernelV1,
 }
@@ -246,7 +246,7 @@ impl fmt::Display for CallingConventionKind {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ParameterRole {
     InputSubject,
     Environment(EnvSlotId),
@@ -261,20 +261,20 @@ impl fmt::Display for ParameterRole {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AbiParameter {
     pub role: ParameterRole,
     pub layout: LayoutId,
     pub pass_mode: AbiPassMode,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AbiResult {
     pub layout: LayoutId,
     pub pass_mode: AbiPassMode,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CallingConvention {
     pub kind: CallingConventionKind,
     pub parameters: Vec<AbiParameter>,
@@ -302,7 +302,7 @@ impl fmt::Display for CallingConvention {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum KernelOriginKind {
     /// The kernel was produced from the item body of the item identified by
     /// `item`.  All other `KernelOriginKind` variants identify their producer
@@ -462,14 +462,14 @@ impl fmt::Display for KernelOriginKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct KernelOrigin {
     pub item: ItemId,
     pub span: SourceSpan,
     pub kind: KernelOriginKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Kernel {
     pub origin: KernelOrigin,
     pub input_subject: Option<LayoutId>,
@@ -516,14 +516,14 @@ impl Kernel {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct KernelExpr {
     pub span: SourceSpan,
     pub layout: LayoutId,
     pub kind: KernelExprKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum KernelExprKind {
     Subject(SubjectRef),
     OptionSome {
@@ -568,18 +568,18 @@ pub enum KernelExprKind {
     Pipe(InlinePipeExpr),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProjectionBase {
     Subject(SubjectRef),
     Expr(KernelExprId),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TextLiteral {
     pub segments: Vec<TextSegment>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TextSegment {
     Fragment {
         raw: Box<str>,
@@ -591,25 +591,25 @@ pub enum TextSegment {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RecordExprField {
     pub label: Box<str>,
     pub value: KernelExprId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MapEntry {
     pub key: KernelExprId,
     pub value: KernelExprId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipeExpr {
     pub head: KernelExprId,
     pub stages: Vec<InlinePipeStage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipeStage {
     pub subject: InlineSubjectId,
     pub subject_memo: Option<InlineSubjectId>,
@@ -620,7 +620,7 @@ pub struct InlinePipeStage {
     pub kind: InlinePipeStageKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InlinePipeStageKind {
     Transform {
         mode: PipeTransformMode,
@@ -648,14 +648,14 @@ pub enum InlinePipeStageKind {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipeCaseArm {
     pub span: SourceSpan,
     pub pattern: InlinePipePattern,
     pub body: KernelExprId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipeTruthyFalsyBranch {
     pub span: SourceSpan,
     pub constructor: BuiltinTerm,
@@ -663,19 +663,19 @@ pub struct InlinePipeTruthyFalsyBranch {
     pub body: KernelExprId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipePattern {
     pub span: SourceSpan,
     pub kind: InlinePipePatternKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InlinePipeConstructor {
     Builtin(BuiltinTerm),
     Sum(SumConstructorHandle),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InlinePipePatternKind {
     Wildcard,
     Binding {
@@ -695,7 +695,7 @@ pub enum InlinePipePatternKind {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipeRecordPatternField {
     pub label: Box<str>,
     pub pattern: InlinePipePattern,

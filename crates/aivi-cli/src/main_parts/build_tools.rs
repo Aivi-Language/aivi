@@ -162,7 +162,7 @@ fn compile_file(path: &Path, output: Option<&Path>) -> Result<ExitCode, String> 
 struct BuildBundleSummary {
     launcher_path: PathBuf,
     runtime_path: PathBuf,
-    workspace_file_count: usize,
+    artifact_path: PathBuf,
 }
 
 fn build_markup_bundle(
@@ -206,29 +206,20 @@ fn build_markup_bundle(
         }
     };
 
-    let summary = write_run_bundle(&snapshot, path, output, artifact.view_name.as_ref())?;
+    let summary = write_run_bundle(output, &artifact)?;
     println!("build bundle passed: {}", path.display());
     println!("  view: {}", artifact.view_name);
-    println!(
-        "  workspace closure: {} file{}",
-        summary.workspace_file_count,
-        plural_suffix(summary.workspace_file_count)
-    );
     println!("  launcher: {}", summary.launcher_path.display());
     println!("  runtime: {}", summary.runtime_path.display());
+    println!("  artifact: {}", summary.artifact_path.display());
     println!("  bundle: {}", output.display());
     println!(
-        "build packages the current AIVI runtime, bundled stdlib, and reachable workspace sources into a runnable bundle directory."
+        "build packages the current AIVI runtime plus a serialized source-free run artifact into a runnable bundle directory."
     );
     Ok(ExitCode::SUCCESS)
 }
 
-fn write_run_bundle(
-    snapshot: &WorkspaceHirSnapshot,
-    entry_path: &Path,
-    output: &Path,
-    view_name: &str,
-) -> Result<BuildBundleSummary, String> {
+fn write_run_bundle(output: &Path, artifact: &RunArtifact) -> Result<BuildBundleSummary, String> {
     if output.exists() {
         return Err(format!(
             "build output {} already exists; choose a fresh directory",
@@ -251,37 +242,21 @@ fn write_run_bundle(
 
     let result = (|| {
         let staging = staging_guard.path();
-        let workspace_root = discover_workspace_root(entry_path);
-        let entry_relative = entry_path.strip_prefix(&workspace_root).map_err(|_| {
-            format!(
-                "failed to place {} under discovered workspace root {}",
-                entry_path.display(),
-                workspace_root.display()
-            )
-        })?;
-        let stdlib_root = discover_bundled_stdlib_root()?;
-
         let runtime_path = staging.join("aivi");
         let current_exe = env::current_exe()
             .map_err(|error| format!("failed to locate current AIVI executable: {error}"))?;
         copy_file_with_permissions(&current_exe, &runtime_path)?;
         ensure_executable(&runtime_path)?;
 
-        copy_dir_all(&stdlib_root, &staging.join("stdlib"))?;
-        let workspace_file_count = copy_workspace_bundle_sources(
-            snapshot,
-            &workspace_root,
-            &stdlib_root,
-            &staging.join("app"),
-        )?;
+        let artifact_path = write_serialized_run_artifact_bundle(staging, artifact)?;
 
         let launcher_path = staging.join("run");
-        write_bundle_launcher(&launcher_path, entry_relative, view_name)?;
+        write_bundle_launcher(&launcher_path, RUN_ARTIFACT_FILE_NAME)?;
 
         Ok(BuildBundleSummary {
             launcher_path,
             runtime_path,
-            workspace_file_count,
+            artifact_path,
         })
     })();
 
@@ -299,6 +274,7 @@ fn write_run_bundle(
             // the cleanup is a silent no-op.  The output directory is safe.
             summary.launcher_path = output.join("run");
             summary.runtime_path = output.join("aivi");
+            summary.artifact_path = output.join(RUN_ARTIFACT_FILE_NAME);
             Ok(summary)
         }
         Err(error) => {
@@ -342,48 +318,10 @@ fn discover_bundled_stdlib_root() -> Result<PathBuf, String> {
     )
 }
 
-fn copy_workspace_bundle_sources(
-    snapshot: &WorkspaceHirSnapshot,
-    workspace_root: &Path,
-    stdlib_root: &Path,
-    output: &Path,
-) -> Result<usize, String> {
-    fs::create_dir_all(output)
-        .map_err(|error| format!("failed to create {}: {error}", output.display()))?;
-
-    let manifest = workspace_root.join("aivi.toml");
-    if manifest.is_file() {
-        copy_file_with_permissions(&manifest, &output.join("aivi.toml"))?;
-    }
-
-    let mut copied = 0;
-    for file in &snapshot.files {
-        let source_path = file.path(&snapshot.frontend.db);
-        if let Ok(relative) = source_path.strip_prefix(workspace_root) {
-            copy_file_with_permissions(&source_path, &output.join(relative))?;
-            copied += 1;
-            continue;
-        }
-        if source_path.strip_prefix(stdlib_root).is_ok() {
-            continue;
-        }
-        return Err(format!(
-            "build currently supports workspace source files plus bundled stdlib only; `{}` was loaded from outside both roots",
-            source_path.display()
-        ));
-    }
-    Ok(copied)
-}
-
-fn write_bundle_launcher(
-    path: &Path,
-    entry_relative: &Path,
-    view_name: &str,
-) -> Result<(), String> {
-    let entry = shell_single_quote(&entry_relative.to_string_lossy());
-    let view = shell_single_quote(view_name);
+fn write_bundle_launcher(path: &Path, artifact_name: &str) -> Result<(), String> {
+    let artifact = shell_single_quote(artifact_name);
     let script = format!(
-        "#!/bin/sh\nset -eu\nSCRIPT_DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nENTRY_REL={entry}\nVIEW_NAME={view}\nexec \"$SCRIPT_DIR/aivi\" run \"$SCRIPT_DIR/app/$ENTRY_REL\" --view \"$VIEW_NAME\"\n"
+        "#!/bin/sh\nset -eu\nSCRIPT_DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nARTIFACT={artifact}\nexec \"$SCRIPT_DIR/aivi\" run \"$SCRIPT_DIR/$ARTIFACT\"\n"
     );
     fs::write(path, script)
         .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
@@ -392,31 +330,6 @@ fn write_bundle_launcher(
 
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-fn copy_dir_all(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination)
-        .map_err(|error| format!("failed to create {}: {error}", destination.display()))?;
-    for entry in fs::read_dir(source)
-        .map_err(|error| format!("failed to read {}: {error}", source.display()))?
-    {
-        let entry = entry.map_err(|error| {
-            format!("failed to iterate directory {}: {error}", source.display())
-        })?;
-        let file_type = entry.file_type().map_err(|error| {
-            format!(
-                "failed to read entry type for {}: {error}",
-                entry.path().display()
-            )
-        })?;
-        let destination_path = destination.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_all(&entry.path(), &destination_path)?;
-        } else if file_type.is_file() {
-            copy_file_with_permissions(&entry.path(), &destination_path)?;
-        }
-    }
-    Ok(())
 }
 
 fn copy_file_with_permissions(source: &Path, destination: &Path) -> Result<(), String> {
@@ -688,7 +601,7 @@ USAGE:
 COMMANDS:
     check [path]                    Type-check a module, directory, or all apps
     compile <path> [-o <object>]    Compile a module to native object code only
-    build <path> -o <dir> [opts]    Package a runnable runtime+source GTK bundle
+    build <path> -o <dir> [opts]    Package a runnable source-free GTK bundle
     run [path] [opts]               Launch a live GTK app
     execute <path> [-- args...]     Run a headless Task program
     test <path>                     Run @test declarations in a workspace
@@ -759,7 +672,7 @@ DESCRIPTION:
         }
         "build" => {
             "\
-aivi build — package a runnable GTK app bundle
+    aivi build — package a runnable GTK app bundle
 
 USAGE:
     aivi build <path> -o <directory> [--app <name>] [--view <name>]
@@ -783,7 +696,7 @@ OPTIONS:
 
 DESCRIPTION:
     Validates the same runnable surface as `aivi run` and packages the
-    current runtime binary, bundled stdlib, and reachable workspace files
+    current runtime binary plus a serialized source-free run artifact
     into a runnable bundle directory.
 
     This is the current runnable deployment path. It is distinct from
@@ -798,9 +711,10 @@ USAGE:
     aivi run [<path>] [--path <path>] [--app <name>] [--view <name>]
 
 ARGS:
-    [<path>]            Path to an .aivi source file or workspace entry.
-                        When omitted, resolves via aivi.toml [[app]] or
-                        [run] entry, then <workspace>/main.aivi.
+    [<path>]            Path to an .aivi source file, workspace entry,
+                        or serialized run artifact (.json). When omitted,
+                        resolves via aivi.toml [[app]] or [run] entry,
+                        then <workspace>/main.aivi.
 
 OPTIONS:
     --app <name>
@@ -819,7 +733,9 @@ OPTIONS:
 DESCRIPTION:
     Compiles and immediately launches a GTK/libadwaita application with
     the full reactive runtime, signal engine, source providers, and
-    live widget tree. The app runs until the window is closed.
+    live widget tree. Serialized run artifacts skip the source/HIR
+    pipeline and launch directly from bundled runtime payloads. The app
+    runs until the window is closed.
 "
         }
         "execute" => {

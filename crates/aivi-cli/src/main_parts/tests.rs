@@ -772,7 +772,7 @@ fn run_hydration_planner_precomputes_control_and_setter_updates_off_thread() {
         .expect("planner window should compile for live run hydration");
     let shared = RunHydrationStaticState {
         view_name: artifact.view_name.clone(),
-        module: artifact.module.clone(),
+        patterns: artifact.patterns.clone(),
         bridge: artifact.bridge.clone(),
         inputs: artifact.hydration_inputs.clone(),
     };
@@ -839,18 +839,42 @@ fn run_hydration_profile_tracks_fragment_and_kernel_activity() {
         .expect("planner window should compile for live run hydration");
     let shared = RunHydrationStaticState {
         view_name: artifact.view_name.clone(),
-        module: artifact.module.clone(),
+        patterns: artifact.patterns.clone(),
         bridge: artifact.bridge.clone(),
         inputs: artifact.hydration_inputs.clone(),
     };
 
     let (_plan, profile) = plan_run_hydration_profiled(&shared, &BTreeMap::new())
         .expect("planner window should produce a hydration profile");
+    let temp = TempDir::new("run-artifact-profile-roundtrip");
+    let artifact_path = super::write_serialized_run_artifact_bundle(temp.path(), &artifact)
+        .expect("run artifact bundle should write");
+    let reloaded = super::load_serialized_run_artifact(&artifact_path, None)
+        .expect("serialized run artifact should reload");
+    let reloaded_plan = plan_run_hydration(
+        &RunHydrationStaticState {
+            view_name: reloaded.view_name.clone(),
+            patterns: reloaded.patterns.clone(),
+            bridge: reloaded.bridge.clone(),
+            inputs: reloaded.hydration_inputs.clone(),
+        },
+        &BTreeMap::new(),
+    )
+    .expect("reloaded artifact should hydrate");
 
     assert!(profile.planned_nodes > 0);
     assert!(profile.evaluated_inputs > 0);
     assert!(!profile.fragment_profiles.is_empty());
     assert!(!profile.program_profiles.is_empty());
+    assert_eq!(artifact.view_name, reloaded.view_name);
+    assert_eq!(artifact.patterns, reloaded.patterns);
+    assert_eq!(artifact.bridge, reloaded.bridge);
+    assert_eq!(artifact.event_handlers.len(), reloaded.event_handlers.len());
+    assert_eq!(
+        artifact.required_signal_globals,
+        reloaded.required_signal_globals
+    );
+    assert!(matches!(reloaded_plan.root, HydratedRunNode::Widget { .. }));
     assert!(
         profile
             .program_profiles

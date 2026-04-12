@@ -3051,13 +3051,13 @@ aivi build src/app.aivi -o dist/users --view mainWindow
 `aivi build` validates the same runnable surface as `aivi run`, then writes a bundle directory containing:
 
 - a copied `aivi` runtime executable
-- a bundled stdlib workspace
-- the reachable workspace source closure plus `aivi.toml` when present
+- a serialized `run-artifact.json` manifest for the selected view
+- a `payloads/` directory with the backend execution payload sidecars referenced by the manifest
 - a `run` launcher script pinned to the selected view
 
 Run the packaged application via `./run` inside the emitted bundle directory.
 
-The bundle is self-contained at the AIVI layer, but it still depends on the target system GTK stack. It is a runnable directory bundle, not yet a single native executable.
+The bundle is self-contained at the AIVI layer and does not depend on workspace sources or a copied stdlib tree at launch. It still depends on the target system GTK stack. It is a runnable directory bundle, not yet a single native executable or direct `aivi compile` output.
 
 Exits 0 on success, 1 on validation/build errors.
 
@@ -3066,7 +3066,10 @@ Exits 0 on success, 1 on validation/build errors.
 ```
 aivi run src/app.aivi
 aivi run src/app.aivi --view mainWindow
+aivi run build/app/run-artifact.json
 ```
+
+The path may be a source/workspace entry or a serialized `run-artifact.json` emitted by `aivi build`.
 
 View selection rules:
 
@@ -3078,6 +3081,8 @@ View selection rules:
 The selected root must be a `Window`. The CLI does not auto-wrap arbitrary widgets into windows.
 
 `aivi run` links the compiled runtime stack, evaluates the selected view fragments against committed runtime snapshots, re-evaluates after each meaningful committed tick, and applies GTK updates through the bridge executor.
+
+When the input is a serialized run artifact, the bundled view is already fixed. `--view <name>` may be omitted or must match the bundled view exactly.
 
 The current cataloged widget/runtime slice includes `Window`, `HeaderBar`, `Paned`, `Box`, `ScrolledWindow`, `Frame`, `Viewport`, `Label`, `Button`, `Entry`, `Switch`, `CheckButton`, `ToggleButton`, `Image`, `Spinner`, `ProgressBar`, `Revealer`, and `Separator`. `Entry.onChange` publishes `Text`, `Switch.onToggle` publishes `Bool`, and JSON-backed source payloads may now decode `Float`, `Decimal`, `BigInt`, and `Bytes` through explicit contracts.
 

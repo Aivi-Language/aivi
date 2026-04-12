@@ -29,6 +29,10 @@ BackendLinkedRuntime  ←  link_backend_runtime()  ←  BackendProgram
 5. Register task bindings
 6. Return `BackendLinkedRuntime`
 
+`link_backend_runtime_with_seed()` is the source-free launch seam used by serialized run artifacts.
+It consumes a pre-derived `BackendRuntimeLinkSeed`, so bundle startup no longer needs typed core
+or full source/HIR reconstruction just to rebuild backend↔runtime origins.
+
 Key types:
 - `LinkedSourceBinding` — a source instance wired to an `InputHandle`
 - `LinkedDerivedSignal` — a derived signal with an evaluator

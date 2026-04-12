@@ -54,8 +54,8 @@ fn help_build_explains_current_bundle_path() {
         "expected bundle wording, got stdout: {stdout}"
     );
     assert!(
-        stdout.contains("current runtime binary, bundled stdlib, and reachable workspace files"),
-        "expected runtime+workspace wording, got stdout: {stdout}"
+        stdout.contains("current runtime binary plus a serialized source-free run artifact"),
+        "expected runtime+artifact wording, got stdout: {stdout}"
     );
     assert!(
         stdout.contains("`aivi compile`, which emits object code only"),

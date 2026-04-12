@@ -11,7 +11,7 @@ pub trait ArenaId: Copy + Eq + Ord + fmt::Display + std::hash::Hash {
 }
 
 /// Fallible arena insertion error for node families that exceed the current raw-id width.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ArenaOverflow {
     attempted_len: usize,
 }
@@ -45,7 +45,18 @@ impl Error for ArenaOverflow {}
 #[macro_export]
 macro_rules! define_arena_id {
     ($vis:vis $name:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
         $vis struct $name(u32);
 
         impl $name {
@@ -113,7 +124,7 @@ macro_rules! alloc_or_diag {
 }
 
 /// Compact typed arena with deterministic, index-stable ids.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Arena<Id, T> {
     entries: Vec<T>,
     _marker: PhantomData<fn() -> Id>,

@@ -381,7 +381,12 @@ impl<'a> RunFragmentCompiler<'a> {
         let execution = self
             .execution_units
             .entry(unit.execution_cache_key)
-            .or_insert_with(|| Arc::new(RunFragmentExecutionUnit::new(unit.backend.clone())))
+            .or_insert_with(|| {
+                Arc::new(RunFragmentExecutionUnit::new(
+                    unit.backend.clone(),
+                    unit.execution_cache_key,
+                ))
+            })
             .clone();
         let backend = unit.backend.as_ref();
         let item = backend
@@ -407,7 +412,7 @@ impl<'a> RunFragmentCompiler<'a> {
             .collect();
         Ok(CompiledRunFragment {
             expr,
-            parameters: site.parameters.clone(),
+            parameters: runtime_fragment_parameters(&site.parameters),
             execution,
             item,
             required_signal_globals,
@@ -585,6 +590,16 @@ fn compile_local_runtime_fragment_backend_unit(
         backend: Arc::new(backend),
         execution_cache_key,
     })
+}
+
+fn runtime_fragment_parameters(parameters: &[GeneralExprParameter]) -> Vec<RunFragmentParameter> {
+    parameters
+        .iter()
+        .map(|parameter| RunFragmentParameter {
+            binding: parameter.binding,
+            name: parameter.name.clone(),
+        })
+        .collect()
 }
 
 type RuntimeBindingEnv = BTreeMap<aivi_hir::BindingId, RuntimeValue>;
@@ -902,7 +917,7 @@ fn plan_run_node<'a>(
             let mut matched = None;
             for (index, branch) in match_node.cases.iter().enumerate() {
                 let mut bindings = RuntimeBindingEnv::new();
-                if match_pattern(&shared.module, branch.pattern, &value, &mut bindings)? {
+                if match_pattern(&shared.patterns, branch.pattern, &value, &mut bindings)? {
                     matched = Some((index, branch, bindings));
                     break;
                 }
@@ -1310,28 +1325,32 @@ fn strip_signal_runtime_ref(mut value: &RuntimeValue) -> &RuntimeValue {
 }
 
 fn match_pattern(
-    module: &HirModule,
+    patterns: &RunPatternTable,
     pattern_id: HirPatternId,
     value: &RuntimeValue,
     bindings: &mut RuntimeBindingEnv,
 ) -> Result<bool, String> {
-    let pattern = &module.patterns()[pattern_id];
+    let Some(pattern) = patterns.get(pattern_id) else {
+        return Err(format!(
+            "run artifact is missing serialized pattern {}",
+            pattern_id.as_raw()
+        ));
+    };
     match &pattern.kind {
-        PatternKind::Wildcard => Ok(true),
-        PatternKind::Binding(binding) => {
-            bindings.insert(binding.binding, strip_signal_runtime_value(value.clone()));
+        RunPatternKind::Wildcard => Ok(true),
+        RunPatternKind::Binding { binding, .. } => {
+            bindings.insert(*binding, strip_signal_runtime_value(value.clone()));
             Ok(true)
         }
-        PatternKind::Integer(integer) => Ok(matches!(
+        RunPatternKind::Integer { raw } => Ok(matches!(
             strip_signal_runtime_value(value.clone()),
-            RuntimeValue::Int(found) if integer.raw.parse::<i64>().ok() == Some(found)
+            RuntimeValue::Int(found) if raw.parse::<i64>().ok() == Some(found)
         )),
-        PatternKind::Text(text) => Ok(matches!(
+        RunPatternKind::Text { value: expected } => Ok(matches!(
             strip_signal_runtime_value(value.clone()),
-            RuntimeValue::Text(found)
-                if text_literal_static_text(text).as_deref() == Some(found.as_ref())
+            RuntimeValue::Text(found) if expected.as_ref() == found.as_ref()
         )),
-        PatternKind::Tuple(elements) => {
+        RunPatternKind::Tuple(elements) => {
             let RuntimeValue::Tuple(found) = strip_signal_runtime_value(value.clone()) else {
                 return Ok(false);
             };
@@ -1341,11 +1360,11 @@ fn match_pattern(
             }
             let mut matches = true;
             for (pattern, value) in expected.into_iter().zip(found.iter()) {
-                matches &= match_pattern(module, pattern, value, bindings)?;
+                matches &= match_pattern(patterns, pattern, value, bindings)?;
             }
             Ok(matches)
         }
-        PatternKind::List { elements, rest } => {
+        RunPatternKind::List { elements, rest } => {
             let RuntimeValue::List(found) = strip_signal_runtime_value(value.clone()) else {
                 return Ok(false);
             };
@@ -1357,15 +1376,15 @@ fn match_pattern(
             }
             let mut matches = true;
             for (pattern, value) in elements.iter().copied().zip(found.iter()) {
-                matches &= match_pattern(module, pattern, value, bindings)?;
+                matches &= match_pattern(patterns, pattern, value, bindings)?;
             }
             if let Some(rest) = rest {
                 let remaining = RuntimeValue::List(found[elements.len()..].to_vec());
-                matches &= match_pattern(module, *rest, &remaining, bindings)?;
+                matches &= match_pattern(patterns, *rest, &remaining, bindings)?;
             }
             Ok(matches)
         }
-        PatternKind::Record(fields) => {
+        RunPatternKind::Record(fields) => {
             let RuntimeValue::Record(found) = strip_signal_runtime_value(value.clone()) else {
                 return Ok(false);
             };
@@ -1373,24 +1392,23 @@ fn match_pattern(
             for field in fields {
                 let Some(found_field) = found
                     .iter()
-                    .find(|candidate| candidate.label.as_ref() == field.label.text())
+                    .find(|candidate| candidate.label.as_ref() == field.label.as_ref())
                 else {
                     return Ok(false);
                 };
-                matches &= match_pattern(module, field.pattern, &found_field.value, bindings)?;
+                matches &= match_pattern(patterns, field.pattern, &found_field.value, bindings)?;
             }
             Ok(matches)
         }
-        PatternKind::Constructor { callee, arguments } => match callee.resolution.as_ref() {
-            aivi_hir::ResolutionState::Resolved(TermResolution::Builtin(term)) => {
-                match_builtin_pattern(*term, arguments, value, module, bindings)
+        RunPatternKind::Constructor { callee, arguments } => match callee {
+            RunPatternConstructor::Builtin(term) => {
+                match_builtin_pattern(*term, arguments, value, patterns, bindings)
             }
-            aivi_hir::ResolutionState::Resolved(TermResolution::Item(item)) => {
+            RunPatternConstructor::Item { item, variant_name } => {
                 let RuntimeValue::Sum(found) = strip_signal_runtime_value(value.clone()) else {
                     return Ok(false);
                 };
-                let variant_name = callee.path.segments().last().text();
-                if found.item != *item || found.variant_name.as_ref() != variant_name {
+                if found.item != *item || found.variant_name.as_ref() != variant_name.as_ref() {
                     return Ok(false);
                 }
                 if arguments.len() != found.fields.len() {
@@ -1398,13 +1416,12 @@ fn match_pattern(
                 }
                 let mut matches = true;
                 for (pattern, field) in arguments.iter().copied().zip(found.fields.iter()) {
-                    matches &= match_pattern(module, pattern, field, bindings)?;
+                    matches &= match_pattern(patterns, pattern, field, bindings)?;
                 }
                 Ok(matches)
             }
-            _ => Ok(false),
         },
-        PatternKind::UnresolvedName(_) => Ok(false),
+        RunPatternKind::UnresolvedName => Ok(false),
     }
 }
 
@@ -1412,7 +1429,7 @@ fn match_builtin_pattern(
     term: BuiltinTerm,
     arguments: &[HirPatternId],
     value: &RuntimeValue,
-    module: &HirModule,
+    patterns: &RunPatternTable,
     bindings: &mut RuntimeBindingEnv,
 ) -> Result<bool, String> {
     let Some(payload) = truthy_falsy_payload(value, term) else {
@@ -1420,7 +1437,7 @@ fn match_builtin_pattern(
     };
     match (payload, arguments) {
         (None, []) => Ok(true),
-        (Some(payload), [argument]) => match_pattern(module, *argument, &payload, bindings),
+        (Some(payload), [argument]) => match_pattern(patterns, *argument, &payload, bindings),
         _ => Ok(false),
     }
 }

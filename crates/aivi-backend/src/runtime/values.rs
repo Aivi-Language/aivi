@@ -1,10 +1,10 @@
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeRecordField {
     pub label: Box<str>,
     pub value: RuntimeValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeMapEntry {
     pub key: RuntimeValue,
     pub value: RuntimeValue,
@@ -16,7 +16,7 @@ pub struct RuntimeMapEntry {
 /// O(n). Insertion order is preserved exactly as written in the source,
 /// satisfying the display and serialisation invariant that `{b: 2, a: 1}`
 /// prints with `b` before `a`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeMap(IndexMap<RuntimeValue, RuntimeValue>);
 
 impl RuntimeMap {
@@ -69,7 +69,7 @@ impl<'a> IntoIterator for &'a RuntimeMap {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeSumValue {
     /// The HIR item that defines this sum type.
     ///
@@ -87,7 +87,7 @@ pub struct RuntimeSumValue {
     pub fields: Vec<RuntimeValue>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeConstructor {
     Some,
     Ok,
@@ -99,7 +99,7 @@ pub enum RuntimeConstructor {
 /// Backend-owned DB task plans stay separate from `RuntimeTaskPlan` until executor integration
 /// lands. This keeps the representation explicit without forcing runtime/CLI wiring in this slice.
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeDbTaskPlan {
     Query(RuntimeDbQueryPlan),
     Commit(RuntimeDbCommitPlan),
@@ -110,7 +110,7 @@ pub enum RuntimeDbTaskPlan {
 /// The `database` text must already be normalized so equality and change invalidation use the same
 /// canonical key.
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbConnection {
     pub database: Box<str>,
 }
@@ -120,7 +120,7 @@ pub struct RuntimeDbConnection {
 /// Argument order is significant and preserves the lowering order so later execution can bind
 /// placeholders deterministically without re-inspecting source syntax.
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbStatement {
     pub sql: Box<str>,
     pub arguments: Vec<RuntimeValue>,
@@ -128,7 +128,7 @@ pub struct RuntimeDbStatement {
 
 /// Read-only DB work.
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbQueryPlan {
     pub connection: RuntimeDbConnection,
     pub statement: RuntimeDbStatement,
@@ -136,20 +136,20 @@ pub struct RuntimeDbQueryPlan {
 
 /// Transactional DB work whose successful commit must invalidate explicit table keys.
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbCommitPlan {
     pub connection: RuntimeDbConnection,
     pub statements: Vec<RuntimeDbStatement>,
     pub changed_tables: BTreeSet<Box<str>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeNamedValue {
     pub name: Box<str>,
     pub value: RuntimeValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeCustomCapabilityCommandPlan {
     pub provider_key: Box<str>,
     pub command: Box<str>,
@@ -216,7 +216,7 @@ impl fmt::Display for RuntimeDbCommitPlan {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeTaskPlan {
     Pure {
         value: Box<RuntimeValue>,
@@ -477,7 +477,7 @@ impl fmt::Display for RuntimeTaskPlan {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeCallable {
     ItemBody {
         item: ItemId,
@@ -509,7 +509,7 @@ pub enum RuntimeCallable {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeValue {
     Unit,
     Bool(bool),
@@ -547,7 +547,7 @@ pub enum RuntimeValue {
 /// ordinary language values keep stable addresses. This wrapper forces callers to
 /// either deep-copy a live runtime value (`from_runtime_copy`) or to explicitly
 /// mark an already-owned value as boundary-ready (`from_runtime_owned`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DetachedRuntimeValue(RuntimeValue);
 
 impl DetachedRuntimeValue {
@@ -819,4 +819,3 @@ impl fmt::Display for RuntimeConstructor {
         }
     }
 }
-
