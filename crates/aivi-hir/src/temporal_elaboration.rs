@@ -317,8 +317,10 @@ fn collect_temporal_pipe(
                             })
                             .and_then(|info| info.ty),
                     },
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("subject walker groups apply runs")
+                    }
                     PipeStageKind::Case { .. }
-                    | PipeStageKind::Apply { .. }
                     | PipeStageKind::RecurStart { .. }
                     | PipeStageKind::RecurStep { .. }
                     | PipeStageKind::Validate { .. } => {
@@ -355,6 +357,9 @@ fn collect_temporal_pipe(
                         new_subject: current
                             .and_then(|s| typing.infer_truthy_falsy_pair(pair, current_env, s)),
                     }
+                }
+                crate::PipeSubjectStage::ApplyRun(_) => {
+                    PipeSubjectStepOutcome::Continue { new_subject: None }
                 }
                 crate::PipeSubjectStage::CaseRun(_) => {
                     PipeSubjectStepOutcome::Continue { new_subject: None }

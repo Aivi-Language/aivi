@@ -808,11 +808,13 @@ fn infer_recurrence_input_subject(
                     new_subject: current
                         .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                 },
+                PipeStageKind::Apply { .. } => {
+                    unreachable!("subject walker groups apply runs")
+                }
                 // Recurrence boundary stages and unhandled case/apply stages should
                 // never appear within the prefix (the caller computes prefix_stage_count
                 // to exclude them), but stop cleanly if one is encountered.
                 PipeStageKind::Case { .. }
-                | PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
                 | PipeStageKind::RecurStep { .. }
                 | PipeStageKind::Validate { .. }
@@ -853,6 +855,7 @@ fn infer_recurrence_input_subject(
                 new_subject: current
                     .and_then(|s| typing.infer_fanout_segment_result_type(segment, current_env, s)),
             },
+            crate::PipeSubjectStage::ApplyRun(_) => PipeSubjectStepOutcome::Stop,
             crate::PipeSubjectStage::CaseRun(_) => PipeSubjectStepOutcome::Stop,
         },
     )

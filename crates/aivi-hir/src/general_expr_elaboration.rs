@@ -3120,12 +3120,7 @@ impl<'a> GeneralExprElaborator<'a> {
                         current = result_subject;
                     }
                     PipeStageKind::Apply { .. } => {
-                        return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
-                            span: stage.span,
-                            kind: GateRuntimeUnsupportedKind::PipeStage(
-                                GateRuntimeUnsupportedPipeStageKind::Apply,
-                            ),
-                        }]);
+                        unreachable!("semantic stage iterator groups apply runs")
                     }
                     PipeStageKind::FanIn { expr } => {
                         if matches!(mode, PipeLoweringMode::PrefixBeforeSchedulerBoundary) {
@@ -3231,6 +3226,14 @@ impl<'a> GeneralExprElaborator<'a> {
                         unreachable!("semantic stage iterator groups case runs")
                     }
                 },
+                crate::PipeSemanticStage::ApplyRun(apply_run) => {
+                    return Err(vec![GeneralExprBlocker::UnsupportedRuntimeExpr {
+                        span: join_stage_spans(apply_run.stage_slice()),
+                        kind: GateRuntimeUnsupportedKind::PipeStage(
+                            GateRuntimeUnsupportedPipeStageKind::Apply,
+                        ),
+                    }]);
+                }
                 crate::PipeSemanticStage::CaseRun(case_run) => {
                     let stage_expected = (case_run.next_stage_index() == stage_count)
                         .then(|| final_expected.cloned())

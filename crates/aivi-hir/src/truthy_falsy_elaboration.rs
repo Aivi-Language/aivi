@@ -244,8 +244,10 @@ fn collect_truthy_falsy_pipe(
                     new_subject: current
                         .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                 },
+                PipeStageKind::Apply { .. } => {
+                    unreachable!("subject walker groups apply runs")
+                }
                 PipeStageKind::Case { .. }
-                | PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
                 | PipeStageKind::RecurStep { .. }
                 | PipeStageKind::Validate { .. }
@@ -314,6 +316,9 @@ fn collect_truthy_falsy_pipe(
                 new_subject: current
                     .and_then(|s| typing.infer_fanout_segment_result_type(segment, current_env, s)),
             },
+            crate::PipeSubjectStage::ApplyRun(_) => {
+                PipeSubjectStepOutcome::Continue { new_subject: None }
+            }
             crate::PipeSubjectStage::CaseRun(_) => {
                 PipeSubjectStepOutcome::Continue { new_subject: None }
             }

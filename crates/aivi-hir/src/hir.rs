@@ -2280,6 +2280,69 @@ impl<'a> PipeCaseStageRun<'a> {
     }
 }
 
+/// Presentation-free structural view of one consecutive `&|>` apply run inside a pipe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PipeApplyStageRun<'a> {
+    start_index: usize,
+    stages: Vec<&'a PipeStage>,
+}
+
+impl<'a> PipeApplyStageRun<'a> {
+    pub fn at(stages: &[&'a PipeStage], start_index: usize) -> Option<Self> {
+        let start_stage = *stages.get(start_index)?;
+        if !matches!(start_stage.kind, PipeStageKind::Apply { .. }) {
+            return None;
+        }
+        let mut run_stages = vec![start_stage];
+        let mut index = start_index + 1;
+        while let Some(stage) = stages.get(index).copied() {
+            if !matches!(stage.kind, PipeStageKind::Apply { .. }) {
+                break;
+            }
+            run_stages.push(stage);
+            index += 1;
+        }
+        Some(Self {
+            start_index,
+            stages: run_stages,
+        })
+    }
+
+    pub fn start_stage_index(&self) -> usize {
+        self.start_index
+    }
+
+    pub fn stage_count(&self) -> usize {
+        self.stages.len()
+    }
+
+    pub fn start_stage(&self) -> &'a PipeStage {
+        self.stages
+            .first()
+            .copied()
+            .expect("apply runs must contain at least one stage")
+    }
+
+    pub fn stages(&self) -> impl DoubleEndedIterator<Item = &'a PipeStage> + '_ {
+        self.stages.iter().copied()
+    }
+
+    pub fn stage_slice(&self) -> &[&'a PipeStage] {
+        &self.stages
+    }
+
+    pub fn exprs(&self) -> impl DoubleEndedIterator<Item = ExprId> + '_ {
+        self.stages().map(|stage| match &stage.kind {
+            PipeStageKind::Apply { expr } => *expr,
+            other => unreachable!("apply runs must contain only `&|>` stages, found {other:?}"),
+        })
+    }
+
+    pub fn next_stage_index(&self) -> usize {
+        self.start_index + self.stage_count()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PipeSubjectStage<'a> {
     Single {
@@ -2287,6 +2350,7 @@ pub enum PipeSubjectStage<'a> {
         stage: &'a PipeStage,
     },
     FanoutSegment(PipeFanoutSegment<'a>),
+    ApplyRun(PipeApplyStageRun<'a>),
     TruthyFalsyPair(PipeTruthyFalsyPair<'a>),
     CaseRun(PipeCaseStageRun<'a>),
 }
@@ -2296,6 +2360,7 @@ impl<'a> PipeSubjectStage<'a> {
         match self {
             Self::Single { stage_index, .. } => *stage_index,
             Self::FanoutSegment(segment) => segment.map_stage_index(),
+            Self::ApplyRun(run) => run.start_stage_index(),
             Self::TruthyFalsyPair(pair) => pair.start_stage_index(),
             Self::CaseRun(run) => run.start_stage_index(),
         }
@@ -2305,6 +2370,7 @@ impl<'a> PipeSubjectStage<'a> {
         match self {
             Self::Single { stage_index, .. } => stage_index + 1,
             Self::FanoutSegment(segment) => segment.next_stage_index(),
+            Self::ApplyRun(run) => run.next_stage_index(),
             Self::TruthyFalsyPair(pair) => pair.next_index,
             Self::CaseRun(run) => run.next_stage_index(),
         }
@@ -2314,6 +2380,7 @@ impl<'a> PipeSubjectStage<'a> {
         match self {
             Self::Single { stage, .. } => stage,
             Self::FanoutSegment(segment) => segment.map_stage(),
+            Self::ApplyRun(run) => run.start_stage(),
             Self::TruthyFalsyPair(pair) => pair.start_stage(),
             Self::CaseRun(run) => run.start_stage(),
         }
@@ -2326,6 +2393,7 @@ pub enum PipeSemanticStage<'a> {
         stage_index: usize,
         stage: &'a PipeStage,
     },
+    ApplyRun(PipeApplyStageRun<'a>),
     TruthyFalsyPair(PipeTruthyFalsyPair<'a>),
     CaseRun(PipeCaseStageRun<'a>),
 }
@@ -2334,6 +2402,7 @@ impl<'a> PipeSemanticStage<'a> {
     pub fn start_stage_index(&self) -> usize {
         match self {
             Self::Single { stage_index, .. } => *stage_index,
+            Self::ApplyRun(run) => run.start_stage_index(),
             Self::TruthyFalsyPair(pair) => pair.start_stage_index(),
             Self::CaseRun(run) => run.start_stage_index(),
         }
@@ -2342,6 +2411,7 @@ impl<'a> PipeSemanticStage<'a> {
     pub fn next_stage_index(&self) -> usize {
         match self {
             Self::Single { stage_index, .. } => stage_index + 1,
+            Self::ApplyRun(run) => run.next_stage_index(),
             Self::TruthyFalsyPair(pair) => pair.next_index,
             Self::CaseRun(run) => run.next_stage_index(),
         }
@@ -2350,6 +2420,7 @@ impl<'a> PipeSemanticStage<'a> {
     pub fn start_stage(&self) -> &'a PipeStage {
         match self {
             Self::Single { stage, .. } => stage,
+            Self::ApplyRun(run) => run.start_stage(),
             Self::TruthyFalsyPair(pair) => pair.start_stage(),
             Self::CaseRun(run) => run.start_stage(),
         }
@@ -2368,6 +2439,9 @@ impl<'a> Iterator for PipeSemanticStages<'a> {
         let stage_index = self.next_index;
         let stage = *self.stages.get(stage_index)?;
         let semantic_stage = match &stage.kind {
+            PipeStageKind::Apply { .. } => PipeApplyStageRun::at(&self.stages, stage_index)
+                .map(PipeSemanticStage::ApplyRun)
+                .unwrap_or(PipeSemanticStage::Single { stage_index, stage }),
             PipeStageKind::Case { .. } => PipeCaseStageRun::at(&self.stages, stage_index)
                 .map(PipeSemanticStage::CaseRun)
                 .unwrap_or(PipeSemanticStage::Single { stage_index, stage }),
@@ -2492,6 +2566,13 @@ impl<'a> Iterator for PipeSubjectStages<'a> {
                 .filter(|segment| segment.next_stage_index() <= self.limit)
                 .map(PipeSubjectStage::FanoutSegment)
                 .unwrap_or(PipeSubjectStage::Single { stage_index, stage }),
+            PipeStageKind::Apply { .. } => {
+                let stages = self.stages.iter().collect::<Vec<_>>();
+                PipeApplyStageRun::at(&stages, stage_index)
+                    .filter(|run| run.next_stage_index() <= self.limit)
+                    .map(PipeSubjectStage::ApplyRun)
+                    .unwrap_or(PipeSubjectStage::Single { stage_index, stage })
+            }
             PipeStageKind::Case { .. } => {
                 let stages = self.stages.iter().take(self.limit).collect::<Vec<_>>();
                 PipeCaseStageRun::at(&stages, stage_index)
@@ -2615,6 +2696,11 @@ impl fmt::Display for PipeRecurrenceShapeError {
 impl Error for PipeRecurrenceShapeError {}
 
 impl PipeExpr {
+    pub fn apply_stage_run(&self, start_index: usize) -> Option<PipeApplyStageRun<'_>> {
+        let stages = self.stages.iter().collect::<Vec<_>>();
+        PipeApplyStageRun::at(&stages, start_index)
+    }
+
     pub fn case_stage_run(&self, start_index: usize) -> Option<PipeCaseStageRun<'_>> {
         let stages = self.stages.iter().collect::<Vec<_>>();
         PipeCaseStageRun::at(&stages, start_index)
@@ -2936,6 +3022,47 @@ mod pipe_stage_kind_tests {
     }
 
     #[test]
+    fn groups_consecutive_apply_stages() {
+        let make_apply = |expr_raw: u32| PipeStage {
+            span: SourceSpan::default(),
+            subject_memo: None,
+            result_memo: None,
+            kind: PipeStageKind::Apply {
+                expr: ExprId::from_raw(expr_raw),
+            },
+        };
+        let pipe = PipeExpr {
+            head: ExprId::from_raw(0),
+            stages: NonEmpty::new(
+                make_apply(11),
+                vec![
+                    make_apply(12),
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Transform {
+                            expr: ExprId::from_raw(99),
+                        },
+                    },
+                ],
+            ),
+            result_block_desugaring: false,
+        };
+        let run = pipe
+            .apply_stage_run(0)
+            .expect("leading apply stages should form a run");
+        assert_eq!(run.start_stage_index(), 0);
+        assert_eq!(run.stage_count(), 2);
+        assert_eq!(run.next_stage_index(), 2);
+        assert_eq!(
+            run.exprs().collect::<Vec<_>>(),
+            vec![ExprId::from_raw(11), ExprId::from_raw(12)]
+        );
+        assert!(pipe.apply_stage_run(2).is_none());
+    }
+
+    #[test]
     fn fanout_segments_keep_filters_without_join() {
         let pipe = PipeExpr {
             head: ExprId::from_raw(0),
@@ -3009,7 +3136,7 @@ mod pipe_stage_kind_tests {
                         span: SourceSpan::default(),
                         subject_memo: None,
                         result_memo: None,
-                        kind: PipeStageKind::Truthy {
+                        kind: PipeStageKind::Apply {
                             expr: ExprId::from_raw(11),
                         },
                     },
@@ -3017,8 +3144,24 @@ mod pipe_stage_kind_tests {
                         span: SourceSpan::default(),
                         subject_memo: None,
                         result_memo: None,
-                        kind: PipeStageKind::Falsy {
+                        kind: PipeStageKind::Apply {
                             expr: ExprId::from_raw(12),
+                        },
+                    },
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Truthy {
+                            expr: ExprId::from_raw(13),
+                        },
+                    },
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Falsy {
+                            expr: ExprId::from_raw(14),
                         },
                     },
                     make_case(1, 21),
@@ -3034,6 +3177,9 @@ mod pipe_stage_kind_tests {
                     PipeStageKind::Transform { .. } => ("transform", stage_index, stage.span),
                     _ => unreachable!("test should only leave transform as a single stage"),
                 },
+                PipeSemanticStage::ApplyRun(run) => {
+                    ("apply-run", run.start_stage_index(), run.start_stage().span)
+                }
                 PipeSemanticStage::TruthyFalsyPair(pair) => (
                     "truthy-falsy",
                     pair.start_stage_index(),
@@ -3044,10 +3190,11 @@ mod pipe_stage_kind_tests {
                 }
             })
             .collect::<Vec<_>>();
-        assert_eq!(semantics.len(), 3);
+        assert_eq!(semantics.len(), 4);
         assert_eq!(semantics[0].0, "transform");
-        assert_eq!(semantics[1].0, "truthy-falsy");
-        assert_eq!(semantics[2].0, "case-run");
+        assert_eq!(semantics[1].0, "apply-run");
+        assert_eq!(semantics[2].0, "truthy-falsy");
+        assert_eq!(semantics[3].0, "case-run");
     }
 
     #[test]
@@ -3097,6 +3244,7 @@ mod pipe_stage_kind_tests {
             .map(|stage| match stage {
                 PipeSubjectStage::Single { stage_index, .. } => ("single", stage_index),
                 PipeSubjectStage::FanoutSegment(segment) => ("fanout", segment.map_stage_index()),
+                PipeSubjectStage::ApplyRun(run) => ("apply-run", run.start_stage_index()),
                 PipeSubjectStage::TruthyFalsyPair(pair) => {
                     ("truthy-falsy", pair.start_stage_index())
                 }
@@ -3146,6 +3294,7 @@ mod pipe_stage_kind_tests {
             .map(|stage| match stage {
                 PipeSubjectStage::Single { stage_index, .. } => ("single", stage_index),
                 PipeSubjectStage::FanoutSegment(segment) => ("fanout", segment.map_stage_index()),
+                PipeSubjectStage::ApplyRun(run) => ("apply-run", run.start_stage_index()),
                 PipeSubjectStage::TruthyFalsyPair(pair) => {
                     ("truthy-falsy", pair.start_stage_index())
                 }
@@ -3159,6 +3308,7 @@ mod pipe_stage_kind_tests {
             .map(|stage| match stage {
                 PipeSubjectStage::Single { stage_index, .. } => ("single", stage_index),
                 PipeSubjectStage::FanoutSegment(segment) => ("fanout", segment.map_stage_index()),
+                PipeSubjectStage::ApplyRun(run) => ("apply-run", run.start_stage_index()),
                 PipeSubjectStage::TruthyFalsyPair(pair) => {
                     ("truthy-falsy", pair.start_stage_index())
                 }
@@ -3166,6 +3316,127 @@ mod pipe_stage_kind_tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(grouped, vec![("fanout", 0)]);
+    }
+
+    #[test]
+    fn iterates_subject_stages_with_apply_grouping() {
+        let pipe = PipeExpr {
+            head: ExprId::from_raw(0),
+            stages: NonEmpty::new(
+                PipeStage {
+                    span: SourceSpan::default(),
+                    subject_memo: None,
+                    result_memo: None,
+                    kind: PipeStageKind::Transform {
+                        expr: ExprId::from_raw(10),
+                    },
+                },
+                vec![
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Apply {
+                            expr: ExprId::from_raw(11),
+                        },
+                    },
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Apply {
+                            expr: ExprId::from_raw(12),
+                        },
+                    },
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Gate {
+                            expr: ExprId::from_raw(13),
+                        },
+                    },
+                ],
+            ),
+            result_block_desugaring: false,
+        };
+        let stages = pipe
+            .subject_stages()
+            .map(|stage| match stage {
+                PipeSubjectStage::Single { stage_index, .. } => ("single", stage_index),
+                PipeSubjectStage::FanoutSegment(segment) => ("fanout", segment.map_stage_index()),
+                PipeSubjectStage::ApplyRun(run) => ("apply-run", run.start_stage_index()),
+                PipeSubjectStage::TruthyFalsyPair(pair) => {
+                    ("truthy-falsy", pair.start_stage_index())
+                }
+                PipeSubjectStage::CaseRun(run) => ("case-run", run.start_stage_index()),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![("single", 0), ("apply-run", 1), ("single", 3)]);
+    }
+
+    #[test]
+    fn respects_subject_stage_limits_for_apply_grouping() {
+        let pipe = PipeExpr {
+            head: ExprId::from_raw(0),
+            stages: NonEmpty::new(
+                PipeStage {
+                    span: SourceSpan::default(),
+                    subject_memo: None,
+                    result_memo: None,
+                    kind: PipeStageKind::Apply {
+                        expr: ExprId::from_raw(11),
+                    },
+                },
+                vec![
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Apply {
+                            expr: ExprId::from_raw(12),
+                        },
+                    },
+                    PipeStage {
+                        span: SourceSpan::default(),
+                        subject_memo: None,
+                        result_memo: None,
+                        kind: PipeStageKind::Transform {
+                            expr: ExprId::from_raw(13),
+                        },
+                    },
+                ],
+            ),
+            result_block_desugaring: false,
+        };
+
+        let limited = pipe
+            .subject_stages_with_limit(1)
+            .map(|stage| match stage {
+                PipeSubjectStage::Single { stage_index, .. } => ("single", stage_index),
+                PipeSubjectStage::FanoutSegment(segment) => ("fanout", segment.map_stage_index()),
+                PipeSubjectStage::ApplyRun(run) => ("apply-run", run.start_stage_index()),
+                PipeSubjectStage::TruthyFalsyPair(pair) => {
+                    ("truthy-falsy", pair.start_stage_index())
+                }
+                PipeSubjectStage::CaseRun(run) => ("case-run", run.start_stage_index()),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(limited, vec![("single", 0)]);
+
+        let grouped = pipe
+            .subject_stages_with_limit(2)
+            .map(|stage| match stage {
+                PipeSubjectStage::Single { stage_index, .. } => ("single", stage_index),
+                PipeSubjectStage::FanoutSegment(segment) => ("fanout", segment.map_stage_index()),
+                PipeSubjectStage::ApplyRun(run) => ("apply-run", run.start_stage_index()),
+                PipeSubjectStage::TruthyFalsyPair(pair) => {
+                    ("truthy-falsy", pair.start_stage_index())
+                }
+                PipeSubjectStage::CaseRun(run) => ("case-run", run.start_stage_index()),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(grouped, vec![("apply-run", 0)]);
     }
 }
 

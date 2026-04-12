@@ -5132,8 +5132,10 @@ impl Validator<'_> {
                                             });
                                             current = None;
                                         }
-                                        PipeStageKind::Apply { expr }
-                                        | PipeStageKind::RecurStart { expr }
+                                        PipeStageKind::Apply { .. } => {
+                                            unreachable!("semantic stage iterator groups apply runs")
+                                        }
+                                        PipeStageKind::RecurStart { expr }
                                         | PipeStageKind::RecurStep { expr }
                                         | PipeStageKind::Validate { expr }
                                         | PipeStageKind::Previous { expr }
@@ -5187,6 +5189,15 @@ impl Validator<'_> {
                                             unreachable!("semantic stage iterator groups case runs")
                                         }
                                     },
+                                    crate::PipeSemanticStage::ApplyRun(apply_run) => {
+                                        for expr in apply_run.exprs().rev() {
+                                            work.push(CaseExhaustivenessWork::Expr {
+                                                expr,
+                                                env: env.clone(),
+                                            });
+                                        }
+                                        current = None;
+                                    }
                                     crate::PipeSemanticStage::TruthyFalsyPair(pair) => {
                                         work.push(CaseExhaustivenessWork::Expr {
                                             expr: pair.falsy_expr,
@@ -5869,8 +5880,10 @@ impl Validator<'_> {
                         new_subject: current
                             .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                     },
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("subject walker groups apply runs")
+                    }
                     PipeStageKind::Case { .. }
-                    | PipeStageKind::Apply { .. }
                     | PipeStageKind::RecurStart { .. }
                     | PipeStageKind::RecurStep { .. }
                     | PipeStageKind::Validate { .. }
@@ -5922,6 +5935,7 @@ impl Validator<'_> {
                     new_subject: current
                         .and_then(|s| typing.infer_truthy_falsy_pair(pair, current_env, s)),
                 },
+                crate::PipeSubjectStage::ApplyRun(_) => PipeSubjectStepOutcome::Stop,
                 crate::PipeSubjectStage::CaseRun(_) => PipeSubjectStepOutcome::Stop,
             },
         )
@@ -6218,8 +6232,10 @@ impl Validator<'_> {
                             self.validate_fanin_stage(stage.span, *expr, current_env, s, typing)
                         }),
                     },
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("subject walker groups apply runs")
+                    }
                     PipeStageKind::Case { .. }
-                    | PipeStageKind::Apply { .. }
                     | PipeStageKind::RecurStart { .. }
                     | PipeStageKind::RecurStep { .. }
                     | PipeStageKind::Validate { .. }
@@ -6260,6 +6276,9 @@ impl Validator<'_> {
                 },
                 crate::PipeSubjectStage::TruthyFalsyPair(pair) => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| typing.infer_truthy_falsy_pair(pair, current_env, s)),
+                },
+                crate::PipeSubjectStage::ApplyRun(_) => PipeSubjectStepOutcome::Continue {
+                    new_subject: None,
                 },
                 crate::PipeSubjectStage::CaseRun(_) => PipeSubjectStepOutcome::Continue {
                     new_subject: None,
@@ -6313,8 +6332,10 @@ impl Validator<'_> {
                         new_subject: current
                             .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                     },
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("subject walker groups apply runs")
+                    }
                     PipeStageKind::Case { .. }
-                    | PipeStageKind::Apply { .. }
                     | PipeStageKind::RecurStart { .. }
                     | PipeStageKind::RecurStep { .. }
                     | PipeStageKind::Validate { .. }
@@ -6353,6 +6374,9 @@ impl Validator<'_> {
                 },
                 crate::PipeSubjectStage::TruthyFalsyPair(pair) => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| typing.infer_truthy_falsy_pair(pair, current_env, s)),
+                },
+                crate::PipeSubjectStage::ApplyRun(_) => PipeSubjectStepOutcome::Continue {
+                    new_subject: None,
                 },
                 crate::PipeSubjectStage::CaseRun(_) => PipeSubjectStepOutcome::Continue {
                     new_subject: None,
@@ -6429,8 +6453,10 @@ impl Validator<'_> {
                         new_subject: current
                             .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
                     },
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("subject walker groups apply runs")
+                    }
                     PipeStageKind::Case { .. }
-                    | PipeStageKind::Apply { .. }
                     | PipeStageKind::RecurStart { .. }
                     | PipeStageKind::RecurStep { .. }
                     | PipeStageKind::Validate { .. }
@@ -6471,6 +6497,9 @@ impl Validator<'_> {
                 crate::PipeSubjectStage::FanoutSegment(segment) => PipeSubjectStepOutcome::Continue {
                     new_subject: current
                         .and_then(|s| typing.infer_fanout_segment_result_type(segment, current_env, s)),
+                },
+                crate::PipeSubjectStage::ApplyRun(_) => PipeSubjectStepOutcome::Continue {
+                    new_subject: None,
                 },
                 crate::PipeSubjectStage::CaseRun(_) => PipeSubjectStepOutcome::Continue {
                     new_subject: None,

@@ -6850,9 +6850,12 @@ impl<'a> GateTypeContext<'a> {
                         let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
                         self.infer_burst_stage_info(*every, *count, &stage_env, &subject)
                     }
-                    PipeStageKind::Apply { .. }
-                    | PipeStageKind::RecurStart { .. }
-                    | PipeStageKind::RecurStep { .. } => GateExprInfo::default(),
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("semantic stage iterator groups apply runs")
+                    }
+                    PipeStageKind::RecurStart { .. } | PipeStageKind::RecurStep { .. } => {
+                        GateExprInfo::default()
+                    }
                     PipeStageKind::Validate { expr } => {
                         let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
                         self.infer_validate_stage_info(*expr, &stage_env, &subject)
@@ -6863,6 +6866,7 @@ impl<'a> GateTypeContext<'a> {
                         unreachable!("semantic stage iterator groups truthy/falsy pairs and case runs")
                     }
                 },
+                crate::PipeSemanticStage::ApplyRun(_) => GateExprInfo::default(),
                 crate::PipeSemanticStage::TruthyFalsyPair(pair) => {
                     let pair_env = pipe_stage_expr_env(&pipe_env, pair.start_stage(), &subject);
                     self.infer_truthy_falsy_pair_info(&pair, &pair_env, &subject)

@@ -166,6 +166,7 @@ fn extend_pipe_env_with_subject_stage_memos(
                 typing,
             );
         }
+        crate::PipeSubjectStage::ApplyRun(_) => {}
         crate::PipeSubjectStage::TruthyFalsyPair(pair) => {
             extend_pipe_env_with_stage_memos(
                 env,
