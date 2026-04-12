@@ -28,7 +28,7 @@ use aivi.url (
 ## Domain
 
 ```aivi
-domain Url over Text
+domain Url over Text = {
     parse : Text -> Result UrlError Url
     scheme : Url -> Option Text
     host : Url -> Option Text
@@ -38,6 +38,7 @@ domain Url over Text
     fragment : Url -> Option Text
     withPath : Url -> Text -> Url
     withQuery : Url -> Text -> Url
+}
 ```
 
 The domain members — `parse`, `scheme`, `host`, `port`, `path`, `query`, `fragment`,

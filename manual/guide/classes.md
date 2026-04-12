@@ -149,9 +149,10 @@ func nonDecreasing = left right =>
 For nominal domains, implement `compare` in the `Ord` instance and then use the ordinary operators:
 
 ```aivi
-domain Calendar over Int
+domain Calendar over Int = {
     suffix day : Int = value => Calendar value
     toDays : Calendar -> Int
+}
 
 instance Eq Calendar = {
     (==) left right = toDays left == toDays right

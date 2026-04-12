@@ -2573,13 +2573,14 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 ### 20.1 Declaration form
 
 ```aivi
-domain Duration over Int
+domain Duration over Int = {
     suffix ms : Int = n => Duration n
     millis : Int -> Duration
     millis = raw => raw
     parse : Int -> Result DurationError Duration
     toMillis : Duration -> Int
     toMillis = duration => duration
+}
 ```
 
 ### 20.2 Core meaning
@@ -2601,15 +2602,17 @@ Use `domain` when the nominal wrapper carries domain-owned suffix, parsing, deco
 A domain may be introduced only through domain-owned constructors or smart constructors.
 
 ```aivi
-domain Url over Text
+domain Url over Text = {
     parse : Text -> Result UrlError Url
     raw : Url -> Text
     raw = url => url
+}
 
-domain Duration over Int
+domain Duration over Int = {
     millis : Int -> Duration
     trySeconds : Int -> Result DurationError Duration
     toMillis : Duration -> Int
+}
 ```
 
 Construction is explicit. Unwrapping is explicit. Unsafe construction should remain internal or be spelled as such.
@@ -2621,10 +2624,11 @@ Callable members may also carry authored bodies: annotate the member with `name 
 ### 20.5 Suffix constructors
 
 ```aivi
-domain Duration over Int
+domain Duration over Int = {
     suffix ms : Int = n => Duration n
     suffix sec : Int = n => Duration (n * 1000)
     suffix min : Int = n => Duration (n * 60000)
+}
 ```
 
 Enables `250ms`, `10sec`, `3min` as typed `Duration` values.
@@ -2649,16 +2653,18 @@ Examples:
 ### 20.6 Domain operators
 
 ```aivi
-domain Duration over Int
+domain Duration over Int = {
     suffix ms : Int = n => Duration n
     (+) : Duration -> Duration -> Duration
     (+) = left right => left + right
     (-) : Duration -> Duration -> Duration
     (*) : Duration -> Int -> Duration
     compare : Duration -> Duration -> Ordering
+}
 
-domain Path over Text
+domain Path over Text = {
     (/) : Path -> Text -> Path
+}
 ```
 
 Operator rules:
@@ -2679,10 +2685,11 @@ Domains attach invariants stronger than the carrier type:
 - `NonEmpty A over List A`: may reject empty lists
 
 ```aivi
-domain NonEmpty A over List A
+domain NonEmpty A over List A = {
     fromList : List A -> Option (NonEmpty A)
     head : NonEmpty A -> A
     tail : NonEmpty A -> List A
+}
 ```
 
 ### 20.8 Parameterized domains
@@ -2730,39 +2737,43 @@ For literal/decode/operator failures, diagnostics should explain whether the fai
 #### Duration
 
 ```aivi
-domain Duration over Int
+domain Duration over Int = {
     suffix ms : Int = n => Duration n
     suffix sec : Int = n => Duration (n * 1000)
     toMillis : Duration -> Int
     (+) : Duration -> Duration -> Duration
     (+) = left right => left + right
+}
 ```
 
 #### Url
 
 ```aivi
-domain Url over Text
+domain Url over Text = {
     parse : Text -> Result UrlError Url
     raw : Url -> Text
     raw = url => url
+}
 ```
 
 #### Path
 
 ```aivi
-domain Path over Text
+domain Path over Text = {
     raw : Path -> Text
     raw = path => path
     (/) : Path -> Text -> Path
+}
 ```
 
 #### NonEmpty
 
 ```aivi
-domain NonEmpty A over List A
+domain NonEmpty A over List A = {
     fromList : List A -> Option (NonEmpty A)
     head : NonEmpty A -> A
     tail : NonEmpty A -> List A
+}
 ```
 
 ### 20.14 Design boundary

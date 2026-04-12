@@ -59,8 +59,9 @@ These variants describe the common failure cases when loading a bundled resource
 ### ResourcePath
 
 ```aivi
-domain ResourcePath over Text
+domain ResourcePath over Text = {
     parse : Text -> Result ResourceError ResourcePath
+}
 ```
 
 `ResourcePath` is a dedicated type for paths such as `"/com/example/app/style.css"`.

@@ -186,18 +186,20 @@ Rules:
 ### 2.5 `domain`
 
 ```aivi
-domain Duration over Int
+domain Duration over Int = {
     suffix ms : Int = n => Duration n
     suffix sec : Int = n => Duration (n * 1000)
     millis : Int -> Duration
     millis = raw => raw
     toMillis : Duration -> Int
     toMillis = duration => duration
+}
 
-domain Url over Text
+domain Url over Text = {
     parse : Text -> Result UrlError Url
     scheme : Url -> Option Text
     host : Url -> Option Text
+}
 ```
 
 Rules:
@@ -206,6 +208,7 @@ Rules:
 - Construction is explicit.
 - Unwrapping is explicit.
 - No implicit casts to/from the carrier.
+- Domain bodies use brace syntax: `domain Name over Carrier = { ... }`.
 - Domain members use ordinary same-name annotations: `member : TypeExpr`.
 - Callable domain members participate in ordinary term lookup.
 - Callable domain members may include an authored body of the form `name = expr`. When the body is function-shaped, the canonical surface is `name = arg1 arg2 => expr`.

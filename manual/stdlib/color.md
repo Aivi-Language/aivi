@@ -21,7 +21,7 @@ use aivi.color (Color)
 ## Domain
 
 ```aivi
-domain Color over Int
+domain Color over Int = {
     argb : Int -> Color
     red : Color -> Int
     green : Color -> Int
@@ -32,6 +32,7 @@ domain Color over Int
     withGreen : Color -> Int -> Color
     withBlue : Color -> Int -> Color
     blend : Color -> Color -> Float -> Color
+}
 ```
 
 `Color` is useful when a field should clearly mean "this is a color" rather than "this is

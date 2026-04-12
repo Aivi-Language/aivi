@@ -80,9 +80,10 @@ If a carrier is not listed here for a class, that class is **not** runtime-backe
 That means a nominal domain becomes orderable by implementing `Ord.compare` directly:
 
 ```aivi
-domain Calendar over Int
+domain Calendar over Int = {
     suffix day : Int = value => Calendar value
     toDays : Calendar -> Int
+}
 
 instance Eq Calendar = {
     (==) left right = toDays left == toDays right

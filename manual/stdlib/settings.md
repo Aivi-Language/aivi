@@ -53,8 +53,9 @@ These variants describe the usual GSettings failure cases.
 ### SettingsSchema
 
 ```aivi
-domain SettingsSchema over Text
+domain SettingsSchema over Text = {
     parse : Text -> Result SettingsError SettingsSchema
+}
 ```
 
 Checked schema identifier such as `"org.gnome.desktop.interface"`.
@@ -68,8 +69,9 @@ value interfaceSchema : Result SettingsError SettingsSchema = parse "org.gnome.d
 ### SettingsKey
 
 ```aivi
-domain SettingsKey over Text
+domain SettingsKey over Text = {
     make : Text -> SettingsKey
+}
 ```
 
 Wrapped key name such as `"color-scheme"`.

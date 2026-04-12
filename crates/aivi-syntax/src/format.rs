@@ -1747,10 +1747,12 @@ impl Formatter {
             return vec![header];
         };
 
+        header.push_str(" = {");
         let mut lines = vec![header];
         for member in &body.members {
             lines.extend(self.format_domain_member(member));
         }
+        lines.push("}".to_owned());
         lines
     }
 
@@ -4008,13 +4010,15 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "domain Duration over Int\n",
+                "domain Duration over Int = {\n",
                 "    suffix ms : Int = value => Duration value\n",
                 "    (*) : Duration -> Int -> Duration\n",
+                "}\n",
                 "\n",
-                "domain Path over Text\n",
+                "domain Path over Text = {\n",
                 "    suffix root : Text = value => Path value\n",
                 "    (/) : Path -> Text -> Path\n",
+                "}\n",
             )
         );
     }
@@ -4048,9 +4052,10 @@ value view =
             concat!(
                 "type Builder = Int -> Duration\n",
                 "\n",
-                "domain Duration over Int\n",
+                "domain Duration over Int = {\n",
                 "    make : Builder\n",
                 "    make = raw => raw\n",
+                "}\n",
             )
         );
     }
@@ -4107,8 +4112,9 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "domain Bucket over Int\n",
+                "domain Bucket over Int = {\n",
                 "    (%) : Bucket -> Int -> Bucket\n",
+                "}\n",
             )
         );
     }
@@ -4121,8 +4127,9 @@ value view =
         assert_eq!(
             formatted,
             concat!(
-                "domain Duration over Int\n",
+                "domain Duration over Int = {\n",
                 "    suffix ms : Int = value => Duration value\n",
+                "}\n",
                 "\n",
                 "value delay : Duration = 250ms\n",
                 "value applied = wrap 250ms\n",

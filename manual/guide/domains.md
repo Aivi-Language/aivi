@@ -33,8 +33,9 @@ This declares a `Score` domain whose runtime carrier is `Int`.
 A domain can define integer suffix constructors:
 
 ```aivi
-domain Score over Int
+domain Score over Int = {
     suffix pts : Int = n => Score n
+}
 
 value highScore : Score = 9000pts
 ```
@@ -46,10 +47,11 @@ Suffixes must be explicit and unambiguous. In current AIVI they must also be at 
 Domains can attach operators and named methods directly under the declaration:
 
 ```aivi
-domain Score over Int
+domain Score over Int = {
     suffix pts : Int = n => Score n
     (+) : Score -> Score -> Score
     (+) = left right => left + right
+}
 ```
 
 That lets you write domain-aware expressions such as:
@@ -62,9 +64,10 @@ value raw : Int = total.carrier
 Callable members use the same two-line pattern: annotate the member, then bind it.
 
 ```aivi
-domain Score over Int
+domain Score over Int = {
     fromRaw : Int -> Score
     fromRaw = raw => raw
+}
 ```
 
 The body is checked against the carrier view of the domain, while callers still see the nominal signature.
@@ -76,13 +79,14 @@ For comparison, prefer `Eq` / `Ord` instances over authored domain operator memb
 When a member operates on the current domain value, you can write it in receiver style with `self`:
 
 ```aivi
-domain Snake over List Cell
+domain Snake over List Cell = {
     fromCells : List Cell -> Snake
     fromCells = cells => cells
     head : Cell
     head = getOrElse (Cell 0 0) (listHead self)
     length : Int
     length = listLength self
+}
 ```
 
 `fromCells` stays explicit because it constructs a `Snake` from a carrier value. `head` and `length` use `self`, so their receiver is implicit in the annotation.
@@ -102,8 +106,9 @@ This is useful when you want stronger guarantees than the carrier type alone can
 Every domain has a built-in `.carrier` accessor that returns the underlying carrier value at zero cost. You do not need to declare it — the compiler synthesizes it automatically:
 
 ```aivi
-domain Score over Int
+domain Score over Int = {
     suffix pts : Int = n => Score n
+}
 
 value raw : Int = (100pts).carrier
 ```
