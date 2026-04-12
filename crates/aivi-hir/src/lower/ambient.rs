@@ -218,10 +218,10 @@ func __aivi_binary_neq = left right =>
 
 domain NonEmptyList A over List A = {
     type (List A) -> (NonEmptyList A)
-    lift items = NonEmptyList items
+    lift items = items
 
     type NonEmptyList A -> (List A)
-    __aivi_nel_carrier nel = nel.carrier
+    __aivi_nel_carrier nel = nel
 }
 
 type A -> (NonEmptyList A)

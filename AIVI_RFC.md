@@ -2576,10 +2576,10 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 domain Duration over Int
     suffix ms : Int = n => Duration n
     millis : Int -> Duration
-    millis = raw => Duration raw
+    millis = raw => raw
     parse : Int -> Result DurationError Duration
     toMillis : Duration -> Int
-    toMillis = duration => duration.carrier
+    toMillis = duration => duration
 ```
 
 ### 20.2 Core meaning
@@ -2604,7 +2604,7 @@ A domain may be introduced only through domain-owned constructors or smart const
 domain Url over Text
     parse : Text -> Result UrlError Url
     raw : Url -> Text
-    raw = url => url.carrier
+    raw = url => url
 
 domain Duration over Int
     millis : Int -> Duration
@@ -2652,7 +2652,7 @@ Examples:
 domain Duration over Int
     suffix ms : Int = n => Duration n
     (+) : Duration -> Duration -> Duration
-    (+) = left right => Duration (left.carrier + right.carrier)
+    (+) = left right => left + right
     (-) : Duration -> Duration -> Duration
     (*) : Duration -> Int -> Duration
     compare : Duration -> Duration -> Ordering
@@ -2735,7 +2735,7 @@ domain Duration over Int
     suffix sec : Int = n => Duration (n * 1000)
     toMillis : Duration -> Int
     (+) : Duration -> Duration -> Duration
-    (+) = left right => Duration (left.carrier + right.carrier)
+    (+) = left right => left + right
 ```
 
 #### Url
@@ -2744,7 +2744,7 @@ domain Duration over Int
 domain Url over Text
     parse : Text -> Result UrlError Url
     raw : Url -> Text
-    raw = url => url.carrier
+    raw = url => url
 ```
 
 #### Path
@@ -2752,7 +2752,7 @@ domain Url over Text
 ```aivi
 domain Path over Text
     raw : Path -> Text
-    raw = path => path.carrier
+    raw = path => path
     (/) : Path -> Text -> Path
 ```
 

@@ -2,7 +2,7 @@ domain Duration over Int
     suffix ms : Int = value => Duration value
     (+) : Duration -> Duration -> Duration
     toInt : Duration -> Int
-    toInt = duration => duration.carrier
+    toInt = duration => duration
 
 value total : Duration = 10ms + 5ms
 value raw : Int = toInt total

@@ -14,30 +14,30 @@ domain Duration over Int
     suffix hr : Int = n => Duration (mul n 3600000)
     suffix dy : Int = n => Duration (mul n 86400000)
     millis : Int -> Duration
-    millis = n => Duration n
+    millis = n => n
     toMillis : Duration -> Int
-    toMillis = duration => duration.carrier
+    toMillis = duration => duration
     toSeconds : Duration -> Int
-    toSeconds = duration => div duration.carrier 1000
+    toSeconds = duration => div duration 1000
     toMinutes : Duration -> Int
-    toMinutes = duration => div duration.carrier 60000
+    toMinutes = duration => div duration 60000
     toHours : Duration -> Int
-    toHours = duration => div duration.carrier 3600000
+    toHours = duration => div duration 3600000
     toDays : Duration -> Int
-    toDays = duration => div duration.carrier 86400000
+    toDays = duration => div duration 86400000
     trySeconds : Int -> Result DurationError Duration
     trySeconds = seconds =>
         seconds < 0
         T|> Err "Duration cannot be negative"
-        F|> Ok (Duration (mul seconds 1000))
+        F|> Ok (mul seconds 1000)
     (+) : Duration -> Duration -> Duration
-    (+) = left right => Duration (left.carrier + right.carrier)
+    (+) = left right => left + right
     (-) : Duration -> Duration -> Duration
-    (-) = left right => Duration (left.carrier - right.carrier)
+    (-) = left right => left - right
     (*) : Duration -> Int -> Duration
-    (*) = duration n => Duration (mul duration.carrier n)
+    (*) = duration n => mul duration n
     (<) : Duration -> Duration -> Bool
-    (<) = left right => left.carrier < right.carrier
+    (<) = left right => left < right
 
 export DurationError
 export Duration

@@ -2438,6 +2438,15 @@ impl<'a> GateTypeContext<'a> {
         self.lower_type(annotation, substitutions, &mut item_stack, false)
     }
 
+    pub(crate) fn lower_domain_member_implementation_type(
+        &mut self,
+        owner: ItemId,
+        annotation: TypeId,
+    ) -> Option<GateType> {
+        let lowered = self.lower_open_annotation(annotation)?;
+        Some(self.rewrite_current_domain_carrier_view(owner, &lowered))
+    }
+
     pub(crate) fn domain_member_annotation(
         &self,
         resolution: DomainMemberResolution,
@@ -2458,6 +2467,126 @@ impl<'a> GateTypeContext<'a> {
         };
         let member = domain.members.get(resolution.member_index)?;
         Some(format!("{}.{}", domain.name.text(), member.name.text()))
+    }
+
+    fn rewrite_current_domain_carrier_view(&mut self, owner: ItemId, ty: &GateType) -> GateType {
+        match ty {
+            GateType::Primitive(_) | GateType::TypeParameter { .. } => ty.clone(),
+            GateType::Tuple(elements) => GateType::Tuple(
+                elements
+                    .iter()
+                    .map(|element| self.rewrite_current_domain_carrier_view(owner, element))
+                    .collect(),
+            ),
+            GateType::Record(fields) => GateType::Record(
+                fields
+                    .iter()
+                    .map(|field| GateRecordField {
+                        name: field.name.clone(),
+                        ty: self.rewrite_current_domain_carrier_view(owner, &field.ty),
+                    })
+                    .collect(),
+            ),
+            GateType::Arrow { parameter, result } => GateType::Arrow {
+                parameter: Box::new(self.rewrite_current_domain_carrier_view(owner, parameter)),
+                result: Box::new(self.rewrite_current_domain_carrier_view(owner, result)),
+            },
+            GateType::List(element) => GateType::List(Box::new(
+                self.rewrite_current_domain_carrier_view(owner, element),
+            )),
+            GateType::Map { key, value } => GateType::Map {
+                key: Box::new(self.rewrite_current_domain_carrier_view(owner, key)),
+                value: Box::new(self.rewrite_current_domain_carrier_view(owner, value)),
+            },
+            GateType::Set(element) => GateType::Set(Box::new(
+                self.rewrite_current_domain_carrier_view(owner, element),
+            )),
+            GateType::Option(element) => GateType::Option(Box::new(
+                self.rewrite_current_domain_carrier_view(owner, element),
+            )),
+            GateType::Result { error, value } => GateType::Result {
+                error: Box::new(self.rewrite_current_domain_carrier_view(owner, error)),
+                value: Box::new(self.rewrite_current_domain_carrier_view(owner, value)),
+            },
+            GateType::Validation { error, value } => GateType::Validation {
+                error: Box::new(self.rewrite_current_domain_carrier_view(owner, error)),
+                value: Box::new(self.rewrite_current_domain_carrier_view(owner, value)),
+            },
+            GateType::Signal(element) => GateType::Signal(Box::new(
+                self.rewrite_current_domain_carrier_view(owner, element),
+            )),
+            GateType::Task { error, value } => GateType::Task {
+                error: Box::new(self.rewrite_current_domain_carrier_view(owner, error)),
+                value: Box::new(self.rewrite_current_domain_carrier_view(owner, value)),
+            },
+            GateType::Domain {
+                item,
+                arguments,
+                name: _,
+            } if *item == owner => self
+                .lower_current_domain_carrier_type(owner, arguments)
+                .map(|carrier| self.rewrite_current_domain_carrier_view(owner, &carrier))
+                .unwrap_or_else(|| ty.clone()),
+            GateType::Domain {
+                item,
+                name,
+                arguments,
+            } => GateType::Domain {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| self.rewrite_current_domain_carrier_view(owner, argument))
+                    .collect(),
+            },
+            GateType::OpaqueItem {
+                item,
+                name,
+                arguments,
+            } => GateType::OpaqueItem {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| self.rewrite_current_domain_carrier_view(owner, argument))
+                    .collect(),
+            },
+            GateType::OpaqueImport {
+                import,
+                name,
+                arguments,
+                definition,
+            } => GateType::OpaqueImport {
+                import: *import,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| self.rewrite_current_domain_carrier_view(owner, argument))
+                    .collect(),
+                definition: definition.clone(),
+            },
+        }
+    }
+
+    fn lower_current_domain_carrier_type(
+        &mut self,
+        owner: ItemId,
+        arguments: &[GateType],
+    ) -> Option<GateType> {
+        let Item::Domain(domain) = &self.module.items()[owner] else {
+            return None;
+        };
+        let mut carrier = self.lower_open_annotation(domain.carrier)?;
+        let substitutions = domain
+            .parameters
+            .iter()
+            .copied()
+            .zip(arguments.iter().cloned())
+            .collect::<HashMap<_, _>>();
+        if !substitutions.is_empty() {
+            carrier = carrier.substitute_type_parameters(&substitutions);
+        }
+        Some(carrier)
     }
 
     pub(crate) fn lower_type(

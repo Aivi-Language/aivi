@@ -1528,7 +1528,7 @@ impl<'a> GeneralExprElaborator<'a> {
             .enumerate()
             .filter_map(|(member_index, member)| {
                 let body_expr = member.body?;
-                let expected = self.domain_member_implementation_type(member.annotation)?;
+                let expected = self.domain_member_implementation_type(owner, member.annotation)?;
                 Some(self.elaborate_domain_member(
                     owner,
                     member_index,
@@ -1823,9 +1823,11 @@ impl<'a> GeneralExprElaborator<'a> {
 
     fn domain_member_implementation_type(
         &mut self,
+        owner: ItemId,
         annotation: crate::TypeId,
     ) -> Option<GateType> {
-        self.typing.lower_open_annotation(annotation)
+        self.typing
+            .lower_domain_member_implementation_type(owner, annotation)
     }
 
     fn instance_class_item_id(&self, item: &InstanceItem) -> Option<ItemId> {
@@ -5516,7 +5518,7 @@ export Envelope
 domain Path over Text = {
     fromText : Text -> Path
     toText : Path -> Text
-    toText path = path.carrier
+    toText path = path
 }
 value home : Path = fromText "/tmp/app"
 value raw : Text = toText home

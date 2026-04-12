@@ -149,7 +149,7 @@ The snake is a non-empty list of cells, but we want richer operations than a pla
 ```aivi
 domain Snake over NonEmptyList Cell
     fromCells : NonEmptyList Cell -> Snake
-    fromCells = cells => Snake cells
+    fromCells = cells => cells
     head : Cell
     head = nelHead self
     contains : Cell -> Bool

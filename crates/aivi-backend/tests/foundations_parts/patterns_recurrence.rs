@@ -289,7 +289,7 @@ domain Duration over Int = {
     type Duration -> Duration -> Duration
     (+)
     type Duration -> Int
-    unwrap duration = duration.carrier
+    unwrap duration = duration
 }
 
 fun unwrap_duration:Int = duration:Duration=> unwrap duration

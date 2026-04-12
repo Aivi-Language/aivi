@@ -222,7 +222,7 @@ fn runtime_evaluates_inline_pipe_domain_member_calls() {
 domain Duration over Int
     suffix ms : Int = value => Duration value
     type Duration -> Int
-    extract duration = duration.carrier
+    extract duration = duration
 
 type Duration -> Int
 func unwrap = duration => extract duration
@@ -250,9 +250,9 @@ type Builder = Int -> Duration
 
 domain Duration over Int
     type Builder
-    make raw = Duration raw
+    make raw = raw
     type Duration -> Int
-    extract duration = duration.carrier
+    extract duration = duration
 
 value raw : Int = extract (make 10)
 "#,

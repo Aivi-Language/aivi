@@ -1797,6 +1797,28 @@ fn typecheck_accepts_projection_from_domain_values() {
 }
 
 #[test]
+fn typecheck_checks_authored_domain_members_against_carrier_view() {
+    let report = typecheck_text(
+        "domain-member-carrier-view.aivi",
+        "domain Duration over Int = {\n\
+             \x20\x20\x20\x20fromMillis : Int -> Duration\n\
+             \x20\x20\x20\x20fromMillis raw = raw\n\
+             \x20\x20\x20\x20toMillis : Duration -> Int\n\
+             \x20\x20\x20\x20toMillis duration = duration\n\
+             \x20\x20\x20\x20(+) : Duration -> Duration -> Duration\n\
+             \x20\x20\x20\x20(+) = left right => left + right\n\
+             }\n\
+             value raw : Int = toMillis (fromMillis 10)\n\
+             value total : Duration = fromMillis 10 + fromMillis 5\n",
+    );
+    assert!(
+        report.is_ok(),
+        "expected authored domain members to typecheck against carrier view, got diagnostics: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
 fn typecheck_reports_invalid_projection_from_signal_wrapped_domains() {
     let report = typecheck_text(
         "signal-projection-domain-value.aivi",

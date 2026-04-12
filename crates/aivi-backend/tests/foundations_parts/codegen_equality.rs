@@ -1123,7 +1123,7 @@ domain Path over Text
     type Text -> Path
     fromText
     type Path -> Text
-    toText path = path.carrier
+    toText path = path
 
 fun wrapPath:Path = raw:Text=>    fromText raw
 
@@ -1203,7 +1203,7 @@ domain Path over Text
     type Text -> Path
     fromText
     type Path -> Text
-    toText path = path.carrier
+    toText path = path
 
 value home : Path = fromText "/tmp/app"
 value raw : Text = toText home

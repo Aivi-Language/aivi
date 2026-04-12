@@ -2,7 +2,7 @@ domain Duration over Int
     suffix ms : Int = value => Duration value
     make : Int -> Duration
     millis : Duration -> Int
-    millis = duration => duration.carrier
+    millis = duration => duration
 
 domain Count over Int
     make : Int -> Count

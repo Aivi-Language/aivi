@@ -190,9 +190,9 @@ domain Duration over Int
     suffix ms : Int = n => Duration n
     suffix sec : Int = n => Duration (n * 1000)
     millis : Int -> Duration
-    millis = raw => Duration raw
+    millis = raw => raw
     toMillis : Duration -> Int
-    toMillis = duration => duration.carrier
+    toMillis = duration => duration
 
 domain Url over Text
     parse : Text -> Result UrlError Url

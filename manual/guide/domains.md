@@ -49,7 +49,7 @@ Domains can attach operators and named methods directly under the declaration:
 domain Score over Int
     suffix pts : Int = n => Score n
     (+) : Score -> Score -> Score
-    (+) = left right => Score (left.carrier + right.carrier)
+    (+) = left right => left + right
 ```
 
 That lets you write domain-aware expressions such as:
@@ -64,7 +64,7 @@ Callable members use the same two-line pattern: annotate the member, then bind i
 ```aivi
 domain Score over Int
     fromRaw : Int -> Score
-    fromRaw = raw => Score raw
+    fromRaw = raw => raw
 ```
 
 The body is checked against the carrier view of the domain, while callers still see the nominal signature.
@@ -76,7 +76,7 @@ When a member operates on the current domain value, you can write it in receiver
 ```aivi
 domain Snake over List Cell
     fromCells : List Cell -> Snake
-    fromCells = cells => Snake cells
+    fromCells = cells => cells
     head : Cell
     head = getOrElse (Cell 0 0) (listHead self)
     length : Int

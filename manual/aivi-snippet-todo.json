@@ -1,9 +1,9 @@
 {
   "root": "manual",
   "scanned_files": 78,
-  "scanned_blocks": 937,
+  "scanned_blocks": 936,
   "rewritten_blocks": 0,
-  "unresolved_fragments": 167,
+  "unresolved_fragments": 170,
   "entries": [
     {
       "markdown_path": "manual/guide/building-snake.md",
@@ -250,35 +250,35 @@
       "block_index": 9,
       "fence_info": "aivi",
       "start_line": 150,
-      "end_line": 165,
+      "end_line": 164,
       "formatting_changed": false,
       "syntax_problem_count": 0,
-      "lsp_problem_count": 15,
-      "compiler_problem_count": 15,
+      "lsp_problem_count": 21,
+      "compiler_problem_count": 21,
       "diagnostics": [
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `cellEq`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `cellEq`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:7:35\n  |\n 7 |     contains cell = listContains (cellEq cell) (toList self)\n  |                                   ^^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `cellEq`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:7:38\n  |\n 7 |     contains = cell => listContains (cellEq cell) (toList self)\n  |                                      ^^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `listContains`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `listContains`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:7:21\n  |\n 7 |     contains cell = listContains (cellEq cell) (toList self)\n  |                     ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `listContains`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:7:24\n  |\n 7 |     contains = cell => listContains (cellEq cell) (toList self)\n  |                        ^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `moveDir`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `moveDir`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:15:20\n  |\n15 |     nextHead dir = moveDir dir (nelHead self)\n  |                    ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `moveDir`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:15:23\n  |\n15 |     nextHead = dir => moveDir dir (nelHead self)\n  |                       ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `nelHead`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `nelHead`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:15:33\n  |\n15 |     nextHead dir = moveDir dir (nelHead self)\n  |                                 ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `nelHead`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:15:36\n  |\n15 |     nextHead = dir => moveDir dir (nelHead self)\n  |                                    ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
@@ -290,7 +290,7 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `nelInit`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `nelInit`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:13:36\n  |\n13 |     move cell = fromHeadTail cell (nelInit self)\n  |                                    ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `nelInit`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:13:39\n  |\n13 |     move = cell => fromHeadTail cell (nelInit self)\n  |                                       ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
@@ -300,61 +300,97 @@
         },
         {
           "severity": "error",
-          "code": "hir::unresolved-type-name",
-          "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:10:10\n  |\n10 |     type Cell -> Snake\n  |          ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:11:30\n  |\n11 |     grow = cell => cons cell self\n  |                              ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:13:47\n  |\n13 |     move = cell => fromHeadTail cell (nelInit self)\n  |                                               ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:15:44\n  |\n15 |     nextHead = dir => moveDir dir (nelHead self)\n  |                                            ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:5:20\n  |\n 5 |     head = nelHead self\n  |                    ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:7:59\n  |\n 7 |     contains = cell => listContains (cellEq cell) (toList self)\n  |                                                           ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cell`?"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:9:24\n  |\n 9 |     length = nelLength self\n  |                        ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:12:10\n  |\n12 |     type Cell -> Snake\n  |          ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:10:12\n  |\n10 |     grow : Cell -> Snake\n  |            ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:14:23\n  |\n14 |     type Direction -> Cell\n  |                       ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:12:12\n  |\n12 |     move : Cell -> Snake\n  |            ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:1:32\n  |\n 1 | domain Snake over NonEmptyList Cell = {\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:14:29\n  |\n14 |     nextHead : Direction -> Cell\n  |                             ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:2:23\n  |\n 2 |     type NonEmptyList Cell -> Snake\n  |                       ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:1:32\n  |\n 1 | domain Snake over NonEmptyList Cell\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:4:10\n  |\n 4 |     type Cell\n  |          ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:2:30\n  |\n 2 |     fromCells : NonEmptyList Cell -> Snake\n  |                              ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:6:10\n  |\n 6 |     type Cell -> Bool\n  |          ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:4:12\n  |\n 4 |     head : Cell\n  |            ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-type-name",
+          "message": "unknown type `Cell`",
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:6:16\n  |\n 6 |     contains : Cell -> Bool\n  |                ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Direction`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Direction`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:14:10\n  |\n14 |     type Direction -> Cell\n  |          ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Direction`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_9.aivi:14:16\n  |\n14 |     nextHead : Direction -> Cell\n  |                ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "domain Snake over NonEmptyList Cell = {\n    type NonEmptyList Cell -> Snake\n    fromCells cells = cells\n    type Cell\n    head = nelHead self\n    type Cell -> Bool\n    contains cell = listContains (cellEq cell) (toList self)\n    type Int\n    length = nelLength self\n    type Cell -> Snake\n    grow cell = cons cell self\n    type Cell -> Snake\n    move cell = fromHeadTail cell (nelInit self)\n    type Direction -> Cell\n    nextHead dir = moveDir dir (nelHead self)\n}\n"
+      "suggested_snippet": "domain Snake over NonEmptyList Cell\n    fromCells : NonEmptyList Cell -> Snake\n    fromCells = cells => cells\n    head : Cell\n    head = nelHead self\n    contains : Cell -> Bool\n    contains = cell => listContains (cellEq cell) (toList self)\n    length : Int\n    length = nelLength self\n    grow : Cell -> Snake\n    grow = cell => cons cell self\n    move : Cell -> Snake\n    move = cell => fromHeadTail cell (nelInit self)\n    nextHead : Direction -> Cell\n    nextHead = dir => moveDir dir (nelHead self)\n"
     },
     {
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 10,
       "fence_info": "aivi",
-      "start_line": 179,
-      "end_line": 186,
+      "start_line": 178,
+      "end_line": 185,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 4,
@@ -391,8 +427,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 11,
       "fence_info": "aivi",
-      "start_line": 192,
-      "end_line": 199,
+      "start_line": 191,
+      "end_line": 198,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 10,
@@ -465,8 +501,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 12,
       "fence_info": "aivi",
-      "start_line": 209,
-      "end_line": 213,
+      "start_line": 208,
+      "end_line": 212,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 6,
@@ -515,8 +551,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 13,
       "fence_info": "aivi",
-      "start_line": 219,
-      "end_line": 222,
+      "start_line": 218,
+      "end_line": 221,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -547,8 +583,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 14,
       "fence_info": "aivi",
-      "start_line": 230,
-      "end_line": 238,
+      "start_line": 229,
+      "end_line": 237,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -579,8 +615,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 15,
       "fence_info": "aivi",
-      "start_line": 246,
-      "end_line": 249,
+      "start_line": 245,
+      "end_line": 248,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -611,8 +647,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 16,
       "fence_info": "aivi",
-      "start_line": 259,
-      "end_line": 262,
+      "start_line": 258,
+      "end_line": 261,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 4,
@@ -649,8 +685,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 17,
       "fence_info": "aivi",
-      "start_line": 272,
-      "end_line": 282,
+      "start_line": 271,
+      "end_line": 281,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -669,8 +705,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 18,
       "fence_info": "aivi",
-      "start_line": 295,
-      "end_line": 301,
+      "start_line": 294,
+      "end_line": 300,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 35,
@@ -827,8 +863,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 19,
       "fence_info": "aivi",
-      "start_line": 311,
-      "end_line": 312,
+      "start_line": 310,
+      "end_line": 311,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -859,8 +895,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 20,
       "fence_info": "aivi",
-      "start_line": 320,
-      "end_line": 345,
+      "start_line": 319,
+      "end_line": 344,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 11,
@@ -915,8 +951,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 21,
       "fence_info": "aivi",
-      "start_line": 355,
-      "end_line": 360,
+      "start_line": 354,
+      "end_line": 359,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 5,
@@ -959,8 +995,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 22,
       "fence_info": "aivi",
-      "start_line": 368,
-      "end_line": 376,
+      "start_line": 367,
+      "end_line": 375,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -991,8 +1027,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 23,
       "fence_info": "aivi",
-      "start_line": 388,
-      "end_line": 409,
+      "start_line": 387,
+      "end_line": 408,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 8,
@@ -1053,8 +1089,8 @@
       "markdown_path": "manual/guide/building-snake.md",
       "block_index": 24,
       "fence_info": "aivi",
-      "start_line": 419,
-      "end_line": 432,
+      "start_line": 418,
+      "end_line": 431,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 6,
@@ -1293,25 +1329,13 @@
       "markdown_path": "manual/guide/domains.md",
       "block_index": 5,
       "fence_info": "aivi",
-      "start_line": 60,
-      "end_line": 61,
+      "start_line": 58,
+      "end_line": 59,
       "formatting_changed": false,
       "syntax_problem_count": 0,
-      "lsp_problem_count": 3,
-      "compiler_problem_count": 3,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
       "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::unknown-literal-suffix",
-          "message": "unknown literal suffix `pts`",
-          "rendered": "error[hir::unknown-literal-suffix]: unknown literal suffix `pts`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_5.aivi:1:25\n  |\n 1 | value total : Score = 10pts + 5pts\n  |                         ^^^\n  = reported during Milestone 2 HIR lowering"
-        },
-        {
-          "severity": "error",
-          "code": "hir::unknown-literal-suffix",
-          "message": "unknown literal suffix `pts`",
-          "rendered": "error[hir::unknown-literal-suffix]: unknown literal suffix `pts`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_5.aivi:1:32\n  |\n 1 | value total : Score = 10pts + 5pts\n  |                                ^^^\n  = reported during Milestone 2 HIR lowering"
-        },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
@@ -1323,60 +1347,92 @@
     },
     {
       "markdown_path": "manual/guide/domains.md",
-      "block_index": 8,
+      "block_index": 7,
       "fence_info": "aivi",
-      "start_line": 92,
-      "end_line": 99,
+      "start_line": 77,
+      "end_line": 83,
       "formatting_changed": false,
       "syntax_problem_count": 0,
-      "lsp_problem_count": 6,
-      "compiler_problem_count": 6,
+      "lsp_problem_count": 8,
+      "compiler_problem_count": 8,
       "diagnostics": [
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_8.aivi:5:23\n  |\n 5 |     head = getOrElse (Cell 0 0) (listHead self)\n  |                       ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `self`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:5:23\n  |\n 5 |     head = getOrElse (Cell 0 0) (listHead self)\n  |                       ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `listHead`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `listHead`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_8.aivi:5:34\n  |\n 5 |     head = getOrElse (Cell 0 0) (listHead self)\n  |                                  ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `listHead`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:5:34\n  |\n 5 |     head = getOrElse (Cell 0 0) (listHead self)\n  |                                  ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `listLength`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `listLength`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_8.aivi:7:14\n  |\n 7 |     length = listLength self\n  |              ^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `listLength`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:7:14\n  |\n 7 |     length = listLength self\n  |              ^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:5:43\n  |\n 5 |     head = getOrElse (Cell 0 0) (listHead self)\n  |                                           ^^^^\n  = reported during Milestone 2 HIR lowering"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unresolved-term-name",
+          "message": "unknown term `self`",
+          "rendered": "error[hir::unresolved-term-name]: unknown term `self`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:7:25\n  |\n 7 |     length = listLength self\n  |                         ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_8.aivi:1:24\n  |\n 1 | domain Snake over List Cell = {\n  |                        ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:1:24\n  |\n 1 | domain Snake over List Cell\n  |                        ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_8.aivi:2:15\n  |\n 2 |     type List Cell -> Snake\n  |               ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:2:22\n  |\n 2 |     fromCells : List Cell -> Snake\n  |                      ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_8.aivi:4:10\n  |\n 4 |     type Cell\n  |          ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_7.aivi:4:12\n  |\n 4 |     head : Cell\n  |            ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "domain Snake over List Cell = {\n    type List Cell -> Snake\n    fromCells cells = cells\n    type Cell\n    head = getOrElse (Cell 0 0) (listHead self)\n    type Int\n    length = listLength self\n}\n"
+      "suggested_snippet": "domain Snake over List Cell\n    fromCells : List Cell -> Snake\n    fromCells = cells => cells\n    head : Cell\n    head = getOrElse (Cell 0 0) (listHead self)\n    length : Int\n    length = listLength self\n"
     },
     {
       "markdown_path": "manual/guide/domains.md",
-      "block_index": 11,
+      "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 129,
-      "end_line": 131,
+      "start_line": 103,
+      "end_line": 106,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-projection-field",
+          "message": "projection `.carrier` is not available on `Score`",
+          "rendered": "error[hir::unknown-projection-field]: projection `.carrier` is not available on `Score`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_9.aivi:4:28\n  |\n 4 | value raw : Int = (100pts).carrier\n  |                            ^^^^^^^\n  = this projection refers to a missing record field"
+        }
+      ],
+      "suggested_snippet": "domain Score over Int\n    suffix pts : Int = n => Score n\n\nvalue raw : Int = (100pts).carrier\n"
+    },
+    {
+      "markdown_path": "manual/guide/domains.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 112,
+      "end_line": 114,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 4,
@@ -1386,25 +1442,25 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `mySnake`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `mySnake`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_11.aivi:3:37\n  |\n 3 | value cells : List Cell = nelToList mySnake.carrier\n  |                                     ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `mySnake`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_10.aivi:3:37\n  |\n 3 | value cells : List Cell = nelToList mySnake.carrier\n  |                                     ^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `nelToList`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `nelToList`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_11.aivi:3:27\n  |\n 3 | value cells : List Cell = nelToList mySnake.carrier\n  |                           ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `nelToList`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_10.aivi:3:27\n  |\n 3 | value cells : List Cell = nelToList mySnake.carrier\n  |                           ^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_11.aivi:1:32\n  |\n 1 | domain Snake over NonEmptyList Cell\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_10.aivi:1:32\n  |\n 1 | domain Snake over NonEmptyList Cell\n  |                                ^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `Cell`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_11.aivi:3:20\n  |\n 3 | value cells : List Cell = nelToList mySnake.carrier\n  |                    ^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/domains/block_10.aivi:3:20\n  |\n 3 | value cells : List Cell = nelToList mySnake.carrier\n  |                    ^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "domain Snake over NonEmptyList Cell\n\nvalue cells : List Cell = nelToList mySnake.carrier\n"
@@ -2704,26 +2760,6 @@
       "suggested_snippet": "type HttpError =\n  | Timeout\n  | DecodeFailure Text\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\ntype DecodeMode =\n  | Strict\n  | Permissive\n\ntype Map K V =\n  | EmptyMap\n\nvalue authHeaders : Map Text Text = EmptyMap\n\nsignal apiHost = \"https://api.example.com\"\n\n@source http.get \"{apiHost}/users\" with {\n    headers: authHeaders,\n    decode: Strict,\n    retry: 3times,\n    timeout: 5sec\n}\nsignal users : Signal (Result HttpError (List User))\n\nvalue view =\n    <Window title=\"Users\">\n        <Label text=\"Loading users\" />\n    </Window>\n"
     },
     {
-      "markdown_path": "manual/guide/sources.md",
-      "block_index": 8,
-      "fence_info": "aivi",
-      "start_line": 203,
-      "end_line": 223,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::source-option-type-mismatch",
-          "message": "source option `timeout` for `custom.feed` expects `Duration`, but this expression proves `Duration`",
-          "rendered": "error[hir::source-option-type-mismatch]: source option `timeout` for `custom.feed` expects `Duration`, but this expression proves `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_8.aivi:13:14\n  |\n13 |     timeout: 5ms,\n  |              ^^^\n  = this source option expression proves `Duration`\n  ::: /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/sources/block_8.aivi:13:5\n  |\n13 |     timeout: 5ms,\n  |     ------------\n  |     note: `timeout` expects `Duration`\nnote: current source option typing checks only the resolved-HIR cases it can prove honestly: same-module annotations, same-module unannotated value bodies rechecked through that same proof slice, suffixed domain literals including any generic arguments the resolved literal-member result proves, same-module constructors checked against the expected contract type or re-inferred as bare roots with `_` holes for any still-unproven generic arguments, built-in `Option` / `Result` / `Validation` constructors including bare roots that only prove a local container shape, imported bindings whose compiler-known import metadata lowers into the current closed type surface, tuple/record/list/map/set expressions whose nested values stay within that same slice, and reactive `Signal` payloads used as ordinary source configuration values\nnote: bare contract-parameter roots now also cover nested same-module generic constructor applications, unannotated local value bodies, tuple/record/list literals, `Some` roots, context-free `None` / `Ok` / `Err` / `Valid` / `Invalid` holes carried through local source-option bindings, and constructor fields whose tuple/record or built-in container shape can be proved locally; imports without compiler-known type metadata and otherwise unproven ordinary expressions still wait for fuller expression typing"
-        }
-      ],
-      "suggested_snippet": "type Mode =\n  | Stream\n\nprovider custom.feed\n    argument path : Text\n    option timeout : Duration\n    option mode : Mode\n    operation read : Text -> Signal Int\n    command delete : Text -> Task Text Unit\n    wakeup: providerTrigger\n\n@source custom.feed \"/tmp/demo.txt\" with {\n    timeout: 5ms,\n    mode: Stream\n}\nsignal updates : Signal Int\n\nvalue view =\n    <Window title=\"Feed\">\n        <Label text=\"Custom provider\" />\n    </Window>\n"
-    },
-    {
       "markdown_path": "manual/guide/thinking-in-aivi.md",
       "block_index": 5,
       "fence_info": "aivi",
@@ -3552,6 +3588,26 @@
       "suggested_snippet": "@source clipboard.watch\nsignal clipboardContent : Signal (Result ClipboardError ClipboardContent)\n"
     },
     {
+      "markdown_path": "manual/stdlib/color.md",
+      "block_index": 4,
+      "fence_info": "aivi",
+      "start_line": 54,
+      "end_line": 58,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-projection",
+          "message": "projection `.carrier` cannot be applied to `Color`",
+          "rendered": "error[hir::invalid-projection]: projection `.carrier` cannot be applied to `Color`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/color/block_4.aivi:5:11\n  |\n 5 |     color.carrier\n  |           ^^^^^^^\n  = this projection target does not support field access"
+        }
+      ],
+      "suggested_snippet": "use aivi.color (Color)\n\ntype Color -> Int\nfunc toArgb = color =>\n    color.carrier\n"
+    },
+    {
       "markdown_path": "manual/stdlib/date.md",
       "block_index": 2,
       "fence_info": "aivi",
@@ -3926,13 +3982,19 @@
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
+      "compiler_problem_count": 2,
       "diagnostics": [
         {
           "severity": "error",
           "code": "hir::invalid-binary-operator",
           "message": "operator `+` expects matching numeric operands, found `Duration` and `Duration`",
           "rendered": "error[hir::invalid-binary-operator]: operator `+` expects matching numeric operands, found `Duration` and `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_7.aivi:1:30\n  |\n 1 | value totalWait : Duration = 1min + 30sec\n  |                              ^^^^^^^^^^^^\n  = both operands must resolve to the same numeric type here"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-projection-field",
+          "message": "projection `.carrier` is not available on `Duration`",
+          "rendered": "error[hir::unknown-projection-field]: projection `.carrier` is not available on `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_7.aivi:2:37\n  |\n 2 | value totalWaitMs : Int = totalWait.carrier\n  |                                     ^^^^^^^\n  = this projection refers to a missing record field"
         }
       ],
       "suggested_snippet": "value totalWait : Duration = 1min + 30sec\nvalue totalWaitMs : Int = totalWait.carrier\n"
@@ -3946,7 +4008,7 @@
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
-      "compiler_problem_count": 4,
+      "compiler_problem_count": 5,
       "diagnostics": [
         {
           "severity": "error",
@@ -3958,7 +4020,7 @@
           "severity": "error",
           "code": "hir::invalid-binary-operator",
           "message": "operator `-` expects matching numeric operands, found `Duration` and `Duration`",
-          "rendered": "error[hir::invalid-binary-operator]: operator `-` expects matching numeric operands, found `Duration` and `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_8.aivi:2:30\n  |\n 2 | value remaining : Duration = total - 10sec\n  |                              ^^^^^^^^^^^^^\n  = both operands must resolve to the same numeric type here\nhelp: convert one operand so both sides share the same numeric type"
+          "rendered": "error[hir::invalid-binary-operator]: operator `-` expects matching numeric operands, found `Duration` and `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_8.aivi:2:30\n  |\n 2 | value remaining : Duration = total - 10sec\n  |                              ^^^^^^^^^^^^^\n  = both operands must resolve to the same numeric type here"
         },
         {
           "severity": "error",
@@ -3968,12 +4030,38 @@
         },
         {
           "severity": "error",
-          "code": "hir::type-mismatch",
-          "message": "expected `Int` but found `Duration`",
-          "rendered": "error[hir::type-mismatch]: expected `Int` but found `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_8.aivi:3:28\n  |\n 3 | value doubled : Duration = 250ms * 2\n  |                            ^^^^^\n  = found `Duration` here, expected `Int`"
+          "code": "hir::literal-suffix-type-mismatch",
+          "message": "literal suffix `ms` does not produce expected type `Int`",
+          "rendered": "error[hir::literal-suffix-type-mismatch]: literal suffix `ms` does not produce expected type `Int`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_8.aivi:3:31\n  |\n 3 | value doubled : Duration = 250ms * 2\n  |                               ^^\n  = this suffix constructor does not match the expected type here\nnote: visible candidates: Duration.ms"
+        },
+        {
+          "severity": "error",
+          "code": "hir::unknown-projection-field",
+          "message": "projection `.carrier` is not available on `Duration`",
+          "rendered": "error[hir::unknown-projection-field]: projection `.carrier` is not available on `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_8.aivi:5:29\n  |\n 5 | value rawMs : Int = doubled.carrier\n  |                             ^^^^^^^\n  = this projection refers to a missing record field"
         }
       ],
       "suggested_snippet": "value total : Duration = 45sec + 15sec\nvalue remaining : Duration = total - 10sec\nvalue doubled : Duration = 250ms * 2\nvalue isShorter : Bool = 30sec < 1min\nvalue rawMs : Int = doubled.carrier\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/duration.md",
+      "block_index": 10,
+      "fence_info": "aivi",
+      "start_line": 110,
+      "end_line": 113,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::unknown-projection-field",
+          "message": "projection `.carrier` is not available on `Duration`",
+          "rendered": "error[hir::unknown-projection-field]: projection `.carrier` is not available on `Duration`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/duration/block_10.aivi:4:33\n  |\n 4 | value timeoutMs : Int = timeout.carrier\n  |                                 ^^^^^^^\n  = this projection refers to a missing record field"
+        }
+      ],
+      "suggested_snippet": "value animationFrame : Duration = 16ms\nvalue autosaveEvery : Duration = 30sec\nvalue timeout : Duration = 2min\nvalue timeoutMs : Int = timeout.carrier\n"
     },
     {
       "markdown_path": "manual/stdlib/env.md",
@@ -4006,7 +4094,7 @@
       "block_index": 3,
       "fence_info": "aivi",
       "start_line": 62,
-      "end_line": 65,
+      "end_line": 63,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4016,17 +4104,17 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `ResourceError`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `ResourceError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/gresource/block_3.aivi:2:25\n  |\n 2 |     type Text -> Result ResourceError ResourcePath\n  |                         ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `ResourceError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/gresource/block_3.aivi:2:28\n  |\n 2 |     parse : Text -> Result ResourceError ResourcePath\n  |                            ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "domain ResourcePath over Text = {\n    type Text -> Result ResourceError ResourcePath\n    parse\n}\n"
+      "suggested_snippet": "domain ResourcePath over Text\n    parse : Text -> Result ResourceError ResourcePath\n"
     },
     {
       "markdown_path": "manual/stdlib/gresource.md",
       "block_index": 4,
       "fence_info": "aivi",
-      "start_line": 73,
-      "end_line": 75,
+      "start_line": 71,
+      "end_line": 73,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -4051,8 +4139,8 @@
       "markdown_path": "manual/stdlib/gresource.md",
       "block_index": 5,
       "fence_info": "aivi",
-      "start_line": 81,
-      "end_line": 81,
+      "start_line": 79,
+      "end_line": 79,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4071,8 +4159,8 @@
       "markdown_path": "manual/stdlib/gresource.md",
       "block_index": 6,
       "fence_info": "aivi",
-      "start_line": 89,
-      "end_line": 89,
+      "start_line": 87,
+      "end_line": 87,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4091,8 +4179,8 @@
       "markdown_path": "manual/stdlib/gresource.md",
       "block_index": 7,
       "fence_info": "aivi",
-      "start_line": 97,
-      "end_line": 97,
+      "start_line": 95,
+      "end_line": 95,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4111,8 +4199,8 @@
       "markdown_path": "manual/stdlib/gresource.md",
       "block_index": 8,
       "fence_info": "aivi",
-      "start_line": 105,
-      "end_line": 105,
+      "start_line": 103,
+      "end_line": 103,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4131,8 +4219,8 @@
       "markdown_path": "manual/stdlib/gresource.md",
       "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 115,
-      "end_line": 119,
+      "start_line": 113,
+      "end_line": 117,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -4712,7 +4800,7 @@
       "block_index": 3,
       "fence_info": "aivi",
       "start_line": 56,
-      "end_line": 59,
+      "end_line": 57,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4722,17 +4810,17 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `SettingsError`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `SettingsError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/settings/block_3.aivi:2:25\n  |\n 2 |     type Text -> Result SettingsError SettingsSchema\n  |                         ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `SettingsError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/settings/block_3.aivi:2:28\n  |\n 2 |     parse : Text -> Result SettingsError SettingsSchema\n  |                            ^^^^^^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "domain SettingsSchema over Text = {\n    type Text -> Result SettingsError SettingsSchema\n    parse\n}\n"
+      "suggested_snippet": "domain SettingsSchema over Text\n    parse : Text -> Result SettingsError SettingsSchema\n"
     },
     {
       "markdown_path": "manual/stdlib/settings.md",
       "block_index": 4,
       "fence_info": "aivi",
-      "start_line": 65,
-      "end_line": 67,
+      "start_line": 63,
+      "end_line": 65,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -4757,8 +4845,8 @@
       "markdown_path": "manual/stdlib/settings.md",
       "block_index": 6,
       "fence_info": "aivi",
-      "start_line": 84,
-      "end_line": 86,
+      "start_line": 80,
+      "end_line": 82,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4777,8 +4865,8 @@
       "markdown_path": "manual/stdlib/settings.md",
       "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 124,
-      "end_line": 124,
+      "start_line": 120,
+      "end_line": 120,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4797,8 +4885,8 @@
       "markdown_path": "manual/stdlib/settings.md",
       "block_index": 10,
       "fence_info": "aivi",
-      "start_line": 134,
-      "end_line": 138,
+      "start_line": 130,
+      "end_line": 134,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 2,
@@ -4884,7 +4972,7 @@
       "block_index": 2,
       "fence_info": "aivi",
       "start_line": 31,
-      "end_line": 50,
+      "end_line": 40,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -4894,10 +4982,30 @@
           "severity": "error",
           "code": "hir::unresolved-type-name",
           "message": "unknown type `UrlError`",
-          "rendered": "error[hir::unresolved-type-name]: unknown type `UrlError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/url/block_2.aivi:2:25\n  |\n 2 |     type Text -> Result UrlError Url\n  |                         ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-type-name]: unknown type `UrlError`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/url/block_2.aivi:2:28\n  |\n 2 |     parse : Text -> Result UrlError Url\n  |                            ^^^^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
-      "suggested_snippet": "domain Url over Text = {\n    type Text -> Result UrlError Url\n    parse\n    type Url -> Option Text\n    scheme\n    type Url -> Option Text\n    host\n    type Url -> Option Int\n    port\n    type Url -> Text\n    path\n    type Url -> Option Text\n    query\n    type Url -> Option Text\n    fragment\n    type Url -> Text -> Url\n    withPath\n    type Url -> Text -> Url\n    withQuery\n}\n"
+      "suggested_snippet": "domain Url over Text\n    parse : Text -> Result UrlError Url\n    scheme : Url -> Option Text\n    host : Url -> Option Text\n    port : Url -> Option Int\n    path : Url -> Text\n    query : Url -> Option Text\n    fragment : Url -> Option Text\n    withPath : Url -> Text -> Url\n    withQuery : Url -> Text -> Url\n"
+    },
+    {
+      "markdown_path": "manual/stdlib/url.md",
+      "block_index": 3,
+      "fence_info": "aivi",
+      "start_line": 53,
+      "end_line": 57,
+      "formatting_changed": false,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-projection",
+          "message": "projection `.carrier` cannot be applied to `Url`",
+          "rendered": "error[hir::invalid-projection]: projection `.carrier` cannot be applied to `Url`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/url/block_3.aivi:5:9\n  |\n 5 |     url.carrier\n  |         ^^^^^^^\n  = this projection target does not support field access"
+        }
+      ],
+      "suggested_snippet": "use aivi.url (Url)\n\ntype Url -> Text\nfunc rawAddress = url =>\n    url.carrier\n"
     }
   ]
 }

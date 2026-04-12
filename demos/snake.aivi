@@ -55,21 +55,21 @@ func cellEq = target candidate =>
 
 domain Snake over NonEmptyList Cell
     fromCells : NonEmptyList Cell -> Snake
-    fromCells = cells => Snake cells
+    fromCells = cells => cells
     head : Snake -> Cell
-    head = snake => nelHead snake.carrier
+    head = snake => nelHead snake
     contains : Snake -> Cell -> Bool
-    contains = snake cell => listContains (cellEq cell) (toList snake.carrier)
+    contains = snake cell => listContains (cellEq cell) (toList snake)
     length : Snake -> Int
-    length = snake => nelLength snake.carrier
+    length = snake => nelLength snake
     cells : Snake -> List Cell
-    cells = snake => toList snake.carrier
+    cells = snake => toList snake
     grow : Snake -> Cell -> Snake
-    grow = snake cell => Snake (cons cell snake.carrier)
+    grow = snake cell => cons cell snake
     move : Snake -> Cell -> Snake
-    move = snake cell => Snake (fromHeadTail cell (nelInit snake.carrier))
+    move = snake cell => fromHeadTail cell (nelInit snake)
     nextHead : Snake -> Direction -> Cell
-    nextHead = snake dir => moveDir dir (nelHead snake.carrier)
+    nextHead = snake dir => moveDir dir (nelHead snake)
 
 type GameState = {
     snake: Snake,

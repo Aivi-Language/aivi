@@ -448,7 +448,10 @@ impl<'a> TypeChecker<'a> {
             let Some(body) = member.body else {
                 continue;
             };
-            let Some(expected) = self.typing.lower_open_annotation(member.annotation) else {
+            let Some(expected) = self
+                .typing
+                .lower_domain_member_implementation_type(owner, member.annotation)
+            else {
                 continue;
             };
             self.check_domain_member(owner, member, body, &expected);

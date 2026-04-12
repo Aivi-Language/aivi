@@ -42,15 +42,15 @@ domain DateDelta over Int
     suffix dy : Int = n => DateDelta n
     suffix wk : Int = n => DateDelta (n * 7)
     days : Int -> DateDelta
-    days = n => DateDelta n
+    days = n => n
     (+) : DateDelta -> DateDelta -> DateDelta
-    (+) = left right => DateDelta (left.carrier + right.carrier)
+    (+) = left right => left + right
     (-) : DateDelta -> DateDelta -> DateDelta
-    (-) = left right => DateDelta (left.carrier - right.carrier)
+    (-) = left right => left - right
     (*) : DateDelta -> Int -> DateDelta
-    (*) = delta n => DateDelta (delta.carrier * n)
+    (*) = delta n => delta * n
     (<) : DateDelta -> DateDelta -> Bool
-    (<) = left right => left.carrier < right.carrier
+    (<) = left right => left < right
 
 type Date -> Year
 func getYear = date => date
