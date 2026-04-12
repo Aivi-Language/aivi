@@ -140,7 +140,7 @@ AIVI is honest about its scope:
 
 - It targets **Linux desktops** with GTK4/libadwaita. It is not a web framework.
 - It is **purely functional**. If you need mutable state as a core programming model, AIVI will feel restrictive.
-- It is a **young language**. Some features are still being implemented. The [surface feature matrix](/guide/surface-feature-matrix) documents exactly what works today.
+- It is a **young language**. The core surface is implemented, but the ecosystem and surrounding tooling are still growing.
 - It does not try to be everything. It tries to be the right tool for reactive, type-safe desktop applications.
 
 ## Next steps

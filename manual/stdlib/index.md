@@ -2,7 +2,7 @@
 
 > **This is the reference sidecar.** Reach for it when you need to know what a specific module
 > exports. If you are still learning the language, start with the
-> [Language Guide](/guide/README) — the five stories there are the language itself.
+> [Language Guide](/guide/why-aivi) — the five stories there are the language itself.
 > The stdlib is the toolbox you reach for once you know what you want to build.
 
 The AIVI standard library is the set of modules that ships with the language. Some names, such

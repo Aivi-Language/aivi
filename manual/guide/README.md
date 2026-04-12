@@ -103,15 +103,9 @@ Classes and modules provide the extensibility layer. Read these after the five c
 
 ---
 
-## Reference
+## Standard library
 
-| Page | Description |
-| --- | --- |
-| [surface-feature-matrix.md](surface-feature-matrix.md) | Implementation status matrix for all surface features |
-
----
-
-> **Standard library** — The stdlib reference lives at [/stdlib](/stdlib/index).
-> It is a sidecar: reach for it when you need to know what a specific module exports,
-> not as the primary way to learn the language. The five stories above are the language;
-> the stdlib is the toolbox.
+The stdlib reference lives at [/stdlib/](/stdlib/).
+It is a sidecar: reach for it when you need to know what a specific module exports,
+not as the primary way to learn the language. The five stories above are the language;
+the stdlib is the toolbox.

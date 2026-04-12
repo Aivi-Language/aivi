@@ -1,29 +1,39 @@
 import type { DefaultTheme } from 'vitepress'
 
-type DocItem = {
+type DocLink = {
   text: string
   link: string
 }
 
-type DocGroup = {
+type DocSection = {
   text: string
   collapsed?: boolean
-  items: DocItem[]
+  items: DocNode[]
 }
 
-function links(items: DocItem[]): DefaultTheme.SidebarItem[] {
-  return items.map(item => ({ text: item.text, link: item.link }))
+type DocNode = DocLink | DocSection
+
+function isSection(item: DocNode): item is DocSection {
+  return 'items' in item
 }
 
-function group(section: DocGroup): DefaultTheme.SidebarItem {
+function sidebarItem(item: DocNode): DefaultTheme.SidebarItem {
+  if (!isSection(item)) {
+    return { text: item.text, link: item.link }
+  }
+
   return {
-    text: section.text,
-    collapsed: section.collapsed,
-    items: links(section.items),
+    text: item.text,
+    collapsed: item.collapsed,
+    items: item.items.map(sidebarItem),
   }
 }
 
-const guideSections: DocGroup[] = [
+function group(section: DocSection): DefaultTheme.SidebarItem {
+  return sidebarItem(section)
+}
+
+const guideSections: DocSection[] = [
   {
     text: 'Getting Started',
     collapsed: false,
@@ -98,16 +108,19 @@ const guideSections: DocGroup[] = [
       { text: 'Building Snake', link: '/guide/building-snake' },
     ],
   },
-  {
-    text: 'Reference',
-    collapsed: true,
-    items: [
-      { text: 'Surface Feature Matrix', link: '/guide/surface-feature-matrix' },
-    ],
-  },
 ]
 
-const stdlibSections: DocGroup[] = [
+const stdlibStartHere: DocSection = {
+  text: 'Start Here',
+  collapsed: false,
+  items: [
+    { text: 'Overview', link: '/stdlib/' },
+    { text: 'Prelude', link: '/stdlib/prelude' },
+    { text: 'Default Values', link: '/stdlib/defaults' },
+  ],
+}
+
+const stdlibSections: DocSection[] = [
   {
     text: 'Core Values & Collections',
     collapsed: true,
@@ -197,6 +210,15 @@ const stdlibSections: DocGroup[] = [
   },
 ]
 
+const stdlibGuideSection: DocSection = {
+  text: 'Standard Library',
+  collapsed: true,
+  items: [
+    stdlibStartHere,
+    ...stdlibSections,
+  ],
+}
+
 export const nav: DefaultTheme.NavItem[] = [
   { text: 'Guide', link: '/guide/why-aivi' },
   { text: 'Standard Library', link: '/stdlib/' },
@@ -205,22 +227,10 @@ export const nav: DefaultTheme.NavItem[] = [
 export const sidebar: DefaultTheme.SidebarMulti = {
   '/guide/': [
     ...guideSections.map(group),
-    group({
-      text: 'Standard Library',
-      collapsed: true,
-      items: [{ text: 'Overview', link: '/stdlib/' }],
-    }),
+    group(stdlibGuideSection),
   ],
   '/stdlib/': [
-    group({
-      text: 'Start Here',
-      collapsed: false,
-      items: [
-        { text: 'Overview', link: '/stdlib/' },
-        { text: 'Prelude', link: '/stdlib/prelude' },
-        { text: 'Default Values', link: '/stdlib/defaults' },
-      ],
-    }),
+    group(stdlibStartHere),
     ...stdlibSections.map(group),
   ],
   '/': [
@@ -234,4 +244,3 @@ export const sidebar: DefaultTheme.SidebarMulti = {
     }),
   ],
 }
-

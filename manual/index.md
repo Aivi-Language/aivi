@@ -15,6 +15,9 @@ hero:
     - theme: alt
       text: Build Snake
       link: /guide/building-snake
+    - theme: alt
+      text: Standard Library
+      link: /stdlib/
 
 features:
   - title: 🧊 No Mutation, No Surprises

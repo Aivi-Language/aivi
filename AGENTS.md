@@ -172,7 +172,6 @@ A feature is not done until every affected artifact is updated. Use the conditio
 | Manual (stdlib) | `manual/stdlib/*.md` | Standard library API reference |
 | Stdlib | `stdlib/` | Standard library `.aivi` source files |
 | Fixtures | `fixtures/frontend/` | Frontend pipeline test fixtures |
-| Surface feature matrix | `manual/guide/surface-feature-matrix.md` | Implementation status truth table |
 
 ### Dependency chains by change category
 
@@ -187,7 +186,6 @@ A feature is not done until every affected artifact is updated. Use the conditio
 7. If commonly used pattern: add VSCode snippet (`snippets/aivi.json`).
 8. Run `aivi manual-snippets --root manual` to verify and fix all manual code blocks.
 9. Update the relevant `manual/guide/` page(s).
-10. Update `manual/guide/surface-feature-matrix.md` status columns.
 
 #### Runtime or source provider change
 
@@ -197,7 +195,6 @@ A feature is not done until every affected artifact is updated. Use the conditio
 4. If new source provider: check whether MCP `list_sources` / `set_source_mode` / `publish_source_value` schemas need updates in `crates/aivi-cli/src/mcp.rs`.
 5. If source changes affect live introspection: verify MCP tool behavior end to end.
 6. Run `aivi manual-snippets --root manual`.
-7. Update `manual/guide/surface-feature-matrix.md`.
 
 #### GTK or widget catalog change
 
@@ -206,7 +203,6 @@ A feature is not done until every affected artifact is updated. Use the conditio
 3. If new widget or event signal: verify MCP `snapshot_gtk_tree` / `find_widgets` / `emit_gtk_event` output reflects the change.
 4. If new event signal type: update `manual/guide/markup.md`.
 5. Run `aivi manual-snippets --root manual`.
-6. Update `manual/guide/surface-feature-matrix.md`.
 
 #### Stdlib change
 
