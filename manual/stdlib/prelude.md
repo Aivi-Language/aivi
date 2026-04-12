@@ -23,7 +23,7 @@ These types are always available and can be imported from `aivi.prelude`:
 | `Result E A` | Success or failure: `Ok value` or `Err error` |
 | `Validation E A` | Accumulating validation: `Valid value` or `Invalid errors` |
 | `Signal A` | A reactive value that changes over time |
-| `Task E A` | An async computation |
+| `Task E A` | A one-shot async computation description |
 
 ## Type Classes
 
@@ -33,8 +33,10 @@ These types are always available and can be imported from `aivi.prelude`:
 | `Ord A` | Ordering and comparison via `compare : A -> A -> Ordering`; ordinary `<`, `>`, `<=`, and `>=` derive from this member |
 | `Default A` | A default value |
 | `Functor F` | Mappable container |
+| `Apply F` | Effectful function application |
 | `Applicative F` | Applicative functor |
-| `Monad F` | Monadic chaining (`List`, `Option`, and `Result` are the builtin executable carriers today) |
+| `Chain M` | Dependent sequencing without changing the carrier family |
+| `Monad F` | Monadic sequencing (`List`, `Option`, `Result`, and `Task` are the builtin executable carriers today) |
 | `Foldable F` | Foldable container |
 | `Traversable F` | Traversable container |
 | `Filterable F` | Filterable container |
@@ -42,7 +44,11 @@ These types are always available and can be imported from `aivi.prelude`:
 | `Monoid A` | Semigroup with identity |
 | `Bifunctor F` | Mappable over both type parameters |
 
-For the current higher-kinded hierarchy, the canonical executable support reference, and the current unary imported-instance slice for user-authored higher-kinded classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses). Parser or checker acceptance alone does not imply executable runtime support.
+For the current higher-kinded hierarchy, the canonical executable support reference, and the current
+unary imported-instance slice for user-authored higher-kinded classes and instances, see
+[Typeclasses & Higher-Kinded Support](/guide/typeclasses). For the law contract behind those classes,
+see [Class Laws & Design Boundaries](/guide/class-laws). Parser or checker acceptance alone does not
+imply executable runtime support.
 
 ## Option Functions
 

@@ -73,7 +73,9 @@ Cross-module polymorphic imports use `ImportBindingMetadata::InstanceMember` and
 
 `EqDeriver` structurally derives `Eq` instances for records, sum types, and domains. The `EqContext` tracks derivation progress; `EqDerivation` is the result.
 
-**Important**: `==` / `!=` at generic type require an `Eq` constraint at the definition site, and current `Eq` instances provide both operator members explicitly. For polymorphic code, pass an explicit `eq` comparator function (see `stdlib/aivi/list.aivi` — `contains` takes an `eq` function parameter).
+**Important**: `==` / `!=` at generic type require an `Eq` constraint at the definition site, and
+surface `!=` reuses the same `Eq` evidence as `==`. For polymorphic code, pass an explicit `eq`
+comparator function (see `stdlib/aivi/list.aivi` — `contains` takes an `eq` function parameter).
 
 ## Domains
 

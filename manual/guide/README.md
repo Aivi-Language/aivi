@@ -91,6 +91,7 @@ Classes and modules provide the extensibility layer. Read these after the five c
 | --- | --- |
 | [classes.md](classes.md) | Typeclass-style abstraction with `class` and `instance` |
 | [typeclasses.md](typeclasses.md) | Higher-kinded hierarchy, canonical executable support reference, HKT limits |
+| [class-laws.md](class-laws.md) | Laws and design boundaries for `Eq`, `Ord`, `Functor`, `Applicative`, `Monad`, and friends |
 | [modules.md](modules.md) | Module system: `use`, `export`, and file layout |
 
 ---

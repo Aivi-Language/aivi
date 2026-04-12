@@ -23,6 +23,10 @@ type Coord = Coord Int Int
 
 The implementation lives in `require_eq_with_scope()` and `require_compiler_derived_eq_with_scope()` in `crates/aivi-hir/src/typecheck/checker.rs:3340-3495`. The lower-level structural deriver in `crates/aivi-typing/src/eq.rs:523-731` mirrors this model and explicitly rejects open records, open sums, recursive derivations, and `Bytes`.
 
+User-facing docs should describe `!=` as surface inequality using the same `Eq` evidence as `==`.
+The current ambient prelude source still spells both operator names, but the semantic contract for this
+documentation slice is “author equality once; inequality follows from the same evidence”.
+
 ## Why demos still define `coordEq` / `cellEq`
 
 **Sources**: `demos/reversi.aivi`, `demos/snake.aivi`, `stdlib/aivi/list.aivi`, `stdlib/aivi/prelude.aivi`

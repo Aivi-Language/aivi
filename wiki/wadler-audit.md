@@ -14,4 +14,4 @@ Focused audit notes for the uniform-elegance cleanup backlog.
 - `Validation E` remains applicative and non-monadic.
 - `Task E` keeps its current builtin executable `Functor` / `Apply` / `Applicative` / `Chain` / `Monad` support.
 - `Traversable` support and traverse-result applicative support stay distinct: `Signal` is allowed only on the result-applicative side, and `Task` is excluded there.
-- Current `Eq` instances still expose both `(==)` and `(!=)` members, so docs in this slice should describe `!=` as an `Eq`-backed operator rather than as sugar.
+- Docs in this slice should describe `!=` as surface inequality using the same `Eq` evidence as `==`; do not teach separate `(!=)` instance bodies as the canonical user story.

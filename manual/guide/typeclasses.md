@@ -43,9 +43,10 @@ Bifunctor
 | `Functor F` | — | `map : (A -> B) -> F A -> F B` |
 | `Apply F` | `Functor F` | `apply : F (A -> B) -> F A -> F B` |
 | `Applicative F` | `Apply F` | `pure : A -> F A` |
+| `Chain M` | `Apply M` | `chain : (A -> M B) -> M A -> M B` |
 | `Monad M` | `Applicative M`, `Chain M` | `join : M (M A) -> M A` |
 | `Foldable F` | — | `reduce : (B -> A -> B) -> B -> F A -> B` |
-| `Traversable T` | `Functor T`, `Foldable T` | `traverse : Applicative G -> (A -> G B) -> T A -> G (T B)` |
+| `Traversable T` | `Functor T`, `Foldable T` | `traverse : Applicative G => (A -> G B) -> T A -> G (T B)` |
 | `Filterable F` | `Functor F` | `filterMap : (A -> Option B) -> F A -> F B` |
 | `Bifunctor F` | — | `bimap : (A -> C) -> (B -> D) -> F A B -> F C D` |
 
@@ -69,16 +70,18 @@ This registry-backed table is the canonical documentation source for builtin exe
 - The `Monad` column means builtin executable lowering for `chain` and `join`; `Chain` uses the same registry entries.
 - `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.
 - `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.
-- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.
+- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `chain`.
 - `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
 <!-- END builtin-executable-support -->
+
+For the law contract behind this hierarchy and the rationale for why `Signal` and `Validation`
+intentionally stop at `Applicative`, see [Class Laws & Design Boundaries](/guide/class-laws).
 
 ## Comparison classes
 
 `Eq A` and `Ord A` are the comparison-facing classes in the ambient prelude:
 
-- `Eq A` backs `==` and `!=`.
-- Current `Eq` instances provide both `(==)` and `(!=)` members.
+- `Eq A` backs `==`; surface `!=` reuses the same `Eq` evidence and behaves as inequality syntax over equality.
 - `Ord A` exposes the primitive member `compare : A -> A -> Ordering`.
 - Ordinary `<`, `>`, `<=`, and `>=` are derived from `Ord.compare`; they are not separate class members.
 - Operator sections like `(<)` and `(>=)` follow the same `Ord.compare` lowering rule.
@@ -93,11 +96,6 @@ domain Calendar over Int = {
     type toDays : Calendar -> Int
 }
 
-instance Eq Calendar = {
-    (==) = left right => toDays left == toDays right
-    (!=) = left right => toDays left != toDays right
-}
-
 instance Ord Calendar = {
     compare = left right => compare (toDays left) (toDays right)
 }
@@ -105,9 +103,14 @@ instance Ord Calendar = {
 type Calendar -> Calendar -> Bool
 func inOrder = start finish =>
     start <= finish
+
+value differentWeek : Bool = 10day != 12day
 ```
 
-You do not need to author separate domain members for `<`, `>`, `<=`, or `>=`; those operators come from `Ord`. Exported ordinary instances also travel across module boundaries, so imported values of that type pick up the same operators.
+You normally explain equality once and let surface `!=` reuse that same evidence. You also do not need
+to author separate domain members for `<`, `>`, `<=`, or `>=`; those operators come from `Ord`.
+Exported ordinary instances also travel across module boundaries, so imported values of that type pick
+up the same operators.
 
 ## User-authored higher-kinded classes and instances
 
@@ -130,5 +133,6 @@ In practice, unary user-authored higher-kinded classes and instances are trustwo
 ## Related pages
 
 - [Classes](/guide/classes) for syntax and local examples
+- [Class Laws & Design Boundaries](/guide/class-laws) for the semantic contract behind each class
 - [Pipes & Operators](/guide/pipes) for `*|>` and applicative clustering with `&|>`
 - [aivi.prelude](/stdlib/prelude) for the ambient types and class names

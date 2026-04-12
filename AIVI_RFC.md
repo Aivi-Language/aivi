@@ -2,7 +2,7 @@
 
 ## Draft v1.0 — implementation-facing resolved pass
 
-> Status: normative working draft with implementation choices merged. Working: surface parsing, name resolution, HIR, type/kind checking, constraint resolution, closed-ADT and record lowering, `Eq`/`Functor`/`Applicative` class and instance checking, Cranelift AOT codegen, GTK/libadwaita widget bridge, signal graph scheduling, source provider catalog (HTTP, fs, timer, D-Bus, process), and CLI execute/fmt/check. Known open gaps: HKT end-to-end through native Cranelift lowering, signal merge runtime wiring, `&|>` typed-core lowering. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
+> Status: normative working draft with implementation choices merged. Working: surface parsing, name resolution, HIR, type/kind checking, constraint resolution, closed-ADT and record lowering, current builtin executable support for `Eq`/`Ord`/`Functor`/`Apply`/`Applicative`/`Chain`/`Monad`/`Foldable`/`Traversable`/`Filterable`/`Bifunctor`, imported unary authored evidence where selection is concrete, Cranelift AOT codegen, GTK/libadwaita widget bridge, signal graph scheduling, source provider catalog (HTTP, fs, timer, D-Bus, process), and CLI execute/fmt/check. Known open gaps: generalized user-authored HKT execution through native Cranelift lowering beyond the current concrete-evidence slice, signal merge runtime wiring. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
 
 ---
 
@@ -757,7 +757,7 @@ Parser-accurate rules:
 - class bodies contain same-indent lines of:
   - `with <Constraint>`
   - `require <Constraint>`
-  - `<member> : [ConstraintPrefix ->] <Type>`
+  - `<member> : [ConstraintPrefix =>] <Type>`
 - class and instance member names may be identifiers or parenthesized operators such as `(==)`
 - `with` and `require` are soft keywords only inside class bodies and only when not immediately followed by `:`
 - `require` is the implemented keyword; `requires` is not syntax
@@ -837,11 +837,13 @@ No `Foldable Task` or `Foldable Signal` instance in v1.
 ```aivi
 class Eq A = {
     type (==) : A -> A -> Bool
-    type (!=) : A -> A -> Bool
 }
 ```
 
-`Eq` currently exposes both comparison operators as class members. Authored instances must implement both `(==)` and `(!=)` exactly once.
+`Eq` is specified in terms of equality itself. Surface `!=` reuses the same `Eq` evidence and is
+defined as inequality syntax over `==`, so authored instances explain equality once via `(==)`. The
+implementation may lower `!=` directly, but it must remain semantically equivalent to negated equality
+over the same evidence.
 
 `Eq` uses the ordinary class/instance resolution rules in §7.1. Compiler-derived and builtin evidence covers the executable surface; user-authored `Eq` instances beyond same-module explicit evidence remain deferred.
 
@@ -872,14 +874,24 @@ Derived equality is structural and type-directed:
 
 `Validation E` is **not** a `Monad`. The intended accumulation semantics are applicative rather than dependent short-circuiting.
 
-### 7.5 Laws
+### 7.5 Laws and guidance
 
 Normative for lawful instances:
 
 - `Eq`: reflexivity, symmetry, transitivity
+- `Ord`: `compare` agrees with `Eq` and defines a total, antisymmetric, transitive ordering
 - `Functor`: identity, composition
+- `Apply`: applicative-style composition
 - `Applicative`: identity, homomorphism, interchange, composition
-- `Monad`: left identity, right identity, associativity
+- `Chain`: associativity
+- `Monad`: left identity, right identity, associativity; `join` and `chain` must describe the same sequencing
+- `Foldable`: `reduce` visits elements in the carrier's declared order and treats empty/singleton shapes consistently
+- `Traversable`: identity, naturality, composition, and shape preservation
+- `Filterable`: `filterMap` may drop or rewrite positions, but must not reorder or duplicate them; `filterMap Some = id`
+- `Bifunctor`: identity and composition in both arguments
+
+These design boundaries are why `Signal` intentionally stops at `Applicative` and why `Validation E`
+keeps its accumulation story at `Applicative` rather than `Monad`.
 
 The compiler is not required to prove these laws.
 

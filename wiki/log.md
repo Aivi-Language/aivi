@@ -27,6 +27,14 @@ Added [uniform-elegance-refactor.md](uniform-elegance-refactor.md) so the refact
 Chose the canonical public direction for `aivi.prelude`: class-polymorphic first, carrier-specific helpers second.  
 Added [prelude-surface-policy.md](prelude-surface-policy.md) so later stdlib cleanup tasks have a fixed target instead of drifting design.
 
+## [2026-04-12] ingest | class laws documentation
+
+Aligned the manual, RFC, and wiki on executable class support, law coverage, and the non-monadic
+`Signal` / `Validation` boundaries.
+Added [class-laws.md](class-laws.md), linked the manual guide to the new laws page, updated the
+canonical `Task` support story, and changed the docs slice to teach `!=` as surface inequality over
+the same `Eq` evidence instead of a second canonical instance body.
+
 ## [2026-04-06] ingest | Initial wiki seeded from codebase
 
 Seeded wiki from source files in `src/`, `crates/`, `manual/`, `stdlib/`, `syntax.md`, `AIVI_RFC.md`.  

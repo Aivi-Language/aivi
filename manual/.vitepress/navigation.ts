@@ -98,6 +98,7 @@ const guideSections: DocSection[] = [
     items: [
       { text: 'Classes', link: '/guide/classes' },
       { text: 'Typeclasses & HKTs', link: '/guide/typeclasses' },
+      { text: 'Class Laws & Boundaries', link: '/guide/class-laws' },
       { text: 'Modules', link: '/guide/modules' },
     ],
   },
