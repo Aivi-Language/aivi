@@ -669,6 +669,55 @@ value matrixRows:List (List Int) =
 }
 
 #[test]
+fn jit_engine_supports_checked_matrix_filled() {
+    let backend = lower_text(
+        "backend-engine-matrix-filled.aivi",
+        r#"
+use aivi.matrix (
+    Matrix,
+    MatrixError,
+    filled,
+    width,
+    rows
+)
+
+value filledResult:Result MatrixError (Matrix Int) =
+    filled 2 3 9
+
+value filledWidth:Int =
+    filled 2 3 9
+    ||> Ok matrix -> width matrix
+    ||> Err _ -> -1
+
+value filledRows:List (List Int) =
+    filled 2 2 9
+    ||> Ok matrix -> rows matrix
+    ||> Err _ -> []
+
+value filledNegative:Int =
+    filled -1 2 9
+    ||> Ok _ -> 1
+    ||> Err _ -> -1
+"#,
+    );
+    let executable = BackendExecutableProgram::interpreted(&backend);
+    let mut jit = executable.create_engine();
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let globals = BTreeMap::new();
+
+    for name in ["filledResult", "filledWidth", "filledRows", "filledNegative"] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            jit.evaluate_item(item, &globals)
+                .unwrap_or_else(|_| panic!("JIT engine should evaluate `{name}`")),
+            interpreter
+                .evaluate_item(item, &globals)
+                .unwrap_or_else(|_| panic!("interpreter should evaluate `{name}`"))
+        );
+    }
+}
+
+#[test]
 fn jit_engine_matches_interpreter_results_for_supported_and_fallback_items() {
     let backend = lower_text(
         "backend-engine-parity.aivi",

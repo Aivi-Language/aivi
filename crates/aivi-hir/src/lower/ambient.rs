@@ -597,10 +597,13 @@ func __aivi_matrix_init = width height build => width < 0
     T|> Err (NegativeWidth width)
     F|> __aivi_matrix_initHeight width height build
 
-type Int -> Int -> (Int -> Int -> A) -> Matrix A
-func __aivi_matrix_filled = w h build => w < 0 or h < 0
-    T|> MkMatrix 0 0 []
-    F|> MkMatrix w h (__aivi_matrix_buildRows w h build)
+type A -> Int -> Int -> A
+func __aivi_matrix_filledCell = value x y =>
+    value
+
+type Int -> Int -> A -> Result MatrixError (Matrix A)
+func __aivi_matrix_filled = w h value =>
+    __aivi_matrix_init w h (__aivi_matrix_filledCell value)
 
 type (A -> Bool) -> Int -> A -> Int
 func __aivi_matrix_countCell = predicate total item => predicate item

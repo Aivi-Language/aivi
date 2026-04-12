@@ -106,7 +106,7 @@ Overview of the AIVI standard library modules. All modules live in `stdlib/aivi/
 
 ## Prelude Auto-Import
 
-`prelude.aivi` is implicitly imported into every AIVI module. It re-exports:
+`prelude.aivi` is implicitly imported into every AIVI module. Target direction for the cleanup backlog: keep prelude class-polymorphic first and carrier-specific wrappers secondary (see [prelude-surface-policy.md](prelude-surface-policy.md)). It currently re-exports:
 - `Option`, `Result`, `Either`, `Pair`, `NonEmpty`
 - `List` operations
 - `Eq`, `Ord`, `Functor`, `Foldable`, common operators

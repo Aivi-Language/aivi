@@ -22,6 +22,11 @@ the preferred `first` / `second` pair naming surface.
 Codified the non-negotiable invariants, forbidden end states, and done criteria for the Wadler-driven cleanup backlog.  
 Added [uniform-elegance-refactor.md](uniform-elegance-refactor.md) so the refactor cannot stop at dual paths, doc drift, or partial stdlib cleanup.
 
+## [2026-04-12] add | prelude surface policy
+
+Chose the canonical public direction for `aivi.prelude`: class-polymorphic first, carrier-specific helpers second.  
+Added [prelude-surface-policy.md](prelude-surface-policy.md) so later stdlib cleanup tasks have a fixed target instead of drifting design.
+
 ## [2026-04-06] ingest | Initial wiki seeded from codebase
 
 Seeded wiki from source files in `src/`, `crates/`, `manual/`, `stdlib/`, `syntax.md`, `AIVI_RFC.md`.  

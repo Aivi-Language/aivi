@@ -122,6 +122,10 @@ func init = width height build => validateInitWidth width height build
  ||> Ok builtRows -> Ok (buildMatrix width height builtRows)
  ||> Err error    -> Err error
 
+type A -> Int -> Int -> A
+func filledCell = value x y =>
+    value
+
 type List (List A) -> Result MatrixError (Matrix A)
 func fromRows = inputRows => validateRows inputRows
  ||> Ok validRows -> Ok (buildMatrix (rowWidth validRows) (listLength validRows) validRows)
@@ -245,9 +249,8 @@ type Matrix A -> (List (MatrixIndex, A)) -> (Option (Matrix A))
 func replaceMany = matrix updates =>
     reduce replaceManyStep (Some matrix) updates
 
-type Int -> Int -> (Int -> Int -> A) -> Matrix A
-func filled = w h build => w < 0 or h < 0
- T|> MkMatrix 0 0 []
- F|> MkMatrix w h (buildRows w h build)
+type Int -> Int -> A -> Result MatrixError (Matrix A)
+func filled = w h value =>
+    init w h (filledCell value)
 
 export (MatrixError, NegativeWidth, NegativeHeight, RaggedRows, Matrix, MatrixIndex, init, fromRows, filled, width, height, rows, row, at, replaceAt, coord, mapWithIndex, reduceWithIndex, coords, entries, positionsWhere, count, modifyAt, replaceMany, indices)

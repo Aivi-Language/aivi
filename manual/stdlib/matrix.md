@@ -14,6 +14,7 @@ use aivi.matrix (
     MatrixIndex
     MatrixError
     init
+    filled
     fromRows
     width
     height
@@ -42,6 +43,7 @@ use aivi.matrix (
 | `coord` | `Int -> Int -> MatrixIndex` | Construct a `MatrixIndex` from zero-based `x` and `y` |
 | `MatrixError` | sum type | Constructor and validation errors |
 | `init` | `Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)` | Build a matrix from coordinates |
+| `filled` | `Int -> Int -> A -> Result MatrixError (Matrix A)` | Build a matrix filled with one repeated value |
 | `fromRows` | `List (List A) -> Result MatrixError (Matrix A)` | Validate an existing nested-list shape |
 | `width` | `Matrix A -> Int` | Number of columns |
 | `height` | `Matrix A -> Int` | Number of rows |
@@ -67,22 +69,23 @@ type MatrixError =
   | RaggedRows Int Int Int
 ```
 
-- `NegativeWidth w` means `init` was called with a negative width.
-- `NegativeHeight h` means `init` was called with a negative height.
+- `NegativeWidth w` means `init` or `filled` was called with a negative width.
+- `NegativeHeight h` means `init` or `filled` was called with a negative height.
 - `RaggedRows rowIndex expected actual` means `fromRows` found a row whose length did not match the
   first row. `rowIndex` is zero-based.
 
-## `init` and `fromRows`
+## `init`, `filled`, and `fromRows`
 
-`init width height build` calls `build x y` for every zero-based coordinate in the rectangle. Use
-`fromRows` when you already have nested lists and want AIVI to validate that every row has the same
-length.
+`init width height build` calls `build x y` for every zero-based coordinate in the rectangle.
+`filled width height value` uses one repeated value for every cell. Use `fromRows` when you already
+have nested lists and want AIVI to validate that every row has the same length.
 
 ```aivi
 use aivi.matrix (
     Matrix
     MatrixError
     init
+    filled
     fromRows
 )
 
@@ -91,6 +94,8 @@ func seatNumber = x y =>
     x + y * 100
 
 value built : Result MatrixError (Matrix Int) = init 3 2 seatNumber
+
+value blank : Result MatrixError (Matrix Text) = filled 3 2 "."
 
 value fromExisting : Result MatrixError (Matrix Text) =
     fromRows [

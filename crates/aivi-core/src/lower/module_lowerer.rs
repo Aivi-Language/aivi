@@ -2680,7 +2680,7 @@ impl<'a> ModuleLowerer<'a> {
         // Guard: only fire this heuristic when `callable_type` is None — constructors are
         // exported without a callable_type, while regular functions always set callable_type.
         // Without this guard a regular stdlib function like
-        //   `filled : Int -> Int -> (Int -> Int -> A) -> Matrix A`
+        //   `filled : Int -> Int -> A -> Result MatrixError (Matrix A)`
         // (result type Named("Matrix")) would be misidentified as a constructor,
         // producing a fake Sum value at runtime instead of calling the real function body.
         if let ImportBindingMetadata::Value { ty } = &binding.metadata
