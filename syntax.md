@@ -79,32 +79,29 @@ func same = v =>
     v == v
 
 type Int -> Int -> Int
-func addFrom = amount value!
+func addFrom = amount value => value
   |> add amount
 
 type Counter -> Int -> Counter
-func bump = counter! delta
+func bump = counter delta => counter
     <| {
         total: counter.total + delta
     }
 
 type State -> Int
-func readNested = state { x.y.z! }
+func readNested = state => state.x.y.z
   |> addOne
 ```
 
 Rules:
 
 - `value` = constant binding only; uses `=`.
-- `func` = function declaration; uses `=` after the name, then either parameters plus `=>`, unary subject sugar rooted at `.`, or selected-subject header sugar rooted at `param!` / `param { path! }`.
+- `func` = function declaration; uses `=` after the name, then parameters plus `=>`.
 - Anonymous lambda expressions also use `=>` and may take one or more named parameters: `value isCell = coord => coord == cell`, `value next = 0 |> x => x + 1`.
 - Function signatures live on a preceding `type` line: `type Int -> Int -> Int`.
 - Inside `from` blocks, the same standalone `type` line form attaches to the immediately following entry.
 - `func` headers keep parameters unannotated: `func add = x y => ...`.
-- Unary subject sugar is available for single-argument functions whose body starts from that argument: `func headOrFallback = .`, `func status = .status`, `func scoreLineFor = "Score: {.}"`.
 - Shorthand subject lambdas are available only for unary composed dot-rooted expressions: `. == cell` means `value => value == cell`, `.score >= threshold` means `value => value.score >= threshold`. Bare `.` and `.field` keep their existing ambient-subject meaning.
-- Selected-subject header sugar is available when one explicit parameter should seed the following continuation: `func addFrom = amount value! |> add amount`, `func bump = counter! delta <| { total: counter.total + delta }`.
-- Record-selector subject picks are projection sugar over the immediately preceding named parameter: `func readNested = state { x.y.z! } |> addOne`.
 - Ignored unary inputs stay explicit: `func constant = _ => ...`.
 - Constraint prefixes, when present, live on the `type` line: `type Eq A => A -> Bool`.
 - `value` is a contextual keyword and can still be a parameter name:
@@ -134,7 +131,7 @@ type Player = {
     | Human
     | Computer
 
-    type Player -> Player
+    type opponent : Player -> Player
     opponent = self => self
      ||> Human    -> Computer
      ||> Computer -> Human
@@ -152,31 +149,34 @@ Rules:
 - In a companion sum body, constructors must come before companion members.
 - Companion members elaborate to ordinary top-level callables and use ordinary `use` / `export`
   rules.
-- Companion member `type` lines spell the full function type, including the receiver. Bodies use
-  ordinary function forms such as `name = self => ...` or the receiver-only shorthand `name = . ...`.
+- Companion member `type` lines spell the full function type, including the receiver.
+- Companion member bodies use ordinary function forms such as `name = self => ...`.
 
 ### 2.4 `class` and `instance`
 
 ```aivi
-class Eq A
-    (==) : A -> A -> Bool
+class Eq A = {
+    type (==) : A -> A -> Bool
+}
 
-class Applicative F
+class Applicative F = {
     with Apply F
-    pure : A -> F A
+    type pure : A -> F A
+}
 
-instance Eq A => Eq (Option A)
-    (==) left right = True
+instance Eq A => Eq (Option A) = {
+    (==) = left right => True
+}
 ```
 
 Rules:
 
-- Class head: `class <Name> <TypeParam>+`
+- Class head: `class <Name> <TypeParam>+ = { ... }`
 - Superclasses use body-level `with <Constraint>`.
 - Per-parameter constraints use body-level `require <Constraint>`.
-- Class members have shape `<member> : [ConstraintPrefix ->] <Type>`.
-- Instance heads may use constraint prefixes: `instance Eq A -> Eq (Option A)`.
-- Instance member bodies use `=`, not `=>`.
+- Class members have shape `type <member> : [ConstraintPrefix =>] <Type>`.
+- Instance heads may use constraint prefixes: `instance Eq A => Eq (Option A)`.
+- Instance member bodies use `name = expr` or `name = arg1 arg2 => expr`.
 - `implements` is **not** syntax.
 - `requires` is **not** syntax; use `require`.
 - Overlapping instances are not allowed.
@@ -187,18 +187,22 @@ Rules:
 
 ```aivi
 domain Duration over Int = {
-    suffix ms : Int = n => Duration n
-    suffix sec : Int = n => Duration (n * 1000)
-    millis : Int -> Duration
+    suffix ms
+    type ms : Int
+    ms = n => Duration n
+    suffix sec
+    type sec : Int
+    sec = n => Duration (n * 1000)
+    type millis : Int -> Duration
     millis = raw => raw
-    toMillis : Duration -> Int
+    type toMillis : Duration -> Int
     toMillis = duration => duration
 }
 
 domain Url over Text = {
-    parse : Text -> Result UrlError Url
-    scheme : Url -> Option Text
-    host : Url -> Option Text
+    type parse : Text -> Result UrlError Url
+    type scheme : Url -> Option Text
+    type host : Url -> Option Text
 }
 ```
 
@@ -209,13 +213,13 @@ Rules:
 - Unwrapping is explicit.
 - No implicit casts to/from the carrier.
 - Domain bodies use brace syntax: `domain Name over Carrier = { ... }`.
-- Domain members use ordinary same-name annotations: `member : TypeExpr`.
+- Domain members use `type member : TypeExpr`.
 - Callable domain members participate in ordinary term lookup.
 - Callable domain members may include an authored body of the form `name = expr`. When the body is function-shaped, the canonical surface is `name = arg1 arg2 => expr`.
 - Authored bodies may use the contextual keyword `self` to refer to the domain-typed receiver. When `self` is used, the type annotation may omit the domain type from the first position because it is implicit. When `self` is not used, the annotation is the full type.
 - Authored bodies are checked against the carrier view of the current domain, while the public signature remains nominal.
 - Bodyless members stay as annotation-only declarations.
-- Domain suffixes use `suffix name : BaseType = expr` syntax.
+- Domain suffixes use `suffix name`, followed by `type name : BaseType` and an ordinary body binding.
 - Unary domain methods can also be projected with `value.member`.
 - Domain projection is still explicit member dispatch; it does not imply implicit carrier casts.
 

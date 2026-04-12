@@ -22,16 +22,16 @@ use aivi.color (Color)
 
 ```aivi
 domain Color over Int = {
-    argb : Int -> Color
-    red : Color -> Int
-    green : Color -> Int
-    blue : Color -> Int
-    alpha : Color -> Int
-    withAlpha : Color -> Int -> Color
-    withRed : Color -> Int -> Color
-    withGreen : Color -> Int -> Color
-    withBlue : Color -> Int -> Color
-    blend : Color -> Color -> Float -> Color
+    type argb : Int -> Color
+    type red : Color -> Int
+    type green : Color -> Int
+    type blue : Color -> Int
+    type alpha : Color -> Int
+    type withAlpha : Color -> Int -> Color
+    type withRed : Color -> Int -> Color
+    type withGreen : Color -> Int -> Color
+    type withBlue : Color -> Int -> Color
+    type blend : Color -> Color -> Float -> Color
 }
 ```
 

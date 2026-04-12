@@ -5,11 +5,17 @@ use aivi.api (
 
 use aivi.http (DecodeMode)
 
-domain Duration over Int
-    suffix sec : Int = value => Duration value
+domain Duration over Int = {
+    suffix sec
+    type sec : Int
+    sec = value => Duration value
+}
 
-domain Retry over Int
-    suffix times : Int = value => Retry value
+domain Retry over Int = {
+    suffix times
+    type times : Int
+    times = value => Retry value
+}
 
 type Pet = {
     id: Int,

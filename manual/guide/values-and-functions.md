@@ -104,7 +104,7 @@ Function bodies are still just expressions, so multi-line definitions usually le
 
 ```aivi
 type Int -> Text
-func describeScore = . >= 50
+func describeScore = arg1 => arg1 >= 50
  T|> "good"
  F|> "keep going"
 
@@ -127,7 +127,7 @@ When a unary function starts from its argument directly, you can omit the explic
 
 ```aivi
 type Text -> Text
-func trimStatus = .
+func trimStatus = arg1 => arg1
  ||> " ready " -> "ready"
  ||> _         -> .
 ```
@@ -136,10 +136,12 @@ The same shorthand works for subject projections and text interpolation:
 
 ```aivi
 type GameState -> Text
-func statusLineFor = .status
+func statusLineFor = arg1 =>
+    arg1.status
 
 type Int -> Text
-func scoreLineFor = "Score: {.}"
+func scoreLineFor = arg1 =>
+    "Score: {arg1}"
 ```
 
 If the unary input is intentionally ignored, write `_ => ...` explicitly:
@@ -161,7 +163,7 @@ func add = left right =>
     left + right
 
 type Int -> Int -> Int
-func addFrom = amount value!
+func addFrom = amount value => value
   |> add amount
 
 value total = addFrom 2 40
@@ -177,8 +179,8 @@ type Counter = {
 }
 
 type Counter -> Int -> Counter
-func bump = counter! amount
-    <| {
+func bump = counter amount =>
+    counter <| {
         total: counter.total + amount,
         ready: True,
     }
@@ -200,7 +202,7 @@ func addOne = value =>
     value + 1
 
 type X -> Int
-func readNested = state { x.y.z! }
+func readNested = state => state.x.y.z
   |> addOne
 
 value nestedTotal =
@@ -299,7 +301,7 @@ stable name:
 
 ```aivi
 type Text -> Text
-func trimStatus = .
+func trimStatus = arg1 => arg1
  ||> " ready " -> "ready"
  ||> _         -> .
 

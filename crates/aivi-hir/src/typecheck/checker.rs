@@ -451,7 +451,7 @@ impl<'a> TypeChecker<'a> {
             };
             let Some(expected) = self
                 .typing
-                .lower_domain_member_implementation_type(owner, member.annotation)
+                .lower_domain_member_implementation_type(owner, member.kind, member.annotation)
             else {
                 continue;
             };

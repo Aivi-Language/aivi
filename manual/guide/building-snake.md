@@ -83,7 +83,7 @@ Every piece of game logic is a pure function. Let us start with direction:
 
 ```aivi
 type Direction -> Direction
-func opposite = .
+func opposite = arg1 => arg1
  ||> North -> South
  ||> South -> North
  ||> East  -> West
@@ -112,7 +112,7 @@ value boardW = 30
 value boardH = 20
 
 type Cell -> Bool
-func outside = .
+func outside = arg1 => arg1
  ||> Cell x y -> x < 0 or x >= boardW or y < 0 or y >= boardH
 ```
 
@@ -148,19 +148,19 @@ The snake is a non-empty list of cells, but we want richer operations than a pla
 
 ```aivi
 domain Snake over NonEmptyList Cell = {
-    fromCells : NonEmptyList Cell -> Snake
+    type fromCells : NonEmptyList Cell -> Snake
     fromCells = cells => cells
-    head : Cell
+    type head : Cell
     head = nelHead self
-    contains : Cell -> Bool
+    type contains : Cell -> Bool
     contains = cell => listContains (cellEq cell) (toList self)
-    length : Int
+    type length : Int
     length = nelLength self
-    grow : Cell -> Snake
+    type grow : Cell -> Snake
     grow = cell => cons cell self
-    move : Cell -> Snake
+    type move : Cell -> Snake
     move = cell => fromHeadTail cell (nelInit self)
-    nextHead : Direction -> Cell
+    type nextHead : Direction -> Cell
     nextHead = dir => moveDir dir (nelHead self)
 }
 ```
@@ -386,25 +386,27 @@ Several small functions format the status display using text interpolation:
 
 ```aivi
 type Direction -> Text
-func dirLabel = .
+func dirLabel = arg1 => arg1
  ||> North -> "Up"
  ||> South -> "Down"
  ||> East  -> "Right"
  ||> West  -> "Left"
 
 type Status -> Text
-func statusLineFor = .
+func statusLineFor = arg1 => arg1
  ||> Running  -> "Running"
  ||> GameOver -> "Game Over"
 
 type Int -> Text
-func scoreLineFor = "Score: {.}"
+func scoreLineFor = arg1 =>
+    "Score: {arg1}"
 
 type Int -> Text
-func finalScoreLineFor = "Final score: {.}"
+func finalScoreLineFor = arg1 =>
+    "Final score: {arg1}"
 
 type Status -> Bool
-func isGameOver = .
+func isGameOver = arg1 => arg1
  ||> Running  -> False
  ||> GameOver -> True
 ```

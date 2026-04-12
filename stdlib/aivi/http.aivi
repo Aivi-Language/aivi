@@ -25,8 +25,11 @@ type DecodeMode =
   | Strict
   | Permissive
 
-domain Retry over Int
-    suffix times : Int = n => Retry n
+domain Retry over Int = {
+    suffix times
+    type times : Int
+    times = n => Retry n
+}
 
 value contentTypeJson : ContentType = "application/json"
 value contentTypeForm : ContentType = "application/x-www-form-urlencoded"

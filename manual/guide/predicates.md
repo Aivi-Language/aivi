@@ -23,7 +23,8 @@ type User = {
 }
 
 type { users: List User } -> { users: List User }
-func promoteActive = .
+func promoteActive = arg1 =>
+    arg1
 ```
 
 This updates the `role` field only for users where `.active` is `True`. Non-matching users are left unchanged.
@@ -49,7 +50,8 @@ type Item = {
 }
 
 type { items: List Item } -> { items: List Item }
-func discountExpensive = .
+func discountExpensive = arg1 =>
+    arg1
 ```
 
 ## Selectors

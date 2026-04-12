@@ -3,7 +3,7 @@ use std::fmt::Write;
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
     DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FromEntry, FromItem,
-    FunctionParam, FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item, LambdaExpr,
+    FunctionParam, Identifier, InstanceItem, InstanceMember, Item, LambdaExpr,
     LambdaSurfaceForm, MapExpr, MapExprEntry, MarkupAttribute, MarkupAttributeValue, MarkupNode,
     Module, NamedItem, PatchBlock, PatchEntry, PatchInstruction, PatchInstructionKind,
     PatchSelector, PatchSelectorSegment, Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind,
@@ -412,16 +412,6 @@ impl Formatter {
 
     /// Format a `func` declaration using the canonical `=` head separator.
     fn format_fun_item(&self, item: &NamedItem) -> Vec<String> {
-        if item.function_form == FunctionSurfaceForm::UnarySubjectSugar
-            && let Some(lines) = self.try_format_unary_subject_fun_item(item)
-        {
-            return lines;
-        }
-        if item.function_form == FunctionSurfaceForm::SelectedSubjectSugar
-            && let Some(lines) = self.try_format_selected_subject_fun_item(item)
-        {
-            return lines;
-        }
         self.format_explicit_fun_item(item)
     }
 
@@ -1839,13 +1829,13 @@ impl Formatter {
     fn format_class_member(&self, member: &ClassMember) -> Vec<String> {
         let Some(annotation) = &member.annotation else {
             return vec![format!(
-                "{}{}:",
+                "{}type {}:",
                 spaces(INDENT_WIDTH),
                 self.format_class_member_name(&member.name)
             )];
         };
         let prefix = format!(
-            "{}{}{}",
+            "{}type {}{}",
             spaces(INDENT_WIDTH),
             self.format_class_member_name(&member.name),
             self.type_annotation_separator(&member.constraints, annotation)
@@ -1865,41 +1855,17 @@ impl Formatter {
 
     fn format_domain_member(&self, member: &DomainMember) -> Vec<String> {
         let mut lines = Vec::new();
-        let member_name = self.format_domain_member_name(&member.name);
+        let member_name = match &member.name {
+            DomainMemberName::Signature(name) => self.format_class_member_name(name),
+            DomainMemberName::Literal(identifier) => identifier.text.clone(),
+        };
 
-        // Suffix members keep their authored `suffix ms : Int = ...` surface.
         if matches!(member.name, DomainMemberName::Literal(_)) {
-            let mut header = format!("{}{}", spaces(INDENT_WIDTH), member_name);
-            if let Some(annotation) = &member.annotation {
-                header.push_str(" : ");
-                header.push_str(&self.format_type_inline(annotation, 0));
-            } else {
-                header.push(':');
-            }
-            if let Some(body) = &member.body {
-                let force_break =
-                    self.should_force_expr_break(display_width(&format!("{header} = ")), body);
-                let block = self.format_expr_block(body, force_break);
-                if block.is_inline() {
-                    lines.push(format!(
-                        "{header} = {}",
-                        block.inline_text().expect("inline block")
-                    ));
-                } else if block.starts_with_delimiter() {
-                    lines.extend(block.prefixed(&format!("{header} = ")).into_lines());
-                } else {
-                    lines.push(format!("{header} ="));
-                    lines.extend(block.indented(INDENT_WIDTH).into_lines());
-                }
-            } else {
-                lines.push(header);
-            }
-            return lines;
+            lines.push(format!("{}suffix {}", spaces(INDENT_WIDTH), member_name));
         }
 
-        // Signature members: emit a same-name annotation line in the canonical domain surface.
         if let Some(annotation) = &member.annotation {
-            let prefix = format!("{}{} : ", spaces(INDENT_WIDTH), member_name);
+            let prefix = format!("{}type {} : ", spaces(INDENT_WIDTH), member_name);
             let force_break = self.should_force_type_break(display_width(&prefix), annotation);
             let block = self.format_type_block(annotation, force_break);
             if block.is_inline() {
@@ -1912,11 +1878,10 @@ impl Formatter {
             }
         }
 
-        // Emit the member name line
         let mut header = format!("{}{}", spaces(INDENT_WIDTH), member_name);
 
         let Some(body) = &member.body else {
-            if member.annotation.is_none() {
+            if member.annotation.is_none() && !matches!(member.name, DomainMemberName::Literal(_)) {
                 lines.push(header);
             }
             return lines;
@@ -1962,16 +1927,6 @@ impl Formatter {
     }
 
     fn format_type_companion_member(&self, member: &crate::TypeCompanionMember) -> Vec<String> {
-        if member.function_form == FunctionSurfaceForm::UnarySubjectSugar
-            && let Some(lines) = self.try_format_unary_subject_type_companion_member(member)
-        {
-            return lines;
-        }
-        if member.function_form == FunctionSurfaceForm::SelectedSubjectSugar
-            && let Some(lines) = self.try_format_selected_subject_type_companion_member(member)
-        {
-            return lines;
-        }
         self.format_explicit_type_companion_member(member)
     }
 
@@ -2087,7 +2042,7 @@ impl Formatter {
         member: &crate::TypeCompanionMember,
     ) {
         if let Some(annotation) = &member.annotation {
-            let prefix = format!("{}type ", spaces(INDENT_WIDTH));
+            let prefix = format!("{}type {} : ", spaces(INDENT_WIDTH), member.name.text);
             let force_break = self.should_force_type_break(display_width(&prefix), annotation);
             let block = self.format_type_block(annotation, force_break);
             if block.is_inline() {
@@ -2102,32 +2057,51 @@ impl Formatter {
     }
 
     fn format_instance_member(&self, member: &InstanceMember) -> Vec<String> {
-        let mut header = format!(
+        let mut binding = format!(
             "{}{}",
             spaces(INDENT_WIDTH),
             self.format_class_member_name(&member.name)
         );
-        for parameter in &member.parameters {
-            header.push(' ');
-            header.push_str(&parameter.text);
-        }
-
         let Some(body) = &member.body else {
-            return vec![format!("{header} =")];
+            return vec![format!("{binding} =")];
         };
 
+        if member.parameters.is_empty() {
+            let force_break =
+                self.should_force_expr_break(display_width(&format!("{binding} = ")), body);
+            let block = self.format_expr_block(body, force_break);
+            if block.is_inline() {
+                return vec![format!(
+                    "{binding} = {}",
+                    block.inline_text().expect("inline block")
+                )];
+            }
+            if block.starts_with_delimiter() {
+                return block.prefixed(&format!("{binding} = ")).into_lines();
+            }
+            let mut lines = vec![format!("{binding} =")];
+            lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
+            return lines;
+        }
+
+        binding.push_str(" =");
+        for parameter in &member.parameters {
+            binding.push(' ');
+            binding.push_str(&parameter.text);
+        }
+        binding.push_str(" =>");
         let force_break =
-            self.should_force_expr_break(display_width(&format!("{header} = ")), body);
+            self.should_force_expr_break(display_width(&format!("{binding} ")), body);
         let block = self.format_expr_block(body, force_break);
         if block.is_inline() {
             vec![format!(
-                "{header} = {}",
+                "{binding} {}",
                 block.inline_text().expect("inline block")
             )]
         } else if block.starts_with_delimiter() {
-            block.prefixed(&format!("{header} = ")).into_lines()
+            block.prefixed(&format!("{binding} ")).into_lines()
         } else {
-            let mut lines = vec![format!("{header} =")];
+            let mut lines = vec![binding];
             lines.extend(block.indented(INDENT_WIDTH * 2).into_lines());
             lines
         }
@@ -3969,7 +3943,7 @@ mod tests {
             formatted,
             concat!(
                 "class Eq A = {\n",
-                "    (==) : A -> A -> Bool\n",
+                "    type (==) : A -> A -> Bool\n",
                 "}\n",
                 "\n",
                 "type Int -> Int -> Bool\n",
@@ -4011,13 +3985,17 @@ value view =
             formatted,
             concat!(
                 "domain Duration over Int = {\n",
-                "    suffix ms : Int = value => Duration value\n",
-                "    (*) : Duration -> Int -> Duration\n",
+                "    suffix ms\n",
+                "    type ms : Int\n",
+                "    ms = value => Duration value\n",
+                "    type (*) : Duration -> Int -> Duration\n",
                 "}\n",
                 "\n",
                 "domain Path over Text = {\n",
-                "    suffix root : Text = value => Path value\n",
-                "    (/) : Path -> Text -> Path\n",
+                "    suffix root\n",
+                "    type root : Text\n",
+                "    root = value => Path value\n",
+                "    type (/) : Path -> Text -> Path\n",
                 "}\n",
             )
         );
@@ -4026,17 +4004,17 @@ value view =
     #[test]
     fn formatter_normalizes_instance_layout() {
         let formatted = format_text(
-            "class Eq A = {\n    (==):A -> A -> Bool\n}\n\ninstance Eq Blob = {\n    (==) left right=\n        same left right\n}\n",
+            "class Eq A = {\n    type (==):A -> A -> Bool\n}\n\ninstance Eq Blob = {\n    (==)=left right=>same left right\n}\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "class Eq A = {\n",
-                "    (==) : A -> A -> Bool\n",
+                "    type (==) : A -> A -> Bool\n",
                 "}\n",
                 "\n",
                 "instance Eq Blob = {\n",
-                "    (==) left right = same left right\n",
+                "    (==) = left right => same left right\n",
                 "}\n",
             )
         );
@@ -4045,7 +4023,7 @@ value view =
     #[test]
     fn formatter_normalizes_domain_member_bindings() {
         let formatted = format_text(
-            "type Builder = Int -> Duration\n\ndomain Duration over Int\n    make : Builder\n    make = raw => raw\n",
+            "type Builder = Int -> Duration\n\ndomain Duration over Int\n    type make:Builder\n    make=raw=>raw\n",
         );
         assert_eq!(
             formatted,
@@ -4053,7 +4031,7 @@ value view =
                 "type Builder = Int -> Duration\n",
                 "\n",
                 "domain Duration over Int = {\n",
-                "    make : Builder\n",
+                "    type make : Builder\n",
                 "    make = raw => raw\n",
                 "}\n",
             )
@@ -4063,7 +4041,7 @@ value view =
     #[test]
     fn formatter_preserves_class_with_and_require_declarations() {
         let formatted = format_text(
-            "class Applicative F = {\n    with Functor F\n    require Eq A\n    pureInt:F Int\n}\n",
+            "class Applicative F = {\n    with Functor F\n    require Eq A\n    type pureInt:F Int\n}\n",
         );
         assert_eq!(
             formatted,
@@ -4071,7 +4049,7 @@ value view =
                 "class Applicative F = {\n",
                 "    with Functor F\n",
                 "    require Eq A\n",
-                "    pureInt : F Int\n",
+                "    type pureInt : F Int\n",
                 "}\n",
             )
         );
@@ -4108,12 +4086,12 @@ value view =
 
     #[test]
     fn formatter_normalizes_percent_domain_operator_layout() {
-        let formatted = format_text("domain Bucket over Int\n    (%) : Bucket -> Int -> Bucket\n");
+        let formatted = format_text("domain Bucket over Int\n    type (%):Bucket -> Int -> Bucket\n");
         assert_eq!(
             formatted,
             concat!(
                 "domain Bucket over Int = {\n",
-                "    (%) : Bucket -> Int -> Bucket\n",
+                "    type (%) : Bucket -> Int -> Bucket\n",
                 "}\n",
             )
         );
@@ -4122,13 +4100,15 @@ value view =
     #[test]
     fn formatter_keeps_compact_domain_literal_suffixes() {
         let formatted = format_text(
-            "domain Duration over Int\n    suffix ms : Int = value => Duration value\nvalue delay:Duration=250ms\nvalue applied=wrap 250ms\n",
+            "domain Duration over Int\n    suffix ms\n    type ms:Int\n    ms=value=>Duration value\nvalue delay:Duration=250ms\nvalue applied=wrap 250ms\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "domain Duration over Int = {\n",
-                "    suffix ms : Int = value => Duration value\n",
+                "    suffix ms\n",
+                "    type ms : Int\n",
+                "    ms = value => Duration value\n",
                 "}\n",
                 "\n",
                 "value delay : Duration = 250ms\n",
@@ -4253,19 +4233,21 @@ value view =
     #[test]
     fn formatter_preserves_unary_subject_function_bodies() {
         let formatted = format_text(
-            "fun currentStatus:Text=.status\nfun scoreLineFor:Text=\"Score: { . }\"\nfun label:Text=.status|>trim\n",
+            "fun currentStatus:Text = current => current.status\nfun scoreLineFor:Text = score => \"Score: {score}\"\nfun label:Text = current => current.status|>trim\n",
         );
         assert_eq!(
             formatted,
             concat!(
                 "type Text\n",
-                "func currentStatus = .status\n",
+                "func currentStatus = current =>\n",
+                "    current.status\n",
                 "\n",
                 "type Text\n",
-                "func scoreLineFor = \"Score: {.}\"\n",
+                "func scoreLineFor = score =>\n",
+                "    \"Score: {score}\"\n",
                 "\n",
                 "type Text\n",
-                "func label = .status\n",
+                "func label = current => current.status\n",
                 "  |> trim\n",
             )
         );
@@ -4274,26 +4256,26 @@ value view =
     #[test]
     fn formatter_preserves_selected_subject_function_bodies() {
         let formatted = format_text(concat!(
-            "func flipsFromDirection = board player coord vector!\n",
+            "func flipsFromDirection = board player coord vector => vector\n",
             "|>rayFrom coord #ray\n",
             "|>collectRay board ray\n",
-            "func readNested = state {x.y.z!}\n",
+            "func readNested = state => state.x.y.z\n",
             "|>render\n",
-            "func recordOpponent = state! coord\n",
+            "func recordOpponent = state coord => state\n",
             "<|{collecting:True,closed:False,trail:[coord]}\n",
         ));
         assert_eq!(
             formatted,
             concat!(
-                "func flipsFromDirection = board player coord vector!\n",
+                "func flipsFromDirection = board player coord vector => vector\n",
                 "  |> rayFrom coord #ray\n",
                 "  |> collectRay board ray\n",
                 "\n",
-                "func readNested = state { x.y.z! }\n",
+                "func readNested = state => state.x.y.z\n",
                 "  |> render\n",
                 "\n",
-                "func recordOpponent = state! coord\n",
-                "    <| {\n",
+                "func recordOpponent = state coord =>\n",
+                "    state <| {\n",
                 "        collecting: True,\n",
                 "        closed: False,\n",
                 "        trail: [coord],\n",
@@ -4305,7 +4287,7 @@ value view =
     #[test]
     fn formatter_preserves_inline_annotated_type_companion_bodies() {
         let formatted = format_text(
-            "type Player = {\n    | Human\n    | Computer\n\n    opponent:Player -> Player=.\n     ||> Human    -> Computer\n     ||> Computer -> Human\n}\n",
+            "type Player = {\n    | Human\n    | Computer\n\n    type opponent:Player -> Player\n    opponent=arg1=>arg1\n     ||> Human    -> Computer\n     ||> Computer -> Human\n}\n",
         );
         assert_eq!(
             formatted,
@@ -4314,8 +4296,8 @@ value view =
                 "    | Human\n",
                 "    | Computer\n",
                 "\n",
-                "    type Player -> Player\n",
-                "    opponent = .\n",
+                "    type opponent : Player -> Player\n",
+                "    opponent = arg1 => arg1\n",
                 "     ||> Human    -> Computer\n",
                 "     ||> Computer -> Human\n",
                 "}\n",
@@ -4326,7 +4308,7 @@ value view =
     #[test]
     fn formatter_preserves_selected_subject_type_companion_bodies() {
         let formatted = format_text(
-            "type Player = {\n    | Human\n    | Computer\n\n    opponent:Player -> Player=self!\n     ||> Human    -> Computer\n     ||> Computer -> Human\n}\n",
+            "type Player = {\n    | Human\n    | Computer\n\n    type opponent:Player -> Player\n    opponent=self=>self\n     ||> Human    -> Computer\n     ||> Computer -> Human\n}\n",
         );
         assert_eq!(
             formatted,
@@ -4335,8 +4317,8 @@ value view =
                 "    | Human\n",
                 "    | Computer\n",
                 "\n",
-                "    type Player -> Player\n",
-                "    opponent = self!\n",
+                "    type opponent : Player -> Player\n",
+                "    opponent = self => self\n",
                 "     ||> Human    -> Computer\n",
                 "     ||> Computer -> Human\n",
                 "}\n",
@@ -4380,7 +4362,7 @@ value view =
     #[test]
     fn formatter_spaces_applied_and_constrained_annotations() {
         let formatted = format_text(
-            "fun wrap:Result Text Int = value:(Result Text Int) => value\nvalue active:Signal Bool=True\nclass Functor F = {\n    map:Applicative G=>(A -> G B) -> F A -> G (F B)\n}\n",
+            "fun wrap:Result Text Int = value:(Result Text Int) => value\nvalue active:Signal Bool=True\nclass Functor F = {\n    type map:Applicative G=>(A -> G B) -> F A -> G (F B)\n}\n",
         );
         assert_eq!(
             formatted,
@@ -4392,7 +4374,7 @@ value view =
                 "value active : Signal Bool = True\n",
                 "\n",
                 "class Functor F = {\n",
-                "    map : Applicative G => (A -> G B) -> F A -> G (F B)\n",
+                "    type map : Applicative G => (A -> G B) -> F A -> G (F B)\n",
                 "}\n",
             )
         );

@@ -1,5 +1,5 @@
 class Applicative F = {
-    pureInt : F Int
+    type pureInt : F Int
 }
 
 instance Applicative Option = {

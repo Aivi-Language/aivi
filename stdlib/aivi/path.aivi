@@ -14,13 +14,14 @@ type PathError =
   | InvalidPath Text
   | PathNotFound Text
 
-domain Path over Text
-    parse : Text -> Result PathError Path
-    (/) : Path -> Text -> Path
-    parent : Path -> Option Path
-    filename : Path -> Option Text
-    stem : Path -> Option Text
-    ext : Path -> Option Text
+domain Path over Text = {
+    type parse : Text -> Result PathError Path
+    type (/) : Path -> Text -> Path
+    type parent : Path -> Option Path
+    type filename : Path -> Option Text
+    type stem : Path -> Option Text
+    type ext : Path -> Option Text
+}
 
 type Text -> Bool
 func hasExtension = path => extension path

@@ -56,7 +56,7 @@ func add = left right =>
     left + right
 
 type Int -> Int -> Int
-func addFrom = amount value!
+func addFrom = amount value => value
   |> add amount
 
 value total = addFrom 2 40
@@ -133,7 +133,7 @@ type Status =
   | Archived
 
 type Status -> Text
-func statusLabel = .
+func statusLabel = arg1 => arg1
  ||> Draft     -> "draft"
  ||> Published -> "published"
  ||> Archived  -> "archived"
@@ -168,7 +168,7 @@ non-canonical carrier.
 
 ```aivi
 type Bool -> Text
-func availabilityLabel = .
+func availabilityLabel = arg1 => arg1
  T|> "ready"
  F|> "waiting"
 
@@ -179,7 +179,7 @@ value shownAvailability = availabilityLabel True
 type User = { name: Text }
 
 type Option User -> Text
-func userNameOrGuest = .
+func userNameOrGuest = arg1 => arg1
  T|> .name
  F|> "guest"
 
@@ -193,7 +193,7 @@ value shownUserName =
 
 ```aivi
 type Result Text Int -> Text
-func loadStatus = .
+func loadStatus = arg1 => arg1
  T|> "loaded"
  F|> .
 
@@ -486,7 +486,7 @@ Pipes must stay on the top-level expression spine. If you need a pipe inside ano
 
 ```aivi
 type Text -> Text
-func normalizeTitle = .
+func normalizeTitle = arg1 => arg1
  ||> "Inbox" -> "priority"
  ||> _       -> .
 

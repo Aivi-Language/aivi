@@ -7,37 +7,48 @@ use aivi.arithmetic (
 
 type DurationError = Text
 
-domain Duration over Int
-    suffix ms : Int = n => Duration n
-    suffix sec : Int = n => Duration (mul n 1000)
-    suffix min : Int = n => Duration (mul n 60000)
-    suffix hr : Int = n => Duration (mul n 3600000)
-    suffix dy : Int = n => Duration (mul n 86400000)
-    millis : Int -> Duration
+domain Duration over Int = {
+    suffix ms
+    type ms : Int
+    ms = n => Duration n
+    suffix sec
+    type sec : Int
+    sec = n => Duration (mul n 1000)
+    suffix min
+    type min : Int
+    min = n => Duration (mul n 60000)
+    suffix hr
+    type hr : Int
+    hr = n => Duration (mul n 3600000)
+    suffix dy
+    type dy : Int
+    dy = n => Duration (mul n 86400000)
+    type millis : Int -> Duration
     millis = n => n
-    toMillis : Duration -> Int
+    type toMillis : Duration -> Int
     toMillis = duration => duration
-    toSeconds : Duration -> Int
+    type toSeconds : Duration -> Int
     toSeconds = duration => div duration 1000
-    toMinutes : Duration -> Int
+    type toMinutes : Duration -> Int
     toMinutes = duration => div duration 60000
-    toHours : Duration -> Int
+    type toHours : Duration -> Int
     toHours = duration => div duration 3600000
-    toDays : Duration -> Int
+    type toDays : Duration -> Int
     toDays = duration => div duration 86400000
-    trySeconds : Int -> Result DurationError Duration
+    type trySeconds : Int -> Result DurationError Duration
     trySeconds = seconds =>
         seconds < 0
         T|> Err "Duration cannot be negative"
         F|> Ok (mul seconds 1000)
-    (+) : Duration -> Duration -> Duration
+    type (+) : Duration -> Duration -> Duration
     (+) = left right => left + right
-    (-) : Duration -> Duration -> Duration
+    type (-) : Duration -> Duration -> Duration
     (-) = left right => left - right
-    (*) : Duration -> Int -> Duration
+    type (*) : Duration -> Int -> Duration
     (*) = duration n => mul duration n
-    (<) : Duration -> Duration -> Bool
+    type (<) : Duration -> Duration -> Bool
     (<) = left right => left < right
+}
 
 export DurationError
 export Duration

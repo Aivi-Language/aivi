@@ -54,7 +54,7 @@ impl<'a> Parser<'a> {
 
         let mut companions = Vec::new();
         let mut pending_annotation: Option<TypeExpr> = None;
-        let mut pending_colon_member: Option<TypeCompanionMember> = None;
+        let mut pending_member: Option<TypeCompanionMember> = None;
 
         while let Some(index) = self.peek_nontrivia(*cursor, inner_end) {
             if self.tokens[index].line_start()
@@ -78,60 +78,14 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            if self.tokens[index].kind() == TokenKind::TypeKw {
-                if let Some(held) = pending_colon_member.take() {
-                    self.diagnostics.push(
-                        Diagnostic::error(format!(
-                            "type companion member `{}` is missing its binding",
-                            held.name.text
-                        ))
-                        .with_code(MISSING_TYPE_COMPANION_BODY)
-                        .with_primary_label(
-                            held.span,
-                            "expected a binding line after this companion type annotation",
-                        ),
-                    );
-                }
-                *cursor = index + 1;
-                let type_end = self
-                    .find_next_type_companion_member_start(*cursor, inner_end, member_indent)
-                    .unwrap_or(inner_end);
-                let annotation = self
-                    .parse_type_expr(cursor, type_end, TypeStop::default())
-                    .or_else(|| {
-                        self.diagnostics.push(
-                            Diagnostic::error(
-                                "type companion annotation is missing its type after `type`",
-                            )
-                            .with_code(MISSING_TYPE_COMPANION_TYPE)
-                            .with_primary_label(
-                                self.source_span_for_range(index, *cursor),
-                                "expected a type such as `Player -> Text`",
-                            ),
-                        );
-                        None
-                    });
-                *cursor = type_end;
-                pending_annotation = annotation;
-                continue;
-            }
-
             let before = *cursor;
-            let Some(mut member) =
-                self.parse_type_companion_member(cursor, inner_end, member_indent)
-            else {
-                break;
-            };
-
-            if let Some(annotation) = pending_annotation.take() {
-                member.annotation = Some(annotation);
-            }
-
-            if member.annotation.is_none()
-                && let Some(held) = pending_colon_member.take() {
-                    if held.name.text == member.name.text {
-                        member.annotation = held.annotation;
-                    } else {
+            let mut member = if self.tokens[index].kind() == TokenKind::TypeKw {
+                if let Some(member) =
+                    self.parse_typed_type_companion_member(cursor, inner_end, member_indent)
+                {
+                    member
+                } else {
+                    if let Some(held) = pending_member.take() {
                         self.diagnostics.push(
                             Diagnostic::error(format!(
                                 "type companion member `{}` is missing its binding",
@@ -140,15 +94,68 @@ impl<'a> Parser<'a> {
                             .with_code(MISSING_TYPE_COMPANION_BODY)
                             .with_primary_label(
                                 held.span,
-                                "expected a binding line with the same companion name",
+                                "expected a binding line after this companion type annotation",
                             ),
                         );
                     }
+                    *cursor = index + 1;
+                    let type_end = self
+                        .find_next_type_companion_member_start(*cursor, inner_end, member_indent)
+                        .unwrap_or(inner_end);
+                    let annotation = self
+                        .parse_type_expr(cursor, type_end, TypeStop::default())
+                        .or_else(|| {
+                            self.diagnostics.push(
+                                Diagnostic::error(
+                                    "type companion annotation is missing its type after `type`",
+                                )
+                                .with_code(MISSING_TYPE_COMPANION_TYPE)
+                                .with_primary_label(
+                                    self.source_span_for_range(index, *cursor),
+                                    "expected a type such as `Player -> Text`",
+                                ),
+                            );
+                            None
+                        });
+                    *cursor = type_end;
+                    pending_annotation = annotation;
+                    continue;
                 }
+            } else {
+                let Some(member) =
+                    self.parse_type_companion_member(cursor, inner_end, member_indent)
+                else {
+                    break;
+                };
+                member
+            };
 
-            if member.annotation.is_some() && member.body.is_none() && member.parameters.is_empty()
-            {
-                pending_colon_member = Some(member);
+            if let Some(annotation) = pending_annotation.take() {
+                member.annotation = Some(annotation);
+            }
+
+            if let Some(held) = pending_member.take() {
+                if held.name.text == member.name.text {
+                    if member.annotation.is_none() {
+                        member.annotation = held.annotation;
+                    }
+                } else {
+                    self.diagnostics.push(
+                        Diagnostic::error(format!(
+                            "type companion member `{}` is missing its binding",
+                            held.name.text
+                        ))
+                        .with_code(MISSING_TYPE_COMPANION_BODY)
+                        .with_primary_label(
+                            held.span,
+                            "expected a binding line with the same companion name",
+                        ),
+                    );
+                }
+            }
+
+            if member.annotation.is_some() && member.body.is_none() && member.parameters.is_empty() {
+                pending_member = Some(member);
                 if *cursor <= before {
                     break;
                 }
@@ -161,7 +168,7 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if let Some(held) = pending_colon_member.take() {
+        if let Some(held) = pending_member.take() {
             self.diagnostics.push(
                 Diagnostic::error(format!(
                     "type companion member `{}` is missing its binding",
@@ -191,6 +198,49 @@ impl<'a> Parser<'a> {
             variants,
             companions,
             span: self.source_span_for_range(lbrace, *cursor),
+        })
+    }
+
+    fn parse_typed_type_companion_member(
+        &mut self,
+        cursor: &mut usize,
+        end: usize,
+        member_indent: usize,
+    ) -> Option<TypeCompanionMember> {
+        let start = *cursor;
+        let type_index = self.consume_kind(cursor, end, TokenKind::TypeKw)?;
+        let Some(name) = self.parse_identifier(cursor, end) else {
+            *cursor = start;
+            return None;
+        };
+        if self.consume_kind(cursor, end, TokenKind::Colon).is_none() {
+            *cursor = start;
+            return None;
+        }
+        let annotation_end = self
+            .find_next_type_companion_member_start(*cursor, end, member_indent)
+            .unwrap_or(end);
+        let annotation = self.parse_type_expr(cursor, annotation_end, TypeStop::default()).or_else(
+            || {
+                self.diagnostics.push(
+                    Diagnostic::error("type companion member is missing its type after `:`")
+                        .with_code(MISSING_TYPE_COMPANION_TYPE)
+                        .with_primary_label(
+                            name.span,
+                            "expected a companion type such as `Player -> Player`",
+                        ),
+                );
+                None
+            },
+        );
+        *cursor = annotation_end;
+        Some(TypeCompanionMember {
+            name,
+            annotation,
+            function_form: FunctionSurfaceForm::Explicit,
+            parameters: Vec::new(),
+            body: None,
+            span: self.source_span_for_range(type_index, *cursor),
         })
     }
 

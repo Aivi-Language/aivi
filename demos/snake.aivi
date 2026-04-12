@@ -28,7 +28,7 @@ value boardH = 20
 value seed0 = 2463534242
 
 type Direction -> Direction
-func opposite = .
+func opposite = arg1 => arg1
  ||> North -> South
  ||> South -> North
  ||> East  -> West
@@ -42,7 +42,7 @@ func moveDir = d c => (d, c)
  ||> (West, Cell x y)  -> Cell (x - 1) y
 
 type Cell -> Bool
-func outside = .
+func outside = arg1 => arg1
  ||> Cell x y -> x < 0 or x >= boardW or y < 0 or y >= boardH
 
 type Int -> Int
@@ -53,23 +53,24 @@ type Cell -> Cell -> Bool
 func cellEq = target candidate =>
     candidate == target
 
-domain Snake over NonEmptyList Cell
-    fromCells : NonEmptyList Cell -> Snake
+domain Snake over NonEmptyList Cell = {
+    type fromCells : NonEmptyList Cell -> Snake
     fromCells = cells => cells
-    head : Snake -> Cell
+    type head : Snake -> Cell
     head = snake => nelHead snake
-    contains : Snake -> Cell -> Bool
+    type contains : Snake -> Cell -> Bool
     contains = snake cell => listContains (cellEq cell) (toList snake)
-    length : Snake -> Int
+    type length : Snake -> Int
     length = snake => nelLength snake
-    cells : Snake -> List Cell
+    type cells : Snake -> List Cell
     cells = snake => toList snake
-    grow : Snake -> Cell -> Snake
+    type grow : Snake -> Cell -> Snake
     grow = snake cell => cons cell snake
-    move : Snake -> Cell -> Snake
+    type move : Snake -> Cell -> Snake
     move = snake cell => fromHeadTail cell (nelInit snake)
-    nextHead : Snake -> Direction -> Cell
+    type nextHead : Snake -> Direction -> Cell
     nextHead = snake dir => moveDir dir (nelHead snake)
+}
 
 type GameState = {
     snake: Snake,
@@ -85,7 +86,7 @@ func spawnFood = s =>
     Cell (s % boardW) (nextSeed s % boardH)
 
 type Direction -> Text
-func dirLabel = .
+func dirLabel = arg1 => arg1
  ||> North -> "Up"
  ||> South -> "Down"
  ||> East  -> "Right"
@@ -134,8 +135,8 @@ func resolveMove = st h => h == st.food
  F|> resolveMoveStep st h
 
 type GameState -> Cell -> Int -> GameState
-func resolveMoveGrowWithSeed = st! h newSeed
-    <| {
+func resolveMoveGrowWithSeed = st h newSeed =>
+    st <| {
         snake: st.snake.grow h,
         food: spawnFood newSeed,
         score: st.score + 1,
@@ -147,8 +148,8 @@ func resolveMoveGrow = st h =>
     resolveMoveGrowWithSeed st h (nextSeed st.seed)
 
 type GameState -> Cell -> GameState
-func resolveMoveStep = st! h
-    <| {
+func resolveMoveStep = st h =>
+    st <| {
         snake: st.snake.move h,
         seed: nextSeed st.seed,
     }
@@ -171,20 +172,22 @@ func renderBoard = snake food => indices boardH
   |> join "\n"
 
 type Status -> Bool
-func isGameOver = .
+func isGameOver = arg1 => arg1
  ||> Running  -> False
  ||> GameOver -> True
 
 type Status -> Text
-func statusLineFor = .
+func statusLineFor = arg1 => arg1
  ||> Running  -> "Running"
  ||> GameOver -> "Game Over"
 
 type Int -> Text
-func scoreLineFor = "Score: {.}"
+func scoreLineFor = arg1 =>
+    "Score: {arg1}"
 
 type Int -> Text
-func finalScoreLineFor = "Final score: {.}"
+func finalScoreLineFor = arg1 =>
+    "Final score: {arg1}"
 
 @source timer.every 120ms with {
     immediate: False,

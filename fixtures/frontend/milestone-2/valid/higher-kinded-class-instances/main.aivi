@@ -1,5 +1,5 @@
 class Applicative F = {
-    pureInt : F Int
+    type pureInt : F Int
 }
 
 instance Applicative Option = {
@@ -7,7 +7,7 @@ instance Applicative Option = {
 }
 
 class Functor F = {
-    labelInt : F Int
+    type labelInt : F Int
 }
 
 instance Functor (Result Text) = {

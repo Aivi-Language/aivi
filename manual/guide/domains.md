@@ -34,7 +34,9 @@ A domain can define integer suffix constructors:
 
 ```aivi
 domain Score over Int = {
-    suffix pts : Int = n => Score n
+    suffix pts
+    type pts : Int
+    pts = n => Score n
 }
 
 value highScore : Score = 9000pts
@@ -48,8 +50,10 @@ Domains can attach operators and named methods directly under the declaration:
 
 ```aivi
 domain Score over Int = {
-    suffix pts : Int = n => Score n
-    (+) : Score -> Score -> Score
+    suffix pts
+    type pts : Int
+    pts = n => Score n
+    type (+) : Score -> Score -> Score
     (+) = left right => left + right
 }
 ```
@@ -65,7 +69,7 @@ Callable members use the same two-line pattern: annotate the member, then bind i
 
 ```aivi
 domain Score over Int = {
-    fromRaw : Int -> Score
+    type fromRaw : Int -> Score
     fromRaw = raw => raw
 }
 ```
@@ -80,11 +84,11 @@ When a member operates on the current domain value, you can write it in receiver
 
 ```aivi
 domain Snake over List Cell = {
-    fromCells : List Cell -> Snake
+    type fromCells : List Cell -> Snake
     fromCells = cells => cells
-    head : Cell
+    type head : Cell
     head = getOrElse (Cell 0 0) (listHead self)
-    length : Int
+    type length : Int
     length = listLength self
 }
 ```
@@ -107,7 +111,9 @@ Every domain has a built-in `.carrier` accessor that returns the underlying carr
 
 ```aivi
 domain Score over Int = {
-    suffix pts : Int = n => Score n
+    suffix pts
+    type pts : Int
+    pts = n => Score n
 }
 
 value raw : Int = (100pts).carrier
@@ -128,8 +134,8 @@ Unlike user-defined domain members, `.carrier` is always available on every doma
 | Form | Meaning |
 | --- | --- |
 | `domain Name over Carrier` | Declare a domain |
-| `suffix pts : Int = expr` | Add an integer suffix constructor |
-| `(+) : D -> D -> D` + `(+) = x y => expr` | Add an operator |
-| `member : T` + `member = x => expr` | Add an authored callable member |
+| `suffix pts` + `type pts : Int` + `pts = n => expr` | Add an integer suffix constructor |
+| `type (+) : D -> D -> D` + `(+) = x y => expr` | Add an operator |
+| `type member : T` + `member = x => expr` | Add an authored callable member |
 | `self` | Implicit domain-typed receiver in authored bodies |
 | `.carrier` | Built-in accessor returning the carrier value (always available) |

@@ -1161,15 +1161,11 @@ impl<'a> Lowerer<'a> {
             annotation
         };
 
-        let parameters: Vec<FunctionParameter> = if kind == DomainMemberKind::Literal {
-            Vec::new()
-        } else {
-            member
-                .parameters
-                .iter()
-                .map(|parameter| self.lower_instance_parameter(parameter))
-                .collect()
-        };
+        let parameters: Vec<FunctionParameter> = member
+            .parameters
+            .iter()
+            .map(|parameter| self.lower_instance_parameter(parameter))
+            .collect();
 
         let body = member.body.as_ref().map(|body| self.lower_expr(body)).or_else(|| {
             if kind == DomainMemberKind::Literal {

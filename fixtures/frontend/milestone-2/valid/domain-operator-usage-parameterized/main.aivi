@@ -1,8 +1,9 @@
-domain Amount A over A
-    wrap : A -> Amount A
-    (+) : Amount A -> Amount A -> Amount A
-    toValue : Amount A -> A
+domain Amount A over A = {
+    type wrap : A -> Amount A
+    type (+) : Amount A -> Amount A -> Amount A
+    type toValue : Amount A -> A
     toValue = amount => amount
+}
 
 value total : Amount Int = wrap 1 + wrap 2
 value raw : Int = toValue total

@@ -215,8 +215,9 @@ Responsibilities:
 ```aivi
 type Bool = True | False
 
-class Eq A
-    (==) : A -> A -> Bool
+class Eq A = {
+    type (==) : A -> A -> Bool
+}
 
 value answer = 42
 
@@ -271,25 +272,19 @@ type Text -> Text
 func greet = name=>    "Hello, {name}"
 ```
 
-Function headers may also mark one parameter as the selected subject for an immediate `|>` or `<|`
-continuation, omitting `=>`:
+When a continuation should start from one parameter, keep that parameter explicit in the body:
 
 ```aivi
 type Int -> Int -> Int
-func addFrom = amount value!
+func addFrom = amount value =>
+    value
   |> add amount
 
 type State -> Int
-func readNested = state { x.y.z! }
+func readNested = state =>
+    state.x.y.z
   |> addOne
 ```
-
-Normative rules:
-
-- `param!` selects the whole parameter as the starting subject
-- `param { path! }` selects a projection rooted at that parameter
-- selected-subject headers are surface sugar only; after lowering they become an ordinary head
-  expression feeding the following pipe or patch continuation
 
 `value` is a **contextual keyword**: it is also a valid identifier and parameter name. The following is valid AIVI — the parameter is named `value`:
 
@@ -616,13 +611,13 @@ type Player = {
     | Human
     | Computer
 
-    type Player -> Player
+    type opponent : Player -> Player
     opponent = self => self
      ||> Human    -> Computer
      ||> Computer -> Human
 
-    type Player -> Text
-    label = .
+    type label : Player -> Text
+    label = player => player
      ||> Human    -> "You"
      ||> Computer -> "Computer"
 }
@@ -638,9 +633,7 @@ Normative rules:
 - companion members follow ordinary `use` / `export` rules; exporting the type does not implicitly
   export its companion members
 - companion member `type` lines spell the full function type, including the receiver
-- companion bodies use ordinary function forms such as `name = self => ...` or `name = . ...`
-- companion members also accept selected-subject headers when the body should begin with `|>` or
-  `<|`, e.g. `name = self! |> ...` or `name = self { field! } <| { ... }`
+- companion bodies use ordinary function forms such as `name = self => ...`
 - naming the receiver as an explicit `self` parameter is accepted, but not required
 - the feature colocates total helpers; it does not introduce methods, mutation, or open-world
   extension
@@ -724,25 +717,30 @@ Core typeclasses are compiler-owned ambient prelude items injected into every ch
 Parser-level surface syntax includes the following forms. Low-kinded examples such as `Container`, `same`, and same-module `Eq` instances are checker-backed today, and same-module user-authored higher-kinded class declarations and instance heads such as `instance Applicative Option` are now checked through the current HIR/typechecking/core-lowering slice:
 
 ```aivi
-class Functor F
-    map : (A -> B) -> F A -> F B
+class Functor F = {
+    type map : (A -> B) -> F A -> F B
+}
 
-class Apply F
+class Apply F = {
     with Functor F
-    apply : F (A -> B) -> F A -> F B
+    type apply : F (A -> B) -> F A -> F B
+}
 
-class Applicative F
+class Applicative F = {
     with Apply F
-    pure : A -> F A
+    type pure : A -> F A
+}
 
-class Traversable T
+class Traversable T = {
     with Functor T
     with Foldable T
-    traverse : Applicative G => (A -> G B) -> T A -> G (T B)
+    type traverse : Applicative G => (A -> G B) -> T A -> G (T B)
+}
 
-class Container A
+class Container A = {
     require Eq A
-    contains : A -> List A -> Bool
+    type contains : A -> List A -> Bool
+}
 
 type Eq A => A -> Bool
 func same = v=>    v == v
@@ -839,8 +837,9 @@ No `Foldable Task` or `Foldable Signal` instance in v1.
 ### 7.3 Equality
 
 ```aivi
-class Eq A
-    (==) : A -> A -> Bool
+class Eq A = {
+    type (==) : A -> A -> Bool
+}
 ```
 
 `x != y` is syntactic sugar that desugars to `not (x == y)`. `(!=)` is not a member of the `Eq` class and has no independent dictionary slot.
@@ -2574,11 +2573,13 @@ A domain is not a type alias. A domain is not subtyping. A domain does not imply
 
 ```aivi
 domain Duration over Int = {
-    suffix ms : Int = n => Duration n
-    millis : Int -> Duration
+    suffix ms
+    type ms : Int
+    ms = n => Duration n
+    type millis : Int -> Duration
     millis = raw => raw
-    parse : Int -> Result DurationError Duration
-    toMillis : Duration -> Int
+    type parse : Int -> Result DurationError Duration
+    type toMillis : Duration -> Int
     toMillis = duration => duration
 }
 ```
@@ -2603,15 +2604,15 @@ A domain may be introduced only through domain-owned constructors or smart const
 
 ```aivi
 domain Url over Text = {
-    parse : Text -> Result UrlError Url
-    raw : Url -> Text
+    type parse : Text -> Result UrlError Url
+    type raw : Url -> Text
     raw = url => url
 }
 
 domain Duration over Int = {
-    millis : Int -> Duration
-    trySeconds : Int -> Result DurationError Duration
-    toMillis : Duration -> Int
+    type millis : Int -> Duration
+    type trySeconds : Int -> Result DurationError Duration
+    type toMillis : Duration -> Int
 }
 ```
 
@@ -2619,15 +2620,21 @@ Construction is explicit. Unwrapping is explicit. Unsafe construction should rem
 
 Callable domain members enter ordinary term lookup when in scope. No projection syntax for domains in v1.
 
-Callable members may also carry authored bodies: annotate the member with `name : TypeExpr`, then bind it with `name = expr` or the canonical function-shaped form `name = arg1 arg2 => expr`. Inside authored bodies, the contextual keyword `self` refers to the domain-typed receiver. When `self` appears in the body, the annotation may omit the domain type from its first position because the receiver is implicit. When `self` is not used (e.g. constructors), the annotation is the full type. Bodyless members keep only their annotation. Authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
+Callable members may also carry authored bodies: annotate the member with `type name : TypeExpr`, then bind it with `name = expr` or the canonical function-shaped form `name = arg1 arg2 => expr`. Inside authored bodies, the contextual keyword `self` refers to the domain-typed receiver. When `self` appears in the body, the annotation may omit the domain type from its first position because the receiver is implicit. When `self` is not used (e.g. constructors), the annotation is the full type. Bodyless members keep only their annotation. Authored bodies are typechecked against the carrier view of the current domain, while the surface signature stays nominal.
 
 ### 20.5 Suffix constructors
 
 ```aivi
 domain Duration over Int = {
-    suffix ms : Int = n => Duration n
-    suffix sec : Int = n => Duration (n * 1000)
-    suffix min : Int = n => Duration (n * 60000)
+    suffix ms
+    type ms : Int
+    ms = n => Duration n
+    suffix sec
+    type sec : Int
+    sec = n => Duration (n * 1000)
+    suffix min
+    type min : Int
+    min = n => Duration (n * 60000)
 }
 ```
 
@@ -2654,16 +2661,18 @@ Examples:
 
 ```aivi
 domain Duration over Int = {
-    suffix ms : Int = n => Duration n
-    (+) : Duration -> Duration -> Duration
+    suffix ms
+    type ms : Int
+    ms = n => Duration n
+    type (+) : Duration -> Duration -> Duration
     (+) = left right => left + right
-    (-) : Duration -> Duration -> Duration
-    (*) : Duration -> Int -> Duration
-    compare : Duration -> Duration -> Ordering
+    type (-) : Duration -> Duration -> Duration
+    type (*) : Duration -> Int -> Duration
+    type compare : Duration -> Duration -> Ordering
 }
 
 domain Path over Text = {
-    (/) : Path -> Text -> Path
+    type (/) : Path -> Text -> Path
 }
 ```
 
@@ -2686,9 +2695,9 @@ Domains attach invariants stronger than the carrier type:
 
 ```aivi
 domain NonEmpty A over List A = {
-    fromList : List A -> Option (NonEmpty A)
-    head : NonEmpty A -> A
-    tail : NonEmpty A -> List A
+    type fromList : List A -> Option (NonEmpty A)
+    type head : NonEmpty A -> A
+    type tail : NonEmpty A -> List A
 }
 ```
 
@@ -2738,10 +2747,14 @@ For literal/decode/operator failures, diagnostics should explain whether the fai
 
 ```aivi
 domain Duration over Int = {
-    suffix ms : Int = n => Duration n
-    suffix sec : Int = n => Duration (n * 1000)
-    toMillis : Duration -> Int
-    (+) : Duration -> Duration -> Duration
+    suffix ms
+    type ms : Int
+    ms = n => Duration n
+    suffix sec
+    type sec : Int
+    sec = n => Duration (n * 1000)
+    type toMillis : Duration -> Int
+    type (+) : Duration -> Duration -> Duration
     (+) = left right => left + right
 }
 ```
@@ -2750,8 +2763,8 @@ domain Duration over Int = {
 
 ```aivi
 domain Url over Text = {
-    parse : Text -> Result UrlError Url
-    raw : Url -> Text
+    type parse : Text -> Result UrlError Url
+    type raw : Url -> Text
     raw = url => url
 }
 ```

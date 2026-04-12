@@ -38,19 +38,24 @@ type DayOfWeek =
   | Saturday
   | Sunday
 
-domain DateDelta over Int
-    suffix dy : Int = n => DateDelta n
-    suffix wk : Int = n => DateDelta (n * 7)
-    days : Int -> DateDelta
+domain DateDelta over Int = {
+    suffix dy
+    type dy : Int
+    dy = n => DateDelta n
+    suffix wk
+    type wk : Int
+    wk = n => DateDelta (n * 7)
+    type days : Int -> DateDelta
     days = n => n
-    (+) : DateDelta -> DateDelta -> DateDelta
+    type (+) : DateDelta -> DateDelta -> DateDelta
     (+) = left right => left + right
-    (-) : DateDelta -> DateDelta -> DateDelta
+    type (-) : DateDelta -> DateDelta -> DateDelta
     (-) = left right => left - right
-    (*) : DateDelta -> Int -> DateDelta
+    type (*) : DateDelta -> Int -> DateDelta
     (*) = delta n => delta * n
-    (<) : DateDelta -> DateDelta -> Bool
+    type (<) : DateDelta -> DateDelta -> Bool
     (<) = left right => left < right
+}
 
 type Date -> Year
 func getYear = date => date

@@ -46,7 +46,8 @@ type User = {
 }
 
 type User -> Text
-func userName = .name
+func userName = arg1 =>
+    arg1.name
 
 value shownName =
     userName {
@@ -95,13 +96,13 @@ type Player = {
     | Human
     | Computer
 
-    type Player -> Player
+    type opponent : Player -> Player
     opponent = self => self
      ||> Human    -> Computer
      ||> Computer -> Human
 
-    type Player -> Text
-    label = .
+    type label : Player -> Text
+    label = arg1 => arg1
      ||> Human    -> "You"
      ||> Computer -> "Computer"
 }
@@ -114,10 +115,8 @@ These companion bindings are still ordinary functions. You call them by name, an
 export them the same way as any other function.
 
 The `type` line spells the full function type, including the receiver. In the example above,
-`type Player -> Player` and `type Player -> Text` are written explicitly. When the receiver is the
-only parameter, `name = .` is shorthand for `name = self => ...`. Companion members also accept the
-same selected-subject header sugar as top-level functions, so `name = self!` can begin a `|>` or
-`<|` continuation without an explicit `=>`.
+`type opponent : Player -> Player` and `type label : Player -> Text` are written explicitly.
+Companion bodies use ordinary function forms such as `name = self => ...`.
 
 The brace form is reserved for companion sums only when the first significant entry is a constructor
 line beginning with `|`. Ordinary record declarations still use the same `type Name = { field: T }`
@@ -178,11 +177,11 @@ func addVec = a b => (a, b)
  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)
 
 type Cell -> Int
-func cellX = .
+func cellX = arg1 => arg1
  ||> Cell x _ -> x
 
 type Cell -> Int
-func cellY = .
+func cellY = arg1 => arg1
  ||> Cell _ y -> y
 ```
 
@@ -202,7 +201,7 @@ type LoadState =
   | Failed Text
 
 type LoadState -> Text
-func loadLabel = .
+func loadLabel = arg1 => arg1
  ||> NotAsked      -> "idle"
  ||> Loading       -> "loading"
  ||> Loaded name   -> "ready {name}"
@@ -273,7 +272,7 @@ You usually unpack tuples with pattern matching:
 
 ```aivi
 type (Int, Int) -> Int
-func firstInt = .
+func firstInt = arg1 => arg1
  ||> (first, _) -> first
 
 value firstValue =

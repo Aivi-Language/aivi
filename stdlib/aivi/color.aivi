@@ -5,25 +5,26 @@ use aivi.bits (
     shiftRightUnsigned
 )
 
-domain Color over Int
-    argb : Int -> Color
+domain Color over Int = {
+    type argb : Int -> Color
     argb = n => n
-    alpha : Color -> Int
+    type alpha : Color -> Int
     alpha = color => and (shiftRightUnsigned color 24) 255
-    red : Color -> Int
+    type red : Color -> Int
     red = color => and (shiftRightUnsigned color 16) 255
-    green : Color -> Int
+    type green : Color -> Int
     green = color => and (shiftRightUnsigned color 8) 255
-    blue : Color -> Int
+    type blue : Color -> Int
     blue = color => and color 255
-    withAlpha : Color -> Int -> Color
+    type withAlpha : Color -> Int -> Color
     withAlpha = color a => or (and color 16777215) (shiftLeft a 24)
-    withRed : Color -> Int -> Color
+    type withRed : Color -> Int -> Color
     withRed = color r => or (and color 4278255615) (shiftLeft r 16)
-    withGreen : Color -> Int -> Color
+    type withGreen : Color -> Int -> Color
     withGreen = color g => or (and color 4294902015) (shiftLeft g 8)
-    withBlue : Color -> Int -> Color
+    type withBlue : Color -> Int -> Color
     withBlue = color b => or (and color 4294967040) b
-    blend : Color -> Color -> Float -> Color
+    type blend : Color -> Color -> Float -> Color
+}
 
 export Color

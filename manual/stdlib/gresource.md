@@ -60,7 +60,7 @@ These variants describe the common failure cases when loading a bundled resource
 
 ```aivi
 domain ResourcePath over Text = {
-    parse : Text -> Result ResourceError ResourcePath
+    type parse : Text -> Result ResourceError ResourcePath
 }
 ```
 

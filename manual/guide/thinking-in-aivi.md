@@ -44,7 +44,7 @@ truthy/falsy splits, use `T|>` and `F|>`. They work with `Bool`, `Option`,
 
 ```aivi
 type Int -> Text
-func classify = . >= 50
+func classify = arg1 => arg1 >= 50
  T|> "pass"
  F|> "fail"
 ```
@@ -59,7 +59,7 @@ type Direction =
   | West
 
 type Direction -> Text
-func label = .
+func label = arg1 => arg1
  ||> North -> "up"
  ||> South -> "down"
  ||> East  -> "right"
@@ -85,10 +85,11 @@ Or decompose into named helpers:
 
 ```aivi
 type Int -> Bool
-func isGold = . >= 90
+func isGold = arg1 =>
+    arg1 >= 90
 
 type Int -> Text
-func subTier = . >= 50
+func subTier = arg1 => arg1 >= 50
  T|> "silver"
  F|> "bronze"
 
@@ -112,10 +113,12 @@ AIVI uses the same ideas, but as pipes:
 
 ```aivi
 type Int -> Int
-func double = . * 2
+func double = arg1 =>
+    arg1 * 2
 
 type Int -> Bool
-func isEven = . % 2 == 0
+func isEven = arg1 =>
+    arg1 % 2 == 0
 
 value numbers = [1, 2, 3, 4, 5]
 

@@ -22,19 +22,19 @@ type Disc = {
     | Black
     | White
 
-    type Disc -> Disc
-    otherDisc = .
+    type otherDisc : Disc -> Disc
+    otherDisc = disc => disc
      ||> Black -> White
      ||> White -> Black
      ||> Empty -> Empty
 
-    type Disc -> Bool
-    isBlackDisc = .
+    type isBlackDisc : Disc -> Bool
+    isBlackDisc = disc => disc
      ||> Black -> True
      ||> _     -> False
 
-    type Disc -> Bool
-    isWhiteDisc = .
+    type isWhiteDisc : Disc -> Bool
+    isWhiteDisc = disc => disc
      ||> White -> True
      ||> _     -> False
 }
@@ -48,23 +48,23 @@ type Phase = {
     | ComputerPreparing Coord
     | ComputerAnimating Coord Int
 
-    type Phase -> Bool
-    phaseAllowsHumanInput = .
+    type phaseAllowsHumanInput : Phase -> Bool
+    phaseAllowsHumanInput = phase => phase
      ||> HumanReady -> True
      ||> _          -> False
 
-    type Phase -> Bool
-    phaseIsPreparing = .
+    type phaseIsPreparing : Phase -> Bool
+    phaseIsPreparing = phase => phase
      ||> ComputerPreparing _ -> True
      ||> _                   -> False
 
-    type Phase -> Option Coord
-    phaseTarget = .
+    type phaseTarget : Phase -> Option Coord
+    phaseTarget = phase => phase
      ||> ComputerAnimating cell _ -> Some cell
      ||> _                        -> None
 
-    type Phase -> Bool
-    phaseShowsTarget = .
+    type phaseShowsTarget : Phase -> Bool
+    phaseShowsTarget = phase => phase
      ||> ComputerAnimating _ step -> step % 2 == 1
      ||> _                        -> False
 }
@@ -93,15 +93,15 @@ type RayScan = {
 }
 
 type Matrix Disc -> Coord -> Disc
-func discAt = board cell!
+func discAt = board cell => cell
  ||> Coord x y -> getOrElse Empty (matrixAt board x y)
 
 type Disc -> Matrix Disc -> Coord -> Matrix Disc
-func paintDisc = disc board cell!
+func paintDisc = disc board cell => cell
  ||> Coord x y -> getOrElse board (matrixReplaceAt board (x, y) disc)
 
 type Disc -> Matrix Disc -> List Coord -> Matrix Disc
-func paintMany = disc board cells!
+func paintMany = disc board cells => cells
   |> reduce (paintDisc disc) board
 
 type Int -> Int -> Disc
@@ -187,7 +187,7 @@ func placeWithFlips = disc board cell flips => length flips == 0
  F|> paintMany disc board (append [cell] flips)
 
 type Matrix Disc -> Disc -> Coord -> Matrix Disc
-func applyMove = board disc cell!
+func applyMove = board disc cell => cell
   |> flipsForMove board disc #flips
   |> placeWithFlips disc board cell flips
 
@@ -228,13 +228,13 @@ func clickState = cell state => stateLegalAt cell state
  F|> state
 
 type State -> State
-func flashState = state { phase! }
+func flashState = state => state.phase
  ||> ComputerPreparing cell      -> state <| { phase: ComputerAnimating cell 0 }
  ||> ComputerAnimating cell step -> stepAnimation state cell step
  ||> HumanReady                  -> state
 
 type State -> Coord -> Int -> State
-func stepAnimation = state cell step!
+func stepAnimation = state cell step => step
   |> . + 1 #next
   |> next >= 4
  T|> afterComputerMove (applyMove state.board White cell)
@@ -262,7 +262,7 @@ func winnerLine = board =>
     winnerText (matrixCount isBlackDisc board) (matrixCount isWhiteDisc board)
 
 type Bool -> Text
-func emptyCellLabel = legal!
+func emptyCellLabel = legal => legal
  T|> "◌"
  F|> "·"
 
@@ -272,7 +272,7 @@ func renderTargetCell = cell legal target phase board => phaseShowsTarget phase 
  F|> baseCellLabel legal (discAt board cell)
 
 type Bool -> Disc -> Text
-func baseCellLabel = legal disc!
+func baseCellLabel = legal disc => disc
  ||> Black -> "🔴"
  ||> White -> "⚪"
  ||> Empty -> emptyCellLabel legal

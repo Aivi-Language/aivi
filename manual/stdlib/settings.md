@@ -54,7 +54,7 @@ These variants describe the usual GSettings failure cases.
 
 ```aivi
 domain SettingsSchema over Text = {
-    parse : Text -> Result SettingsError SettingsSchema
+    type parse : Text -> Result SettingsError SettingsSchema
 }
 ```
 
@@ -70,7 +70,7 @@ value interfaceSchema : Result SettingsError SettingsSchema = parse "org.gnome.d
 
 ```aivi
 domain SettingsKey over Text = {
-    make : Text -> SettingsKey
+    type make : Text -> SettingsKey
 }
 ```
 

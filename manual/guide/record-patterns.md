@@ -13,7 +13,7 @@ type Profile = {
 }
 
 type Profile -> Text
-func greet = .
+func greet = arg1 => arg1
  ||> { name } -> "Hello, {name}!"
 ```
 
@@ -21,7 +21,7 @@ You can bind multiple fields in one pattern:
 
 ```aivi
 type Profile -> Text
-func summary = .
+func summary = arg1 => arg1
  ||> { name, score } -> "{name} scored {score}"
 ```
 
@@ -48,7 +48,7 @@ type User = {
 }
 
 type User -> Text
-func cityName = .
+func cityName = arg1 => arg1
  ||> { address.city.name } -> name
 ```
 
@@ -61,7 +61,7 @@ The leaf segment (`name`) becomes the bound variable. This works at any depth:
 
 ```aivi
 type User -> Text
-func streetName = .
+func streetName = arg1 => arg1
  ||> { address.street } -> street
 ```
 
@@ -69,7 +69,7 @@ You can combine dotted paths with ordinary fields:
 
 ```aivi
 type User -> Text
-func userCity = .
+func userCity = arg1 => arg1
  ||> { name, address.city.name: cityName } -> "{name} lives in {cityName}"
 ```
 
@@ -86,7 +86,8 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = .score >= 100
+func isTopScore = arg1 =>
+    arg1.score >= 100
 ```
 
 This is sugar for:
@@ -105,14 +106,15 @@ Dotted paths combine with the projection form to reach into nested structures:
 
 ```aivi
 type User -> Text
-func getCityName = .address.city.name
+func getCityName = arg1 =>
+    arg1.address.city.name
 ```
 
 This extracts `address.city.name` from the input and makes it available for downstream pipes:
 
 ```aivi
 type User -> Text
-func upperCityName = .address.city.name
+func upperCityName = arg1 => arg1.address.city.name
   |> toUpper
 ```
 
@@ -130,7 +132,7 @@ func addOne = value =>
     value + 1
 
 type X -> Int
-func readNested = state { x.y.z! }
+func readNested = state => state.x.y.z
   |> addOne
 ```
 
@@ -169,7 +171,8 @@ type Full = {
 }
 
 type Full -> { name: Text, email: Text }
-func stripDebug = .
+func stripDebug = arg1 =>
+    arg1
 ```
 
 Removal can target nested fields using selectors:

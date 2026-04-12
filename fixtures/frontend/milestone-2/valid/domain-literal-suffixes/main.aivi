@@ -1,7 +1,12 @@
-domain Duration over Int
-    suffix ms : Int = value => Duration value
-    suffix sec : Int = value => Duration value
-    (+) : Duration -> Duration -> Duration
+domain Duration over Int = {
+    suffix ms
+    type ms : Int
+    ms = value => Duration value
+    suffix sec
+    type sec : Int
+    sec = value => Duration value
+    type (+) : Duration -> Duration -> Duration
+}
 
 value delay : Duration = 250ms
 value total = 250ms + 3sec

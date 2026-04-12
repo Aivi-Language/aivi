@@ -23,12 +23,12 @@ When a class has multiple members, group them inside `= { ... }`:
 
 ```aivi
 class Eq A = {
-    (==) : A -> A -> Bool
+    type (==) : A -> A -> Bool
 }
 
 class Display A = {
-    display : A -> Text
-    label : A -> Text
+    type display : A -> Text
+    type label : A -> Text
 }
 ```
 
@@ -36,7 +36,7 @@ Instance declarations use the same block form:
 
 ```aivi
 instance Eq Blob = {
-    (==) left right = blobEquals left right
+    (==) = left right => blobEquals left right
 }
 ```
 
@@ -150,17 +150,19 @@ For nominal domains, implement `compare` in the `Ord` instance and then use the 
 
 ```aivi
 domain Calendar over Int = {
-    suffix day : Int = value => Calendar value
-    toDays : Calendar -> Int
+    suffix day
+    type day : Int
+    day = value => Calendar value
+    type toDays : Calendar -> Int
 }
 
 instance Eq Calendar = {
-    (==) left right = toDays left == toDays right
-    (!=) left right = toDays left != toDays right
+    (==) = left right => toDays left == toDays right
+    (!=) = left right => toDays left != toDays right
 }
 
 instance Ord Calendar = {
-    compare left right = compare (toDays left) (toDays right)
+    compare = left right => compare (toDays left) (toDays right)
 }
 
 value ordered : Bool = 10day < 12day

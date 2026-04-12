@@ -1,5 +1,5 @@
 class Eq A = {
-    (==) : A -> A -> Bool
+    type (==) : A -> A -> Bool
 }
 
 type Int -> Int -> Bool

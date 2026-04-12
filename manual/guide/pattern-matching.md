@@ -10,7 +10,7 @@ Use `||>` when you want to branch on a value:
 
 ```aivi
 type Int -> Text
-func describeNumber = .
+func describeNumber = arg1 => arg1
  ||> 0 -> "zero"
  ||> 1 -> "one"
  ||> _ -> "many"
@@ -37,7 +37,7 @@ type Direction =
   | Right
 
 type Direction -> Text
-func directionLabel = .
+func directionLabel = arg1 => arg1
  ||> Up    -> "up"
  ||> Down  -> "down"
  ||> Left  -> "left"
@@ -55,7 +55,7 @@ type LoadState =
   | Failed Text
 
 type LoadState -> Text
-func describeLoadState = .
+func describeLoadState = arg1 => arg1
  ||> NotAsked      -> "waiting"
  ||> Loaded name   -> "loaded {name}"
  ||> Failed reason -> "error {reason}"
@@ -74,7 +74,7 @@ type Status =
   | Stopped
 
 type Status -> Bool
-func isRunning = .
+func isRunning = arg1 => arg1
  ||> Running -> True
  ||> _       -> False
 
@@ -87,7 +87,7 @@ When the choice is really a boolean condition, calculate the condition first and
 
 ```aivi
 type Int -> Text
-func classifyNumber = . > 0
+func classifyNumber = arg1 => arg1 > 0
  T|> "positive"
  F|> "not positive"
 
@@ -107,7 +107,7 @@ type Profile = {
 }
 
 type Profile -> Text
-func profileSummary = .
+func profileSummary = arg1 => arg1
  ||> { name, score } -> "{name} scored {score}"
 
 value summaryText =
@@ -127,7 +127,8 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = .score >= 100
+func isTopScore = arg1 =>
+    arg1.score >= 100
 
 value topScore =
     isTopScore {
@@ -150,7 +151,7 @@ type Direction =
   | Right
 
 type (Point, Direction) -> Point
-func step = .
+func step = arg1 => arg1
  ||> (Point x y, Up)    -> Point x (y - 1)
  ||> (Point x y, Down)  -> Point x (y + 1)
  ||> (Point x y, Left)  -> Point (x - 1) y
@@ -173,7 +174,7 @@ type Inner = A | B
 type Outer = Outer Inner
 
 type Outer -> Text
-func describeOuter = .
+func describeOuter = arg1 => arg1
  ||> Outer A -> "outer A"
  ||> Outer B -> "outer B"
 
@@ -186,7 +187,7 @@ value outerLabel = describeOuter (Outer A)
 
 ```aivi
 type Option Text -> Text
-func displayName = .
+func displayName = arg1 => arg1
  ||> Some name -> name
  ||> None      -> "anonymous"
 
@@ -195,7 +196,7 @@ value shownName = displayName (Some "Ada")
 
 ```aivi
 type Result Text Int -> Text
-func handleResult = .
+func handleResult = arg1 => arg1
  ||> Ok value    -> "got {value}"
  ||> Err message -> "failed {message}"
 
@@ -211,7 +212,7 @@ outer `Signal (...)`.
 
 ```aivi
 type Bool -> Text
-func statusLabel = .
+func statusLabel = arg1 => arg1
  T|> "active"
  F|> "inactive"
 

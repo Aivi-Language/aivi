@@ -2699,10 +2699,15 @@ impl<'a> GateTypeContext<'a> {
     pub(crate) fn lower_domain_member_implementation_type(
         &mut self,
         owner: ItemId,
+        kind: DomainMemberKind,
         annotation: TypeId,
     ) -> Option<GateType> {
         let lowered = self.lower_open_annotation(annotation)?;
-        Some(self.rewrite_current_domain_carrier_view(owner, &lowered))
+        if kind == DomainMemberKind::Literal {
+            Some(lowered)
+        } else {
+            Some(self.rewrite_current_domain_carrier_view(owner, &lowered))
+        }
     }
 
     pub(crate) fn domain_member_annotation(

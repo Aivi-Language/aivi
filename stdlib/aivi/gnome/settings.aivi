@@ -5,12 +5,14 @@ type SettingsError =
   | SettingsUnavailable
 
 // Domain type for GSettings schema IDs (e.g. "org.gnome.desktop.interface")
-domain SettingsSchema over Text
-    parse : Text -> Result SettingsError SettingsSchema
+domain SettingsSchema over Text = {
+    type parse : Text -> Result SettingsError SettingsSchema
+}
 
 // Domain type for settings key paths
-domain SettingsKey over Text
-    make : Text -> SettingsKey
+domain SettingsKey over Text = {
+    type make : Text -> SettingsKey
+}
 
 // Typed setting values
 type SettingValue =

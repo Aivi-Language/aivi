@@ -1,9 +1,9 @@
 class Eq A = {
-    (==) : A -> A -> Bool
+    type (==) : A -> A -> Bool
 }
 
 class Display A = {
-    display : A -> Text
+    type display : A -> Text
 }
 
 type Int -> Int -> Bool
