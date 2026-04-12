@@ -42,9 +42,21 @@ signal slowWindows : Signal Window =
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
             match &predicate_kernel.exprs()[*callee].kind {
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(
-                    crate::BuiltinClassMemberIntrinsic::StructuralEq,
-                )) => {}
+                KernelExprKind::ExecutableEvidence(item) => {
+                    let body = backend.items()[*item]
+                        .body
+                        .expect("structural equality evidence should carry a body");
+                    assert!(matches!(
+                        backend.kernels()[body].exprs()[backend.kernels()[body].root].kind,
+                        KernelExprKind::Apply { callee, .. }
+                            if matches!(
+                                backend.kernels()[body].exprs()[callee].kind,
+                                KernelExprKind::BuiltinClassMember(
+                                    crate::BuiltinClassMemberIntrinsic::StructuralEq
+                                )
+                            )
+                    ));
+                }
                 other => panic!(
                     "expected outer comparison to lower through structural equality, found {other:?}"
                 ),
@@ -56,12 +68,26 @@ signal slowWindows : Signal Window =
                 } => {
                     assert_eq!(compare_args.len(), 2);
                     match &predicate_kernel.exprs()[*callee].kind {
-                        KernelExprKind::ExecutableEvidence(
-                            ExecutableEvidence::Authored(_),
-                        ) => {}
-                        KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(
-                            crate::BuiltinClassMemberIntrinsic::Compare { .. },
-                        )) => {}
+                        KernelExprKind::ExecutableEvidence(item) => {
+                            let body = backend.items()[*item]
+                                .body
+                                .expect("Ord evidence should carry a body kernel");
+                            let wrapper = &backend.kernels()[body];
+                            assert!(
+                                backend.items()[*item].name.starts_with("instance#")
+                                    || matches!(
+                                        wrapper.exprs()[wrapper.root].kind,
+                                        KernelExprKind::Apply { callee, .. }
+                                            if matches!(
+                                                wrapper.exprs()[callee].kind,
+                                                KernelExprKind::BuiltinClassMember(
+                                                    crate::BuiltinClassMemberIntrinsic::Compare { .. }
+                                                )
+                                            )
+                                    ),
+                                "expected Ord-backed inner compare callee to be authored or a builtin wrapper"
+                            );
+                        }
                         other => panic!(
                             "expected Ord-backed inner compare callee, found {other:?}"
                         ),

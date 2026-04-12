@@ -26,9 +26,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     /// by default, but lazy JIT may compile them on demand when their
     /// lowered expressions stay inside the supported backend slice.
     fn is_ambient_kernel(&self, kernel: &Kernel) -> bool {
-        self.program.items()[kernel.origin.item]
-            .name
-            .starts_with("__aivi_")
+        let name = self.program.items()[kernel.origin.item].name.as_ref();
+        name.starts_with("__aivi_") || name.starts_with("builtin-evidence#")
     }
 
     fn prevalidate_kernels<I>(&self, kernel_ids: I) -> Result<(), CodegenErrors>
@@ -456,6 +455,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     }
                     KernelExprKind::DomainMember(_)
                     | KernelExprKind::ExecutableEvidence(_)
+                    | KernelExprKind::BuiltinClassMember(_)
                     | KernelExprKind::Builtin(_) => {
                         errors.push(self.unsupported_expression(
                             kernel_id,
@@ -2853,6 +2853,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         &self,
         kernel_id: KernelId,
         expr_id: KernelExprId,
+        callee: KernelExprId,
         item: ItemId,
         arguments: &[KernelExprId],
     ) -> Result<DirectApplyPlan, CodegenError> {
@@ -2872,6 +2873,15 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             .kernels()
             .get(body)
             .expect("validated backend programs keep item body kernels aligned with codegen");
+        if item_decl.name.starts_with("builtin-evidence#")
+            && let Some(intrinsic) = builtin_wrapper_intrinsic(body_kernel)
+        {
+            return self
+                .require_compilable_builtin_class_member_call(
+                    kernel_id, expr_id, callee, intrinsic, arguments,
+                )
+                .map(DirectApplyPlan::Builtin);
+        }
         if arguments.is_empty() {
             if !item_decl.parameters.is_empty() {
                 // Unsaturated reference: emit function address of the body kernel.
@@ -3130,7 +3140,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 self.resolve_direct_apply_plan(kernel_id, expr_id, *inner_callee, &combined)
             }
             KernelExprKind::Item(item) => {
-                self.require_compilable_item_call(kernel_id, expr_id, *item, arguments)
+                self.require_compilable_item_call(kernel_id, expr_id, callee, *item, arguments)
             }
             KernelExprKind::SumConstructor(handle) => {
                 if arguments.len() != handle.field_count {
@@ -3309,20 +3319,17 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     arguments,
                 )
                 .map(DirectApplyPlan::Intrinsic),
-            KernelExprKind::ExecutableEvidence(evidence) => match evidence {
-                crate::ExecutableEvidence::Authored(item) => {
-                    self.require_compilable_item_call(kernel_id, expr_id, *item, arguments)
-                }
-                crate::ExecutableEvidence::Builtin(intrinsic) => self
-                    .require_compilable_builtin_class_member_call(
-                        kernel_id,
-                        expr_id,
-                        callee,
-                        *intrinsic,
-                        arguments,
-                    )
-                    .map(DirectApplyPlan::Builtin),
-            },
+            KernelExprKind::ExecutableEvidence(item) => self
+                .require_compilable_item_call(kernel_id, expr_id, callee, *item, arguments),
+            KernelExprKind::BuiltinClassMember(intrinsic) => self
+                .require_compilable_builtin_class_member_call(
+                    kernel_id,
+                    expr_id,
+                    callee,
+                    *intrinsic,
+                    arguments,
+                )
+                .map(DirectApplyPlan::Builtin),
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -9004,6 +9011,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         | KernelExprKind::Item(_)
                         | KernelExprKind::DomainMember(_)
                         | KernelExprKind::ExecutableEvidence(_)
+                        | KernelExprKind::BuiltinClassMember(_)
                         | KernelExprKind::Projection { .. }
                         | KernelExprKind::Pipe(_) => {
                             return Ok(None);
@@ -9160,9 +9168,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                         tasks.push(Task::Visit(*argument));
                                     }
                                 }
-                                KernelExprKind::ExecutableEvidence(
-                                    crate::ExecutableEvidence::Builtin(intrinsic),
-                                ) => {
+                                KernelExprKind::BuiltinClassMember(intrinsic) => {
                                     let Some(expected_arity) =
                                         static_builtin_class_member_arity(*intrinsic)
                                     else {
@@ -9174,6 +9180,34 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     tasks.push(Task::BuildBuiltinClassMember {
                                         intrinsic: *intrinsic,
                                     });
+                                    for argument in arguments.iter().rev() {
+                                        tasks.push(Task::Visit(*argument));
+                                    }
+                                }
+                                KernelExprKind::ExecutableEvidence(item)
+                                | KernelExprKind::Item(item) => {
+                                    let Some(item_decl) = self.program.items().get(*item) else {
+                                        return Ok(None);
+                                    };
+                                    if !item_decl.name.starts_with("builtin-evidence#") {
+                                        return Ok(None);
+                                    }
+                                    let Some(body) = item_decl.body else {
+                                        return Ok(None);
+                                    };
+                                    let wrapper = &self.program.kernels()[body];
+                                    let Some(intrinsic) = builtin_wrapper_intrinsic(wrapper) else {
+                                        return Ok(None);
+                                    };
+                                    let Some(expected_arity) =
+                                        static_builtin_class_member_arity(intrinsic)
+                                    else {
+                                        return Ok(None);
+                                    };
+                                    if arguments.len() != expected_arity {
+                                        return Ok(None);
+                                    }
+                                    tasks.push(Task::BuildBuiltinClassMember { intrinsic });
                                     for argument in arguments.iter().rev() {
                                         tasks.push(Task::Visit(*argument));
                                     }

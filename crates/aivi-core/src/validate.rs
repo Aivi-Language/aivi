@@ -582,14 +582,13 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             | ExprKind::SuffixedInteger(_)
             | ExprKind::Reference(Reference::Local(_))
             | ExprKind::Reference(Reference::Builtin(_))
+            | ExprKind::Reference(Reference::BuiltinClassMember(_))
             | ExprKind::Reference(Reference::IntrinsicValue(_))
             | ExprKind::Reference(Reference::DomainMember(_))
             | ExprKind::Reference(Reference::SumConstructor(_))
             | ExprKind::Reference(Reference::HirItem(_)) => {}
-            ExprKind::Reference(Reference::ExecutableEvidence(evidence)) => {
-                if let crate::ExecutableEvidence::Authored(item) = evidence
-                    && !module.items().contains(*item)
-                {
+            ExprKind::Reference(Reference::ExecutableEvidence(item)) => {
+                if !module.items().contains(*item) {
                     errors.push(ValidationError::UnknownItemReference {
                         expr: expr_id,
                         item: *item,

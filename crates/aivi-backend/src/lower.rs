@@ -25,8 +25,8 @@ use crate::{
     CallingConvention, CallingConventionKind, DecimalLiteral, DecodeExtraFieldPolicy, DecodeField,
     DecodeFieldRequirement, DecodeMode, DecodePlan, DecodePlanId, DecodeStep, DecodeStepId,
     DecodeStepKind, DecodeSumStrategy, DecodeVariant, DomainDecodeSurface, DomainDecodeSurfaceKind,
-    EnvSlotId, ExecutableEvidence as BackendExecutableEvidence, FanoutCarrier, FanoutFilter,
-    FanoutJoin, FanoutStage, FloatLiteral, GateStage, InlinePipeCaseArm, InlinePipeConstructor,
+    EnvSlotId, FanoutCarrier, FanoutFilter, FanoutJoin, FanoutStage, FloatLiteral, GateStage,
+    InlinePipeCaseArm, InlinePipeConstructor,
     InlinePipeExpr, InlinePipePattern, InlinePipePatternKind, InlinePipeRecordPatternField,
     InlinePipeStage, InlinePipeStageKind, InlinePipeTruthyFalsyBranch, InlineSubjectId,
     IntegerLiteral, Item, ItemId, ItemKind, Kernel, KernelExpr, KernelExprId, KernelExprKind,
@@ -1798,10 +1798,9 @@ impl<'a> ProgramLowerer<'a> {
                     core::Reference::SumConstructor(_) => {}
                     core::Reference::DomainMember(_) => {}
                     core::Reference::ExecutableEvidence(evidence) => {
-                        if let core::ExecutableEvidence::Authored(item) = evidence {
-                            globals.insert(self.require_item(*item, expr.span)?);
-                        }
+                        globals.insert(self.require_item(*evidence, expr.span)?);
                     }
+                    core::Reference::BuiltinClassMember(_) => {}
                     core::Reference::IntrinsicValue(_) => {}
                     core::Reference::HirItem(_) => {
                         return Err(UnresolvedItemReference { span: expr.span });
@@ -2060,10 +2059,12 @@ impl<'a> ProgramLowerer<'a> {
                                     KernelExprKind::DomainMember(handle.clone())
                                 }
                                 core::Reference::ExecutableEvidence(evidence) => {
-                                    KernelExprKind::ExecutableEvidence(map_executable_evidence(
-                                        *evidence,
-                                        |item| self.require_item(item, expr.span),
-                                    )?)
+                                    KernelExprKind::ExecutableEvidence(
+                                        self.require_item(*evidence, expr.span)?,
+                                    )
+                                }
+                                core::Reference::BuiltinClassMember(intrinsic) => {
+                                    KernelExprKind::BuiltinClassMember(*intrinsic)
                                 }
                                 core::Reference::HirItem(_) => {
                                     return Err(UnresolvedItemReference { span: expr.span });
@@ -3791,20 +3792,6 @@ fn map_builtin_term(term: HirBuiltinTerm) -> BuiltinTerm {
         HirBuiltinTerm::Valid => BuiltinTerm::Valid,
         HirBuiltinTerm::Invalid => BuiltinTerm::Invalid,
     }
-}
-
-fn map_executable_evidence(
-    evidence: core::ExecutableEvidence<core::ItemId, core::BuiltinClassMemberIntrinsic>,
-    mut map_item: impl FnMut(core::ItemId) -> Result<ItemId, LoweringError>,
-) -> Result<BackendExecutableEvidence, LoweringError> {
-    Ok(match evidence {
-        core::ExecutableEvidence::Authored(item) => {
-            BackendExecutableEvidence::Authored(map_item(item)?)
-        }
-        core::ExecutableEvidence::Builtin(intrinsic) => {
-            BackendExecutableEvidence::Builtin(intrinsic)
-        }
-    })
 }
 
 fn map_unary_operator(operator: HirUnaryOperator) -> UnaryOperator {

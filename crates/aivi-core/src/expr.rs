@@ -61,17 +61,13 @@ pub enum Reference {
     SumConstructor(SumConstructorHandle),
     DomainMember(DomainMemberHandle),
     ExecutableEvidence(ExecutableClassMember),
+    BuiltinClassMember(BuiltinClassMemberIntrinsic),
     Builtin(BuiltinTerm),
     IntrinsicValue(IntrinsicValue),
 }
 
-pub type ExecutableClassMember = ExecutableEvidence<crate::ItemId, BuiltinClassMemberIntrinsic>;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ExecutableEvidence<Item, Builtin> {
-    Authored(Item),
-    Builtin(Builtin),
-}
+pub type ExecutableEvidence = crate::ItemId;
+pub type ExecutableClassMember = ExecutableEvidence;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BuiltinClassMemberIntrinsic {

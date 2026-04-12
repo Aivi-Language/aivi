@@ -5,7 +5,7 @@ use aivi_backend::{
     BuiltinBifunctorCarrier, BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier,
     BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinMonadCarrier, BuiltinOrdSubject,
     BuiltinTerm, BuiltinTraversableCarrier, CodegenError, DecodeStepKind, DomainDecodeSurfaceKind,
-    EvaluationError, ExecutableEvidence, GateStage as BackendGateStage, InlinePipeConstructor,
+    EvaluationError, GateStage as BackendGateStage, InlinePipeConstructor,
     InlinePipePatternKind, InlinePipeStageKind, ItemKind as BackendItemKind, KernelEvaluator,
     KernelExprKind, KernelOriginKind, LayoutKind, LoweringError, NonSourceWakeupCause,
     ProjectionBase, RecurrenceTarget, RuntimeBigInt, RuntimeDbCommitPlan, RuntimeDbConnection,

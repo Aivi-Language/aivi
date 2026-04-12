@@ -29,6 +29,20 @@ fn static_builtin_class_member_arity(
     }
 }
 
+fn builtin_wrapper_intrinsic(kernel: &crate::Kernel) -> Option<crate::BuiltinClassMemberIntrinsic> {
+    match &kernel.exprs()[kernel.root].kind {
+        crate::KernelExprKind::BuiltinClassMember(intrinsic) => Some(*intrinsic),
+        crate::KernelExprKind::Apply { callee, arguments } => {
+            let crate::KernelExprKind::BuiltinClassMember(intrinsic) = &kernel.exprs()[*callee].kind
+            else {
+                return None;
+            };
+            (arguments.len() == kernel.convention.parameters.len()).then_some(*intrinsic)
+        }
+        _ => None,
+    }
+}
+
 fn static_evaluate_builtin_class_member_call(
     intrinsic: crate::BuiltinClassMemberIntrinsic,
     arguments: Vec<RuntimeValue>,

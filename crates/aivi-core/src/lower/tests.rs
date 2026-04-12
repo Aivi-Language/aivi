@@ -15,7 +15,7 @@ use crate::{
     BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,
     BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier, BuiltinFoldableCarrier,
     BuiltinFunctorCarrier, BuiltinMonadCarrier, BuiltinOrdSubject, BuiltinTraversableCarrier,
-    DecodeStep, ExecutableEvidence, GateStage, ItemKind, Reference, StageKind, Type,
+    DecodeStep, GateStage, ItemKind, Reference, StageKind, Type,
     validate::{ValidationError, validate_module},
 };
 
@@ -37,6 +37,49 @@ fn lower_text(path: &str, text: &str) -> aivi_hir::LoweringResult {
         parsed.all_diagnostics().collect::<Vec<_>>()
     );
     aivi_hir::lower_module(&parsed.module)
+}
+
+fn expect_executable_evidence_item(core: &crate::Module, expr_id: crate::ExprId) -> crate::ItemId {
+    let crate::ExprKind::Reference(Reference::ExecutableEvidence(item)) = &core.exprs()[expr_id].kind
+    else {
+        panic!("expected executable evidence item reference");
+    };
+    *item
+}
+
+fn expect_builtin_evidence_item(
+    core: &crate::Module,
+    expr_id: crate::ExprId,
+    expected: BuiltinClassMemberIntrinsic,
+) -> crate::ItemId {
+    let item = expect_executable_evidence_item(core, expr_id);
+    let body = core.items()[item]
+        .body
+        .expect("builtin evidence item should carry a body");
+    match &core.exprs()[body].kind {
+        crate::ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)) => {
+            assert_eq!(*intrinsic, expected);
+            assert!(
+                core.items()[item].parameters.is_empty(),
+                "zero-arity builtin evidence should lower as a value item"
+            );
+        }
+        crate::ExprKind::Apply { callee, arguments } => {
+            let crate::ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)) =
+                &core.exprs()[*callee].kind
+            else {
+                panic!("builtin evidence body should call a builtin class member");
+            };
+            assert_eq!(*intrinsic, expected);
+            assert_eq!(
+                arguments.len(),
+                core.items()[item].parameters.len(),
+                "builtin evidence wrapper should forward each synthetic parameter"
+            );
+        }
+        other => panic!("builtin evidence item should lower to a builtin wrapper body, found {other:?}"),
+    }
+    item
 }
 
 struct SingleImportResolver {
@@ -975,9 +1018,8 @@ value combined:Blob =
     let crate::ExprKind::Apply { callee, .. } = &core.exprs()[combined_body].kind else {
         panic!("combined should lower to an apply expression");
     };
-    let crate::ExprKind::Reference(crate::Reference::ExecutableEvidence(
-        ExecutableEvidence::Authored(hidden_item),
-    )) = &core.exprs()[*callee].kind
+    let crate::ExprKind::Reference(crate::Reference::ExecutableEvidence(hidden_item)) =
+        &core.exprs()[*callee].kind
     else {
         panic!("same-module class member should lower to authored executable evidence");
     };
@@ -1035,9 +1077,8 @@ value chosen:Option Int =
     let chosen_body = core.items()[chosen]
         .body
         .expect("chosen should carry a lowered body");
-    let crate::ExprKind::Reference(crate::Reference::ExecutableEvidence(
-        ExecutableEvidence::Authored(hidden_item),
-    )) = &core.exprs()[chosen_body].kind
+    let crate::ExprKind::Reference(crate::Reference::ExecutableEvidence(hidden_item)) =
+        &core.exprs()[chosen_body].kind
     else {
         panic!(
             "higher-kinded same-module class member should lower to authored executable evidence"
@@ -1123,12 +1164,11 @@ value total:Int =
         panic!("joined should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 3);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::List),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("reduce should lower to the builtin Foldable list intrinsic");
-    };
+    );
 }
 
 #[test]
@@ -1184,15 +1224,25 @@ value filtered:List Int =
         panic!("ordered should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
-        BuiltinClassMemberIntrinsic::Compare {
-            subject: BuiltinOrdSubject::Float,
-            ..
-        },
-    ))) = &core.exprs()[*callee].kind
+    let ordered_item = expect_executable_evidence_item(&core, *callee);
+    let ordered_wrapper_body = core.items()[ordered_item]
+        .body
+        .expect("compare evidence item should carry a body");
+    let crate::ExprKind::Apply {
+        callee: compare_callee,
+        arguments: compare_arguments,
+    } = &core.exprs()[ordered_wrapper_body].kind
     else {
-        panic!("compare should lower to the builtin Ord float intrinsic");
+        panic!("compare evidence item should lower to a builtin wrapper call");
     };
+    assert_eq!(compare_arguments.len(), core.items()[ordered_item].parameters.len());
+    let crate::ExprKind::Reference(Reference::BuiltinClassMember(
+        BuiltinClassMemberIntrinsic::Compare { subject, .. },
+    )) = &core.exprs()[*compare_callee].kind
+    else {
+        panic!("compare evidence item should call the builtin compare intrinsic");
+    };
+    assert_eq!(*subject, BuiltinOrdSubject::Float);
 
     let mapped = core
         .items()
@@ -1207,12 +1257,11 @@ value filtered:List Int =
         panic!("mapped should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 3);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Bimap(BuiltinBifunctorCarrier::Result),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("bimap should lower to the builtin Result bifunctor intrinsic");
-    };
+    );
 
     let ready_task = core
         .items()
@@ -1227,12 +1276,11 @@ value filtered:List Int =
         panic!("readyTask should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 1);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Task),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("pure task should lower to the builtin Task applicative intrinsic");
-    };
+    );
 
     let traversed = core
         .items()
@@ -1247,15 +1295,14 @@ value filtered:List Int =
         panic!("traversed should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Traverse {
             traversable: BuiltinTraversableCarrier::List,
             applicative: BuiltinApplicativeCarrier::Option,
         },
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("traverse should lower to the builtin list traversable intrinsic");
-    };
+    );
 
     let filtered = core
         .items()
@@ -1270,12 +1317,11 @@ value filtered:List Int =
         panic!("filtered should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::FilterMap(BuiltinFilterableCarrier::List),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("filterMap should lower to the builtin list filterable intrinsic");
-    };
+    );
 }
 
 #[test]
@@ -1325,12 +1371,11 @@ value joinedList:List Int =
         panic!("chainedOption should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Chain(BuiltinMonadCarrier::Option),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("chain should lower to the builtin option monad intrinsic");
-    };
+    );
 
     let joined_option = core
         .items()
@@ -1346,12 +1391,11 @@ value joinedList:List Int =
         panic!("joinedOption should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 1);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Join(BuiltinMonadCarrier::Option),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("join should lower to the builtin option monad intrinsic");
-    };
+    );
 
     let chained_result = core
         .items()
@@ -1365,12 +1409,11 @@ value joinedList:List Int =
     let crate::ExprKind::Apply { callee, .. } = &core.exprs()[chained_result_body].kind else {
         panic!("chainedResult should lower to an apply expression");
     };
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Chain(BuiltinMonadCarrier::Result),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("chain should lower to the builtin result monad intrinsic");
-    };
+    );
 
     let joined_list = core
         .items()
@@ -1384,12 +1427,11 @@ value joinedList:List Int =
     let crate::ExprKind::Apply { callee, .. } = &core.exprs()[joined_list_body].kind else {
         panic!("joinedList should lower to an apply expression");
     };
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
         BuiltinClassMemberIntrinsic::Join(BuiltinMonadCarrier::List),
-    ))) = &core.exprs()[*callee].kind
-    else {
-        panic!("join should lower to the builtin list monad intrinsic");
-    };
+    );
 }
 
 #[test]
@@ -1467,16 +1509,7 @@ value joinedTask:Task Text Int =
         let crate::ExprKind::Apply { callee, .. } = &core.exprs()[body].kind else {
             panic!("{name} should lower to an apply expression");
         };
-        let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
-            intrinsic,
-        ))) = &core.exprs()[*callee].kind
-        else {
-            panic!("{name} should lower to builtin executable evidence");
-        };
-        assert_eq!(
-            *intrinsic, expected,
-            "{name} lowered through the wrong intrinsic"
-        );
+        expect_builtin_evidence_item(&core, *callee, expected);
     }
 }
 
@@ -1787,12 +1820,11 @@ fn lowers_applicative_cluster_fixture_into_core_ir() {
         panic!("validatedUser should lower to nested applicative apply expressions");
     };
     assert_eq!(outer_arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *outer_callee,
         BuiltinClassMemberIntrinsic::Apply(crate::BuiltinApplyCarrier::Signal),
-    ))) = &core.exprs()[*outer_callee].kind
-    else {
-        panic!("validatedUser should end in the builtin Signal apply intrinsic");
-    };
+    );
 
     let crate::ExprKind::Apply {
         callee: middle_callee,
@@ -1802,12 +1834,11 @@ fn lowers_applicative_cluster_fixture_into_core_ir() {
         panic!("validatedUser should keep nesting Signal apply intrinsics");
     };
     assert_eq!(middle_arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *middle_callee,
         BuiltinClassMemberIntrinsic::Apply(crate::BuiltinApplyCarrier::Signal),
-    ))) = &core.exprs()[*middle_callee].kind
-    else {
-        panic!("validatedUser should use builtin Signal apply for the second member");
-    };
+    );
 
     let crate::ExprKind::Apply {
         callee: inner_callee,
@@ -1817,12 +1848,11 @@ fn lowers_applicative_cluster_fixture_into_core_ir() {
         panic!("validatedUser should use builtin Signal apply for the first member");
     };
     assert_eq!(inner_arguments.len(), 2);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *inner_callee,
         BuiltinClassMemberIntrinsic::Apply(crate::BuiltinApplyCarrier::Signal),
-    ))) = &core.exprs()[*inner_callee].kind
-    else {
-        panic!("validatedUser should begin with the builtin Signal apply intrinsic");
-    };
+    );
 
     let crate::ExprKind::Apply {
         callee: pure_callee,
@@ -1832,10 +1862,9 @@ fn lowers_applicative_cluster_fixture_into_core_ir() {
         panic!("validatedUser should seed the cluster with Applicative.pure");
     };
     assert_eq!(pure_arguments.len(), 1);
-    let crate::ExprKind::Reference(Reference::ExecutableEvidence(ExecutableEvidence::Builtin(
+    expect_builtin_evidence_item(
+        &core,
+        *pure_callee,
         BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Signal),
-    ))) = &core.exprs()[*pure_callee].kind
-    else {
-        panic!("validatedUser should seed the cluster with the builtin Signal pure intrinsic");
-    };
+    );
 }

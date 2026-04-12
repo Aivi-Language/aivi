@@ -1,3 +1,49 @@
+fn expect_backend_evidence_item(
+    _backend: &aivi_backend::Program,
+    kernel: &aivi_backend::Kernel,
+    expr_id: aivi_backend::KernelExprId,
+) -> aivi_backend::ItemId {
+    let KernelExprKind::ExecutableEvidence(item) = &kernel.exprs()[expr_id].kind else {
+        panic!("expected executable evidence item");
+    };
+    *item
+}
+
+fn expect_backend_builtin_evidence_item(
+    backend: &aivi_backend::Program,
+    kernel: &aivi_backend::Kernel,
+    expr_id: aivi_backend::KernelExprId,
+    expected: BuiltinClassMemberIntrinsic,
+) -> aivi_backend::ItemId {
+    let item = expect_backend_evidence_item(backend, kernel, expr_id);
+    let body = backend.items()[item]
+        .body
+        .expect("builtin evidence item should carry a body kernel");
+    let wrapper = &backend.kernels()[body];
+    match &wrapper.exprs()[wrapper.root].kind {
+        KernelExprKind::BuiltinClassMember(intrinsic) => {
+            assert_eq!(*intrinsic, expected);
+            assert!(
+                backend.items()[item].parameters.is_empty(),
+                "zero-arity builtin evidence should lower as a value item"
+            );
+        }
+        KernelExprKind::Apply { callee, arguments } => {
+            let KernelExprKind::BuiltinClassMember(intrinsic) = &wrapper.exprs()[*callee].kind else {
+                panic!("builtin evidence item should call a builtin class member");
+            };
+            assert_eq!(*intrinsic, expected);
+            assert_eq!(
+                arguments.len(),
+                backend.items()[item].parameters.len(),
+                "builtin evidence item should forward each synthetic parameter"
+            );
+        }
+        other => panic!("builtin evidence item should lower to a builtin wrapper body, found {other:?}"),
+    }
+    item
+}
+
 #[test]
 fn runtime_evaluates_item_bodies_and_source_kernels() {
     let backend = lower_text(
@@ -129,12 +175,12 @@ value none:List Int =
     match &joined_kernel.exprs()[joined_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            assert!(matches!(
-                &joined_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Append(
-                    BuiltinAppendCarrier::Text
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &joined_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Append(BuiltinAppendCarrier::Text),
+            );
         }
         other => panic!("expected append body to lower into an apply tree, found {other:?}"),
     }
@@ -146,12 +192,12 @@ value none:List Int =
     match &lifted_kernel.exprs()[lifted_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            assert!(matches!(
-                &lifted_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Map(
-                    BuiltinFunctorCarrier::Option
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &lifted_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Option),
+            );
         }
         other => panic!("expected map body to lower into an apply tree, found {other:?}"),
     }
@@ -163,12 +209,12 @@ value none:List Int =
     match &singleton_kernel.exprs()[singleton_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 1);
-            assert!(matches!(
-                &singleton_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Pure(
-                    BuiltinApplicativeCarrier::Option
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &singleton_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Option),
+            );
         }
         other => panic!("expected pure body to lower into an apply tree, found {other:?}"),
     }
@@ -180,22 +226,23 @@ value none:List Int =
     match &ready_task_kernel.exprs()[ready_task_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 1);
-            assert!(matches!(
-                &ready_task_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Pure(
-                    BuiltinApplicativeCarrier::Task
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &ready_task_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Task),
+            );
         }
         other => panic!("expected task pure body to lower into an apply tree, found {other:?}"),
     }
 
-    assert!(matches!(
-        &backend.kernels()[none_kernel_id].exprs()[backend.kernels()[none_kernel_id].root].kind,
-        KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Empty(
-            BuiltinAppendCarrier::List
-        )))
-    ));
+    let none_kernel = &backend.kernels()[none_kernel_id];
+    expect_backend_builtin_evidence_item(
+        &backend,
+        none_kernel,
+        none_kernel.root,
+        BuiltinClassMemberIntrinsic::Empty(BuiltinAppendCarrier::List),
+    );
 
     let mut evaluator = KernelEvaluator::new(&backend);
     let globals = BTreeMap::new();
@@ -271,12 +318,12 @@ value joinedList:List Int =
     match &chained_option_kernel.exprs()[chained_option_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            assert!(matches!(
-                &chained_option_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Chain(
-                    BuiltinMonadCarrier::Option
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &chained_option_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Chain(BuiltinMonadCarrier::Option),
+            );
         }
         other => panic!("expected chain body to lower into an apply tree, found {other:?}"),
     }
@@ -288,12 +335,12 @@ value joinedList:List Int =
     match &joined_option_kernel.exprs()[joined_option_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 1);
-            assert!(matches!(
-                &joined_option_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Join(
-                    BuiltinMonadCarrier::Option
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &joined_option_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Join(BuiltinMonadCarrier::Option),
+            );
         }
         other => panic!("expected join body to lower into an apply tree, found {other:?}"),
     }
@@ -391,11 +438,7 @@ value joinedTask:Task Text Int =
         let KernelExprKind::Apply { callee, .. } = &kernel.exprs()[kernel.root].kind else {
             panic!("{name} should lower to an apply tree");
         };
-        assert!(matches!(
-            &kernel.exprs()[*callee].kind,
-            KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(intrinsic))
-                if *intrinsic == expected_intrinsic
-        ));
+        expect_backend_builtin_evidence_item(&backend, &kernel, *callee, expected_intrinsic);
     }
 
     let mut evaluator = KernelEvaluator::new(&backend);
@@ -543,12 +586,12 @@ value invalidTotal:Int =
     match &total_kernel.exprs()[total_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 3);
-            assert!(matches!(
-                &total_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Reduce(
-                    BuiltinFoldableCarrier::List
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &total_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::List),
+            );
         }
         other => panic!("expected reduce body to lower into an apply tree, found {other:?}"),
     }
@@ -683,13 +726,25 @@ value filteredMissing:Option Int =
     match &ordered_float_kernel.exprs()[ordered_float_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
+            let item = expect_backend_evidence_item(&backend, &ordered_float_kernel, *callee);
+            let wrapper = &backend.kernels()[backend.items()[item]
+                .body
+                .expect("compare evidence item should carry a body kernel")];
+            let KernelExprKind::Apply {
+                callee: compare_callee,
+                arguments: compare_arguments,
+            } = &wrapper.exprs()[wrapper.root].kind
+            else {
+                panic!("compare evidence item should lower to a builtin wrapper call");
+            };
+            assert_eq!(compare_arguments.len(), backend.items()[item].parameters.len());
             assert!(matches!(
-                &ordered_float_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Compare {
+                &wrapper.exprs()[*compare_callee].kind,
+                KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Compare {
                     subject: BuiltinOrdSubject::Float,
                     ..
                 })
-            )));
+            ));
         }
         other => panic!("expected compare body to lower into an apply tree, found {other:?}"),
     }
@@ -701,12 +756,12 @@ value filteredMissing:Option Int =
     match &mapped_ok_kernel.exprs()[mapped_ok_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 3);
-            assert!(matches!(
-                &mapped_ok_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Bimap(
-                    BuiltinBifunctorCarrier::Result
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &mapped_ok_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Bimap(BuiltinBifunctorCarrier::Result),
+            );
         }
         other => panic!("expected bimap body to lower into an apply tree, found {other:?}"),
     }
@@ -718,13 +773,15 @@ value filteredMissing:Option Int =
     match &traversed_list_kernel.exprs()[traversed_list_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            assert!(matches!(
-                &traversed_list_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Traverse {
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &traversed_list_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::Traverse {
                     traversable: BuiltinTraversableCarrier::List,
-                    applicative: BuiltinApplicativeCarrier::Option
-                })
-            )));
+                    applicative: BuiltinApplicativeCarrier::Option,
+                },
+            );
         }
         other => panic!("expected traverse body to lower into an apply tree, found {other:?}"),
     }
@@ -736,12 +793,12 @@ value filteredMissing:Option Int =
     match &filtered_list_kernel.exprs()[filtered_list_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            assert!(matches!(
-                &filtered_list_kernel.exprs()[*callee].kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::FilterMap(
-                    BuiltinFilterableCarrier::List
-                )))
-            ));
+            expect_backend_builtin_evidence_item(
+                &backend,
+                &filtered_list_kernel,
+                *callee,
+                BuiltinClassMemberIntrinsic::FilterMap(BuiltinFilterableCarrier::List),
+            );
         }
         other => panic!("expected filterMap body to lower into an apply tree, found {other:?}"),
     }
@@ -871,11 +928,21 @@ value combined:Validation Text Pair =
         .expect("combined should carry a body")];
     assert!(
         combined_kernel.exprs().iter().any(|(_, expr)| {
+            let KernelExprKind::ExecutableEvidence(item) = expr.kind else {
+                return false;
+            };
+            let Some(body) = backend.items()[item].body else {
+                return false;
+            };
             matches!(
-                expr.kind,
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Apply(
-                    BuiltinApplyCarrier::Validation
-                )))
+                backend.kernels()[body].exprs()[backend.kernels()[body].root].kind,
+                KernelExprKind::Apply { callee, .. }
+                    if matches!(
+                        backend.kernels()[body].exprs()[callee].kind,
+                        KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Apply(
+                            BuiltinApplyCarrier::Validation
+                        ))
+                    )
             )
         }),
         "expected validation applicative clusters to lower through builtin Apply"
@@ -930,17 +997,25 @@ value lifted:Envelope (Option Int) =
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
             match &lifted_kernel.exprs()[*callee].kind {
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Builtin(BuiltinClassMemberIntrinsic::Map(
-                    BuiltinFunctorCarrier::Option,
-                ))) => {}
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Authored(item)) => {
-                    assert_eq!(backend.items()[*item].name.as_ref(), "__aivi_option_map");
+                KernelExprKind::ExecutableEvidence(_) => {
+                    let item = expect_backend_builtin_evidence_item(
+                        &backend,
+                        lifted_kernel,
+                        *callee,
+                        BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Option),
+                    );
+                    assert!(
+                        backend.items()[item].name.starts_with("builtin-evidence#"),
+                        "expected workspace map call to lower through a materialized builtin evidence item"
+                    );
                 }
                 KernelExprKind::Item(item) => {
                     assert_eq!(backend.items()[*item].name.as_ref(), "__aivi_option_map");
                 }
                 other => {
-                    panic!("expected workspace map call to lower through builtin evidence, authored evidence, or the ambient map item, found {other:?}");
+                    panic!(
+                        "expected workspace map call to lower through materialized builtin evidence or the imported ambient map item, found {other:?}"
+                    );
                 }
             }
         }
@@ -986,14 +1061,8 @@ value combined:Blob =
     match &combine_kernel.exprs()[combine_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            match &combine_kernel.exprs()[*callee].kind {
-                KernelExprKind::ExecutableEvidence(ExecutableEvidence::Authored(item)) => {
-                    assert!(backend.items()[*item].name.starts_with("instance#"));
-                }
-                other => panic!(
-                    "expected same-module class member to lower through authored executable evidence, found {other:?}"
-                ),
-            }
+            let item = expect_backend_evidence_item(&backend, combine_kernel, *callee);
+            assert!(backend.items()[item].name.starts_with("instance#"));
         }
         other => panic!("expected combine to lower to an apply expression, found {other:?}"),
     }

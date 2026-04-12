@@ -8,6 +8,7 @@ struct ModuleLowerer<'a> {
     import_item_map: HashMap<ImportId, ItemId>,
     domain_member_item_map: HashMap<DomainMemberKey, ItemId>,
     instance_member_item_map: HashMap<InstanceMemberKey, ItemId>,
+    builtin_evidence_item_map: HashMap<BuiltinEvidenceKey, ItemId>,
     pipe_builders: BTreeMap<PipeKey, PipeBuilder>,
     source_by_owner: HashMap<ItemId, SourceId>,
     decode_by_owner: HashMap<ItemId, DecodeProgramId>,
@@ -42,6 +43,12 @@ struct ModuleLowerer<'a> {
 enum MockImportTarget {
     Item(HirItemId),
     Import(ImportId),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct BuiltinEvidenceKey {
+    intrinsic: BuiltinClassMemberIntrinsic,
+    ty: Type,
 }
 
 fn is_markup_value(hir: &aivi_hir::Module, item_id: HirItemId) -> bool {
@@ -236,6 +243,7 @@ impl<'a> ModuleLowerer<'a> {
         let saved_import_item_map = std::mem::take(&mut self.import_item_map);
         let saved_domain_member_item_map = std::mem::take(&mut self.domain_member_item_map);
         let saved_instance_member_item_map = std::mem::take(&mut self.instance_member_item_map);
+        let saved_builtin_evidence_item_map = std::mem::take(&mut self.builtin_evidence_item_map);
         let saved_pipe_builders = std::mem::take(&mut self.pipe_builders);
         let saved_source_by_owner = std::mem::take(&mut self.source_by_owner);
         let saved_decode_by_owner = std::mem::take(&mut self.decode_by_owner);
@@ -267,6 +275,7 @@ impl<'a> ModuleLowerer<'a> {
         self.import_item_map = HashMap::new();
         self.domain_member_item_map = HashMap::new();
         self.instance_member_item_map = HashMap::new();
+        self.builtin_evidence_item_map = HashMap::new();
         self.pipe_builders = BTreeMap::new();
         self.source_by_owner = HashMap::new();
         self.decode_by_owner = HashMap::new();
@@ -419,6 +428,7 @@ impl<'a> ModuleLowerer<'a> {
         self.import_item_map = saved_import_item_map;
         self.domain_member_item_map = saved_domain_member_item_map;
         self.instance_member_item_map = saved_instance_member_item_map;
+        self.builtin_evidence_item_map = saved_builtin_evidence_item_map;
         self.pipe_builders = saved_pipe_builders;
         self.source_by_owner = saved_source_by_owner;
         self.decode_by_owner = saved_decode_by_owner;
@@ -457,6 +467,7 @@ impl<'a> ModuleLowerer<'a> {
             import_item_map: HashMap::new(),
             domain_member_item_map: HashMap::new(),
             instance_member_item_map: HashMap::new(),
+            builtin_evidence_item_map: HashMap::new(),
             pipe_builders: BTreeMap::new(),
             source_by_owner: HashMap::new(),
             decode_by_owner: HashMap::new(),
@@ -2106,9 +2117,7 @@ impl<'a> ModuleLowerer<'a> {
                             "same-module instance member body was not seeded into typed-core lowering",
                         )
                     })?;
-                return Ok(Reference::ExecutableEvidence(
-                    crate::ExecutableEvidence::Authored(lowered),
-                ));
+                return Ok(Reference::ExecutableEvidence(lowered));
             }
             aivi_hir::ClassMemberImplementation::ImportedInstance { import } => {
                 let reference = self.lower_import_reference(owner, import)?;
@@ -2117,9 +2126,7 @@ impl<'a> ModuleLowerer<'a> {
                         "imported instance member did not lower to an executable typed-core item",
                     ));
                 };
-                return Ok(Reference::ExecutableEvidence(
-                    crate::ExecutableEvidence::Authored(item),
-                ));
+                return Ok(Reference::ExecutableEvidence(item));
             }
             aivi_hir::ClassMemberImplementation::Builtin => {}
         }
@@ -2230,7 +2237,7 @@ impl<'a> ModuleLowerer<'a> {
             }
         };
         Ok(Reference::ExecutableEvidence(
-            crate::ExecutableEvidence::Builtin(intrinsic),
+            self.seed_builtin_evidence_item(owner, span, intrinsic, expr_ty)?,
         ))
     }
 
@@ -2407,6 +2414,140 @@ impl<'a> ModuleLowerer<'a> {
                     attempted_len: usize::MAX,
                 })?;
         Ok(aivi_hir::BindingId::from_raw(raw))
+    }
+
+    fn seed_builtin_evidence_item(
+        &mut self,
+        owner: HirItemId,
+        span: SourceSpan,
+        intrinsic: BuiltinClassMemberIntrinsic,
+        expr_ty: &aivi_hir::GateType,
+    ) -> Result<ItemId, LoweringError> {
+        let key = BuiltinEvidenceKey {
+            intrinsic,
+            ty: Type::lower(expr_ty),
+        };
+        if let Some(item) = self.builtin_evidence_item_map.get(&key).copied() {
+            return Ok(item);
+        }
+
+        let origin = self.next_synthetic_item_origin()?;
+        let (parameters, result_ty) = self.synthetic_builtin_signature(span, expr_ty)?;
+        let kind = if parameters.is_empty() {
+            ItemKind::Value
+        } else {
+            ItemKind::Function
+        };
+        let name = format!(
+            "builtin-evidence#{}::{}",
+            origin.as_raw(),
+            self.builtin_evidence_name(intrinsic)
+        )
+        .into_boxed_str();
+        let item_id = self
+            .module
+            .items_mut()
+            .alloc(Item {
+                origin,
+                span,
+                name,
+                kind,
+                parameters: parameters.clone(),
+                body: None,
+                pipes: Vec::new(),
+            })
+            .map_err(|overflow| arena_overflow("items", overflow))?;
+
+        let body = if parameters.is_empty() {
+            self.alloc_expr(
+                owner,
+                span,
+                Expr {
+                    span,
+                    ty: result_ty,
+                    kind: ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)),
+                },
+            )?
+        } else {
+            let callee = self.alloc_expr(
+                owner,
+                span,
+                Expr {
+                    span,
+                    ty: key.ty.clone(),
+                    kind: ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)),
+                },
+            )?;
+            let arguments = parameters
+                .iter()
+                .map(|parameter| {
+                    self.alloc_expr(
+                        owner,
+                        span,
+                        Expr {
+                            span,
+                            ty: parameter.ty.clone(),
+                            kind: ExprKind::Reference(Reference::Local(parameter.binding)),
+                        },
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            self.alloc_expr(
+                owner,
+                span,
+                Expr {
+                    span,
+                    ty: result_ty,
+                    kind: ExprKind::Apply { callee, arguments },
+                },
+            )?
+        };
+
+        self.module
+            .items_mut()
+            .get_mut(item_id)
+            .expect("fresh builtin evidence item should exist")
+            .body = Some(body);
+        self.builtin_evidence_item_map.insert(key, item_id);
+        Ok(item_id)
+    }
+
+    fn synthetic_builtin_signature(
+        &mut self,
+        span: SourceSpan,
+        expr_ty: &aivi_hir::GateType,
+    ) -> Result<(Vec<ItemParameter>, Type), LoweringError> {
+        let mut parameters = Vec::new();
+        let mut current = Type::lower(expr_ty);
+        while let Type::Arrow { parameter, result } = current {
+            let parameter_index = parameters.len();
+            parameters.push(ItemParameter {
+                binding: self.next_synthetic_binding()?,
+                span,
+                name: format!("arg{parameter_index}").into_boxed_str(),
+                ty: *parameter,
+            });
+            current = *result;
+        }
+        Ok((parameters, current))
+    }
+
+    fn builtin_evidence_name(&self, intrinsic: BuiltinClassMemberIntrinsic) -> &'static str {
+        match intrinsic {
+            BuiltinClassMemberIntrinsic::StructuralEq => "structural-eq",
+            BuiltinClassMemberIntrinsic::Compare { .. } => "compare",
+            BuiltinClassMemberIntrinsic::Append(_) => "append",
+            BuiltinClassMemberIntrinsic::Empty(_) => "empty",
+            BuiltinClassMemberIntrinsic::Map(_) => "map",
+            BuiltinClassMemberIntrinsic::Bimap(_) => "bimap",
+            BuiltinClassMemberIntrinsic::Pure(_) => "pure",
+            BuiltinClassMemberIntrinsic::Apply(_) => "apply",
+            BuiltinClassMemberIntrinsic::Chain(_) => "chain",
+            BuiltinClassMemberIntrinsic::Join(_) => "join",
+            BuiltinClassMemberIntrinsic::Reduce(_) => "reduce",
+            BuiltinClassMemberIntrinsic::Traverse { .. } => "traverse",
+            BuiltinClassMemberIntrinsic::FilterMap(_) => "filter-map",
+        }
     }
 
     fn lower_import_type(&self, ty: &ImportValueType) -> Type {

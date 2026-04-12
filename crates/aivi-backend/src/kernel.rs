@@ -1,7 +1,7 @@
 use std::fmt;
 
 use aivi_base::SourceSpan;
-use aivi_core::{Arena, ExecutableEvidence as SharedExecutableEvidence};
+use aivi_core::Arena;
 use aivi_hir::{DomainMemberHandle, IntrinsicValue, PipeTransformMode, SumConstructorHandle};
 
 use crate::{
@@ -27,7 +27,7 @@ pub use aivi_core::{
     BuiltinFunctorCarrier, BuiltinMonadCarrier, BuiltinOrdSubject, BuiltinTraversableCarrier,
 };
 
-pub type ExecutableEvidence = SharedExecutableEvidence<ItemId, BuiltinClassMemberIntrinsic>;
+pub type ExecutableEvidence = ItemId;
 
 impl fmt::Display for BuiltinTerm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -437,6 +437,7 @@ pub enum KernelExprKind {
     SumConstructor(SumConstructorHandle),
     DomainMember(DomainMemberHandle),
     ExecutableEvidence(ExecutableEvidence),
+    BuiltinClassMember(BuiltinClassMemberIntrinsic),
     Builtin(BuiltinTerm),
     IntrinsicValue(IntrinsicValue),
     Integer(IntegerLiteral),
@@ -622,12 +623,10 @@ pub fn describe_expr_kind(kind: &KernelExprKind) -> String {
                 handle.domain_name, handle.member_name
             )
         }
-        KernelExprKind::ExecutableEvidence(evidence) => match evidence {
-            ExecutableEvidence::Authored(item) => format!("executable-evidence item{item}"),
-            ExecutableEvidence::Builtin(intrinsic) => {
-                format!("builtin-class-member {intrinsic:?}")
-            }
-        },
+        KernelExprKind::ExecutableEvidence(item) => format!("executable-evidence item{item}"),
+        KernelExprKind::BuiltinClassMember(intrinsic) => {
+            format!("builtin-class-member {intrinsic:?}")
+        }
         KernelExprKind::Builtin(term) => format!("builtin {term}"),
         KernelExprKind::IntrinsicValue(value) => format!("intrinsic {value}"),
         KernelExprKind::Integer(integer) => integer.raw.to_string(),
