@@ -119,6 +119,11 @@ Updated companion syntax notes in [type-system.md](type-system.md) and [indexed-
 Sources updated alongside the wiki: `syntax.md`, `AIVI_RFC.md`, `manual/guide/types.md`, `crates/aivi-syntax/src/parse.rs`, and `crates/aivi-hir/src/lower.rs`.
 ## [2026-04-08] query | triggered temporal scheduling design
 
+## [2026-04-12] query | codebase audit
+
+Audited all Rust crates, the CLI execution boundary, stdlib/manual parity, and surface naming.  
+Added [codebase-audit-2026-04-12.md](codebase-audit-2026-04-12.md) and recorded the current JIT/object-code/build split plus the highest-confidence cleanup targets.
+
 Compared two designs for delayed/finite repeated signal triggering: a new source-shaped helper
 versus a recurrence/pipe-shaped temporal transform. Concluded that recurrence/temporal pipe is the
 more AIVI-like long-term home, while a narrow source helper is a pragmatic short-term fallback.  
@@ -267,3 +272,10 @@ Implemented three phases on branch `copilot/bits-stdlib`, merged to main:
 
 Removed stale roadmap claims about a future `@effect` decorator / `doOnce` combinator from `manual/stdlib/async.md` and `manual/guide/signals.md`.  
 Updated [signal-model.md](signal-model.md) to describe only the current `activeWhen`-gated fire-once idiom.
+
+## [2026-04-12] query | Domains versus product types
+
+Clarified that `aivi.date` still models `Date`, `TimeOfDay`, `DateTime`, and `ZonedDateTime` as
+constructor-backed product types, while `DateDelta` is the domain. Added
+[data-shapes.md](data-shapes.md) to capture the current split between records, constructor-backed
+types, and domains.

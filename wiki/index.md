@@ -13,6 +13,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [architecture.md](architecture.md) | High-level system overview: layers, crates, data flow |
 | [anonymous-lambdas.md](anonymous-lambdas.md) | Expression lambda surface, shorthand boundary, and hoisting model |
 | [compiler-pipeline.md](compiler-pipeline.md) | CST → HIR → Core → Lambda → Backend → Cranelift codegen |
+| [data-shapes.md](data-shapes.md) | Current split between records, constructor-backed types, and domains |
 | [type-system.md](type-system.md) | Types, kinds, HKT, type classes, Eq derivation, constraints |
 | [equality-semantics.md](equality-semantics.md) | Concrete structural Eq, generic constraints, and why demos still use comparator helpers |
 | [signal-model.md](signal-model.md) | Reactive signals, sources, merge syntax, signal graph |
@@ -29,6 +30,7 @@ A persistent, LLM-maintained knowledge base for the AIVI compiler project.
 | [openapi-source.md](openapi-source.md) | OpenAPI capability handle: `@source api`, codegen, auth |
 
 | [demo-audit.md](demo-audit.md) | Snake & Reversi audit — issues found and fixed |
+| [codebase-audit-2026-04-12.md](codebase-audit-2026-04-12.md) | Codebase-wide audit covering JIT/AOT boundary, crate hotspots, stdlib/manual drift, and API naming pressure |
 | [manual-hallucination-report.md](manual-hallucination-report.md) | Hallucination audit of 78 manual files: 7 critical, 5 high, 3 medium, 2 low findings |
 
 ## Log
@@ -37,4 +39,4 @@ See [log.md](log.md) for a chronological record of wiki activity.
 
 ---
 
-*Last updated: 2026-04-10*
+*Last updated: 2026-04-12*
