@@ -5,6 +5,7 @@ If you have never used typeclasses, here is the core idea: sometimes you want to
 If you have used interfaces in Java, traits in Rust, or protocols in Swift, typeclasses are a similar idea — but they also work at a higher level, letting you abstract over type constructors like `List`, `Option`, and `Signal`, not just concrete types.
 
 This page documents the **executable** compiler/runtime slice that exists today, not just surface syntax.
+Its builtin support section is the canonical doc source for higher-kinded executable class support: it is generated from the registry in `crates/aivi-core/src/class_support.rs`, and other docs should link here instead of copying carrier/class matrices.
 For class declaration and instance syntax, see [Classes](/guide/classes).
 
 ## When to use what
@@ -48,12 +49,14 @@ Bifunctor
 | `Filterable F` | `Functor F` | `filterMap : (A -> Option B) -> F A -> F B` |
 | `Bifunctor F` | — | `bimap : (A -> C) -> (B -> D) -> F A B -> F C D` |
 
-## Builtin executable support
+## Canonical builtin executable support
 
 In this section, **executable support** means the current compiler lowers class-member use to first-class executable evidence in `aivi-core`.
 Builtin carriers use builtin executable evidence intrinsics; authored instances use authored executable evidence that points at their lowered item bodies. If a carrier is not listed here for a builtin class, that class is **not** runtime-backed for that carrier today, even if parser, HIR, or checker support exists for related syntax.
 
 <!-- BEGIN builtin-executable-support -->
+This registry-backed table is the canonical documentation source for builtin executable higher-kinded support. Other docs should link here instead of restating carrier/class matrices.
+
 | Builtin carrier | Functor | Apply | Applicative | Monad | Foldable | Traversable | Filterable | Bifunctor |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `List` | yes | yes | yes | yes | yes | yes | yes | — |
@@ -67,7 +70,7 @@ Builtin carriers use builtin executable evidence intrinsics; authored instances 
 - `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.
 - `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.
 - `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.
-- Traverse result applicatives are builtin-supported for `List`, `Option`, `Result`, `Validation`, and `Signal`, but not for `Task`.
+- `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
 <!-- END builtin-executable-support -->
 
 ## Comparison classes
@@ -75,6 +78,7 @@ Builtin carriers use builtin executable evidence intrinsics; authored instances 
 `Eq A` and `Ord A` are the comparison-facing classes in the ambient prelude:
 
 - `Eq A` backs `==` and `!=`.
+- Current `Eq` instances provide both `(==)` and `(!=)` members.
 - `Ord A` exposes the primitive member `compare : A -> A -> Ordering`.
 - Ordinary `<`, `>`, `<=`, and `>=` are derived from `Ord.compare`; they are not separate class members.
 - Operator sections like `(<)` and `(>=)` follow the same `Ord.compare` lowering rule.

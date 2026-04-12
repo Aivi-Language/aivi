@@ -42,7 +42,7 @@ These types are always available and can be imported from `aivi.prelude`:
 | `Monoid A` | Semigroup with identity |
 | `Bifunctor F` | Mappable over both type parameters |
 
-For the current higher-kinded hierarchy, the executable builtin carrier matrix, and the current unary imported-instance slice for user-authored higher-kinded classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses). Parser or checker acceptance alone does not imply executable runtime support.
+For the current higher-kinded hierarchy, the canonical executable support reference, and the current unary imported-instance slice for user-authored higher-kinded classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses). Parser or checker acceptance alone does not imply executable runtime support.
 
 ## Option Functions
 

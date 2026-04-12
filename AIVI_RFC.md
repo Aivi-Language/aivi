@@ -813,10 +813,11 @@ Instance members lower into first-class executable evidence per `(instance, memb
 
 ### 7.2 Core instances
 
-- The canonical builtin executable class/carrier registry lives in `aivi_core::builtin_executable_class_support` and is mirrored in `manual/guide/typeclasses.md`.
+- The canonical builtin executable class/carrier registry lives in `aivi_core::builtin_executable_class_support` and is mirrored in `manual/guide/typeclasses.md#canonical-builtin-executable-support`; other docs should reference that section instead of copying support matrices.
 - `Signal` remains builtin `Functor`, `Apply`, and `Applicative` only; it is intentionally not `Chain` / `Monad`.
 - `Validation E` remains builtin `Functor`, `Bifunctor`, `Apply`, `Applicative`, `Foldable`, and `Traversable`, but not `Chain` / `Monad`.
 - `Task E` has builtin executable `Functor`, `Apply`, `Applicative`, `Chain`, and `Monad` support.
+- `Traversable` support and traverse-result applicative support are distinct registry checks: builtin `traverse` supports `List`, `Option`, `Result`, and `Validation` as traversables, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
 - `Eq` is compiler-provided for the structural cases in §7.3
 - current `Default` evidence is narrower than general imported instance resolution: builtin `Option` defaulting comes from `use aivi.defaults (Option)`, `Text` / `Int` / `Bool` omission can use `use aivi.defaults (defaultText, defaultInt, defaultBool)`, and other cases are still limited to same-module `Default` instances
 
@@ -836,10 +837,11 @@ No `Foldable Task` or `Foldable Signal` instance in v1.
 ```aivi
 class Eq A = {
     type (==) : A -> A -> Bool
+    type (!=) : A -> A -> Bool
 }
 ```
 
-`x != y` is syntactic sugar that desugars to `not (x == y)`. `(!=)` is not a member of the `Eq` class and has no independent dictionary slot.
+`Eq` currently exposes both comparison operators as class members. Authored instances must implement both `(==)` and `(!=)` exactly once.
 
 `Eq` uses the ordinary class/instance resolution rules in §7.1. Compiler-derived and builtin evidence covers the executable surface; user-authored `Eq` instances beyond same-module explicit evidence remain deferred.
 
@@ -2522,14 +2524,14 @@ Predicates may use:
 - `.` for the current subject
 - `and`, `or`, `not`
 - `==` when an `Eq` instance is available for the operand type
-- `!=` as syntactic sugar for `not (x == y)`
+- `!=` when an `Eq` instance is available for the operand type
 
 ```aivi
 users |> filter (.active and .age > 18)
 xs    |> takeWhile (. < 10)
 ```
 
-`x == y` desugars to `(==) x y`. `x != y` desugars to `not (x == y)`; `(!=)` is not a class member and introduces no separate dictionary slot.
+`x == y` resolves through `(==)`. `x != y` resolves through the `Eq` member `(!=)`.
 
 ---
 

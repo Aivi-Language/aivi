@@ -90,7 +90,7 @@ Classes and modules provide the extensibility layer. Read these after the five c
 | Page | Description |
 | --- | --- |
 | [classes.md](classes.md) | Typeclass-style abstraction with `class` and `instance` |
-| [typeclasses.md](typeclasses.md) | Higher-kinded hierarchy, built-in support matrix, HKT limits |
+| [typeclasses.md](typeclasses.md) | Higher-kinded hierarchy, canonical executable support reference, HKT limits |
 | [modules.md](modules.md) | Module system: `use`, `export`, and file layout |
 
 ---

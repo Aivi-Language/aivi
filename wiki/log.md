@@ -310,3 +310,10 @@ Updated the wiki to match the executable-evidence refactor for class members.
 
 - `wiki/type-system.md` now describes imported unary higher-kinded execution through authored executable evidence
 - `wiki/indexed-collections.md` now frames `Matrix` participation in `map` / `reduce` through authored executable evidence instead of hidden callable lowering
+
+## [2026-04-12] ingest | executable class doc canon
+
+Recorded the new canonical ownership for executable class support docs.
+
+- `manual/guide/typeclasses.md` now owns the registry-backed support table and dependent docs link there instead of describing their own matrices
+- `wiki/type-system.md` and new `wiki/wadler-audit.md` capture the preserved `Signal` / `Validation` / `Task` invariants plus the traverse-result and `!=` notes

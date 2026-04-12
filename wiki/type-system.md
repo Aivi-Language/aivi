@@ -73,7 +73,7 @@ Cross-module polymorphic imports use `ImportBindingMetadata::InstanceMember` and
 
 `EqDeriver` structurally derives `Eq` instances for records, sum types, and domains. The `EqContext` tracks derivation progress; `EqDerivation` is the result.
 
-**Important**: `==` at generic type requires an `Eq` constraint at the definition site. For polymorphic code, pass an explicit `eq` comparator function (see `stdlib/aivi/list.aivi` — `contains` takes an `eq` function parameter).
+**Important**: `==` / `!=` at generic type require an `Eq` constraint at the definition site, and current `Eq` instances provide both operator members explicitly. For polymorphic code, pass an explicit `eq` comparator function (see `stdlib/aivi/list.aivi` — `contains` takes an `eq` function parameter).
 
 ## Domains
 
@@ -118,6 +118,13 @@ AIVI's stdlib uses higher-kinded type classes for generic data abstractions:
 | `Append` | `* → *` |
 
 These correspond to the `Builtin*Carrier` types in `crates/aivi-core/src/expr.rs`.
+
+### Canonical executable support reference
+
+- `manual/guide/typeclasses.md#canonical-builtin-executable-support` is the canonical human-facing reference for builtin executable class support.
+- That section is generated from the registry in `crates/aivi-core/src/class_support.rs`, so it stays aligned with the lowering path rather than hand-maintained matrices.
+- Preserve these invariants when updating it: `Signal` stays applicative/non-monadic, `Validation E` stays applicative/non-monadic, and current `Task E` executable support remains intact.
+- `Traversable` carrier support and traverse-result applicative support are distinct: builtin `traverse` supports `List`, `Option`, `Result`, and `Validation` as traversables, while result applicatives additionally allow `Signal` but not `Task`.
 
 ### Current imported-instance slice
 

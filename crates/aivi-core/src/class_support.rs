@@ -470,6 +470,7 @@ pub fn builtin_filter_map_intrinsic(
 
 pub fn render_higher_kinded_builtin_support_markdown() -> String {
     let mut markdown = String::new();
+    markdown.push_str("This registry-backed table is the canonical documentation source for builtin executable higher-kinded support. Other docs should link here instead of restating carrier/class matrices.\n\n");
     markdown.push_str("| Builtin carrier |");
     for class in HIGHER_KINDED_DOC_CLASSES {
         markdown.push(' ');
@@ -507,9 +508,7 @@ pub fn render_higher_kinded_builtin_support_markdown() -> String {
     markdown.push_str("- `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.\n");
     markdown.push_str("- `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.\n");
     markdown.push_str("- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.\n");
-    markdown.push_str(
-        "- Traverse result applicatives are builtin-supported for `List`, `Option`, `Result`, `Validation`, and `Signal`, but not for `Task`.\n",
-    );
+    markdown.push_str("- `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.\n");
     markdown
 }
 

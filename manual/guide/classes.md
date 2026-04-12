@@ -1,7 +1,7 @@
 # Classes
 
 Classes are AIVI's typeclass-style abstraction mechanism. A class describes a set of operations that a type must provide.
-For the current higher-kinded hierarchy, builtin executable support matrix, and user-authored instance limits, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses).
+For the canonical executable support reference for higher-kinded classes, current builtin/runtime-backed carriers, and user-authored instance limits, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses).
 
 ## Declaring a class
 
@@ -86,6 +86,8 @@ func equivalent = left right =>
 
 value sameNumber = equivalent 4 4
 ```
+
+Current `Eq` instances provide both `(==)` and `(!=)` members, so both operators become available once the instance exists.
 
 `Ord` uses `compare : A -> A -> Ordering` as its primitive member. Surface ordering operators are derived from that member, so `<`, `>`, `<=`, and `>=` all work once an `Ord` instance exists.
 ## Declaring an instance
@@ -189,4 +191,4 @@ Classes let generic code talk about capability instead of one hard-coded type. T
 
 ---
 
-**See also:** [Typeclasses & Higher-Kinded Support](typeclasses.md) — HKT hierarchy, built-in support matrix, and user-authored instance limits
+**See also:** [Typeclasses & Higher-Kinded Support](typeclasses.md) — canonical executable support reference, HKT hierarchy, and user-authored instance limits
