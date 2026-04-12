@@ -2115,7 +2115,7 @@ impl<'a> ModuleLowerer<'a> {
         }
 
         let intrinsic = match (class_name.as_ref(), member_name.as_ref(), &dispatch.subject) {
-            ("Eq", "(==)", _) | ("Setoid", "equals", _) => {
+            ("Eq", "==", _) | ("Setoid", "equals", _) => {
                 BuiltinClassMemberIntrinsic::StructuralEq
             }
             (

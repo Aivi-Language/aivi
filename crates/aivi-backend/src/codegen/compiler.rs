@@ -3525,6 +3525,21 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         arguments: &[KernelExprId],
     ) -> Result<BuiltinCallPlan, CodegenError> {
         match intrinsic {
+            crate::BuiltinClassMemberIntrinsic::StructuralEq => {
+                let detail = format!("builtin class member `{intrinsic:?}`");
+                let (_parameters, _result_layout) = self.require_saturated_callable_call(
+                    kernel_id, expr_id, callee, arguments, &detail,
+                )?;
+                let [left, right] = arguments else {
+                    unreachable!(
+                        "saturated structural equality call should keep exactly two arguments"
+                    );
+                };
+                let kernel = &self.program.kernels()[kernel_id];
+                let shape =
+                    self.require_equatable_expression_pair(kernel_id, kernel, expr_id, *left, *right)?;
+                Ok(BuiltinCallPlan::StructuralEq(shape))
+            }
             crate::BuiltinClassMemberIntrinsic::Reduce(crate::BuiltinFoldableCarrier::List) => {
                 let detail = format!("builtin class member `{intrinsic:?}`");
                 let (_parameters, _result_layout) = self.require_saturated_callable_call(
@@ -4957,6 +4972,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "unsupported domain binary operator in emission",
                     )),
                 }
+            }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::StructuralEq(shape)) => {
+                let [left, right] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct structural equality lowering expected exactly two materialized arguments",
+                    ));
+                };
+                self.lower_native_equality_shape(kernel_id, expr_id, &shape, *left, *right, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
                 let [_function, seed, subject] = arguments else {

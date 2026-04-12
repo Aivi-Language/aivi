@@ -340,8 +340,8 @@ signal right = 22
 signal ready = True
 
 signal total : Signal Int = ready
-  ||> True => left + right
-  ||> _ => 0
+  T|> left + right
+  F|> 0
 ```
 
 Several derived signals may also share one upstream source through top-level `from` sugar:
@@ -1253,8 +1253,8 @@ elaborates to:
 
 ```aivi
 ready
- ||> True  -> start
- ||> False -> wait
+ T|> start
+ F|> wait
 ```
 
 `Option`:
@@ -1721,8 +1721,8 @@ signal right = 22
 signal ready = True
 
 signal total : Signal Int = ready
-  ||> True => left + right
-  ||> _ => 0
+  T|> left + right
+  F|> 0
 
 signal event : Signal Event = tick | keyDown
   ||> tick _ => Tick

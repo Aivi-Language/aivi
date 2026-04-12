@@ -371,6 +371,7 @@ enum DomainMemberCallPlan {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum BuiltinCallPlan {
+    StructuralEq(NativeEqualityShape),
     OptionSome(OptionCodegenContract),
     ListReduce(ListReducePlan),
 }
@@ -523,4 +524,3 @@ fn build_target_isa() -> Result<OwnedTargetIsa, CodegenError> {
             message: error.to_string().into_boxed_str(),
         })
 }
-

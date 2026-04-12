@@ -855,8 +855,8 @@ signal event : Signal Event = tick | keyDown
   ||> _ => Tick
 
 signal total : Signal Int = ready
-  ||> True => left + right
-  ||> _ => 0
+  T|> left + right
+  F|> 0
 ```
 
 Rules:

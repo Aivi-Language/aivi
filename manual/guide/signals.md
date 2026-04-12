@@ -121,8 +121,8 @@ signal right = 22
 signal ready = True
 
 signal total : Signal Int = ready
-  ||> True => left + right
-  ||> _ => 0
+  T|> left + right
+  F|> 0
 ```
 
 ### Multi-source merge

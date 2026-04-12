@@ -4049,7 +4049,7 @@ value view =
     #[test]
     fn formatter_normalizes_domain_member_bindings() {
         let formatted = format_text(
-            "type Builder = Int -> Duration\n\ndomain Duration over Int = {\n    type Builder\n    make raw=\n        raw\n}\n",
+            "type Builder = Int -> Duration\n\ndomain Duration over Int\n    make : Builder\n    make = raw => raw\n",
         );
         assert_eq!(
             formatted,
@@ -4112,7 +4112,7 @@ value view =
     #[test]
     fn formatter_normalizes_percent_domain_operator_layout() {
         let formatted = format_text(
-            "domain Bucket over Int = {\n    type Bucket -> Int -> Bucket\n    (%)\n}\n",
+            "domain Bucket over Int\n    (%) : Bucket -> Int -> Bucket\n",
         );
         assert_eq!(
             formatted,
@@ -4126,7 +4126,7 @@ value view =
     #[test]
     fn formatter_keeps_compact_domain_literal_suffixes() {
         let formatted = format_text(
-            "domain Duration over Int = {\n    suffix ms : Int = value => Duration value\n}\nvalue delay:Duration=250ms\nvalue applied=wrap 250ms\n",
+            "domain Duration over Int\n    suffix ms : Int = value => Duration value\nvalue delay:Duration=250ms\nvalue applied=wrap 250ms\n",
         );
         assert_eq!(
             formatted,

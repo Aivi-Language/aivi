@@ -3672,11 +3672,6 @@ impl<'a> TypeChecker<'a> {
         subject: &TypeBinding,
     ) -> Option<ClassMemberImplementation> {
         let class_name = self.class_name(resolution.class)?.to_owned();
-        if matches!(class_name.as_str(), "Eq" | "Setoid")
-            && matches!(subject, TypeBinding::Type(ty) if self.require_compiler_derived_eq(ty, &mut Vec::new()).is_ok())
-        {
-            return Some(ClassMemberImplementation::Builtin);
-        }
         if let Ok(Some((instance_id, instance))) =
             self.resolve_same_module_instance_binding_with_id(resolution.class, subject)
         {
@@ -3701,6 +3696,11 @@ impl<'a> TypeChecker<'a> {
             self.resolve_imported_instance_member(&class_name, resolution, subject)
         {
             return Some(ClassMemberImplementation::ImportedInstance { import });
+        }
+        if matches!(class_name.as_str(), "Eq" | "Setoid")
+            && matches!(subject, TypeBinding::Type(ty) if self.require_compiler_derived_eq(ty, &mut Vec::new()).is_ok())
+        {
+            return Some(ClassMemberImplementation::Builtin);
         }
         None
     }

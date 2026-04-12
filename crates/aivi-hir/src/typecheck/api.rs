@@ -247,3 +247,45 @@ pub(crate) fn resolve_class_member_dispatch(
         DomainMemberSelection::Ambiguous | DomainMemberSelection::NoMatch => None,
     }
 }
+
+pub(crate) fn resolve_class_member_dispatch_for_subject(
+    module: &Module,
+    member: ClassMemberResolution,
+    subject: &GateType,
+) -> Option<ResolvedClassMemberDispatch> {
+    let mut checker = TypeChecker::new(module);
+    let subject = TypeBinding::Type(subject.clone());
+    let implementation = checker.class_member_implementation(member, &subject)?;
+    Some(ResolvedClassMemberDispatch {
+        member,
+        subject,
+        implementation,
+    })
+}
+
+pub(crate) fn resolve_equality_dispatch(
+    module: &Module,
+    subject: &GateType,
+) -> Option<ResolvedClassMemberDispatch> {
+    let checker = TypeChecker::new(module);
+    for (class_name, member_name) in [("Eq", "=="), ("Setoid", "equals")] {
+        let Some(class) = checker.class_item_id_by_name(class_name) else {
+            continue;
+        };
+        let Item::Class(class_item) = &module.items()[class] else {
+            continue;
+        };
+        let Some(member_index) = class_item
+            .members
+            .iter()
+            .position(|member| member.name.text() == member_name)
+        else {
+            continue;
+        };
+        let member = ClassMemberResolution { class, member_index };
+        if let Some(dispatch) = resolve_class_member_dispatch_for_subject(module, member, subject) {
+            return Some(dispatch);
+        }
+    }
+    None
+}

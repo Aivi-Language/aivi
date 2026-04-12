@@ -1365,7 +1365,7 @@ fn check_accepts_cross_module_domain_literal_suffix_imports() {
     workspace.write("aivi.toml", "");
     workspace.write(
         "shared/timing.aivi",
-        "domain Duration over Int = {\n    suffix ms : Int = value => Duration value\n    suffix sec : Int = value => Duration value\n    type Duration -> Duration -> Duration\n    (+)\n    type Duration -> Int\n    unwrap\n}\n\nexport Duration\n",
+        "domain Duration over Int\n    suffix ms : Int = value => Duration value\n    suffix sec : Int = value => Duration value\n    (+) : Duration -> Duration -> Duration\n    unwrap : Duration -> Int\n\nexport Duration\n",
     );
     let main = workspace.write(
         "main.aivi",

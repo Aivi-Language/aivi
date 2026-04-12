@@ -10,6 +10,10 @@ use crate::{
     PipeExpr, PipeStageKind, PipeTransformMode, ProjectionBase, SuffixedIntegerLiteral,
     TermReference, TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
+    general_expr_elaboration::{
+        EqualityEvidenceCatalog, build_equality_runtime_expr,
+        extend_gate_env_with_equality_evidence, lower_name_expr_with_equality_evidence,
+    },
     typecheck::resolve_class_member_dispatch,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeFunctionSignatureMatch,
@@ -388,6 +392,7 @@ impl GateRuntimeExpr {
 pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
     let module = crate::typecheck::elaborate_default_record_fields(module);
     let module = &module;
+    let equality_evidence = EqualityEvidenceCatalog::new(module);
     let items = module
         .items()
         .iter()
@@ -407,7 +412,8 @@ pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
                 &mut stages,
             ),
             Item::Function(item) => {
-                let env = gate_env_for_function(&item, &mut typing);
+                let mut env = gate_env_for_function(&item, &mut typing);
+                extend_gate_env_with_equality_evidence(&mut env, owner, &equality_evidence);
                 collect_gate_stages(module, owner, item.body, &env, &mut typing, &mut stages);
             }
             Item::Signal(item) => {
@@ -423,12 +429,14 @@ pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
                 }
             }
             Item::Instance(item) => {
+                let mut env = GateExprEnv::default();
+                extend_gate_env_with_equality_evidence(&mut env, owner, &equality_evidence);
                 for member in item.members {
                     collect_gate_stages(
                         module,
                         owner,
                         member.body,
-                        &GateExprEnv::default(),
+                        &env,
                         &mut typing,
                         &mut stages,
                     );
@@ -1054,6 +1062,7 @@ fn lower_gate_runtime_expr_with_purity(
     typing: &mut GateTypeContext<'_>,
     purity: GateRuntimePurity,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let equality_evidence = EqualityEvidenceCatalog::new(module);
     let mut work: Vec<LowerTask> = vec![LowerTask::Eval(expr_id)];
     let mut results: Vec<GateRuntimeExpr> = Vec::new();
 
@@ -1075,14 +1084,26 @@ fn lower_gate_runtime_expr_with_purity(
                 match expr.kind {
                     // --- Leaf nodes: push result directly ---
                     ExprKind::Name(reference) => {
-                        let kind = GateRuntimeExprKind::Reference(runtime_reference_for_name(
-                            module, expr.span, &reference,
-                        )?);
-                        results.push(GateRuntimeExpr {
-                            span: expr.span,
-                            ty,
-                            kind,
-                        });
+                        if let Some(lowered) = lower_name_expr_with_equality_evidence(
+                            module,
+                            typing,
+                            &equality_evidence,
+                            expr.span,
+                            &reference,
+                            env,
+                            &ty,
+                        ) {
+                            results.push(lowered);
+                        } else {
+                            let kind = GateRuntimeExprKind::Reference(runtime_reference_for_name(
+                                module, expr.span, &reference,
+                            )?);
+                            results.push(GateRuntimeExpr {
+                                span: expr.span,
+                                ty,
+                                kind,
+                            });
+                        }
                     }
                     ExprKind::Integer(literal) => {
                         results.push(GateRuntimeExpr {
@@ -1334,15 +1355,21 @@ fn lower_gate_runtime_expr_with_purity(
                 let left = results
                     .pop()
                     .expect("result stack has left for BuildBinary");
-                results.push(GateRuntimeExpr {
-                    span,
-                    ty,
-                    kind: GateRuntimeExprKind::Binary {
-                        left: Box::new(left),
-                        operator,
-                        right: Box::new(right),
-                    },
-                });
+                if matches!(operator, BinaryOperator::Equals | BinaryOperator::NotEquals) {
+                    results.push(build_equality_runtime_expr(
+                        module, env, span, ty, operator, left, right,
+                    ));
+                } else {
+                    results.push(GateRuntimeExpr {
+                        span,
+                        ty,
+                        kind: GateRuntimeExprKind::Binary {
+                            left: Box::new(left),
+                            operator,
+                            right: Box::new(right),
+                        },
+                    });
+                }
             }
             LowerTask::BuildDomainBinary {
                 span,

@@ -698,6 +698,121 @@ fun samePath:Bool = left:Path right:Path=>    left == right
 }
 
 #[test]
+fn same_module_eq_instances_override_builtin_domain_structural_equality() {
+    let backend = lower_text(
+        "backend-domain-instance-equality.aivi",
+        r#"
+domain Path over Text
+    type Text -> Path
+    fromText
+
+instance Eq Path = {
+    (==) left right = True
+}
+
+value left : Path = fromText "/tmp/a"
+value right : Path = fromText "/tmp/b"
+value same : Bool = left == right
+"#,
+    );
+
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "same"), &BTreeMap::new())
+            .expect("same-module Eq instances should drive runtime equality"),
+        RuntimeValue::Bool(true)
+    );
+
+    let same_body = backend.items()[find_item(&backend, "same")]
+        .body
+        .expect("same should carry a body kernel");
+    let lazy = aivi_backend::BackendExecutableProgram::interpreted(&backend)
+        .compile_kernel(same_body)
+        .expect("same-module Eq instances should keep the concrete equality kernel compilable");
+    assert_eq!(lazy.kernel_id(), same_body);
+    assert!(!lazy.object().is_empty());
+}
+
+#[test]
+fn runtime_preserves_eq_constrained_function_equality() {
+    let backend = lower_text(
+        "backend-generic-eq-runtime.aivi",
+        r#"
+fun same:Eq A => Bool = left:A right:A =>
+    left == right
+
+value sameText:Bool = same "Ada" "Ada"
+value differentText:Bool = same "Ada" "Grace"
+"#,
+    );
+
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "sameText"), &BTreeMap::new())
+            .expect("Eq-constrained equality should evaluate for matching Text"),
+        RuntimeValue::Bool(true)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "differentText"), &BTreeMap::new())
+            .expect("Eq-constrained equality should evaluate for distinct Text"),
+        RuntimeValue::Bool(false)
+    );
+}
+
+#[test]
+fn runtime_forwards_custom_eq_evidence_through_nested_generic_helpers() {
+    let backend = lower_text(
+        "backend-nested-generic-eq-runtime.aivi",
+        r#"
+domain Path over Text
+    type Text -> Path
+    fromText
+
+instance Eq Path = {
+    (==) left right = True
+}
+
+fun same:Eq A => Bool = left:A right:A =>
+    left == right
+
+fun nested:Eq A => Bool = left:A right:A =>
+    same left right
+
+value left : Path = fromText "/tmp/a"
+value right : Path = fromText "/tmp/b"
+value direct : Bool = same left right
+value nestedSame : Bool = nested left right
+"#,
+    );
+
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "direct"), &BTreeMap::new())
+            .expect("generic helper should use same-module Eq instance"),
+        RuntimeValue::Bool(true)
+    );
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "nestedSame"), &BTreeMap::new())
+            .expect("nested generic helper should forward Eq evidence"),
+        RuntimeValue::Bool(true)
+    );
+
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    assert_eq!(
+        engine
+            .evaluate_item(find_item(&backend, "nestedSame"), &BTreeMap::new())
+            .expect("lazy JIT engine should match interpreter for forwarded Eq evidence"),
+        RuntimeValue::Bool(true)
+    );
+}
+
+#[test]
 fn cranelift_codegen_compiles_inline_subject_projection_pipes() {
     let user_type = CoreType::Record(vec![
         CoreRecordField {

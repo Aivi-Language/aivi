@@ -45,6 +45,18 @@ pub(crate) fn item_type_name(item: &Item) -> String {
 pub(crate) struct GateExprEnv {
     pub(crate) locals: HashMap<BindingId, GateType>,
     pub(crate) current_domain: Option<ItemId>,
+    pub(crate) equality_evidence: Vec<GateEqualityEvidence>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GateEqualityEvidence {
+    pub(crate) binding: BindingId,
+    pub(crate) span: SourceSpan,
+    pub(crate) name: Box<str>,
+    pub(crate) ty: GateType,
+    pub(crate) subject: GateType,
+    pub(crate) member: ClassMemberResolution,
+    pub(crate) priority: u8,
 }
 
 pub(crate) fn pipe_stage_subject_memo_type(
