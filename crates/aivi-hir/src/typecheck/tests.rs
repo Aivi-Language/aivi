@@ -551,6 +551,45 @@ fn typecheck_accepts_ord_comparison_for_text() {
 }
 
 #[test]
+fn typecheck_accepts_ord_comparison_for_nominal_domains() {
+    let report = typecheck_text(
+        "ord-domain-comparison.aivi",
+        "domain Calendar over Int = {\n\
+             \x20\x20\x20\x20suffix day : Int = value => Calendar value\n\
+             \x20\x20\x20\x20toDay : Calendar -> Int\n\
+             \x20\x20\x20\x20toDay value = value\n\
+             }\n\
+             instance Eq Calendar = {\n\
+             \x20\x20\x20\x20(==) left right = toDay left == toDay right\n\
+             \x20\x20\x20\x20(!=) left right = toDay left != toDay right\n\
+             }\n\
+             instance Ord Calendar = {\n\
+             \x20\x20\x20\x20compare left right = compare (toDay left) (toDay right)\n\
+             }\n\
+             value earlier:Bool = 1day < 2day\n",
+    );
+    assert!(
+        report.is_ok(),
+        "expected Ord-backed domain comparison to typecheck, got diagnostics: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn typecheck_accepts_ordering_operator_sections() {
+    let report = typecheck_text(
+        "ord-operator-section.aivi",
+        "value less:(Int -> Int -> Bool) = (<)\n\
+         value ordered:Bool = less 1 2\n",
+    );
+    assert!(
+        report.is_ok(),
+        "expected ordering operator section to typecheck, got diagnostics: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
 fn typecheck_reports_invalid_binary_operator_for_non_ord_comparison() {
     let report = typecheck_text(
         "invalid-binary-operator.aivi",

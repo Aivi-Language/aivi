@@ -69,6 +69,8 @@ domain Score over Int
 
 The body is checked against the carrier view of the domain, while callers still see the nominal signature.
 
+For comparison, prefer `Eq` / `Ord` instances over authored domain operator members. Once a domain implements `Ord.compare`, ordinary `<`, `>`, `<=`, and `>=` work automatically for that domain.
+
 ## `self` and receiver-style members
 
 When a member operates on the current domain value, you can write it in receiver style with `self`:

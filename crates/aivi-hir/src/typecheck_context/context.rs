@@ -1931,6 +1931,264 @@ impl<'a> GateTypeContext<'a> {
         )
     }
 
+    pub(crate) fn match_item_name_candidate(
+        &mut self,
+        item_id: ItemId,
+        expected: &GateType,
+    ) -> Option<GateType> {
+        let annotation = match &self.module.items()[item_id] {
+            Item::Value(item) => item.annotation?,
+            Item::Function(item) => item.annotation?,
+            Item::Signal(item) => item.annotation?,
+            _ => return None,
+        };
+        let mut substitutions = HashMap::new();
+        let mut item_stack = Vec::new();
+        if !self.match_hir_type(annotation, expected, &mut substitutions, &mut item_stack) {
+            return None;
+        }
+        let lowered = self.lower_type(annotation, &substitutions, &mut item_stack, true)?;
+        lowered.same_shape(expected).then_some(lowered)
+    }
+
+    fn match_gate_type_template(
+        template: &GateType,
+        actual: &GateType,
+        substitutions: &mut HashMap<TypeParameterId, GateType>,
+    ) -> bool {
+        if let Some(expanded_template) = template.expand_transparent_import_alias() {
+            return Self::match_gate_type_template(&expanded_template, actual, substitutions);
+        }
+        if let Some(expanded_actual) = actual.expand_transparent_import_alias() {
+            return Self::match_gate_type_template(template, &expanded_actual, substitutions);
+        }
+        match template {
+            GateType::TypeParameter { parameter, .. } => match substitutions.entry(*parameter) {
+                Entry::Occupied(existing) => existing.get().same_shape(actual),
+                Entry::Vacant(slot) => {
+                    slot.insert(actual.clone());
+                    true
+                }
+            },
+            GateType::Primitive(_) => template == actual,
+            GateType::Tuple(template_elements) => match actual {
+                GateType::Tuple(actual_elements) => {
+                    template_elements.len() == actual_elements.len()
+                        && template_elements
+                            .iter()
+                            .zip(actual_elements.iter())
+                            .all(|(template, actual)| {
+                                Self::match_gate_type_template(template, actual, substitutions)
+                            })
+                }
+                _ => false,
+            },
+            GateType::Record(template_fields) => match actual {
+                GateType::Record(actual_fields) => {
+                    template_fields.len() == actual_fields.len()
+                        && template_fields
+                            .iter()
+                            .zip(actual_fields.iter())
+                            .all(|(template, actual)| {
+                                template.name == actual.name
+                                    && Self::match_gate_type_template(
+                                        &template.ty,
+                                        &actual.ty,
+                                        substitutions,
+                                    )
+                            })
+                }
+                _ => false,
+            },
+            GateType::Arrow {
+                parameter: template_parameter,
+                result: template_result,
+            } => match actual {
+                GateType::Arrow {
+                    parameter: actual_parameter,
+                    result: actual_result,
+                } => {
+                    Self::match_gate_type_template(
+                        template_parameter,
+                        actual_parameter,
+                        substitutions,
+                    ) && Self::match_gate_type_template(
+                        template_result,
+                        actual_result,
+                        substitutions,
+                    )
+                }
+                _ => false,
+            },
+            GateType::List(template_element) => match actual {
+                GateType::List(actual_element) => {
+                    Self::match_gate_type_template(template_element, actual_element, substitutions)
+                }
+                _ => false,
+            },
+            GateType::Map {
+                key: template_key,
+                value: template_value,
+            } => match actual {
+                GateType::Map {
+                    key: actual_key,
+                    value: actual_value,
+                } => {
+                    Self::match_gate_type_template(template_key, actual_key, substitutions)
+                        && Self::match_gate_type_template(
+                            template_value,
+                            actual_value,
+                            substitutions,
+                        )
+                }
+                _ => false,
+            },
+            GateType::Set(template_element) => match actual {
+                GateType::Set(actual_element) => {
+                    Self::match_gate_type_template(template_element, actual_element, substitutions)
+                }
+                _ => false,
+            },
+            GateType::Option(template_element) => match actual {
+                GateType::Option(actual_element) => {
+                    Self::match_gate_type_template(template_element, actual_element, substitutions)
+                }
+                _ => false,
+            },
+            GateType::Result {
+                error: template_error,
+                value: template_value,
+            } => match actual {
+                GateType::Result {
+                    error: actual_error,
+                    value: actual_value,
+                } => {
+                    Self::match_gate_type_template(template_error, actual_error, substitutions)
+                        && Self::match_gate_type_template(
+                            template_value,
+                            actual_value,
+                            substitutions,
+                        )
+                }
+                _ => false,
+            },
+            GateType::Validation {
+                error: template_error,
+                value: template_value,
+            } => match actual {
+                GateType::Validation {
+                    error: actual_error,
+                    value: actual_value,
+                } => {
+                    Self::match_gate_type_template(template_error, actual_error, substitutions)
+                        && Self::match_gate_type_template(
+                            template_value,
+                            actual_value,
+                            substitutions,
+                        )
+                }
+                _ => false,
+            },
+            GateType::Signal(template_element) => match actual {
+                GateType::Signal(actual_element) => {
+                    Self::match_gate_type_template(template_element, actual_element, substitutions)
+                }
+                _ => false,
+            },
+            GateType::Task {
+                error: template_error,
+                value: template_value,
+            } => match actual {
+                GateType::Task {
+                    error: actual_error,
+                    value: actual_value,
+                } => {
+                    Self::match_gate_type_template(template_error, actual_error, substitutions)
+                        && Self::match_gate_type_template(
+                            template_value,
+                            actual_value,
+                            substitutions,
+                        )
+                }
+                _ => false,
+            },
+            GateType::Domain {
+                item,
+                arguments: template_arguments,
+                ..
+            } => match actual {
+                GateType::Domain {
+                    item: actual_item,
+                    arguments: actual_arguments,
+                    ..
+                } => {
+                    item == actual_item
+                        && template_arguments.len() == actual_arguments.len()
+                        && template_arguments
+                            .iter()
+                            .zip(actual_arguments.iter())
+                            .all(|(template, actual)| {
+                                Self::match_gate_type_template(template, actual, substitutions)
+                            })
+                }
+                _ => false,
+            },
+            GateType::OpaqueItem {
+                item,
+                arguments: template_arguments,
+                ..
+            } => match actual {
+                GateType::OpaqueItem {
+                    item: actual_item,
+                    arguments: actual_arguments,
+                    ..
+                } => {
+                    item == actual_item
+                        && template_arguments.len() == actual_arguments.len()
+                        && template_arguments
+                            .iter()
+                            .zip(actual_arguments.iter())
+                            .all(|(template, actual)| {
+                                Self::match_gate_type_template(template, actual, substitutions)
+                            })
+                }
+                _ => false,
+            },
+            GateType::OpaqueImport {
+                import,
+                arguments: template_arguments,
+                ..
+            } => match actual {
+                GateType::OpaqueImport {
+                    import: actual_import,
+                    arguments: actual_arguments,
+                    ..
+                } => {
+                    import == actual_import
+                        && template_arguments.len() == actual_arguments.len()
+                        && template_arguments
+                            .iter()
+                            .zip(actual_arguments.iter())
+                            .all(|(template, actual)| {
+                                Self::match_gate_type_template(template, actual, substitutions)
+                            })
+                }
+                _ => false,
+            },
+        }
+    }
+
+    fn specialize_gate_type_template(
+        &self,
+        template: &GateType,
+        expected: &GateType,
+    ) -> Option<GateType> {
+        let mut substitutions = HashMap::new();
+        Self::match_gate_type_template(template, expected, &mut substitutions)
+            .then(|| template.substitute_type_parameters(&substitutions))
+            .filter(|specialized| specialized.same_shape(expected))
+    }
+
     pub(crate) fn class_member_candidates(
         &self,
         reference: &TermReference,
@@ -3881,10 +4139,29 @@ impl<'a> GateTypeContext<'a> {
                 operator,
                 right,
             } => {
-                let mut info = self.infer_expr(left, env, ambient);
-                let left_ty = info.actual_gate_type().or(info.ty.clone());
-                let right_info = self.infer_expr(right, env, ambient);
-                let right_ty = right_info.actual_gate_type().or(right_info.ty.clone());
+                let mut left_info = self.infer_expr(left, env, ambient);
+                let mut left_ty = left_info.actual_gate_type().or(left_info.ty.clone());
+                let mut right_info = self.infer_expr(right, env, ambient);
+                let mut right_ty = right_info.actual_gate_type().or(right_info.ty.clone());
+
+                if right_ty.is_none()
+                    && let Some(left) = left_ty.as_ref()
+                    && let Some(refined) =
+                        self.infer_binary_operand_against_peer(right, env, ambient, left)
+                {
+                    right_ty = refined.actual_gate_type().or(refined.ty.clone());
+                    right_info = refined;
+                }
+                if left_ty.is_none()
+                    && let Some(right) = right_ty.as_ref()
+                    && let Some(refined) =
+                        self.infer_binary_operand_against_peer(left, env, ambient, right)
+                {
+                    left_ty = refined.actual_gate_type().or(refined.ty.clone());
+                    left_info = refined;
+                }
+
+                let mut info = left_info;
                 info.merge(right_info);
                 info.ty = if let (Some(left), Some(right)) = (left_ty.as_ref(), right_ty.as_ref()) {
                     match select_domain_binary_operator(self.module, self, operator, left, right) {
@@ -3923,7 +4200,9 @@ impl<'a> GateTypeContext<'a> {
                     | (Some(left), Some(right), crate::hir::BinaryOperator::LessThan)
                     | (Some(left), Some(right), crate::hir::BinaryOperator::GreaterThanOrEqual)
                     | (Some(left), Some(right), crate::hir::BinaryOperator::LessThanOrEqual)
-                        if is_numeric_gate_type(left) && left.same_shape(right) =>
+                        if left.same_shape(right)
+                            && crate::typecheck::resolve_ordering_dispatch(self.module, left)
+                                .is_some() =>
                     {
                         Some(GateType::Primitive(BuiltinType::Bool))
                     }
@@ -3993,6 +4272,69 @@ impl<'a> GateTypeContext<'a> {
             ExprKind::Markup(_) => GateExprInfo::default(),
         };
         self.finalize_expr_info(self.maybe_use_ambient_signal_payload(expr_id, ambient, info))
+    }
+
+    pub(crate) fn infer_expr_with_expected(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        expected: &GateType,
+    ) -> GateExprInfo {
+        let expr = self.module.exprs()[expr_id].clone();
+        match expr.kind {
+            ExprKind::SuffixedInteger(literal) => {
+                self.infer_suffixed_integer_expr_with_expected(&literal, expected)
+            }
+            ExprKind::Name(reference) => self.infer_name_with_expected(&reference, env, expected),
+            _ => self.infer_expr(expr_id, env, ambient),
+        }
+    }
+
+    fn infer_binary_operand_against_peer(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        peer: &GateType,
+    ) -> Option<GateExprInfo> {
+        let expr = self.module.exprs()[expr_id].clone();
+        matches!(expr.kind, ExprKind::SuffixedInteger(_))
+            .then(|| self.infer_expr_with_expected(expr_id, env, ambient, peer))
+    }
+
+    fn infer_suffixed_integer_expr_with_expected(
+        &mut self,
+        literal: &crate::hir::SuffixedIntegerLiteral,
+        expected: &GateType,
+    ) -> GateExprInfo {
+        match self.select_suffixed_integer_candidate(literal, Some(expected)) {
+            LiteralSuffixSelection::Unique { result, .. } => GateExprInfo {
+                ty: Some(result),
+                ..GateExprInfo::default()
+            },
+            LiteralSuffixSelection::Ambiguous { candidates } => GateExprInfo {
+                issues: vec![GateIssue::AmbiguousLiteralSuffix {
+                    span: literal.suffix.span(),
+                    suffix: literal.suffix.text().to_owned(),
+                    candidates,
+                }],
+                ..GateExprInfo::default()
+            },
+            LiteralSuffixSelection::NoMatch { candidates } => {
+                if candidates.is_empty() {
+                    GateExprInfo {
+                        issues: vec![GateIssue::UnknownLiteralSuffix {
+                            span: literal.suffix.span(),
+                            suffix: literal.suffix.text().to_owned(),
+                        }],
+                        ..GateExprInfo::default()
+                    }
+                } else {
+                    GateExprInfo::default()
+                }
+            }
+        }
     }
 
     pub(crate) fn infer_name(
@@ -4106,6 +4448,61 @@ impl<'a> GateTypeContext<'a> {
                 }
             }
         }
+    }
+
+    pub(crate) fn infer_name_with_expected(
+        &mut self,
+        reference: &TermReference,
+        env: &GateExprEnv,
+        expected: &GateType,
+    ) -> GateExprInfo {
+        let mut info = match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::Item(item_id)) => {
+                if let Some(ty) = self.match_item_name_candidate(*item_id, expected) {
+                    GateExprInfo {
+                        actual: Some(SourceOptionActualType::from_gate_type(&ty)),
+                        contains_signal: ty.is_signal(),
+                        ty: Some(ty),
+                        ..GateExprInfo::default()
+                    }
+                } else {
+                    self.infer_name(reference, env)
+                }
+            }
+            ResolutionState::Resolved(TermResolution::DomainMember(_))
+            | ResolutionState::Resolved(TermResolution::AmbiguousDomainMembers(_)) => {
+                match self.select_domain_member_name(reference, expected) {
+                    Some(DomainMemberSelection::Unique(ty)) => GateExprInfo {
+                        actual: Some(SourceOptionActualType::from_gate_type(&ty)),
+                        contains_signal: ty.is_signal(),
+                        ty: Some(ty),
+                        ..GateExprInfo::default()
+                    },
+                    Some(DomainMemberSelection::Ambiguous) => GateExprInfo {
+                        issues: vec![GateIssue::AmbiguousDomainMember {
+                            span: reference.span(),
+                            name: reference.path.segments().last().text().to_owned(),
+                            candidates: self
+                                .domain_member_candidate_labels(reference)
+                                .unwrap_or_default(),
+                        }],
+                        ..GateExprInfo::default()
+                    },
+                    Some(DomainMemberSelection::NoMatch) | None => self.infer_name(reference, env),
+                }
+            }
+            _ => self.infer_name(reference, env),
+        };
+        if let Some(specialized) = info
+            .ty
+            .as_ref()
+            .and_then(|template| self.specialize_gate_type_template(template, expected))
+        {
+            info.actual = Some(SourceOptionActualType::from_gate_type(&specialized));
+            info.contains_signal = specialized.is_signal();
+            info.ty = Some(specialized);
+        }
+        info
     }
 
     pub(crate) fn same_module_constructor(
@@ -4832,11 +5229,25 @@ impl<'a> GateTypeContext<'a> {
         bindings: &mut PolyTypeBindings,
     ) -> Option<()> {
         if let Some(lowered) = self.lower_annotation(annotation) {
-            lowered.same_shape(actual).then_some(())
-        } else {
-            self.match_poly_hir_type(annotation, actual, bindings)
-                .then_some(())
+            return lowered.same_shape(actual).then_some(());
         }
+        if let Some(template) = self.lower_open_annotation(annotation) {
+            let mut substitutions = HashMap::new();
+            Self::match_gate_type_template(&template, actual, &mut substitutions).then_some(())?;
+            for (parameter, ty) in substitutions {
+                let candidate = TypeBinding::Type(ty);
+                match bindings.entry(parameter) {
+                    Entry::Occupied(entry) if !entry.get().matches(&candidate) => return None,
+                    Entry::Occupied(_) => {}
+                    Entry::Vacant(entry) => {
+                        entry.insert(candidate);
+                    }
+                }
+            }
+            return Some(());
+        }
+        self.match_poly_hir_type(annotation, actual, bindings)
+            .then_some(())
     }
 
     pub(crate) fn match_pipe_argument_parameter_annotation(

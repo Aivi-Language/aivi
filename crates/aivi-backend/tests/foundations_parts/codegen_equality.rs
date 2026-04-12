@@ -29,7 +29,8 @@ fun ne:Bool = left:Float right:Float=>    left != right
         .expect("compiled program should retain gt kernel metadata");
     assert!(gt_artifact.code_size > 0);
     assert!(gt_artifact.clif.contains("(f64, f64) -> i8"));
-    assert!(gt_artifact.clif.contains("fcmp gt"));
+    assert!(gt_artifact.clif.contains("fcmp lt"));
+    assert!(gt_artifact.clif.contains("fcmp eq"));
 
     let eq_artifact = compiled
         .kernel(eq_body)
@@ -43,7 +44,8 @@ fun ne:Bool = left:Float right:Float=>    left != right
         .expect("compiled program should retain ne kernel metadata");
     assert!(ne_artifact.code_size > 0);
     assert!(ne_artifact.clif.contains("(f64, f64) -> i8"));
-    assert!(ne_artifact.clif.contains("fcmp ne"));
+    assert!(ne_artifact.clif.contains("fcmp eq"));
+    assert!(ne_artifact.clif.contains("bxor"));
     assert!(!compiled.object().is_empty());
 }
 
@@ -1648,14 +1650,23 @@ value user:User = { name: "Ada", active: True }
 #[test]
 fn cranelift_codegen_rejects_nonrepresentational_domain_member_calls() {
     let backend = lower_text(
-        "backend-domain-operators-codegen.aivi",
+        "backend-ord-domain-codegen.aivi",
         r#"
 domain Duration over Int
     suffix ms : Int = value => Duration value
+    type Duration -> Int
+    toMillis value = value
     type Duration -> Duration -> Duration
     (+)
-    type Duration -> Duration -> Bool
-    (>)
+
+instance Eq Duration = {
+    (==) left right = toMillis left == toMillis right
+    (!=) left right = toMillis left != toMillis right
+}
+
+instance Ord Duration = {
+    compare left right = compare (toMillis left) (toMillis right)
+}
 
 type Window = {
     delay: Duration
@@ -1665,12 +1676,12 @@ signal windows : Signal Window = { delay: 10ms }
 
 signal slowWindows : Signal Window =
     windows
-     ?|> ((.delay + 5ms) > 12ms)
+     ?|> (.delay > 12ms)
 "#,
     );
-    // The gate predicate involves domain literals (5ms, 12ms) which remain
-    // outside the current codegen slice. The (+) and (>) operators themselves
-    // now compile for Int-carrier domains via NativeIntBinary, but the literal
+    // The gate predicate still involves domain literals (12ms), which
+    // remain outside the current codegen slice. The comparison is now Ord-backed
+    // rather than a direct domain comparison operator, but the domain literal
     // expressions still produce UnsupportedExpression errors.
     let errors = compile_program(&backend)
         .expect_err("domain literal expressions inside gate predicates should stay unsupported");

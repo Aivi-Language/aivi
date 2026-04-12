@@ -707,17 +707,16 @@ impl NavigationAnalysis {
                 text.contains(binary_operator_text(*operator))
             }
             NavigationSite::LiteralSuffix { resolution } => match resolution {
-                ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(resolution)) => self
-                    .domain_member_name_text(*resolution)
-                    .is_some_and(|name| span_text_matches_name(text, name)),
-                ResolutionState::Resolved(LiteralSuffixResolution::Import(import)) => self
-                    .module()
-                    .imports()
-                    .get(*import)
-                    .is_some_and(|binding| {
+                ResolutionState::Resolved(LiteralSuffixResolution::DomainMember(resolution)) => {
+                    self.domain_member_name_text(*resolution)
+                        .is_some_and(|name| span_text_matches_name(text, name))
+                }
+                ResolutionState::Resolved(LiteralSuffixResolution::Import(import)) => {
+                    self.module().imports().get(*import).is_some_and(|binding| {
                         span_text_matches_name(text, binding.imported_name.text())
                             || span_text_matches_name(text, binding.local_name.text())
-                    }),
+                    })
+                }
                 ResolutionState::Unresolved => true,
             },
             NavigationSite::ItemDecl { item } => self

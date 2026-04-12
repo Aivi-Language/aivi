@@ -1570,7 +1570,8 @@ mod tests {
             while context.pending() {
                 context.iteration(false);
             }
-            let slice = Duration::from_millis(10).min(deadline.saturating_duration_since(Instant::now()));
+            let slice =
+                Duration::from_millis(10).min(deadline.saturating_duration_since(Instant::now()));
             if slice.is_zero() {
                 break;
             }
@@ -1595,7 +1596,8 @@ mod tests {
             if predicate() {
                 return true;
             }
-            let slice = Duration::from_millis(10).min(deadline.saturating_duration_since(Instant::now()));
+            let slice =
+                Duration::from_millis(10).min(deadline.saturating_duration_since(Instant::now()));
             if slice.is_zero() {
                 break;
             }

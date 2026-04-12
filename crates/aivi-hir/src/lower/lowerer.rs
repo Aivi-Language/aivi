@@ -2535,6 +2535,10 @@ impl<'a> Lowerer<'a> {
         let ambient_name = match op {
             syn::BinaryOperator::Equals => Some("__aivi_binary_eq"),
             syn::BinaryOperator::NotEquals => Some("__aivi_binary_neq"),
+            syn::BinaryOperator::LessThan => Some("__aivi_binary_lt"),
+            syn::BinaryOperator::GreaterThan => Some("__aivi_binary_gt"),
+            syn::BinaryOperator::LessThanOrEqual => Some("__aivi_binary_lte"),
+            syn::BinaryOperator::GreaterThanOrEqual => Some("__aivi_binary_gte"),
             _ => None,
         };
         if let Some(name) = ambient_name {

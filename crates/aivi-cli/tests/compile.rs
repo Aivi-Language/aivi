@@ -787,10 +787,19 @@ fn compile_reports_codegen_limits_without_emitting_fake_artifacts() {
         r#"
 domain Duration over Int
     suffix ms : Int = value => Duration value
+    type Duration -> Int
+    toMillis value = value
     type Duration -> Duration -> Duration
     (+)
-    type Duration -> Duration -> Bool
-    (>)
+
+instance Eq Duration = {
+    (==) left right = toMillis left == toMillis right
+    (!=) left right = toMillis left != toMillis right
+}
+
+instance Ord Duration = {
+    compare left right = compare (toMillis left) (toMillis right)
+}
 
 type Window = {
     delay: Duration

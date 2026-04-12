@@ -1764,6 +1764,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 NativeEqualityShape::Text
                                 | NativeEqualityShape::Bytes
+                                | NativeEqualityShape::TaggedNullarySum
                                 | NativeEqualityShape::Aggregate(_)
                                 | NativeEqualityShape::InlineScalarOption(_)
                                 | NativeEqualityShape::NicheOption { .. } => {
@@ -3120,6 +3121,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     ) -> Result<DirectApplyPlan, CodegenError> {
         let kernel = &self.program.kernels()[kernel_id];
         match &kernel.exprs()[callee].kind {
+            KernelExprKind::Apply {
+                callee: inner_callee,
+                arguments: bound_arguments,
+            } => {
+                let mut combined = bound_arguments.clone();
+                combined.extend_from_slice(arguments);
+                self.resolve_direct_apply_plan(kernel_id, expr_id, *inner_callee, &combined)
+            }
             KernelExprKind::Item(item) => {
                 self.require_compilable_item_call(kernel_id, expr_id, *item, arguments)
             }
@@ -3432,6 +3441,32 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             return Ok(DomainMemberCallPlan::CarrierExtractPrimitive);
         }
 
+        if self.is_named_domain_layout(*parameter_layout)
+            && self.program.layouts()[*parameter_layout].abi == AbiPassMode::ByReference
+            && self.program.layouts()[result_layout].abi == AbiPassMode::ByValue
+        {
+            return Ok(DomainMemberCallPlan::RepresentationalRepackUnary {
+                from_layout: *parameter_layout,
+                to_layout: result_layout,
+            });
+        }
+
+        if self.program.layouts()[*parameter_layout].abi == AbiPassMode::ByValue
+            && matches!(
+                &self.program.layouts()[*parameter_layout].kind,
+                LayoutKind::Primitive(PrimitiveType::Int)
+                    | LayoutKind::Primitive(PrimitiveType::Float)
+                    | LayoutKind::Primitive(PrimitiveType::Bool)
+            )
+            && self.is_named_domain_layout(result_layout)
+            && self.program.layouts()[result_layout].abi == AbiPassMode::ByReference
+        {
+            return Ok(DomainMemberCallPlan::RepresentationalRepackUnary {
+                from_layout: *parameter_layout,
+                to_layout: result_layout,
+            });
+        }
+
         if self.program.layouts()[*parameter_layout].abi != AbiPassMode::ByReference
             || self.program.layouts()[result_layout].abi != AbiPassMode::ByReference
         {
@@ -3525,6 +3560,27 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         arguments: &[KernelExprId],
     ) -> Result<BuiltinCallPlan, CodegenError> {
         match intrinsic {
+            crate::BuiltinClassMemberIntrinsic::Compare { subject, .. } => {
+                let detail = format!("builtin class member `{intrinsic:?}`");
+                let (_parameters, result_layout) = self.require_saturated_callable_call(
+                    kernel_id, expr_id, callee, arguments, &detail,
+                )?;
+                let [left, right] = arguments else {
+                    unreachable!("saturated compare call should keep exactly two arguments");
+                };
+                let kernel = &self.program.kernels()[kernel_id];
+                let kind = self.require_builtin_compare_subject(
+                    kernel_id, kernel, expr_id, subject, *left, *right,
+                )?;
+                let (less_tag, equal_tag, greater_tag) =
+                    self.require_ordering_result_tags(kernel_id, expr_id, result_layout)?;
+                Ok(BuiltinCallPlan::NativeCompare {
+                    kind,
+                    less_tag,
+                    equal_tag,
+                    greater_tag,
+                })
+            }
             crate::BuiltinClassMemberIntrinsic::StructuralEq => {
                 let detail = format!("builtin class member `{intrinsic:?}`");
                 let (_parameters, _result_layout) = self.require_saturated_callable_call(
@@ -3640,6 +3696,128 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 expr_id,
                 intrinsic,
                 arguments.len(),
+            )),
+        }
+    }
+
+    fn require_builtin_compare_subject(
+        &self,
+        kernel_id: KernelId,
+        kernel: &Kernel,
+        expr_id: KernelExprId,
+        subject: BuiltinOrdSubject,
+        left: KernelExprId,
+        right: KernelExprId,
+    ) -> Result<NativeCompareKind, CodegenError> {
+        let left_layout_id = kernel.exprs()[left].layout;
+        let right_layout_id = kernel.exprs()[right].layout;
+        let left_layout = &self.program.layouts()[left_layout_id];
+        let right_layout = &self.program.layouts()[right_layout_id];
+        match subject {
+            BuiltinOrdSubject::Int
+                if matches!(
+                    (&left_layout.kind, &right_layout.kind),
+                    (
+                        LayoutKind::Primitive(PrimitiveType::Int),
+                        LayoutKind::Primitive(PrimitiveType::Int)
+                    )
+                ) =>
+            {
+                Ok(NativeCompareKind::Integer)
+            }
+            BuiltinOrdSubject::Float
+                if matches!(
+                    (&left_layout.kind, &right_layout.kind),
+                    (
+                        LayoutKind::Primitive(PrimitiveType::Float),
+                        LayoutKind::Primitive(PrimitiveType::Float)
+                    )
+                ) =>
+            {
+                Ok(NativeCompareKind::Float)
+            }
+            BuiltinOrdSubject::Decimal
+                if matches!(
+                    (&left_layout.kind, &right_layout.kind),
+                    (
+                        LayoutKind::Primitive(PrimitiveType::Decimal),
+                        LayoutKind::Primitive(PrimitiveType::Decimal)
+                    )
+                ) =>
+            {
+                Ok(NativeCompareKind::Decimal)
+            }
+            BuiltinOrdSubject::BigInt
+                if matches!(
+                    (&left_layout.kind, &right_layout.kind),
+                    (
+                        LayoutKind::Primitive(PrimitiveType::BigInt),
+                        LayoutKind::Primitive(PrimitiveType::BigInt)
+                    )
+                ) =>
+            {
+                Ok(NativeCompareKind::BigInt)
+            }
+            BuiltinOrdSubject::Bool
+                if matches!(
+                    (&left_layout.kind, &right_layout.kind),
+                    (
+                        LayoutKind::Primitive(PrimitiveType::Bool),
+                        LayoutKind::Primitive(PrimitiveType::Bool)
+                    )
+                ) =>
+            {
+                Ok(NativeCompareKind::Integer)
+            }
+            _ => Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!(
+                    "builtin compare for `{subject:?}` is not yet supported with layout{left_layout_id}=`{left_layout}` and layout{right_layout_id}=`{right_layout}`"
+                ),
+            )),
+        }
+    }
+
+    fn require_ordering_result_tags(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        result_layout: LayoutId,
+    ) -> Result<(i64, i64, i64), CodegenError> {
+        Ok((
+            self.require_sum_variant_tag(kernel_id, expr_id, result_layout, "Less")?,
+            self.require_sum_variant_tag(kernel_id, expr_id, result_layout, "Equal")?,
+            self.require_sum_variant_tag(kernel_id, expr_id, result_layout, "Greater")?,
+        ))
+    }
+
+    fn require_sum_variant_tag(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        layout: LayoutId,
+        variant_name: &str,
+    ) -> Result<i64, CodegenError> {
+        match &self.program.layouts()[layout].kind {
+            LayoutKind::Sum(variants) => variants
+                .iter()
+                .position(|variant| variant.name.as_ref() == variant_name)
+                .map(|index| index as i64)
+                .ok_or_else(|| {
+                    self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        &format!("sum variant `{variant_name}` not found in layout"),
+                    )
+                }),
+            LayoutKind::Opaque { .. } | LayoutKind::Domain { .. } => {
+                Ok(sum_variant_tag_for_opaque(variant_name))
+            }
+            other => Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!("ordering compare result requires a sum-like layout, found `{other:?}`"),
             )),
         }
     }
@@ -4173,6 +4351,28 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let base = self.allocate_static_arena_bytes(kernel_id, total_size, 8, builder)?;
         let tag_value = builder.ins().iconst(types::I64, tag);
         builder.ins().store(MemFlags::new(), tag_value, base, 0);
+        if let Some((payload, _)) = payload {
+            builder.ins().store(MemFlags::new(), payload, base, 8);
+        }
+        Ok(base)
+    }
+
+    fn emit_dynamic_tagged_reference(
+        &mut self,
+        kernel_id: KernelId,
+        tag: Value,
+        payload: Option<(Value, LayoutId)>,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let payload_size = if let Some((_, layout)) = payload {
+            self.field_abi_shape(kernel_id, layout, "tagged payload")?
+                .size
+        } else {
+            0
+        };
+        let total_size = (8 + payload_size).max(8);
+        let base = self.allocate_static_arena_bytes(kernel_id, total_size, 8, builder)?;
+        builder.ins().store(MemFlags::new(), tag, base, 0);
         if let Some((payload, _)) = payload {
             builder.ins().store(MemFlags::new(), payload, base, 8);
         }
@@ -4914,6 +5114,19 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     .ins()
                     .load(types::I64, MemFlags::new(), *argument, 0))
             }
+            DirectApplyPlan::DomainMember(DomainMemberCallPlan::RepresentationalRepackUnary {
+                from_layout,
+                to_layout,
+            }) => {
+                let [argument] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "representational repack lowering expected exactly one materialized argument",
+                    ));
+                };
+                self.repack_value(kernel_id, *argument, from_layout, to_layout, builder)
+            }
             DirectApplyPlan::DomainMember(DomainMemberCallPlan::RepresentationalIdentityUnary)
             | DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BytesFromText) => {
                 let [argument] = arguments else {
@@ -4982,6 +5195,74 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     ));
                 };
                 self.lower_native_equality_shape(kernel_id, expr_id, &shape, *left, *right, builder)
+            }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::NativeCompare {
+                kind,
+                less_tag,
+                equal_tag,
+                greater_tag,
+            }) => {
+                let [left, right] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct compare lowering expected exactly two materialized arguments",
+                    ));
+                };
+                let less = match kind {
+                    NativeCompareKind::Integer => {
+                        builder.ins().icmp(IntCC::SignedLessThan, *left, *right)
+                    }
+                    NativeCompareKind::Float => {
+                        builder.ins().fcmp(FloatCC::LessThan, *left, *right)
+                    }
+                    NativeCompareKind::Decimal => {
+                        let func_ref =
+                            self.declare_ptr_cmp_func("aivi_decimal_lt", kernel_id, builder)?;
+                        let call = builder.ins().call(func_ref, &[*left, *right]);
+                        let cmp = builder.inst_results(call)[0];
+                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                    }
+                    NativeCompareKind::BigInt => {
+                        let func_ref =
+                            self.declare_ptr_cmp_func("aivi_bigint_lt", kernel_id, builder)?;
+                        let call = builder.ins().call(func_ref, &[*left, *right]);
+                        let cmp = builder.inst_results(call)[0];
+                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                    }
+                    NativeCompareKind::DomainInt => {
+                        return Err(self.unsupported_expression(
+                            kernel_id,
+                            expr_id,
+                            "native compare lowering only supports carrier-level builtin compare subjects",
+                        ));
+                    }
+                };
+                let equal = match kind {
+                    NativeCompareKind::Integer => builder.ins().icmp(IntCC::Equal, *left, *right),
+                    NativeCompareKind::Float => builder.ins().fcmp(FloatCC::Equal, *left, *right),
+                    NativeCompareKind::Decimal => {
+                        let func_ref =
+                            self.declare_ptr_cmp_func("aivi_decimal_eq", kernel_id, builder)?;
+                        let call = builder.ins().call(func_ref, &[*left, *right]);
+                        let cmp = builder.inst_results(call)[0];
+                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                    }
+                    NativeCompareKind::BigInt => {
+                        let func_ref =
+                            self.declare_ptr_cmp_func("aivi_bigint_eq", kernel_id, builder)?;
+                        let call = builder.ins().call(func_ref, &[*left, *right]);
+                        let cmp = builder.inst_results(call)[0];
+                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                    }
+                    NativeCompareKind::DomainInt => unreachable!(),
+                };
+                let less_tag = builder.ins().iconst(types::I64, less_tag);
+                let equal_tag = builder.ins().iconst(types::I64, equal_tag);
+                let greater_tag = builder.ins().iconst(types::I64, greater_tag);
+                let non_less_tag = builder.ins().select(equal, equal_tag, greater_tag);
+                let tag = builder.ins().select(less, less_tag, non_less_tag);
+                self.emit_dynamic_tagged_reference(kernel_id, tag, None, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
                 let [_function, seed, subject] = arguments else {
@@ -5870,6 +6151,29 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 }
                 Ok(NativeEqualityShape::Bytes)
             }
+            LayoutKind::Sum(variants) => {
+                if self.program.layouts()[layout].abi != AbiPassMode::ByReference {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        &format!(
+                            "sum layout{layout}=`{}` must stay by-reference for native equality lowering",
+                            self.program.layouts()[layout]
+                        ),
+                    ));
+                }
+                if variants.iter().all(|variant| variant.payload.is_none()) {
+                    return Ok(NativeEqualityShape::TaggedNullarySum);
+                }
+                Err(self.unsupported_expression(
+                    kernel_id,
+                    expr_id,
+                    &format!(
+                        "sum layout{layout}=`{}` still requires compiled payload-aware equality beyond tag-only nullary variants",
+                        self.program.layouts()[layout]
+                    ),
+                ))
+            }
             LayoutKind::Tuple(elements) => {
                 if self.program.layouts()[layout].abi != AbiPassMode::ByReference {
                     return Err(self.unsupported_expression(
@@ -6058,6 +6362,29 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 visited.remove(&layout);
                 result
             }
+            LayoutKind::Opaque { variants, .. } => {
+                if self.program.layouts()[layout].abi != AbiPassMode::ByReference {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        &format!(
+                            "opaque layout{layout}=`{}` must stay by-reference for native equality lowering",
+                            self.program.layouts()[layout]
+                        ),
+                    ));
+                }
+                if variants.iter().all(|variant| variant.payload.is_none()) {
+                    return Ok(NativeEqualityShape::TaggedNullarySum);
+                }
+                Err(self.unsupported_expression(
+                    kernel_id,
+                    expr_id,
+                    &format!(
+                        "opaque layout{layout}=`{}` still requires compiled payload-aware equality beyond tag-only nullary variants",
+                        self.program.layouts()[layout]
+                    ),
+                ))
+            }
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -6090,6 +6417,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let func_ref = self.declare_ptr_cmp_func(sym, kernel_id, builder)?;
                 let call = builder.ins().call(func_ref, &[lhs, rhs]);
                 Ok(builder.inst_results(call)[0])
+            }
+            NativeEqualityShape::TaggedNullarySum => {
+                let left_tag = builder.ins().load(types::I64, MemFlags::new(), lhs, 0);
+                let right_tag = builder.ins().load(types::I64, MemFlags::new(), rhs, 0);
+                Ok(builder.ins().icmp(IntCC::Equal, left_tag, right_tag))
             }
             NativeEqualityShape::InlineScalarOption(_) => {
                 Ok(builder.ins().icmp(IntCC::Equal, lhs, rhs))
@@ -8589,6 +8921,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             BuildBuiltinConstructor {
                 constructor: crate::RuntimeConstructor,
             },
+            BuildBuiltinClassMember {
+                intrinsic: crate::BuiltinClassMemberIntrinsic,
+            },
             BuildIntrinsicCall {
                 intrinsic: IntrinsicValue,
             },
@@ -8820,6 +9155,22 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                         tasks.push(Task::Visit(*argument));
                                     }
                                 }
+                                KernelExprKind::BuiltinClassMember(intrinsic) => {
+                                    let Some(expected_arity) =
+                                        static_builtin_class_member_arity(*intrinsic)
+                                    else {
+                                        return Ok(None);
+                                    };
+                                    if arguments.len() != expected_arity {
+                                        return Ok(None);
+                                    }
+                                    tasks.push(Task::BuildBuiltinClassMember {
+                                        intrinsic: *intrinsic,
+                                    });
+                                    for argument in arguments.iter().rev() {
+                                        tasks.push(Task::Visit(*argument));
+                                    }
+                                }
                                 _ => return Ok(None),
                             }
                         }
@@ -8864,6 +9215,20 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         crate::RuntimeConstructor::Invalid => {
                             RuntimeValue::ValidationInvalid(Box::new(payload))
                         }
+                    };
+                    values.push(value);
+                }
+                Task::BuildBuiltinClassMember { intrinsic } => {
+                    let Some(value) = static_evaluate_builtin_class_member_call(
+                        intrinsic,
+                        drain_tail(
+                            &mut values,
+                            static_builtin_class_member_arity(intrinsic).expect(
+                                "static builtin class member builder should only use supported arities",
+                            ),
+                        ),
+                    ) else {
+                        return Ok(None);
                     };
                     values.push(value);
                 }

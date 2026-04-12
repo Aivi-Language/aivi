@@ -16,6 +16,7 @@ struct TypeChecker<'a> {
 enum BinaryOperatorExpectation {
     BoolOperands,
     MatchingNumericOperands,
+    MatchingOrderedOperands,
     CommonTypeOperands,
 }
 
@@ -658,7 +659,9 @@ impl<'a> TypeChecker<'a> {
         expected: Option<&GateType>,
         ambient: &GateType,
     ) -> bool {
-        let info = self.typing.infer_expr(expr_id, env, Some(ambient));
+        let info = expected
+            .map(|expected| self.typing.infer_expr_with_expected(expr_id, env, Some(ambient), expected))
+            .unwrap_or_else(|| self.typing.infer_expr(expr_id, env, Some(ambient)));
         self.emit_expr_issues(&info.issues);
         self.handle_constraints(&info.constraints);
 
@@ -680,7 +683,9 @@ impl<'a> TypeChecker<'a> {
         expected: &GateType,
         ambient: &GateType,
     ) -> bool {
-        let info = self.typing.infer_expr(expr_id, env, Some(ambient));
+        let info = self
+            .typing
+            .infer_expr_with_expected(expr_id, env, Some(ambient), expected);
         self.enqueue_eq_constraints(&info.constraints);
         info.issues.is_empty()
             && info
@@ -695,7 +700,9 @@ impl<'a> TypeChecker<'a> {
         env: &GateExprEnv,
         expected: Option<&GateType>,
     ) -> bool {
-        let info = self.typing.infer_expr(expr_id, env, None);
+        let info = expected
+            .map(|expected| self.typing.infer_expr_with_expected(expr_id, env, None, expected))
+            .unwrap_or_else(|| self.typing.infer_expr(expr_id, env, None));
         self.emit_expr_issues(&info.issues);
         self.handle_constraints(&info.constraints);
 
@@ -789,11 +796,19 @@ impl<'a> TypeChecker<'a> {
             | BinaryOperator::Subtract
             | BinaryOperator::Multiply
             | BinaryOperator::Divide
-            | BinaryOperator::Modulo
-            | BinaryOperator::GreaterThan
+            | BinaryOperator::Modulo => self.check_numeric_binary_expr(
+                expr_id,
+                left,
+                operator,
+                right,
+                env,
+                expected,
+                value_stack,
+            ),
+            BinaryOperator::GreaterThan
             | BinaryOperator::LessThan
             | BinaryOperator::GreaterThanOrEqual
-            | BinaryOperator::LessThanOrEqual => self.check_numeric_binary_expr(
+            | BinaryOperator::LessThanOrEqual => self.check_ordered_binary_expr(
                 expr_id,
                 left,
                 operator,
@@ -891,38 +906,6 @@ impl<'a> TypeChecker<'a> {
             right_actual.as_ref(),
             expected,
         ) else {
-            if matches!(
-                operator,
-                BinaryOperator::GreaterThan
-                    | BinaryOperator::LessThan
-                    | BinaryOperator::GreaterThanOrEqual
-                    | BinaryOperator::LessThanOrEqual
-            ) && let (Some(left_actual), Some(right_actual)) =
-                (left_actual.as_ref(), right_actual.as_ref())
-                && left_actual.same_shape(right_actual)
-                && self.require_class_named("Ord", left_actual).is_ok()
-            {
-                let checkpoint = self.diagnostics.len();
-                let left_ok = self.check_expr(left, env, Some(left_actual), value_stack);
-                let right_ok = self.check_expr(right, env, Some(right_actual), value_stack);
-                if !left_ok || !right_ok {
-                    if self.diagnostics.len() == checkpoint {
-                        self.emit_invalid_binary_operator(
-                            self.module.exprs()[expr_id].span,
-                            operator,
-                            Some(left_actual),
-                            Some(right_actual),
-                            BinaryOperatorExpectation::MatchingNumericOperands,
-                        );
-                    }
-                    return false;
-                }
-                return self.check_result_type(
-                    expr_id,
-                    expected,
-                    &GateType::Primitive(BuiltinType::Bool),
-                );
-            }
             let checkpoint = self.diagnostics.len();
             self.check_expr(left, env, None, value_stack);
             self.check_expr(right, env, None, value_stack);
@@ -955,10 +938,6 @@ impl<'a> TypeChecker<'a> {
         }
 
         let result_ty = match operator {
-            BinaryOperator::GreaterThan
-            | BinaryOperator::LessThan
-            | BinaryOperator::GreaterThanOrEqual
-            | BinaryOperator::LessThanOrEqual => GateType::Primitive(BuiltinType::Bool),
             BinaryOperator::Add
             | BinaryOperator::Subtract
             | BinaryOperator::Multiply
@@ -967,6 +946,74 @@ impl<'a> TypeChecker<'a> {
             _ => unreachable!("numeric binary operator helper only handles numeric operators"),
         };
         self.check_result_type(expr_id, expected, &result_ty)
+    }
+
+    fn check_ordered_binary_expr(
+        &mut self,
+        expr_id: ExprId,
+        left: ExprId,
+        operator: BinaryOperator,
+        right: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        let left_actual = self.inferred_expr_type(left, env);
+        let right_actual = self.inferred_expr_type(right, env);
+        let Some(operand_ty) = left_actual
+            .as_ref()
+            .zip(right_actual.as_ref())
+            .and_then(|(left_actual, right_actual)| {
+                left_actual.same_shape(right_actual).then_some(left_actual)
+            })
+        else {
+            let checkpoint = self.diagnostics.len();
+            self.check_expr(left, env, None, value_stack);
+            self.check_expr(right, env, None, value_stack);
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::MatchingOrderedOperands,
+                );
+            }
+            return false;
+        };
+        if self.require_class_named("Ord", operand_ty).is_err() {
+            let checkpoint = self.diagnostics.len();
+            self.check_expr(left, env, Some(operand_ty), value_stack);
+            self.check_expr(right, env, Some(operand_ty), value_stack);
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::MatchingOrderedOperands,
+                );
+            }
+            return false;
+        }
+
+        let checkpoint = self.diagnostics.len();
+        let left_ok = self.check_expr(left, env, Some(operand_ty), value_stack);
+        let right_ok = self.check_expr(right, env, Some(operand_ty), value_stack);
+        if !left_ok || !right_ok {
+            if self.diagnostics.len() == checkpoint {
+                self.emit_invalid_binary_operator(
+                    self.module.exprs()[expr_id].span,
+                    operator,
+                    left_actual.as_ref(),
+                    right_actual.as_ref(),
+                    BinaryOperatorExpectation::MatchingOrderedOperands,
+                );
+            }
+            return false;
+        }
+
+        self.check_result_type(expr_id, expected, &GateType::Primitive(BuiltinType::Bool))
     }
 
     fn check_equality_binary_expr(
@@ -3125,6 +3172,10 @@ impl<'a> TypeChecker<'a> {
                 "matching numeric operands",
                 "both operands must resolve to the same numeric type here",
             ),
+            BinaryOperatorExpectation::MatchingOrderedOperands => (
+                "matching operands whose shared type implements `Ord`",
+                "both operands must resolve to the same ordered type here",
+            ),
             BinaryOperatorExpectation::CommonTypeOperands => (
                 "operands that resolve to one common type",
                 "both operands must resolve to one shared type here",
@@ -3150,6 +3201,18 @@ impl<'a> TypeChecker<'a> {
                     && l != r {
                         diag = diag.with_help(
                             "convert one operand so both sides share the same numeric type",
+                        );
+                    }
+            }
+            BinaryOperatorExpectation::MatchingOrderedOperands => {
+                if let (Some(l), Some(r)) = (left, right)
+                    && l != r {
+                        diag = diag.with_help(
+                            "convert one operand so both sides share the same type, and ensure that type has an `Ord` instance",
+                        );
+                    } else {
+                        diag = diag.with_help(
+                            "comparison operators `>`, `<`, `>=`, `<=` require one shared type with `Ord`",
                         );
                     }
             }

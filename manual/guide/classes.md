@@ -86,6 +86,8 @@ func equivalent = left right =>
 
 value sameNumber = equivalent 4 4
 ```
+
+`Ord` uses `compare : A -> A -> Ordering` as its primitive member. Surface ordering operators are derived from that member, so `<`, `>`, `<=`, and `>=` all work once an `Ord` instance exists.
 ## Declaring an instance
 
 Instances provide the implementation for a concrete type:
@@ -133,6 +135,37 @@ func bothEqual = leftA rightA leftB rightB =>
 ```
 
 The constraint ensures the function can only be called when `K` (or `A`, `B`, etc.) has an `Eq` instance. Without the constraint, using `==` on an open type parameter is a type error.
+
+## Ord constraints and domain ordering
+
+Use `Ord` when a function needs ordering rather than just equality:
+
+```aivi
+type Ord A => A -> A -> Bool
+func nonDecreasing = left right =>
+    left <= right
+```
+
+For nominal domains, implement `compare` in the `Ord` instance and then use the ordinary operators:
+
+```aivi
+domain Calendar over Int
+    suffix day : Int = value => Calendar value
+    toDays : Calendar -> Int
+
+instance Eq Calendar = {
+    (==) left right = toDays left == toDays right
+    (!=) left right = toDays left != toDays right
+}
+
+instance Ord Calendar = {
+    compare left right = compare (toDays left) (toDays right)
+}
+
+value ordered : Bool = 10day < 12day
+```
+
+You do not need to author separate class or domain members for `<`, `>`, `<=`, or `>=`; those surface operators are sugar over `Ord.compare`.
 
 ## Why classes matter
 

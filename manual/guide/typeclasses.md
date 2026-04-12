@@ -68,6 +68,38 @@ If a carrier is not listed here for a class, that class is **not** runtime-backe
 - `Validation E` is intentionally **not** a `Monad`: its supported accumulation semantics are applicative rather than dependent short-circuiting.
 - There is no builtin executable `Foldable` or `Traversable` support for `Signal` or `Task` in the current slice.
 
+## Comparison classes
+
+`Eq A` and `Ord A` are the comparison-facing classes in the ambient prelude:
+
+- `Eq A` backs `==` and `!=`.
+- `Ord A` exposes the primitive member `compare : A -> A -> Ordering`.
+- Ordinary `<`, `>`, `<=`, and `>=` are derived from `Ord.compare`; they are not separate class members.
+- Operator sections like `(<)` and `(>=)` follow the same `Ord.compare` lowering rule.
+
+That means a nominal domain becomes orderable by implementing `Ord.compare` directly:
+
+```aivi
+domain Calendar over Int
+    suffix day : Int = value => Calendar value
+    toDays : Calendar -> Int
+
+instance Eq Calendar = {
+    (==) left right = toDays left == toDays right
+    (!=) left right = toDays left != toDays right
+}
+
+instance Ord Calendar = {
+    compare left right = compare (toDays left) (toDays right)
+}
+
+type Calendar -> Calendar -> Bool
+func inOrder = start finish =>
+    start <= finish
+```
+
+You do not need to author separate domain members for `<`, `>`, `<=`, or `>=`; those operators come from `Ord`.
+
 ## User-authored higher-kinded classes and instances
 
 ### Supported end to end today

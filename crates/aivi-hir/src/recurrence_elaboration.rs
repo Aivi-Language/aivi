@@ -1082,10 +1082,7 @@ mod tests {
                     aivi_typing::NonSourceWakeupCause::ExplicitTimer
                 );
                 match &witness.runtime_witness.kind {
-                    GateRuntimeExprKind::Apply {
-                        callee,
-                        arguments,
-                    } => {
+                    GateRuntimeExprKind::Apply { callee, arguments } => {
                         assert_eq!(arguments.len(), 1);
                         assert!(matches!(
                             &arguments[0].kind,
@@ -1131,10 +1128,7 @@ mod tests {
                     aivi_typing::NonSourceWakeupCause::ExplicitBackoff
                 );
                 match &witness.runtime_witness.kind {
-                    GateRuntimeExprKind::Apply {
-                        callee,
-                        arguments,
-                    } => {
+                    GateRuntimeExprKind::Apply { callee, arguments } => {
                         assert_eq!(arguments.len(), 1);
                         assert!(matches!(
                             &arguments[0].kind,

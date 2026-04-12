@@ -19,6 +19,36 @@ fn static_intrinsic_arity(intrinsic: IntrinsicValue) -> Option<usize> {
     }
 }
 
+fn static_builtin_class_member_arity(
+    intrinsic: crate::BuiltinClassMemberIntrinsic,
+) -> Option<usize> {
+    match intrinsic {
+        crate::BuiltinClassMemberIntrinsic::StructuralEq
+        | crate::BuiltinClassMemberIntrinsic::Compare { .. } => Some(2),
+        _ => None,
+    }
+}
+
+fn static_evaluate_builtin_class_member_call(
+    intrinsic: crate::BuiltinClassMemberIntrinsic,
+    arguments: Vec<RuntimeValue>,
+) -> Option<RuntimeValue> {
+    let arguments: Vec<_> = arguments.into_iter().map(static_strip_signal).collect();
+    match (intrinsic, arguments.as_slice()) {
+        (crate::BuiltinClassMemberIntrinsic::StructuralEq, [left, right]) => {
+            Some(RuntimeValue::Bool(static_structural_eq(left, right)))
+        }
+        (
+            crate::BuiltinClassMemberIntrinsic::Compare {
+                subject,
+                ordering_item,
+            },
+            [left, right],
+        ) => static_compare_builtin_subject(subject, ordering_item, left, right),
+        _ => None,
+    }
+}
+
 fn static_evaluate_intrinsic_call(
     intrinsic: IntrinsicValue,
     arguments: Vec<RuntimeValue>,
@@ -75,6 +105,69 @@ fn static_strip_signal(value: RuntimeValue) -> RuntimeValue {
     match value {
         RuntimeValue::Signal(inner) => *inner,
         other => other,
+    }
+}
+
+fn static_compare_builtin_subject(
+    subject: BuiltinOrdSubject,
+    ordering_item: aivi_hir::ItemId,
+    left: &RuntimeValue,
+    right: &RuntimeValue,
+) -> Option<RuntimeValue> {
+    let ordering = match (subject, left, right) {
+        (BuiltinOrdSubject::Int, RuntimeValue::Int(left), RuntimeValue::Int(right)) => {
+            left.cmp(right)
+        }
+        (BuiltinOrdSubject::Float, RuntimeValue::Float(left), RuntimeValue::Float(right)) => left
+            .partial_cmp(right)
+            .expect("static floats are finite and always comparable"),
+        (
+            BuiltinOrdSubject::Decimal,
+            RuntimeValue::Decimal(left),
+            RuntimeValue::Decimal(right),
+        ) => left.cmp(right),
+        (BuiltinOrdSubject::BigInt, RuntimeValue::BigInt(left), RuntimeValue::BigInt(right)) => {
+            left.cmp(right)
+        }
+        (BuiltinOrdSubject::Bool, RuntimeValue::Bool(left), RuntimeValue::Bool(right)) => {
+            left.cmp(right)
+        }
+        (BuiltinOrdSubject::Text, RuntimeValue::Text(left), RuntimeValue::Text(right)) => {
+            left.as_ref().cmp(right.as_ref())
+        }
+        (BuiltinOrdSubject::Ordering, RuntimeValue::Sum(left), RuntimeValue::Sum(right))
+            if left.type_name.as_ref() == "Ordering" && right.type_name.as_ref() == "Ordering" =>
+        {
+            static_ordering_rank(&left.variant_name).cmp(&static_ordering_rank(&right.variant_name))
+        }
+        _ => return None,
+    };
+    Some(static_ordering_value(ordering_item, ordering))
+}
+
+fn static_ordering_value(
+    ordering_item: aivi_hir::ItemId,
+    ordering: std::cmp::Ordering,
+) -> RuntimeValue {
+    let variant_name = match ordering {
+        std::cmp::Ordering::Less => "Less",
+        std::cmp::Ordering::Equal => "Equal",
+        std::cmp::Ordering::Greater => "Greater",
+    };
+    RuntimeValue::Sum(crate::RuntimeSumValue {
+        item: ordering_item,
+        type_name: "Ordering".into(),
+        variant_name: variant_name.into(),
+        fields: Vec::new(),
+    })
+}
+
+fn static_ordering_rank(variant_name: &str) -> u8 {
+    match variant_name {
+        "Less" => 0,
+        "Equal" => 1,
+        "Greater" => 2,
+        _ => 3,
     }
 }
 

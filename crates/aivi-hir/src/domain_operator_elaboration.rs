@@ -32,10 +32,6 @@ pub(crate) fn select_domain_binary_operator(
             | BinaryOperator::Multiply
             | BinaryOperator::Divide
             | BinaryOperator::Modulo
-            | BinaryOperator::GreaterThan
-            | BinaryOperator::LessThan
-            | BinaryOperator::GreaterThanOrEqual
-            | BinaryOperator::LessThanOrEqual
     ) {
         return Ok(None);
     }

@@ -33,10 +33,11 @@ use cranelift_module::{
 use cranelift_object::{ObjectBuilder, ObjectModule};
 
 use crate::{
-    AbiPassMode, BinaryOperator, BuiltinTerm, CallingConventionKind, EnvSlotId, ItemId, Kernel,
-    KernelExprId, KernelExprKind, KernelId, KernelOriginKind, Layout, LayoutId, LayoutKind,
-    ParameterRole, PrimitiveType, Program, RuntimeMap, RuntimeMapEntry, RuntimeRecordField,
-    RuntimeValue, SubjectRef, UnaryOperator, ValidationError, describe_expr_kind,
+    AbiPassMode, BinaryOperator, BuiltinOrdSubject, BuiltinTerm, CallingConventionKind, EnvSlotId,
+    ItemId, Kernel, KernelExprId, KernelExprKind, KernelId, KernelOriginKind, Layout, LayoutId,
+    LayoutKind, ParameterRole, PrimitiveType, Program, RuntimeMap, RuntimeMapEntry,
+    RuntimeRecordField, RuntimeValue, SubjectRef, UnaryOperator, ValidationError,
+    describe_expr_kind,
     numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat},
     program::ItemKind,
     validate_program,

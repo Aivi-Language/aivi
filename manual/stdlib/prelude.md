@@ -30,7 +30,7 @@ These types are always available and can be imported from `aivi.prelude`:
 | Class | Description |
 |-------|-------------|
 | `Eq A` | Equality comparison |
-| `Ord A` | Ordering and comparison |
+| `Ord A` | Ordering and comparison via `compare : A -> A -> Ordering`; ordinary `<`, `>`, `<=`, and `>=` derive from this member |
 | `Default A` | A default value |
 | `Functor F` | Mappable container |
 | `Applicative F` | Applicative functor |
@@ -135,6 +135,8 @@ value indexedTotal : Int =
 ```
 
 ## Order Functions
+
+`Ord.compare` is the primitive ordering member in the prelude. Any type with an `Ord` instance can use the ordinary ordering operators and sections directly.
 
 ```aivi
 type Int -> Int -> Bool

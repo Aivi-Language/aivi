@@ -712,6 +712,5 @@ fn is_duration_stage_type(ty: &GateType) -> bool {
 }
 
 fn is_burst_count_stage_type(ty: &GateType) -> bool {
-    matches!(ty, GateType::Primitive(BuiltinType::Int))
-        || ty.has_named_type("Retry")
+    matches!(ty, GateType::Primitive(BuiltinType::Int)) || ty.has_named_type("Retry")
 }

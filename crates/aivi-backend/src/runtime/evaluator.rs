@@ -1408,6 +1408,19 @@ impl<'a> KernelEvaluator<'a> {
 
         if parameters.len() == 1
             && matches!(arguments.as_slice(), [_])
+            && is_named_domain_layout(self.program, parameters[0])
+            && !is_named_domain_layout(self.program, result_layout)
+        {
+            return Ok(domain_member_carrier_value(
+                arguments
+                    .into_iter()
+                    .next()
+                    .expect("single-argument domain member should expose its carrier"),
+            ));
+        }
+
+        if parameters.len() == 1
+            && matches!(arguments.as_slice(), [_])
             && is_named_domain_layout(self.program, result_layout)
         {
             return Ok(strip_signal(

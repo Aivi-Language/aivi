@@ -263,29 +263,45 @@ pub(crate) fn resolve_class_member_dispatch_for_subject(
     })
 }
 
+fn resolve_named_class_member_dispatch_for_subject(
+    module: &Module,
+    subject: &GateType,
+    class_name: &str,
+    member_name: &str,
+) -> Option<ResolvedClassMemberDispatch> {
+    let checker = TypeChecker::new(module);
+    let class = checker.class_item_id_by_name(class_name)?;
+    let Item::Class(class_item) = &module.items()[class] else {
+        return None;
+    };
+    let member_index = class_item
+        .members
+        .iter()
+        .position(|member| member.name.text() == member_name)?;
+    let member = ClassMemberResolution { class, member_index };
+    resolve_class_member_dispatch_for_subject(module, member, subject)
+}
+
 pub(crate) fn resolve_equality_dispatch(
     module: &Module,
     subject: &GateType,
 ) -> Option<ResolvedClassMemberDispatch> {
-    let checker = TypeChecker::new(module);
     for (class_name, member_name) in [("Eq", "=="), ("Setoid", "equals")] {
-        let Some(class) = checker.class_item_id_by_name(class_name) else {
-            continue;
-        };
-        let Item::Class(class_item) = &module.items()[class] else {
-            continue;
-        };
-        let Some(member_index) = class_item
-            .members
-            .iter()
-            .position(|member| member.name.text() == member_name)
-        else {
-            continue;
-        };
-        let member = ClassMemberResolution { class, member_index };
-        if let Some(dispatch) = resolve_class_member_dispatch_for_subject(module, member, subject) {
+        if let Some(dispatch) = resolve_named_class_member_dispatch_for_subject(
+            module,
+            subject,
+            class_name,
+            member_name,
+        ) {
             return Some(dispatch);
         }
     }
     None
+}
+
+pub(crate) fn resolve_ordering_dispatch(
+    module: &Module,
+    subject: &GateType,
+) -> Option<ResolvedClassMemberDispatch> {
+    resolve_named_class_member_dispatch_for_subject(module, subject, "Ord", "compare")
 }

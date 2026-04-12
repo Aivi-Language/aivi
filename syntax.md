@@ -588,6 +588,9 @@ Rules:
 - A pipe spine starts from one ordinary expression and consumes stages left-to-right.
 - Selected-subject function/companion headers desugar to that same ordinary-expression head before
   the continuation is parsed.
+- `==` / `!=` typecheck through equality-class evidence.
+- `<`, `>`, `<=`, and `>=` typecheck through `Ord.compare : A -> A -> Ordering`; the four
+  surface operators, and sections like `(<)` / `(>=)`, are sugar over that primitive.
 
 ## 6. Pipe algebra
 

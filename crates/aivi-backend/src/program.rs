@@ -97,7 +97,9 @@ impl Program {
     /// Returns the backend `ItemId` for a domain member that has a compiled body,
     /// keyed by the HIR domain `ItemId` and the member's zero-based index.
     pub fn domain_member_item(&self, domain: HirItemId, member_index: usize) -> Option<ItemId> {
-        self.domain_member_items.get(&(domain, member_index)).copied()
+        self.domain_member_items
+            .get(&(domain, member_index))
+            .copied()
     }
 
     pub fn domain_member_items_mut(&mut self) -> &mut HashMap<(HirItemId, usize), ItemId> {

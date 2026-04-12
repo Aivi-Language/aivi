@@ -11,8 +11,9 @@ use crate::{
     TermReference, TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     general_expr_elaboration::{
-        EqualityEvidenceCatalog, build_equality_runtime_expr,
-        extend_gate_env_with_equality_evidence, lower_name_expr_with_equality_evidence,
+        EqualityEvidenceCatalog, build_equality_runtime_expr, build_ordering_runtime_expr,
+        extend_gate_env_with_equality_evidence, lower_class_member_callee_with_evidence,
+        lower_name_expr_with_equality_evidence,
     },
     typecheck::resolve_class_member_dispatch,
     validate::{
@@ -432,14 +433,7 @@ pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
                 let mut env = GateExprEnv::default();
                 extend_gate_env_with_equality_evidence(&mut env, owner, &equality_evidence);
                 for member in item.members {
-                    collect_gate_stages(
-                        module,
-                        owner,
-                        member.body,
-                        &env,
-                        &mut typing,
-                        &mut stages,
-                    );
+                    collect_gate_stages(module, owner, member.body, &env, &mut typing, &mut stages);
                 }
             }
             Item::Type(_)
@@ -826,17 +820,24 @@ fn lower_pipe_function_runtime_expr_from_plan(
             crate::ResolutionState::Resolved(TermResolution::ClassMember(_))
                 | crate::ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
         ) {
-            let dispatch = resolve_class_member_dispatch(
+            if let Some(dispatch) = resolve_class_member_dispatch(
                 module,
                 reference,
                 &plan.parameter_types,
                 Some(&plan.result_type),
-            )
-            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-            GateRuntimeExpr {
-                span: module.exprs()[plan.callee_expr].span,
-                ty: callee_ty.clone(),
-                kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)),
+            ) {
+                GateRuntimeExpr {
+                    span: module.exprs()[plan.callee_expr].span,
+                    ty: callee_ty.clone(),
+                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
+                        dispatch,
+                    )),
+                }
+            } else if let Some(subject) = plan.parameter_types.first() {
+                lower_class_member_callee_with_evidence(env, reference, subject, callee_ty.clone())
+                    .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?
+            } else {
+                return Err(GateElaborationBlocker::UnknownRuntimeExprType { span });
             }
         } else {
             match lower_gate_runtime_expr_with_purity(
@@ -964,7 +965,10 @@ enum LowerTask {
     /// Evaluate this expression node.  The task handler inspects the
     /// `ExprKind`, pushes the appropriate `Build*` continuation, and then
     /// pushes child `Eval` tasks so they execute first.
-    Eval(ExprId),
+    Eval {
+        expr_id: ExprId,
+        expected: Option<GateType>,
+    },
     /// Pop one result → wrap in `Unary { operator }` with the given span/ty.
     BuildUnary {
         span: SourceSpan,
@@ -1063,12 +1067,15 @@ fn lower_gate_runtime_expr_with_purity(
     purity: GateRuntimePurity,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
     let equality_evidence = EqualityEvidenceCatalog::new(module);
-    let mut work: Vec<LowerTask> = vec![LowerTask::Eval(expr_id)];
+    let mut work: Vec<LowerTask> = vec![LowerTask::Eval {
+        expr_id,
+        expected: None,
+    }];
     let mut results: Vec<GateRuntimeExpr> = Vec::new();
 
     while let Some(task) = work.pop() {
         match task {
-            LowerTask::Eval(expr_id) => {
+            LowerTask::Eval { expr_id, expected } => {
                 // --- Domain-operator shortcut (Binary with domain member callee) ---
                 // Returns true if the domain path was taken; in that case `BuildDomainBinary`
                 // and two `Eval` children have already been pushed onto `work`.
@@ -1078,8 +1085,15 @@ fn lower_gate_runtime_expr_with_purity(
                     continue;
                 }
 
-                let (expr, ty) =
-                    inferred_runtime_expr(module, expr_id, env, ambient, typing, purity)?;
+                let (expr, ty) = inferred_runtime_expr(
+                    module,
+                    expr_id,
+                    env,
+                    ambient,
+                    expected.as_ref(),
+                    typing,
+                    purity,
+                )?;
 
                 match expr.kind {
                     // --- Leaf nodes: push result directly ---
@@ -1234,13 +1248,19 @@ fn lower_gate_runtime_expr_with_purity(
                             ty,
                             operator,
                         });
-                        work.push(LowerTask::Eval(child));
+                        work.push(LowerTask::Eval {
+                            expr_id: child,
+                            expected: None,
+                        });
                     }
                     ExprKind::Binary {
                         left,
                         operator,
                         right,
                     } => {
+                        let (left_expected, right_expected) = binary_operand_expected_types(
+                            left, operator, right, env, ambient, typing,
+                        );
                         // Push Build first (runs last), then children in reverse order
                         // so `left` is evaluated before `right`.
                         work.push(LowerTask::BuildBinary {
@@ -1248,8 +1268,14 @@ fn lower_gate_runtime_expr_with_purity(
                             ty,
                             operator,
                         });
-                        work.push(LowerTask::Eval(right));
-                        work.push(LowerTask::Eval(left));
+                        work.push(LowerTask::Eval {
+                            expr_id: right,
+                            expected: right_expected,
+                        });
+                        work.push(LowerTask::Eval {
+                            expr_id: left,
+                            expected: left_expected,
+                        });
                     }
                     ExprKind::Tuple(elements) => {
                         let n = elements.len();
@@ -1259,7 +1285,10 @@ fn lower_gate_runtime_expr_with_purity(
                             n,
                         });
                         for &element in elements.iter().rev() {
-                            work.push(LowerTask::Eval(element));
+                            work.push(LowerTask::Eval {
+                                expr_id: element,
+                                expected: None,
+                            });
                         }
                     }
                     ExprKind::List(elements) => {
@@ -1270,7 +1299,10 @@ fn lower_gate_runtime_expr_with_purity(
                             n,
                         });
                         for element in elements.into_iter().rev() {
-                            work.push(LowerTask::Eval(element));
+                            work.push(LowerTask::Eval {
+                                expr_id: element,
+                                expected: None,
+                            });
                         }
                     }
                     ExprKind::Map(map) => {
@@ -1281,8 +1313,14 @@ fn lower_gate_runtime_expr_with_purity(
                             n,
                         });
                         for entry in map.entries.into_iter().rev() {
-                            work.push(LowerTask::Eval(entry.value));
-                            work.push(LowerTask::Eval(entry.key));
+                            work.push(LowerTask::Eval {
+                                expr_id: entry.value,
+                                expected: None,
+                            });
+                            work.push(LowerTask::Eval {
+                                expr_id: entry.key,
+                                expected: None,
+                            });
                         }
                     }
                     ExprKind::Set(elements) => {
@@ -1293,7 +1331,10 @@ fn lower_gate_runtime_expr_with_purity(
                             n,
                         });
                         for element in elements.into_iter().rev() {
-                            work.push(LowerTask::Eval(element));
+                            work.push(LowerTask::Eval {
+                                expr_id: element,
+                                expected: None,
+                            });
                         }
                     }
                     ExprKind::Record(record) => {
@@ -1305,7 +1346,10 @@ fn lower_gate_runtime_expr_with_purity(
                             labels,
                         });
                         for field in record.fields.into_iter().rev() {
-                            work.push(LowerTask::Eval(field.value));
+                            work.push(LowerTask::Eval {
+                                expr_id: field.value,
+                                expected: None,
+                            });
                         }
                     }
                     ExprKind::Projection {
@@ -1317,7 +1361,10 @@ fn lower_gate_runtime_expr_with_purity(
                             ty,
                             path,
                         });
-                        work.push(LowerTask::Eval(base));
+                        work.push(LowerTask::Eval {
+                            expr_id: base,
+                            expected: None,
+                        });
                     }
                     ExprKind::Apply { callee, arguments } => {
                         let n_args = arguments.len();
@@ -1327,9 +1374,15 @@ fn lower_gate_runtime_expr_with_purity(
                             n_args,
                         });
                         for &arg in arguments.iter().rev() {
-                            work.push(LowerTask::Eval(arg));
+                            work.push(LowerTask::Eval {
+                                expr_id: arg,
+                                expected: None,
+                            });
                         }
-                        work.push(LowerTask::Eval(callee));
+                        work.push(LowerTask::Eval {
+                            expr_id: callee,
+                            expected: None,
+                        });
                     }
                 }
             }
@@ -1358,6 +1411,16 @@ fn lower_gate_runtime_expr_with_purity(
                 if matches!(operator, BinaryOperator::Equals | BinaryOperator::NotEquals) {
                     results.push(build_equality_runtime_expr(
                         module, env, span, ty, operator, left, right,
+                    ));
+                } else if matches!(
+                    operator,
+                    BinaryOperator::GreaterThan
+                        | BinaryOperator::LessThan
+                        | BinaryOperator::GreaterThanOrEqual
+                        | BinaryOperator::LessThanOrEqual
+                ) {
+                    results.push(build_ordering_runtime_expr(
+                        module, typing, env, span, ty, operator, left, right,
                     ));
                 } else {
                     results.push(GateRuntimeExpr {
@@ -1729,8 +1792,38 @@ fn check_domain_operator_and_schedule(
     else {
         return Ok(false);
     };
-    let left_ty = typing.infer_expr(left, env, ambient).ty;
-    let right_ty = typing.infer_expr(right, env, ambient).ty;
+    let mut left_ty = typing
+        .infer_expr(left, env, ambient)
+        .actual_gate_type()
+        .or_else(|| typing.infer_expr(left, env, ambient).ty);
+    let mut right_ty = typing
+        .infer_expr(right, env, ambient)
+        .actual_gate_type()
+        .or_else(|| typing.infer_expr(right, env, ambient).ty);
+    if right_ty.is_none()
+        && let Some(left_ty_ref) = left_ty.as_ref()
+    {
+        right_ty = typing
+            .infer_expr_with_expected(right, env, ambient, left_ty_ref)
+            .actual_gate_type()
+            .or_else(|| {
+                typing
+                    .infer_expr_with_expected(right, env, ambient, left_ty_ref)
+                    .ty
+            });
+    }
+    if left_ty.is_none()
+        && let Some(right_ty_ref) = right_ty.as_ref()
+    {
+        left_ty = typing
+            .infer_expr_with_expected(left, env, ambient, right_ty_ref)
+            .actual_gate_type()
+            .or_else(|| {
+                typing
+                    .infer_expr_with_expected(left, env, ambient, right_ty_ref)
+                    .ty
+            });
+    }
     let (Some(left_ty), Some(right_ty)) = (left_ty.as_ref(), right_ty.as_ref()) else {
         return Ok(false);
     };
@@ -1748,9 +1841,77 @@ fn check_domain_operator_and_schedule(
         callee_ty: matched.callee_type,
         callee: matched.callee,
     });
-    work.push(LowerTask::Eval(right));
-    work.push(LowerTask::Eval(left));
+    work.push(LowerTask::Eval {
+        expr_id: right,
+        expected: Some(right_ty.clone()),
+    });
+    work.push(LowerTask::Eval {
+        expr_id: left,
+        expected: Some(left_ty.clone()),
+    });
     Ok(true)
+}
+
+fn binary_operand_expected_types(
+    left: ExprId,
+    operator: BinaryOperator,
+    right: ExprId,
+    env: &GateExprEnv,
+    ambient: Option<&GateType>,
+    typing: &mut GateTypeContext<'_>,
+) -> (Option<GateType>, Option<GateType>) {
+    if !matches!(
+        operator,
+        BinaryOperator::Equals
+            | BinaryOperator::NotEquals
+            | BinaryOperator::GreaterThan
+            | BinaryOperator::LessThan
+            | BinaryOperator::GreaterThanOrEqual
+            | BinaryOperator::LessThanOrEqual
+            | BinaryOperator::Add
+            | BinaryOperator::Subtract
+            | BinaryOperator::Multiply
+            | BinaryOperator::Divide
+            | BinaryOperator::Modulo
+    ) {
+        return (None, None);
+    }
+
+    let mut left_ty = typing
+        .infer_expr(left, env, ambient)
+        .actual_gate_type()
+        .or_else(|| typing.infer_expr(left, env, ambient).ty);
+    let mut right_ty = typing
+        .infer_expr(right, env, ambient)
+        .actual_gate_type()
+        .or_else(|| typing.infer_expr(right, env, ambient).ty);
+
+    if right_ty.is_none()
+        && let Some(left) = left_ty.as_ref()
+    {
+        right_ty = typing
+            .infer_expr_with_expected(right, env, ambient, left)
+            .actual_gate_type()
+            .or_else(|| {
+                typing
+                    .infer_expr_with_expected(right, env, ambient, left)
+                    .ty
+            });
+    }
+    if left_ty.is_none()
+        && let Some(right) = right_ty.as_ref()
+    {
+        left_ty = typing
+            .infer_expr_with_expected(left, env, ambient, right)
+            .actual_gate_type()
+            .or_else(|| {
+                typing
+                    .infer_expr_with_expected(left, env, ambient, right)
+                    .ty
+            });
+    }
+
+    (left_ty, right_ty)
 }
 
 fn lower_runtime_text_literal(
@@ -1974,11 +2135,14 @@ fn inferred_runtime_expr(
     expr_id: ExprId,
     env: &GateExprEnv,
     ambient: Option<&GateType>,
+    expected: Option<&GateType>,
     typing: &mut GateTypeContext<'_>,
     purity: GateRuntimePurity,
 ) -> Result<(crate::Expr, GateType), GateElaborationBlocker> {
     let expr = module.exprs()[expr_id].clone();
-    let info = typing.infer_expr(expr_id, env, ambient);
+    let info = expected
+        .map(|expected| typing.infer_expr_with_expected(expr_id, env, ambient, expected))
+        .unwrap_or_else(|| typing.infer_expr(expr_id, env, ambient));
     if matches!(purity, GateRuntimePurity::PureOnly)
         && (info.contains_signal || info.ty.as_ref().is_some_and(GateType::is_signal))
     {
@@ -2102,11 +2266,9 @@ fn lower_suffixed_integer_runtime_expr(
             crate::LiteralSuffixBase::Int => GateRuntimeExprKind::Integer(IntegerLiteral {
                 raw: literal.raw.clone(),
             }),
-            crate::LiteralSuffixBase::Decimal => {
-                GateRuntimeExprKind::Decimal(DecimalLiteral {
-                    raw: literal.raw.clone(),
-                })
-            }
+            crate::LiteralSuffixBase::Decimal => GateRuntimeExprKind::Decimal(DecimalLiteral {
+                raw: literal.raw.clone(),
+            }),
         },
     };
     Ok(GateRuntimeExpr {
@@ -2391,19 +2553,27 @@ signal activeUsers:Signal User =
                             ),
                         }
                         match &right.kind {
-                            GateRuntimeExprKind::Binary {
-                                left,
-                                operator: crate::BinaryOperator::GreaterThan,
-                                right,
-                            } => {
+                            GateRuntimeExprKind::Apply { callee, arguments } => {
+                                assert_eq!(arguments.len(), 2);
                                 assert!(matches!(
-                                    &left.kind,
-                                    GateRuntimeExprKind::Projection { .. }
+                                    &callee.kind,
+                                    GateRuntimeExprKind::Reference(
+                                        GateRuntimeReference::ClassMember(_)
+                                    )
                                 ));
-                                assert!(matches!(&right.kind, GateRuntimeExprKind::Integer(_)));
+                                assert!(matches!(
+                                    &arguments[0].kind,
+                                    GateRuntimeExprKind::Apply { .. }
+                                ));
+                                assert!(matches!(
+                                    &arguments[1].kind,
+                                    GateRuntimeExprKind::Reference(
+                                        GateRuntimeReference::SumConstructor(_)
+                                    )
+                                ));
                             }
                             other => panic!(
-                                "expected numeric comparison on the right side, found {other:?}"
+                                "expected Ord-backed comparison on the right side, found {other:?}"
                             ),
                         }
                     }
@@ -2415,14 +2585,23 @@ signal activeUsers:Signal User =
     }
 
     #[test]
-    fn lowers_domain_operator_predicates_into_explicit_domain_calls() {
+    fn lowers_ord_backed_domain_predicates_into_apply_trees() {
         let lowered = lower_text(
-            "signal-gate-domain-operators.aivi",
+            "signal-gate-ord-domain.aivi",
             r#"
 domain Duration over Int = {
     suffix ms : Int = value => Duration value
-    (+) : Duration -> Duration -> Duration
-    (>) : Duration -> Duration -> Bool
+    toMillis : Duration -> Int
+    toMillis value = value
+}
+
+instance Eq Duration = {
+    (==) left right = toMillis left == toMillis right
+    (!=) left right = toMillis left != toMillis right
+}
+
+instance Ord Duration = {
+    compare left right = compare (toMillis left) (toMillis right)
 }
 type Window = {
     delay: Duration
@@ -2432,7 +2611,7 @@ signal windows:Signal Window = { delay: 10ms }
 
 signal slowWindows:Signal Window =
     windows
-     ?|> ((.delay + 5ms) > 12ms)
+     ?|> (.delay > 12ms)
 "#,
         );
         assert!(
@@ -2453,36 +2632,45 @@ signal slowWindows:Signal Window =
                 GateRuntimeExprKind::Apply { callee, arguments } => {
                     assert_eq!(arguments.len(), 2);
                     match &callee.kind {
+                        GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(_))
+                        | GateRuntimeExprKind::Apply { .. }
+                        | GateRuntimeExprKind::Reference(GateRuntimeReference::Item(_))
+                        | GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_)) => {}
                         GateRuntimeExprKind::Reference(GateRuntimeReference::DomainMember(
                             handle,
                         )) => {
-                            assert_eq!(handle.domain_name.as_ref(), "Duration");
-                            assert_eq!(handle.member_name.as_ref(), ">");
+                            panic!(
+                                "expected Ord-backed outer comparison, found direct domain member {}.{}",
+                                handle.domain_name, handle.member_name
+                            )
                         }
-                        other => panic!(
-                            "expected explicit domain-member reference for outer comparison, found {other:?}"
-                        ),
+                        other => {
+                            panic!("expected Ord-backed outer comparison callee, found {other:?}")
+                        }
                     }
                     match &arguments[0].kind {
-                        GateRuntimeExprKind::Apply { callee, arguments } => {
-                            assert_eq!(arguments.len(), 2);
+                        GateRuntimeExprKind::Apply {
+                            callee,
+                            arguments: suffix_args,
+                        } => {
+                            assert_eq!(suffix_args.len(), 2);
                             assert!(matches!(
-                                &arguments[0].kind,
+                                &suffix_args[0].kind,
                                 GateRuntimeExprKind::Projection {
                                     base: GateRuntimeProjectionBase::AmbientSubject,
                                     ..
                                 }
                             ));
-                            match &arguments[1].kind {
+                            match &suffix_args[1].kind {
                                 GateRuntimeExprKind::Apply {
                                     callee,
-                                    arguments: suffix_args,
+                                    arguments: suffix_literal_args,
                                 } => {
-                                    assert_eq!(suffix_args.len(), 1);
+                                    assert_eq!(suffix_literal_args.len(), 1);
                                     assert!(matches!(
-                                        &suffix_args[0].kind,
+                                        &suffix_literal_args[0].kind,
                                         GateRuntimeExprKind::Integer(crate::IntegerLiteral { raw })
-                                            if raw.as_ref() == "5"
+                                            if raw.as_ref() == "12"
                                     ));
                                     match &callee.kind {
                                         GateRuntimeExprKind::Reference(
@@ -2492,60 +2680,43 @@ signal slowWindows:Signal Window =
                                             assert_eq!(handle.member_name.as_ref(), "ms");
                                         }
                                         other => panic!(
-                                            "expected explicit suffix-constructor reference for nested add, found {other:?}"
+                                            "expected explicit suffix-constructor reference inside Ord.compare, found {other:?}"
                                         ),
                                     }
                                 }
                                 other => panic!(
-                                    "expected nested add operand to lower as a suffix constructor call, found {other:?}"
+                                    "expected Ord.compare right operand to lower as a suffix constructor call, found {other:?}"
                                 ),
                             }
                             match &callee.kind {
                                 GateRuntimeExprKind::Reference(
-                                    GateRuntimeReference::DomainMember(handle),
-                                ) => {
-                                    assert_eq!(handle.domain_name.as_ref(), "Duration");
-                                    assert_eq!(handle.member_name.as_ref(), "+");
+                                    GateRuntimeReference::ClassMember(_),
+                                )
+                                | GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_)) => {
                                 }
                                 other => panic!(
-                                    "expected explicit domain-member reference for nested add, found {other:?}"
+                                    "expected Ord.compare dispatch for outer comparison, found {other:?}"
                                 ),
                             }
                         }
                         other => panic!(
-                            "expected nested explicit apply for domain addition, found {other:?}"
+                            "expected outer comparison left operand to lower as an Ord.compare apply, found {other:?}"
                         ),
                     }
                     match &arguments[1].kind {
-                        GateRuntimeExprKind::Apply {
-                            callee,
-                            arguments: suffix_args,
-                        } => {
-                            assert_eq!(suffix_args.len(), 1);
-                            assert!(matches!(
-                                &suffix_args[0].kind,
-                                GateRuntimeExprKind::Integer(crate::IntegerLiteral { raw })
-                                    if raw.as_ref() == "12"
-                            ));
-                            match &callee.kind {
-                                GateRuntimeExprKind::Reference(
-                                    GateRuntimeReference::DomainMember(handle),
-                                ) => {
-                                    assert_eq!(handle.domain_name.as_ref(), "Duration");
-                                    assert_eq!(handle.member_name.as_ref(), "ms");
-                                }
-                                other => panic!(
-                                    "expected explicit suffix-constructor reference for outer comparison, found {other:?}"
-                                ),
-                            }
+                        GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(
+                            handle,
+                        )) => {
+                            assert_eq!(handle.type_name.as_ref(), "Ordering");
+                            assert_eq!(handle.variant_name.as_ref(), "Greater");
                         }
                         other => panic!(
-                            "expected outer comparison right operand to lower as a suffix constructor call, found {other:?}"
+                            "expected outer comparison right operand to lower as an Ordering constructor, found {other:?}"
                         ),
                     }
                 }
                 other => panic!(
-                    "expected explicit apply tree for domain operator predicate, found {other:?}"
+                    "expected explicit apply tree for Ord-backed domain predicate, found {other:?}"
                 ),
             },
             other => panic!("expected signal filter plan, found {other:?}"),

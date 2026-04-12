@@ -364,6 +364,10 @@ enum ItemReferencePlan {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DomainMemberCallPlan {
     RepresentationalIdentityUnary,
+    RepresentationalRepackUnary {
+        from_layout: LayoutId,
+        to_layout: LayoutId,
+    },
     /// `.carrier` where the carrier is a by-value primitive (e.g., `Duration over Int` → `Int`).
     CarrierExtractPrimitive,
     NativeIntBinary(BinaryOperator),
@@ -372,6 +376,12 @@ enum DomainMemberCallPlan {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum BuiltinCallPlan {
     StructuralEq(NativeEqualityShape),
+    NativeCompare {
+        kind: NativeCompareKind,
+        less_tag: i64,
+        equal_tag: i64,
+        greater_tag: i64,
+    },
     OptionSome(OptionCodegenContract),
     ListReduce(ListReducePlan),
 }
@@ -474,6 +484,7 @@ enum NativeEqualityShape {
     BigInt,
     Text,
     Bytes,
+    TaggedNullarySum,
     Aggregate(Vec<NativeEqualityField>),
     NicheOption { payload: Box<NativeEqualityShape> },
     InlineScalarOption(ScalarOptionKind),

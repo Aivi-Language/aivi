@@ -216,6 +216,32 @@ type Eq A => A -> A -> Bool
 func __aivi_binary_neq = left right =>
     left != right
 
+type Ord A => A -> A -> Bool
+func __aivi_binary_lt = left right =>
+    compare left right
+     ||> Less    -> True
+     ||> Equal   -> False
+     ||> Greater -> False
+
+type Ord A => A -> A -> Bool
+func __aivi_binary_gt = left right =>
+    compare left right
+     ||> Less    -> False
+     ||> Equal   -> False
+     ||> Greater -> True
+
+type Ord A => A -> A -> Bool
+func __aivi_binary_lte = left right =>
+    compare left right
+     ||> Greater -> False
+     ||> _       -> True
+
+type Ord A => A -> A -> Bool
+func __aivi_binary_gte = left right =>
+    compare left right
+     ||> Less -> False
+     ||> _    -> True
+
 domain NonEmptyList A over List A = {
     type (List A) -> (NonEmptyList A)
     lift items = items

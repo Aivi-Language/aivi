@@ -1867,11 +1867,7 @@ impl Formatter {
 
         // Suffix members keep their authored `suffix ms : Int = ...` surface.
         if matches!(member.name, DomainMemberName::Literal(_)) {
-            let mut header = format!(
-                "{}{}",
-                spaces(INDENT_WIDTH),
-                member_name
-            );
+            let mut header = format!("{}{}", spaces(INDENT_WIDTH), member_name);
             if let Some(annotation) = &member.annotation {
                 header.push_str(" : ");
                 header.push_str(&self.format_type_inline(annotation, 0));
@@ -1915,11 +1911,7 @@ impl Formatter {
         }
 
         // Emit the member name line
-        let mut header = format!(
-            "{}{}",
-            spaces(INDENT_WIDTH),
-            member_name
-        );
+        let mut header = format!("{}{}", spaces(INDENT_WIDTH), member_name);
 
         let Some(body) = &member.body else {
             if member.annotation.is_none() {
@@ -4111,9 +4103,7 @@ value view =
 
     #[test]
     fn formatter_normalizes_percent_domain_operator_layout() {
-        let formatted = format_text(
-            "domain Bucket over Int\n    (%) : Bucket -> Int -> Bucket\n",
-        );
+        let formatted = format_text("domain Bucket over Int\n    (%) : Bucket -> Int -> Bucket\n");
         assert_eq!(
             formatted,
             concat!(

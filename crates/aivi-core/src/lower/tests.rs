@@ -416,6 +416,36 @@ fn lowers_transform_stage_modes_into_core_pipe_nodes() {
 }
 
 #[test]
+fn lowers_nonfinal_generic_pipe_transforms_through_transparent_alias_parameters() {
+    let lowered = lower_text(
+        "typed-core-generic-pipe-alias.aivi",
+        r#"
+type Box A = {
+    value: A
+}
+
+fun unwrapBox:A = box:(Box A)=>    box
+    ||> { value } -> value
+
+fun addOne:Int = value:Int=>    value + 1
+
+value out : Int =
+    { value: 1 }
+      |> unwrapBox
+      |> addOne
+"#,
+    );
+    assert!(
+        !lowered.has_errors(),
+        "generic alias pipe example should lower to HIR: {:?}",
+        lowered.diagnostics()
+    );
+
+    let core = lower_module(lowered.module()).expect("typed-core lowering should succeed");
+    validate_module(&core).expect("lowered core module should validate");
+}
+
+#[test]
 fn lowers_source_and_decode_programs_into_core_ir() {
     let lowered = lower_text(
         "typed-core-source-decode.aivi",

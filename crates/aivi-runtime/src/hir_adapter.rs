@@ -451,8 +451,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         continue;
                     }
                     *dependencies = graph_dependencies.into_boxed_slice();
-                    *temporal_trigger_dependencies =
-                        resolved_temporal_triggers.into_boxed_slice();
+                    *temporal_trigger_dependencies = resolved_temporal_triggers.into_boxed_slice();
                 }
                 HirSignalBindingKind::Reactive {
                     signal: reactive,

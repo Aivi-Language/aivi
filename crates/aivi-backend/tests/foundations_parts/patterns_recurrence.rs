@@ -238,14 +238,23 @@ fun mod_durations:Duration = a:Duration b:Duration=>    a % b
 }
 
 #[test]
-fn cranelift_codegen_compiles_domain_binary_comparison_operators() {
+fn cranelift_codegen_compiles_ord_backed_domain_comparisons() {
     let backend = lower_text(
-        "domain-binary-comparison.aivi",
+        "domain-ord-comparison.aivi",
         r#"
 domain Duration over Int = {
     suffix ms : Int = value => Duration value
-    type Duration -> Duration -> Bool
-    (>)
+    type Duration -> Int
+    toMillis value = value
+}
+
+instance Eq Duration = {
+    (==) left right = toMillis left == toMillis right
+    (!=) left right = toMillis left != toMillis right
+}
+
+instance Ord Duration = {
+    compare left right = compare (toMillis left) (toMillis right)
 }
 
 fun gt_durations:Bool = a:Duration b:Duration=>    a > b
@@ -269,11 +278,6 @@ fun gt_durations:Bool = a:Duration b:Duration=>    a > b
     assert!(
         artifact.clif.contains(&format!("({ptr}, {ptr}) -> i8")),
         "gt_durations CLIF should have (ptr, ptr) -> i8 signature, got:\n{}",
-        artifact.clif
-    );
-    assert!(
-        !artifact.clif.contains("call"),
-        "gt_durations CLIF should not contain function calls, got:\n{}",
         artifact.clif
     );
     assert!(!compiled.object().is_empty());
