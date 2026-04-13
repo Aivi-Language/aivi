@@ -1,14 +1,14 @@
 use aivi.matrix (
     Matrix
+    MatrixError
     at as matrixAt
     count as matrixCount
-    filled as matrixFilled
+    init as matrixInit
     indices as matrixIndices
     replaceAt as matrixReplaceAt
 )
 
 use aivi.list (
-    contains as listContains
     filter
     flatMap
     head
@@ -69,12 +69,16 @@ type Phase = {
      ||> _                        -> False
 }
 
-type State = {
+type BoardState = {
     board: Matrix Disc,
     humanMoves: List Coord,
     computerMoves: List Coord,
     phase: Phase
 }
+
+type State =
+  | Ready BoardState
+  | SetupError MatrixError
 
 type Event =
   | Click Coord
@@ -191,8 +195,8 @@ func applyMove = board disc cell => cell
   |> flipsForMove board disc #flips
   |> placeWithFlips disc board cell flips
 
-type Matrix Disc -> Phase -> State
-func stateFor = board phase =>
+type Matrix Disc -> Phase -> BoardState
+func boardStateFor = board phase =>
     {
         board,
         humanMoves: legalMoves board Black,
@@ -200,51 +204,68 @@ func stateFor = board phase =>
         phase
     }
 
-type State -> State
-func prepareComputerFrom = state => head state.computerMoves
- ||> Some cell -> state <| { phase: ComputerPreparing cell }
- ||> None      -> state
+type Matrix Disc -> Phase -> State
+func stateFor = board phase =>
+    Ready (boardStateFor board phase)
 
-type State -> State
+type BoardState -> State
+func prepareComputerFromReady = ready =>
+    head ready.computerMoves
+  ||> Some cell -> Ready (ready <| { phase: ComputerPreparing cell })
+  ||> None      -> Ready ready
+
+type BoardState -> State
 func settleComputerTurn = state => nonEmpty state.humanMoves
- T|> state
- F|> prepareComputerFrom state
+ T|> Ready state
+ F|> prepareComputerFromReady state
 
 type Matrix Disc -> State
 func afterComputerMove = board =>
-    settleComputerTurn (stateFor board HumanReady)
+    settleComputerTurn (boardStateFor board HumanReady)
 
 type Matrix Disc -> State
 func prepareComputerTurn = board =>
-    prepareComputerFrom (stateFor board HumanReady)
+    prepareComputerFromReady (boardStateFor board HumanReady)
 
-type Int -> Matrix Disc
-func openingBoard = ignored =>
-    matrixFilled 8 8 buildInitialDisc
+type Int -> State
+func openingState = ignored =>
+    matrixInit 8 8 buildInitialDisc
+  ||> Ok board -> stateFor board HumanReady
+  ||> Err error -> SetupError error
+
+type Coord -> BoardState -> State
+func clickReady = cell ready => phaseAllowsHumanInput ready.phase and any (sameCoord cell) ready.humanMoves
+ T|> prepareComputerTurn (applyMove ready.board Black cell)
+ F|> Ready ready
 
 type Coord -> State -> State
-func clickState = cell state => stateLegalAt cell state
- T|> prepareComputerTurn (applyMove state.board Black cell)
- F|> state
+func clickState = cell state => state
+ ||> Ready ready -> clickReady cell ready
+ ||> SetupError error -> SetupError error
+
+type BoardState -> State
+func flashReady = ready => ready.phase
+ ||> ComputerPreparing cell      -> Ready (ready <| { phase: ComputerAnimating cell 0 })
+ ||> ComputerAnimating cell step -> stepAnimation ready cell step
+ ||> HumanReady                  -> Ready ready
 
 type State -> State
-func flashState = state => state.phase
- ||> ComputerPreparing cell      -> state <| { phase: ComputerAnimating cell 0 }
- ||> ComputerAnimating cell step -> stepAnimation state cell step
- ||> HumanReady                  -> state
+func flashState = state => state
+ ||> Ready ready -> flashReady ready
+ ||> SetupError error -> SetupError error
 
-type State -> Coord -> Int -> State
+type BoardState -> Coord -> Int -> State
 func stepAnimation = state cell step => step
   |> . + 1 #next
-  |> next >= 4
+ |> next >= 4
  T|> afterComputerMove (applyMove state.board White cell)
- F|> state <| { phase: ComputerAnimating cell next }
+ F|> Ready (state <| { phase: ComputerAnimating cell next })
 
 type Event -> State -> State
 func step = event state => event
  ||> Click cell    -> clickState cell state
  ||> ComputerFlash -> flashState state
- ||> Reset         -> stateFor (openingBoard 0) HumanReady
+ ||> Reset         -> openingState 0
  ||> Idle          -> state
 
 type Int -> Int -> Text
@@ -260,6 +281,15 @@ func winnerText = black white => black > white
 type Matrix Disc -> Text
 func winnerLine = board =>
     winnerText (matrixCount isBlackDisc board) (matrixCount isWhiteDisc board)
+
+type MatrixError -> Text
+func matrixErrorText = error => error
+ ||> NegativeWidth width ->
+     "Opening board width must be non-negative, got {width}."
+ ||> NegativeHeight height ->
+     "Opening board height must be non-negative, got {height}."
+ ||> RaggedRows rowIndex expected actual ->
+     "Opening board row {rowIndex} has width {actual}, expected {expected}."
 
 type Bool -> Text
 func emptyCellLabel = legal => legal
@@ -283,27 +313,40 @@ func renderCell = cell legal phase board => phaseTarget phase
  ||> None        -> baseCellLabel legal (discAt board cell)
 
 type State -> Bool
-func stateGameOver = state =>
-    length state.humanMoves == 0 and length state.computerMoves == 0
+func stateGameOver = state => state
+ ||> Ready ready -> length ready.humanMoves == 0 and length ready.computerMoves == 0
+ ||> SetupError _ -> True
 
 type State -> Text
-func stateWinnerLine = state =>
-    winnerLine state.board
+func stateWinnerLine = state => state
+ ||> Ready ready -> winnerLine ready.board
+ ||> SetupError error -> matrixErrorText error
 
 type Coord -> Coord -> Bool
 func sameCoord = target candidate =>
     target == candidate
 
+type Coord -> BoardState -> Bool
+func readyLegalAt = cell ready =>
+    phaseAllowsHumanInput ready.phase and any (sameCoord cell) ready.humanMoves
+
 type Coord -> State -> Bool
-func stateLegalAt = cell state =>
-    phaseAllowsHumanInput state.phase and listContains (sameCoord cell) state.humanMoves
+func stateLegalAt = cell state => state
+ ||> Ready ready -> readyLegalAt cell ready
+ ||> SetupError _ -> False
 
 type Coord -> State -> Text
-func stateCellLabel = cell state =>
-    renderCell cell (stateLegalAt cell state) state.phase state.board
+func stateCellLabel = cell state => state
+ ||> Ready ready -> renderCell cell (readyLegalAt cell ready) ready.phase ready.board
+ ||> SetupError _ -> "×"
+
+type State -> Phase
+func statePhase = state => state
+ ||> Ready ready -> ready.phase
+ ||> SetupError _ -> HumanReady
 
 from state = {
-    phase: .phase
+    phase: statePhase
     gameOver: stateGameOver
     finalText: stateWinnerLine
 
@@ -340,7 +383,7 @@ signal event = placeCell | computerFlashTick | restartClick
   ||> _ => Idle
 
 signal state = event
- +|> (stateFor (openingBoard 0) HumanReady) step
+ +|> (openingState 0) step
 
 value main =
     <Window title="AIVI Reversi" defaultWidth={520} defaultHeight={520}>

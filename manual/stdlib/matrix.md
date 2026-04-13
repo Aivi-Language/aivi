@@ -94,7 +94,6 @@ func seatNumber = x y =>
     x + y * 100
 
 value built : Result MatrixError (Matrix Int) = init 3 2 seatNumber
-
 value blank : Result MatrixError (Matrix Text) = filled 3 2 "."
 
 value fromExisting : Result MatrixError (Matrix Text) =

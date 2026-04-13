@@ -2276,7 +2276,7 @@ func stateCellLabel = cell state => state.on
 
 signal click : Signal Unit
 type Unit -> State -> State
-func step = input current => { on: not current.on }
+func step = input current => { on: not (current.on) }
 
 value initialState = { on: False }
 

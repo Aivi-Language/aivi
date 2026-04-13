@@ -16,7 +16,7 @@ Performed: 2026-04-06. All issues below are fixed in the demo files.
 - **Domain abstraction**: `Snake over NonEmptyList Cell` — correct use of the domain system to encapsulate the snake body.
 - **No if/else, no loops**: pure pattern matching and pipe algebra throughout.
 - **Patch operator**: `<|` used correctly for record field updates.
-- **`cellEq` comparator**: Required AIVI pattern — `==` at polymorphic type needs an explicit `Eq` comparator passed to `listContains`. Correct as-is (see [type-system.md](type-system.md)).
+- **Predicate search via `any`**: `Snake.contains` and similar helpers now route through `any`, with small typed predicates like `sameCell` where general-expression lowering wants explicit parameter types. Plain list membership still lives on `contains value list`.
 - **Timer source**: `@source timer.every 120ms with { immediate: False, coalesce: True }` — correct Duration literal with options.
 
 ### ❌ Issues found & fixed
@@ -168,9 +168,14 @@ The tiebreaker semantics (fewer flips wins when positional scores are equal) ali
 ### 2026-04-10 run-path compatibility note
 
 - `aivi check demos/reversi.aivi` can succeed while the live run path still fails later in typed-core/runtime preparation if demo helpers lean on implicit `. == value` comparator lambdas.
-- Reversi now uses an explicit `coordEq : Coord -> Coord -> Bool` helper in the `listContains` sites that feed both gameplay checks and markup-facing state helpers.
+- Reversi legality checks now use `any (sameCoord cell)` instead of routing through predicate-shaped `contains`.
 - `clickState` also routes through `stateLegalAt` instead of branching directly on the inline legality expression, keeping the truthy/falsy subject shape explicit for the run path.
 - This was handled as a demo cleanup, not a compiler semantics expansion: the goal was to put the showcase back onto the stable subset already exercised by `aivi run` / MCP tests.
+
+### 2026-04-13 final closeout note
+
+- `demos/reversi.aivi` now builds the opening board through checked `matrixInit 8 8 buildInitialDisc` instead of stale `matrixFilled` semantics.
+- Setup failure is now explicit in the demo state (`SetupError MatrixError`) instead of silently fabricating a fallback board, so the checked matrix constructor policy stays intact even in the showcase app.
 
 ---
 

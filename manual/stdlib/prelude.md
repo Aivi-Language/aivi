@@ -175,16 +175,21 @@ value leastOf : Int =
 
 ## Text Functions
 
+Prelude keeps bare `join` for the generic `Monad.join` member. Text joining stays on
+`aivi.text.join`, which you can import locally when needed.
+
 ```aivi
+use aivi.text (join as textJoin)
+
 value csv : Text =
-    join ", " [
+    textJoin ", " [
         "Ada",
         "Grace",
         "Hedy"
     ]
 
 value combined : Text =
-    join "" [
+    textJoin "" [
         "Hello",
         " ",
         "World"

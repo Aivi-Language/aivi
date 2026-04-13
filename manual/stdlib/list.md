@@ -681,7 +681,8 @@ value result : Option Int =
 
 ### contains
 
-Returns `True` if any element matches the predicate. The common membership shape is `(. == needle)`.
+Returns `True` if list contains target value according to ambient `Eq` instance. For predicate search,
+use `any`.
 
 ```aivi
 ```
@@ -690,7 +691,7 @@ Returns `True` if any element matches the predicate. The common membership shape
 use aivi.list (contains)
 
 value found : Bool =
-    contains (. == 3) [
+    contains 3 [
         1,
         2,
         3,
@@ -699,10 +700,10 @@ value found : Bool =
     ]
 
 value foundPipe : Bool = [1, 2, 3, 4, 5]
-  |> contains (. == 3)
+  |> contains 3
 
 value missing : Bool =
-    contains (. == 9) [
+    contains 9 [
         1,
         2,
         3

@@ -54,15 +54,12 @@ use aivi.list (
     findMap as listFindMap
 )
 
-use aivi.order (
-    comparing as orderComparing
-)
+use aivi.order (comparing as orderComparing)
 
 use aivi.text (
-    join as textJoin
-    isEmpty as textIsEmpty
-    nonEmpty as textNonEmpty
-    surround as textSurround
+    isEmpty as textIsEmptyImpl
+    nonEmpty as textNonEmptyImpl
+    surround as textSurroundImpl
 )
 
 use aivi.math (
@@ -86,14 +83,10 @@ use aivi.bool (
 
 use aivi.pair (
     first as pairFirst
-    fst as pairFst
     second as pairSecond
-    snd as pairSnd
     swap as pairSwap
     mapFirst as pairMapFirst
-    mapFst as pairMapFst
     mapSecond as pairMapSecond
-    mapSnd as pairMapSnd
     mapBoth as pairMapBoth
     duplicate as pairDuplicate
 )
@@ -262,21 +255,17 @@ type (A -> B) -> (B -> B -> Bool) -> A -> A -> Bool
 func comparing = extract compare left right =>
     orderComparing extract compare left right
 
-type Text -> (List Text) -> Text
-func join = separator parts =>
-    textJoin separator parts
-
 type Text -> Bool
 func textIsEmpty = t =>
-    textIsEmpty t
+    textIsEmptyImpl t
 
 type Text -> Bool
 func textNonEmpty = t =>
-    textNonEmpty t
+    textNonEmptyImpl t
 
 type Text -> Text -> Text -> Text
 func surround = left right middle =>
-    textSurround left right middle
+    textSurroundImpl left right middle
 
 type Int -> Int
 func abs = n =>
@@ -334,17 +323,9 @@ type (A, B) -> A
 func first = pair =>
     pairFirst pair
 
-type (A, B) -> A
-func fst = pair =>
-    pairFst pair
-
 type (A, B) -> B
 func second = pair =>
     pairSecond pair
-
-type (A, B) -> B
-func snd = pair =>
-    pairSnd pair
 
 type (A, B) -> (B, A)
 func swap = pair =>
@@ -354,17 +335,9 @@ type (A -> B) -> (A, C) -> (B, C)
 func mapFirst = f pair =>
     pairMapFirst f pair
 
-type (A -> B) -> (A, C) -> (B, C)
-func mapFst = f pair =>
-    pairMapFst f pair
-
 type (B -> C) -> (A, B) -> (A, C)
 func mapSecond = f pair =>
     pairMapSecond f pair
-
-type (B -> C) -> (A, B) -> (A, C)
-func mapSnd = f pair =>
-    pairMapSnd f pair
 
 type (A -> C) -> (B -> D) -> (A, B) -> (C, D)
 func mapPair = f g pair =>
@@ -374,4 +347,4 @@ type A -> (A, A)
 func duplicate = item =>
     pairDuplicate item
 
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, Errors, isSome, isNone, getOrElse, mapOr, isSomeAnd, withDefault, isOk, isErr, isValid, isInvalid, validationGetOrElse, validationMapErr, validationToResult, validationFromResult, validationToOption, validationMap, validationAndThen, zipValidation, validationFold, length, head, at, last, indexed, mapWithIndex, reduceWithIndex, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, replaceAt, take, drop, sum, contains, any, all, count, find, findMap, min, max, minOf, maxOf, comparing, join, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, first, fst, second, snd, swap, mapFirst, mapFst, mapSecond, mapSnd, mapPair, duplicate)
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, Errors, isSome, isNone, getOrElse, mapOr, isSomeAnd, withDefault, isOk, isErr, isValid, isInvalid, validationGetOrElse, validationMapErr, validationToResult, validationFromResult, validationToOption, validationMap, validationAndThen, zipValidation, validationFold, length, head, at, last, indexed, mapWithIndex, reduceWithIndex, tailOrEmpty, isEmpty, nonEmpty, flatten, reverse, replaceAt, take, drop, sum, contains, any, all, count, find, findMap, min, max, minOf, maxOf, comparing, textIsEmpty, textNonEmpty, surround, abs, negate, sign, isEven, isOdd, square, clamp, between, divides, not, xor, implies, boolFromInt, first, second, swap, mapFirst, mapSecond, mapPair, duplicate)

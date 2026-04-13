@@ -1081,3 +1081,110 @@ value combined:Blob =
         other => panic!("expected Blob sum result, found {other:?}"),
     }
 }
+
+#[test]
+fn higher_kinded_evidence_behaves_uniformly_for_builtin_same_module_and_imported_calls() {
+    let local = lower_text(
+        "backend-uniform-hkt-evidence.aivi",
+        r#"
+type Box A = Box A
+
+instance Functor Box = {
+    map transform box =
+        box
+         ||> Box item -> Box (transform item)
+}
+
+instance Foldable Box = {
+    reduce step seed box =
+        box
+         ||> Box item -> step seed item
+}
+
+type Int -> Int
+func addOne = x =>
+    x + 1
+
+type Int -> Int -> Int
+func add = total item =>
+    total + item
+
+value mappedBuiltinValue : Int =
+    map addOne (Some 1)
+     ||> Some item -> item
+     ||> None -> 0
+
+value totalBuiltin : Int =
+    reduce add 10 [1]
+
+value mappedAuthoredValue : Int =
+    map addOne (Box 1)
+     ||> Box item -> item
+
+value totalAuthored : Int =
+    reduce add 10 (Box 1)
+"#,
+    );
+
+    let mapped_builtin = find_item(&local, "mappedBuiltinValue");
+    let total_builtin = find_item(&local, "totalBuiltin");
+
+    let mut evaluator = KernelEvaluator::new(&local);
+    let globals = BTreeMap::new();
+    let builtin_mapped_value = evaluator
+        .evaluate_item(mapped_builtin, &globals)
+        .expect("builtin map should evaluate");
+    let builtin_total = evaluator
+        .evaluate_item(total_builtin, &globals)
+        .expect("builtin reduce should evaluate");
+    let authored_mapped_value = evaluator
+        .evaluate_item(find_item(&local, "mappedAuthoredValue"), &globals)
+        .expect("same-module authored map should evaluate");
+    let authored_total = evaluator
+        .evaluate_item(find_item(&local, "totalAuthored"), &globals)
+        .expect("same-module authored reduce should evaluate");
+
+    assert_eq!(builtin_mapped_value, RuntimeValue::Int(2));
+    assert_eq!(builtin_total, RuntimeValue::Int(11));
+    assert_eq!(authored_mapped_value, RuntimeValue::Int(2));
+    assert_eq!(authored_total, RuntimeValue::Int(11));
+
+    let imported = lower_workspace_text(
+        "milestone-2/valid/workspace-imported-higher-kinded-instances/main.aivi",
+        r#"
+use shared.box (
+    Box
+    one
+)
+
+type Int -> Int
+func addOne = x =>
+    x + 1
+
+type Int -> Int -> Int
+func add = total item =>
+    total + item
+
+value mappedImportedValue : Int =
+    reduce add 0 (map addOne one)
+
+value totalImported : Int =
+    reduce add 10 one
+"#,
+    );
+
+    let mut imported_evaluator = KernelEvaluator::new(&imported);
+    let imported_mapped_value = imported_evaluator
+        .evaluate_item(find_item(&imported, "mappedImportedValue"), &globals)
+        .expect("imported authored map should evaluate");
+    let imported_total = imported_evaluator
+        .evaluate_item(find_item(&imported, "totalImported"), &globals)
+        .expect("imported authored reduce should evaluate");
+
+    assert_eq!(imported_mapped_value, RuntimeValue::Int(2));
+    assert_eq!(imported_total, RuntimeValue::Int(11));
+    assert_eq!(authored_mapped_value, imported_mapped_value);
+    assert_eq!(authored_total, imported_total);
+    assert_eq!(builtin_mapped_value, imported_mapped_value);
+    assert_eq!(builtin_total, imported_total);
+}

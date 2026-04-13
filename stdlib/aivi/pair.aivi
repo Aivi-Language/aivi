@@ -1,4 +1,4 @@
-hoist
+hoist hiding (fst, snd, mapFst, mapSnd)
 
 type (A, B) -> A
 func first = pair => pair

@@ -286,15 +286,15 @@ value maxNum : Option Int = maximum numbers
 value minNum : Option Int = minimum numbers
 value maxNumBy : Option Int = maximumBy smaller numbers
 value minNumBy : Option Int = minimumBy smaller numbers
-value hasThree : Bool = contains (. == 3) numbers
+value hasThree : Bool = contains 3 numbers
 
 value hasThreeViaPipe : Bool = numbers
-  |> contains (. == 3)
+  |> contains 3
 
-value missesNine : Bool = contains (. == 9) numbers
+value missesNine : Bool = contains 9 numbers
 
 value missesNineViaPipe : Bool = numbers
-  |> contains (. == 9)
+  |> contains 9
 
 value threeIndex : Option Int = indexOf isThree numbers
 value anyPos : Bool = any isPositive numbers
@@ -526,7 +526,7 @@ value reversed1 : Bool = reversed smaller 4 2
 
 type (Int, Text) -> Int
 func getAge = person =>
-    fst person
+    first person
 
 value people : List (Int, Text) = [
     (30, "Ada"),

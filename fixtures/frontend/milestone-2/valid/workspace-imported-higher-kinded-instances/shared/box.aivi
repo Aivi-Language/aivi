@@ -1,19 +1,15 @@
 type Box A = Box A
 
-type (A -> B) -> Box A -> Box B
-func mapBox = transform box => box
- ||> Box item -> Box (transform item)
-
 instance Functor Box = {
-    map = mapBox
+    map transform box =
+        box
+         ||> Box item -> Box (transform item)
 }
 
-type (B -> A -> B) -> B -> Box A -> B
-func reduceBox = step seed box => box
- ||> Box item -> step seed item
-
 instance Foldable Box = {
-    reduce = reduceBox
+    reduce step seed box =
+        box
+         ||> Box item -> step seed item
 }
 
 value one : Box Int = Box 1

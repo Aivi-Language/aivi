@@ -4,7 +4,9 @@ use aivi.nonEmpty (
     init as nelInit
 )
 
-use aivi.list (contains as listContains)
+use aivi.text (
+    join as textJoin
+)
 
 type Direction =
   | North
@@ -50,7 +52,7 @@ func nextSeed = s =>
     (s * 1103515245 + 12345) % 2147483647
 
 type Cell -> Cell -> Bool
-func cellEq = target candidate =>
+func sameCell = target candidate =>
     candidate == target
 
 domain Snake over NonEmptyList Cell = {
@@ -59,7 +61,7 @@ domain Snake over NonEmptyList Cell = {
     type head : Snake -> Cell
     head = snake => nelHead snake
     type contains : Snake -> Cell -> Bool
-    contains = snake cell => listContains (cellEq cell) (toList snake)
+    contains = snake cell => any (sameCell cell) (toList snake)
     type length : Snake -> Int
     length = snake => nelLength snake
     type cells : Snake -> List Cell
@@ -155,7 +157,7 @@ func resolveMoveStep = st h =>
     }
 
 type List Cell -> Cell -> Cell -> Int -> Int -> Text
-func cellGlyph = body head food y x => (Cell x y == head, listContains (cellEq (Cell x y)) body, Cell x y == food)
+func cellGlyph = body head food y x => (Cell x y == head, any (sameCell (Cell x y)) body, Cell x y == food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
@@ -164,12 +166,12 @@ func cellGlyph = body head food y x => (Cell x y == head, listContains (cellEq (
 type List Cell -> Cell -> Cell -> Int -> Text
 func renderRowAt = body head food y => indices boardW
   |> map (cellGlyph body head food y)
-  |> join ""
+  |> textJoin ""
 
 type Snake -> Cell -> Text
 func renderBoard = snake food => indices boardH
   |> map (renderRowAt snake.cells snake.head food)
-  |> join "\n"
+  |> textJoin "\n"
 
 type Status -> Bool
 func isGameOver = arg1 => arg1

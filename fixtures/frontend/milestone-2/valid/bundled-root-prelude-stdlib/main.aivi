@@ -48,8 +48,9 @@ use aivi.prelude (
     min
     max
     minOf
-    join
 )
+
+use aivi.text (join as textJoin)
 
 use aivi.matrix (
     Matrix
@@ -130,11 +131,13 @@ value checkedNameResult : Result Text Text = validationToResult checkedName
 value checkedNameValue : Text = validationGetOrElse "guest" checkedName
 
 value labels : Text =
-    join ", " [
+    textJoin ", " [
         "Ada",
         "Grace"
     ]
 
+value nestedMaybeName : Option (Option Text) = Some maybeName
+value flattenedMaybeName : Option Text = join nestedMaybeName
 value orderedCount : Ordering = compare 1 2
 value combinedLabel : Text = append "Ada" " Lovelace"
 value emptyLabels : Text = empty

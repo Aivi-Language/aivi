@@ -214,13 +214,14 @@ fn check_accepts_anonymous_lambda_expressions() {
             "type Coord -> Coord -> Bool\n",
             "func coordEq = target candidate => candidate == target\n",
             "type Coord -> List Coord -> Bool\n",
-            "func member = cell items => contains (coordEq cell) items\n",
+            "func member = cell items => contains cell items\n",
             "value items : List Coord = [Coord 0 0, Coord 1 1]\n",
             "value cell : Coord = Coord 1 1\n",
+            "value helperMatch : Bool = any (coordEq cell) items\n",
             "value explicitMatch : Bool = any (coord => coord == cell) items\n",
             "value shorthandMatch : Bool = any (. == cell) items\n",
-            "value containsMatch : Bool = contains (. == cell) items\n",
-            "value containsPipeMatch : Bool = items |> contains (. == cell)\n",
+            "value containsMatch : Bool = contains cell items\n",
+            "value containsPipeMatch : Bool = items |> contains cell\n",
             "value containsHelperMatch : Bool = member cell items\n",
             "value addPair : Int -> Int -> Int = left right => left + right\n",
             "value total : Int = addPair 2 3\n",
@@ -1451,7 +1452,7 @@ fn check_accepts_bundled_root_and_prelude_stdlib_imports() {
     workspace.write("aivi.toml", "");
     let main = workspace.write(
         "main.aivi",
-        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n    getOrElse\n    withDefault\n    isValid\n    validationToResult\n    length\n    head\n    join\n)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue labels:Text = join \", \" [\"Ada\", \"Grace\"]\nvalue sameCount:Bool = chosenCount == 2\n",
+        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n    getOrElse\n    withDefault\n    isValid\n    validationToResult\n    length\n    head\n)\n\nuse aivi.text (\n    join as textJoin\n)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\nvalue nestedMaybeName:Option (Option Text) = Some maybeName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue labels:Text = textJoin \", \" [\"Ada\", \"Grace\"]\nvalue flattenedName:Option Text = join nestedMaybeName\nvalue sameCount:Bool = chosenCount == 2\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("check")

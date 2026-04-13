@@ -74,8 +74,8 @@ Cross-module polymorphic imports use `ImportBindingMetadata::InstanceMember` and
 `EqDeriver` structurally derives `Eq` instances for records, sum types, and domains. The `EqContext` tracks derivation progress; `EqDerivation` is the result.
 
 **Important**: `==` / `!=` at generic type require an `Eq` constraint at the definition site, and
-surface `!=` reuses the same `Eq` evidence as `==`. For polymorphic code, pass an explicit `eq`
-comparator function (see `stdlib/aivi/list.aivi` — `contains` takes an `eq` function parameter).
+surface `!=` reuses the same `Eq` evidence as `==`. For polymorphic code, list membership follows
+that same rule directly: `contains : Eq A => A -> List A -> Bool`.
 
 ## Domains
 
@@ -131,9 +131,16 @@ These correspond to the `Builtin*Carrier` types in `crates/aivi-core/src/expr.rs
 ### Current imported-instance slice
 
 - Imported unary user-authored higher-kinded instances are executable today for ordinary member lookup such as `map` and `reduce`
-- This path works through authored executable evidence, not through expanding the builtin carrier table
+- This path works through authored executable evidence that points at hidden lowered member bodies, not through expanding the builtin carrier table
 - `aivi.matrix` uses this mechanism to expose ambient `map` / `reduce` via user-authored `Functor` / `Foldable` instances
+- Parser/checker acceptance alone is not a runtime guarantee if evidence cannot be selected concretely
 - Multi-parameter indexed heads are still a deferred design problem; the current executable evidence path is clearly unary
+
+### Advanced ambient classes
+
+- The ambient prelude also declares secondary classes such as `Setoid`, `Semigroupoid`, `Contravariant`, `Category`, `Profunctor`, `Alt`, `Plus`, `Extend`, `Comonad`, `Alternative`, and `ChainRec`
+- Current manual guidance explicitly de-scopes those names from the primary executable support story unless a feature documents a narrower supported path
+- Do not read their presence in the ambient source as a blanket runtime-support promise
 
 ### Closed sum companions
 

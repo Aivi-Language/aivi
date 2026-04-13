@@ -8826,9 +8826,11 @@ impl<'a> Lowerer<'a> {
             LookupResult::Missing => {}
         }
         // Hoisted names (from `hoist` declarations) are consulted after explicit
-        // `use` imports.  Unique → resolved as a normal import.  Multiple
-        // candidates (same name from different hoisted modules) → deferred to
-        // type-directed disambiguation at the type-checking layer.
+        // `use` imports. Unique hoisted names keep their concrete meaning, but
+        // ambiguous hoisted names defer to class-member lookup first so the
+        // generic algebraic surface remains available when several concrete
+        // helpers share the same spelling.
+        let mut ambiguous_hoisted = None;
         match lookup_item(&namespaces.hoisted_term_imports, name) {
             LookupResult::Unique(import) => {
                 let import_binding = &self.module.imports()[import];
@@ -8852,19 +8854,15 @@ impl<'a> Lowerer<'a> {
                 return;
             }
             LookupResult::Ambiguous => {
-                if let Some(candidates) = namespaces.hoisted_term_imports.get(name)
-                    && let Ok(candidates) = crate::NonEmpty::from_vec(
+                ambiguous_hoisted = namespaces.hoisted_term_imports.get(name).and_then(|candidates| {
+                    crate::NonEmpty::from_vec(
                         candidates
                             .iter()
                             .map(|site| site.value)
                             .collect::<Vec<ImportId>>(),
                     )
-                {
-                    reference.resolution = ResolutionState::Resolved(
-                        TermResolution::AmbiguousHoistedImports(candidates),
-                    );
-                    return;
-                }
+                    .ok()
+                });
             }
             LookupResult::Missing => {}
         }
@@ -8913,6 +8911,11 @@ impl<'a> Lowerer<'a> {
                 }
             }
             LookupResult::Missing => {}
+        }
+        if let Some(candidates) = ambiguous_hoisted {
+            reference.resolution =
+                ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(candidates));
+            return;
         }
         if let Some(builtin) = builtin_term(name) {
             reference.resolution = ResolutionState::Resolved(TermResolution::Builtin(builtin));

@@ -623,22 +623,13 @@ fn builtin_filterable_carrier(
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
-
     use super::{
         BuiltinExecutableCarrier, BuiltinExecutableClass, BuiltinExecutableClassSupport,
         builtin_executable_class_support, builtin_traverse_result_applicative_support,
         render_higher_kinded_builtin_support_markdown,
     };
 
-    fn typeclasses_manual_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("manual")
-            .join("guide")
-            .join("typeclasses.md")
-    }
+    const TYPECLASSES_MANUAL: &str = include_str!("../../../manual/guide/typeclasses.md");
 
     #[test]
     fn registry_keeps_signal_and_validation_non_monadic_without_reducing_task_support() {
@@ -698,8 +689,7 @@ mod tests {
 
     #[test]
     fn rendered_support_section_matches_the_manual() {
-        let manual = fs::read_to_string(typeclasses_manual_path())
-            .expect("typeclasses guide should be readable");
+        let manual = TYPECLASSES_MANUAL;
         let begin = "<!-- BEGIN builtin-executable-support -->";
         let end = "<!-- END builtin-executable-support -->";
         let start = manual

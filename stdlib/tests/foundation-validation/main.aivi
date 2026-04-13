@@ -112,7 +112,6 @@ value numsLength : Int = length numbers
 value numsHead : Option Int = head numbers
 value numsTail : Option (List Int) = tail numbers
 value numsLast : Option Int = last numbers
-
 value smallestNumber : Int = min 4 2
 value largestNumber : Int = max 4 2
 

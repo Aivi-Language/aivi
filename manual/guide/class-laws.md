@@ -38,7 +38,7 @@ The reason is architectural, not cosmetic: AIVI extracts a static signal depende
 topologically, and keeps propagation glitch-free per tick. A monadic `Signal` would imply data-dependent
 dependency rewiring, which would blur graph extraction, scheduler ownership, teardown, and diagnostics.
 So `&|>` is the correct abstraction for combining independent signals; dependent reactive rewiring is
-not modelled as class-backed `chain`.
+not modelled as class-backed `bind`.
 
 ## Why `Validation` stops at `Applicative`
 

@@ -125,6 +125,92 @@ fn mock_target_import(hir: &aivi_hir::Module, expr_id: HirExprId) -> Option<Impo
     Some(import_id)
 }
 
+fn workspace_import_cache_key(binding: &aivi_hir::ImportBinding) -> &str {
+    match &binding.metadata {
+        ImportBindingMetadata::InstanceMember { .. } => binding.local_name.text(),
+        _ => binding.imported_name.text(),
+    }
+}
+
+fn workspace_instance_subject_label(
+    module: &aivi_hir::Module,
+    ty: aivi_hir::TypeId,
+) -> Option<Box<str>> {
+    let type_node = module.types().get(ty)?;
+    match &type_node.kind {
+        aivi_hir::TypeKind::Name(reference) => Some(reference.path.segments().last().text().into()),
+        aivi_hir::TypeKind::Apply { callee, .. } => workspace_instance_subject_label(module, *callee),
+        _ => None,
+    }
+}
+
+fn import_value_type_label(ty: &aivi_hir::ImportValueType) -> String {
+    match ty {
+        aivi_hir::ImportValueType::Primitive(builtin) => format!("{builtin:?}"),
+        aivi_hir::ImportValueType::Tuple(elements) => {
+            let parts: Vec<_> = elements.iter().map(import_value_type_label).collect();
+            format!("Tuple_{}", parts.join("_"))
+        }
+        aivi_hir::ImportValueType::Record(fields) => {
+            let parts: Vec<_> = fields
+                .iter()
+                .map(|field| format!("{}_{}", field.name, import_value_type_label(&field.ty)))
+                .collect();
+            format!("Record_{}", parts.join("_"))
+        }
+        aivi_hir::ImportValueType::Arrow { parameter, result } => format!(
+            "Arrow_{}_{}",
+            import_value_type_label(parameter),
+            import_value_type_label(result)
+        ),
+        aivi_hir::ImportValueType::List(element) => {
+            format!("List_{}", import_value_type_label(element))
+        }
+        aivi_hir::ImportValueType::Map { key, value } => format!(
+            "Map_{}_{}",
+            import_value_type_label(key),
+            import_value_type_label(value)
+        ),
+        aivi_hir::ImportValueType::Set(element) => {
+            format!("Set_{}", import_value_type_label(element))
+        }
+        aivi_hir::ImportValueType::Option(element) => {
+            format!("Option_{}", import_value_type_label(element))
+        }
+        aivi_hir::ImportValueType::Result { error, value } => format!(
+            "Result_{}_{}",
+            import_value_type_label(error),
+            import_value_type_label(value)
+        ),
+        aivi_hir::ImportValueType::Validation { error, value } => format!(
+            "Validation_{}_{}",
+            import_value_type_label(error),
+            import_value_type_label(value)
+        ),
+        aivi_hir::ImportValueType::Signal(element) => {
+            format!("Signal_{}", import_value_type_label(element))
+        }
+        aivi_hir::ImportValueType::Task { error, value } => format!(
+            "Task_{}_{}",
+            import_value_type_label(error),
+            import_value_type_label(value)
+        ),
+        aivi_hir::ImportValueType::TypeVariable { name, .. } => name.clone(),
+        aivi_hir::ImportValueType::Named {
+            type_name,
+            arguments,
+            ..
+        } => {
+            if arguments.is_empty() {
+                type_name.clone()
+            } else {
+                let arguments: Vec<_> = arguments.iter().map(import_value_type_label).collect();
+                format!("{}_{}", type_name, arguments.join("_"))
+            }
+        }
+    }
+}
+
 fn mock_replacement_target(hir: &aivi_hir::Module, expr_id: HirExprId) -> Option<MockImportTarget> {
     let HirExprKind::Name(reference) = &hir.exprs().get(expr_id)?.kind else {
         return None;
@@ -341,6 +427,61 @@ impl<'a> ModuleLowerer<'a> {
                 name_map.entry(synthetic_name).or_insert(core_id);
             }
         }
+        let exported_instance_members = aivi_hir::exports(ws_hir)
+            .instances
+            .into_iter()
+            .flat_map(|instance| {
+                instance.members.into_iter().map(move |member| {
+                    (
+                        (
+                            instance.class_name.to_string(),
+                            instance.subject.to_string(),
+                            member.name.to_string(),
+                        ),
+                        member.ty,
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        for (hir_id, item) in ws_hir.items().iter() {
+            let HirItem::Instance(instance) = item else {
+                continue;
+            };
+            let class_name = instance.class.path.segments().last().text().to_owned();
+            let Some(subject_type) = instance.arguments.iter().next().copied() else {
+                continue;
+            };
+            let Some(subject_label) = workspace_instance_subject_label(ws_hir, subject_type) else {
+                continue;
+            };
+            let subject_label = subject_label.to_string();
+            for (member_index, member) in instance.members.iter().enumerate() {
+                let key = InstanceMemberKey {
+                    instance: hir_id,
+                    member_index,
+                };
+                let Some(core_id) = self.instance_member_item_map.get(&key).copied() else {
+                    continue;
+                };
+                let lookup = (
+                    class_name.clone(),
+                    subject_label.clone(),
+                    member.name.text().to_owned(),
+                );
+                let Some(member_ty) = exported_instance_members.get(&lookup) else {
+                    continue;
+                };
+                let synthetic_name: Box<str> = format!(
+                    "__instance_{}_{}_{}_{}",
+                    class_name,
+                    member.name.text(),
+                    subject_label,
+                    import_value_type_label(member_ty),
+                )
+                .into();
+                name_map.entry(synthetic_name).or_insert(core_id);
+            }
+        }
         // Also include all non-signal imports so that downstream modules that import through
         // a re-export shim resolve to the original implementation item (with body) rather than
         // a bodyless stub. Two passes: first from import_item_map (already-resolved imports from
@@ -376,7 +517,7 @@ impl<'a> ModuleLowerer<'a> {
             }
             if let Some(source_module) = self.import_to_module.get(&import_id)
                 && let Some(source_name_map) = self.workspace_name_maps.get(source_module.as_ref())
-                    && let Some(&core_id) = source_name_map.get(binding.imported_name.text()) {
+                    && let Some(&core_id) = source_name_map.get(workspace_import_cache_key(binding)) {
                         name_map.insert(local_name, core_id);
                     }
         }
@@ -2660,7 +2801,8 @@ impl<'a> ModuleLowerer<'a> {
                 .as_deref()
                 .or_else(|| self.import_to_module.get(&import).map(|name| name.as_ref()))
                 && let Some(name_map) = self.workspace_name_maps.get(module_name)
-                    && let Some(&core_item_id) = name_map.get(binding.imported_name.text()) {
+                    && let Some(&core_item_id) =
+                        name_map.get(workspace_import_cache_key(&binding)) {
                         self.import_item_map.insert(import, core_item_id);
                         return Ok(core_item_id);
                     }

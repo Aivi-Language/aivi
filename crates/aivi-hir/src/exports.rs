@@ -582,17 +582,6 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
         let Some(subject) = type_label_for_export(module, subject_type_id) else {
             continue;
         };
-        let class_type_param_map: HashMap<TypeParameterId, usize> = class_item
-            .parameters
-            .iter()
-            .enumerate()
-            .map(|(index, &parameter)| (parameter, index))
-            .collect();
-        let instance_argument_types = instance
-            .arguments
-            .iter()
-            .map(|&argument| import_value_type(module, argument))
-            .collect::<Option<Vec<_>>>();
         let members = instance
             .members
             .iter()
@@ -606,14 +595,11 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
                             .iter()
                             .find(|class_member| class_member.name.text() == member.name.text())
                             .and_then(|class_member| {
-                                let generic_ty = poly_import_value_type(
+                                exported_instance_class_member_type(
                                     module,
                                     class_member.annotation,
-                                    &class_type_param_map,
-                                )?;
-                                substitute_import_type_variables(
-                                    &generic_ty,
-                                    instance_argument_types.as_deref()?,
+                                    &class_item.parameters,
+                                    &instance.arguments,
                                 )
                             })
                     })
@@ -659,77 +645,6 @@ fn exported_instance_member_type(
     Some(ty)
 }
 
-fn substitute_import_type_variables(
-    ty: &ImportValueType,
-    substitutions: &[ImportValueType],
-) -> Option<ImportValueType> {
-    match ty {
-        ImportValueType::Primitive(_) => Some(ty.clone()),
-        ImportValueType::Tuple(elements) => Some(ImportValueType::Tuple(
-            elements
-                .iter()
-                .map(|element| substitute_import_type_variables(element, substitutions))
-                .collect::<Option<Vec<_>>>()?,
-        )),
-        ImportValueType::Record(fields) => Some(ImportValueType::Record(
-            fields
-                .iter()
-                .map(|field| {
-                    Some(ImportRecordField {
-                        name: field.name.clone(),
-                        ty: substitute_import_type_variables(&field.ty, substitutions)?,
-                    })
-                })
-                .collect::<Option<Vec<_>>>()?,
-        )),
-        ImportValueType::Arrow { parameter, result } => Some(ImportValueType::Arrow {
-            parameter: Box::new(substitute_import_type_variables(parameter, substitutions)?),
-            result: Box::new(substitute_import_type_variables(result, substitutions)?),
-        }),
-        ImportValueType::List(element) => Some(ImportValueType::List(Box::new(
-            substitute_import_type_variables(element, substitutions)?,
-        ))),
-        ImportValueType::Map { key, value } => Some(ImportValueType::Map {
-            key: Box::new(substitute_import_type_variables(key, substitutions)?),
-            value: Box::new(substitute_import_type_variables(value, substitutions)?),
-        }),
-        ImportValueType::Set(element) => Some(ImportValueType::Set(Box::new(
-            substitute_import_type_variables(element, substitutions)?,
-        ))),
-        ImportValueType::Option(element) => Some(ImportValueType::Option(Box::new(
-            substitute_import_type_variables(element, substitutions)?,
-        ))),
-        ImportValueType::Result { error, value } => Some(ImportValueType::Result {
-            error: Box::new(substitute_import_type_variables(error, substitutions)?),
-            value: Box::new(substitute_import_type_variables(value, substitutions)?),
-        }),
-        ImportValueType::Validation { error, value } => Some(ImportValueType::Validation {
-            error: Box::new(substitute_import_type_variables(error, substitutions)?),
-            value: Box::new(substitute_import_type_variables(value, substitutions)?),
-        }),
-        ImportValueType::Signal(element) => Some(ImportValueType::Signal(Box::new(
-            substitute_import_type_variables(element, substitutions)?,
-        ))),
-        ImportValueType::Task { error, value } => Some(ImportValueType::Task {
-            error: Box::new(substitute_import_type_variables(error, substitutions)?),
-            value: Box::new(substitute_import_type_variables(value, substitutions)?),
-        }),
-        ImportValueType::TypeVariable { index, .. } => substitutions.get(*index).cloned(),
-        ImportValueType::Named {
-            type_name,
-            arguments,
-            definition,
-        } => Some(ImportValueType::Named {
-            type_name: type_name.clone(),
-            arguments: arguments
-                .iter()
-                .map(|argument| substitute_import_type_variables(argument, substitutions))
-                .collect::<Option<Vec<_>>>()?,
-            definition: definition.clone(),
-        }),
-    }
-}
-
 /// Extract a string label for a type, used for cross-module instance subject matching.
 fn type_label_for_export(module: &Module, ty: TypeId) -> Option<Box<str>> {
     let type_node = module.types().get(ty)?;
@@ -737,6 +652,336 @@ fn type_label_for_export(module: &Module, ty: TypeId) -> Option<Box<str>> {
         TypeKind::Name(reference) => Some(reference.path.segments().last().text().into()),
         TypeKind::Apply { callee, .. } => type_label_for_export(module, *callee),
         _ => None,
+    }
+}
+
+type TypeParamSubstitutions = HashMap<TypeParameterId, TypeId>;
+
+fn exported_instance_class_member_type(
+    module: &Module,
+    member_annotation: TypeId,
+    class_parameters: &crate::NonEmpty<TypeParameterId>,
+    instance_arguments: &crate::NonEmpty<TypeId>,
+) -> Option<ImportValueType> {
+    let class_substitutions = class_parameters
+        .iter()
+        .copied()
+        .zip(instance_arguments.iter().copied())
+        .collect::<TypeParamSubstitutions>();
+    let mut free_params = TypeParamMap::new();
+    let mut item_stack = Vec::new();
+    exported_instance_member_import_value_type_with_stack(
+        module,
+        member_annotation,
+        &class_substitutions,
+        &mut free_params,
+        &mut item_stack,
+    )
+}
+
+fn exported_instance_member_import_value_type_with_stack(
+    module: &Module,
+    ty: TypeId,
+    class_substitutions: &TypeParamSubstitutions,
+    free_params: &mut TypeParamMap,
+    item_stack: &mut Vec<ItemId>,
+) -> Option<ImportValueType> {
+    let type_node = module.types().get(ty)?;
+    match &type_node.kind {
+        TypeKind::Name(reference) => match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TypeResolution::Builtin(builtin)) => {
+                primitive_import_value_type_from_builtin(*builtin)
+            }
+            ResolutionState::Resolved(TypeResolution::TypeParameter(param_id)) => {
+                if let Some(replacement) = class_substitutions.get(param_id) {
+                    return exported_instance_member_import_value_type_with_stack(
+                        module,
+                        *replacement,
+                        class_substitutions,
+                        free_params,
+                        item_stack,
+                    );
+                }
+                let next_index = free_params.len();
+                let index = match free_params.entry(*param_id) {
+                    std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(next_index);
+                        next_index
+                    }
+                };
+                let name = module
+                    .type_parameters()
+                    .get(*param_id)
+                    .map(|param| param.name.text().to_owned())
+                    .unwrap_or_else(|| format!("T{}", index + 1));
+                Some(ImportValueType::TypeVariable { index, name })
+            }
+            ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
+                named_import_value_type_from_item(module, *item_id, Vec::new(), item_stack)
+            }
+            ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
+                named_import_value_type_from_import(module, *import_id, Vec::new())
+            }
+            _ => None,
+        },
+        TypeKind::Tuple(elements) => Some(ImportValueType::Tuple(
+            elements
+                .iter()
+                .map(|element| {
+                    exported_instance_member_import_value_type_with_stack(
+                        module,
+                        *element,
+                        class_substitutions,
+                        free_params,
+                        item_stack,
+                    )
+                })
+                .collect::<Option<Vec<_>>>()?,
+        )),
+        TypeKind::Record(fields) => Some(ImportValueType::Record(
+            fields
+                .iter()
+                .map(|field| {
+                    Some(ImportRecordField {
+                        name: field.label.text().into(),
+                        ty: exported_instance_member_import_value_type_with_stack(
+                            module,
+                            field.ty,
+                            class_substitutions,
+                            free_params,
+                            item_stack,
+                        )?,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?,
+        )),
+        TypeKind::RecordTransform { transform, source } => {
+            let source = exported_instance_member_import_value_type_with_stack(
+                module,
+                *source,
+                class_substitutions,
+                free_params,
+                item_stack,
+            )?;
+            apply_record_row_transform_import_value_type(transform, source)
+        }
+        TypeKind::Arrow { parameter, result } => Some(ImportValueType::Arrow {
+            parameter: Box::new(exported_instance_member_import_value_type_with_stack(
+                module,
+                *parameter,
+                class_substitutions,
+                free_params,
+                item_stack,
+            )?),
+            result: Box::new(exported_instance_member_import_value_type_with_stack(
+                module,
+                *result,
+                class_substitutions,
+                free_params,
+                item_stack,
+            )?),
+        }),
+        TypeKind::Apply { .. } => exported_instance_member_applied_import_value_type_with_stack(
+            module,
+            ty,
+            class_substitutions,
+            free_params,
+            item_stack,
+        ),
+    }
+}
+
+fn exported_instance_member_applied_import_value_type_with_stack(
+    module: &Module,
+    ty: TypeId,
+    class_substitutions: &TypeParamSubstitutions,
+    free_params: &mut TypeParamMap,
+    item_stack: &mut Vec<ItemId>,
+) -> Option<ImportValueType> {
+    let (constructor, arguments) =
+        flatten_exported_instance_member_type_application(module, ty, class_substitutions)?;
+    match constructor {
+        ResolvedTypeConstructor::Builtin(builtin) => match (builtin, arguments.len()) {
+            (BuiltinType::List, 1) => Some(ImportValueType::List(Box::new(
+                exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?,
+            ))),
+            (BuiltinType::Map, 2) => Some(ImportValueType::Map {
+                key: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+                value: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[1],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+            }),
+            (BuiltinType::Set, 1) => Some(ImportValueType::Set(Box::new(
+                exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?,
+            ))),
+            (BuiltinType::Option, 1) => Some(ImportValueType::Option(Box::new(
+                exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?,
+            ))),
+            (BuiltinType::Result, 2) => Some(ImportValueType::Result {
+                error: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+                value: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[1],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+            }),
+            (BuiltinType::Validation, 2) => Some(ImportValueType::Validation {
+                error: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+                value: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[1],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+            }),
+            (BuiltinType::Signal, 1) => Some(ImportValueType::Signal(Box::new(
+                exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?,
+            ))),
+            (BuiltinType::Task, 2) => Some(ImportValueType::Task {
+                error: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+                value: Box::new(exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[1],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?),
+            }),
+            _ => None,
+        },
+        ResolvedTypeConstructor::Bundle(ImportBundleKind::BuiltinOption)
+            if arguments.len() == 1 =>
+        {
+            Some(ImportValueType::Option(Box::new(
+                exported_instance_member_import_value_type_with_stack(
+                    module,
+                    arguments[0],
+                    class_substitutions,
+                    free_params,
+                    item_stack,
+                )?,
+            )))
+        }
+        ResolvedTypeConstructor::Item(item_id) => {
+            let arguments = arguments
+                .iter()
+                .map(|argument| {
+                    exported_instance_member_import_value_type_with_stack(
+                        module,
+                        *argument,
+                        class_substitutions,
+                        free_params,
+                        item_stack,
+                    )
+                })
+                .collect::<Option<Vec<_>>>()?;
+            named_import_value_type_from_item(module, item_id, arguments, item_stack)
+        }
+        ResolvedTypeConstructor::Import(import_id) => {
+            let arguments = arguments
+                .iter()
+                .map(|argument| {
+                    exported_instance_member_import_value_type_with_stack(
+                        module,
+                        *argument,
+                        class_substitutions,
+                        free_params,
+                        item_stack,
+                    )
+                })
+                .collect::<Option<Vec<_>>>()?;
+            named_import_value_type_from_import(module, import_id, arguments)
+        }
+        ResolvedTypeConstructor::Bundle(_) => None,
+    }
+}
+
+fn flatten_exported_instance_member_type_application(
+    module: &Module,
+    ty: TypeId,
+    class_substitutions: &TypeParamSubstitutions,
+) -> Option<(ResolvedTypeConstructor, Vec<TypeId>)> {
+    let type_node = module.types().get(ty)?;
+    match &type_node.kind {
+        TypeKind::Apply { callee, arguments } => {
+            let (constructor, mut flattened) = flatten_exported_instance_member_type_application(
+                module,
+                *callee,
+                class_substitutions,
+            )?;
+            flattened.extend(arguments.iter().copied());
+            Some((constructor, flattened))
+        }
+        TypeKind::Name(reference) => match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TypeResolution::TypeParameter(param_id)) => {
+                flatten_exported_instance_member_type_application(
+                    module,
+                    *class_substitutions.get(param_id)?,
+                    class_substitutions,
+                )
+            }
+            _ => resolve_type_constructor(module, reference).map(|constructor| (constructor, Vec::new())),
+        },
+        TypeKind::Tuple(_)
+        | TypeKind::Record(_)
+        | TypeKind::RecordTransform { .. }
+        | TypeKind::Arrow { .. } => None,
     }
 }
 
@@ -1031,7 +1276,21 @@ fn applied_import_value_type(
                 arguments[0],
             )?)))
         }
-        _ => None,
+        ResolvedTypeConstructor::Item(item_id) => {
+            let lowered_arguments = arguments
+                .iter()
+                .map(|argument| import_value_type_with_stack(module, *argument, item_stack))
+                .collect::<Option<Vec<_>>>()?;
+            named_import_value_type_from_item(module, item_id, lowered_arguments, item_stack)
+        }
+        ResolvedTypeConstructor::Import(import_id) => {
+            let lowered_arguments = arguments
+                .iter()
+                .map(|argument| import_value_type_with_stack(module, *argument, item_stack))
+                .collect::<Option<Vec<_>>>()?;
+            named_import_value_type_from_import(module, import_id, lowered_arguments)
+        }
+        ResolvedTypeConstructor::Builtin(_) | ResolvedTypeConstructor::Bundle(_) => None,
     }
 }
 
@@ -1039,6 +1298,8 @@ fn applied_import_value_type(
 enum ResolvedTypeConstructor {
     Builtin(crate::BuiltinType),
     Bundle(ImportBundleKind),
+    Item(ItemId),
+    Import(ImportId),
 }
 
 fn item_type_name(item: &Item) -> String {
@@ -1182,6 +1443,9 @@ fn resolve_type_constructor(
         ResolutionState::Resolved(TypeResolution::Builtin(builtin)) => {
             Some(ResolvedTypeConstructor::Builtin(*builtin))
         }
+        ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
+            Some(ResolvedTypeConstructor::Item(*item_id))
+        }
         ResolutionState::Resolved(TypeResolution::Import(import_id)) => match &module.imports()
             [*import_id]
             .metadata
@@ -1190,20 +1454,21 @@ fn resolve_type_constructor(
                 Some(ResolvedTypeConstructor::Builtin(*builtin))
             }
             ImportBindingMetadata::Bundle(bundle) => Some(ResolvedTypeConstructor::Bundle(*bundle)),
+            ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::Domain { .. }
+            | ImportBindingMetadata::AmbientType => {
+                Some(ResolvedTypeConstructor::Import(*import_id))
+            }
             ImportBindingMetadata::Unknown
             | ImportBindingMetadata::Value { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }
-            | ImportBindingMetadata::TypeConstructor { .. }
-            | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::BuiltinTerm(_)
-            | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::InstanceMember { .. } => None,
         },
-        ResolutionState::Resolved(TypeResolution::Item(_))
-        | ResolutionState::Resolved(TypeResolution::TypeParameter(_))
+        ResolutionState::Resolved(TypeResolution::TypeParameter(_))
         | ResolutionState::Unresolved => None,
     }
 }
@@ -1630,6 +1895,28 @@ mod tests {
         crate::lower_module(&parsed.module)
     }
 
+    fn assert_named_type_variable_argument(
+        ty: &ImportValueType,
+        expected_name: &str,
+        expected_index: usize,
+    ) {
+        match ty {
+            ImportValueType::Named {
+                type_name,
+                arguments,
+                ..
+            } => {
+                assert_eq!(type_name.as_str(), expected_name);
+                assert_eq!(arguments.len(), 1);
+                assert!(matches!(
+                    &arguments[0],
+                    ImportValueType::TypeVariable { index, .. } if *index == expected_index
+                ));
+            }
+            other => panic!("expected `{expected_name}` applied to a type variable, got {other:?}"),
+        }
+    }
+
     #[test]
     fn exported_alias_preserves_nested_named_alias_definitions() {
         let lowered = lower_text(
@@ -1690,6 +1977,95 @@ type UIState = {
             other => panic!(
                 "expected compose field to retain nested ComposeState alias definition, got {other:?}"
             ),
+        }
+    }
+
+    #[test]
+    fn exported_instances_preserve_higher_kinded_member_signatures() {
+        let lowered = lower_text(
+            "box.aivi",
+            r#"
+type Box A = Box A
+
+instance Functor Box = {
+    map transform box =
+        box
+         ||> Box item -> Box (transform item)
+}
+
+instance Foldable Box = {
+    reduce step seed box =
+        box
+         ||> Box item -> step seed item
+}
+
+value one : Box Int = Box 1
+
+export (Box, one)
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "lowering should succeed: {:?}",
+            lowered.diagnostics()
+        );
+
+        let exported = exports(lowered.module());
+
+        let functor = exported
+            .instances
+            .iter()
+            .find(|instance| {
+                instance.class_name.as_ref() == "Functor" && instance.subject.as_ref() == "Box"
+            })
+            .expect("Functor Box instance should be exported");
+        let map = functor
+            .members
+            .iter()
+            .find(|member| member.name.as_ref() == "map")
+            .expect("Functor Box export should include map");
+        match &map.ty {
+            ImportValueType::Arrow { parameter, result } => {
+                assert!(matches!(
+                    parameter.as_ref(),
+                    ImportValueType::Arrow { parameter, result }
+                        if matches!(parameter.as_ref(), ImportValueType::TypeVariable { index, .. } if *index == 0)
+                            && matches!(result.as_ref(), ImportValueType::TypeVariable { index, .. } if *index == 1)
+                ));
+                match result.as_ref() {
+                    ImportValueType::Arrow { parameter, result } => {
+                        assert_named_type_variable_argument(parameter, "Box", 0);
+                        assert_named_type_variable_argument(result, "Box", 1);
+                    }
+                    other => panic!("expected map result to remain a Box-arrow, got {other:?}"),
+                }
+            }
+            other => panic!("expected exported map signature, got {other:?}"),
+        }
+
+        let foldable = exported
+            .instances
+            .iter()
+            .find(|instance| {
+                instance.class_name.as_ref() == "Foldable" && instance.subject.as_ref() == "Box"
+            })
+            .expect("Foldable Box instance should be exported");
+        let reduce = foldable
+            .members
+            .iter()
+            .find(|member| member.name.as_ref() == "reduce")
+            .expect("Foldable Box export should include reduce");
+        match &reduce.ty {
+            ImportValueType::Arrow { result, .. } => match result.as_ref() {
+                ImportValueType::Arrow { result, .. } => match result.as_ref() {
+                    ImportValueType::Arrow { parameter, .. } => {
+                        assert_named_type_variable_argument(parameter, "Box", 1);
+                    }
+                    other => panic!("expected reduce subject to stay Box A, got {other:?}"),
+                },
+                other => panic!("expected exported reduce signature, got {other:?}"),
+            },
+            other => panic!("expected exported reduce signature, got {other:?}"),
         }
     }
 }

@@ -23,7 +23,8 @@ Overview of the AIVI standard library modules. All modules live in `stdlib/aivi/
 | `dict` | `Dict K V` — key-value map |
 | `matrix` | `Matrix A` — 2D grid with `MatrixIndex`, indexed traversal helpers, and user-authored `Functor` / `Foldable` instances |
 
-**Note**: Generic `==` requires an `Eq` constraint at the definition site. For polymorphic list operations (e.g. `contains`), pass an explicit `eq` comparator function. See `stdlib/aivi/list.aivi`.
+**Note**: Generic `==` requires an `Eq` constraint at the definition site. Polymorphic list
+membership follows that same contract directly: `contains : Eq A => A -> List A -> Bool`.
 
 ## Text & Numbers
 
@@ -107,11 +108,12 @@ Overview of the AIVI standard library modules. All modules live in `stdlib/aivi/
 ## Prelude Auto-Import
 
 `prelude.aivi` is implicitly imported into every AIVI module. Target direction for the cleanup backlog: keep prelude class-polymorphic first and carrier-specific wrappers secondary (see [prelude-surface-policy.md](prelude-surface-policy.md)). It currently re-exports:
-- `Option`, `Result`, `Either`, `Pair`, `NonEmpty`
+- builtin scalars and common containers such as `Option`, `Result`, `Validation`, `Signal`, and `Task`
 - `List` operations
-- `Eq`, `Ord`, `Functor`, `Foldable`, common operators
-- `contains` — takes an explicit `eq` comparator: `contains eq list value`
-- pair helpers `first`, `second`, `mapFirst`, `mapSecond` plus compatibility aliases
+- class names plus canonical class-backed members such as ambient `join`
+- `contains` — ambient `Eq`-driven membership: `contains value list`
+- text helpers `textIsEmpty`, `textNonEmpty`, and `surround`; plain text joining now stays module-local on `aivi.text.join`
+- preferred pair helpers `first`, `second`, `mapFirst`, `mapSecond`
 
 Recent ergonomics additions:
 

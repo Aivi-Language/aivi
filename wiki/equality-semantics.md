@@ -27,26 +27,19 @@ User-facing docs should describe `!=` as surface inequality using the same `Eq` 
 The current ambient prelude source still spells both operator names, but the semantic contract for this
 documentation slice is “author equality once; inequality follows from the same evidence”.
 
-## Why demos still define `coordEq` / `cellEq`
+## Why demos no longer need `coordEq` / `cellEq` for list membership
 
 **Sources**: `demos/reversi.aivi`, `demos/snake.aivi`, `stdlib/aivi/list.aivi`, `stdlib/aivi/prelude.aivi`
 
-Some stdlib helpers are comparator-passing APIs rather than class-constrained APIs. Example:
+Comparator-taking list APIs still exist, but plain membership no longer needs them. Example:
 
-- `stdlib/aivi/list.aivi:401-403` defines `contains : (A -> A -> Bool) -> A -> List A -> Bool`
-- `stdlib/aivi/prelude.aivi:249-251` re-exports that shape as ambient `contains`
+- `stdlib/aivi/list.aivi` defines `contains : Eq A => A -> List A -> Bool`
+- `stdlib/aivi/prelude.aivi` re-exports that same membership shape as ambient `contains`
 
-So demos wrap `==` into a named comparator:
-
-```aivi
-type Cell -> Cell -> Bool
-func cellEq = a b =>
-    a == b
-```
-
-That helper exists so code can **pass equality as first-class function value** into `listContains` / `contains`. It is not proof that `Cell` or `Coord` lack structural equality.
-
-In a few places, demos also call `coordEq cell target` where plain `cell == target` would also work. That is best read as style or reuse, not a language restriction.
+So ordinary membership no longer needs ad hoc comparator plumbing in `Eq` cases. Closed values such
+as `Cell` or `Coord` can use `contains` directly, while demos that want explicit predicate search can
+pair `any` with a small typed helper like `sameCell` or `sameCoord`. Explicit comparator-taking APIs
+stay on `...By` helpers such as `uniqueBy`, `minimumBy`, or `sortBy`.
 
 ## Where `Eq` still needs help
 

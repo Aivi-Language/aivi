@@ -389,8 +389,10 @@ enum BuiltinCallPlan {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ListReducePlan {
     step_body: KernelId,
+    step_prefix_exprs: Box<[KernelExprId]>,
     loop_layout: LayoutId,
     seed_layout: LayoutId,
+    step_prefix_layouts: Box<[(LayoutId, LayoutId)]>,
     step_acc_layout: LayoutId,
     element_layout: LayoutId,
     step_element_layout: LayoutId,

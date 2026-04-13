@@ -405,9 +405,14 @@ func minimumBy = compare items => head items
  ||> None       -> None
  ||> Some first -> Some (reduce (chooseLesserBy compare) first (tailOrEmpty items))
 
-type (A -> Bool) -> (List A) -> Bool
-func contains = predicate items =>
-    any predicate items
+type Eq A => A -> Bool -> A -> Bool
+func containsStep = target found item => found
+ T|> True
+ F|> item == target
+
+type Eq A => A -> (List A) -> Bool
+func contains = target items => items
+  |> reduce (containsStep target) False
 
 type IndexState A = {
     index: Int,
@@ -473,7 +478,7 @@ func unzip = pairs => pairs
   |> reduce unzipStep { lefts: [], rights: [] }
 
 type Eq A => (List A) -> A -> (List A)
-func uniqueStep = acc item => any (. == item) acc
+func uniqueStep = acc item => contains item acc
  T|> acc
  F|> append acc [item]
 

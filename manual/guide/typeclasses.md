@@ -50,6 +50,29 @@ Bifunctor
 | `Filterable F` | `Functor F` | `filterMap : (A -> Option B) -> F A -> F B` |
 | `Bifunctor F` | — | `bimap : (A -> C) -> (B -> D) -> F A B -> F C D` |
 
+## Advanced ambient classes (secondary today)
+
+The ambient prelude also declares additional classes beyond the primary slice above:
+
+- `Setoid` (`equals`)
+- `Semigroupoid` (`compose`)
+- `Contravariant` (`contramap`)
+- `Category` (`id`)
+- `Profunctor` (`dimap`)
+- `Semigroup` / `Monoid` / `Group` (`append`, `empty`, `invert`)
+- `Alt` / `Plus` / `Alternative` (`alt`, `zero`, `guard`)
+- `Extend` / `Comonad` (`extend`, `extract`)
+- `ChainRec` (`chainRec`)
+
+These names are real surface declarations, but they are **not** part of the primary executable support
+story on this page unless a later section says so explicitly.
+
+That means:
+
+- the builtin carrier table below does **not** claim runtime-backed support for them
+- this guide does not present them as the default user-facing abstraction path today
+- if a feature or module relies on one of them, document and validate that exact class/instance path instead of assuming broad runtime coverage
+
 ## Canonical builtin executable support
 
 In this section, **executable support** means the current compiler lowers class-member use to first-class executable evidence in `aivi-core`.
@@ -70,12 +93,35 @@ This registry-backed table is the canonical documentation source for builtin exe
 - The `Monad` column means builtin executable lowering for `chain` and `join`; `Chain` uses the same registry entries.
 - `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.
 - `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.
-- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `chain`.
+- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.
 - `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
 <!-- END builtin-executable-support -->
 
 For the law contract behind this hierarchy and the rationale for why `Signal` and `Validation`
 intentionally stop at `Applicative`, see [Class Laws & Design Boundaries](/guide/class-laws).
+
+## Execution boundary: builtin carriers vs authored instances
+
+AIVI has two executable higher-kinded paths today, and they are intentionally different:
+
+| Path | What backs execution | What is proven today | What it does **not** mean |
+| --- | --- | --- | --- |
+| Builtin carriers | Registry-backed builtin executable evidence in `aivi-core` | The class/carrier pairs listed in the builtin table above | Declaring a new class or instance does **not** extend this builtin runtime table |
+| Authored instances | Authored executable evidence pointing at compiler-lowered member bodies | Same-module and imported unary higher-kinded member calls such as `map` and `reduce`, when the checker can choose one concrete evidence item | Multi-parameter / indexed higher-kinded heads are still not an end-to-end executable slice |
+
+### Hidden lowered member bodies
+
+When you write an authored instance member, the compiler lowers each `(instance, member)` pair to a
+hidden executable item body, then stores authored executable evidence that points at that lowered
+body. Surface code still looks ordinary — you write `map f box`, not a synthetic helper call — but
+the selected evidence ultimately dispatches to that hidden lowered member body.
+
+That is the key boundary to remember:
+
+- builtin carriers execute through builtin evidence intrinsics from the canonical registry
+- authored instances execute through hidden lowered member bodies chosen by evidence resolution
+- imported unary higher-kinded calls work today because the compiler can export/import that authored evidence path; they do **not** turn user-defined carriers into new builtin carriers
+- parser or checker acceptance alone is not a runtime promise if evidence cannot be selected concretely
 
 ## Comparison classes
 

@@ -20,27 +20,26 @@ The entire game is about 230 lines of AIVI. There are no mutable variables, no l
 
 All standard library functions are available in every AIVI file without any
 `use` statement — the stdlib modules self-hoist their exports project-wide.
-`map`, `filter`, `join`, `concat`, `indices`, `Duration`, and the rest are
-ready to use directly.
+`map`, `filter`, `indices`, `Duration`, and the rest are ready to use directly.
+Text joining is one intentional exception: we import `aivi.text.join` locally so
+bare `join` stays free for the generic `Monad.join` name.
 
-The only case where a small `use` block with `as` is still useful is when
-a domain defines an operation that shares a name with a hoisted function. For
-example, the `Snake` domain defines its own `head`, `length`, and `contains`
-operations; inside the domain body the `as` aliases give the compiler
-unambiguous references to the underlying `NonEmptyList` and `List` helpers:
+Two small `use` blocks keep the names clean:
 
 ```aivi
+use aivi.text (join as textJoin)
+
 use aivi.nonEmpty (
     head as nelHead
     length as nelLength
     init as nelInit
 )
-
-use aivi.list (contains as listContains)
 ```
 
-Outside the domain body — in plain functions and signal expressions — you use
-all names directly without any import.
+The text alias makes rendering-specific string joining explicit. The `NonEmptyList`
+aliases handle the other sharp edge: the `Snake` domain defines its own `head`
+and `length` operations, so inside the domain body we still want unambiguous
+references to the underlying helpers.
 
 ## Modeling the world with types
 
@@ -136,11 +135,12 @@ The game uses a simple linear congruential generator for pseudo-random numbers. 
 
 ```aivi
 type Cell -> Cell -> Bool
-func cellEq = target candidate =>
+func sameCell = target candidate =>
     candidate == target
 ```
 
-`Cell` is a closed constructor type, so the helper body is just `==`. `contains` now takes a unary predicate, so the helper is partially applied as `cellEq cell`.
+`Cell` is a closed constructor type, so the helper body is just `==`. We use that typed predicate with
+`any` when a list search wants an explicit boolean test.
 
 ## Domains: the snake itself
 
@@ -153,7 +153,7 @@ domain Snake over NonEmptyList Cell = {
     type head : Cell
     head = nelHead self
     type contains : Cell -> Bool
-    contains = cell => listContains (cellEq cell) (toList self)
+    contains = cell => any (sameCell cell) (toList self)
     type length : Int
     length = nelLength self
     type grow : Cell -> Snake
@@ -353,7 +353,7 @@ The board renders as text. Instead of nested loops, we use `indices` to generate
 
 ```aivi
 type List Cell -> Cell -> Cell -> Int -> Int -> Text
-func cellGlyph = body head food y x => (Cell x y == head, listContains (cellEq (Cell x y)) body, Cell x y == food)
+func cellGlyph = body head food y x => (Cell x y == head, any (sameCell (Cell x y)) body, Cell x y == food)
  ||> (True, _, _)          -> "@"
  ||> (_, True, _)          -> "o"
  ||> (_, _, True)          -> "*"
@@ -368,15 +368,15 @@ Each row is rendered by mapping `cellGlyph body head food y` over the column ind
 type List Cell -> Cell -> Cell -> Int -> Text
 func renderRowAt = body head food y => indices boardW
   |> map (cellGlyph body head food y)
-  |> concat
+  |> textJoin ""
 
 type Snake -> Cell -> Text
 func renderBoard = snake food => indices boardH
   |> map (renderRowAt snake.cells snake.head food)
-  |> join "\n"
+  |> textJoin "\n"
 ```
 
-`indices boardW` produces `[0, 1, 2, ..., 29]`. The pipe maps each index through `cellGlyph body head food y` to produce a list of single-character strings, then `concat` joins them without a separator. The outer pipe does the same for rows, joining with newlines.
+`indices boardW` produces `[0, 1, 2, ..., 29]`. The pipe maps each index through `cellGlyph body head food y` to produce a list of single-character strings, then `textJoin ""` joins them without a separator. The outer pipe does the same for rows with `textJoin "\n"`.
 
 The expression `snake.cells` gives us the whole body list once in `renderBoard`, and `snake.head` gives us the head cell once. Those values are threaded through `renderRowAt` and `cellGlyph`, avoiding repeated conversions or unrelated `GameState` reads across all 600 cells.
 

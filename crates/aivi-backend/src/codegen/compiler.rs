@@ -410,13 +410,29 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         }
                     }
                     KernelExprKind::Apply { callee, arguments } => {
-                        for argument in arguments {
-                            work.push(*argument);
-                        }
-                        if let Err(error) =
-                            self.resolve_direct_apply_plan(kernel_id, expr_id, *callee, arguments)
+                        match self.resolve_direct_apply_plan(kernel_id, expr_id, *callee, arguments)
                         {
-                            errors.push(error);
+                            Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan))) => {
+                                for argument in plan
+                                    .step_prefix_exprs
+                                    .iter()
+                                    .copied()
+                                    .chain(arguments.iter().copied().skip(1))
+                                {
+                                    work.push(argument);
+                                }
+                            }
+                            Ok(_) => {
+                                for argument in arguments {
+                                    work.push(*argument);
+                                }
+                            }
+                            Err(error) => {
+                                for argument in arguments {
+                                    work.push(*argument);
+                                }
+                                errors.push(error);
+                            }
                         }
                     }
                     KernelExprKind::SumConstructor(_) => {
@@ -1214,12 +1230,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             let plan = self.resolve_direct_apply_plan(
                                 kernel_id, expr_id, *callee, arguments,
                             )?;
+                            let materialized_arguments = match &plan {
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
+                                    let mut materialized =
+                                        Vec::with_capacity(plan.step_prefix_exprs.len() + 2);
+                                    materialized.extend(plan.step_prefix_exprs.iter().copied());
+                                    materialized.extend(arguments.iter().copied().skip(1));
+                                    materialized
+                                }
+                                _ => self.flatten_direct_apply_arguments(
+                                    kernel,
+                                    *callee,
+                                    arguments,
+                                ),
+                            };
                             tasks.push(Task::BuildDirectApply {
                                 expr: expr_id,
                                 plan,
-                                argument_count: arguments.len(),
+                                argument_count: materialized_arguments.len(),
                             });
-                            for argument in arguments.iter().rev() {
+                            for argument in materialized_arguments.iter().rev() {
                                 tasks.push(Task::Visit(*argument));
                             }
                         }
@@ -3122,6 +3152,42 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(builder.ins().symbol_value(self.pointer_type(), global))
     }
 
+    fn resolve_item_partial_application(
+        &self,
+        kernel: &Kernel,
+        expr_id: KernelExprId,
+    ) -> Option<(ItemId, Vec<KernelExprId>)> {
+        match &kernel.exprs()[expr_id].kind {
+            KernelExprKind::Item(item) => Some((*item, Vec::new())),
+            KernelExprKind::Apply { callee, arguments } => {
+                let (item, mut prefix_arguments) =
+                    self.resolve_item_partial_application(kernel, *callee)?;
+                prefix_arguments.extend(arguments.iter().copied());
+                Some((item, prefix_arguments))
+            }
+            _ => None,
+        }
+    }
+
+    fn flatten_direct_apply_arguments(
+        &self,
+        kernel: &Kernel,
+        callee: KernelExprId,
+        arguments: &[KernelExprId],
+    ) -> Vec<KernelExprId> {
+        match &kernel.exprs()[callee].kind {
+            KernelExprKind::Apply {
+                callee: inner_callee,
+                arguments: bound_arguments,
+            } => {
+                let mut combined = bound_arguments.clone();
+                combined.extend_from_slice(arguments);
+                self.flatten_direct_apply_arguments(kernel, *inner_callee, &combined)
+            }
+            _ => arguments.to_vec(),
+        }
+    }
+
     fn resolve_direct_apply_plan(
         &self,
         kernel_id: KernelId,
@@ -3618,18 +3684,19 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 let kernel = &self.program.kernels()[kernel_id];
                 let loop_layout = kernel.exprs()[expr_id].layout;
-                let function_expr = &kernel.exprs()[*function];
-                let KernelExprKind::Item(step_item) = &function_expr.kind else {
+                let Some((step_item, step_prefix_exprs)) =
+                    self.resolve_item_partial_application(kernel, *function)
+                else {
                     return Err(self.unsupported_expression(
                         kernel_id,
                         *function,
-                        "list reduce currently requires an item reducer",
+                        "list reduce currently requires an item reducer or an item reducer with bound prefix arguments",
                     ));
                 };
                 let item_decl = self
                     .program
                     .items()
-                    .get(*step_item)
+                    .get(step_item)
                     .expect("validated backend kernels keep reducer item references aligned");
                 let Some(step_body) = item_decl.body else {
                     return Err(self.unsupported_expression(
@@ -3638,13 +3705,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "list reduce currently requires a reducer item body",
                     ));
                 };
-                if item_decl.parameters.len() != 2 {
+                if item_decl.parameters.len() < step_prefix_exprs.len() + 2 {
                     return Err(self.unsupported_expression(
                         kernel_id,
                         *function,
                         &format!(
-                            "list reduce reducer `{}` must take exactly two parameters",
-                            item_decl.name
+                            "list reduce reducer `{}` binds {} prefix argument(s) but only declares {} parameter(s)",
+                            item_decl.name,
+                            step_prefix_exprs.len(),
+                            item_decl.parameters.len()
+                        ),
+                    ));
+                }
+                let remaining_arity = item_decl.parameters.len() - step_prefix_exprs.len();
+                if remaining_arity != 2 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        &format!(
+                            "list reduce reducer `{}` must leave exactly two visible parameters after binding prefix arguments, found {}",
+                            item_decl.name, remaining_arity
                         ),
                     ));
                 }
@@ -3664,6 +3744,27 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     .kernels()
                     .get(step_body)
                     .expect("validated backend programs keep reducer body kernels aligned");
+                let mut step_prefix_layouts = Vec::with_capacity(step_prefix_exprs.len());
+                for (index, (prefix_expr, expected_layout)) in step_prefix_exprs
+                    .iter()
+                    .zip(item_decl.parameters.iter())
+                    .enumerate()
+                {
+                    let found_layout = kernel.exprs()[*prefix_expr].layout;
+                    self.require_layout_match(
+                        kernel_id,
+                        *prefix_expr,
+                        *expected_layout,
+                        found_layout,
+                        &format!(
+                            "list reduce reducer bound argument {index} for `{}`",
+                            item_decl.name
+                        ),
+                    )?;
+                    step_prefix_layouts.push((found_layout, *expected_layout));
+                }
+                let step_acc_layout = item_decl.parameters[step_prefix_exprs.len()];
+                let step_element_layout = item_decl.parameters[step_prefix_exprs.len() + 1];
                 self.require_layout_match(
                     kernel_id,
                     *seed,
@@ -3674,14 +3775,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 self.require_layout_match(
                     kernel_id,
                     *seed,
-                    item_decl.parameters[0],
+                    step_acc_layout,
                     seed_layout,
                     &format!("list reduce reducer accumulator for `{}`", item_decl.name),
                 )?;
                 self.require_layout_match(
                     kernel_id,
                     *subject,
-                    item_decl.parameters[1],
+                    step_element_layout,
                     *element,
                     &format!("list reduce reducer element for `{}`", item_decl.name),
                 )?;
@@ -3695,11 +3796,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
                 Ok(BuiltinCallPlan::ListReduce(ListReducePlan {
                     step_body,
+                    step_prefix_exprs: step_prefix_exprs.into_boxed_slice(),
                     loop_layout,
                     seed_layout,
-                    step_acc_layout: item_decl.parameters[0],
+                    step_prefix_layouts: step_prefix_layouts.into_boxed_slice(),
+                    step_acc_layout,
                     element_layout: *element,
-                    step_element_layout: item_decl.parameters[1],
+                    step_element_layout,
                     step_result_layout: step_body_kernel.result_layout,
                 }))
             }
@@ -4924,6 +5027,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         &mut self,
         kernel_id: KernelId,
         plan: &ListReducePlan,
+        prefix_arguments: &[Value],
         seed: Value,
         subject: Value,
         builder: &mut FunctionBuilder<'_>,
@@ -4938,6 +5042,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             self.field_abi_shape(kernel_id, plan.element_layout, "list reduce element")?;
         let seed =
             self.repack_value(kernel_id, seed, plan.seed_layout, plan.loop_layout, builder)?;
+        let mut prefix_arguments = prefix_arguments.to_vec();
+        for ((from, to), argument) in plan
+            .step_prefix_layouts
+            .iter()
+            .zip(prefix_arguments.iter_mut())
+        {
+            *argument = self.repack_value(kernel_id, *argument, *from, *to, builder)?;
+        }
 
         let loop_block = builder.create_block();
         let body_block = builder.create_block();
@@ -4984,10 +5096,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             plan.step_element_layout,
             builder,
         )?;
+        let mut step_arguments = Vec::with_capacity(prefix_arguments.len() + 2);
+        step_arguments.extend(prefix_arguments.iter().copied());
+        step_arguments.push(step_acc);
+        step_arguments.push(step_element);
         let next = self.lower_direct_item_call(
             kernel_id,
             plan.step_body,
-            &[step_acc, step_element],
+            &step_arguments,
             builder,
         )?;
         let next = self.repack_value(
@@ -5277,14 +5393,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 self.emit_dynamic_tagged_reference(kernel_id, tag, None, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
-                let [_function, seed, subject] = arguments else {
+                let prefix_count = plan.step_prefix_layouts.len();
+                if arguments.len() != prefix_count + 2 {
                     return Err(self.unsupported_expression(
                         kernel_id,
                         expr_id,
-                        "direct list reduce lowering expected exactly three materialized arguments",
+                        "direct list reduce lowering expected prefix arguments followed by seed and subject",
                     ));
+                }
+                let (prefix_arguments, trailing_arguments) = arguments.split_at(prefix_count);
+                let [seed, subject] = trailing_arguments else {
+                    unreachable!("direct list reduce lowering keeps seed and subject trailing");
                 };
-                self.lower_list_reduce(kernel_id, &plan, *seed, *subject, builder)
+                self.lower_list_reduce(
+                    kernel_id,
+                    &plan,
+                    prefix_arguments,
+                    *seed,
+                    *subject,
+                    builder,
+                )
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::OptionSome(contract)) => {
                 let [argument] = arguments else {

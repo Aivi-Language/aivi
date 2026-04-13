@@ -40,21 +40,9 @@ fn lower_workspace_text(path: &str, text: &str) -> aivi_backend::Program {
     let db = RootDatabase::new();
     let absolute = fixture_root().join(path);
     let file = db.open_file(&absolute, text);
-    let lowered = aivi_query::hir_module(&db, file);
-    assert!(
-        lowered.hir_diagnostics().is_empty(),
-        "workspace fixture should lower to HIR: {:?}",
-        lowered.hir_diagnostics()
-    );
-    let core =
-        lower_core_module(lowered.module()).expect("workspace HIR should lower into typed core");
-    validate_core_module(&core).expect("workspace typed core should validate");
-    let lambda = lower_lambda_module(&core).expect("workspace lambda lowering should succeed");
-    validate_lambda_module(&lambda).expect("workspace lambda module should validate");
-    let backend = aivi_backend::lower_module_with_hir(&lambda, lowered.module())
-        .expect("workspace backend lowering should succeed");
-    validate_program(&backend).expect("workspace backend program should validate");
-    backend
+    let unit = aivi_query::whole_program_backend_unit(&db, file)
+        .expect("workspace backend unit should lower cleanly");
+    unit.backend().clone()
 }
 
 fn find_item(program: &aivi_backend::Program, name: &str) -> aivi_backend::ItemId {

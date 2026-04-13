@@ -2,9 +2,9 @@
 
 Classes are AIVI's typeclass-style abstraction mechanism. A class describes a set of operations that a
 type must provide. For the canonical executable support reference for higher-kinded classes, current
-builtin/runtime-backed carriers, and user-authored instance limits, see
-[Typeclasses & Higher-Kinded Support](/guide/typeclasses). For the semantic contract behind those
-instances, see [Class Laws & Design Boundaries](/guide/class-laws).
+builtin/runtime-backed carriers, the builtin-vs-authored execution boundary, and user-authored
+instance limits, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses#execution-boundary-builtin-carriers-vs-authored-instances).
+For the semantic contract behind those instances, see [Class Laws & Design Boundaries](/guide/class-laws).
 
 ## Declaring a class
 
@@ -193,4 +193,4 @@ Classes let generic code talk about capability instead of one hard-coded type. T
 
 ---
 
-**See also:** [Typeclasses & Higher-Kinded Support](typeclasses.md) — canonical executable support reference, HKT hierarchy, and user-authored instance limits; [Class Laws & Design Boundaries](class-laws.md) — the semantic contract behind lawful instances
+**See also:** [Typeclasses & Higher-Kinded Support](typeclasses.md#execution-boundary-builtin-carriers-vs-authored-instances) — canonical executable support reference, builtin-vs-authored execution boundary, HKT hierarchy, and user-authored instance limits; [Class Laws & Design Boundaries](class-laws.md) — the semantic contract behind lawful instances

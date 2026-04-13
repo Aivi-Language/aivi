@@ -243,34 +243,34 @@ func __aivi_binary_gte = left right =>
      ||> _    -> True
 
 type Ord A => A -> A -> A
-func __aivi_order_min = left right => __aivi_binary_lt right left
+func __aivi_order_min = left right =>
+    right < left
     T|> right
     F|> left
 
 type Ord A => A -> A -> A
-func __aivi_order_max = left right => __aivi_binary_lt left right
+func __aivi_order_max = left right =>
+    left < right
     T|> right
     F|> left
 
 type Ord A => A -> (List A) -> A
 func __aivi_order_minOf = first rest =>
-    __aivi_list_maximum __aivi_binary_lt (append [first] rest)
-        ||> Some item -> item
-        ||> None      -> first
+    __aivi_list_minimumFrom first rest
 
 type Ord A => A -> (List A) -> A
 func __aivi_order_maxOf = first rest =>
-    __aivi_list_maximum __aivi_binary_gt (append [first] rest)
-        ||> Some item -> item
-        ||> None      -> first
+    __aivi_list_maximumFrom first rest
 
 type Ord A => A -> A -> A
-func __aivi_order_clampToMax = high value => __aivi_binary_lt high value
+func __aivi_order_clampToMax = high value =>
+    high < value
     T|> high
     F|> value
 
 type Ord A => A -> A -> A -> A
-func __aivi_order_clamp = low high value => __aivi_binary_lt value low
+func __aivi_order_clamp = low high value =>
+    value < low
     T|> low
     F|> __aivi_order_clampToMax high value
 
@@ -385,9 +385,9 @@ func __aivi_option_map = transform opt => opt
     ||> Some item -> Some (transform item)
     ||> None      -> None
 
-type (A -> Bool) -> (List A) -> Bool
-func __aivi_list_contains = predicate items =>
-    __aivi_list_any predicate items
+type Eq A => A -> (List A) -> Bool
+func __aivi_list_contains = target items =>
+    __aivi_list_containsEq target items
 
 type (A -> A -> Bool) -> (List A) -> A -> (List A)
 func __aivi_list_uniqueByStep = eq acc item =>
@@ -399,9 +399,25 @@ type (A -> A -> Bool) -> (List A) -> (List A)
 func __aivi_list_uniqueBy = eq items => items
     |> reduce (__aivi_list_uniqueByStep eq) []
 
+type Eq A => A -> Bool -> A -> Bool
+func __aivi_list_containsEqStep = target found item => found
+    T|> True
+    F|> __aivi_binary_eq target item
+
+type Eq A => A -> (List A) -> Bool
+func __aivi_list_containsEq = target items => items
+    |> reduce (__aivi_list_containsEqStep target) False
+
+type Eq A => (List A) -> A -> (List A)
+func __aivi_list_uniqueEqStep = acc item =>
+    __aivi_list_containsEq item acc
+      T|> acc
+      F|> append acc [item]
+
 type Eq A => (List A) -> (List A)
 func __aivi_list_unique = items =>
-    __aivi_list_uniqueBy __aivi_binary_eq items
+    items
+      |> reduce __aivi_list_uniqueEqStep []
 
 type Eq A => (List A) -> (List A)
 func unique = items =>
@@ -463,13 +479,57 @@ type (A -> A -> Bool) -> (List A) -> (Option A)
 func __aivi_list_maximum = gt items => items
     |> reduce (__aivi_list_maximumStep gt) None
 
+type Ord A => A -> A -> (Option A)
+func __aivi_list_maximumOrdPick = item prev =>
+    __aivi_binary_gt item prev
+      T|> Some item
+      F|> Some prev
+
+type Ord A => (Option A) -> A -> (Option A)
+func __aivi_list_maximumOrdStep = best item => best
+    ||> None      -> Some item
+    ||> Some prev -> __aivi_list_maximumOrdPick item prev
+
+type Ord A => A -> A -> A
+func __aivi_list_maximumFromStep = best item =>
+    __aivi_binary_gt item best
+      T|> item
+      F|> best
+
+type Ord A => A -> (List A) -> A
+func __aivi_list_maximumFrom = best items => items
+    |> reduce __aivi_list_maximumFromStep best
+
+type Ord A => A -> A -> (Option A)
+func __aivi_list_minimumOrdPick = item prev =>
+    __aivi_binary_lt item prev
+      T|> Some item
+      F|> Some prev
+
+type Ord A => (Option A) -> A -> (Option A)
+func __aivi_list_minimumOrdStep = best item => best
+    ||> None      -> Some item
+    ||> Some prev -> __aivi_list_minimumOrdPick item prev
+
+type Ord A => A -> A -> A
+func __aivi_list_minimumFromStep = best item =>
+    __aivi_binary_lt item best
+      T|> item
+      F|> best
+
+type Ord A => A -> (List A) -> A
+func __aivi_list_minimumFrom = best items => items
+    |> reduce __aivi_list_minimumFromStep best
+
 type Ord A => (List A) -> (Option A)
 func maximum = items =>
-    __aivi_list_maximum __aivi_binary_gt items
+    items
+      |> reduce __aivi_list_maximumOrdStep None
 
 type Ord A => (List A) -> (Option A)
 func minimum = items =>
-    __aivi_list_maximum __aivi_binary_lt items
+    items
+      |> reduce __aivi_list_minimumOrdStep None
 
 type Int -> (List Int) -> (List Int)
 func __aivi_list_rangeDesc = current acc => current < 0
@@ -756,9 +816,35 @@ type (A -> A -> Bool) -> (List A) -> (List A)
 func __aivi_list_sortBy = cmp items => items
     |> reduce (__aivi_list_sortByStep cmp) []
 
+type Ord A => A -> A -> (List A) -> (Bool, List A)
+func __aivi_list_insertSortedOrdFalse = newItem current acc =>
+    __aivi_binary_lt newItem current
+      T|> (True, append (append acc [newItem]) [current])
+      F|> (False, append acc [current])
+
+type Ord A => A -> (Bool, List A) -> A -> (Bool, List A)
+func __aivi_list_insertSortedOrdStep = newItem state current => state
+    ||> (True, acc) -> (True, append acc [current])
+    ||> (False, acc) -> __aivi_list_insertSortedOrdFalse newItem current acc
+
+type Ord A => A -> (Bool, List A) -> (List A)
+func __aivi_list_insertSortedOrdFinish = newItem state => state
+    ||> (True, result) -> result
+    ||> (False, acc) -> append acc [newItem]
+
+type Ord A => A -> (List A) -> (List A)
+func __aivi_list_insertSortedOrd = newItem sorted => sorted
+    |> reduce (__aivi_list_insertSortedOrdStep newItem) (False, [])
+    |> __aivi_list_insertSortedOrdFinish newItem
+
+type Ord A => (List A) -> A -> (List A)
+func __aivi_list_sortOrdStep = sorted item =>
+    __aivi_list_insertSortedOrd item sorted
+
 type Ord A => (List A) -> (List A)
 func sort = items =>
-    __aivi_list_sortBy __aivi_binary_lt items
+    items
+      |> reduce __aivi_list_sortOrdStep []
 
 type Text -> Bool
 func __aivi_text_isEmpty = text => text == ""

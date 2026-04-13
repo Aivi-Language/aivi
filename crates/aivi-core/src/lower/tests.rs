@@ -82,6 +82,25 @@ fn expect_builtin_evidence_item(
     item
 }
 
+fn find_core_item(core: &crate::Module, name: &str) -> crate::ItemId {
+    core.items()
+        .iter()
+        .find(|(_, item)| item.name.as_ref() == name)
+        .map(|(id, _)| id)
+        .unwrap_or_else(|| panic!("expected core item `{name}`"))
+}
+
+fn expect_value_apply_callee(core: &crate::Module, name: &str) -> crate::ExprId {
+    let owner = find_core_item(core, name);
+    let body = core.items()[owner]
+        .body
+        .unwrap_or_else(|| panic!("core item `{name}` should carry a lowered body"));
+    let crate::ExprKind::Apply { callee, .. } = &core.exprs()[body].kind else {
+        panic!("core item `{name}` should lower to an apply expression");
+    };
+    *callee
+}
+
 struct SingleImportResolver {
     module_path: Vec<&'static str>,
     module_file: &'static str,
@@ -1126,6 +1145,162 @@ fn lowers_higher_kinded_class_instance_fixture_into_core_ir() {
         hidden_members >= 2,
         "expected typed-core lowering to synthesize hidden items for higher-kinded instance members"
     );
+}
+
+#[test]
+fn lowers_builtin_authored_and_imported_higher_kinded_calls_through_executable_evidence_items() {
+    let local = lower_text(
+        "typed-core-uniform-hkt-evidence.aivi",
+        r#"
+type Box A = Box A
+
+instance Functor Box = {
+    map transform box =
+        box
+         ||> Box item -> Box (transform item)
+}
+
+instance Foldable Box = {
+    reduce step seed box =
+        box
+         ||> Box item -> step seed item
+}
+
+type Int -> Int
+func addOne = x =>
+    x + 1
+
+type Int -> Int -> Int
+func add = total item =>
+    total + item
+
+value mappedBuiltin : Option Int =
+    map addOne (Some 1)
+
+value totalBuiltin : Int =
+    reduce add 10 [1]
+
+value mappedAuthored : Box Int =
+    map addOne (Box 1)
+
+value totalAuthored : Int =
+    reduce add 10 (Box 1)
+"#,
+    );
+    assert!(
+        !local.has_errors(),
+        "uniform higher-kinded evidence fixture should lower to HIR: {:?}",
+        local.diagnostics()
+    );
+    let local_core = lower_module(local.module()).expect("local uniform evidence fixture should lower into typed core");
+
+    let mapped_builtin = expect_builtin_evidence_item(
+        &local_core,
+        expect_value_apply_callee(&local_core, "mappedBuiltin"),
+        BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Option),
+    );
+    assert!(
+        local_core.items()[mapped_builtin]
+            .name
+            .starts_with("builtin-evidence#"),
+        "builtin map call should lower through a materialized builtin evidence item"
+    );
+
+    let total_builtin = expect_builtin_evidence_item(
+        &local_core,
+        expect_value_apply_callee(&local_core, "totalBuiltin"),
+        BuiltinClassMemberIntrinsic::Reduce(BuiltinFoldableCarrier::List),
+    );
+    assert!(
+        local_core.items()[total_builtin]
+            .name
+            .starts_with("builtin-evidence#"),
+        "builtin reduce call should lower through a materialized builtin evidence item"
+    );
+
+    for name in ["mappedAuthored", "totalAuthored"] {
+        let evidence_item =
+            expect_executable_evidence_item(&local_core, expect_value_apply_callee(&local_core, name));
+        let hidden = &local_core.items()[evidence_item];
+        assert!(
+            hidden.name.starts_with("instance#"),
+            "same-module authored `{name}` should lower through a hidden instance member, found {}",
+            hidden.name
+        );
+        assert!(
+            hidden.body.is_some(),
+            "same-module authored `{name}` hidden evidence should carry a lowered body"
+        );
+    }
+
+    let imported = lower_text_with_single_import(
+        "main.aivi",
+        r#"
+use shared.box (
+    Box
+    one
+)
+
+type Int -> Int
+func addOne = x =>
+    x + 1
+
+type Int -> Int -> Int
+func add = total item =>
+    total + item
+
+value mappedImported : Box Int =
+    map addOne one
+
+value totalImported : Int =
+    reduce add 10 one
+"#,
+        vec!["shared", "box"],
+        "shared/box.aivi",
+        r#"
+type Box A = Box A
+
+instance Functor Box = {
+    map transform box =
+        box
+         ||> Box item -> Box (transform item)
+}
+
+instance Foldable Box = {
+    reduce step seed box =
+        box
+         ||> Box item -> step seed item
+}
+
+value one : Box Int = Box 1
+
+export (Box, one)
+"#,
+    );
+    assert!(
+        !imported.has_errors(),
+        "imported higher-kinded evidence fixture should lower to HIR: {:?}",
+        imported.diagnostics()
+    );
+    let imported_core =
+        lower_module(imported.module()).expect("imported higher-kinded evidence fixture should lower into typed core");
+
+    for name in ["mappedImported", "totalImported"] {
+        let evidence_item = expect_executable_evidence_item(
+            &imported_core,
+            expect_value_apply_callee(&imported_core, name),
+        );
+        let hidden = &imported_core.items()[evidence_item];
+        assert!(
+            hidden.name.contains("instance#") || hidden.name.starts_with("__instance_"),
+            "imported authored `{name}` should lower through synthetic instance evidence, found {}",
+            hidden.name
+        );
+        assert!(
+            hidden.body.is_some() || hidden.name.starts_with("__instance_"),
+            "imported authored `{name}` evidence should either lower a body or preserve the imported instance binding"
+        );
+    }
 }
 
 #[test]

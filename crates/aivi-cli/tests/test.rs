@@ -125,22 +125,20 @@ fn test_command_reports_when_workspace_has_no_tests() {
 }
 
 #[test]
-fn test_command_accepts_contains_predicate_forms() {
+fn test_command_accepts_contains_membership_forms() {
     let dir = TempDir::new("test-contains-predicate-forms");
     let path = dir.write(
         "main.aivi",
         concat!(
             "use aivi.list (contains)\n",
             "type Coord = Coord Int Int\n",
-            "type Coord -> Coord -> Bool\n",
-            "func coordEq = target candidate => candidate == target\n",
             "type Coord -> List Coord -> Bool\n",
-            "func member = cell items => contains (coordEq cell) items\n",
+            "func member = cell items => contains cell items\n",
             "value items : List Coord = [Coord 0 0, Coord 1 1]\n",
             "value cell : Coord = Coord 1 1\n",
-            "value directMatch : Bool = contains (. == cell) items\n",
+            "value directMatch : Bool = contains cell items\n",
             "value helperMatch : Bool = member cell items\n",
-            "value missingMatch : Bool = not (contains (. == (Coord 9 9)) items)\n",
+            "value missingMatch : Bool = not (contains (Coord 9 9) items)\n",
             "@test\n",
             "value directContains : Task Text Bool = pure directMatch\n",
             "@test\n",
@@ -159,14 +157,14 @@ fn test_command_accepts_contains_predicate_forms() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         output.status.success(),
-        "expected contains predicate forms to pass `aivi test`, stdout was: {stdout}, stderr was: {stderr}"
+        "expected contains membership forms to pass `aivi test`, stdout was: {stdout}, stderr was: {stderr}"
     );
     assert!(
         stderr.is_empty(),
-        "expected contains predicate forms to keep stderr empty, stderr was: {stderr}"
+        "expected contains membership forms to keep stderr empty, stderr was: {stderr}"
     );
     assert!(
         stdout.contains("test result: ok. 3 passed; 0 failed; 3 total"),
-        "expected success summary for contains predicate forms, stdout was: {stdout}"
+        "expected success summary for contains membership forms, stdout was: {stdout}"
     );
 }

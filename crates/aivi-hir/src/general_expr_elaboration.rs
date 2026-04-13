@@ -690,6 +690,10 @@ impl EqualityEvidenceCatalog {
             .map(Vec::as_slice)
             .unwrap_or(&[])
     }
+
+    pub(crate) fn has_requirements_for(&self, owner: ItemId) -> bool {
+        self.requirements.contains_key(&owner)
+    }
 }
 
 fn collect_owner_equality_requirements(
@@ -954,9 +958,19 @@ fn in_scope_class_evidence_by_member<'a>(
     member: ClassMemberResolution,
     subject: &GateType,
 ) -> Option<&'a GateEqualityEvidence> {
-    env.equality_evidence
+    if let Some(exact) = env
+        .equality_evidence
         .iter()
         .find(|candidate| candidate.member == member && candidate.subject == *subject)
+    {
+        return Some(exact);
+    }
+    let mut matches = env
+        .equality_evidence
+        .iter()
+        .filter(|candidate| candidate.member == member && candidate.subject.same_shape(subject));
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
 }
 
 fn lower_equality_evidence_arguments(
@@ -969,17 +983,15 @@ fn lower_equality_evidence_arguments(
     let mut arguments = Vec::with_capacity(requirements.len());
     for requirement in requirements {
         let subject = substitute_gate_type(&requirement.subject, substitutions);
-        let ty = substitute_gate_type(&requirement.ty, substitutions);
-        if let Some(local) = env.equality_evidence.iter().find(|candidate| {
-            candidate.member == requirement.member && candidate.subject == subject
-        }) {
+        if let Some(local) = in_scope_class_evidence_by_member(env, requirement.member, &subject) {
             arguments.push(GateRuntimeExpr {
                 span,
-                ty,
+                ty: local.ty.clone(),
                 kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(local.binding)),
             });
             continue;
         }
+        let ty = substitute_gate_type(&requirement.ty, substitutions);
         let dispatch =
             resolve_class_member_dispatch_for_subject(module, requirement.member, &subject)?;
         arguments.push(GateRuntimeExpr {
@@ -1020,17 +1032,24 @@ pub(crate) fn lower_name_expr_with_equality_evidence(
     env: &GateExprEnv,
     visible_ty: &GateType,
 ) -> Option<GateRuntimeExpr> {
-    let ResolutionState::Resolved(TermResolution::Item(item_id)) = reference.resolution.as_ref()
-    else {
-        return None;
+    let item_id = match reference.resolution.as_ref() {
+        ResolutionState::Resolved(TermResolution::Item(item_id)) => *item_id,
+        ResolutionState::Resolved(TermResolution::Import(import_id)) => {
+            ambient_item_for_import(module, *import_id)?
+        }
+        ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
+            let import_id = typing.select_hoisted_import(reference, Some(visible_ty))?;
+            ambient_item_for_import(module, import_id)?
+        }
+        _ => return None,
     };
-    let requirements = evidence.requirements_for(*item_id);
+    let requirements = evidence.requirements_for(item_id);
     if requirements.is_empty() {
         return None;
     }
     let item_visible_ty = {
-        let item_ty = typing.item_value_type(*item_id)?;
-        match &module.items()[*item_id] {
+        let item_ty = typing.item_value_type(item_id)?;
+        match &module.items()[item_id] {
             Item::Function(function) => {
                 let total_arity = count_arrow_parameters(&item_ty);
                 if total_arity > function.parameters.len() {
@@ -1061,7 +1080,7 @@ pub(crate) fn lower_name_expr_with_equality_evidence(
     let callee = GateRuntimeExpr {
         span,
         ty: callee_ty,
-        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Item(*item_id)),
+        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item_id)),
     };
     Some(GateRuntimeExpr {
         span,
@@ -1220,7 +1239,7 @@ pub(crate) fn lower_class_member_callee_with_evidence(
     env: &GateExprEnv,
     reference: &TermReference,
     subject: &GateType,
-    callee_ty: GateType,
+    _callee_ty: GateType,
 ) -> Option<GateRuntimeExpr> {
     let ResolutionState::Resolved(TermResolution::ClassMember(member)) =
         reference.resolution.as_ref()
@@ -1230,7 +1249,7 @@ pub(crate) fn lower_class_member_callee_with_evidence(
     let evidence = in_scope_class_evidence_by_member(env, *member, subject)?;
     Some(GateRuntimeExpr {
         span: reference.span(),
-        ty: callee_ty,
+        ty: evidence.ty.clone(),
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
     })
 }
@@ -1717,7 +1736,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 let annotation = expected_members.get(member.name.text()).copied()?;
                 let expected = self
                     .typing
-                    .instantiate_poly_hir_type(annotation, &argument_bindings)?;
+                    .instantiate_poly_hir_type_partially(annotation, &argument_bindings)?;
                 Some(self.elaborate_instance_member(owner, member_index, member, &expected))
             })
             .collect()
@@ -5480,6 +5499,44 @@ instance Semigroup Blob = {
                 ));
             }
             other => panic!("expected lowered instance member body, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_higher_kinded_instance_member_bodies_with_member_local_type_parameters() {
+        let lowered = lower_text(
+            "general-expr-higher-kinded-instance-member.aivi",
+            r#"
+type Box A = Box A
+
+instance Functor Box = {
+    map transform box =
+        box
+         ||> Box item -> Box (transform item)
+}"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "higher-kinded instance-member example should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_general_expressions(lowered.module());
+        let map = report
+            .instance_members()
+            .iter()
+            .find(|member| member.member_index == 0)
+            .expect("expected higher-kinded instance member elaboration");
+        assert_eq!(
+            map.parameters
+                .iter()
+                .map(|parameter| parameter.name.as_ref())
+                .collect::<Vec<_>>(),
+            vec!["transform", "box"]
+        );
+        match &map.outcome {
+            GeneralExprOutcome::Lowered(_) => {}
+            other => panic!("expected lowered higher-kinded instance member body, found {other:?}"),
         }
     }
 

@@ -35,6 +35,12 @@ Added [class-laws.md](class-laws.md), linked the manual guide to the new laws pa
 canonical `Task` support story, and changed the docs slice to teach `!=` as surface inequality over
 the same `Eq` evidence instead of a second canonical instance body.
 
+## [2026-04-13] ingest | list contains membership
+
+Aligned list membership with ambient `Eq` instead of predicate/comparator plumbing.  
+Updated `stdlib/aivi/list.aivi`, demos, manual pages, and wiki notes so `contains` now means
+`Eq`-driven membership while predicate search stays on `any`.
+
 ## [2026-04-06] ingest | Initial wiki seeded from codebase
 
 Seeded wiki from source files in `src/`, `crates/`, `manual/`, `stdlib/`, `syntax.md`, `AIVI_RFC.md`.  
@@ -212,6 +218,11 @@ and small `RayState` / animation updates now use `<|` patches instead of manual 
 
 ## [2026-04-09] ingest | selected-subject function headers
 
+## [2026-04-13] ingest | reversi closeout validation
+
+Closed the last Wadler backlog item by updating `demos/reversi.aivi` to use checked matrix initialization and
+an explicit setup-error state, then refreshed stale snapshots, CLI fixtures, and formatter-guarded AIVI files.
+
 Implemented `param!` and `param { path! }` header sugar so `func` and companion bodies can begin
 with subject-rooted `|>` or `<|` continuations without an explicit `=>`.
 
@@ -325,3 +336,26 @@ Recorded the new canonical ownership for executable class support docs.
 
 - `manual/guide/typeclasses.md` now owns the registry-backed support table and dependent docs link there instead of describing their own matrices
 - `wiki/type-system.md` and new `wiki/wadler-audit.md` capture the preserved `Signal` / `Validation` / `Task` invariants plus the traverse-result and `!=` notes
+
+## [2026-04-13] ingest | prelude shadow cleanup
+
+Updated the docs/wiki to match the narrowed ambient prelude surface.
+
+- `stdlib/aivi/text.aivi` now hides text `join` from project-wide hoist, so bare `join` can stay the canonical `Monad` name while text callers import `aivi.text.join` explicitly where needed
+- `stdlib/aivi/pair.aivi` now hides compatibility aliases `fst` / `snd` / `mapFst` / `mapSnd` from hoist, leaving only the preferred pair names ambient
+- `manual/guide/building-snake.md`, `manual/stdlib/prelude.md`, and `wiki/stdlib.md` now teach explicit `aivi.text.join` imports for text joining and keep bare `join` for `Monad`
+
+## [2026-04-13] ingest | executable boundary docs
+
+Documented the current builtin-vs-authored executable class boundary in the manual/wiki.
+
+- `manual/guide/typeclasses.md` now has an explicit execution-boundary section covering builtin evidence intrinsics, authored executable evidence, and hidden lowered member bodies
+- `manual/guide/classes.md` now links directly to that boundary section instead of only naming higher-kinded support in general
+- `wiki/type-system.md` now records that imported unary authored higher-kinded execution works by reusing hidden lowered member bodies rather than expanding the builtin carrier table
+
+## [2026-04-13] ingest | advanced ambient class scope
+
+Documented the ambient class graph outside the primary executable slice.
+
+- `manual/guide/typeclasses.md` now lists the secondary ambient classes and explicitly de-scopes them from the builtin support table unless a narrower feature doc says otherwise
+- `wiki/type-system.md` now records that those ambient declarations are real but not a blanket runtime-support promise

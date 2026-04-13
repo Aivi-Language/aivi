@@ -769,8 +769,16 @@ fn lower_function_pipe_body_runtime_expr(
     let plan = typing
         .match_pipe_function_signature(expr_id, env, ambient, None)
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: expr.span })?;
+    let equality_evidence = EqualityEvidenceCatalog::new(module);
     lower_pipe_function_runtime_expr_from_plan(
-        module, expr.span, plan, env, ambient, typing, purity,
+        module,
+        expr.span,
+        plan,
+        &equality_evidence,
+        env,
+        ambient,
+        typing,
+        purity,
     )
 }
 
@@ -793,10 +801,12 @@ pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
             expected_result,
         )
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
+    let equality_evidence = EqualityEvidenceCatalog::new(module);
     lower_pipe_function_runtime_expr_from_plan(
         module,
         span,
         plan,
+        &equality_evidence,
         env,
         ambient,
         typing,
@@ -808,6 +818,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
     module: &Module,
     span: SourceSpan,
     plan: PipeFunctionSignatureMatch,
+    equality_evidence: &EqualityEvidenceCatalog,
     env: &GateExprEnv,
     ambient: &GateType,
     typing: &mut GateTypeContext<'_>,
@@ -885,6 +896,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
         arguments.push(lower_pipe_argument_runtime_expr(
             module,
             *argument,
+            equality_evidence,
             env,
             Some(ambient),
             expected_parameter,
@@ -905,6 +917,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
 fn lower_pipe_argument_runtime_expr(
     module: &Module,
     expr_id: ExprId,
+    equality_evidence: &EqualityEvidenceCatalog,
     env: &GateExprEnv,
     ambient: Option<&GateType>,
     expected: &GateType,
@@ -927,6 +940,19 @@ fn lower_pipe_argument_runtime_expr(
                 )?),
             });
         }
+    }
+    if let ExprKind::Name(reference) = &module.exprs()[expr_id].kind
+        && let Some(lowered) = lower_name_expr_with_equality_evidence(
+            module,
+            typing,
+            equality_evidence,
+            module.exprs()[expr_id].span,
+            reference,
+            env,
+            expected,
+        )
+    {
+        return Ok(lowered);
     }
     lower_gate_runtime_expr_with_purity(module, expr_id, env, ambient, typing, purity)
 }
@@ -1032,6 +1058,106 @@ enum LowerTask {
     },
 }
 
+fn count_arrow_parameters(ty: &GateType) -> usize {
+    let mut count = 0usize;
+    let mut current = ty;
+    while let GateType::Arrow { result, .. } = current {
+        count += 1;
+        current = result;
+    }
+    count
+}
+
+fn strip_leading_arrow_parameters(mut ty: GateType, count: usize) -> GateType {
+    for _ in 0..count {
+        let GateType::Arrow { result, .. } = ty else {
+            break;
+        };
+        ty = *result;
+    }
+    ty
+}
+
+fn visible_callable_item_type(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    item_id: ItemId,
+) -> Option<GateType> {
+    let item_ty = typing.item_value_type(item_id)?;
+    let Item::Function(function) = &module.items()[item_id] else {
+        return Some(item_ty);
+    };
+    let total_arity = count_arrow_parameters(&item_ty);
+    if total_arity > function.parameters.len() {
+        Some(strip_leading_arrow_parameters(
+            item_ty,
+            total_arity - function.parameters.len(),
+        ))
+    } else {
+        Some(item_ty)
+    }
+}
+
+fn visible_callee_type_for_apply(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    equality_evidence: &EqualityEvidenceCatalog,
+    callee: ExprId,
+    env: &GateExprEnv,
+    ambient: Option<&GateType>,
+) -> Option<GateType> {
+    if let ExprKind::Name(reference) = &module.exprs()[callee].kind {
+        match reference.resolution.as_ref() {
+            crate::ResolutionState::Resolved(TermResolution::Item(item_id)) => {
+                return visible_callable_item_type(module, typing, *item_id)
+                    .or_else(|| typing.item_value_type(*item_id));
+            }
+            crate::ResolutionState::Resolved(TermResolution::Import(import_id)) => {
+                if let Some(item_id) = ambient_item_for_import(module, *import_id) {
+                    return visible_callable_item_type(module, typing, item_id)
+                        .or_else(|| typing.import_value_type(*import_id));
+                }
+                if let Some(import_ty) = typing.import_value_type(*import_id) {
+                    return Some(import_ty);
+                }
+            }
+            _ => {}
+        }
+    }
+    let inferred = typing.infer_expr(callee, env, ambient);
+    if let ExprKind::Name(reference) = &module.exprs()[callee].kind
+        && let crate::ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        && equality_evidence.has_requirements_for(*item_id)
+    {
+        return visible_callable_item_type(module, typing, *item_id);
+    }
+    inferred.actual_gate_type().or(inferred.ty)
+}
+
+fn apply_argument_expectations(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    equality_evidence: &EqualityEvidenceCatalog,
+    callee: ExprId,
+    arity: usize,
+    env: &GateExprEnv,
+    ambient: Option<&GateType>,
+) -> (Option<GateType>, Vec<Option<GateType>>) {
+    let Some(callee_ty) =
+        visible_callee_type_for_apply(module, typing, equality_evidence, callee, env, ambient)
+    else {
+        return (None, vec![None; arity]);
+    };
+    let Some((parameters, _)) = typing.function_signature(&callee_ty, arity) else {
+        return (Some(callee_ty), vec![None; arity]);
+    };
+    (
+        Some(callee_ty),
+        parameters.into_iter().map(Some).collect::<Vec<_>>(),
+    )
+}
+
 /// Iterative post-order tree lowering for gate runtime expressions.
 ///
 /// Converts the HIR expression rooted at `expr_id` into a [`GateRuntimeExpr`]
@@ -1098,6 +1224,7 @@ fn lower_gate_runtime_expr_with_purity(
                 match expr.kind {
                     // --- Leaf nodes: push result directly ---
                     ExprKind::Name(reference) => {
+                        let evidence_ty = expected.as_ref().unwrap_or(&ty);
                         if let Some(lowered) = lower_name_expr_with_equality_evidence(
                             module,
                             typing,
@@ -1105,7 +1232,7 @@ fn lower_gate_runtime_expr_with_purity(
                             expr.span,
                             &reference,
                             env,
-                            &ty,
+                            evidence_ty,
                         ) {
                             results.push(lowered);
                         } else {
@@ -1368,20 +1495,34 @@ fn lower_gate_runtime_expr_with_purity(
                     }
                     ExprKind::Apply { callee, arguments } => {
                         let n_args = arguments.len();
+                        let (callee_expected, argument_expected) = apply_argument_expectations(
+                            module,
+                            typing,
+                            &equality_evidence,
+                            callee,
+                            n_args,
+                            env,
+                            ambient,
+                        );
                         work.push(LowerTask::BuildApply {
                             span: expr.span,
                             ty,
                             n_args,
                         });
-                        for &arg in arguments.iter().rev() {
+                        let scheduled_arguments = arguments
+                            .iter()
+                            .copied()
+                            .zip(argument_expected.into_iter())
+                            .collect::<Vec<_>>();
+                        for (arg, expected) in scheduled_arguments.into_iter().rev() {
                             work.push(LowerTask::Eval {
                                 expr_id: arg,
-                                expected: None,
+                                expected,
                             });
                         }
                         work.push(LowerTask::Eval {
                             expr_id: callee,
-                            expected: None,
+                            expected: callee_expected,
                         });
                     }
                 }

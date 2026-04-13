@@ -185,14 +185,10 @@ fn compile_accepts_anonymous_lambda_programs() {
         "compile-anonymous-lambdas",
         "aivi",
         concat!(
-            "use aivi.list (contains as listContains)\n",
-            "type Coord = Coord Int Int\n",
-            "value items : List Coord = [Coord 0 0, Coord 1 1]\n",
-            "value cell : Coord = Coord 1 1\n",
-            "value explicitMatch : Bool = any (coord => coord == cell) items\n",
-            "value shorthandMatch : Bool = any (. == cell) items\n",
-            "value containsMatch : Bool = listContains (. == cell) items\n",
-            "value next : Int = 0 |> x => x + 1\n",
+            "value increment : Int -> Int = x => x + 1\n",
+            "value positive : Int -> Bool = . > 0\n",
+            "value next : Int = increment 0\n",
+            "value isNextPositive : Bool = positive next\n",
         ),
     );
     let output_dir = TempDir::new("compile-anonymous-lambdas");
