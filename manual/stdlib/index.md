@@ -1,9 +1,8 @@
 # Standard Library
 
 > **This is the reference sidecar.** Reach for it when you need to know what a specific module
-> exports. If you are still learning the language, start with the
-> [Language Guide](/guide/why-aivi) — the five stories there are the language itself.
-> The stdlib is the toolbox you reach for once you know what you want to build.
+> exports today. If you are still learning AIVI, start with [Tutorials](/tutorials/) or
+> [How-to Guides](/how-to/) first, then come back here when you know the job or module you need.
 
 The AIVI standard library is the set of modules that ships with the language. Some names, such
 as `Option`, `Result`, `Signal`, and `Task`, are built in. Most other tools live in named modules

@@ -17,12 +17,12 @@ surface meaning is really elimination or scheduler behavior instead of generic c
 
 | Family | Operators | Lawful basis |
 | --- | --- | --- |
-| Plain composition | `|>`, `|`, `#memo` | ordinary function composition and observation |
-| Applicative/HKT | `&|>` | `Apply` + `Applicative` |
-| Validation sequencing | `!|>` | dependent `Result` / `Validation` sequencing; primitive surface operator |
-| Predicate / sum elimination | `?|>`, `||>`, `T|>`, `F|>` | gating and closed-data elimination, not generic HKTs |
-| Collection fan-out | `*|>`, `<|*` | current list/signal-list fan-out primitive |
-| Temporal / recurrence | `~|>`, `-|>`, `+|>`, `|> delay`, `|> burst`, `@|>`, `<|@` | FRP scheduler primitives |
+| Plain composition | `\|>`, `\|`, `#memo` | ordinary function composition and observation |
+| Applicative/HKT | `&\|>` | `Apply` + `Applicative` |
+| Validation sequencing | `!\|>` | dependent `Result` / `Validation` sequencing; primitive surface operator |
+| Predicate / sum elimination | `?\|>`, `\|\|>`, `T\|>`, `F\|>` | gating and closed-data elimination, not generic HKTs |
+| Collection fan-out | `*\|>`, `<\|*` | current list/signal-list fan-out primitive |
+| Temporal / recurrence | `~\|>`, `-\|>`, `+\|>`, `\|> delay`, `\|> burst`, `@\|>`, `<\|@` | FRP scheduler primitives |
 
 ## The basic pipe `|>`
 
@@ -82,33 +82,34 @@ projection selectors like `state { x.y.z! }` when the flow should start from a n
 
 ## Remembering stage values with `#name`
 
-`#name` is the pipe memo operator. Use it when you want the convenience of a local `let`
-without leaving the pipe.
+`#name` is the pipe memo operator. Use it **sparingly**. If a stage only needs its current subject
+once, `.` is usually clearer. Reach for `#name` when a later stage genuinely needs an earlier value,
+or when you need both the "before" and "after" versions of the same thing.
 
 - Put `#name` right after the operator to name the stage input for that stage body.
 - Put `#name` at the end of the stage to name the stage result for later stages.
 
 ```aivi
-value total : Int = 20
-  |> #before before + 1 #after
-  |> after + before
+value summary : Text = "  Ada  "
+  |> #raw trim raw #clean
+  |> "{clean} (started as {raw})"
 ```
 
-Here `before` only exists while the first stage body runs. `after` is available to the rest of
-the pipe.
+Here `raw` only exists while the trimming stage runs. `clean` is available to the rest of the pipe.
+That makes the memo worthwhile: the later stage needs both versions.
 
 Branching stages support the same pattern. When you want the merged branch result later, write the
 same result memo on each arm:
 
 ```aivi
 type StageChoice =
-  | Ready Int
+  | Ready Text
   | Missing
 
-value resolvedScore : Int = Ready 2
- ||> #input Ready value -> value + 1 #resolved
- ||> Missing            -> 0 #resolved
-  |> resolved
+value banner : Text = Ready "Ada"
+ ||> Ready name -> "Hello, {name}" #message
+ ||> Missing    -> "Waiting for a user" #message
+  |> "[status] {message}"
 ```
 
 This is the pipe-native replacement for the local binding you might otherwise reach for in a

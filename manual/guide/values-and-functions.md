@@ -112,13 +112,14 @@ value scoreLabel = describeScore 88
 ```
 
 When a stage needs both the old and new value, use `#name` instead of breaking out into a helper
-just to simulate a local binding:
+just to simulate a local binding. If a stage only needs its current subject once, prefer `.` and
+keep the pipe simple.
 
 ```aivi
 type Int -> Int
-func nudge = value => value
+func compareWithPrevious = value => value
   |> #before before + 1 #after
-  |> after + before
+  |> after - before
 ```
 
 ## Unary subject sugar

@@ -22,6 +22,26 @@ use aivi.option (
 )
 ```
 
+## At a glance
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `isSome` | `Option A -> Bool` | Check whether a value is present |
+| `isNone` | `Option A -> Bool` | Check whether a value is missing |
+| `getOrElse` | `A -> Option A -> A` | Unwrap with a fallback value |
+| `fold` | `B -> (A -> B) -> Option A -> B` | Collapse an option to one output type |
+| `mapOr` | `B -> (A -> B) -> Option A -> B` | Transform when present, fallback when absent |
+| `isSomeAnd` | `(A -> Bool) -> Option A -> Bool` | Run a predicate only on `Some` |
+| `orElse` | `Option A -> Option A -> Option A` | Fall back to another option |
+| `flatMap` | `(A -> Option B) -> Option A -> Option B` | Chain Option-returning steps |
+| `flatten` | `Option (Option A) -> Option A` | Remove one layer of nesting |
+| `toList` | `Option A -> List A` | Turn `Some` into a one-item list |
+| `toResult` | `E -> Option A -> Result E A` | Turn absence into an explicit error |
+| `map` | `(A -> B) -> Option A -> Option B` | Transform the payload inside `Some` |
+| `filter` | `(A -> Bool) -> Option A -> Option A` | Keep a `Some` only if it matches |
+| `zip` | `Option A -> Option B -> Option (A, B)` | Combine two options when both are present |
+| `fromBool` | `A -> Bool -> Option A` | Gate a value behind a boolean condition |
+
 ---
 
 ## isSome

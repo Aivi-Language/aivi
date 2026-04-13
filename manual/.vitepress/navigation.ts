@@ -33,83 +33,90 @@ function group(section: DocSection): DefaultTheme.SidebarItem {
   return sidebarItem(section)
 }
 
-const guideSections: DocSection[] = [
-  {
-    text: 'Getting Started',
-    collapsed: false,
-    items: [
-      { text: 'Why AIVI?', link: '/guide/why-aivi' },
-      { text: 'What is AIVI?', link: '/guide/getting-started' },
-      { text: 'Your First App', link: '/guide/your-first-app' },
-    ],
-  },
-  {
-    text: 'Story 1 — Functional Programming',
-    collapsed: false,
-    items: [
-      { text: 'Thinking in AIVI', link: '/guide/thinking-in-aivi' },
-      { text: 'Values & Functions', link: '/guide/values-and-functions' },
-      { text: 'Types', link: '/guide/types' },
-    ],
-  },
-  {
-    text: 'Story 2 — Pipe Algebra',
-    collapsed: false,
-    items: [
-      { text: 'Pipes & Operators', link: '/guide/pipes' },
-      { text: 'Pattern Matching', link: '/guide/pattern-matching' },
-      { text: 'Record Patterns', link: '/guide/record-patterns' },
-      { text: 'Predicates & Selectors', link: '/guide/predicates' },
-    ],
-  },
-  {
-    text: 'Story 3 — Domains',
-    collapsed: false,
-    items: [
-      { text: 'Domains', link: '/guide/domains' },
-    ],
-  },
-  {
-    text: 'Story 4 — Signals & Reactivity',
-    collapsed: false,
-    items: [
-      { text: 'Signals', link: '/guide/signals' },
-      { text: 'Sources', link: '/guide/sources' },
-    ],
-  },
-  {
-    text: 'Story 5 — GTK & Markup',
-    collapsed: false,
-    items: [
-      { text: 'Markup & UI', link: '/guide/markup' },
-    ],
-  },
-  {
-    text: 'External Integrations',
-    collapsed: false,
-    items: [
-      { text: 'Integration Patterns', link: '/guide/integrations' },
-      { text: 'Source Catalog', link: '/guide/source-catalog' },
-    ],
-  },
-  {
-    text: 'Abstractions',
-    collapsed: true,
-    items: [
-      { text: 'Classes', link: '/guide/classes' },
-      { text: 'Typeclasses & HKTs', link: '/guide/typeclasses' },
-      { text: 'Class Laws & Boundaries', link: '/guide/class-laws' },
-      { text: 'Modules', link: '/guide/modules' },
-    ],
-  },
-  {
-    text: 'Examples',
-    collapsed: false,
-    items: [
-      { text: 'Building Snake', link: '/guide/building-snake' },
-    ],
-  },
-]
+const tutorialsSection: DocSection = {
+  text: 'Tutorials',
+  collapsed: false,
+  items: [
+    { text: 'Overview', link: '/tutorials/' },
+    { text: 'Start Here', link: '/guide/getting-started' },
+    { text: 'Build a Small Task Tracker', link: '/guide/your-first-app' },
+    { text: 'Optional Deep Example: Snake', link: '/guide/building-snake' },
+  ],
+}
+
+const howToSection: DocSection = {
+  text: 'How-to Guides',
+  collapsed: false,
+  items: [
+    { text: 'Overview', link: '/how-to/' },
+    { text: 'Fetch HTTP Data', link: '/how-to/fetch-http-data' },
+    { text: 'Model Loading and Error States', link: '/how-to/loading-and-error-states' },
+    { text: 'Work with Timers', link: '/how-to/work-with-timers' },
+    { text: 'Organize Modules', link: '/how-to/organize-modules' },
+    { text: 'OpenAPI-backed Services', link: '/guide/openapi-source' },
+    { text: 'Integration Patterns', link: '/guide/integrations' },
+  ],
+}
+
+const referenceSection: DocSection = {
+  text: 'Reference',
+  collapsed: false,
+  items: [
+    { text: 'Overview', link: '/reference/' },
+    {
+      text: 'Core language',
+      collapsed: false,
+      items: [
+        { text: 'Values & Functions', link: '/guide/values-and-functions' },
+        { text: 'Types', link: '/guide/types' },
+        { text: 'Pipes & Operators', link: '/guide/pipes' },
+        { text: 'Pattern Matching', link: '/guide/pattern-matching' },
+        { text: 'Record Patterns', link: '/guide/record-patterns' },
+        { text: 'Predicates & Selectors', link: '/guide/predicates' },
+        { text: 'Domains', link: '/guide/domains' },
+      ],
+    },
+    {
+      text: 'Reactivity and UI',
+      collapsed: false,
+      items: [
+        { text: 'Signals', link: '/guide/signals' },
+        { text: 'Sources', link: '/guide/sources' },
+        { text: 'Built-in Source Catalog', link: '/guide/source-catalog' },
+        { text: 'Markup & UI', link: '/guide/markup' },
+      ],
+    },
+    {
+      text: 'Abstractions and structure',
+      collapsed: true,
+      items: [
+        { text: 'Classes', link: '/guide/classes' },
+        { text: 'Typeclasses & HKTs', link: '/guide/typeclasses' },
+        { text: 'Class Laws & Boundaries', link: '/guide/class-laws' },
+        { text: 'Modules', link: '/guide/modules' },
+      ],
+    },
+  ],
+}
+
+const explanationSection: DocSection = {
+  text: 'Explanation',
+  collapsed: false,
+  items: [
+    { text: 'Overview', link: '/explanation/' },
+    { text: 'Why AIVI?', link: '/guide/why-aivi' },
+    { text: 'If You Are New to Functional Programming', link: '/explanation/functional-programming-bridge' },
+    { text: 'Thinking in AIVI', link: '/guide/thinking-in-aivi' },
+  ],
+}
+
+const examplesSection: DocSection = {
+  text: 'Examples',
+  collapsed: true,
+  items: [
+    { text: 'Snake', link: '/guide/building-snake' },
+  ],
+}
 
 const stdlibStartHere: DocSection = {
   text: 'Start Here',
@@ -225,16 +232,39 @@ const stdlibGuideSection: DocSection = {
 }
 
 export const nav: DefaultTheme.NavItem[] = [
-  { text: 'Guide', link: '/guide/why-aivi' },
+  { text: 'Tutorials', link: '/tutorials/' },
+  { text: 'How-to', link: '/how-to/' },
+  { text: 'Reference', link: '/reference/' },
+  { text: 'Explanation', link: '/explanation/' },
   { text: 'Standard Library', link: '/stdlib/' },
 ]
 
+const manualSidebar = [
+  group(tutorialsSection),
+  group(howToSection),
+  group(referenceSection),
+  group(explanationSection),
+  group(examplesSection),
+  group(stdlibGuideSection),
+]
+
 export const sidebar: DefaultTheme.SidebarMulti = {
-  '/guide/': [
-    ...guideSections.map(group),
-    group(stdlibGuideSection),
-  ],
+  '/tutorials/': manualSidebar,
+  '/how-to/': manualSidebar,
+  '/reference/': manualSidebar,
+  '/explanation/': manualSidebar,
+  '/guide/': manualSidebar,
   '/stdlib/': [
+    group({
+      text: 'Manual',
+      collapsed: false,
+      items: [
+        { text: 'Tutorials', link: '/tutorials/' },
+        { text: 'How-to Guides', link: '/how-to/' },
+        { text: 'Reference', link: '/reference/' },
+        { text: 'Explanation', link: '/explanation/' },
+      ],
+    }),
     group(stdlibStartHere),
     ...stdlibSections.map(group),
   ],
@@ -243,7 +273,10 @@ export const sidebar: DefaultTheme.SidebarMulti = {
       text: 'Manual',
       collapsed: false,
       items: [
-        { text: 'Guide', link: '/guide/why-aivi' },
+        { text: 'Tutorials', link: '/tutorials/' },
+        { text: 'How-to Guides', link: '/how-to/' },
+        { text: 'Reference', link: '/reference/' },
+        { text: 'Explanation', link: '/explanation/' },
         { text: 'Standard Library', link: '/stdlib/' },
       ],
     }),

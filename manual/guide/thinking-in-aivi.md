@@ -70,7 +70,7 @@ The compiler checks that you have handled every case. If you add a fifth directi
 
 ### Chaining conditions
 
-When you need multiple conditions, compute each one and combine them:
+When you need multiple conditions, model the combined shape directly:
 
 ```aivi
 type Int -> Bool -> Text
@@ -85,16 +85,14 @@ Or decompose into named helpers:
 
 ```aivi
 type Int -> Bool
-func isGold = arg1 =>
-    arg1 >= 90
+func isGold = score =>
+    score >= 90
 
 type Int -> Text
-func subTier = arg1 => arg1 >= 50
- T|> "silver"
- F|> "bronze"
-
-type Int -> Text
-func tier = isGold =>
+func tier = score => (isGold score, score >= 50)
+ ||> (True, _)      -> "gold"
+ ||> (False, True)  -> "silver"
+ ||> (False, False) -> "bronze"
 ```
 
 ## There are no loops — use collection combinators
@@ -158,20 +156,20 @@ function process(user) {
 }
 ```
 
-In AIVI, a function body is a single expression. If you need intermediate steps, keep them in the
-pipe and name them with `#name` instead of reaching for a local `let`:
+In AIVI, a function body is a single expression. Most of the time you can keep the work in the
+pipe directly and use `.` for the current subject:
 
 ```aivi
 type User = { name: Text }
 
 type User -> Text
 func process = user => user.name
-  |> #raw trim raw #trimmed
-  |> "Hello, {trimmed}!"
+  |> trim
+  |> "Hello, {.}!"
 ```
 
-Use a top-level helper when the step should be reusable. Use `#name` when the name only matters
-inside one pipe.
+Use a top-level helper when the step should be reusable. Use `#name` only when a later stage truly
+needs an earlier value and a plain `.` would stop being clear.
 
 Or break the work into named helpers:
 

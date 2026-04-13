@@ -24,6 +24,78 @@ Two built-in functions underpin all list work and are available everywhere witho
 | `append` | `List A -> List A -> List A` | Concatenate two lists |
 | `reduce` | `(B -> A -> B) -> B -> List A -> B` | Fold a list from left to right |
 
+## At a glance
+
+### Inspection
+
+| Function | Use it for |
+| --- | --- |
+| `isEmpty` | Check whether a list has no items |
+| `nonEmpty` | Check whether a list has at least one item |
+| `length` | Count items |
+| `head` | Read the first item safely |
+| `at` | Read one index safely |
+| `tail` | Read everything after the first item safely |
+| `tailOrEmpty` | Drop the first item without handling `None` |
+| `last` | Read the final item safely |
+| `indexed` | Pair items with their zero-based positions |
+
+### Transformation
+
+| Function | Use it for |
+| --- | --- |
+| `map` | Transform every item |
+| `mapWithIndex` | Transform every item with its position |
+| `filter` | Keep only matching items |
+| `filterMap` | Transform and discard in one pass |
+| `flatten` | Remove one list layer |
+| `flatMap` | Map each item to a list, then flatten |
+| `reduceWithIndex` | Fold while keeping track of the index |
+| `reverse` | Reverse item order |
+| `take` | Keep the first `n` items |
+| `drop` | Skip the first `n` items |
+| `replaceAt` | Replace one index safely |
+| `takeWhile` | Keep items while a predicate holds |
+| `dropWhile` | Skip items while a predicate holds |
+| `intersperse` | Insert a separator between items |
+
+### Searching
+
+| Function | Use it for |
+| --- | --- |
+| `any` | Ask whether at least one item matches |
+| `all` | Ask whether every item matches |
+| `count` | Count how many items match |
+| `find` | Return the first matching item |
+| `findMap` | Find and transform in one pass |
+| `contains` | Check membership |
+| `indexOf` | Find the first matching position |
+
+### Aggregation
+
+| Function | Use it for |
+| --- | --- |
+| `sum` | Add numeric items |
+| `product` | Multiply numeric items |
+| `maximum` | Find the largest item |
+| `minimum` | Find the smallest item |
+
+### Set-style helpers
+
+| Function | Use it for |
+| --- | --- |
+| `unique` | Remove duplicates while keeping order |
+| `sort` | Sort items using `Ord` |
+| `partition` | Split items into matching and non-matching groups |
+
+### Zipping
+
+| Function | Use it for |
+| --- | --- |
+| `zip` | Pair items from two lists |
+| `zipWith` | Zip and combine in one step |
+| `unzip` | Split paired items into two lists |
+
 ---
 
 ## Inspection

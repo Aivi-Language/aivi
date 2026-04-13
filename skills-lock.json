@@ -11,6 +11,11 @@
       "sourceType": "github",
       "computedHash": "b69aa2d24add96983f34f545d9c1355d3c383d8b2c434b9749436bbb10b223ae"
     },
+    "documentation-writer": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "ee53d65b163cd7eb953a930c95841cfe398cc2c0bd24c06508bbaa07c432be35"
+    },
     "rust-async-patterns": {
       "source": "wshobson/agents",
       "sourceType": "github",

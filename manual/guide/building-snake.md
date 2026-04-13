@@ -1,8 +1,12 @@
-# Building Snake
+# Snake: A Deeper Example
 
-This tutorial walks through a complete Snake game written in AIVI. It is a real program — you can find it in `demos/snake.aivi` — and it uses every major language feature. We will build it up piece by piece, explaining each concept as it appears.
+This is the **optional deep example** in the manual. If you are new to AIVI, start with
+[Tutorials](/tutorials/) and build the task tracker first. Come here when you want to see the same
+ideas stretched into a larger, more feature-dense program.
 
-By the end, you will understand how types, functions, signals, sources, domains, pattern matching, and markup work together in a real application.
+Snake is still a real program — you can find it in `demos/snake.aivi` — and it uses every major
+language feature. We will build it up piece by piece and use it to show how types, functions,
+signals, sources, domains, pattern matching, and markup work together in a larger application.
 
 ## The game at a glance
 

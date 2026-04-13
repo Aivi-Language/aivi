@@ -1,8 +1,12 @@
-# What is AIVI?
+# Start Here
 
-AIVI is a purely functional, reactive, statically typed language designed for one purpose: building native Linux desktop applications that are correct by construction.
+AIVI is a purely functional, reactive, statically typed language designed for one purpose:
+building native Linux desktop applications that are correct by construction.
 
-If you have used React, Elm, or SwiftUI, some ideas will feel familiar — reactive state, declarative UI, immutable data. But AIVI is not a framework inside another language. It is the language itself.
+If you have used JavaScript, Python, Rust, React, Elm, or SwiftUI, some ideas will feel familiar
+and some will not. This page is the first-pass orientation for readers who may be new to
+functional programming: it gives you the shape of the language before the tutorial asks you to
+build anything substantial.
 
 ## What you need to know up front
 
@@ -93,14 +97,15 @@ That is why the language leans so heavily on named declarations and pipes: the r
 
 ## Where to go next
 
-Choose your path:
+Choose the path that matches your goal:
 
-- **I want to understand the philosophy first** → [Why AIVI?](/guide/why-aivi)
-- **I want to learn how to think without loops and if/else** → [Thinking in AIVI](/guide/thinking-in-aivi)
-- **I want to build something immediately** → [Your First App](/guide/your-first-app)
-- **I want to see a real program** → [Building Snake](/guide/building-snake)
-- **I want the language reference** → [Values & Functions](/guide/values-and-functions)
+- **I want the guided learning path** → [Tutorials](/tutorials/)
+- **I want to build the flagship beginner app** → [Build a Small Task Tracker](/guide/your-first-app)
+- **I want the philosophy and mental model** → [Explanation](/explanation/)
+- **I want exact language details** → [Reference](/reference/)
+- **I already know the basics and want a larger example** → [Snake](/guide/building-snake)
 
 ---
 
-**See also:** [Your First App](your-first-app.md) — step-by-step counter app with signals, sources, and markup
+**See also:** [If you are new to functional programming](/explanation/functional-programming-bridge)
+— a plain-language bridge from imperative habits to AIVI's model

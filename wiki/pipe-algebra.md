@@ -73,6 +73,14 @@ and focused CLI coverage in:
 - `crates/aivi-cli/tests/check.rs`
 - `crates/aivi-cli/tests/compile.rs`
 
+## Manual navigation and markdown note
+
+- The human-facing pipe guide lives at `manual/guide/pipes.md`.
+- Navigation to that page currently comes from two places:
+  - `manual/guide/README.md` under **Story 2 — Pipe Algebra**
+  - `manual/.vitepress/navigation.ts` sidebar item **Pipes & Operators** with link `/guide/pipes`
+- When pipe operators appear inside markdown tables, escape the bar characters (`\|>`, `\|\|>`, `&\|>`, and so on), otherwise some renderers split the table cell incorrectly.
+
 ## Cluster boundary
 
 `&|>` applicative clusters lower through `ApplicativeCluster` / `ApplicativeSpine`, not the

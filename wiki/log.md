@@ -260,6 +260,12 @@ an explicit setup-error state, then refreshed stale snapshots, CLI fixtures, and
 Ran a post-merge codebase pass and corrected the remaining stale historical/wiki notes.  
 Updated `wiki/wadler-audit.md`, `wiki/stdlib.md`, `wiki/indexed-collections.md`, and `wiki/index.md` so the wiki now matches the landed prelude, list, matrix, RFC, and class-law state.
 
+## [2026-04-13] ingest | pipe manual navigation and table escaping
+
+Checked `manual/guide/pipes.md` after a report of broken markdown tables.  
+Escaped the operator-family table cells, then recorded that `/guide/pipes` is linked from both
+`manual/guide/README.md` and `manual/.vitepress/navigation.ts`.
+
 Implemented `param!` and `param { path! }` header sugar so `func` and companion bodies can begin
 with subject-rooted `|>` or `<|` continuations without an explicit `=>`.
 

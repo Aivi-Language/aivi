@@ -20,6 +20,24 @@ use aivi.result (
 )
 ```
 
+## At a glance
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `isOk` | `Result E A -> Bool` | Check for success |
+| `isErr` | `Result E A -> Bool` | Check for failure |
+| `mapErr` | `(E1 -> E2) -> Result E1 A -> Result E2 A` | Transform only the error side |
+| `withDefault` | `A -> Result E A -> A` | Unwrap with a fallback value |
+| `orElse` | `Result E A -> Result E A -> Result E A` | Fall back to another result |
+| `flatMap` | `(A -> Result E B) -> Result E A -> Result E B` | Chain Result-returning steps |
+| `flatten` | `Result E (Result E A) -> Result E A` | Remove one layer of nesting |
+| `toOption` | `Result E A -> Option A` | Drop the error and keep only success |
+| `toList` | `Result E A -> List A` | Turn `Ok` into a one-item list |
+| `map` | `(A -> B) -> Result E A -> Result E B` | Transform only the success side |
+| `mapBoth` | `(E1 -> E2) -> (A -> B) -> Result E1 A -> Result E2 B` | Transform both error and success |
+| `fold` | `(E -> B) -> (A -> B) -> Result E A -> B` | Collapse a result to one output type |
+| `fromOption` | `E -> Option A -> Result E A` | Turn `None` into an explicit error |
+
 ---
 
 ## isOk

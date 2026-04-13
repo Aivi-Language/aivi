@@ -1,239 +1,436 @@
-# Your First App
+# Build a Small Task Tracker
 
-This tutorial walks you through building a small GTK application in AIVI, step by step. By the end, you will have a working app with reactive state, keyboard input, and a live UI.
+This tutorial walks through one complete beginner-sized AIVI app: a small GTK task tracker.
+By the end, you will have an app that can:
 
-We will build a **simple counter** — not because it is exciting, but because it introduces every major concept in a small space: values, functions, signals, sources, pattern matching, pipes, and markup.
+- capture text input
+- add tasks to a list
+- toggle tasks done or undone
+- filter the list by **All**, **Active**, or **Done**
 
-## Step 1: A static window
+The point is not to build the world's fanciest task app. The point is to make the AIVI model click:
+**types describe the data, signals carry change, pure functions describe state transitions, and the
+UI simply reflects the signal graph**.
 
-Every AIVI application starts with a `value` that describes the UI:
+## Step 1: Model the data first
 
-```aivi
-value main =
-    <Window title="Counter">
-        <Label text="Hello from AIVI" />
-    </Window>
-
-export main
-```
-
-This is a complete, runnable module. The markup is an ordinary AIVI expression — `<Window>` and `<Label>` are GTK widgets with type-checked attributes. `export main` makes this the entry point.
-
-## Step 2: Naming a value
-
-Let us extract the label text into a named value:
+Before building UI, define what exists in the app.
 
 ```aivi
-value greeting = "Hello from AIVI"
+type Filter =
+  | All
+  | Active
+  | Done
 
-value main =
-    <Window title="Counter">
-        <Label text={greeting} />
-    </Window>
-
-export main
-```
-
-Inside markup, `{...}` embeds any AIVI expression. Here it references the `greeting` value. This is still static — the text will not change at runtime.
-
-## Step 3: Adding a function
-
-Functions in AIVI are declared with `func`. Let us add one that formats a count:
-
-```aivi
-type Int -> Text
-func formatCount = n =>
-    "Count: {n}"
-
-value main =
-    <Window title="Counter">
-        <Label text={formatCount 0} />
-    </Window>
-
-export main
-```
-
-The `type Int -> Text` line is the function's signature — it takes an `Int` and returns `Text`. The body is a single expression using text interpolation.
-
-## Step 4: Making it reactive with signals
-
-To make the count change over time, we need a **signal**. A signal is a value that participates in the reactive dependency graph:
-
-```aivi
-type Int -> Text
-func formatCount = n =>
-    "Count: {n}"
-
-signal count = 0
-
-signal label = count
-  |> formatCount
-
-value main =
-    <Window title="Counter">
-        <Label text={label} />
-    </Window>
-
-export main
-```
-
-`signal count = 0` declares a reactive value starting at 0. `signal label` is **derived** from `count` — whenever `count` changes, `label` recomputes automatically.
-
-The `|>` pipe sends `count` into `formatCount`. It reads naturally: *"take count, then format it."*
-
-## Step 5: Defining events
-
-We need a way to express what can happen. In AIVI, we model events as a sum type:
-
-```aivi
-type Event =
-  | Increment
-  | Decrement
-  | Reset
-```
-
-This declares three possible events. The type is closed — nothing else can be an `Event`. Pattern matching will force us to handle all three.
-
-## Step 6: A pure step function
-
-Now we write a function that takes an event and the current count, and produces the next count:
-
-```aivi
-type Event -> Int -> Int
-func step = event count => event
- ||> Increment -> count + 1
- ||> Decrement -> count - 1
- ||> Reset     -> 0
-```
-
-This is **pure** — no mutation, no side effects. It takes the current state and an event, and returns the new state. The `||>` operator pattern-matches on the event, and the compiler checks that all three constructors are covered.
-
-## Step 7: Connecting keyboard input
-
-We need events to come from somewhere. AIVI uses **sources** to connect the reactive graph to the outside world:
-
-```aivi
-type Key = Key Text
-
-@source window.keyDown with {
-    repeat: False
+type Todo = {
+    id: Int,
+    text: Text,
+    done: Bool
 }
-signal keyDown : Signal Key
-```
 
-`@source window.keyDown` declares that `keyDown` receives keyboard events from the GTK window. The `Key` type wraps the key name as text.
-
-Now we route specific keys to events using signal merge:
-
-```aivi
-signal event : Signal Event = keyDown
-  ||> Key "ArrowUp" => Increment
-  ||> Key "ArrowDown" => Decrement
-  ||> Key "Space" => Reset
-  ||> _ => Increment
-```
-
-The signal merge lists `keyDown` as its source, then each `||>` arm matches a pattern on the
-key payload and produces an event. When a matching key arrives, the corresponding event appears
-in the `event` signal.
-
-## Step 8: Accumulating state
-
-The `+|>` pipe folds events into state over time:
-
-```aivi
-signal count = event
- +|> 0 step
-```
-
-This reads: *"start count at 0, and each time event fires, apply `step` to get the next value."* The accumulation is managed by the signal system — there are no mutable variables.
-
-## Step 9: The complete app
-
-Here is the full program:
-
-```aivi
-type Event =
-  | Increment
-  | Decrement
-  | Reset
-
-type Key = Key Text
-
-type Int -> Text
-func formatCount = n =>
-    "Count: {n}"
-
-type Event -> Int -> Int
-func step = event count => event
- ||> Increment -> count + 1
- ||> Decrement -> count - 1
- ||> Reset     -> 0
-
-@source window.keyDown with {
-    repeat: False
+type State = {
+    nextId: Int,
+    draft: Text,
+    filter: Filter,
+    items: List Todo
 }
-signal keyDown : Signal Key
 
-signal event : Signal Event = keyDown
-  ||> Key "ArrowUp" => Increment
-  ||> Key "ArrowDown" => Decrement
-  ||> Key "Space" => Reset
-  ||> _ => Increment
+type Event =
+  | DraftChanged Text
+  | AddTodo
+  | ToggleTodo Int
+  | SetFilter Filter
+  | ClearDone
 
-signal count = event
- +|> 0 step
+value initial : State = {
+    nextId: 1,
+    draft: "",
+    filter: All,
+    items: []
+}
+```
 
-signal label = count
-  |> formatCount
+This is already a functional-programming habit worth keeping: do not start with callbacks or widget
+handlers. Start by making the application's shape explicit.
+
+## Step 2: Write the pure state logic
+
+Now we describe what each event means. This is ordinary pure code: given an event and the current
+state, return the next state.
+
+```aivi
+type Filter =
+  | All
+  | Active
+  | Done
+
+type Todo = {
+    id: Int,
+    text: Text,
+    done: Bool
+}
+
+type State = {
+    nextId: Int,
+    draft: Text,
+    filter: Filter,
+    items: List Todo
+}
+
+type Event =
+  | DraftChanged Text
+  | AddTodo
+  | ToggleTodo Int
+  | SetFilter Filter
+  | ClearDone
+
+type Todo -> Bool
+func isOpen = todo => todo.done
+ T|> False
+ F|> True
+
+type Filter -> Todo -> Bool
+func matchesFilter = current todo => current
+ ||> All    -> True
+ ||> Active -> isOpen todo
+ ||> Done   -> todo.done
+
+type Todo -> Text
+func todoLabel = todo => todo.done
+ T|> "[x] {todo.text}"
+ F|> "[ ] {todo.text}"
+
+type Int -> Todo -> Todo
+func toggleItem = target todo => (todo.id == target, todo.done)
+ ||> (True, True)  -> todo <| { done: False }
+ ||> (True, False) -> todo <| { done: True }
+ ||> (False, _)    -> todo
+
+type State -> State
+func addItem = state => trim state.draft == ""
+ T|> state
+ F|> state <| { nextId: state.nextId + 1, draft: "", items: append state.items [{ id: state.nextId, text: trim state.draft, done: False }] }
+
+type Todo -> Bool
+func keepActive = todo =>
+    isOpen todo
+
+type State -> State
+func clearCompleted = state =>
+    state <| { items: filter keepActive state.items }
+
+type Event -> State -> State
+func step = event state => event
+ ||> DraftChanged text -> state <| { draft: text }
+ ||> AddTodo           -> addItem state
+ ||> ToggleTodo id     -> state <| { items: map (toggleItem id) state.items }
+ ||> SetFilter current -> state <| { filter: current }
+ ||> ClearDone         -> clearCompleted state
+```
+
+The important part is the `step` function. It is the same idea you would use in Elm, Redux, or a
+state machine: one closed event type in, one new state out.
+
+## Step 3: Turn UI events into domain events
+
+GTK widgets can emit signal payloads directly into your reactive graph.
+
+```aivi
+type Filter =
+  | All
+  | Active
+  | Done
+
+type Event =
+  | DraftChanged Text
+  | AddTodo
+  | ToggleTodo Int
+  | SetFilter Filter
+  | ClearDone
+
+signal draftChanged : Signal Text
+signal addClick : Signal Unit
+signal toggleTodo : Signal Int
+signal setFilter : Signal Filter
+signal clearDone : Signal Unit
+
+signal event : Signal Event = draftChanged | addClick | toggleTodo | setFilter | clearDone
+  ||> draftChanged text => DraftChanged text
+  ||> addClick _ => AddTodo
+  ||> toggleTodo id => ToggleTodo id
+  ||> setFilter filter => SetFilter filter
+  ||> clearDone _ => ClearDone
+```
+
+This is the bridge from UI events to your app's own vocabulary. The buttons and entry do not mutate
+state directly; they emit values, and the signal graph folds those values into state.
+
+## Step 4: Derive the state the UI needs
+
+Once `event` exists, accumulation gives us the live application state:
+
+```aivi
+type Filter =
+  | All
+  | Active
+  | Done
+
+type Todo = {
+    id: Int,
+    text: Text,
+    done: Bool
+}
+
+type State = {
+    nextId: Int,
+    draft: Text,
+    filter: Filter,
+    items: List Todo
+}
+
+type Event =
+  | DraftChanged Text
+  | AddTodo
+  | ToggleTodo Int
+  | SetFilter Filter
+  | ClearDone
+
+value initial : State = {
+    nextId: 1,
+    draft: "",
+    filter: All,
+    items: []
+}
+
+type Todo -> Bool
+func isOpen = todo => todo.done
+ T|> False
+ F|> True
+
+type Filter -> Todo -> Bool
+func matchesFilter = current todo => current
+ ||> All    -> True
+ ||> Active -> isOpen todo
+ ||> Done   -> todo.done
+
+type Event -> State -> State
+func step = event state => event
+ ||> DraftChanged text -> state <| { draft: text }
+ ||> AddTodo           -> state
+ ||> ToggleTodo _      -> state
+ ||> SetFilter current -> state <| { filter: current }
+ ||> ClearDone         -> state
+
+type State -> List Todo
+func visibleTodos = state =>
+    filter (matchesFilter state.filter) state.items
+
+type State -> Bool
+func hasDraft = state =>
+    trim state.draft != ""
+
+type State -> Text
+func footer = state => state.items
+  |> length
+  |> "{.} total tasks"
+
+signal event : Signal Event
+
+signal state = event
+ +|> initial step
+
+signal draftText = state
+  |> .draft
+
+signal visibleItems = state
+  |> visibleTodos
+
+signal canAdd = state
+  |> hasDraft
+
+signal footerText = state
+  |> footer
+```
+
+This is the core AIVI move: **declare the dependency graph once**. `draftText`, `visibleItems`,
+`canAdd`, and `footerText` all stay correct because they are defined from `state`.
+
+## Step 5: Build the UI
+
+Now the UI is mostly straightforward. It just reads from signals and emits event payloads back into
+the graph.
+
+```aivi
+type Filter =
+  | All
+  | Active
+  | Done
+
+type Todo = {
+    id: Int,
+    text: Text,
+    done: Bool
+}
+
+type State = {
+    nextId: Int,
+    draft: Text,
+    filter: Filter,
+    items: List Todo
+}
+
+type Event =
+  | DraftChanged Text
+  | AddTodo
+  | ToggleTodo Int
+  | SetFilter Filter
+  | ClearDone
+
+value initial : State = {
+    nextId: 1,
+    draft: "",
+    filter: All,
+    items: []
+}
+
+type Todo -> Bool
+func isOpen = todo => todo.done
+ T|> False
+ F|> True
+
+type Filter -> Todo -> Bool
+func matchesFilter = current todo => current
+ ||> All    -> True
+ ||> Active -> isOpen todo
+ ||> Done   -> todo.done
+
+type Todo -> Text
+func todoLabel = todo => todo.done
+ T|> "[x] {todo.text}"
+ F|> "[ ] {todo.text}"
+
+type Int -> Todo -> Todo
+func toggleItem = target todo => (todo.id == target, todo.done)
+ ||> (True, True)  -> todo <| { done: False }
+ ||> (True, False) -> todo <| { done: True }
+ ||> (False, _)    -> todo
+
+type State -> State
+func addItem = state => trim state.draft == ""
+ T|> state
+ F|> state <| { nextId: state.nextId + 1, draft: "", items: append state.items [{ id: state.nextId, text: trim state.draft, done: False }] }
+
+type Todo -> Bool
+func keepActive = todo =>
+    isOpen todo
+
+type State -> State
+func clearCompleted = state =>
+    state <| { items: filter keepActive state.items }
+
+type Event -> State -> State
+func step = event state => event
+ ||> DraftChanged text -> state <| { draft: text }
+ ||> AddTodo           -> addItem state
+ ||> ToggleTodo id     -> state <| { items: map (toggleItem id) state.items }
+ ||> SetFilter current -> state <| { filter: current }
+ ||> ClearDone         -> clearCompleted state
+
+type State -> List Todo
+func visibleTodos = state =>
+    filter (matchesFilter state.filter) state.items
+
+type State -> Bool
+func hasDraft = state =>
+    trim state.draft != ""
+
+type State -> Text
+func footer = state => state.items
+  |> length
+  |> "{.} total tasks"
+
+signal draftChanged : Signal Text
+signal addClick : Signal Unit
+signal toggleTodo : Signal Int
+signal setFilter : Signal Filter
+signal clearDone : Signal Unit
+
+signal event : Signal Event = draftChanged | addClick | toggleTodo | setFilter | clearDone
+  ||> draftChanged text => DraftChanged text
+  ||> addClick _ => AddTodo
+  ||> toggleTodo id => ToggleTodo id
+  ||> setFilter filter => SetFilter filter
+  ||> clearDone _ => ClearDone
+
+signal state = event
+ +|> initial step
+
+signal draftText = state
+  |> .draft
+
+signal visibleItems = state
+  |> visibleTodos
+
+signal canAdd = state
+  |> hasDraft
+
+signal footerText = state
+  |> footer
 
 value main =
-    <Window title="Counter">
-        <Box orientation="vertical" spacing={8}>
-            <Label text={label} />
-            <Label text="↑ increment  ↓ decrement  space reset" />
+    <Window title="AIVI Task Tracker" defaultWidth={420} defaultHeight={480}>
+        <Box orientation="vertical" spacing={12} marginTop={16} marginBottom={16} marginStart={16} marginEnd={16}>
+            <Label text="Task Tracker" />
+            <Label text="Type a task, press Add, then click an item to toggle it done." />
+            <Entry text={draftText} onChange={draftChanged} />
+            <Button label="Add task" onClick={addClick} sensitive={canAdd} />
+            <Box orientation="horizontal" spacing={8}>
+                <Button label="All" onClick={setFilter All} />
+                <Button label="Active" onClick={setFilter Active} />
+                <Button label="Done" onClick={setFilter Done} />
+                <Button label="Clear done" onClick={clearDone} />
+            </Box>
+            <Box orientation="vertical" spacing={6}>
+                <each of={visibleItems} as={todo} key={todo.id}>
+                    <Button label={todoLabel todo} onClick={toggleTodo todo.id} />
+                </each>
+            </Box>
+            <Label text={footerText} />
         </Box>
     </Window>
 
 export main
 ```
 
-## What we covered
+## What this app teaches
 
-Let us trace the concepts this small app introduced:
-
-| Concept | Where it appeared |
+| Concept | Where it appears |
 | --- | --- |
-| **Values** | `formatCount 0`, string literals, the `main` UI tree |
-| **Functions** | `formatCount`, `step` — pure, typed, reusable |
-| **Types** | `Event` sum type, `Key` wrapper, function signatures |
-| **Signals** | `count`, `label`, `event`, `keyDown` — the reactive graph |
-| **Sources** | `@source window.keyDown` — external input boundary |
-| **Pattern matching** | `||>` in `step`, signal merge arms route keys to events |
-| **Pipes** | `|>` to transform, `+|>` to accumulate |
-| **Markup** | `<Window>`, `<Box>`, `<Label>` — type-checked GTK widgets |
-| **Reactivity** | `label` recomputes when `count` changes, automatically |
+| **Closed types** | `Filter` and `Event` make the app vocabulary explicit |
+| **Plain records** | `Todo` and `State` hold application data |
+| **Pure functions** | `step`, `addItem`, `toggleItem`, `visibleTodos` |
+| **Signals** | `event`, `state`, `draftText`, `visibleItems`, `canAdd`, `footerText` |
+| **Merge and accumulation** | UI events merge into `event`; `+|>` folds them into `state` |
+| **GTK markup** | `Entry`, `Button`, `Box`, `Label`, and `<each>` |
+| **Functional style without ceremony** | No mutable variables, no callback soup, no unnecessary memo names |
 
 ## The data flow
 
 ```
-Keyboard → @source window.keyDown → keyDown signal
-                                          ↓
-                              signal merge routes to event signal
-                                          ↓
-                              +|> accumulates into count signal
-                                          ↓
-                              |> derives label signal
-                                          ↓
-                              <Label text={label} /> updates
+Entry + buttons  →  UI event signals
+                        ↓
+               merged into Event values
+                        ↓
+                 +|> folds into State
+                        ↓
+            derived signals feed the GTK tree
 ```
 
-Every arrow is a declared dependency. There are no hidden subscriptions, no manual wiring, and no callbacks to forget.
+Every arrow is declared in the source. There is no hidden mutation site to go hunting for later.
 
 ## Next steps
 
-- [Building Snake](/guide/building-snake) — a real game that uses these same concepts at scale
-- [Pipes & Operators](/guide/pipes) — the full pipe algebra
-- [Signals](/guide/signals) — signals in depth
-- [Sources](/guide/sources) — all the ways to connect to the outside world
-- [Markup & UI](/guide/markup) — the complete widget system
+- [How-to Guides](/how-to/) — move from the learning path to concrete tasks
+- [Signals](/guide/signals) — deeper reference for merge, accumulation, and derivation
+- [Markup & UI](/guide/markup) — widget catalog and control nodes
+- [Snake](/guide/building-snake) — optional bigger example once this app feels comfortable
