@@ -14,8 +14,31 @@ use aivi.nonEmpty (
     mapNel
     fromList
     appendNel
+    fromHeadTail
+    init
 )
 ```
+
+## At a glance
+
+| Export | Type | Use it for |
+| --- | --- | --- |
+| `NonEmptyList A` | `MkNEL A (List A)` | The non-empty list type itself |
+| `singleton` | `A -> NonEmptyList A` | Create a one-item non-empty list |
+| `cons` | `A -> NonEmptyList A -> NonEmptyList A` | Add an item at the front |
+| `head` | `NonEmptyList A -> A` | Read the first item safely |
+| `last` | `NonEmptyList A -> A` | Read the final item safely |
+| `length` | `NonEmptyList A -> Int` | Count items |
+| `toList` | `NonEmptyList A -> List A` | Drop the non-empty guarantee and get a regular list |
+| `mapNel` | `(A -> B) -> NonEmptyList A -> NonEmptyList B` | Transform every item while preserving non-emptiness |
+| `fromList` | `List A -> Option (NonEmptyList A)` | Upgrade a regular list when it is not empty |
+| `fromHeadTail` | `A -> List A -> NonEmptyList A` | Build a non-empty list from a required head and a list tail |
+| `init` | `NonEmptyList A -> List A` | Return every item except the last |
+| `appendNel` | `NonEmptyList A -> NonEmptyList A -> NonEmptyList A` | Concatenate two non-empty lists |
+
+The detailed sections below focus on the most commonly reached-for constructors and transforms; the
+table above also lists the extra public helpers that are useful in real code, such as
+`fromHeadTail` and `init`.
 
 ---
 

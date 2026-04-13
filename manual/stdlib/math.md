@@ -13,8 +13,37 @@ use aivi.math (
     clamp
     between
     divides
+    gcd
+    lcm
+    pow
+    digits
+    fromDigits
+    isPrime
 )
 ```
+
+## At a glance
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `abs` | `Int -> Int` | Absolute value |
+| `negate` | `Int -> Int` | Flip the sign |
+| `sign` | `Int -> Int` | Collapse a number to `-1`, `0`, or `1` |
+| `isEven` | `Int -> Bool` | Check parity |
+| `isOdd` | `Int -> Bool` | Check oddness |
+| `square` | `Int -> Int` | Multiply a number by itself |
+| `clamp` | `Int -> Int -> Int -> Int` | Restrict a number to a range |
+| `between` | `Int -> Int -> Int -> Bool` | Check whether a number lies in a range |
+| `divides` | `Int -> Int -> Bool` | Check exact divisibility |
+| `gcd` | `Int -> Int -> Int` | Greatest common divisor |
+| `lcm` | `Int -> Int -> Int` | Least common multiple |
+| `pow` | `Int -> Int -> Int` | Integer exponentiation |
+| `digits` | `Int -> List Int` | Break an integer into decimal digits |
+| `fromDigits` | `List Int -> Int` | Rebuild an integer from decimal digits |
+| `isPrime` | `Int -> Bool` | Primality test |
+
+The detailed sections below focus on the most common helpers first. The table above is the full
+currently exported surface for `aivi.math`.
 
 ---
 

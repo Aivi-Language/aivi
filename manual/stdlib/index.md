@@ -17,6 +17,17 @@ Use this page as a map:
 Several modules are intentionally small today, and some are shared type vocabularies rather than
 full runtime clients. Their pages call that out up front so you do not have to guess.
 
+## How to read module pages
+
+| Module page shape | What the top tables show | Typical examples |
+| --- | --- | --- |
+| Pure helper module | The full exported function battery for the module | `aivi.option`, `aivi.result`, `aivi.list`, `aivi.math`, `aivi.bool` |
+| Vocabulary / capability module | The exported types, handles, and canonical members | `aivi.fs`, `aivi.http`, `aivi.db`, `aivi.env` |
+| Mixed module | Separate tables for core operations and higher-level helpers | `aivi.text`, `aivi.prelude`, `aivi.matrix` |
+
+If you open a module page and only want the quick answer to *"what does this include?"*, jump to
+the **At a glance** section near the top.
+
 For external systems, prefer provider capabilities defined through `@source`. The related stdlib
 modules now mainly carry shared data vocabulary and handle-marker types such as `FsSource`,
 `HttpSource`, `EnvSource`, and `LogSource`.

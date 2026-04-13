@@ -16,6 +16,20 @@ use aivi.core.fn (
 )
 ```
 
+## At a glance
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `identity` | `A -> A` | Return a value unchanged |
+| `const` | `A -> B -> A` | Ignore the second argument and keep the first |
+| `flip` | `(A -> B -> C) -> B -> A -> C` | Reverse the first two arguments of a function |
+| `compose` | `(B -> C) -> (A -> B) -> A -> C` | Right-to-left composition |
+| `andThen` | `(A -> B) -> (B -> C) -> A -> C` | Left-to-right composition |
+| `always` | `A -> B -> A` | Constant function with a more intention-revealing name |
+| `on` | `(B -> B -> C) -> (A -> B) -> A -> A -> C` | Compare or combine after projecting both sides |
+| `applyTo` | `A -> (A -> B) -> B` | Value-first application |
+| `applyTwice` | `(A -> A) -> A -> A` | Apply the same transform two times |
+
 ---
 
 ## identity

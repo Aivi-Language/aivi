@@ -16,6 +16,10 @@ use aivi.order (
     maxOf
     clamp
     minBy
+    maxBy
+    minOfBy
+    maxOfBy
+    clampBy
     reversed
     comparing
 )
@@ -30,6 +34,33 @@ func byInt = a b =>
 ```
 
 Pass this (or any equivalent) to the `...By` helpers when you need a custom ordering.
+
+## At a glance
+
+### Ambient `Ord` helpers
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `min` | `Ord A => A -> A -> A` | Choose the smaller of two values |
+| `max` | `Ord A => A -> A -> A` | Choose the larger of two values |
+| `minOf` | `Ord A => A -> List A -> A` | Find the minimum in a non-empty collection |
+| `maxOf` | `Ord A => A -> List A -> A` | Find the maximum in a non-empty collection |
+| `clamp` | `Ord A => A -> A -> A -> A` | Restrict a value to an inclusive range |
+
+### Explicit comparator helpers
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `minBy` | `(A -> A -> Bool) -> A -> A -> A` | Choose the smaller value using a custom comparator |
+| `maxBy` | `(A -> A -> Bool) -> A -> A -> A` | Choose the larger value using a custom comparator |
+| `minOfBy` | `(A -> A -> Bool) -> A -> List A -> A` | Find a minimum with a custom comparator |
+| `maxOfBy` | `(A -> A -> Bool) -> A -> List A -> A` | Find a maximum with a custom comparator |
+| `clampBy` | `(A -> A -> Bool) -> A -> A -> A -> A` | Clamp with a custom comparator |
+| `reversed` | `(A -> A -> Bool) -> A -> A -> Bool` | Flip an existing comparator |
+| `comparing` | `(A -> B) -> (B -> B -> Bool) -> A -> A -> Bool` | Build a comparator by projecting to a sortable field |
+
+The detailed sections below walk through the most commonly used helpers. Use these tables when you
+just want the full ordering surface at a glance.
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "root": "manual",
   "scanned_files": 91,
-  "scanned_blocks": 951,
+  "scanned_blocks": 950,
   "rewritten_blocks": 0,
   "unresolved_fragments": 165,
   "entries": [
@@ -930,7 +930,7 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `status`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `snake`?"
         },
         {
           "severity": "error",
@@ -2884,13 +2884,13 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:11:6\n  |\n11 |  ||> Cell _ y -> y\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellX`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:11:6\n  |\n11 |  ||> Cell _ y -> y\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellY`?"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `Cell`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:7:6\n  |\n 7 |  ||> Cell x _ -> x\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellX`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `Cell`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/types/block_11.aivi:7:6\n  |\n 7 |  ||> Cell x _ -> x\n  |      ^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `cellY`?"
         },
         {
           "severity": "error",
@@ -3093,10 +3093,10 @@
     },
     {
       "markdown_path": "manual/stdlib/async.md",
-      "block_index": 5,
+      "block_index": 4,
       "fence_info": "aivi",
-      "start_line": 89,
-      "end_line": 93,
+      "start_line": 96,
+      "end_line": 100,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 3,
@@ -3106,29 +3106,29 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `users`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_5.aivi:2:18\n  |\n 2 | signal loading = users.pending\n  |                  ^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_4.aivi:2:18\n  |\n 2 | signal loading = users.pending\n  |                  ^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `users`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_5.aivi:4:19\n  |\n 4 | signal userList = users.done\n  |                   ^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_4.aivi:4:19\n  |\n 4 | signal userList = users.done\n  |                   ^^^^^\n  = reported during Milestone 2 HIR lowering"
         },
         {
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `users`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_5.aivi:5:21\n  |\n 5 | signal fetchError = users.error\n  |                     ^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `users`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_4.aivi:5:21\n  |\n 5 | signal fetchError = users.error\n  |                     ^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "// Spinner visible while loading\nsignal loading = users.pending\n\nsignal userList = users.done\nsignal fetchError = users.error\n"
     },
     {
       "markdown_path": "manual/stdlib/async.md",
-      "block_index": 9,
+      "block_index": 8,
       "fence_info": "aivi",
-      "start_line": 158,
-      "end_line": 198,
+      "start_line": 165,
+      "end_line": 205,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 1,
@@ -3138,17 +3138,17 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `items`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `items`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_9.aivi:37:27\n  |\n37 |             <Label text=\"{items}\" />\n  |                           ^^^^^\n  = reported during Milestone 2 HIR lowering"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `items`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_8.aivi:37:27\n  |\n37 |             <Label text=\"{items}\" />\n  |                           ^^^^^\n  = reported during Milestone 2 HIR lowering"
         }
       ],
       "suggested_snippet": "use aivi.async (\n    AsyncTracker\n    step\n)\n\nuse aivi.http (\n    HttpError\n    HttpSource\n)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\n@source http \"https://api.example.com\"\nsignal api : HttpSource\n\nsignal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n\nvalue initialUsers : AsyncTracker HttpError (List User) = {\n    pending: True,\n    done: None,\n    error: None\n}\n\nsignal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n +|> initialUsers step\n\nvalue main =\n    <Window title=\"Users\">\n        <Box>\n            <Spinner />\n            <Box />\n            <Label text=\"Failed to load\" />\n            <Label text=\"No data yet\" />\n            <Label text=\"{items}\" />\n        </Box>\n    </Window>\n\nexport main\n"
     },
     {
       "markdown_path": "manual/stdlib/async.md",
-      "block_index": 10,
+      "block_index": 9,
       "fence_info": "aivi",
-      "start_line": 210,
-      "end_line": 245,
+      "start_line": 217,
+      "end_line": 252,
       "formatting_changed": false,
       "syntax_problem_count": 0,
       "lsp_problem_count": 0,
@@ -3158,7 +3158,7 @@
           "severity": "error",
           "code": "hir::invalid-projection",
           "message": "projection `.done` cannot be applied to `Signal AsyncTracker HttpError List { id: Int, name: Text }`",
-          "rendered": "error[hir::invalid-projection]: projection `.done` cannot be applied to `Signal AsyncTracker HttpError List { id: Int, name: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_10.aivi:35:44\n  |\n35 | signal firstLoadDone : Signal Bool = users.done\n  |                                            ^^^^\n  = this projection target does not support field access"
+          "rendered": "error[hir::invalid-projection]: projection `.done` cannot be applied to `Signal AsyncTracker HttpError List { id: Int, name: Text }`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/async/block_9.aivi:35:44\n  |\n35 | signal firstLoadDone : Signal Bool = users.done\n  |                                            ^^^^\n  = this projection target does not support field access"
         }
       ],
       "suggested_snippet": "use aivi.async (\n    AsyncTracker\n    step\n)\n\nuse aivi.http (\n    HttpError\n    HttpSource\n)\n\ntype User = {\n    id: Int,\n    name: Text\n}\n\n@source http \"https://api.example.com\"\nsignal api : HttpSource\n\nsignal rawUsers : Signal (Result HttpError (List User)) = api.get \"/users\"\n\nvalue initialUsers : AsyncTracker HttpError (List User) = {\n    pending: True,\n    done: None,\n    error: None\n}\n\nsignal users : Signal (AsyncTracker HttpError (List User)) = rawUsers\n +|> initialUsers step\n\ntype Bool -> Option (List User) -> Bool\nfunc trackFirstLoad = hasFired newDone => hasFired\n T|> True\n F|> isSome newDone\n\nsignal firstLoadDone : Signal Bool = users.done\n +|> False trackFirstLoad\n"

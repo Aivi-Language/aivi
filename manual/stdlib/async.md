@@ -5,10 +5,7 @@ async source (HTTP, file reads, D-Bus, database queries) into a record with thre
 projections: `pending`, `done`, and `error`.
 
 Once you have a `Signal (AsyncTracker E A)`, the projections become signals themselves — no
-extra derivations needed:
-
-```aivi
-```
+extra derivations needed.
 
 ## Import
 
@@ -21,6 +18,16 @@ use aivi.async (
     isFailed
 )
 ```
+
+## At a glance
+
+| Export | Type | Use it for |
+| --- | --- | --- |
+| `AsyncTracker E A` | `{ pending: Bool, done: Option A, error: Option E }` | Track async lifecycle state in one record |
+| `step` | `AsyncTracker E A -> Result E A -> AsyncTracker E A` | Fold new results into tracker state |
+| `isPending` | `AsyncTracker E A -> Bool` | Check whether no result has arrived yet |
+| `isDone` | `AsyncTracker E A -> Bool` | Check whether at least one success has arrived |
+| `isFailed` | `AsyncTracker E A -> Bool` | Check whether the most recent result was a failure |
 
 ---
 

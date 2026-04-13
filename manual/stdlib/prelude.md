@@ -4,6 +4,13 @@ The `aivi.prelude` module is AIVI's convenience layer — it re-exports the most
 
 Because `aivi.prelude` declares `hoist`, all of its exports are automatically available in every AIVI file. You do not need a `use aivi.prelude (...)` declaration. Types like `Int`, `Bool`, `Text`, `List`, `Option`, `Result`, and type class constraints like `Eq`, `Ord`, `Functor`, and more are simply in scope everywhere.
 
+## At a glance
+
+`aivi.prelude` is already a scan-first module page: the tables below list the types, classes, and
+representative helper batteries that are available everywhere by default. Use this page as the
+overview map; use the module pages like `aivi.option`, `aivi.result`, and `aivi.list` when you need
+the full per-module battery tables.
+
 ## Built-in Types
 
 These types are always available and can be imported from `aivi.prelude`:

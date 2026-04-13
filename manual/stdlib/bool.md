@@ -14,6 +14,18 @@ use aivi.bool (
 )
 ```
 
+## At a glance
+
+| Function | Type | Use it for |
+| --- | --- | --- |
+| `not` | `Bool -> Bool` | Negate a boolean |
+| `xor` | `Bool -> Bool -> Bool` | Check whether exactly one side is true |
+| `implies` | `Bool -> Bool -> Bool` | Express logical implication |
+| `both` | `Bool -> Bool -> Bool` | Named `and` |
+| `either` | `Bool -> Bool -> Bool` | Named `or` |
+| `neither` | `Bool -> Bool -> Bool` | Check whether both sides are false |
+| `fromInt` | `Int -> Bool` | Treat `0` as false and everything else as true |
+
 ---
 
 ## not

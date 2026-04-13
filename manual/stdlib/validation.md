@@ -21,6 +21,26 @@ use aivi.validation (
 )
 ```
 
+## At a glance
+
+| Export | Type | Use it for |
+| --- | --- | --- |
+| `Errors E` | `NonEmptyList E` | Canonical accumulated error carrier |
+| `isValid` | `Validation E A -> Bool` | Check whether validation succeeded |
+| `isInvalid` | `Validation E A -> Bool` | Check whether validation failed |
+| `getOrElse` | `A -> Validation E A -> A` | Unwrap with a fallback value |
+| `mapErr` | `(E1 -> E2) -> Validation E1 A -> Validation E2 A` | Transform only the error side |
+| `toResult` | `Validation E A -> Result E A` | Convert to `Result` |
+| `fromResult` | `Result E A -> Validation E A` | Convert from `Result` |
+| `toOption` | `Validation E A -> Option A` | Discard errors and keep the value when valid |
+| `map` | `(A -> B) -> Validation E A -> Validation E B` | Transform only the valid side |
+| `andThen` | `(A -> Validation E B) -> Validation E A -> Validation E B` | Chain dependent validation steps |
+| `zipValidation` | `Validation (NonEmptyList E) A -> Validation (NonEmptyList E) B -> Validation (NonEmptyList E) (A, B)` | Accumulate independent failures from both sides |
+| `fold` | `(E -> B) -> (A -> B) -> Validation E A -> B` | Collapse a validation to one output type |
+
+Start with this table when you want the export inventory first; the detailed sections below explain
+the individual helpers in more depth.
+
 ---
 
 ## Errors
