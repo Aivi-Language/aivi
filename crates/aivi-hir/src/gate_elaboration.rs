@@ -19,7 +19,7 @@ use crate::{
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeFunctionSignatureMatch,
         PipeSubjectStepOutcome, PipeSubjectWalker, extend_pipe_env_with_stage_memos,
-        gate_env_for_function, pipe_stage_expr_env, truthy_falsy_pair_stages, walk_expr_tree,
+        gate_env_for_function, pipe_stage_expr_env, walk_expr_tree,
     },
 };
 
@@ -70,7 +70,7 @@ pub enum GateStageOutcome {
     Blocked(BlockedGateStage),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OrdinaryGateStage {
     pub input_subject: GateType,
     pub result_type: GateType,
@@ -78,7 +78,7 @@ pub struct OrdinaryGateStage {
     pub when_false: GateCoreExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignalGateFilter {
     pub input_subject: GateType,
     pub payload_type: GateType,
@@ -186,27 +186,27 @@ impl fmt::Display for GateRuntimeUnsupportedPipeStageKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateCoreExpr {
     pub ty: GateType,
     pub kind: GateCoreExprKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateCoreExprKind {
     AmbientSubject,
     OptionSome { payload: Box<GateCoreExpr> },
     OptionNone,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeExpr {
     pub span: SourceSpan,
     pub ty: GateType,
     pub kind: GateRuntimeExprKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeExprKind {
     AmbientSubject,
     Reference(GateRuntimeReference),
@@ -241,7 +241,7 @@ pub enum GateRuntimeExprKind {
     Pipe(GateRuntimePipeExpr),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeReference {
     Local(BindingId),
     Item(ItemId),
@@ -253,42 +253,42 @@ pub enum GateRuntimeReference {
     IntrinsicValue(IntrinsicValue),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeProjectionBase {
     AmbientSubject,
     Expr(Box<GateRuntimeExpr>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeTextLiteral {
     pub segments: Vec<GateRuntimeTextSegment>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimeTextSegment {
     Fragment(TextFragment),
     Interpolation(Box<GateRuntimeExpr>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeRecordField {
     pub label: Name,
     pub value: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeMapEntry {
     pub key: GateRuntimeExpr,
     pub value: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimePipeExpr {
     pub head: Box<GateRuntimeExpr>,
     pub stages: Vec<GateRuntimePipeStage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimePipeStage {
     pub span: SourceSpan,
     pub subject_memo: Option<BindingId>,
@@ -298,14 +298,14 @@ pub struct GateRuntimePipeStage {
     pub kind: GateRuntimePipeStageKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeCaseArm {
     pub span: SourceSpan,
     pub pattern: PatternId,
     pub body: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRuntimeTruthyFalsyBranch {
     pub span: SourceSpan,
     pub constructor: BuiltinTerm,
@@ -314,7 +314,7 @@ pub struct GateRuntimeTruthyFalsyBranch {
     pub body: GateRuntimeExpr,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GateRuntimePipeStageKind {
     Transform {
         mode: PipeTransformMode,
@@ -478,121 +478,108 @@ fn collect_gate_pipe(
         .ok()
         .flatten()
         .map(|suffix| suffix.prefix_stage_count());
-    let all_stages = pipe.stages.iter().collect::<Vec<_>>();
     PipeSubjectWalker::new(pipe, env, typing).walk(
         typing,
-        |stage_index, stage, current, current_env, typing| {
+        |stage, current, current_env, typing| {
             // Stop at the recurrence boundary — gate elaboration only covers the
             // non-recurrence prefix of the pipe.
-            if recurrence_start_index.is_some_and(|start| stage_index >= start) {
+            if recurrence_start_index.is_some_and(|start| stage.start_stage_index() >= start) {
                 return PipeSubjectStepOutcome::Stop;
             }
-            match &stage.kind {
-                PipeStageKind::Gate { expr } => {
-                    let outcome = elaborate_gate_stage(module, *expr, current_env, current, typing);
-                    gate_stages.push(GateStageElaboration {
-                        owner,
-                        pipe_expr,
-                        stage_index,
-                        stage_span: stage.span,
-                        predicate: *expr,
-                        outcome: outcome.clone(),
-                    });
-                    PipeSubjectStepOutcome::Continue {
-                        new_subject: match outcome {
-                            GateStageOutcome::Ordinary(s) => Some(s.result_type),
-                            GateStageOutcome::SignalFilter(s) => Some(s.result_type),
-                            GateStageOutcome::Blocked(_) => None,
-                        },
-                        advance_by: 1,
-                    }
-                }
-                PipeStageKind::Map { expr } => {
-                    let segment = pipe
-                        .fanout_segment(stage_index)
-                        .expect("map stages should expose a fan-out segment");
-                    if segment.join_stage().is_some() {
-                        let outcome = crate::fanout_elaboration::elaborate_fanout_segment(
-                            module,
-                            &segment,
-                            current,
-                            current_env,
-                            typing,
-                        );
-                        let advance = segment
-                            .next_stage_index()
-                            .saturating_sub(stage_index)
-                            .max(1);
+            match stage {
+                crate::PipeSubjectStage::Single { stage, stage_index } => match &stage.kind {
+                    PipeStageKind::Gate { expr } => {
+                        let outcome =
+                            elaborate_gate_stage(module, *expr, current_env, current, typing);
+                        gate_stages.push(GateStageElaboration {
+                            owner,
+                            pipe_expr,
+                            stage_index: *stage_index,
+                            stage_span: stage.span,
+                            predicate: *expr,
+                            outcome: outcome.clone(),
+                        });
                         PipeSubjectStepOutcome::Continue {
                             new_subject: match outcome {
-                                crate::fanout_elaboration::FanoutSegmentOutcome::Planned(plan) => {
-                                    Some(plan.result_type)
-                                }
-                                crate::fanout_elaboration::FanoutSegmentOutcome::Blocked(_) => None,
+                                GateStageOutcome::Ordinary(s) => Some(s.result_type),
+                                GateStageOutcome::SignalFilter(s) => Some(s.result_type),
+                                GateStageOutcome::Blocked(_) => None,
                             },
-                            advance_by: advance,
-                        }
-                    } else {
-                        PipeSubjectStepOutcome::Continue {
-                            new_subject: current
-                                .and_then(|s| typing.infer_fanout_map_stage(*expr, current_env, s)),
-                            advance_by: 1,
                         }
                     }
-                }
-                PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
-                    advance_by: 1,
+                    PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
+                        new_subject: current
+                            .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
+                    },
+                    PipeStageKind::Apply { .. } => {
+                        unreachable!("subject walker groups apply runs")
+                    }
+                    PipeStageKind::Case { .. }
+                    | PipeStageKind::RecurStart { .. }
+                    | PipeStageKind::RecurStep { .. }
+                    | PipeStageKind::Validate { .. }
+                    | PipeStageKind::Accumulate { .. } => {
+                        PipeSubjectStepOutcome::Continue { new_subject: None }
+                    }
+                    PipeStageKind::Previous { expr } => PipeSubjectStepOutcome::Continue {
+                        new_subject: current.and_then(|s| {
+                            typing.infer_previous_stage_info(*expr, current_env, s).ty
+                        }),
+                    },
+                    PipeStageKind::Diff { expr } => PipeSubjectStepOutcome::Continue {
+                        new_subject: current
+                            .and_then(|s| typing.infer_diff_stage_info(*expr, current_env, s).ty),
+                    },
+                    PipeStageKind::Delay { duration } => PipeSubjectStepOutcome::Continue {
+                        new_subject: current.and_then(|s| {
+                            typing.infer_delay_stage_info(*duration, current_env, s).ty
+                        }),
+                    },
+                    PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
+                        new_subject: current.and_then(|s| {
+                            typing
+                                .infer_burst_stage_info(*every, *count, current_env, s)
+                                .ty
+                        }),
+                    },
+                    PipeStageKind::Map { .. }
+                    | PipeStageKind::Truthy { .. }
+                    | PipeStageKind::Falsy { .. }
+                    | PipeStageKind::Transform { .. }
+                    | PipeStageKind::Tap { .. } => {
+                        unreachable!(
+                            "subject walker groups fanout segments/pairs and consumes transform/tap"
+                        )
+                    }
                 },
-                PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
-                    let Some(pair) = truthy_falsy_pair_stages(&all_stages, stage_index) else {
-                        return PipeSubjectStepOutcome::Continue {
-                            new_subject: None,
-                            advance_by: 1,
-                        };
-                    };
-                    let advance = pair.next_index.saturating_sub(stage_index).max(1);
+                crate::PipeSubjectStage::FanoutSegment(segment) => {
+                    let outcome = crate::fanout_elaboration::elaborate_fanout_segment(
+                        module,
+                        segment,
+                        current,
+                        current_env,
+                        typing,
+                    );
+                    PipeSubjectStepOutcome::Continue {
+                        new_subject: match outcome {
+                            crate::fanout_elaboration::FanoutSegmentOutcome::Planned(plan) => {
+                                Some(plan.result_type)
+                            }
+                            crate::fanout_elaboration::FanoutSegmentOutcome::Blocked(_) => None,
+                        },
+                    }
+                }
+                crate::PipeSubjectStage::TruthyFalsyPair(pair) => {
                     PipeSubjectStepOutcome::Continue {
                         new_subject: current
-                            .and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s)),
-                        advance_by: advance,
+                            .and_then(|s| typing.infer_truthy_falsy_pair(pair, current_env, s)),
                     }
                 }
-                PipeStageKind::Case { .. }
-                | PipeStageKind::Apply { .. }
-                | PipeStageKind::RecurStart { .. }
-                | PipeStageKind::RecurStep { .. }
-                | PipeStageKind::Validate { .. }
-                | PipeStageKind::Accumulate { .. } => PipeSubjectStepOutcome::Continue {
-                    new_subject: None,
-                    advance_by: 1,
-                },
-                PipeStageKind::Previous { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_previous_stage_info(*expr, current_env, s).ty),
-                    advance_by: 1,
-                },
-                PipeStageKind::Diff { expr } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_diff_stage_info(*expr, current_env, s).ty),
-                    advance_by: 1,
-                },
-                PipeStageKind::Delay { duration } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current
-                        .and_then(|s| typing.infer_delay_stage_info(*duration, current_env, s).ty),
-                    advance_by: 1,
-                },
-                PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
-                    new_subject: current.and_then(|s| {
-                        typing
-                            .infer_burst_stage_info(*every, *count, current_env, s)
-                            .ty
-                    }),
-                    advance_by: 1,
-                },
-                PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
-                    unreachable!("PipeSubjectWalker handles Transform and Tap internally")
+                crate::PipeSubjectStage::ApplyRun(_) => {
+                    PipeSubjectStepOutcome::Continue { new_subject: None }
+                }
+                crate::PipeSubjectStage::CaseRun(_) => {
+                    PipeSubjectStepOutcome::Continue { new_subject: None }
                 }
             }
         },
@@ -2912,6 +2899,104 @@ value maybeJoined:Option Text =
                 );
             }
             other => panic!("expected ordinary gate after fanout, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn gate_after_joined_fanout_can_use_map_result_memo() {
+        let lowered = lower_text(
+            "gate-after-fanout-map-memo.aivi",
+            r#"
+use aivi.list (length)
+
+type User = {
+    email: Text
+}
+
+fun joinEmails:Text = items:List Text=>    "joined"
+
+value users:List User = [
+    { email: "ada@example.com" }
+]
+
+value maybeJoined:Option Text =
+    users
+     *|> .email #emails
+     <|* joinEmails
+     ?|> length emails > 0
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "gate-after-fanout-map-memo example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_gates(lowered.module());
+        let ordinary = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "maybeJoined")
+            .expect("expected ordinary gate after joined fanout with a map memo");
+
+        match &ordinary.outcome {
+            GateStageOutcome::Ordinary(stage) => {
+                assert_eq!(stage.input_subject, GateType::Primitive(BuiltinType::Text));
+                assert_eq!(
+                    stage.result_type,
+                    GateType::Option(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => panic!("expected ordinary gate after joined fanout map memo, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn gate_after_joined_fanout_can_use_join_result_memo() {
+        let lowered = lower_text(
+            "gate-after-fanout-join-memo.aivi",
+            r#"
+type User = {
+    email: Text
+}
+
+fun joinEmails:Text = items:List Text=>    "joined"
+
+value users:List User = [
+    { email: "ada@example.com" }
+]
+
+value maybeJoined:Option Text =
+    users
+     *|> .email
+     <|* joinEmails #joined
+     ?|> joined == "joined"
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "gate-after-fanout-join-memo example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_gates(lowered.module());
+        let ordinary = report
+            .stages()
+            .iter()
+            .find(|stage| item_name(lowered.module(), stage.owner) == "maybeJoined")
+            .expect("expected ordinary gate after joined fanout with a join memo");
+
+        match &ordinary.outcome {
+            GateStageOutcome::Ordinary(stage) => {
+                assert_eq!(stage.input_subject, GateType::Primitive(BuiltinType::Text));
+                assert_eq!(
+                    stage.result_type,
+                    GateType::Option(Box::new(GateType::Primitive(BuiltinType::Text)))
+                );
+            }
+            other => {
+                panic!("expected ordinary gate after joined fanout join memo, found {other:?}")
+            }
         }
     }
 

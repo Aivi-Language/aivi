@@ -56,7 +56,7 @@ pub enum SourceLifecycleNodeOutcome {
     Blocked(BlockedSourceLifecycleNode),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SourceInstanceId {
     decorator: DecoratorId,
 }
@@ -93,17 +93,17 @@ pub struct SourceOptionValueBinding {
     pub runtime_expr: GateRuntimeExpr,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceTeardownPolicy {
     DisposeOnOwnerTeardown,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceReplacementPolicy {
     DisposeSupersededBeforePublish,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceStaleWorkPolicy {
     DropStalePublications,
 }

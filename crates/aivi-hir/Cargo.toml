@@ -10,6 +10,7 @@ aivi-openapi.workspace = true
 aivi-syntax.workspace = true
 aivi-typing.workspace = true
 regex-syntax.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

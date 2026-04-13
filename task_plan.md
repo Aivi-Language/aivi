@@ -2,7 +2,8 @@
 
 ## Goal
 
-Implement the remaining `partial` and `no` items from [manual/guide/surface-feature-matrix.md](manual/guide/surface-feature-matrix.md) end to end across:
+Implement the remaining surface backlog items called out in `findings.md`, the RFC, and the
+current manual pages end to end across:
 
 - syntax / HIR
 - typed core
@@ -15,7 +16,7 @@ Do not mark the work complete until the matrix can be re-audited with proportion
 
 ## Architecture Decision
 
-Treat the matrix as a dependency-ordered language backlog, not a flat checklist.
+Treat the current surface backlog as a dependency-ordered language backlog, not a flat checklist.
 
 Implementation order:
 
@@ -23,18 +24,18 @@ Implementation order:
 2. Close runtime execution gaps for source-backed and recurrent features.
 3. Expand backend/codegen coverage only after earlier IRs carry the missing semantics cleanly.
 4. Tighten provider option execution and cross-module evidence after the runtime and lowering paths are stable.
-5. Re-audit the matrix against tests.
+5. Re-audit the backlog against tests and live docs.
 
 ## Phases
 
 | Phase | Status | Scope |
 | --- | --- | --- |
-| 1 | in_progress | Convert the matrix into concrete backlog items with exact owning layers and current blockers |
+| 1 | in_progress | Convert the current surface backlog into concrete owning-layer items with exact blockers |
 | 2 | pending | Implement missing pre-runtime core semantics (`!|>`, `~|>`, `-|>`, patch gaps where feasible) |
 | 3 | pending | Implement runtime / execute / run parity for source-backed and recurrent features |
 | 4 | pending | Expand backend / Cranelift coverage for inline case / truthy-falsy / tap / dynamic text / aggregates |
 | 5 | pending | Close provider option gaps and cross-module higher-kinded execution gaps |
-| 6 | pending | Re-run matrix verification, update docs, and summarize remaining blockers if any |
+| 6 | pending | Re-run backlog verification, update docs, and summarize remaining blockers if any |
 
 ## Backlog Buckets
 
@@ -76,7 +77,7 @@ Implementation order:
 
 ## Success Criteria
 
-- The relevant matrix rows become `yes` or remain intentionally `n/a`.
+- The relevant backlog slices become implemented or remain intentionally deferred with explicit notes.
 - New semantics have regression tests at the right layer.
 - `aivi check`, `aivi execute`, `aivi run` preparation, and `aivi compile` all agree on the implemented subset.
 - No new “accepted but not executable” surface is introduced without an explicit manual note.

@@ -4,7 +4,9 @@ use std::fmt;
 ///
 /// The current implementation supports only the RFC's v1 kind set:
 /// `Type` and right-associative arrows between `Type`-kinded arguments.
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum Kind {
     Type,
     Arrow(Box<Kind>, Box<Kind>),
@@ -53,7 +55,7 @@ define_typing_id!(pub TypeConstructorId, "type constructor table overflow");
 define_typing_id!(pub KindParameterId, "kind parameter table overflow");
 define_typing_id!(pub KindExprId, "kind expression arena overflow");
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TypeConstructor {
     name: Box<str>,
     kind: Kind,
@@ -76,7 +78,7 @@ impl TypeConstructor {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct KindParameter {
     name: Box<str>,
 }
@@ -94,7 +96,7 @@ impl KindParameter {
 }
 
 /// Focused type-expression surface for kind checking.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum KindExpr {
     Parameter(KindParameterId),
     Constructor(TypeConstructorId),
@@ -110,7 +112,7 @@ pub enum KindExpr {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct KindRecordField {
     name: Box<str>,
     ty: KindExprId,
@@ -133,7 +135,7 @@ impl KindRecordField {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct KindStore {
     constructors: Vec<TypeConstructor>,
     parameters: Vec<KindParameter>,

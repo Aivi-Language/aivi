@@ -8,7 +8,7 @@ pub enum SequenceError {
 }
 
 /// Sequence wrapper that guarantees at least one element.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NonEmpty<T> {
     first: T,
     rest: Vec<T>,
@@ -56,7 +56,7 @@ impl<T> NonEmpty<T> {
 }
 
 /// Sequence wrapper that guarantees at least two elements.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct AtLeastTwo<T> {
     first: T,
     second: T,

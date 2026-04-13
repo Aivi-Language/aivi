@@ -1,7 +1,73 @@
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackendRuntimeLinkSeed {
+    pub hir_to_backend: Box<[(hir::ItemId, BackendItemId)]>,
+}
+
+pub fn derive_backend_runtime_link_seed(
+    core: &core::Module,
+    backend: &BackendProgram,
+) -> Result<BackendRuntimeLinkSeed, BackendRuntimeLinkErrors> {
+    let mut errors = Vec::new();
+    let mut core_to_hir = BTreeMap::new();
+    let mut hir_to_backend = BTreeMap::new();
+    for (core_id, item) in core.items().iter() {
+        core_to_hir.insert(core_id, item.origin);
+    }
+    for (backend_item, item) in backend.items().iter() {
+        let Some(&hir_item) = core_to_hir.get(&item.origin) else {
+            errors.push(BackendRuntimeLinkError::MissingCoreItemOrigin {
+                backend_item,
+                core_item: item.origin,
+            });
+            continue;
+        };
+        if let Some(previous) = hir_to_backend.insert(hir_item, backend_item) {
+            errors.push(BackendRuntimeLinkError::DuplicateBackendOrigin {
+                item: hir_item,
+                first: previous,
+                second: backend_item,
+            });
+        }
+    }
+    if errors.is_empty() {
+        Ok(BackendRuntimeLinkSeed {
+            hir_to_backend: hir_to_backend
+                .into_iter()
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+        })
+    } else {
+        Err(BackendRuntimeLinkErrors::new(errors))
+    }
+}
+
 pub fn link_backend_runtime(
     assembly: HirRuntimeAssembly,
     core: &core::Module,
     backend: Arc<BackendProgram>,
+) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors> {
+    let seed = derive_backend_runtime_link_seed(core, &backend)?;
+    link_backend_runtime_with_seed(assembly, backend, &seed)
+}
+
+pub fn link_backend_runtime_with_seed(
+    assembly: HirRuntimeAssembly,
+    backend: Arc<BackendProgram>,
+    seed: &BackendRuntimeLinkSeed,
+) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors> {
+    link_backend_runtime_with_seed_and_native_kernels(
+        assembly,
+        backend,
+        std::sync::Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
+        seed,
+    )
+}
+
+pub fn link_backend_runtime_with_seed_and_native_kernels(
+    assembly: HirRuntimeAssembly,
+    backend: Arc<BackendProgram>,
+    native_kernels: std::sync::Arc<aivi_backend::NativeKernelArtifactSet>,
+    seed: &BackendRuntimeLinkSeed,
 ) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors> {
     let runtime = assembly
         .instantiate_runtime_with_value_store::<RuntimeValue, _>(MovingRuntimeValueStore::default())
@@ -10,12 +76,13 @@ pub fn link_backend_runtime(
                 error,
             }])
         })?;
-    let mut builder = LinkBuilder::new(&assembly, core, &backend);
+    let mut builder = LinkBuilder::new(&assembly, &backend, native_kernels.as_ref(), seed);
     let linked = builder.build()?;
     let mut linked_runtime = BackendLinkedRuntime {
         assembly,
         runtime,
         backend,
+        native_kernels,
         signal_items_by_handle: linked.signal_items_by_handle,
         runtime_signal_by_item: linked.runtime_signal_by_item,
         derived_signals: linked.derived_signals,
@@ -38,13 +105,15 @@ pub fn link_backend_runtime(
 /// A fully linked runtime pairing a compiled backend program with the
 /// scheduler/assembly required to tick signals.
 ///
-/// Owns an `Arc<BackendProgram>` so the runtime is `'static` and can be
-/// stored in `Arc`, sent across threads, or used at async `await` points
-/// without a lifetime coupling to the stack that produced the program (M5).
+/// Owns an `Arc<BackendProgram>` plus bundled native-kernel sidecars so the
+/// runtime is `'static` and can be stored in `Arc`, sent across threads, or
+/// used at async `await` points without a lifetime coupling to the stack that
+/// produced the program (M5).
 pub struct BackendLinkedRuntime {
     assembly: HirRuntimeAssembly,
     runtime: TaskSourceRuntime<RuntimeValue, hir::SourceDecodeProgram, MovingRuntimeValueStore>,
     backend: Arc<BackendProgram>,
+    native_kernels: std::sync::Arc<aivi_backend::NativeKernelArtifactSet>,
     signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
     runtime_signal_by_item: BTreeMap<BackendItemId, SignalHandle>,
     derived_signals: BTreeMap<DerivedHandle, LinkedDerivedSignal>,

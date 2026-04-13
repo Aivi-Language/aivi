@@ -11,7 +11,7 @@ use crate::{Kind, KindExprId, KindStore, PrimitiveType};
 /// listed here. There is no runtime extension point: adding a new built-in provider requires
 /// modifying this enum, its `ALL` constant, the `parse` and `key` methods, and the `contract`
 /// method. It is **not** extensible without a code change.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinSourceProvider {
     HttpGet,
     HttpPost,
@@ -395,14 +395,14 @@ impl SourceLifecycleContract {
 
 /// Whether a built-in source should request explicit cancellation of in-flight work when it is
 /// replaced, suspended, or disposed.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceCancellationPolicy {
     ProviderManaged,
     CancelInFlight,
 }
 
 /// Intrinsic recurrent wakeup that the provider guarantees without extra option slots.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceContractIntrinsicWakeup {
     Timer,
     /// Indicates that the provider fires on its own internal trigger (e.g. an incoming stream
@@ -440,7 +440,7 @@ impl SourceOptionWakeupContract {
 }
 
 /// Closed wakeup causes that can be attached to source option slots today.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SourceOptionWakeupCause {
     RetryPolicy,
     PollingPolicy,

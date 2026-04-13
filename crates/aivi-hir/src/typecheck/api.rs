@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ConstraintClass {
     Eq,
     Default,
@@ -124,7 +124,7 @@ pub struct TypeCheckReport {
     elisions: Vec<DefaultRecordElision>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ClassMemberImplementation {
     Builtin,
     SameModuleInstance {
@@ -136,7 +136,7 @@ pub enum ClassMemberImplementation {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedClassMemberDispatch {
     pub member: ClassMemberResolution,
     pub subject: TypeBinding,

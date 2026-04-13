@@ -4,7 +4,7 @@ use aivi_hir::{BuiltinType, ItemId as HirItemId};
 
 use crate::LayoutId;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum AbiPassMode {
     ByValue,
     ByReference,
@@ -19,7 +19,7 @@ impl fmt::Display for AbiPassMode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PrimitiveType {
     Int,
     Float,
@@ -102,20 +102,20 @@ impl fmt::Display for PrimitiveType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RecordFieldLayout {
     pub name: Box<str>,
     pub layout: LayoutId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct VariantLayout {
     pub name: Box<str>,
     pub field_count: usize,
     pub payload: Option<LayoutId>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LayoutKind {
     Primitive(PrimitiveType),
     Tuple(Vec<LayoutId>),
@@ -192,7 +192,7 @@ impl LayoutKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Layout {
     pub abi: AbiPassMode,
     pub kind: LayoutKind,

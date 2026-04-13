@@ -32,7 +32,7 @@ pub use runtime_adapter::{
     RuntimePlanNode, RuntimePlanNodeKind, RuntimePropertyBinding, RuntimeSetterBinding,
     RuntimeShowMountPolicy, RuntimeShowNode, RuntimeWidgetNode, RuntimeWithNode,
     WidgetRuntimeAdapterError, WidgetRuntimeAdapterErrors, WidgetRuntimeAssembly,
-    WidgetRuntimeAssemblyBuilder, assemble_widget_runtime,
+    WidgetRuntimeAssemblyBuilder, WidgetRuntimeAssemblyParts, assemble_widget_runtime,
 };
 pub use schema::{
     GtkBoolPropertySetter, GtkChildContainerKind, GtkChildGroupDescriptor, GtkChildMountRoute,

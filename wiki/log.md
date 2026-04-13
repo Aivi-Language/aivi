@@ -123,6 +123,33 @@ Hardened the GLib runtime adapter so async wake-driven draining can no longer ru
 - Explicit synchronous drains (`queue_publication_now`, `tick_now`) still run until idle
 - Added stress coverage for long worker-publication chains and linked-runtime stop safety after a queued follow-up callback
 
+## [2026-04-12] ingest | source-free run artifact boundary
+
+Documented the new source-free runnable bundle boundary after landing serialized run-artifact
+support.
+
+- updated [cli.md](cli.md) for `run-artifact.json`, source-free `build`, and the remaining compiled-payload gap
+- updated [runtime.md](runtime.md) for `BackendRuntimeLinkSeed` / `link_backend_runtime_with_seed()`
+- refreshed [codebase-audit-2026-04-12.md](codebase-audit-2026-04-12.md) so the closed source-carrying gap and the remaining compiled-payload gap are separated cleanly
+
+## [2026-04-12] ingest | removed obsolete surface matrix refs
+
+Kept `manual/guide/surface-feature-matrix.md` deleted to match `main` and cleaned active references to
+it from current wiki/task notes.
+
+- updated [surface-syntax.md](surface-syntax.md), `task_plan.md`, and `findings.md`
+
+## [2026-04-12] ingest | native artifact bundle launch
+
+Closed compiled bundle launch gap by teaching `aivi build` / `aivi run` artifacts to emit and
+consume precompiled native kernel sidecars alongside serialized backend metadata payloads.
+
+- updated [cli.md](cli.md) for native-sidecar bundle launch semantics
+- updated [runtime.md](runtime.md) for `link_backend_runtime_with_seed_and_native_kernels()`
+- refreshed [codebase-audit-2026-04-12.md](codebase-audit-2026-04-12.md) to mark the compiled
+  bundle launch gap closed
+- historical mentions inside this append-only log remain as history, not live documentation
+
 ## [2026-04-07] ingest | From signal fan-out sugar
 
 Implemented top-level `from source = { ... }` syntax for grouped derived signals.
@@ -142,6 +169,11 @@ Added a focused GTK regression test in `crates/aivi-cli/src/run_session.rs` that
 Documented the follow-up runtime and GTK bridge changes behind the Reversi latency fix.
 
 - `crates/aivi-runtime/src/glib_adapter.rs`: direct UI publications can now drain only the current scheduler queue instead of also draining timer wakeups
+
+## [2026-04-12] query | Wadler-style audit
+
+Audited AIVI's language shape, stdlib, and executable typeclass support through a Philip Wadler lens.  
+Added [wadler-audit.md](wadler-audit.md); key findings were strong algebraic intent, a less uniform builtin-vs-authored execution story, and RFC drift behind the current executable class support.
 - `crates/aivi-gtk/src/schema.rs` + `crates/aivi-gtk/src/host.rs`: buttons now support `focusable={Bool}` so board cells can suppress focus flashes
 
 ## [2026-04-08] ingest | ADT companion function syntax

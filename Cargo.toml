@@ -34,6 +34,8 @@ aivi-lsp = { path = "crates/aivi-lsp" }
 insta = { version = "1", features = ["ron"] }
 regex-syntax = "0.8.10"
 rustc-hash = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -929,7 +929,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         site,
                         start_stage_span: node.start_stage_span,
                         owner_signal,
-                        plan: plan.clone(),
+                        wakeup_signal: plan.wakeup_signal,
                     });
                 }
                 hir::RecurrenceNodeOutcome::Blocked(blocked) => {
@@ -1097,6 +1097,19 @@ pub struct HirRuntimeAssembly {
     db_changed_bindings: Box<[HirDbChangedBinding]>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HirRuntimeAssemblyParts {
+    pub graph: crate::SignalGraphParts,
+    pub reactive_program: crate::ReactiveProgramParts,
+    pub owners: Box<[HirOwnerBinding]>,
+    pub signals: Box<[HirSignalBinding]>,
+    pub sources: Box<[HirSourceBinding]>,
+    pub tasks: Box<[HirTaskBinding]>,
+    pub gates: Box<[HirGateStageBinding]>,
+    pub recurrences: Box<[HirRecurrenceBinding]>,
+    pub db_changed_bindings: Box<[HirDbChangedBinding]>,
+}
+
 impl HirRuntimeAssembly {
     pub fn graph(&self) -> &SignalGraph {
         &self.graph
@@ -1130,7 +1143,7 @@ impl HirRuntimeAssembly {
         &self.recurrences
     }
 
-    pub(crate) fn db_changed_bindings(&self) -> &[HirDbChangedBinding] {
+    pub fn db_changed_bindings(&self) -> &[HirDbChangedBinding] {
         &self.db_changed_bindings
     }
 
@@ -1184,15 +1197,65 @@ impl HirRuntimeAssembly {
         }
         Ok(runtime)
     }
+
+    pub fn into_parts(self) -> HirRuntimeAssemblyParts {
+        let Self {
+            graph,
+            reactive_program,
+            owners,
+            signals,
+            sources,
+            tasks,
+            gates,
+            recurrences,
+            db_changed_bindings,
+        } = self;
+        HirRuntimeAssemblyParts {
+            graph: graph.into_parts(),
+            reactive_program: reactive_program.into_parts(),
+            owners,
+            signals,
+            sources,
+            tasks,
+            gates,
+            recurrences,
+            db_changed_bindings,
+        }
+    }
+
+    pub fn from_parts(parts: HirRuntimeAssemblyParts) -> Self {
+        let HirRuntimeAssemblyParts {
+            graph,
+            reactive_program,
+            owners,
+            signals,
+            sources,
+            tasks,
+            gates,
+            recurrences,
+            db_changed_bindings,
+        } = parts;
+        Self {
+            graph: SignalGraph::from_parts(graph),
+            reactive_program: ReactiveProgram::from_parts(reactive_program),
+            owners,
+            signals,
+            sources,
+            tasks,
+            gates,
+            recurrences,
+            db_changed_bindings,
+        }
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct HirDbChangedBinding {
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+pub struct HirDbChangedBinding {
     pub table_item: hir::ItemId,
     pub changed_signal: hir::ItemId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HirOwnerBinding {
     pub item: hir::ItemId,
     pub span: SourceSpan,
@@ -1322,17 +1385,18 @@ pub struct HirReactiveUpdateBinding {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HirCompiledRuntimeExpr {
     pub backend: Arc<BackendProgram>,
+    pub native_kernels: Arc<aivi_backend::NativeKernelArtifactSet>,
     pub entry_item: BackendItemId,
     pub required_signals: Box<[HirCompiledRuntimeExprSignal]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HirCompiledRuntimeExprSignal {
     pub signal: SignalHandle,
     pub backend_item: BackendItemId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HirSourceBinding {
     pub owner: hir::ItemId,
     pub source_instance: hir::SourceInstanceId,
@@ -1343,7 +1407,7 @@ pub struct HirSourceBinding {
     pub spec: SourceRuntimeSpec<hir::SourceDecodeProgram>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HirTaskBinding {
     pub owner: hir::ItemId,
     pub owner_handle: OwnerHandle,
@@ -1352,7 +1416,9 @@ pub struct HirTaskBinding {
     pub spec: TaskRuntimeSpec,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct HirGateStageId {
     pub owner: hir::ItemId,
     pub pipe_expr: hir::ExprId,
@@ -1369,13 +1435,13 @@ impl HirGateStageId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum HirRuntimeGatePlan {
     Ordinary(hir::OrdinaryGateStage),
     SignalFilter(hir::SignalGateFilter),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HirGateStageBinding {
     pub site: HirGateStageId,
     pub stage_span: SourceSpan,
@@ -1384,7 +1450,9 @@ pub struct HirGateStageBinding {
     pub plan: HirRuntimeGatePlan,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct HirRecurrenceNodeId {
     pub owner: hir::ItemId,
     pub pipe_expr: hir::ExprId,
@@ -1401,12 +1469,12 @@ impl HirRecurrenceNodeId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HirRecurrenceBinding {
     pub site: HirRecurrenceNodeId,
     pub start_stage_span: SourceSpan,
     pub owner_signal: Option<DerivedHandle>,
-    pub plan: hir::RecurrenceNodePlan,
+    pub wakeup_signal: Option<hir::ItemId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2300,6 +2368,7 @@ fn compile_runtime_expr_fragment(
     )?;
     Ok(HirCompiledRuntimeExpr {
         backend: Arc::new(backend),
+        native_kernels: Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
         entry_item,
         required_signals,
     })
@@ -2483,8 +2552,7 @@ mod tests {
             .unwrap_or_else(|| panic!("expected item named {name}"))
     }
 
-    #[test]
-    fn assembles_signal_graph_and_source_specs_from_hir_reports() {
+    fn runtime_positive_fixture() -> (hir::LoweringResult, HirRuntimeAssembly) {
         let lowered = lower_text(
             "runtime-hir-adapter-positive.aivi",
             r#"
@@ -2523,7 +2591,13 @@ signal retried : Signal Int =
         );
 
         let assembly = assemble_hir_runtime(lowered.module())
-            .expect("positive runtime adapter fixture should assemble");
+            .expect("positive runtime fixture should assemble");
+        (lowered, assembly)
+    }
+
+    #[test]
+    fn assembles_signal_graph_and_source_specs_from_hir_reports() {
+        let (lowered, assembly) = runtime_positive_fixture();
 
         let api_host = assembly
             .signal(item_id(lowered.module(), "apiHost"))
@@ -2600,7 +2674,10 @@ signal retried : Signal Int =
             .find(|node| node.site.owner == retried_id)
             .expect("retried recurrence handoff should exist");
         assert_eq!(recurrence.owner_signal, retried.derived());
-        assert_eq!(recurrence.plan.wakeup.kind(), RecurrenceWakeupKind::Timer);
+        assert_eq!(
+            recurrence.wakeup_signal, None,
+            "timer recurrence handoff should not invent an upstream wakeup signal"
+        );
 
         let runtime: TaskSourceRuntime<i32, hir::SourceDecodeProgram> = assembly
             .instantiate_runtime()
@@ -2642,6 +2719,13 @@ signal retried : Signal Int =
             program.partitions().len() >= assembly.graph().batches().len(),
             "reactive program partitions should cover at least the scheduled topology batches"
         );
+    }
+
+    #[test]
+    fn runtime_assembly_roundtrips_through_parts() {
+        let (_, assembly) = runtime_positive_fixture();
+        let rebuilt = HirRuntimeAssembly::from_parts(assembly.clone().into_parts());
+        assert_eq!(rebuilt, assembly);
     }
 
     #[test]
@@ -2896,7 +2980,7 @@ signal gated : Signal Int =
             .expect("gated recurrence handoff should exist");
         assert_eq!(recurrence.owner_signal, Some(derived));
         assert_eq!(
-            recurrence.plan.wakeup_signal,
+            recurrence.wakeup_signal,
             Some(user_events_id),
             "accumulate recurrence handoff should preserve its upstream wakeup signal"
         );

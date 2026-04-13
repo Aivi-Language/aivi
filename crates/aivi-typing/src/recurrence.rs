@@ -13,7 +13,7 @@ use crate::source_contracts::{
 };
 
 /// Closed lowering targets that RFC §11.7 currently permits for recurrent pipes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceTarget {
     Signal,
     Task,
@@ -21,7 +21,7 @@ pub enum RecurrenceTarget {
 }
 
 /// Explicit evidence the current frontend can carry forward into recurrence planning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceTargetEvidence {
     SignalItemBody,
     ExplicitSignalAnnotation,
@@ -40,7 +40,7 @@ impl RecurrenceTargetEvidence {
 }
 
 /// Focused recurrence-lowering decision chosen before wakeup and scheduler checks.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RecurrencePlan {
     target: RecurrenceTarget,
     evidence: RecurrenceTargetEvidence,
@@ -64,7 +64,7 @@ impl RecurrencePlan {
 }
 
 /// Focused planning error for recurrent pipes whose lowering target is still unknown.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceTargetError {
     MissingExplicitTarget,
 }
@@ -82,7 +82,7 @@ impl fmt::Display for RecurrenceTargetError {
 impl Error for RecurrenceTargetError {}
 
 /// Closed explicit wakeup classes that RFC §11.7 currently permits for recurrent pipes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceWakeupKind {
     Timer,
     Backoff,
@@ -91,7 +91,7 @@ pub enum RecurrenceWakeupKind {
 }
 
 /// Built-in source-side proof the current compiler can carry into recurrence wakeup planning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinSourceWakeupCause {
     ProviderTimer,
     RetryPolicy,
@@ -113,7 +113,7 @@ impl BuiltinSourceWakeupCause {
 }
 
 /// Custom source-side proof the current compiler can carry into recurrence wakeup planning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CustomSourceWakeupCause {
     ReactiveInputs,
     DeclaredWakeup(RecurrenceWakeupKind),
@@ -129,7 +129,7 @@ impl CustomSourceWakeupCause {
 }
 
 /// Explicit non-source wakeup proofs the current frontend can carry today.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum NonSourceWakeupCause {
     ExplicitTimer,
     ExplicitBackoff,
@@ -145,7 +145,7 @@ impl NonSourceWakeupCause {
 }
 
 /// Explicit wakeup evidence the current frontend can already prove for recurrent pipes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RecurrenceWakeupEvidence {
     BuiltinSource {
         provider: BuiltinSourceProvider,
@@ -200,7 +200,7 @@ impl RecurrenceWakeupEvidence {
 }
 
 /// Focused wakeup proof chosen before recurrence node lowering.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RecurrenceWakeupPlan {
     kind: RecurrenceWakeupKind,
     evidence: RecurrenceWakeupEvidence,
@@ -229,7 +229,7 @@ impl RecurrenceWakeupPlan {
 /// structurally: which built-in provider is selected, whether named wakeup policy slots such as
 /// `retry` / `refreshEvery` / `refreshOn` are present, and whether source arguments or options are
 /// reactive. The actual option-expression types still belong to later source typing work.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SourceRecurrenceWakeupContext {
     provider: BuiltinSourceProvider,
     has_retry_policy: bool,
@@ -297,7 +297,7 @@ impl SourceRecurrenceWakeupContext {
 /// provider metadata. Resolved HIR currently populates that hook only from same-module
 /// `provider qualified.name` declarations, and later richer provider-contract surfaces can extend
 /// it without reshaping recurrence planning.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct CustomSourceRecurrenceWakeupContext {
     declared_wakeup: Option<RecurrenceWakeupKind>,
     has_reactive_inputs: bool,

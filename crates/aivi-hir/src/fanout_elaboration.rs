@@ -9,7 +9,8 @@ use crate::{
     },
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeSubjectStepOutcome,
-        PipeSubjectWalker, truthy_falsy_pair_stages, walk_expr_tree,
+        PipeSubjectWalker, extend_pipe_env_with_stage_result_memo, pipe_stage_expr_env,
+        walk_expr_tree,
     },
 };
 
@@ -241,82 +242,39 @@ fn collect_fanout_pipe(
     typing: &mut GateTypeContext<'_>,
     segments: &mut Vec<FanoutSegmentElaboration>,
 ) {
-    // Collect the stages snapshot once for truthy_falsy_pair_stages lookups.
-    let all_stages = pipe.stages.iter().collect::<Vec<_>>();
     PipeSubjectWalker::new(pipe, env, typing).walk(
         typing,
-        |stage_index, stage, current, current_env, typing| {
-            match &stage.kind {
+        |stage, current, current_env, typing| match stage {
+            crate::PipeSubjectStage::Single { stage, .. } => match &stage.kind {
                 PipeStageKind::Gate { expr } => PipeSubjectStepOutcome::Continue {
                     new_subject: current
                         .and_then(|s| typing.infer_gate_stage(*expr, current_env, s)),
-                    advance_by: 1,
                 },
-                PipeStageKind::Map { expr } => {
-                    let segment = pipe
-                        .fanout_segment(stage_index)
-                        .expect("map stages should expose a fan-out segment");
-                    let outcome =
-                        elaborate_fanout_segment(module, &segment, current, current_env, typing);
-                    segments.push(FanoutSegmentElaboration {
-                        owner,
-                        pipe_expr,
-                        map_stage_index: stage_index,
-                        map_stage_span: stage.span,
-                        map_expr: *expr,
-                        outcome: outcome.clone(),
-                    });
-                    let advance = segment.next_stage_index().saturating_sub(stage_index);
-                    PipeSubjectStepOutcome::Continue {
-                        new_subject: match outcome {
-                            FanoutSegmentOutcome::Planned(plan) => Some(plan.result_type),
-                            FanoutSegmentOutcome::Blocked(_) => None,
-                        },
-                        advance_by: advance.max(1),
-                    }
-                }
                 PipeStageKind::FanIn { expr } => PipeSubjectStepOutcome::Continue {
                     new_subject: current
                         .and_then(|s| typing.infer_fanin_stage(*expr, current_env, s)),
-                    advance_by: 1,
                 },
-                PipeStageKind::Truthy { .. } | PipeStageKind::Falsy { .. } => {
-                    let Some(pair) = truthy_falsy_pair_stages(&all_stages, stage_index) else {
-                        return PipeSubjectStepOutcome::Continue {
-                            new_subject: None,
-                            advance_by: 1,
-                        };
-                    };
-                    let advance = pair.next_index.saturating_sub(stage_index);
-                    PipeSubjectStepOutcome::Continue {
-                        new_subject: current
-                            .and_then(|s| typing.infer_truthy_falsy_pair(&pair, current_env, s)),
-                        advance_by: advance.max(1),
-                    }
+                PipeStageKind::Apply { .. } => {
+                    unreachable!("subject walker groups apply runs")
                 }
                 PipeStageKind::Case { .. }
-                | PipeStageKind::Apply { .. }
                 | PipeStageKind::RecurStart { .. }
                 | PipeStageKind::RecurStep { .. }
                 | PipeStageKind::Validate { .. }
-                | PipeStageKind::Accumulate { .. } => PipeSubjectStepOutcome::Continue {
-                    new_subject: None,
-                    advance_by: 1,
-                },
+                | PipeStageKind::Accumulate { .. } => {
+                    PipeSubjectStepOutcome::Continue { new_subject: None }
+                }
                 PipeStageKind::Previous { expr } => PipeSubjectStepOutcome::Continue {
                     new_subject: current
                         .and_then(|s| typing.infer_previous_stage_info(*expr, current_env, s).ty),
-                    advance_by: 1,
                 },
                 PipeStageKind::Diff { expr } => PipeSubjectStepOutcome::Continue {
                     new_subject: current
                         .and_then(|s| typing.infer_diff_stage_info(*expr, current_env, s).ty),
-                    advance_by: 1,
                 },
                 PipeStageKind::Delay { duration } => PipeSubjectStepOutcome::Continue {
                     new_subject: current
                         .and_then(|s| typing.infer_delay_stage_info(*duration, current_env, s).ty),
-                    advance_by: 1,
                 },
                 PipeStageKind::Burst { every, count } => PipeSubjectStepOutcome::Continue {
                     new_subject: current.and_then(|s| {
@@ -324,12 +282,44 @@ fn collect_fanout_pipe(
                             .infer_burst_stage_info(*every, *count, current_env, s)
                             .ty
                     }),
-                    advance_by: 1,
                 },
-                // Transform and Tap are handled by the walker itself.
-                PipeStageKind::Transform { .. } | PipeStageKind::Tap { .. } => {
-                    unreachable!("PipeSubjectWalker handles Transform and Tap internally")
+                PipeStageKind::Map { .. }
+                | PipeStageKind::Truthy { .. }
+                | PipeStageKind::Falsy { .. }
+                | PipeStageKind::Transform { .. }
+                | PipeStageKind::Tap { .. } => {
+                    unreachable!(
+                        "subject walker groups fanout segments/pairs and consumes transform/tap"
+                    )
                 }
+            },
+            crate::PipeSubjectStage::FanoutSegment(segment) => {
+                let outcome =
+                    elaborate_fanout_segment(module, segment, current, current_env, typing);
+                segments.push(FanoutSegmentElaboration {
+                    owner,
+                    pipe_expr,
+                    map_stage_index: segment.map_stage_index(),
+                    map_stage_span: segment.map_stage().span,
+                    map_expr: segment.map_expr(),
+                    outcome: outcome.clone(),
+                });
+                PipeSubjectStepOutcome::Continue {
+                    new_subject: match outcome {
+                        FanoutSegmentOutcome::Planned(plan) => Some(plan.result_type),
+                        FanoutSegmentOutcome::Blocked(_) => None,
+                    },
+                }
+            }
+            crate::PipeSubjectStage::TruthyFalsyPair(pair) => PipeSubjectStepOutcome::Continue {
+                new_subject: current
+                    .and_then(|s| typing.infer_truthy_falsy_pair(pair, current_env, s)),
+            },
+            crate::PipeSubjectStage::ApplyRun(_) => {
+                PipeSubjectStepOutcome::Continue { new_subject: None }
+            }
+            crate::PipeSubjectStage::CaseRun(_) => {
+                PipeSubjectStepOutcome::Continue { new_subject: None }
             }
         },
     );
@@ -402,13 +392,25 @@ pub(crate) fn elaborate_fanout_segment(
         }
     };
 
+    let mapped_collection_type = typing.apply_fanout_plan(
+        FanoutPlanner::plan(FanoutStageKind::Map, carrier),
+        mapped_element_type.clone(),
+    );
+    let mut segment_env = env.clone();
+    extend_pipe_env_with_stage_result_memo(
+        &mut segment_env,
+        segment.map_stage(),
+        &mapped_collection_type,
+    );
     let mut filters = Vec::new();
     for (offset, stage) in segment.filter_stages().enumerate() {
         let PipeStageKind::Gate { expr } = stage.kind else {
             unreachable!("validated fan-out filters must use `?|>`");
         };
         let stage_index = segment.map_stage_index() + 1 + offset;
-        match lower_fanout_filter_predicate(module, expr, env, &mapped_element_type, typing) {
+        let filter_env = pipe_stage_expr_env(&segment_env, stage, &mapped_collection_type);
+        match lower_fanout_filter_predicate(module, expr, &filter_env, &mapped_element_type, typing)
+        {
             Ok(runtime_predicate) => {
                 filters.push(FanoutFilterPlan {
                     stage_index,
@@ -426,6 +428,7 @@ pub(crate) fn elaborate_fanout_segment(
                 });
             }
         }
+        extend_pipe_env_with_stage_result_memo(&mut segment_env, stage, &mapped_collection_type);
     }
     if !blockers.is_empty() {
         return FanoutSegmentOutcome::Blocked(BlockedFanoutSegment {
@@ -434,10 +437,6 @@ pub(crate) fn elaborate_fanout_segment(
         });
     }
 
-    let mapped_collection_type = typing.apply_fanout_plan(
-        FanoutPlanner::plan(FanoutStageKind::Map, carrier),
-        mapped_element_type.clone(),
-    );
     let mut result_type = mapped_collection_type.clone();
     let mut join = None;
 
@@ -445,7 +444,8 @@ pub(crate) fn elaborate_fanout_segment(
         let join_expr = segment
             .join_expr()
             .expect("join stage index implies a join expression");
-        let join_info = typing.infer_pipe_body(join_expr, env, &mapped_collection_type);
+        let join_env = pipe_stage_expr_env(&segment_env, stage, &mapped_collection_type);
+        let join_info = typing.infer_pipe_body(join_expr, &join_env, &mapped_collection_type);
         let mut join_blockers = join_info
             .issues
             .into_iter()
@@ -470,7 +470,7 @@ pub(crate) fn elaborate_fanout_segment(
         let runtime_expr = match lower_gate_pipe_body_runtime_expr(
             module,
             join_expr,
-            env,
+            &join_env,
             &collection_subject,
             typing,
         ) {
@@ -899,6 +899,92 @@ value joinedEmails:Text =
                     GateType::List(Box::new(GateType::Primitive(BuiltinType::Text)))
                 );
                 assert_eq!(plan.result_type, GateType::Primitive(BuiltinType::Text));
+            }
+            other => panic!("expected planned joined fan-out segment, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_joined_fanout_with_join_subject_memo() {
+        let lowered = lower_text(
+            "fanout-join-subject-memo.aivi",
+            r#"
+use aivi.list (length)
+
+value joinedTotal:Int =
+    [1, 2, 3]
+     *|> . + 1
+     <|* #mapped length mapped
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "fan-out join subject memo example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_fanouts(lowered.module());
+        let joined = report
+            .segments()
+            .iter()
+            .find(|segment| item_name(lowered.module(), segment.owner) == "joinedTotal")
+            .expect("expected joined fan-out segment using a join subject memo");
+
+        match &joined.outcome {
+            FanoutSegmentOutcome::Planned(plan) => {
+                let join = plan
+                    .join
+                    .as_ref()
+                    .expect("joined fan-out should record `<|*`");
+                assert_eq!(
+                    join.collection_subject,
+                    GateType::List(Box::new(GateType::Primitive(BuiltinType::Int)))
+                );
+                assert_eq!(join.result_type, GateType::Primitive(BuiltinType::Int));
+            }
+            other => panic!("expected planned joined fan-out segment, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_joined_fanout_with_filter_memos_before_join() {
+        let lowered = lower_text(
+            "fanout-filter-memos-before-join.aivi",
+            r#"
+use aivi.list (length)
+
+value joinedTotal:Int =
+    [1, 2, 3]
+     *|> . + 1
+     ?|> #values length values > 0 #filtered
+     <|* length filtered
+"#,
+        );
+        assert!(
+            !lowered.has_errors(),
+            "fan-out filter memo example should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+
+        let report = elaborate_fanouts(lowered.module());
+        let joined = report
+            .segments()
+            .iter()
+            .find(|segment| item_name(lowered.module(), segment.owner) == "joinedTotal")
+            .expect("expected joined fan-out segment using filter memos");
+
+        match &joined.outcome {
+            FanoutSegmentOutcome::Planned(plan) => {
+                assert_eq!(plan.filters.len(), 1);
+                let join = plan
+                    .join
+                    .as_ref()
+                    .expect("joined fan-out should record `<|*`");
+                assert_eq!(
+                    join.collection_subject,
+                    GateType::List(Box::new(GateType::Primitive(BuiltinType::Int)))
+                );
+                assert_eq!(join.result_type, GateType::Primitive(BuiltinType::Int));
             }
             other => panic!("expected planned joined fan-out segment, found {other:?}"),
         }

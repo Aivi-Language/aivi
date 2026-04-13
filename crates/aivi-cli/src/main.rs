@@ -67,6 +67,7 @@ use gtk::{glib, prelude::*};
 include!("main_parts/dispatch.rs");
 include!("main_parts/workspace.rs");
 include!("main_parts/run_model.rs");
+include!("main_parts/run_artifact.rs");
 include!("main_parts/check_execute.rs");
 include!("main_parts/run_prepare.rs");
 include!("main_parts/run_hydration.rs");

@@ -156,21 +156,26 @@ struct RunSessionLifecycle {
 
 fn render_backend_runtime_link_error(
     error: &aivi_runtime::BackendRuntimeLinkError,
-    module: &HirModule,
+    module: Option<&HirModule>,
     backend: &BackendProgram,
 ) -> String {
-    let hir_item_name = |item: HirItemId| match &module.items()[item] {
-        Item::Type(item) => item.name.text(),
-        Item::Value(item) => item.name.text(),
-        Item::Function(item) => item.name.text(),
-        Item::Signal(item) => item.name.text(),
-        Item::Class(item) => item.name.text(),
-        Item::Domain(item) => item.name.text(),
-        Item::SourceProviderContract(_)
-        | Item::Instance(_)
-        | Item::Use(_)
-        | Item::Export(_)
-        | Item::Hoist(_) => "<anonymous>",
+    let hir_item_name = |item: HirItemId| {
+        module
+            .and_then(|module| module.items().get(item))
+            .map(|item| match item {
+                Item::Type(item) => item.name.text(),
+                Item::Value(item) => item.name.text(),
+                Item::Function(item) => item.name.text(),
+                Item::Signal(item) => item.name.text(),
+                Item::Class(item) => item.name.text(),
+                Item::Domain(item) => item.name.text(),
+                Item::SourceProviderContract(_)
+                | Item::Instance(_)
+                | Item::Use(_)
+                | Item::Export(_)
+                | Item::Hoist(_) => "<anonymous>",
+            })
+            .unwrap_or("<unknown>")
     };
     match error {
         aivi_runtime::BackendRuntimeLinkError::DuplicateBackendOrigin {
@@ -957,27 +962,33 @@ where
     );
     let RunArtifact {
         view_name,
-        module,
+        patterns,
         bridge,
         hydration_inputs,
         required_signal_globals,
         runtime_assembly,
-        core,
+        runtime_link,
         backend,
+        backend_native_kernels,
         event_handlers,
         stub_signal_defaults,
     } = artifact;
     let runtime_link_started = Instant::now();
-    let linked =
-        link_backend_runtime(runtime_assembly, &core, backend.clone()).map_err(|errors| {
-            let mut rendered = String::from("failed to link backend runtime for `aivi run`:\n");
-            for error in errors.errors() {
-                rendered.push_str("- ");
-                rendered.push_str(&render_backend_runtime_link_error(error, &module, &backend));
-                rendered.push('\n');
-            }
-            rendered
-        })?;
+    let linked = aivi_runtime::link_backend_runtime_with_seed_and_native_kernels(
+        runtime_assembly,
+        backend.clone(),
+        backend_native_kernels.clone(),
+        &runtime_link,
+    )
+    .map_err(|errors| {
+        let mut rendered = String::from("failed to link backend runtime for `aivi run`:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&render_backend_runtime_link_error(error, None, &backend));
+            rendered.push('\n');
+        }
+        rendered
+    })?;
     let runtime_link = runtime_link_started.elapsed();
     record_startup_stage(
         &mut startup_metrics,
@@ -1051,7 +1062,7 @@ where
         hydration: RunHydrationCoordinator::new(
             Arc::new(RunHydrationStaticState {
                 view_name: view_name.clone(),
-                module,
+                patterns,
                 bridge,
                 inputs: hydration_inputs,
             }),
@@ -2604,7 +2615,7 @@ export main
         let (path, artifact) = prepare_reversi_run();
         let shared = RunHydrationStaticState {
             view_name: artifact.view_name.clone(),
-            module: artifact.module.clone(),
+            patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
         };
