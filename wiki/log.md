@@ -99,6 +99,33 @@ Hardened the GLib runtime adapter so async wake-driven draining can no longer ru
 - Explicit synchronous drains (`queue_publication_now`, `tick_now`) still run until idle
 - Added stress coverage for long worker-publication chains and linked-runtime stop safety after a queued follow-up callback
 
+## [2026-04-12] ingest | source-free run artifact boundary
+
+Documented the new source-free runnable bundle boundary after landing serialized run-artifact
+support.
+
+- updated [cli.md](cli.md) for `run-artifact.json`, source-free `build`, and the remaining compiled-payload gap
+- updated [runtime.md](runtime.md) for `BackendRuntimeLinkSeed` / `link_backend_runtime_with_seed()`
+- refreshed [codebase-audit-2026-04-12.md](codebase-audit-2026-04-12.md) so the closed source-carrying gap and the remaining compiled-payload gap are separated cleanly
+
+## [2026-04-12] ingest | removed obsolete surface matrix refs
+
+Kept `manual/guide/surface-feature-matrix.md` deleted to match `main` and cleaned active references to
+it from current wiki/task notes.
+
+- updated [surface-syntax.md](surface-syntax.md), `task_plan.md`, and `findings.md`
+
+## [2026-04-12] ingest | native artifact bundle launch
+
+Closed compiled bundle launch gap by teaching `aivi build` / `aivi run` artifacts to emit and
+consume precompiled native kernel sidecars alongside serialized backend metadata payloads.
+
+- updated [cli.md](cli.md) for native-sidecar bundle launch semantics
+- updated [runtime.md](runtime.md) for `link_backend_runtime_with_seed_and_native_kernels()`
+- refreshed [codebase-audit-2026-04-12.md](codebase-audit-2026-04-12.md) to mark the compiled
+  bundle launch gap closed
+- historical mentions inside this append-only log remain as history, not live documentation
+
 ## [2026-04-07] ingest | From signal fan-out sugar
 
 Implemented top-level `from source = { ... }` syntax for grouped derived signals.

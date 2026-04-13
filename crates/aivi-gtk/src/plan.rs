@@ -7,7 +7,9 @@ use aivi_hir::{
 };
 
 /// One node in the lowered widget plan arena.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct PlanNodeId(u32);
 
 impl PlanNodeId {
@@ -31,7 +33,7 @@ impl fmt::Display for PlanNodeId {
 }
 
 /// Stable identity imported from HIR so later runtime layers can preserve widget/control identity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum StableNodeId {
     Markup(MarkupNodeId),
     Control(ControlNodeId),
@@ -351,7 +353,7 @@ pub enum PropertyPlan {
 }
 
 /// Static property initialization that requires no runtime subscription.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StaticPropertyPlan {
     pub site: AttributeSite,
     pub name: Name,
@@ -359,7 +361,7 @@ pub struct StaticPropertyPlan {
 }
 
 /// Surface-stable static property payload.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StaticPropertyValue {
     ImplicitTrue,
     Text(TextLiteral),
@@ -376,20 +378,20 @@ pub struct SetterBindingPlan {
 }
 
 /// One value source for a direct setter binding.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SetterSource {
     Expr(ExprId),
     InterpolatedText(TextLiteral),
 }
 
 /// Concrete update mode mandated by the RFC.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SetterUpdateStrategy {
     DirectSetter,
 }
 
 /// Teardown work required for one setter binding.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum SetterTeardown {
     CancelSubscription,
 }
@@ -405,19 +407,19 @@ pub struct EventHookPlan {
 }
 
 /// Concrete event hookup mode mandated by the RFC.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum EventHookStrategy {
     DirectSignal,
 }
 
 /// Teardown work required for one event hookup.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum EventHookTeardown {
     DisconnectHandler,
 }
 
 /// Stable location for one lowered attribute site.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AttributeSite {
     pub owner: StableNodeId,
     pub index: usize,
@@ -433,7 +435,7 @@ pub struct ShowNode {
 }
 
 /// Presence policy preserved for show/hide lowering.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ShowMountPolicy {
     UnmountWhenHidden,
     KeepMounted { decision: ExprId },
@@ -450,7 +452,7 @@ pub struct EachNode {
 }
 
 /// Child-management strategy for repeated subtrees.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum RepeatedChildPolicy {
     Positional {
         updates: ChildUpdateMode,
@@ -462,7 +464,7 @@ pub enum RepeatedChildPolicy {
 }
 
 /// Repeated-child update mode. Kept explicit so later runtime work cannot regress into VDOM diffing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ChildUpdateMode {
     Localized,
 }

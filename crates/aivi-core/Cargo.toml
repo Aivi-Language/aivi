@@ -8,6 +8,7 @@ rust-version.workspace = true
 aivi-base.workspace = true
 aivi-hir.workspace = true
 aivi-typing.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 aivi-syntax.workspace = true

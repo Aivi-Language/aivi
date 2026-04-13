@@ -236,6 +236,21 @@ fn run_markup_file_with_launch_config(
     if let Some(view) = requested_view {
         validate_module_name(view)?;
     }
+    if let Some(artifact) = maybe_load_serialized_run_artifact(path, requested_view)? {
+        return run_session::launch_run_with_config(
+            path,
+            artifact,
+            launch_config,
+            move |stage, startup_metrics| {
+                if timings {
+                    print_run_startup_stage_progress(stage, *startup_metrics);
+                }
+            },
+            move |_| {
+                let _ = total_start;
+            },
+        );
+    }
 
     let t0 = Instant::now();
     let snapshot = WorkspaceHirSnapshot::load(path)?;

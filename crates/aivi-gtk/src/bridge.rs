@@ -12,7 +12,7 @@ use crate::{
         RuntimeCaseBranch, RuntimeChildOp, RuntimeEventBinding, RuntimeExprInput, RuntimeNodeRef,
         RuntimePlanNode, RuntimePlanNodeKind, RuntimePropertyBinding, RuntimeShowMountPolicy,
         WidgetRuntimeAdapterError, WidgetRuntimeAdapterErrors, WidgetRuntimeAssembly,
-        assemble_widget_runtime,
+        WidgetRuntimeAssemblyParts, assemble_widget_runtime,
     },
 };
 
@@ -412,6 +412,13 @@ pub struct GtkBridgeGraph {
     nodes: Box<[GtkBridgeNode]>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GtkBridgeGraphParts {
+    pub assembly: WidgetRuntimeAssemblyParts,
+    pub root: GtkBridgeNodeRef,
+    pub nodes: Box<[GtkBridgeNode]>,
+}
+
 impl GtkBridgeGraph {
     pub fn assembly(&self) -> &WidgetRuntimeAssembly {
         &self.assembly
@@ -448,6 +455,32 @@ impl GtkBridgeGraph {
 
     pub fn plan_for_owner(&self, owner: OwnerHandle) -> Option<PlanNodeId> {
         self.assembly.plan_for_owner(owner)
+    }
+
+    pub fn into_parts(self) -> GtkBridgeGraphParts {
+        let Self {
+            assembly,
+            root,
+            nodes,
+        } = self;
+        GtkBridgeGraphParts {
+            assembly: assembly.into_parts(),
+            root,
+            nodes,
+        }
+    }
+
+    pub fn from_parts(parts: GtkBridgeGraphParts) -> Self {
+        let GtkBridgeGraphParts {
+            assembly,
+            root,
+            nodes,
+        } = parts;
+        Self {
+            assembly: WidgetRuntimeAssembly::from_parts(assembly),
+            root,
+            nodes,
+        }
     }
 
     pub fn show_transition(
@@ -710,7 +743,9 @@ impl GtkBridgeGraph {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct GtkBridgeNodeRef {
     pub plan: PlanNodeId,
     pub owner: OwnerHandle,
@@ -786,7 +821,7 @@ pub struct GtkGroupNode {
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkShowNode {
     pub when: RuntimeExprInput,
     pub mount: RuntimeShowMountPolicy,
@@ -811,14 +846,14 @@ impl GtkShowNode {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum GtkShowState {
     Unmounted,
     MountedHidden,
     MountedVisible,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkEachNode {
     pub collection: RuntimeExprInput,
     pub key_input: Option<RuntimeExprInput>,
@@ -828,18 +863,18 @@ pub struct GtkEachNode {
     pub empty_branch: Option<GtkEmptyBranch>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkEmptyBranch {
     pub empty: GtkBridgeNodeRef,
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkEmptyNode {
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkMatchNode {
     pub scrutinee: RuntimeExprInput,
     pub cases: Box<[GtkCaseBranch]>,
@@ -862,32 +897,32 @@ impl GtkMatchNode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkCaseBranch {
     pub case: GtkBridgeNodeRef,
     pub pattern: PatternId,
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkCaseNode {
     pub pattern: PatternId,
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkFragmentNode {
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkWithNode {
     pub value: RuntimeExprInput,
     pub binding: BindingId,
     pub body: GtkChildGroup,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkChildGroup {
     pub owner: GtkBridgeNodeRef,
     pub kind: GtkChildGroupKind,
@@ -904,7 +939,7 @@ impl GtkChildGroup {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum GtkChildGroupKind {
     WidgetDefault,
     WidgetNamed,
@@ -994,7 +1029,9 @@ pub enum GtkRepeatedChildIdentity {
     Keyed(GtkCollectionKey),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct GtkCollectionKey(Box<str>);
 
 impl GtkCollectionKey {
@@ -1511,6 +1548,13 @@ value view =
             .as_ref()
             .expect("each node should keep explicit empty branch semantics");
         assert_eq!(empty_branch.body.kind, GtkChildGroupKind::EachEmptyBranch);
+    }
+
+    #[test]
+    fn bridge_graph_roundtrips_through_parts() {
+        let graph = control_fixture_graph();
+        let rebuilt = GtkBridgeGraph::from_parts(graph.clone().into_parts());
+        assert_eq!(rebuilt, graph);
     }
 
     #[test]

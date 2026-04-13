@@ -23,7 +23,7 @@ pub(crate) enum RecurrenceTargetHint {
     UnsupportedType { ty: GateType, span: SourceSpan },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GateRecordField {
     pub name: String,
     pub ty: GateType,

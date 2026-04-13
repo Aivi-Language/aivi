@@ -59,7 +59,7 @@ pub enum SourceDecodeProgramOutcome {
     Blocked(BlockedSourceDecodeProgram),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DecodeProgramStepId(u32);
 
 impl DecodeProgramStepId {
@@ -72,7 +72,7 @@ impl DecodeProgramStepId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceDecodeProgram {
     pub mode: DecodeMode,
     pub payload_annotation: crate::TypeId,
@@ -121,7 +121,7 @@ pub enum SourceDecodeProgramBlocker {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum DecodeProgramStep {
     Scalar {
         scalar: PrimitiveType,
@@ -157,27 +157,27 @@ pub enum DecodeProgramStep {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeProgramField {
     pub name: FieldName,
     pub requirement: DecodeFieldRequirement,
     pub step: DecodeProgramStepId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeProgramVariant {
     pub constructor: Option<crate::SumConstructorHandle>,
     pub name: VariantName,
     pub payload: Option<DecodeProgramStepId>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DomainDecodeSurfaceKind {
     Direct,
     FallibleResult,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DomainDecodeSurfacePlan {
     pub domain_item: ItemId,
     pub member_index: usize,

@@ -1,6 +1,6 @@
 # Findings
 
-## Matrix-derived backlog
+## Surface backlog
 
 - `compile` is still limited by the first Cranelift slice in `crates/aivi-backend/src/codegen.rs`.
 - `aivi compile` stops at object code and explicitly does not produce runnable GTK binaries.
@@ -21,9 +21,9 @@
 
 ## Evidence anchors
 
-- `manual/guide/surface-feature-matrix.md`
 - `manual/guide/source-catalog.md`
 - `manual/guide/typeclasses.md`
+- `AIVI_RFC.md`
 - `crates/aivi-hir/src/general_expr_elaboration.rs`
 - `crates/aivi-runtime/src/providers.rs`
 - `crates/aivi-runtime/src/startup.rs`

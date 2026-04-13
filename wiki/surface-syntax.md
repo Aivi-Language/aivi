@@ -13,7 +13,6 @@ The implementation lowers each entry to an ordinary derived binding fed by that 
 Primary user-facing docs:
 
 - `manual/guide/signals.md` — grouped derivations with `from`
-- `manual/guide/surface-feature-matrix.md` — feature status
 - `AIVI_RFC.md` — top-level forms and signal rules
 - `wiki/signal-model.md` — lowering summary and examples
 
@@ -62,7 +61,6 @@ Temporal signal replays now use reserved `|>` stage heads with explicit duration
 Primary user-facing docs:
 
 - `manual/guide/pipes.md` and `manual/guide/signals.md` — temporal replay behavior
-- `manual/guide/surface-feature-matrix.md` — implementation status
 - `syntax.md` and `AIVI_RFC.md` — normative surface spelling
 - `wiki/pipe-algebra.md` and `wiki/temporal-design.md` — implementation notes
 
@@ -83,7 +81,6 @@ Primary user-facing docs:
 - `manual/guide/types.md`
 - `manual/guide/values-and-functions.md`
 - `manual/guide/record-patterns.md`
-- `manual/guide/surface-feature-matrix.md`
 - `wiki/signal-model.md`
 - `wiki/pipe-algebra.md`
 - `wiki/type-system.md`

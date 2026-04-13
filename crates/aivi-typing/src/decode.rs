@@ -16,7 +16,9 @@ use crate::eq::{
     define_typing_id,
 };
 
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, Hash)]
+#[derive(
+    Copy, Clone, Debug, Default, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum DecodeMode {
     #[default]
     Strict,
@@ -74,28 +76,28 @@ impl DecodeSchema {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeExtraFieldPolicy {
     Reject,
     Ignore,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeFieldRequirement {
     Required,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeSumStrategy {
     Explicit,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum DecodeDomainRule {
     ExplicitSurface,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum DecodeStep {
     IntrinsicScalar {
         ty: TypeId,
@@ -156,14 +158,14 @@ impl DecodeStep {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeFieldPlan {
     pub name: FieldName,
     pub requirement: DecodeFieldRequirement,
     pub schema: DecodePlanId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DecodeVariantPlan {
     pub name: VariantName,
     pub payload: Option<DecodePlanId>,

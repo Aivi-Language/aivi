@@ -103,7 +103,7 @@ impl ApplicativeClusterKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeBinding {
     Type(GateType),
     Constructor(TypeConstructorBinding),
@@ -119,7 +119,7 @@ impl TypeBinding {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeConstructorBinding {
     head: TypeConstructorHead,
     arguments: Vec<GateType>,
@@ -145,7 +145,7 @@ impl TypeConstructorBinding {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeConstructorHead {
     Builtin(BuiltinType),
     Item(ItemId),

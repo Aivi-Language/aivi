@@ -93,8 +93,8 @@ value screenView =
         "expected launcher to invoke bundled runtime, got: {launcher}"
     );
     assert!(
-        launcher.contains("screenView"),
-        "expected launcher to pin the selected view, got: {launcher}"
+        launcher.contains("run-artifact.json"),
+        "expected launcher to invoke the serialized run artifact, got: {launcher}"
     );
 
     #[cfg(unix)]
@@ -108,20 +108,55 @@ value screenView =
         "launcher should be executable"
     );
 
-    let bundled_source = fs::read_to_string(bundle_path.join("app/main.aivi"))
-        .expect("bundle should copy the entry source");
-    assert_eq!(
-        bundled_source,
-        "\nvalue screenView =\n    <Window title=\"AIVI\" />\n"
+    let run_artifact = fs::read_to_string(bundle_path.join("run-artifact.json"))
+        .expect("bundle should write the serialized run artifact");
+    assert!(
+        run_artifact.contains("\"format\": \"aivi.run-artifact\""),
+        "expected run artifact header, got: {run_artifact}"
     );
     assert!(
-        bundle_path.join("stdlib/aivi.toml").is_file(),
-        "bundle should include the stdlib workspace"
+        run_artifact.contains("\"view_name\": \"screenView\""),
+        "expected bundled view name in run artifact, got: {run_artifact}"
+    );
+    assert!(
+        fs::read_dir(bundle_path.join("payloads"))
+            .expect("bundle should materialize backend payloads")
+            .next()
+            .is_some(),
+        "bundle should write at least one backend payload file"
+    );
+    let payload_entries = fs::read_dir(bundle_path.join("payloads"))
+        .expect("bundle should materialize backend payloads")
+        .map(|entry| {
+            entry
+                .expect("payload dir entries should read")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        payload_entries.iter().any(|entry| entry.ends_with(".json")),
+        "bundle should keep serialized backend payloads, got: {payload_entries:?}"
+    );
+    assert!(
+        payload_entries
+            .iter()
+            .any(|entry| entry.starts_with("native-") && entry.ends_with(".bin")),
+        "bundle should emit native kernel sidecars, got: {payload_entries:?}"
+    );
+    assert!(
+        !bundle_path.join("app/main.aivi").exists(),
+        "source-free bundles should not need workspace source files"
+    );
+    assert!(
+        !bundle_path.join("stdlib").exists(),
+        "source-free bundles should not carry the stdlib workspace"
     );
 }
 
 #[test]
-fn build_copies_the_loaded_workspace_closure() {
+fn build_emits_a_source_free_bundle_even_for_workspace_closures() {
     let workspace = TempDir::new("build-workspace-closure");
     workspace.write("aivi.toml", "");
     workspace.write(
@@ -162,11 +197,15 @@ export (Greeting)
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        bundle_path.join("app/aivi.toml").is_file(),
-        "bundle should preserve the workspace manifest"
+        bundle_path.join("run-artifact.json").is_file(),
+        "bundle should write a serialized run artifact"
     );
     assert!(
-        bundle_path.join("app/shared/types.aivi").is_file(),
-        "bundle should copy imported workspace files"
+        !bundle_path.join("app/aivi.toml").exists(),
+        "source-free bundles should not copy the workspace manifest"
+    );
+    assert!(
+        !bundle_path.join("app/shared/types.aivi").exists(),
+        "source-free bundles should not copy imported workspace files"
     );
 }
