@@ -1,9 +1,9 @@
 {
   "root": "manual",
-  "scanned_files": 91,
-  "scanned_blocks": 948,
-  "rewritten_blocks": 0,
-  "unresolved_fragments": 161,
+  "scanned_files": 93,
+  "scanned_blocks": 963,
+  "rewritten_blocks": 6,
+  "unresolved_fragments": 160,
   "entries": [
     {
       "markdown_path": "manual/guide/building-snake.md",
@@ -930,7 +930,7 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `snake`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `status`?"
         },
         {
           "severity": "error",
@@ -3310,26 +3310,6 @@
         }
       ],
       "suggested_snippet": "@source clipboard.watch\nsignal clipboardContent : Signal (Result ClipboardError ClipboardContent)\n"
-    },
-    {
-      "markdown_path": "manual/stdlib/color.md",
-      "block_index": 4,
-      "fence_info": "aivi",
-      "start_line": 55,
-      "end_line": 59,
-      "formatting_changed": false,
-      "syntax_problem_count": 0,
-      "lsp_problem_count": 0,
-      "compiler_problem_count": 1,
-      "diagnostics": [
-        {
-          "severity": "error",
-          "code": "hir::invalid-projection",
-          "message": "projection `.carrier` cannot be applied to `Color`",
-          "rendered": "error[hir::invalid-projection]: projection `.carrier` cannot be applied to `Color`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/stdlib/color/block_4.aivi:5:11\n  |\n 5 |     color.carrier\n  |           ^^^^^^^\n  = this projection target does not support field access"
-        }
-      ],
-      "suggested_snippet": "use aivi.color (Color)\n\ntype Color -> Int\nfunc toArgb = color =>\n    color.carrier\n"
     },
     {
       "markdown_path": "manual/stdlib/date.md",

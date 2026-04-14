@@ -209,6 +209,11 @@ where
     queued_events: Rc<GtkEventQueue<V>>,
     queued_window_keys: Rc<GtkWindowKeyQueue>,
     event_notifier: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    /// Tracks the set of CSS class names that were last applied to each widget
+    /// via the `cssClasses` property, keyed by the widget's GObject pointer.
+    /// Needed so the classes can be cleanly replaced on each property update
+    /// without accumulating stale class names.
+    managed_css_classes: RefCell<BTreeMap<usize, BTreeSet<String>>>,
 }
 
 impl<V> Default for GtkConcreteHost<V>
@@ -224,6 +229,7 @@ where
             queued_events: Rc::new(GtkEventQueue::default()),
             queued_window_keys: Rc::new(GtkWindowKeyQueue::default()),
             event_notifier: Rc::new(RefCell::new(None)),
+            managed_css_classes: RefCell::new(BTreeMap::new()),
         }
     }
 }
@@ -411,6 +417,23 @@ where
                 adw::NavigationPage::new(&placeholder, "").upcast::<gtk::Widget>()
             }
             GtkConcreteWidgetKind::ToastOverlay => adw::ToastOverlay::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::PreferencesGroup => {
+                adw::PreferencesGroup::new().upcast::<gtk::Widget>()
+            }
+            GtkConcreteWidgetKind::PreferencesPage => {
+                adw::PreferencesPage::new().upcast::<gtk::Widget>()
+            }
+            GtkConcreteWidgetKind::PreferencesWindow => {
+                adw::PreferencesWindow::new().upcast::<gtk::Widget>()
+            }
+            GtkConcreteWidgetKind::ComboRow => adw::ComboRow::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::PasswordEntryRow => {
+                adw::PasswordEntryRow::new().upcast::<gtk::Widget>()
+            }
+            GtkConcreteWidgetKind::Overlay => gtk::Overlay::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::MultilineEntry => {
+                gtk::TextView::new().upcast::<gtk::Widget>()
+            }
         };
         ensure_aivi_widget_styles();
         Ok((schema, widget))
@@ -827,6 +850,46 @@ where
                     })?
                     .set_expanded(value);
             }
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::PreferencesWindowSearchEnabled) => {
+                widget
+                    .clone()
+                    .downcast::<adw::PreferencesWindow>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::PreferencesWindow",
+                    })?
+                    .set_search_enabled(value);
+            }
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::ButtonUseUnderline) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::Button>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::Button",
+                    })?
+                    .set_use_underline(value);
+            }
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::MultilineEntryEditable) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_editable(value);
+            }
+            GtkPropertySetter::Bool(GtkBoolPropertySetter::MultilineEntryMonospace) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_monospace(value);
+            }
             _ => {
                 return Err(self.invalid_property_value(
                     schema,
@@ -1078,23 +1141,21 @@ where
                 }
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::CssClasses) => {
-                let existing: Vec<String> = widget
-                    .css_classes()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .filter(|s| s.starts_with("aivi-css-"))
-                    .collect();
-                for class in &existing {
-                    widget.remove_css_class(class);
-                }
-                if !value.is_empty() {
-                    for class in value.split(',') {
-                        let class = class.trim();
-                        if !class.is_empty() {
-                            widget.add_css_class(&format!("aivi-css-{class}"));
-                        }
+                let key = widget.as_ptr() as usize;
+                let mut map = self.managed_css_classes.borrow_mut();
+                if let Some(previous) = map.get(&key) {
+                    for class in previous {
+                        widget.remove_css_class(class.as_str());
                     }
                 }
+                let mut next_set = BTreeSet::new();
+                if !value.is_empty() {
+                    for class in value.split_ascii_whitespace() {
+                        widget.add_css_class(class);
+                        next_set.insert(class.to_owned());
+                    }
+                }
+                map.insert(key, next_set);
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::LabelWrapMode) => {
                 let mode = parse_wrap_mode(value).ok_or_else(|| {
@@ -1369,6 +1430,116 @@ where
                     })?
                     .set_tag(if value.is_empty() { None } else { Some(value) });
             }
+            GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesGroupTitle) => {
+                widget
+                    .clone()
+                    .downcast::<adw::PreferencesGroup>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::PreferencesGroup",
+                    })?
+                    .set_title(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesGroupDescription) => {
+                widget
+                    .clone()
+                    .downcast::<adw::PreferencesGroup>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::PreferencesGroup",
+                    })?
+                    .set_description(if value.is_empty() { None } else { Some(value) });
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesPageTitle) => {
+                widget
+                    .clone()
+                    .downcast::<adw::PreferencesPage>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::PreferencesPage",
+                    })?
+                    .set_title(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesPageIconName) => {
+                widget
+                    .clone()
+                    .downcast::<adw::PreferencesPage>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::PreferencesPage",
+                    })?
+                    .set_icon_name(if value.is_empty() { None } else { Some(value) });
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::ComboRowItems) => {
+                let row = widget
+                    .clone()
+                    .downcast::<adw::ComboRow>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::ComboRow",
+                    })?;
+                let items: Vec<&str> = if value.is_empty() {
+                    vec![]
+                } else {
+                    value.split(',').map(str::trim).collect()
+                };
+                let model = gtk::StringList::new(&items);
+                row.set_model(Some(&model));
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::PasswordEntryRowText) => {
+                widget
+                    .clone()
+                    .downcast::<adw::PasswordEntryRow>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::PasswordEntryRow",
+                    })?
+                    .set_text(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::ButtonIconName) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::Button>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::Button",
+                    })?
+                    .set_icon_name(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::MultilineEntryText) => {
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .buffer()
+                    .set_text(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::MultilineEntryWrapMode) => {
+                let wrap_mode = match value {
+                    "None" => gtk::WrapMode::None,
+                    "Char" => gtk::WrapMode::Char,
+                    "Word" => gtk::WrapMode::Word,
+                    "WordChar" => gtk::WrapMode::WordChar,
+                    _ => {
+                        return Err(self.invalid_property_value(
+                            schema,
+                            property,
+                            "text naming a valid WrapMode value (None, Char, Word, WordChar)",
+                        ));
+                    }
+                };
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_wrap_mode(wrap_mode);
+            }
             _ => {
                 return Err(self.invalid_property_value(
                     schema,
@@ -1566,6 +1737,90 @@ where
                         expected_type: "gtk::DropDown",
                     })?
                     .set_selected(position);
+                Ok(())
+            }
+            GtkPropertySetter::I64(GtkI64PropertySetter::ComboRowSelected) => {
+                let position = u32::try_from(value).map_err(|_| {
+                    self.invalid_property_value(schema, property, "non-negative 32-bit integer")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<adw::ComboRow>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::ComboRow",
+                    })?
+                    .set_selected(position);
+                Ok(())
+            }
+            GtkPropertySetter::I64(GtkI64PropertySetter::LabelLines) => {
+                let lines = i32::try_from(value).map_err(|_| {
+                    self.invalid_property_value(schema, property, "signed 32-bit integer")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<gtk::Label>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::Label",
+                    })?
+                    .set_lines(lines);
+                Ok(())
+            }
+            GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryTopMargin) => {
+                let margin = i32::try_from(value).map_err(|_| {
+                    self.invalid_property_value(schema, property, "signed 32-bit integer")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_top_margin(margin);
+                Ok(())
+            }
+            GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryBottomMargin) => {
+                let margin = i32::try_from(value).map_err(|_| {
+                    self.invalid_property_value(schema, property, "signed 32-bit integer")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_bottom_margin(margin);
+                Ok(())
+            }
+            GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryLeftMargin) => {
+                let margin = i32::try_from(value).map_err(|_| {
+                    self.invalid_property_value(schema, property, "signed 32-bit integer")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_left_margin(margin);
+                Ok(())
+            }
+            GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryRightMargin) => {
+                let margin = i32::try_from(value).map_err(|_| {
+                    self.invalid_property_value(schema, property, "signed 32-bit integer")
+                })?;
+                widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?
+                    .set_right_margin(margin);
                 Ok(())
             }
             _ => Err(self.invalid_property_value(
@@ -1850,6 +2105,62 @@ where
                     }
                 }
             }
+            GtkChildMountRoute::PreferencesGroupChildren => {
+                for child in previous {
+                    child.unparent();
+                }
+                let group = parent_widget
+                    .clone()
+                    .downcast::<adw::PreferencesGroup>()
+                    .expect("preferences group widget should downcast");
+                for child in next {
+                    group.add(child);
+                }
+            }
+            GtkChildMountRoute::PreferencesPageChildren => {
+                for child in previous {
+                    child.unparent();
+                }
+                let page = parent_widget
+                    .clone()
+                    .downcast::<adw::PreferencesPage>()
+                    .expect("preferences page widget should downcast");
+                for child in next {
+                    if let Ok(group) = child.clone().downcast::<adw::PreferencesGroup>() {
+                        page.add(&group);
+                    } else {
+                        child.unparent();
+                    }
+                }
+            }
+            GtkChildMountRoute::PreferencesWindowPages => {
+                for child in previous {
+                    child.unparent();
+                }
+                let win = parent_widget
+                    .clone()
+                    .downcast::<adw::PreferencesWindow>()
+                    .expect("preferences window widget should downcast");
+                for child in next {
+                    if let Ok(page) = child.clone().downcast::<adw::PreferencesPage>() {
+                        win.add(&page);
+                    } else {
+                        child.unparent();
+                    }
+                }
+            }
+            GtkChildMountRoute::OverlayOverlay => {
+                let overlay = parent_widget
+                    .clone()
+                    .downcast::<gtk::Overlay>()
+                    .expect("overlay widget should downcast");
+                for child in previous {
+                    overlay.remove_overlay(child);
+                }
+                for child in next {
+                    overlay.add_overlay(child);
+                }
+            }
             _ => unreachable!("replace_sequence_children requires a sequence child group"),
         }
     }
@@ -2015,6 +2326,16 @@ where
                     })?
                     .set_child(child);
             }
+            GtkChildMountRoute::OverlayContent => {
+                parent_widget
+                    .clone()
+                    .downcast::<gtk::Overlay>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: "Overlay".into(),
+                        expected_type: "gtk::Overlay",
+                    })?
+                    .set_child(child);
+            }
             GtkChildMountRoute::HeaderBarStart
             | GtkChildMountRoute::HeaderBarEnd
             | GtkChildMountRoute::BoxChildren
@@ -2023,7 +2344,11 @@ where
             | GtkChildMountRoute::ActionRowSuffix
             | GtkChildMountRoute::ExpanderRowRows
             | GtkChildMountRoute::ListBoxChildren
-            | GtkChildMountRoute::NavigationViewPages => {
+            | GtkChildMountRoute::NavigationViewPages
+            | GtkChildMountRoute::PreferencesGroupChildren
+            | GtkChildMountRoute::PreferencesPageChildren
+            | GtkChildMountRoute::PreferencesWindowPages
+            | GtkChildMountRoute::OverlayOverlay => {
                 unreachable!("sequence child groups are handled by explicit sequence APIs")
             }
         }
@@ -2598,6 +2923,113 @@ where
                         notifier();
                     }
                 }),
+            GtkEventSignal::ComboRowSelectionChanged => widget
+                .clone()
+                .downcast::<adw::ComboRow>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::ComboRow",
+                })?
+                .connect_selected_notify(move |row| {
+                    let selected = row.selected() as i64;
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_i64(selected),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::PasswordEntryRowChanged => widget
+                .clone()
+                .downcast::<adw::PasswordEntryRow>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::PasswordEntryRow",
+                })?
+                .connect_changed(move |entry| {
+                    let text = entry.text();
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_text(text.as_str()),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::PasswordEntryRowActivated => widget
+                .clone()
+                .downcast::<adw::PasswordEntryRow>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::PasswordEntryRow",
+                })?
+                .connect_entry_activated(move |_| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::unit(),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::MultilineEntryChanged => {
+                let text_view = widget
+                    .clone()
+                    .downcast::<gtk::TextView>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "gtk::TextView",
+                    })?;
+                let buffer = text_view.buffer();
+                let sid = buffer.connect_changed(move |buf| {
+                    let (start, end) = buf.bounds();
+                    let text = buf.text(&start, &end, false);
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_text(text.as_str()),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                });
+                signal_object = buffer.upcast::<glib::Object>();
+                sid
+            }
+            GtkEventSignal::WindowCloseRequest => widget
+                .clone()
+                .downcast::<gtk::Window>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "gtk::Window",
+                })?
+                .connect_close_request(move |_| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::unit(),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                    glib::Propagation::Proceed
+                }),
+            GtkEventSignal::NavigationViewPopped => widget
+                .clone()
+                .downcast::<adw::NavigationView>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::NavigationView",
+                })?
+                .connect_popped(move |_, page| {
+                    let tag = page.tag().unwrap_or_default();
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_text(tag.as_str()),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
         };
         self.events.insert(
             handle.0,
@@ -2820,6 +3252,9 @@ where
                 event.signal_object.disconnect(event.signal);
             }
         }
+        self.managed_css_classes
+            .borrow_mut()
+            .remove(&(mounted.widget.as_ptr() as usize));
         if mounted.schema.is_window_root() {
             match mounted.widget.downcast::<gtk::Window>() {
                 Ok(window) => window.close(),

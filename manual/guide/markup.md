@@ -508,3 +508,88 @@ An overlay that can display transient toast notifications (toasts are shown at r
 ```
 
 **Children:** `content` (single)
+
+---
+
+### Preferences and forms
+
+#### `PreferencesWindow`
+
+An Adwaita preferences window with a searchable page switcher.
+
+```aivi
+value view =
+    <PreferencesWindow title="Settings" defaultWidth={600} defaultHeight={400} searchEnabled={True}>
+        <PreferencesPage title="General" iconName="preferences-system-symbolic">
+            <PreferencesGroup title="Appearance" description="Adjust how the app looks">
+                <SwitchRow title="Dark mode" />
+            </PreferencesGroup>
+        </PreferencesPage>
+    </PreferencesWindow>
+```
+
+**Properties:** `title`, `defaultWidth` (Int), `defaultHeight` (Int), `searchEnabled` (Bool)  
+**Children:** `pages` (sequence of `PreferencesPage`)
+
+#### `PreferencesPage`
+
+A named page inside a `PreferencesWindow`.
+
+```aivi
+```
+
+**Properties:** `title`, `iconName`  
+**Children:** `children` (sequence of `PreferencesGroup`)
+
+#### `PreferencesGroup`
+
+A titled group of preference rows within a `PreferencesPage`.
+
+```aivi
+```
+
+**Properties:** `title`, `description`  
+**Children:** `children` (sequence — any preference rows or widgets)
+
+#### `ComboRow`
+
+A preference row with a drop-down selector.
+
+```aivi
+```
+
+**Properties:** `title`, `subtitle`, `items` (comma-separated), `selected` (Int)  
+**Events:** `onSelectionChanged` (Int — zero-based index of selected item)
+
+#### `PasswordEntryRow`
+
+A preference row styled for password input with reveal toggle.
+
+```aivi
+```
+
+**Properties:** `title`, `text`  
+**Events:** `onChange` (Text), `onActivated` (Unit)
+
+---
+
+### Layout overlays
+
+#### `Overlay`
+
+Stacks widgets on top of a main content widget. Use `content` for the base layer and `overlay` for widgets that float above it.
+
+```aivi
+```
+
+**Children:** `content` (single — base widget), `overlay` (sequence — overlaid widgets)
+
+#### `MultilineEntry`
+
+A multi-line text editor backed by `gtk::TextView`.
+
+```aivi
+```
+
+**Properties:** `text`, `editable` (Bool), `monospace` (Bool), `topMargin` (Int), `bottomMargin` (Int), `leftMargin` (Int), `rightMargin` (Int)  
+**Events:** `onChange` (Text)

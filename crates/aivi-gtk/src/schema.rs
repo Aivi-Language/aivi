@@ -74,6 +74,16 @@ pub enum GtkConcreteWidgetKind {
     NavigationView,
     NavigationPage,
     ToastOverlay,
+    // Group E: Adwaita preferences structure
+    PreferencesGroup,
+    PreferencesPage,
+    PreferencesWindow,
+    ComboRow,
+    PasswordEntryRow,
+    // Group F: Layout
+    Overlay,
+    // Group G: Input
+    MultilineEntry,
 }
 
 impl GtkConcreteWidgetKind {
@@ -116,6 +126,13 @@ impl GtkConcreteWidgetKind {
             Self::NavigationView => "NavigationView",
             Self::NavigationPage => "NavigationPage",
             Self::ToastOverlay => "ToastOverlay",
+            Self::PreferencesGroup => "PreferencesGroup",
+            Self::PreferencesPage => "PreferencesPage",
+            Self::PreferencesWindow => "PreferencesWindow",
+            Self::ComboRow => "ComboRow",
+            Self::PasswordEntryRow => "PasswordEntryRow",
+            Self::Overlay => "Overlay",
+            Self::MultilineEntry => "MultilineEntry",
         }
     }
 }
@@ -198,6 +215,13 @@ pub enum GtkBoolPropertySetter {
     ListBoxRowActivatable,
     // Group C: Utility
     ExpanderExpanded,
+    // Group E: Preferences structure
+    PreferencesWindowSearchEnabled,
+    // Phase 4: Button extras
+    ButtonUseUnderline,
+    // Group G: MultilineEntry
+    MultilineEntryEditable,
+    MultilineEntryMonospace,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -253,6 +277,18 @@ pub enum GtkTextPropertySetter {
     // Group D: Navigation
     NavigationPageTitle,
     NavigationPageTag,
+    // Group E: Preferences structure
+    PreferencesGroupTitle,
+    PreferencesGroupDescription,
+    PreferencesPageTitle,
+    PreferencesPageIconName,
+    ComboRowItems,
+    PasswordEntryRowText,
+    // Phase 4: Button extras
+    ButtonIconName,
+    // Group G: MultilineEntry
+    MultilineEntryText,
+    MultilineEntryWrapMode,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -280,6 +316,15 @@ pub enum GtkI64PropertySetter {
     ClampTighteningThreshold,
     // Group B: List and selection
     DropDownSelected,
+    // Group E: ComboRow
+    ComboRowSelected,
+    // Phase 4: Label extras
+    LabelLines,
+    // Group G: MultilineEntry
+    MultilineEntryTopMargin,
+    MultilineEntryBottomMargin,
+    MultilineEntryLeftMargin,
+    MultilineEntryRightMargin,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -325,6 +370,9 @@ impl GtkPropertySetter {
             }
             Self::Text(GtkTextPropertySetter::LabelWrapMode) => {
                 "text naming a valid WrapMode value"
+            }
+            Self::Text(GtkTextPropertySetter::MultilineEntryWrapMode) => {
+                "text naming a valid WrapMode value (None, Char, Word, WordChar)"
             }
             Self::Text(GtkTextPropertySetter::LabelJustify) => {
                 "text naming a valid Justification value"
@@ -388,6 +436,17 @@ pub enum GtkEventSignal {
     SearchEntryChanged,
     SearchEntryActivated,
     SearchEntrySearchChanged,
+    // Group E: ComboRow
+    ComboRowSelectionChanged,
+    // PasswordEntryRow
+    PasswordEntryRowChanged,
+    PasswordEntryRowActivated,
+    // Group G: MultilineEntry
+    MultilineEntryChanged,
+    // Phase 4: Window
+    WindowCloseRequest,
+    // Phase 4: NavigationView
+    NavigationViewPopped,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -443,6 +502,13 @@ pub enum GtkChildMountRoute {
     NavigationViewPages,
     NavigationPageContent,
     ToastOverlayContent,
+    // Group E: Preferences structure
+    PreferencesGroupChildren,
+    PreferencesPageChildren,
+    PreferencesWindowPages,
+    // Group F: Overlay
+    OverlayContent,
+    OverlayOverlay,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -577,6 +643,18 @@ const BUTTON_HAS_FRAME_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "hasFrame",
     value_shape: GtkPropertyValueShape::Bool,
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ButtonHasFrame),
+};
+
+const BUTTON_ICON_NAME_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "iconName",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ButtonIconName),
+};
+
+const BUTTON_USE_UNDERLINE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "useUnderline",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ButtonUseUnderline),
 };
 
 const WIDTH_REQUEST_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
@@ -868,6 +946,12 @@ const WINDOW_MODAL_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::WindowModal),
 };
 
+const WINDOW_CLOSE_REQUEST_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onCloseRequest",
+    payload: GtkConcreteEventPayload::Unit,
+    signal: GtkEventSignal::WindowCloseRequest,
+};
+
 // ── Label-specific properties ────────────────────────────────────────────────
 
 const WRAP_MODE_VALUE_SHAPE: GtkEnumValueShape = GtkEnumValueShape {
@@ -925,6 +1009,12 @@ const LABEL_USE_MARKUP_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "useMarkup",
     value_shape: GtkPropertyValueShape::Bool,
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::LabelUseMarkup),
+};
+
+const LABEL_LINES_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "lines",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::LabelLines),
 };
 
 // ── Entry-specific properties ────────────────────────────────────────────────
@@ -1187,7 +1277,7 @@ const WINDOW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         WINDOW_RESIZABLE_PROPERTY,
         WINDOW_MODAL_PROPERTY,
     ],
-    events: &[],
+    events: &[WINDOW_CLOSE_REQUEST_EVENT],
     default_child_group_override: Some(&WINDOW_CONTENT_CHILD_GROUP),
     child_groups: &[WINDOW_CONTENT_CHILD_GROUP, WINDOW_TITLEBAR_CHILD_GROUP],
 };
@@ -1400,6 +1490,7 @@ const LABEL_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         LABEL_MAX_WIDTH_CHARS_PROPERTY,
         LABEL_SELECTABLE_PROPERTY,
         LABEL_USE_MARKUP_PROPERTY,
+        LABEL_LINES_PROPERTY,
     ],
     events: &[
         FOCUS_IN_EVENT,
@@ -1436,6 +1527,8 @@ const BUTTON_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         BUTTON_COMPACT_PROPERTY,
         BUTTON_HAS_FRAME_PROPERTY,
         BUTTON_LABEL_PROPERTY,
+        BUTTON_ICON_NAME_PROPERTY,
+        BUTTON_USE_UNDERLINE_PROPERTY,
     ],
     events: &[
         BUTTON_CLICK_EVENT,
@@ -2667,6 +2760,12 @@ const NAVIGATION_VIEW_PAGES_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroup
     max_children: None,
 };
 
+const NAVIGATION_VIEW_POPPED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onPopped",
+    payload: GtkConcreteEventPayload::Text,
+    signal: GtkEventSignal::NavigationViewPopped,
+};
+
 const NAVIGATION_VIEW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "NavigationView",
     kind: GtkConcreteWidgetKind::NavigationView,
@@ -2689,7 +2788,7 @@ const NAVIGATION_VIEW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         TOOLTIP_PROPERTY,
         CSS_CLASSES_PROPERTY,
     ],
-    events: &[],
+    events: &[NAVIGATION_VIEW_POPPED_EVENT],
     default_child_group_override: None,
     child_groups: &[NAVIGATION_VIEW_PAGES_CHILD_GROUP],
 };
@@ -2782,6 +2881,394 @@ const TOAST_OVERLAY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     child_groups: &[TOAST_OVERLAY_CONTENT_CHILD_GROUP],
 };
 
+// ── Adwaita: PreferencesGroup ─────────────────────────────────────────────────
+
+const PREFERENCES_GROUP_TITLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "title",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesGroupTitle),
+};
+
+const PREFERENCES_GROUP_DESCRIPTION_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "description",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesGroupDescription),
+};
+
+const PREFERENCES_GROUP_CHILDREN_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "children",
+    container: GtkChildContainerKind::Sequence,
+    mount: GtkChildMountRoute::PreferencesGroupChildren,
+    min_children: 0,
+    max_children: None,
+};
+
+const PREFERENCES_GROUP_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "PreferencesGroup",
+    kind: GtkConcreteWidgetKind::PreferencesGroup,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        PREFERENCES_GROUP_TITLE_PROPERTY,
+        PREFERENCES_GROUP_DESCRIPTION_PROPERTY,
+    ],
+    events: &[],
+    default_child_group_override: None,
+    child_groups: &[PREFERENCES_GROUP_CHILDREN_CHILD_GROUP],
+};
+
+// ── Adwaita: PreferencesPage ──────────────────────────────────────────────────
+
+const PREFERENCES_PAGE_TITLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "title",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesPageTitle),
+};
+
+const PREFERENCES_PAGE_ICON_NAME_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "iconName",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::PreferencesPageIconName),
+};
+
+const PREFERENCES_PAGE_GROUPS_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "children",
+    container: GtkChildContainerKind::Sequence,
+    mount: GtkChildMountRoute::PreferencesPageChildren,
+    min_children: 0,
+    max_children: None,
+};
+
+const PREFERENCES_PAGE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "PreferencesPage",
+    kind: GtkConcreteWidgetKind::PreferencesPage,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        PREFERENCES_PAGE_TITLE_PROPERTY,
+        PREFERENCES_PAGE_ICON_NAME_PROPERTY,
+    ],
+    events: &[],
+    default_child_group_override: None,
+    child_groups: &[PREFERENCES_PAGE_GROUPS_CHILD_GROUP],
+};
+
+// ── Adwaita: PreferencesWindow ────────────────────────────────────────────────
+
+const PREFERENCES_WINDOW_SEARCH_ENABLED_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "searchEnabled",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::PreferencesWindowSearchEnabled),
+};
+
+const PREFERENCES_WINDOW_PAGES_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "pages",
+    container: GtkChildContainerKind::Sequence,
+    mount: GtkChildMountRoute::PreferencesWindowPages,
+    min_children: 0,
+    max_children: None,
+};
+
+const PREFERENCES_WINDOW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "PreferencesWindow",
+    kind: GtkConcreteWidgetKind::PreferencesWindow,
+    root_kind: GtkWidgetRootKind::Window,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        FOCUSABLE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        WINDOW_TITLE_PROPERTY,
+        WINDOW_DEFAULT_WIDTH_PROPERTY,
+        WINDOW_DEFAULT_HEIGHT_PROPERTY,
+        WINDOW_RESIZABLE_PROPERTY,
+        WINDOW_MODAL_PROPERTY,
+        PREFERENCES_WINDOW_SEARCH_ENABLED_PROPERTY,
+    ],
+    events: &[WINDOW_CLOSE_REQUEST_EVENT],
+    default_child_group_override: Some(&PREFERENCES_WINDOW_PAGES_CHILD_GROUP),
+    child_groups: &[PREFERENCES_WINDOW_PAGES_CHILD_GROUP],
+};
+
+// ── Adwaita: ComboRow ─────────────────────────────────────────────────────────
+
+const COMBO_ROW_ITEMS_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "items",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ComboRowItems),
+};
+
+const COMBO_ROW_SELECTED_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "selected",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::ComboRowSelected),
+};
+
+const COMBO_ROW_SELECTION_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onSelectionChanged",
+    payload: GtkConcreteEventPayload::I64,
+    signal: GtkEventSignal::ComboRowSelectionChanged,
+};
+
+const COMBO_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "ComboRow",
+    kind: GtkConcreteWidgetKind::ComboRow,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        ADW_PREFERENCES_ROW_TITLE_PROPERTY,
+        ADW_ACTION_ROW_SUBTITLE_PROPERTY,
+        COMBO_ROW_ITEMS_PROPERTY,
+        COMBO_ROW_SELECTED_PROPERTY,
+    ],
+    events: &[COMBO_ROW_SELECTION_CHANGED_EVENT],
+    default_child_group_override: None,
+    child_groups: &[],
+};
+
+// ── Adwaita: PasswordEntryRow ─────────────────────────────────────────────────
+
+const PASSWORD_ENTRY_ROW_TEXT_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "text",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::PasswordEntryRowText),
+};
+
+const PASSWORD_ENTRY_ROW_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onChange",
+    payload: GtkConcreteEventPayload::Text,
+    signal: GtkEventSignal::PasswordEntryRowChanged,
+};
+
+const PASSWORD_ENTRY_ROW_ACTIVATED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onActivated",
+    payload: GtkConcreteEventPayload::Unit,
+    signal: GtkEventSignal::PasswordEntryRowActivated,
+};
+
+const PASSWORD_ENTRY_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "PasswordEntryRow",
+    kind: GtkConcreteWidgetKind::PasswordEntryRow,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        ADW_PREFERENCES_ROW_TITLE_PROPERTY,
+        PASSWORD_ENTRY_ROW_TEXT_PROPERTY,
+    ],
+    events: &[PASSWORD_ENTRY_ROW_CHANGED_EVENT, PASSWORD_ENTRY_ROW_ACTIVATED_EVENT],
+    default_child_group_override: None,
+    child_groups: &[],
+};
+
+// ── GTK: Overlay ──────────────────────────────────────────────────────────────
+
+const OVERLAY_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "content",
+    container: GtkChildContainerKind::Single,
+    mount: GtkChildMountRoute::OverlayContent,
+    min_children: 0,
+    max_children: Some(1),
+};
+
+const OVERLAY_OVERLAY_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "overlay",
+    container: GtkChildContainerKind::Sequence,
+    mount: GtkChildMountRoute::OverlayOverlay,
+    min_children: 0,
+    max_children: None,
+};
+
+const OVERLAY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "Overlay",
+    kind: GtkConcreteWidgetKind::Overlay,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+    ],
+    events: &[],
+    default_child_group_override: Some(&OVERLAY_CONTENT_CHILD_GROUP),
+    child_groups: &[OVERLAY_CONTENT_CHILD_GROUP, OVERLAY_OVERLAY_CHILD_GROUP],
+};
+
+// ── GTK: MultilineEntry ───────────────────────────────────────────────────────
+
+const MULTILINE_ENTRY_TEXT_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "text",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::MultilineEntryText),
+};
+
+const MULTILINE_ENTRY_EDITABLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "editable",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::MultilineEntryEditable),
+};
+
+const MULTILINE_ENTRY_WRAP_MODE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "wrapMode",
+    value_shape: GtkPropertyValueShape::Enum(WRAP_MODE_VALUE_SHAPE),
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::MultilineEntryWrapMode),
+};
+
+const MULTILINE_ENTRY_MONOSPACE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "monospace",
+    value_shape: GtkPropertyValueShape::Bool,
+    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::MultilineEntryMonospace),
+};
+
+const MULTILINE_ENTRY_TOP_MARGIN_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "topMargin",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryTopMargin),
+};
+
+const MULTILINE_ENTRY_BOTTOM_MARGIN_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "bottomMargin",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryBottomMargin),
+};
+
+const MULTILINE_ENTRY_LEFT_MARGIN_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "leftMargin",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryLeftMargin),
+};
+
+const MULTILINE_ENTRY_RIGHT_MARGIN_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "rightMargin",
+    value_shape: GtkPropertyValueShape::I64,
+    setter: GtkPropertySetter::I64(GtkI64PropertySetter::MultilineEntryRightMargin),
+};
+
+const MULTILINE_ENTRY_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onChange",
+    payload: GtkConcreteEventPayload::Text,
+    signal: GtkEventSignal::MultilineEntryChanged,
+};
+
+const MULTILINE_ENTRY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "MultilineEntry",
+    kind: GtkConcreteWidgetKind::MultilineEntry,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        MULTILINE_ENTRY_TEXT_PROPERTY,
+        MULTILINE_ENTRY_EDITABLE_PROPERTY,
+        MULTILINE_ENTRY_WRAP_MODE_PROPERTY,
+        MULTILINE_ENTRY_MONOSPACE_PROPERTY,
+        MULTILINE_ENTRY_TOP_MARGIN_PROPERTY,
+        MULTILINE_ENTRY_BOTTOM_MARGIN_PROPERTY,
+        MULTILINE_ENTRY_LEFT_MARGIN_PROPERTY,
+        MULTILINE_ENTRY_RIGHT_MARGIN_PROPERTY,
+    ],
+    events: &[MULTILINE_ENTRY_CHANGED_EVENT],
+    default_child_group_override: None,
+    child_groups: &[],
+};
+
 const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] = &[
     WINDOW_SCHEMA,
     HEADER_BAR_SCHEMA,
@@ -2820,6 +3307,13 @@ const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] = &[
     NAVIGATION_VIEW_SCHEMA,
     NAVIGATION_PAGE_SCHEMA,
     TOAST_OVERLAY_SCHEMA,
+    PREFERENCES_GROUP_SCHEMA,
+    PREFERENCES_PAGE_SCHEMA,
+    PREFERENCES_WINDOW_SCHEMA,
+    COMBO_ROW_SCHEMA,
+    PASSWORD_ENTRY_ROW_SCHEMA,
+    OVERLAY_SCHEMA,
+    MULTILINE_ENTRY_SCHEMA,
 ];
 
 pub fn supported_widget_schemas() -> &'static [GtkWidgetSchema] {
@@ -2938,6 +3432,13 @@ mod tests {
                 "NavigationView",
                 "NavigationPage",
                 "ToastOverlay",
+                "PreferencesGroup",
+                "PreferencesPage",
+                "PreferencesWindow",
+                "ComboRow",
+                "PasswordEntryRow",
+                "Overlay",
+                "MultilineEntry",
             ]
         );
     }

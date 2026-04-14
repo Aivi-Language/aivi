@@ -92,7 +92,9 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.gnome.onlineAccounts](onlineAccounts.md) | Desktop account and token records | `id`, `token`, `tokenType`, `expiresAt` |
 | [aivi.gnome.notifications](notifications.md) | Desktop notification payloads | `summary`, `body`, `icon`, `actions` |
 | [aivi.clipboard](clipboard.md) | Clipboard content types and watcher shapes | `ClipboardContent`, `ClipboardSource` |
-| [aivi.color](color.md) | Packed UI color domain | `argb`, `red`, `green`, `blue`, `withAlpha` |
+| [aivi.color](color.md) | Packed ARGB color domain with blend and GNOME palette | `argb`, `blend`, `gnomeBlue3`, `gnomeRed3` |
+| [aivi.px](px.md) | Pixel dimension domain for type-safe sizing | `px`, `(+)`, `(-)`, `scale`, `zero` |
+| [aivi.gtk.styles](styles.md) | Adwaita CSS class name constants | `suggestedAction`, `destructiveAction`, `classes` |
 | [aivi.image](image.md) | Image data, metadata, and load errors | `format`, `size`, `bytes`, `hasAlpha` |
 | [aivi.gresource](gresource.md) | Bundled GResource paths and load errors | `readText`, `readBytes` |
 | [aivi.i18n](i18n.md) | Internationalisation marker helpers | `tr`, `trn` |

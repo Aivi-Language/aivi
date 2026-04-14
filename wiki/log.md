@@ -402,3 +402,14 @@ Documented the ambient class graph outside the primary executable slice.
 
 - `manual/guide/typeclasses.md` now lists the secondary ambient classes and explicitly de-scopes them from the builtin support table unless a narrower feature doc says otherwise
 - `wiki/type-system.md` now records that those ambient declarations are real but not a blanket runtime-support promise
+
+## [2026-04-14] ingest | GTK stdlib gap analysis and implementation
+
+- Fixed `cssClasses` bug: removed `aivi-css-` prefix, per-widget tracking via `managed_css_classes`.
+- Added 7 new widgets: PreferencesGroup, PreferencesPage, PreferencesWindow, ComboRow, PasswordEntryRow, Overlay, MultilineEntry (widget count 37 → 44).
+- Added missing properties/events: Button.iconName, Button.useUnderline, Window.onCloseRequest, NavigationView.onPopped, Label.lines.
+- Created `stdlib/aivi/gtk/styles.aivi` — Adwaita CSS class name constants and `classes` combinator.
+- Created `stdlib/aivi/px.aivi` — `Px` domain over `Int` for type-safe pixel dimensions.
+- Enhanced `stdlib/aivi/color.aivi` — added `blend`, `blendChannel`, GNOME Adwaita palette (35 constants).
+- Updated `wiki/gtk-bridge.md`, `wiki/stdlib.md`, `manual/stdlib/color.md`, `manual/stdlib/index.md`, `manual/guide/markup.md`.
+- Created `manual/stdlib/px.md`, `manual/stdlib/styles.md`.

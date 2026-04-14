@@ -65,7 +65,9 @@ membership follows that same contract directly: `contains : Eq A => A -> List A 
 | Module | Description |
 |--------|-------------|
 | `app` | Application lifecycle (`stdlib/aivi/app/`) |
-| `color` | `Color` type and operations |
+| `color` | `Color` domain with blend, GNOME palette constants |
+| `px` | `Px` domain for type-safe pixel dimensions |
+| `gtk.styles` | Adwaita CSS class name constants and combinator |
 | `image` | Image loading and display |
 | `clipboard` | Clipboard read/write |
 | `portal` | XDG portal integration (file chooser, etc.) |

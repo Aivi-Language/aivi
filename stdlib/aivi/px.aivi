@@ -1,0 +1,59 @@
+use aivi.arithmetic (
+    add
+    sub
+)
+use aivi.core.float (
+    fromInt as floatFromInt
+    toInt as floatToInt
+)
+
+domain Px over Int = {
+    type mkPx : Int -> Px
+    mkPx = n => n
+    type carry : Px -> Int
+    carry = p => p
+    type geqPx : Px -> Px -> Bool
+    geqPx = a b => a >= b
+    type leqPx : Px -> Px -> Bool
+    leqPx = a b => a <= b
+}
+
+/** Construct a Px value from an Int. **/
+type Int -> Px
+func px = n => mkPx n
+
+/** The zero pixel value. **/
+value zero : Px = mkPx 0
+
+/** Add two Px values. **/
+type Px -> Px -> Px
+func addPx = a b => mkPx (add (carry a) (carry b))
+
+/** Subtract two Px values. **/
+type Px -> Px -> Px
+func subPx = a b => mkPx (sub (carry a) (carry b))
+
+/** Scale a Px value by a Float factor. **/
+type Px -> Float -> Px
+func scalePx = a f => mkPx (floatToInt (floatFromInt (carry a) * f))
+
+/** Return the larger of two Px values. **/
+type Px -> Px -> Px
+func maxPx = a b => geqPx a b
+ T|> a
+ F|> b
+
+/** Return the smaller of two Px values. **/
+type Px -> Px -> Px
+func minPx = a b => leqPx a b
+ T|> a
+ F|> b
+
+export Px
+export px
+export zero
+export addPx
+export subPx
+export scalePx
+export maxPx
+export minPx

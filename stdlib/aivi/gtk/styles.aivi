@@ -1,0 +1,133 @@
+use aivi.text (join)
+
+// ── Typography ────────────────────────────────────────────────────────────────
+
+/** Display-size heading (used for hero text or onboarding screens). **/
+value title1 : Text = "title-1"
+
+/** Large section heading. **/
+value title2 : Text = "title-2"
+
+/** Medium section heading. **/
+value title3 : Text = "title-3"
+
+/** Small heading, equivalent to a bold subheading. **/
+value title4 : Text = "title-4"
+
+/** Standard heading weight for labels above lists or content areas. **/
+value heading : Text = "heading"
+
+/** Small secondary text, e.g. form captions or timestamps. **/
+value caption : Text = "caption"
+
+/** Bold small text, e.g. column headers at caption scale. **/
+value captionHeading : Text = "caption-heading"
+
+/** Monospaced numeric rendering — keeps digit widths uniform. **/
+value numeric : Text = "numeric"
+
+// ── Button variants ───────────────────────────────────────────────────────────
+
+/** Primary call-to-action button (accent colour). **/
+value suggestedAction : Text = "suggested-action"
+
+/** Danger or irreversible action button (destructive colour). **/
+value destructiveAction : Text = "destructive-action"
+
+/** Flat, borderless button — no background or frame. **/
+value flatStyle : Text = "flat"
+
+/** Circular icon button with equal width and height. **/
+value circular : Text = "circular"
+
+/** Pill-shaped button with fully rounded ends. **/
+value pill : Text = "pill"
+
+/** Raised surface button — slight elevation. **/
+value raised : Text = "raised"
+
+/** Linked button group — removes the gap between adjacent buttons. **/
+value linked : Text = "linked"
+
+/** On-screen-display button — dark semi-transparent background. **/
+value osd : Text = "osd"
+
+// ── Status and accent ─────────────────────────────────────────────────────────
+
+/** Green success / confirmation tint. **/
+value success : Text = "success"
+
+/** Yellow warning tint. **/
+value warning : Text = "warning"
+
+/** Red error / destructive tint. **/
+value errorStyle : Text = "error"
+
+/** Accent colour — follows the system or app accent hue. **/
+value accent : Text = "accent"
+
+// ── Text helpers ──────────────────────────────────────────────────────────────
+
+/** Dimmed / secondary label text (reduced opacity). **/
+value dimLabel : Text = "dim-label"
+
+// ── Container helpers ─────────────────────────────────────────────────────────
+
+/** Card surface — white/dark background with rounded corners and shadow. **/
+value card : Text = "card"
+
+/** Boxed list — renders a ListBox with bordered, rounded row groups. **/
+value boxedList : Text = "boxed-list"
+
+/** Toolbar surface — used on ToolbarView bars. **/
+value toolbar : Text = "toolbar"
+
+/** Frame border — thin border around a container. **/
+value frameStyle : Text = "frame"
+
+/** Background surface colour — app background layer. **/
+value backgroundStyle : Text = "background"
+
+/** Content view surface — primary reading/editing area. **/
+value viewStyle : Text = "view"
+
+/** Scrolled-content overlay behaviour. **/
+value undershoot : Text = "undershoot"
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+/** Combine multiple CSS class names into a single space-separated string
+    suitable for use in the `cssClasses` attribute. **/
+func classes : List Text -> Text = list => join " " list
+
+export (
+    title1
+    title2
+    title3
+    title4
+    heading
+    caption
+    captionHeading
+    numeric
+    suggestedAction
+    destructiveAction
+    flatStyle
+    circular
+    pill
+    raised
+    linked
+    osd
+    success
+    warning
+    errorStyle
+    accent
+    dimLabel
+    card
+    boxedList
+    toolbar
+    frameStyle
+    backgroundStyle
+    viewStyle
+    undershoot
+    classes
+)
