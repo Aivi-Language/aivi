@@ -46,7 +46,7 @@ Key lookup functions:
 - `lookup_widget_event(schema, name)` — look up a `GtkEventDescriptor`
 - `supported_widget_schemas()` — full list of supported widgets
 
-**Widget kinds** (`GtkConcreteWidgetKind`): 45 supported GTK4 and Adwaita widgets as of this writing. Includes: Window, HeaderBar, Paned, Box, ScrolledWindow, Frame, Viewport, Label, Button, Entry, Switch, CheckButton, ToggleButton, SpinButton, Scale, Image, Spinner, ProgressBar, Revealer, Separator, StatusPage, Clamp, Banner, ToolbarView, ActionRow, ExpanderRow, SwitchRow, SpinRow, EntryRow, ListBox, ListBoxRow, DropDown, SearchEntry, Expander, NavigationView, NavigationPage, ToastOverlay, PreferencesGroup, PreferencesPage, PreferencesWindow, ComboRow, PasswordEntryRow, Overlay, MultilineEntry, Picture.
+**Widget kinds** (`GtkConcreteWidgetKind`): 48 supported GTK4 and Adwaita widgets as of this writing. Includes: Window, HeaderBar, Paned, Box, ScrolledWindow, Frame, Viewport, Label, Button, Entry, Switch, CheckButton, ToggleButton, SpinButton, Scale, Image, Spinner, ProgressBar, Revealer, Separator, StatusPage, Clamp, Banner, ToolbarView, ActionRow, ExpanderRow, SwitchRow, SpinRow, EntryRow, ListBox, ListBoxRow, DropDown, SearchEntry, Expander, NavigationView, NavigationPage, ToastOverlay, PreferencesGroup, PreferencesPage, PreferencesWindow, ComboRow, PasswordEntryRow, Overlay, MultilineEntry, Picture, ViewStack, ViewStackPage, AlertDialog.
 
 **Property setters** (`GtkPropertySetter`):
 - `GtkTextPropertySetter` — sets a string property
@@ -123,5 +123,19 @@ Key lookup functions:
 - GObject signal emission: main thread only
 - Source providers and task executors run on worker threads and publish into scheduler queues
 - The scheduler drives reactive clause outputs on the main thread via `GlibSchedulerDriver`
+
+## GTK Source Providers
+
+Two builtin source providers are backed directly by GTK/Adwaita APIs:
+
+| Key | Output type | Backing API |
+|-----|-------------|-------------|
+| `window.keyDown` | `Text` (key name) | `gtk::EventControllerKey` on the main window |
+| `gtk.darkMode` | `Bool` (`True` = dark) | `adw::StyleManager::connect_dark_notify` |
+
+`gtk.darkMode` pushes the current state once at startup (before the first tick) and
+again each time the user changes the system appearance in GNOME Settings. The source
+has no options and is idempotent: only one watcher is installed per host instance
+regardless of how many `@source gtk.darkMode` declarations appear.
 
 *See also: [runtime.md](runtime.md), [signal-model.md](signal-model.md)*

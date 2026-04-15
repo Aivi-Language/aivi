@@ -413,3 +413,17 @@ Documented the ambient class graph outside the primary executable slice.
 - Enhanced `stdlib/aivi/color.aivi` — added `blend`, `blendChannel`, GNOME Adwaita palette (35 constants).
 - Updated `wiki/gtk-bridge.md`, `wiki/stdlib.md`, `manual/stdlib/color.md`, `manual/stdlib/index.md`, `manual/guide/markup.md`.
 - Created `manual/stdlib/px.md`, `manual/stdlib/styles.md`.
+
+## [2026-04-15] ingest | gtk.darkMode source + widget catalog and event docs
+
+- Implemented `BuiltinSourceProvider::GtkDarkMode` across the full stack:
+  - `source_contracts.rs` — enum variant, `ALL`/`parse()`/`key()`/`contract()`, `DARK_MODE_RECURRENCE`
+  - `manager.rs` — `ActiveProviderState::DarkMode`, activation arm, `dispatch_dark_mode_changed`
+  - `glib_adapter.rs` — `dispatch_dark_mode_changed` delegate
+  - `host.rs` — `GtkDarkModeQueue` (coalescing), fields, `drain_dark_mode_events()`, `setup_dark_mode_watcher()` (idempotent, fires on first Window mount)
+  - `run_session.rs` — drain loop after window key drain
+  - `validator.rs` — tagged alongside `WindowKeyDown` in recurrence-wakeup hint
+- Updated `wiki/gtk-bridge.md` — widget count 45→48, added GTK Source Providers section.
+- Filled empty `ViewStack` and `AlertDialog` code blocks in `markup.md` with real examples.
+- Added missing events to `markup.md`: `ExpanderRow.onExpanded`, `Expander.onExpanded`, `NavigationPage.onShowing`/`onHiding`, `EntryRow.onFocusIn`/`onFocusOut`, `PasswordEntryRow.onFocusIn`/`onFocusOut`.
+- Added `gtk.darkMode` section to `source-catalog.md`.
