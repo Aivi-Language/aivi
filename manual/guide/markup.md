@@ -552,6 +552,7 @@ value view =
 ```
 
 **Properties:** `title`, `subtitle`, `expanded`  
+**Events:** `onExpanded` (Bool) — fires each time the row is expanded or collapsed  
 **Children:** `rows` (sequence)
 
 #### `SwitchRow`
@@ -600,7 +601,7 @@ value view =
 ```
 
 **Properties:** `title`, `text`  
-**Events:** `onChange` (Text), `onActivated` (Unit)
+**Events:** `onChange` (Text), `onActivated` (Unit), `onFocusIn` (Unit), `onFocusOut` (Unit)
 
 ---
 
@@ -693,6 +694,7 @@ value view =
 ```
 
 **Properties:** `label`, `expanded`  
+**Events:** `onExpanded` (Bool) — fires each time the expander is expanded or collapsed  
 **Children:** `child` (single)
 
 ---
@@ -740,6 +742,7 @@ value view =
 ```
 
 **Properties:** `title`, `tag`  
+**Events:** `onShowing` (Unit) — fired when the page is pushed onto the navigation stack; `onHiding` (Unit) — fired when the page is popped  
 **Children:** `content` (single)
 
 #### `ToastOverlay`
@@ -848,7 +851,7 @@ value view =
 ```
 
 **Properties:** `title`, `text`  
-**Events:** `onChange` (Text), `onActivated` (Unit)
+**Events:** `onChange` (Text), `onActivated` (Unit), `onFocusIn` (Unit), `onFocusOut` (Unit)
 
 ---
 
@@ -913,6 +916,28 @@ cross-widget references, both widgets share state through a common `visibleChild
 signal rather than a direct object link.
 
 ```aivi
+signal activePage : Text = "home"
+
+value view =
+    <Window title="App">
+        <ToolbarView>
+            <ToolbarView.top>
+                <HeaderBar>
+                    <ViewSwitcher policy="Wide" />
+                </HeaderBar>
+            </ToolbarView.top>
+            <ViewStack visibleChildName={activePage}>
+                <ViewStack.pages>
+                    <ViewStackPage name="home" title="Home" iconName="go-home-symbolic">
+                        <Label text="Home page" halign="Center" valign="Center" vexpand={True} />
+                    </ViewStackPage>
+                    <ViewStackPage name="search" title="Search" iconName="edit-find-symbolic">
+                        <Label text="Search page" halign="Center" valign="Center" vexpand={True} />
+                    </ViewStackPage>
+                </ViewStack.pages>
+            </ViewStack>
+        </ToolbarView>
+    </Window>
 ```
 
 **ViewStack properties:**
@@ -939,10 +964,15 @@ signal rather than a direct object link.
 dismiss it by binding a Bool signal to the `visible` property.
 
 ```aivi
-```
+signal showConfirm : Bool = False
+signal lastResponse : Text = ""
 
-**Properties:**
-- `visible` (Bool) — `True` presents the dialog, `False` closes it
+value view =
+    <Window title="App">
+        <AlertDialog visible={showConfirm} heading="Delete item?" body="This action cannot be undone." defaultResponse="delete" closeResponse="cancel" responses="delete:Delete:destructive|cancel:Cancel"></AlertDialog>
+        <Button label="Delete" cssClasses="destructive-action"></Window>
+    </Window>
+``` — `True` presents the dialog, `False` closes it
 - `heading` (Text) — dialog heading text
 - `body` (Text) — dialog body text
 - `defaultResponse` (Text) — ID of the response activated by pressing Enter

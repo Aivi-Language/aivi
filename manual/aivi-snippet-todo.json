@@ -1,9 +1,9 @@
 {
   "root": "manual",
   "scanned_files": 94,
-  "scanned_blocks": 969,
-  "rewritten_blocks": 0,
-  "unresolved_fragments": 160,
+  "scanned_blocks": 970,
+  "rewritten_blocks": 3,
+  "unresolved_fragments": 163,
   "entries": [
     {
       "markdown_path": "manual/guide/building-snake.md",
@@ -930,7 +930,7 @@
           "severity": "error",
           "code": "hir::unresolved-term-name",
           "message": "unknown term `state`",
-          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `status`?"
+          "rendered": "error[hir::unresolved-term-name]: unknown term `state`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/building-snake/block_20.aivi:1:6\n  |\n 1 | from state = {\n  |      ^^^^^\n  = reported during Milestone 2 HIR lowering\nhelp: did you mean `snake`?"
         },
         {
           "severity": "error",
@@ -1968,6 +1968,58 @@
       "suggested_snippet": "signal configResult : Signal (Result FsError AppConfig)\n\nsignal configError : Signal (Option Text) = configResult\n ||> Ok _  -> None\n ||> Err e -> Some (renderFsError e)\n\nvalue main =\n    <Window title=\"App\">\n        <show when={configError |> isSome}>\n            <Label text={configError |> withDefault \"\"} />\n        </show>\n    </Window>\n"
     },
     {
+      "markdown_path": "manual/guide/markup.md",
+      "block_index": 53,
+      "fence_info": "aivi",
+      "start_line": 919,
+      "end_line": 940,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 0,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-signal-annotation",
+          "message": "signal bodies require a `Signal A` annotation, found `Text`",
+          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `Text`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/markup/block_53.aivi:1:28\n  |\n 1 | signal activePage : Text = \"home\"\n  |                            ^^^^^^\n  = this signal body is checked against the payload type of `Signal A`"
+        }
+      ],
+      "suggested_snippet": "signal activePage : Text = \"home\"\n\nvalue view =\n    <Window title=\"App\">\n        <ToolbarView>\n            <ToolbarView.top>\n                <HeaderBar>\n                    <ViewSwitcher policy=\"Wide\" />\n                </HeaderBar>\n            </ToolbarView.top>\n            <ViewStack visibleChildName={activePage}>\n                <ViewStack.pages>\n                    <ViewStackPage name=\"home\" title=\"Home\" iconName=\"go-home-symbolic\">\n                        <Label text=\"Home page\" halign=\"Center\" valign=\"Center\" vexpand={True} />\n                    </ViewStackPage>\n                    <ViewStackPage name=\"search\" title=\"Search\" iconName=\"edit-find-symbolic\">\n                        <Label text=\"Search page\" halign=\"Center\" valign=\"Center\" vexpand={True} />\n                    </ViewStackPage>\n                </ViewStack.pages>\n            </ViewStack>\n        </ToolbarView>\n    </Window>\n"
+    },
+    {
+      "markdown_path": "manual/guide/markup.md",
+      "block_index": 54,
+      "fence_info": "aivi",
+      "start_line": 967,
+      "end_line": 985,
+      "formatting_changed": true,
+      "syntax_problem_count": 1,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 2,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-signal-annotation",
+          "message": "signal bodies require a `Signal A` annotation, found `Bool`",
+          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `Bool`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/markup/block_54.aivi:1:29\n  |\n 1 | signal showConfirm : Bool = False\n  |                             ^^^^^\n  = this signal body is checked against the payload type of `Signal A`"
+        },
+        {
+          "severity": "error",
+          "code": "hir::invalid-signal-annotation",
+          "message": "signal bodies require a `Signal A` annotation, found `Text`",
+          "rendered": "error[hir::invalid-signal-annotation]: signal bodies require a `Signal A` annotation, found `Text`\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/markup/block_54.aivi:2:30\n  |\n 2 | signal lastResponse : Text = \"\"\n  |                              ^^\n  = this signal body is checked against the payload type of `Signal A`"
+        },
+        {
+          "severity": "error",
+          "code": "syntax::mismatched-markup-close",
+          "message": "markup closing tag does not match the open tag",
+          "rendered": "error[syntax::mismatched-markup-close]: markup closing tag does not match the open tag\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/markup/block_54.aivi:7:66\n  |\n 7 |         <Button label=\"Delete\" cssClasses=\"destructive-action\"></Window>\n  |                                                                  ^^^^^^\n  = expected `</Button>` to close this node\n  ::: /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/markup/block_54.aivi:7:10\n  |\n 7 |         <Button label=\"Delete\" cssClasses=\"destructive-action\"></Window>\n  |          ------\n  |          note: `<Button>` was opened here\nhelp: ensure opening and closing tags match"
+        }
+      ],
+      "suggested_snippet": "signal showConfirm : Bool = False\nsignal lastResponse : Text = \"\"\n\nvalue view =\n    <Window title=\"App\">\n        <AlertDialog visible={showConfirm} heading=\"Delete item?\" body=\"This action cannot be undone.\" defaultResponse=\"delete\" closeResponse=\"cancel\" responses=\"delete:Delete:destructive|cancel:Cancel\"></AlertDialog>\n        <Button label=\"Delete\" cssClasses=\"destructive-action\"></Window>\n    </Window>\n"
+    },
+    {
       "markdown_path": "manual/guide/modules.md",
       "block_index": 2,
       "fence_info": "aivi",
@@ -2582,6 +2634,26 @@
         }
       ],
       "suggested_snippet": "@source api \"./spec.yaml\" with {\n    baseUrl: serverUrl,\n    auth: BearerToken apiToken,\n    timeout: 30sec\n}\nsignal petstore : ApiSource\n"
+    },
+    {
+      "markdown_path": "manual/guide/source-catalog.md",
+      "block_index": 2,
+      "fence_info": "aivi",
+      "start_line": 334,
+      "end_line": 340,
+      "formatting_changed": true,
+      "syntax_problem_count": 0,
+      "lsp_problem_count": 1,
+      "compiler_problem_count": 1,
+      "diagnostics": [
+        {
+          "severity": "error",
+          "code": "hir::invalid-source-capability-provider",
+          "message": "source capability handles must name a provider family such as `fs`, not a concrete provider variant",
+          "rendered": "error[hir::invalid-source-capability-provider]: source capability handles must name a provider family such as `fs`, not a concrete provider variant\n --> /home/mendrik/desk/mendrik/aivi/stdlib/manual_snippets/guide/source-catalog/block_2.aivi:3:9\n  |\n 3 | @source gtk.darkMode\n  |         ^^^^^^^^^^^^\n  = `gtk.darkMode` is already a concrete provider binding"
+        }
+      ],
+      "suggested_snippet": "type Theme = Light | Dark\n\n@source gtk.darkMode\nsignal rawDark : Bool\n\nsignal theme : Theme\n"
     },
     {
       "markdown_path": "manual/guide/sources.md",

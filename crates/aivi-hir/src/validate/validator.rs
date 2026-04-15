@@ -6103,6 +6103,7 @@ impl Validator<'_> {
                             | BuiltinSourceProvider::DbusSignal
                             | BuiltinSourceProvider::DbusMethod
                             | BuiltinSourceProvider::WindowKeyDown
+                            | BuiltinSourceProvider::GtkDarkMode
                             | BuiltinSourceProvider::ImapIdle
                             | BuiltinSourceProvider::ImapFetchBody
                             | BuiltinSourceProvider::SmtpSend

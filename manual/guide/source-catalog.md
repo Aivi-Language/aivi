@@ -318,6 +318,34 @@ These built-ins publish one host-context snapshot when the source starts. They d
 
 - Delivery comes from the focused window key controller.
 
+### `gtk.darkMode`
+
+**Form:** `@source gtk.darkMode`
+
+No options.  The output must decode to `Bool`.
+
+Emits the current system dark-mode state (`True` = dark) once at startup and again
+each time the user changes the appearance preference in GNOME Settings.  Backed by
+`adw::StyleManager::is_dark()`.
+
+**Example**
+
+```aivi
+type Theme = Light | Dark
+
+@source gtk.darkMode
+signal rawDark : Bool
+
+signal theme : Theme
+```
+
+**Notes**
+
+- The source fires one initial value before the first render tick, so `theme` is
+  always populated when the UI first appears.
+- Uses `adw::StyleManager::default()`, so it reflects the system-wide GNOME preference
+  or any app-level override set via `adw::StyleManager::set_color_scheme()`.
+
 ## D-Bus
 
 ### `dbus.ownName`

@@ -86,6 +86,11 @@ pub enum GtkConcreteWidgetKind {
     MultilineEntry,
     // Group H: Picture
     Picture,
+    // Group I: ViewStack navigation
+    ViewStack,
+    ViewStackPage,
+    // Group J: Dialogs
+    AlertDialog,
 }
 
 impl GtkConcreteWidgetKind {
@@ -136,6 +141,9 @@ impl GtkConcreteWidgetKind {
             Self::Overlay => "Overlay",
             Self::MultilineEntry => "MultilineEntry",
             Self::Picture => "Picture",
+            Self::ViewStack => "ViewStack",
+            Self::ViewStackPage => "ViewStackPage",
+            Self::AlertDialog => "AlertDialog",
         }
     }
 }
@@ -299,6 +307,17 @@ pub enum GtkTextPropertySetter {
     PictureResource,
     PictureContentFit,
     PictureAltText,
+    // Group I: ViewStack navigation
+    ViewStackVisibleChild,
+    ViewStackPageName,
+    ViewStackPageTitle,
+    ViewStackPageIconName,
+    // Group J: AlertDialog (adw::MessageDialog)
+    AlertDialogHeading,
+    AlertDialogBody,
+    AlertDialogDefaultResponse,
+    AlertDialogCloseResponse,
+    AlertDialogResponses,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -457,6 +476,16 @@ pub enum GtkEventSignal {
     WindowCloseRequest,
     // Phase 4: NavigationView
     NavigationViewPopped,
+    // Expander events
+    ExpanderRowExpanded,
+    ExpanderExpanded,
+    // NavigationPage events
+    NavigationPageShowing,
+    NavigationPageHiding,
+    // ViewStack
+    ViewStackSwitch,
+    // AlertDialog (adw::MessageDialog)
+    AlertDialogResponse,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -519,6 +548,9 @@ pub enum GtkChildMountRoute {
     // Group F: Overlay
     OverlayContent,
     OverlayOverlay,
+    // Group G: ViewStack navigation
+    ViewStackPages,
+    ViewStackPageContent,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2362,6 +2394,12 @@ const EXPANDER_ROW_EXPANDED_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescrip
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ExpanderRowExpanded),
 };
 
+const EXPANDER_ROW_EXPANDED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onExpanded",
+    payload: GtkConcreteEventPayload::Bool,
+    signal: GtkEventSignal::ExpanderRowExpanded,
+};
+
 const EXPANDER_ROW_ROWS_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
     name: "rows",
     container: GtkChildContainerKind::Sequence,
@@ -2395,7 +2433,7 @@ const EXPANDER_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         ADW_EXPANDER_ROW_SUBTITLE_PROPERTY,
         EXPANDER_ROW_EXPANDED_PROPERTY,
     ],
-    events: &[],
+    events: &[EXPANDER_ROW_EXPANDED_EVENT],
     default_child_group_override: None,
     child_groups: &[EXPANDER_ROW_ROWS_CHILD_GROUP],
 };
@@ -2553,7 +2591,7 @@ const ENTRY_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         ADW_PREFERENCES_ROW_TITLE_PROPERTY,
         ENTRY_ROW_TEXT_PROPERTY,
     ],
-    events: &[ENTRY_ROW_CHANGED_EVENT, ENTRY_ROW_ACTIVATED_EVENT],
+    events: &[ENTRY_ROW_CHANGED_EVENT, ENTRY_ROW_ACTIVATED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -2787,6 +2825,12 @@ const EXPANDER_EXPANDED_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor 
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ExpanderExpanded),
 };
 
+const EXPANDER_EXPANDED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onExpanded",
+    payload: GtkConcreteEventPayload::Bool,
+    signal: GtkEventSignal::ExpanderExpanded,
+};
+
 const EXPANDER_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
     name: "child",
     container: GtkChildContainerKind::Single,
@@ -2819,7 +2863,7 @@ const EXPANDER_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         EXPANDER_LABEL_PROPERTY,
         EXPANDER_EXPANDED_PROPERTY,
     ],
-    events: &[],
+    events: &[EXPANDER_EXPANDED_EVENT],
     default_child_group_override: None,
     child_groups: &[EXPANDER_CHILD_GROUP],
 };
@@ -2889,6 +2933,18 @@ const NAVIGATION_PAGE_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGro
     max_children: Some(1),
 };
 
+const NAVIGATION_PAGE_SHOWING_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onShowing",
+    payload: GtkConcreteEventPayload::Unit,
+    signal: GtkEventSignal::NavigationPageShowing,
+};
+
+const NAVIGATION_PAGE_HIDING_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onHiding",
+    payload: GtkConcreteEventPayload::Unit,
+    signal: GtkEventSignal::NavigationPageHiding,
+};
+
 const NAVIGATION_PAGE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "NavigationPage",
     kind: GtkConcreteWidgetKind::NavigationPage,
@@ -2913,7 +2969,7 @@ const NAVIGATION_PAGE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         NAVIGATION_PAGE_TITLE_PROPERTY,
         NAVIGATION_PAGE_TAG_PROPERTY,
     ],
-    events: &[],
+    events: &[NAVIGATION_PAGE_SHOWING_EVENT, NAVIGATION_PAGE_HIDING_EVENT],
     default_child_group_override: None,
     child_groups: &[NAVIGATION_PAGE_CONTENT_CHILD_GROUP],
 };
@@ -3202,7 +3258,7 @@ const PASSWORD_ENTRY_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         ADW_PREFERENCES_ROW_TITLE_PROPERTY,
         PASSWORD_ENTRY_ROW_TEXT_PROPERTY,
     ],
-    events: &[PASSWORD_ENTRY_ROW_CHANGED_EVENT, PASSWORD_ENTRY_ROW_ACTIVATED_EVENT],
+    events: &[PASSWORD_ENTRY_ROW_CHANGED_EVENT, PASSWORD_ENTRY_ROW_ACTIVATED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -3338,7 +3394,155 @@ const MULTILINE_ENTRY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         MULTILINE_ENTRY_LEFT_MARGIN_PROPERTY,
         MULTILINE_ENTRY_RIGHT_MARGIN_PROPERTY,
     ],
-    events: &[MULTILINE_ENTRY_CHANGED_EVENT],
+    events: &[MULTILINE_ENTRY_CHANGED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
+    default_child_group_override: None,
+    child_groups: &[],
+};
+
+// ── Adwaita: ViewStack ────────────────────────────────────────────────────────
+
+const VIEW_STACK_VISIBLE_CHILD_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "visibleChildName",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackVisibleChild),
+};
+
+const VIEW_STACK_SWITCH_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onSwitch",
+    payload: GtkConcreteEventPayload::Text,
+    signal: GtkEventSignal::ViewStackSwitch,
+};
+
+const VIEW_STACK_PAGES_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "pages",
+    container: GtkChildContainerKind::Sequence,
+    mount: GtkChildMountRoute::ViewStackPages,
+    min_children: 0,
+    max_children: None,
+};
+
+const VIEW_STACK_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "ViewStack",
+    kind: GtkConcreteWidgetKind::ViewStack,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        SENSITIVE_PROPERTY,
+        HEXPAND_PROPERTY,
+        VEXPAND_PROPERTY,
+        OPACITY_PROPERTY,
+        ANIMATE_OPACITY_PROPERTY,
+        WIDTH_REQUEST_PROPERTY,
+        HEIGHT_REQUEST_PROPERTY,
+        HALIGN_PROPERTY,
+        VALIGN_PROPERTY,
+        MARGIN_START_PROPERTY,
+        MARGIN_END_PROPERTY,
+        MARGIN_TOP_PROPERTY,
+        MARGIN_BOTTOM_PROPERTY,
+        TOOLTIP_PROPERTY,
+        CSS_CLASSES_PROPERTY,
+        VIEW_STACK_VISIBLE_CHILD_PROPERTY,
+    ],
+    events: &[VIEW_STACK_SWITCH_EVENT],
+    default_child_group_override: Some(&VIEW_STACK_PAGES_CHILD_GROUP),
+    child_groups: &[VIEW_STACK_PAGES_CHILD_GROUP],
+};
+
+// ── Adwaita: ViewStackPage ────────────────────────────────────────────────────
+
+const VIEW_STACK_PAGE_NAME_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "name",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackPageName),
+};
+
+const VIEW_STACK_PAGE_TITLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "title",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackPageTitle),
+};
+
+const VIEW_STACK_PAGE_ICON_NAME_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "iconName",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackPageIconName),
+};
+
+const VIEW_STACK_PAGE_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
+    name: "content",
+    container: GtkChildContainerKind::Single,
+    mount: GtkChildMountRoute::ViewStackPageContent,
+    min_children: 0,
+    max_children: Some(1),
+};
+
+const VIEW_STACK_PAGE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "ViewStackPage",
+    kind: GtkConcreteWidgetKind::ViewStackPage,
+    root_kind: GtkWidgetRootKind::Embedded,
+    properties: &[
+        VISIBLE_PROPERTY,
+        VIEW_STACK_PAGE_NAME_PROPERTY,
+        VIEW_STACK_PAGE_TITLE_PROPERTY,
+        VIEW_STACK_PAGE_ICON_NAME_PROPERTY,
+    ],
+    events: &[],
+    default_child_group_override: Some(&VIEW_STACK_PAGE_CONTENT_CHILD_GROUP),
+    child_groups: &[VIEW_STACK_PAGE_CONTENT_CHILD_GROUP],
+};
+
+// ── Adwaita: AlertDialog (adw::MessageDialog) ─────────────────────────────────
+
+const ALERT_DIALOG_HEADING_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "heading",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogHeading),
+};
+
+const ALERT_DIALOG_BODY_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "body",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogBody),
+};
+
+const ALERT_DIALOG_DEFAULT_RESPONSE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "defaultResponse",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogDefaultResponse),
+};
+
+const ALERT_DIALOG_CLOSE_RESPONSE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "closeResponse",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogCloseResponse),
+};
+
+const ALERT_DIALOG_RESPONSES_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
+    name: "responses",
+    value_shape: GtkPropertyValueShape::Text,
+    setter: GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogResponses),
+};
+
+const ALERT_DIALOG_RESPONSE_EVENT: GtkEventDescriptor = GtkEventDescriptor {
+    name: "onResponse",
+    payload: GtkConcreteEventPayload::Text,
+    signal: GtkEventSignal::AlertDialogResponse,
+};
+
+const ALERT_DIALOG_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
+    markup_name: "AlertDialog",
+    kind: GtkConcreteWidgetKind::AlertDialog,
+    root_kind: GtkWidgetRootKind::Window,
+    properties: &[
+        VISIBLE_PROPERTY,
+        ALERT_DIALOG_HEADING_PROPERTY,
+        ALERT_DIALOG_BODY_PROPERTY,
+        ALERT_DIALOG_DEFAULT_RESPONSE_PROPERTY,
+        ALERT_DIALOG_CLOSE_RESPONSE_PROPERTY,
+        ALERT_DIALOG_RESPONSES_PROPERTY,
+    ],
+    events: &[ALERT_DIALOG_RESPONSE_EVENT],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -3389,6 +3593,9 @@ const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] = &[
     OVERLAY_SCHEMA,
     MULTILINE_ENTRY_SCHEMA,
     PICTURE_SCHEMA,
+    VIEW_STACK_SCHEMA,
+    VIEW_STACK_PAGE_SCHEMA,
+    ALERT_DIALOG_SCHEMA,
 ];
 
 pub fn supported_widget_schemas() -> &'static [GtkWidgetSchema] {
@@ -3515,6 +3722,9 @@ mod tests {
                 "Overlay",
                 "MultilineEntry",
                 "Picture",
+                "ViewStack",
+                "ViewStackPage",
+                "AlertDialog",
             ]
         );
     }

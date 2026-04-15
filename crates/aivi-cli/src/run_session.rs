@@ -751,6 +751,10 @@ impl RunSessionState {
                 .dispatch_window_key_event(event.name.as_ref(), event.repeated);
             self.driver.tick_now();
         }
+        for is_dark in self.executor.host_mut().drain_dark_mode_events() {
+            self.driver.dispatch_dark_mode_changed(is_dark);
+            self.driver.tick_now();
+        }
         let failures = self.driver.drain_failures();
         if !failures.is_empty() {
             let source_map = self.driver.build_source_map();

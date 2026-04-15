@@ -647,6 +647,15 @@ impl GlibLinkedRuntimeDriver {
         });
     }
 
+    /// Publishes a dark-mode state change to all active `gtk.darkMode` source instances.
+    /// Called from the GTK main thread when `adw::StyleManager` dark state changes,
+    /// and once at startup with the current dark state.
+    pub fn dispatch_dark_mode_changed(&self, is_dark: bool) {
+        self.with_state_mut(|state| {
+            state.providers.dispatch_dark_mode_changed(is_dark);
+        });
+    }
+
     pub fn queued_message_count(&self) -> usize {
         self.with_state(|state| state.linked.queued_message_count())
     }

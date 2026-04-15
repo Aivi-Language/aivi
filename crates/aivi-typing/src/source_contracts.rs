@@ -37,6 +37,7 @@ pub enum BuiltinSourceProvider {
     DbusSignal,
     DbusMethod,
     WindowKeyDown,
+    GtkDarkMode,
     ImapConnect,
     ImapIdle,
     ImapFetchBody,
@@ -51,7 +52,7 @@ pub enum BuiltinSourceProvider {
 }
 
 impl BuiltinSourceProvider {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 36] = [
         Self::HttpGet,
         Self::HttpPost,
         Self::TimerEvery,
@@ -76,6 +77,7 @@ impl BuiltinSourceProvider {
         Self::DbusSignal,
         Self::DbusMethod,
         Self::WindowKeyDown,
+        Self::GtkDarkMode,
         Self::ImapConnect,
         Self::ImapIdle,
         Self::ImapFetchBody,
@@ -115,6 +117,7 @@ impl BuiltinSourceProvider {
             "dbus.signal" => Some(Self::DbusSignal),
             "dbus.method" => Some(Self::DbusMethod),
             "window.keyDown" => Some(Self::WindowKeyDown),
+            "gtk.darkMode" => Some(Self::GtkDarkMode),
             "imap.connect" => Some(Self::ImapConnect),
             "imap.idle" => Some(Self::ImapIdle),
             "imap.fetchBody" => Some(Self::ImapFetchBody),
@@ -156,6 +159,7 @@ impl BuiltinSourceProvider {
             Self::DbusSignal => "dbus.signal",
             Self::DbusMethod => "dbus.method",
             Self::WindowKeyDown => "window.keyDown",
+            Self::GtkDarkMode => "gtk.darkMode",
             Self::ImapConnect => "imap.connect",
             Self::ImapIdle => "imap.idle",
             Self::ImapFetchBody => "imap.fetchBody",
@@ -242,6 +246,16 @@ impl BuiltinSourceProvider {
             ),
             Self::WindowKeyDown => {
                 SourceContract::new(self, &WINDOW_OPTIONS, WINDOW_RECURRENCE, STREAM_LIFECYCLE)
+            }
+            Self::GtkDarkMode => {
+                // Provider-triggered stream: fires with the initial dark state on activation,
+                // then fires again on every system dark-mode change.
+                SourceContract::new(
+                    self,
+                    &NO_OPTIONS,
+                    DARK_MODE_RECURRENCE,
+                    STREAM_LIFECYCLE,
+                )
             }
             Self::ImapConnect => {
                 SourceContract::new(self, &NO_OPTIONS, STATIC_RECURRENCE, STREAM_LIFECYCLE)
@@ -1011,6 +1025,10 @@ const DBUS_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::new(
     &[],
 );
 const WINDOW_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::new(
+    Some(SourceContractIntrinsicWakeup::ProviderDefinedTrigger),
+    &[],
+);
+const DARK_MODE_RECURRENCE: SourceRecurrenceContract = SourceRecurrenceContract::new(
     Some(SourceContractIntrinsicWakeup::ProviderDefinedTrigger),
     &[],
 );

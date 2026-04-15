@@ -181,6 +181,39 @@ impl GtkWindowKeyQueue {
     }
 }
 
+/// Coalescing queue for `gtk.darkMode` events.  Only the latest value matters;
+/// rapid theme changes collapse to the final state seen before the next drain.
+struct GtkDarkModeQueue {
+    events: Mutex<VecDeque<bool>>,
+}
+
+impl Default for GtkDarkModeQueue {
+    fn default() -> Self {
+        Self {
+            events: Mutex::new(VecDeque::new()),
+        }
+    }
+}
+
+impl GtkDarkModeQueue {
+    fn push(&self, is_dark: bool) {
+        let mut q = self
+            .events
+            .lock()
+            .expect("GtkDarkModeQueue mutex should not be poisoned");
+        q.clear(); // Only the latest value matters.
+        q.push_back(is_dark);
+    }
+
+    fn drain(&self) -> Vec<bool> {
+        self.events
+            .lock()
+            .expect("GtkDarkModeQueue mutex should not be poisoned")
+            .drain(..)
+            .collect()
+    }
+}
+
 impl<V> GtkEventQueue<V> {
     fn push(&self, event: GtkQueuedEvent<V>) {
         self.events
@@ -196,6 +229,14 @@ impl<V> GtkEventQueue<V> {
             .drain(..)
             .collect()
     }
+}
+
+/// Metadata for a ViewStackPage, stored in the host keyed by widget GObject pointer.
+#[derive(Default, Clone)]
+struct ViewStackPageMeta {
+    name: String,
+    title: String,
+    icon_name: String,
 }
 
 pub struct GtkConcreteHost<V>
@@ -217,6 +258,14 @@ where
     /// Tracks the list of response IDs currently added to each AlertDialog,
     /// keyed by the widget's GObject pointer.
     alert_dialog_responses: RefCell<BTreeMap<usize, Vec<Box<str>>>>,
+    /// Stores name/title/iconName for ViewStackPage widgets, keyed by GObject pointer.
+    /// Read when the page is mounted into a ViewStack.
+    view_stack_page_meta: RefCell<BTreeMap<usize, ViewStackPageMeta>>,
+    /// Queue of `gtk.darkMode` state changes pushed by the `adw::StyleManager` notify
+    /// signal.  Drained each tick and dispatched to the runtime.
+    queued_dark_mode: Rc<GtkDarkModeQueue>,
+    /// Whether the dark-mode watcher has been connected to `adw::StyleManager`.
+    dark_mode_watcher_installed: bool,
 }
 
 impl<V> Default for GtkConcreteHost<V>
@@ -234,6 +283,9 @@ where
             event_notifier: Rc::new(RefCell::new(None)),
             managed_css_classes: RefCell::new(BTreeMap::new()),
             alert_dialog_responses: RefCell::new(BTreeMap::new()),
+            view_stack_page_meta: RefCell::new(BTreeMap::new()),
+            queued_dark_mode: Rc::new(GtkDarkModeQueue::default()),
+            dark_mode_watcher_installed: false,
         }
     }
 }
@@ -288,6 +340,38 @@ where
     pub fn drain_window_key_events(&mut self) -> Vec<GtkQueuedWindowKeyEvent> {
         GtkConcreteHost::<V>::assert_gtk_main_thread();
         self.queued_window_keys.drain()
+    }
+
+    /// Drains all pending dark-mode events queued by the `adw::StyleManager` watcher.
+    /// Returns at most one value (the latest state) since the queue is coalescing.
+    pub fn drain_dark_mode_events(&mut self) -> Vec<bool> {
+        GtkConcreteHost::<V>::assert_gtk_main_thread();
+        self.queued_dark_mode.drain()
+    }
+
+    /// Installs a one-time `adw::StyleManager` dark-notify watcher.  Idempotent: only
+    /// the first call does anything; subsequent calls from repeated Window creation are
+    /// no-ops.  Pushes the *current* dark state immediately so the source signal is
+    /// populated before the first scheduler tick.
+    fn setup_dark_mode_watcher(&mut self) {
+        if self.dark_mode_watcher_installed {
+            return;
+        }
+        self.dark_mode_watcher_installed = true;
+        let queue = self.queued_dark_mode.clone();
+        let notifier = self.event_notifier.clone();
+        let style_manager = adw::StyleManager::default();
+        // Push the current state immediately so the source is not uninitialized.
+        queue.push(style_manager.is_dark());
+        if let Some(n) = notifier.borrow().clone() {
+            n();
+        }
+        style_manager.connect_dark_notify(move |mgr| {
+            queue.push(mgr.is_dark());
+            if let Some(n) = notifier.borrow().clone() {
+                n();
+            }
+        });
     }
 
     pub fn queue_window_key_event(&mut self, name: &str, repeated: bool) {
@@ -439,6 +523,13 @@ where
                 gtk::TextView::new().upcast::<gtk::Widget>()
             }
             GtkConcreteWidgetKind::Picture => gtk::Picture::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::ViewStack => adw::ViewStack::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::ViewStackPage => {
+                adw::Bin::new().upcast::<gtk::Widget>()
+            }
+            GtkConcreteWidgetKind::AlertDialog => {
+                adw::MessageDialog::new(None::<&gtk::Window>, None, None).upcast::<gtk::Widget>()
+            }
         };
         ensure_aivi_widget_styles();
         Ok((schema, widget))
@@ -1605,6 +1696,133 @@ where
                     })?
                     .set_alternative_text(if value.is_empty() { None } else { Some(value) });
             }
+            GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackVisibleChild) => {
+                widget
+                    .clone()
+                    .downcast::<adw::ViewStack>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::ViewStack",
+                    })?
+                    .set_visible_child_name(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackPageName) => {
+                let key = widget.as_ptr() as usize;
+                self.view_stack_page_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .name = value.to_owned();
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackPageTitle) => {
+                let key = widget.as_ptr() as usize;
+                self.view_stack_page_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .title = value.to_owned();
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::ViewStackPageIconName) => {
+                let key = widget.as_ptr() as usize;
+                self.view_stack_page_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .icon_name = value.to_owned();
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogHeading) => {
+                widget
+                    .clone()
+                    .downcast::<adw::MessageDialog>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::MessageDialog",
+                    })?
+                    .set_heading(if value.is_empty() { None } else { Some(value) });
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogBody) => {
+                widget
+                    .clone()
+                    .downcast::<adw::MessageDialog>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::MessageDialog",
+                    })?
+                    .set_body(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogDefaultResponse) => {
+                widget
+                    .clone()
+                    .downcast::<adw::MessageDialog>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::MessageDialog",
+                    })?
+                    .set_default_response(if value.is_empty() { None } else { Some(value) });
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogCloseResponse) => {
+                widget
+                    .clone()
+                    .downcast::<adw::MessageDialog>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::MessageDialog",
+                    })?
+                    .set_close_response(value);
+            }
+            GtkPropertySetter::Text(GtkTextPropertySetter::AlertDialogResponses) => {
+                let dialog = widget
+                    .clone()
+                    .downcast::<adw::MessageDialog>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: schema.markup_name.into(),
+                        expected_type: "adw::MessageDialog",
+                    })?;
+                let key = widget.as_ptr() as usize;
+                let mut tracked = self.alert_dialog_responses.borrow_mut();
+                let current_ids = tracked.entry(key).or_default();
+
+                // Parse "id:Label:appearance|id2:Label2" format.
+                let new_responses: Vec<(Box<str>, Box<str>, adw::ResponseAppearance)> = value
+                    .split('|')
+                    .filter(|s| !s.is_empty())
+                    .map(|entry| {
+                        let mut parts = entry.splitn(3, ':');
+                        let id = parts.next().unwrap_or("").trim();
+                        let label = parts.next().unwrap_or(id).trim();
+                        let appearance_str = parts.next().unwrap_or("").trim();
+                        let appearance = match appearance_str {
+                            "suggested" => adw::ResponseAppearance::Suggested,
+                            "destructive" => adw::ResponseAppearance::Destructive,
+                            _ => adw::ResponseAppearance::Default,
+                        };
+                        (id.into(), label.into(), appearance)
+                    })
+                    .collect();
+
+                let new_ids: Vec<Box<str>> =
+                    new_responses.iter().map(|(id, _, _)| id.clone()).collect();
+
+                // Remove stale responses (requires adw v1.5).
+                let stale: Vec<Box<str>> = current_ids
+                    .iter()
+                    .filter(|id| !new_ids.contains(id))
+                    .cloned()
+                    .collect();
+                for id in &stale {
+                    dialog.remove_response(id.as_ref());
+                }
+
+                // Add new responses and update appearance.
+                for (id, label, appearance) in &new_responses {
+                    if !current_ids.contains(id) {
+                        dialog.add_response(id.as_ref(), label.as_ref());
+                    }
+                    dialog.set_response_appearance(id.as_ref(), *appearance);
+                }
+
+                *current_ids = new_ids;
+            }
             _ => {
                 return Err(self.invalid_property_value(
                     schema,
@@ -2226,6 +2444,26 @@ where
                     overlay.add_overlay(child);
                 }
             }
+            GtkChildMountRoute::ViewStackPages => {
+                for child in previous {
+                    child.unparent();
+                }
+                let stack = parent_widget
+                    .clone()
+                    .downcast::<adw::ViewStack>()
+                    .expect("view stack widget should downcast");
+                let meta_map = self.view_stack_page_meta.borrow();
+                for child in next {
+                    let key = child.as_ptr() as usize;
+                    let meta = meta_map.get(&key).cloned().unwrap_or_default();
+                    let name: Option<&str> = if meta.name.is_empty() {
+                        None
+                    } else {
+                        Some(&meta.name)
+                    };
+                    stack.add_titled_with_icon(child, name, &meta.title, &meta.icon_name);
+                }
+            }
             _ => unreachable!("replace_sequence_children requires a sequence child group"),
         }
     }
@@ -2401,6 +2639,16 @@ where
                     })?
                     .set_child(child);
             }
+            GtkChildMountRoute::ViewStackPageContent => {
+                parent_widget
+                    .clone()
+                    .downcast::<adw::Bin>()
+                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                        widget: "ViewStackPage".into(),
+                        expected_type: "adw::Bin",
+                    })?
+                    .set_child(child);
+            }
             GtkChildMountRoute::HeaderBarStart
             | GtkChildMountRoute::HeaderBarEnd
             | GtkChildMountRoute::BoxChildren
@@ -2413,7 +2661,8 @@ where
             | GtkChildMountRoute::PreferencesGroupChildren
             | GtkChildMountRoute::PreferencesPageChildren
             | GtkChildMountRoute::PreferencesWindowPages
-            | GtkChildMountRoute::OverlayOverlay => {
+            | GtkChildMountRoute::OverlayOverlay
+            | GtkChildMountRoute::ViewStackPages => {
                 unreachable!("sequence child groups are handled by explicit sequence APIs")
             }
         }
@@ -2441,6 +2690,9 @@ where
             .checked_add(1)
             .expect("concrete GTK widget handle counter should not overflow");
         let (schema, widget) = self.create_supported_widget(widget)?;
+        if schema.is_window_root() {
+            self.setup_dark_mode_watcher();
+        }
         self.widgets.insert(
             handle.0,
             MountedWidget {
@@ -3095,6 +3347,106 @@ where
                         notifier();
                     }
                 }),
+            GtkEventSignal::ExpanderRowExpanded => widget
+                .clone()
+                .downcast::<adw::ExpanderRow>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::ExpanderRow",
+                })?
+                .connect_expanded_notify(move |row| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_bool(row.is_expanded()),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::ExpanderExpanded => widget
+                .clone()
+                .downcast::<gtk::Expander>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "gtk::Expander",
+                })?
+                .connect_expanded_notify(move |expander| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_bool(expander.is_expanded()),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::NavigationPageShowing => widget
+                .clone()
+                .downcast::<adw::NavigationPage>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::NavigationPage",
+                })?
+                .connect_showing(move |_| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::unit(),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::NavigationPageHiding => widget
+                .clone()
+                .downcast::<adw::NavigationPage>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::NavigationPage",
+                })?
+                .connect_hiding(move |_| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::unit(),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::ViewStackSwitch => widget
+                .clone()
+                .downcast::<adw::ViewStack>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::ViewStack",
+                })?
+                .connect_visible_child_name_notify(move |stack| {
+                    let name = stack
+                        .visible_child_name()
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_text(&name),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
+            GtkEventSignal::AlertDialogResponse => widget
+                .clone()
+                .downcast::<adw::MessageDialog>()
+                .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                    widget: schema.markup_name.into(),
+                    expected_type: "adw::MessageDialog",
+                })?
+                .connect_response(None, move |_, response| {
+                    queue.push(GtkQueuedEvent {
+                        route: route_id,
+                        value: V::from_text(response),
+                    });
+                    if let Some(notifier) = notifier.borrow().clone() {
+                        notifier();
+                    }
+                }),
         };
         self.events.insert(
             handle.0,
@@ -3321,6 +3673,9 @@ where
             .borrow_mut()
             .remove(&(mounted.widget.as_ptr() as usize));
         self.alert_dialog_responses
+            .borrow_mut()
+            .remove(&(mounted.widget.as_ptr() as usize));
+        self.view_stack_page_meta
             .borrow_mut()
             .remove(&(mounted.widget.as_ptr() as usize));
         if mounted.schema.is_window_root() {

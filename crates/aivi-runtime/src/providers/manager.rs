@@ -23,6 +23,11 @@ enum ActiveProviderState {
         allow_repeat: bool,
         port: DetachedRuntimePublicationPort,
     },
+    /// Live dark-mode stream: publishes `Bool` on each system dark-mode change.
+    DarkMode {
+        provider: RuntimeSourceProvider,
+        port: DetachedRuntimePublicationPort,
+    },
 }
 
 impl ActiveProviderState {
@@ -30,7 +35,8 @@ impl ActiveProviderState {
         match self {
             Self::Passive { provider, .. }
             | Self::Mailbox { provider, .. }
-            | Self::Window { provider, .. } => provider,
+            | Self::Window { provider, .. }
+            | Self::DarkMode { provider, .. } => provider,
         }
     }
 }
@@ -129,6 +135,19 @@ impl SourceProviderManager {
         WindowKeyConfig {
             capture,
             focus_only,
+        }
+    }
+
+    /// Publishes a dark-mode change to all active `gtk.darkMode` source instances.
+    /// Called by the GTK main thread whenever `adw::StyleManager` dark state changes.
+    pub fn dispatch_dark_mode_changed(&mut self, is_dark: bool) {
+        for state in self.active.values() {
+            let ActiveProviderState::DarkMode { port, .. } = state else {
+                continue;
+            };
+            let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(
+                RuntimeValue::Bool(is_dark),
+            ));
         }
     }
 
@@ -632,6 +651,17 @@ impl SourceProviderManager {
                     port,
                 }
             }
+            RuntimeSourceProvider::Builtin(BuiltinSourceProvider::GtkDarkMode) => {
+                validate_argument_count(instance, BuiltinSourceProvider::GtkDarkMode, config, 0)?;
+                reject_options(instance, BuiltinSourceProvider::GtkDarkMode, config)?;
+                // The GTK host publishes the initial dark-mode state via `dispatch_dark_mode_changed`
+                // shortly after activation (before the first tick). Subsequent changes are pushed
+                // whenever `adw::StyleManager::dark` changes.
+                ActiveProviderState::DarkMode {
+                    provider: config.provider.clone(),
+                    port,
+                }
+            }
             RuntimeSourceProvider::Builtin(
                 BuiltinSourceProvider::ImapConnect
                 | BuiltinSourceProvider::ImapIdle
@@ -687,7 +717,7 @@ impl SourceProviderManager {
                     .expect("mailbox hub mutex should not be poisoned")
                     .unsubscribe(mailbox, *subscriber_id);
             }
-            ActiveProviderState::Window { .. } => {}
+            ActiveProviderState::Window { .. } | ActiveProviderState::DarkMode { .. } => {}
         }
         // Join any worker threads associated with this instance.  The stop flag
         // was already set above so each thread should exit on its next iteration;
