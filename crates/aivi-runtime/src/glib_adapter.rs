@@ -219,9 +219,13 @@ impl GlibTickDrainMode {
         queued_messages: usize,
     ) -> bool {
         match self {
-            Self::UntilIdle | Self::AsyncWakeBudgeted => {
-                async_wake_requested || queued_messages > 0
-            }
+            Self::UntilIdle => async_wake_requested || queued_messages > 0,
+            // For async timer-driven ticks, stop after each productive tick and
+            // yield to GTK rendering.  A new async drive task has already been
+            // spawned by `request_tick()` on the background timer thread, so
+            // the queued publication will be processed on the next GLib event
+            // loop iteration — after GTK gets a chance to render.
+            Self::AsyncWakeBudgeted => queued_messages > 0,
             Self::UntilCurrentQueue => queued_messages > 0,
         }
     }
