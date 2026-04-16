@@ -178,7 +178,7 @@ func cellEntry = ct c => c
 
 type Snake -> Cell -> List ((Int, Int), CellType)
 func boardEntries = sn food =>
-    append (map (cellEntry Body) sn.cells) (cons (cellEntry Food food) (singleton (cellEntry Head sn.head)))
+    append (map (cellEntry Body) sn.cells) [cellEntry Food food, cellEntry Head sn.head]
 
 type Snake -> Cell -> Option (Matrix CellType)
 func buildBoardMatrix = sn food =>

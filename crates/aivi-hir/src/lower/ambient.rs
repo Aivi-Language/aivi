@@ -676,6 +676,19 @@ type (Matrix A) -> (Int, Int) -> A -> (Option (Matrix A))
 func __aivi_matrix_replaceAt = matrix coord value => coord
     ||> (x, y) -> __aivi_matrix_replaceCoord matrix x y value
 
+type (Matrix A) -> ((Int, Int), A) -> (Option (Matrix A))
+func __aivi_matrix_replaceManyUpdate = matrix update => update
+    ||> (coord, value) -> __aivi_matrix_replaceAt matrix coord value
+
+type (Option (Matrix A)) -> ((Int, Int), A) -> (Option (Matrix A))
+func __aivi_matrix_replaceManyStep = current update => current
+    ||> None        -> None
+    ||> Some matrix -> __aivi_matrix_replaceManyUpdate matrix update
+
+type (Matrix A) -> (List ((Int, Int), A)) -> (Option (Matrix A))
+func __aivi_matrix_replaceMany = matrix updates =>
+    updates |> reduce __aivi_matrix_replaceManyStep (Some matrix)
+
 type Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
 func __aivi_matrix_validateFirstRow = rowIdx expectedWidth row =>
     (1, __aivi_list_length row, None)

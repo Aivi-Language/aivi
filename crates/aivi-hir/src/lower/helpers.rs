@@ -1642,6 +1642,9 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.matrix", "replaceAt") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_matrix_replaceAt".into(),
         }),
+        ("aivi.matrix", "replaceMany") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_matrix_replaceMany".into(),
+        }),
         ("aivi.matrix", "rows") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_matrix_rows".into(),
         }),
