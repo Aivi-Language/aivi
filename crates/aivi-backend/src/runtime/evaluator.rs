@@ -158,6 +158,22 @@ impl<'a> KernelEvaluator<'a> {
             .kernels()
             .get(kernel_id)
             .ok_or(EvaluationError::UnknownKernel { kernel: kernel_id })?;
+        // Check the single-entry call cache before doing any validation or evaluation.
+        if let Some((cached_result, cached_layout)) =
+            self.last_kernel_call.as_ref().and_then(|last| {
+                (last.kernel_id == kernel_id
+                    && last.input_subject.as_ref() == input_subject
+                    && last.environment.as_ref() == environment)
+                    .then(|| (last.result.clone(), last.result_layout))
+            })
+        {
+            self.record_kernel_profile(
+                kernel_id,
+                started_at.map_or(Duration::ZERO, |started| started.elapsed()),
+                true,
+            );
+            return Ok((cached_result, cached_layout));
+        }
         match (kernel.input_subject, input_subject) {
             (Some(expected), Some(value)) => {
                 if !value_matches_layout(self.program, value, expected) {
@@ -197,22 +213,6 @@ impl<'a> KernelEvaluator<'a> {
                     found: value.clone(),
                 });
             }
-        }
-        // Check the single-entry call cache before doing any work.
-        if let Some((cached_result, cached_layout)) =
-            self.last_kernel_call.as_ref().and_then(|last| {
-                (last.kernel_id == kernel_id
-                    && last.input_subject.as_ref() == input_subject
-                    && last.environment.as_ref() == environment)
-                    .then(|| (last.result.clone(), last.result_layout))
-            })
-        {
-            self.record_kernel_profile(
-                kernel_id,
-                started_at.map_or(Duration::ZERO, |started| started.elapsed()),
-                true,
-            );
-            return Ok((cached_result, cached_layout));
         }
         let inline_subjects = vec![None; kernel.inline_subjects.len()];
         let result = self.evaluate_expr(

@@ -44,15 +44,12 @@ pub(crate) fn value_matches_layout(program: &Program, value: &RuntimeValue, layo
                     .zip(elements.iter())
                     .all(|(layout, value)| value_matches_layout(program, value, *layout))
         }
-        (LayoutKind::List { element }, RuntimeValue::List(elements))
-        | (LayoutKind::Set { element }, RuntimeValue::Set(elements)) => elements
-            .iter()
-            .all(|value| value_matches_layout(program, value, *element)),
-        (LayoutKind::Map { key, value }, RuntimeValue::Map(entries)) => {
-            entries.iter().all(|(k, v)| {
-                value_matches_layout(program, k, *key) && value_matches_layout(program, v, *value)
-            })
-        }
+        // Shallow tag checks: the typechecker guarantees element types are correct, so
+        // walking every element on every kernel call would be O(N) per check and catastrophic
+        // for large collections (e.g. Matrix = List(List(...))).
+        (LayoutKind::List { .. }, RuntimeValue::List(_))
+        | (LayoutKind::Set { .. }, RuntimeValue::Set(_)) => true,
+        (LayoutKind::Map { .. }, RuntimeValue::Map(_)) => true,
         (LayoutKind::Record(expected), RuntimeValue::Record(fields)) => {
             expected.len() == fields.len()
                 && expected.iter().zip(fields.iter()).all(|(layout, field)| {
