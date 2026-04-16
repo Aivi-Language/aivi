@@ -166,6 +166,17 @@ impl McpHostState {
             prepared.artifact,
             prepared.launch_config,
         )?;
+        if prepared.sources_paused {
+            harness.with_access(|access| {
+                let driver = access.driver();
+                for binding in driver.source_bindings() {
+                    let _ = driver.set_source_mode(
+                        binding.instance,
+                        GlibLinkedSourceMode::Manual,
+                    );
+                }
+            });
+        }
         harness.install_quit_on_last_window_close();
         harness.present_root_windows()?;
         let view_name = harness.view_name().to_owned();
@@ -605,6 +616,7 @@ struct PreparedLaunch {
     entry_path: PathBuf,
     artifact: RunArtifact,
     launch_config: run_session::RunLaunchConfig,
+    sources_paused: bool,
 }
 
 fn prepare_launch_request(
@@ -616,6 +628,7 @@ fn prepare_launch_request(
     if let Some(view) = requested_view.as_deref() {
         validate_module_name(view)?;
     }
+    let sources_paused = source_context.sources_paused.unwrap_or(false);
     let snapshot = WorkspaceHirSnapshot::load(entry_path)?;
     if let Some(diagnostics) = rendered_workspace_errors(&snapshot) {
         return Err(diagnostics);
@@ -638,6 +651,7 @@ fn prepare_launch_request(
         launch_config: run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
             build_source_context(source_context)?,
         )),
+        sources_paused,
     })
 }
 
@@ -1228,7 +1242,11 @@ fn tool_definitions() -> Vec<JsonValue> {
                     "args": { "type": "array", "items": { "type": "string" } },
                     "cwd": { "type": "string" },
                     "env": { "type": "object", "additionalProperties": { "type": "string" } },
-                    "stdin_text": { "type": "string" }
+                    "stdin_text": { "type": "string" },
+                    "sources_paused": {
+                        "type": "boolean",
+                        "description": "When true, all sources are set to Manual immediately after the app initialises — before any live timer or keyboard event can fire. Use this to get a deterministic initial state for per-tick testing via publish_source_value."
+                    }
                 },
                 "additionalProperties": false
             }
@@ -1244,7 +1262,11 @@ fn tool_definitions() -> Vec<JsonValue> {
                     "args": { "type": "array", "items": { "type": "string" } },
                     "cwd": { "type": "string" },
                     "env": { "type": "object", "additionalProperties": { "type": "string" } },
-                    "stdin_text": { "type": "string" }
+                    "stdin_text": { "type": "string" },
+                    "sources_paused": {
+                        "type": "boolean",
+                        "description": "When true, all sources are set to Manual immediately after the app initialises — before any live timer or keyboard event can fire. Use this to get a deterministic initial state for per-tick testing via publish_source_value."
+                    }
                 },
                 "additionalProperties": false
             }
@@ -2141,6 +2163,10 @@ struct LaunchSourceArgs {
     cwd: Option<String>,
     env: Option<BTreeMap<String, String>>,
     stdin_text: Option<String>,
+    /// When true, all sources are set to Manual immediately after the app
+    /// initialises — before any live timer or keyboard event can fire.
+    /// Use this to get a deterministic initial state for per-tick testing.
+    sources_paused: Option<bool>,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]

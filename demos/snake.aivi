@@ -8,6 +8,13 @@ use aivi.text (
     join as textJoin
 )
 
+use aivi.matrix (
+    Matrix
+    filled as matrixFilled
+    rows as matrixRows
+    replaceMany as matrixReplaceMany
+)
+
 type Direction =
   | North
   | South
@@ -156,22 +163,41 @@ func resolveMoveStep = st h =>
         seed: nextSeed st.seed,
     }
 
-type List Cell -> Cell -> Cell -> Int -> Int -> Text
-func cellGlyph = body head food y x => (Cell x y == head, any (sameCell (Cell x y)) body, Cell x y == food)
- ||> (True, _, _)          -> "@"
- ||> (_, True, _)          -> "o"
- ||> (_, _, True)          -> "*"
- ||> (False, False, False) -> "·"
+type CellType = Empty | Head | Body | Food
 
-type List Cell -> Cell -> Cell -> Int -> Text
-func renderRowAt = body head food y => indices boardW
-  |> map (cellGlyph body head food y)
-  |> textJoin ""
+type CellType -> Text
+func cellGlyph = arg1 => arg1
+ ||> Empty -> "·"
+ ||> Head  -> "@"
+ ||> Body  -> "o"
+ ||> Food  -> "*"
 
-type Snake -> Cell -> Text
-func renderBoard = snake food => indices boardH
-  |> map (renderRowAt snake.cells snake.head food)
-  |> textJoin "\n"
+type CellType -> Cell -> ((Int, Int), CellType)
+func cellEntry = ct c => c
+ ||> Cell x y -> ((x, y), ct)
+
+type Snake -> Cell -> List ((Int, Int), CellType)
+func boardEntries = sn food =>
+    append (map (cellEntry Body) sn.cells) (cons (cellEntry Food food) (singleton (cellEntry Head sn.head)))
+
+type Snake -> Cell -> Option (Matrix CellType)
+func buildBoardMatrix = sn food =>
+    matrixFilled boardW boardH Empty
+     ||> Err _ -> None
+     ||> Ok base -> matrixReplaceMany base (boardEntries sn food)
+
+type List CellType -> Text
+func renderRow = cells =>
+    cells |> map cellGlyph |> textJoin ""
+
+type Matrix CellType -> Text
+func boardTextFromMatrix = board =>
+    board |> matrixRows |> map renderRow |> textJoin "\n"
+
+type Option (Matrix CellType) -> Text
+func renderBoardOption = opt => opt
+ ||> None   -> ""
+ ||> Some m -> boardTextFromMatrix m
 
 type Status -> Bool
 func isGameOver = arg1 => arg1
@@ -222,10 +248,13 @@ from state = {
     status: .status
 }
 
-signal boardText : Signal Text =
+signal boardMatrix : Signal (Option (Matrix CellType)) =
  &|> snake
  &|> food
-  |> renderBoard
+  |> buildBoardMatrix
+
+signal boardText : Signal Text =
+    boardMatrix |> renderBoardOption
 
 from dir = {
     dirLine: dirLabel
