@@ -819,6 +819,8 @@ pub struct ItemBase {
 pub struct FunctionParam {
     pub name: Option<Identifier>,
     pub annotation: Option<TypeExpr>,
+    /// Whether this parameter was written with `!` to select it as the subject in sugar form.
+    pub is_selected: bool,
     pub span: SourceSpan,
 }
 

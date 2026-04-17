@@ -159,10 +159,54 @@ fn compile_file(path: &Path, output: Option<&Path>) -> Result<ExitCode, String> 
 }
 
 #[derive(Debug)]
-struct BuildBundleSummary {
-    launcher_path: PathBuf,
-    runtime_path: PathBuf,
-    artifact_path: PathBuf,
+struct BuildExecutableSummary {
+    executable_path: PathBuf,
+    embedded_file_count: usize,
+    companion_file_count: usize,
+}
+
+const EMBEDDED_BUNDLE_ARCHIVE_MAGIC: [u8; 16] = *b"AIVI_ARCHIVE_V1_";
+const EMBEDDED_BUNDLE_FOOTER_MAGIC: [u8; 16] = *b"AIVI_BUNDLE_V1__";
+const EMBEDDED_BUNDLE_FOOTER_LEN: u64 = 24;
+const EMBEDDED_BUNDLE_LAUNCH_CWD_FILE: &str = ".aivi-launch-cwd";
+
+#[derive(Debug)]
+struct EmbeddedBundleDescriptor {
+    archive_offset: u64,
+    archive_len: u64,
+}
+
+#[derive(Debug)]
+struct EmbeddedBundleEntry {
+    relative_path: PathBuf,
+    source_path: PathBuf,
+}
+
+#[derive(Debug)]
+struct WorkspaceEmbeddingLayout {
+    source_root: PathBuf,
+    embedded_prefix: PathBuf,
+    launch_cwd: PathBuf,
+}
+
+struct CurrentDirGuard {
+    previous: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn enter(path: &Path) -> Result<Self, String> {
+        let previous = env::current_dir()
+            .map_err(|error| format!("failed to determine current directory: {error}"))?;
+        env::set_current_dir(path)
+            .map_err(|error| format!("failed to change current directory to {}: {error}", path.display()))?;
+        Ok(Self { previous })
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        let _ = env::set_current_dir(&self.previous);
+    }
 }
 
 fn build_markup_bundle(
@@ -206,23 +250,26 @@ fn build_markup_bundle(
         }
     };
 
-    let summary = write_run_bundle(output, &artifact)?;
-    println!("build bundle passed: {}", path.display());
+    let summary = write_run_executable(path, output, &artifact)?;
+    println!("build executable passed: {}", path.display());
     println!("  view: {}", artifact.view_name);
-    println!("  launcher: {}", summary.launcher_path.display());
-    println!("  runtime: {}", summary.runtime_path.display());
-    println!("  artifact: {}", summary.artifact_path.display());
-    println!("  bundle: {}", output.display());
+    println!("  executable: {}", summary.executable_path.display());
+    println!("  embedded files: {}", summary.embedded_file_count);
+    println!("  companion files: {}", summary.companion_file_count);
     println!(
-        "build packages the current AIVI runtime plus a serialized source-free run artifact into a runnable bundle directory."
+        "build packages the current AIVI runtime plus a serialized source-free run artifact into a single runnable executable."
     );
     Ok(ExitCode::SUCCESS)
 }
 
-fn write_run_bundle(output: &Path, artifact: &RunArtifact) -> Result<BuildBundleSummary, String> {
+fn write_run_executable(
+    source_path: &Path,
+    output: &Path,
+    artifact: &RunArtifact,
+) -> Result<BuildExecutableSummary, String> {
     if output.exists() {
         return Err(format!(
-            "build output {} already exists; choose a fresh directory",
+            "build output {} already exists; choose a fresh executable path",
             output.display()
         ));
     }
@@ -241,46 +288,51 @@ fn write_run_bundle(output: &Path, artifact: &RunArtifact) -> Result<BuildBundle
     let staging_guard = StagingDir::new_in(staging_parent)?;
 
     let result = (|| {
-        let staging = staging_guard.path();
-        let runtime_path = staging.join("aivi");
+        let bundle_root = staging_guard.path().join("bundle");
+        fs::create_dir_all(&bundle_root)
+            .map_err(|error| format!("failed to create {}: {error}", bundle_root.display()))?;
+        write_serialized_run_artifact_bundle(&bundle_root, artifact)?;
+        let workspace_layout = discover_workspace_embedding_layout(source_path);
+        if !workspace_layout.launch_cwd.as_os_str().is_empty() {
+            fs::create_dir_all(bundle_root.join(&workspace_layout.launch_cwd)).map_err(|error| {
+                format!(
+                    "failed to create embedded launch cwd {}: {error}",
+                    bundle_root.join(&workspace_layout.launch_cwd).display()
+                )
+            })?;
+            write_embedded_launch_cwd_file(&bundle_root, &workspace_layout.launch_cwd)?;
+        }
+        let companion_file_count = copy_workspace_companion_files(&workspace_layout, &bundle_root)?;
+
+        let staged_executable = staging_guard.path().join(
+            output
+                .file_name()
+                .ok_or_else(|| format!("invalid build output path {}", output.display()))?,
+        );
         let current_exe = env::current_exe()
             .map_err(|error| format!("failed to locate current AIVI executable: {error}"))?;
-        copy_file_with_permissions(&current_exe, &runtime_path)?;
-        ensure_executable(&runtime_path)?;
-
-        let artifact_path = write_serialized_run_artifact_bundle(staging, artifact)?;
-
-        let launcher_path = staging.join("run");
-        write_bundle_launcher(&launcher_path, RUN_ARTIFACT_FILE_NAME)?;
-
-        Ok(BuildBundleSummary {
-            launcher_path,
-            runtime_path,
-            artifact_path,
+        copy_file_with_permissions(&current_exe, &staged_executable)?;
+        ensure_executable(&staged_executable)?;
+        let embedded_file_count = append_embedded_bundle(&staged_executable, &bundle_root)?;
+        Ok(BuildExecutableSummary {
+            executable_path: staged_executable,
+            embedded_file_count,
+            companion_file_count,
         })
     })();
 
     match result {
         Ok(mut summary) => {
-            fs::rename(staging_guard.path(), output).map_err(|error| {
+            fs::rename(&summary.executable_path, output).map_err(|error| {
                 format!(
-                    "failed to move build bundle into {}: {error}",
+                    "failed to move build executable into {}: {error}",
                     output.display()
                 )
             })?;
-            // The staging directory has been atomically moved to its final
-            // location.  When `staging_guard` drops, `TempDir` attempts to
-            // remove the original staging path, which no longer exists, so
-            // the cleanup is a silent no-op.  The output directory is safe.
-            summary.launcher_path = output.join("run");
-            summary.runtime_path = output.join("aivi");
-            summary.artifact_path = output.join(RUN_ARTIFACT_FILE_NAME);
+            summary.executable_path = output.to_path_buf();
             Ok(summary)
         }
-        Err(error) => {
-            // staging_guard drops here, cleaning up the partial build directory.
-            Err(error)
-        }
+        Err(error) => Err(error),
     }
 }
 
@@ -295,6 +347,26 @@ fn discover_workspace_root(path: &Path) -> PathBuf {
         }
     }
     start.to_path_buf()
+}
+
+fn discover_workspace_embedding_layout(path: &Path) -> WorkspaceEmbeddingLayout {
+    let source_root = discover_workspace_root(path);
+    if source_root.join("aivi.toml").is_file() {
+        return WorkspaceEmbeddingLayout {
+            source_root,
+            embedded_prefix: PathBuf::new(),
+            launch_cwd: PathBuf::new(),
+        };
+    }
+    let basename = source_root
+        .file_name()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("app"));
+    WorkspaceEmbeddingLayout {
+        source_root,
+        embedded_prefix: basename.clone(),
+        launch_cwd: basename,
+    }
 }
 
 fn discover_bundled_stdlib_root() -> Result<PathBuf, String> {
@@ -316,20 +388,6 @@ fn discover_bundled_stdlib_root() -> Result<PathBuf, String> {
         "failed to locate the bundled stdlib; expected `stdlib/aivi.toml` next to the AIVI executable or workspace checkout"
             .to_owned(),
     )
-}
-
-fn write_bundle_launcher(path: &Path, artifact_name: &str) -> Result<(), String> {
-    let artifact = shell_single_quote(artifact_name);
-    let script = format!(
-        "#!/bin/sh\nset -eu\nSCRIPT_DIR=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\nARTIFACT={artifact}\nexec \"$SCRIPT_DIR/aivi\" run \"$SCRIPT_DIR/$ARTIFACT\"\n"
-    );
-    fs::write(path, script)
-        .map_err(|error| format!("failed to write {}: {error}", path.display()))?;
-    ensure_executable(path)
-}
-
-fn shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn copy_file_with_permissions(source: &Path, destination: &Path) -> Result<(), String> {
@@ -434,6 +492,404 @@ fn write_object_file(path: &Path, object: &[u8]) -> Result<(), String> {
 
 fn plural_suffix(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
+}
+
+fn maybe_run_embedded_build_output(arguments: &[OsString]) -> Result<Option<ExitCode>, String> {
+    if !arguments.is_empty() {
+        return Ok(None);
+    }
+    let executable = env::current_exe()
+        .map_err(|error| format!("failed to determine current executable: {error}"))?;
+    let Some(bundle) = read_embedded_bundle_descriptor(&executable)? else {
+        return Ok(None);
+    };
+    let extracted = extract_embedded_bundle(&executable, &bundle)?;
+    let artifact_path = extracted.path().join(RUN_ARTIFACT_FILE_NAME);
+    let artifact = load_serialized_run_artifact(&artifact_path, None)?;
+    let launch_cwd = read_embedded_launch_cwd(extracted.path())?
+        .map(|relative| extracted.path().join(relative))
+        .unwrap_or_else(|| extracted.path().to_path_buf());
+    let _cwd_guard = CurrentDirGuard::enter(&launch_cwd)?;
+    let exit = run_session::launch_run_with_config(
+        &artifact_path,
+        artifact,
+        run_session::RunLaunchConfig::default(),
+        |_, _| {},
+        |_| {},
+    )?;
+    Ok(Some(exit))
+}
+
+fn copy_workspace_companion_files(
+    workspace_layout: &WorkspaceEmbeddingLayout,
+    destination_root: &Path,
+) -> Result<usize, String> {
+    let mut copied = 0usize;
+    copy_workspace_companion_files_recursive(
+        workspace_layout,
+        &workspace_layout.source_root,
+        destination_root,
+        &mut copied,
+    )?;
+    Ok(copied)
+}
+
+fn copy_workspace_companion_files_recursive(
+    workspace_layout: &WorkspaceEmbeddingLayout,
+    current: &Path,
+    destination_root: &Path,
+    copied: &mut usize,
+) -> Result<(), String> {
+    let mut entries = fs::read_dir(current)
+        .map_err(|error| format!("failed to read {}: {error}", current.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to read {}: {error}", current.display()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(&workspace_layout.source_root)
+            .map_err(|error| format!("failed to relativize {}: {error}", path.display()))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("failed to stat {}: {error}", path.display()))?;
+        if file_type.is_dir() {
+            if should_skip_workspace_dir(relative) {
+                continue;
+            }
+            copy_workspace_companion_files_recursive(
+                workspace_layout,
+                &path,
+                destination_root,
+                copied,
+            )?;
+            continue;
+        }
+        if !file_type.is_file() || !should_embed_workspace_file(relative) {
+            continue;
+        }
+        let destination_relative = if workspace_layout.embedded_prefix.as_os_str().is_empty() {
+            relative.to_path_buf()
+        } else {
+            workspace_layout.embedded_prefix.join(relative)
+        };
+        let destination = destination_root.join(&destination_relative);
+        if destination.exists() {
+            return Err(format!(
+                "workspace companion file {} conflicts with generated bundle content",
+                destination_relative.display()
+            ));
+        }
+        copy_file_with_permissions(&path, &destination)?;
+        *copied += 1;
+    }
+
+    Ok(())
+}
+
+fn should_skip_workspace_dir(relative: &Path) -> bool {
+    let Some(name) = relative.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    matches!(name, ".git" | ".hg" | ".svn" | "target" | "out" | "node_modules")
+}
+
+fn should_embed_workspace_file(relative: &Path) -> bool {
+    let Some(name) = relative.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if name == "aivi.toml" {
+        return false;
+    }
+    relative.extension().and_then(|extension| extension.to_str()) != Some("aivi")
+}
+
+fn append_embedded_bundle(executable: &Path, bundle_root: &Path) -> Result<usize, String> {
+    let entries = collect_embedded_bundle_entries(bundle_root)?;
+    let mut output = fs::OpenOptions::new()
+        .append(true)
+        .open(executable)
+        .map_err(|error| format!("failed to open {} for bundle append: {error}", executable.display()))?;
+    let mut archive_len = 0u64;
+
+    write_archive_chunk(&mut output, &EMBEDDED_BUNDLE_ARCHIVE_MAGIC, &mut archive_len)?;
+    write_archive_chunk(
+        &mut output,
+        &(entries.len() as u32).to_le_bytes(),
+        &mut archive_len,
+    )?;
+    for entry in &entries {
+        let relative = entry
+            .relative_path
+            .to_str()
+            .ok_or_else(|| format!("embedded bundle path {} is not valid UTF-8", entry.relative_path.display()))?;
+        let path_bytes = relative.as_bytes();
+        write_archive_chunk(
+            &mut output,
+            &(path_bytes.len() as u32).to_le_bytes(),
+            &mut archive_len,
+        )?;
+        let file_size = fs::metadata(&entry.source_path)
+            .map_err(|error| format!("failed to stat {}: {error}", entry.source_path.display()))?
+            .len();
+        write_archive_chunk(&mut output, &file_size.to_le_bytes(), &mut archive_len)?;
+        write_archive_chunk(&mut output, path_bytes, &mut archive_len)?;
+        let mut source = fs::File::open(&entry.source_path)
+            .map_err(|error| format!("failed to open {}: {error}", entry.source_path.display()))?;
+        let copied = std::io::copy(&mut source, &mut output)
+            .map_err(|error| format!("failed to append {}: {error}", entry.source_path.display()))?;
+        archive_len = archive_len
+            .checked_add(copied)
+            .ok_or_else(|| "embedded bundle archive exceeded maximum size".to_owned())?;
+    }
+
+    output
+        .write_all(&EMBEDDED_BUNDLE_FOOTER_MAGIC)
+        .map_err(|error| format!("failed to finalize {}: {error}", executable.display()))?;
+    output
+        .write_all(&archive_len.to_le_bytes())
+        .map_err(|error| format!("failed to finalize {}: {error}", executable.display()))?;
+    Ok(entries.len())
+}
+
+fn collect_embedded_bundle_entries(root: &Path) -> Result<Vec<EmbeddedBundleEntry>, String> {
+    let mut entries = Vec::new();
+    collect_embedded_bundle_entries_recursive(root, root, &mut entries)?;
+    entries.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    Ok(entries)
+}
+
+fn collect_embedded_bundle_entries_recursive(
+    root: &Path,
+    current: &Path,
+    entries: &mut Vec<EmbeddedBundleEntry>,
+) -> Result<(), String> {
+    let mut dir_entries = fs::read_dir(current)
+        .map_err(|error| format!("failed to read {}: {error}", current.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to read {}: {error}", current.display()))?;
+    dir_entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in dir_entries {
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("failed to stat {}: {error}", path.display()))?;
+        if file_type.is_dir() {
+            collect_embedded_bundle_entries_recursive(root, &path, entries)?;
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        let relative_path = path
+            .strip_prefix(root)
+            .map_err(|error| format!("failed to relativize {}: {error}", path.display()))?
+            .to_path_buf();
+        entries.push(EmbeddedBundleEntry {
+            relative_path,
+            source_path: path,
+        });
+    }
+    Ok(())
+}
+
+fn write_archive_chunk(
+    output: &mut fs::File,
+    bytes: &[u8],
+    archive_len: &mut u64,
+) -> Result<(), String> {
+    output
+        .write_all(bytes)
+        .map_err(|error| format!("failed to append embedded bundle: {error}"))?;
+    *archive_len = archive_len
+        .checked_add(bytes.len() as u64)
+        .ok_or_else(|| "embedded bundle archive exceeded maximum size".to_owned())?;
+    Ok(())
+}
+
+fn write_embedded_launch_cwd_file(bundle_root: &Path, launch_cwd: &Path) -> Result<(), String> {
+    let contents = launch_cwd
+        .to_str()
+        .ok_or_else(|| format!("launch cwd {} is not valid UTF-8", launch_cwd.display()))?;
+    fs::write(bundle_root.join(EMBEDDED_BUNDLE_LAUNCH_CWD_FILE), contents).map_err(|error| {
+        format!(
+            "failed to write {}: {error}",
+            bundle_root.join(EMBEDDED_BUNDLE_LAUNCH_CWD_FILE).display()
+        )
+    })
+}
+
+fn read_embedded_launch_cwd(bundle_root: &Path) -> Result<Option<PathBuf>, String> {
+    let path = bundle_root.join(EMBEDDED_BUNDLE_LAUNCH_CWD_FILE);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text =
+        fs::read_to_string(&path).map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    validate_embedded_bundle_relative_path(trimmed).map(Some)
+}
+
+fn read_embedded_bundle_descriptor(path: &Path) -> Result<Option<EmbeddedBundleDescriptor>, String> {
+    let mut file =
+        fs::File::open(path).map_err(|error| format!("failed to open {}: {error}", path.display()))?;
+    let file_len = file
+        .metadata()
+        .map_err(|error| format!("failed to stat {}: {error}", path.display()))?
+        .len();
+    if file_len < EMBEDDED_BUNDLE_FOOTER_LEN {
+        return Ok(None);
+    }
+
+    use std::io::{Read, Seek, SeekFrom};
+
+    file.seek(SeekFrom::End(-(EMBEDDED_BUNDLE_FOOTER_LEN as i64)))
+        .map_err(|error| format!("failed to seek {}: {error}", path.display()))?;
+    let mut magic = [0u8; 16];
+    file.read_exact(&mut magic)
+        .map_err(|error| format!("failed to read embedded bundle footer from {}: {error}", path.display()))?;
+    if magic != EMBEDDED_BUNDLE_FOOTER_MAGIC {
+        return Ok(None);
+    }
+    let mut len_bytes = [0u8; 8];
+    file.read_exact(&mut len_bytes)
+        .map_err(|error| format!("failed to read embedded bundle footer from {}: {error}", path.display()))?;
+    let archive_len = u64::from_le_bytes(len_bytes);
+    let archive_offset = file_len.checked_sub(EMBEDDED_BUNDLE_FOOTER_LEN + archive_len).ok_or_else(
+        || format!("embedded bundle footer in {} points before the start of the file", path.display()),
+    )?;
+    Ok(Some(EmbeddedBundleDescriptor {
+        archive_offset,
+        archive_len,
+    }))
+}
+
+fn extract_embedded_bundle(
+    executable: &Path,
+    descriptor: &EmbeddedBundleDescriptor,
+) -> Result<tempfile::TempDir, String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let temp = tempfile::Builder::new()
+        .prefix(".aivi-embedded-run-")
+        .tempdir()
+        .map_err(|error| format!("failed to create embedded bundle tempdir: {error}"))?;
+    let mut input = fs::File::open(executable)
+        .map_err(|error| format!("failed to open {}: {error}", executable.display()))?;
+    input
+        .seek(SeekFrom::Start(descriptor.archive_offset))
+        .map_err(|error| format!("failed to seek {}: {error}", executable.display()))?;
+    let mut consumed = 0u64;
+    let mut magic = [0u8; 16];
+    input
+        .read_exact(&mut magic)
+        .map_err(|error| format!("failed to read embedded archive header from {}: {error}", executable.display()))?;
+    consumed += 16;
+    if magic != EMBEDDED_BUNDLE_ARCHIVE_MAGIC {
+        return Err(format!(
+            "{} contains an unsupported embedded bundle archive",
+            executable.display()
+        ));
+    }
+    let entry_count = read_u32_le_from(&mut input, executable)?;
+    consumed += 4;
+
+    for _ in 0..entry_count {
+        let path_len = read_u32_le_from(&mut input, executable)? as usize;
+        consumed += 4;
+        let file_len = read_u64_le_from(&mut input, executable)?;
+        consumed += 8;
+        let mut path_bytes = vec![0u8; path_len];
+        input.read_exact(&mut path_bytes).map_err(|error| {
+            format!(
+                "failed to read embedded bundle path from {}: {error}",
+                executable.display()
+            )
+        })?;
+        consumed += path_len as u64;
+        let relative = std::str::from_utf8(&path_bytes).map_err(|error| {
+            format!(
+                "embedded bundle path in {} is not valid UTF-8: {error}",
+                executable.display()
+            )
+        })?;
+        let relative = validate_embedded_bundle_relative_path(relative)?;
+        let destination = temp.path().join(&relative);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+        }
+        let mut output = fs::File::create(&destination)
+            .map_err(|error| format!("failed to create {}: {error}", destination.display()))?;
+        let copied = std::io::copy(
+            &mut std::io::Read::by_ref(&mut input).take(file_len),
+            &mut output,
+        )
+        .map_err(|error| {
+            format!(
+                "failed to extract embedded bundle entry {}: {error}",
+                relative.display()
+            )
+        })?;
+        if copied != file_len {
+            return Err(format!(
+                "embedded bundle entry {} was truncated while extracting from {}",
+                relative.display(),
+                executable.display()
+            ));
+        }
+        consumed += copied;
+    }
+
+    if consumed != descriptor.archive_len {
+        return Err(format!(
+            "{} embedded bundle length mismatch: expected {} bytes, decoded {}",
+            executable.display(),
+            descriptor.archive_len,
+            consumed
+        ));
+    }
+
+    Ok(temp)
+}
+
+fn read_u32_le_from(reader: &mut fs::File, path: &Path) -> Result<u32, String> {
+    use std::io::Read;
+
+    let mut bytes = [0u8; 4];
+    reader
+        .read_exact(&mut bytes)
+        .map_err(|error| format!("failed to read embedded bundle header from {}: {error}", path.display()))?;
+    Ok(u32::from_le_bytes(bytes))
+}
+
+fn read_u64_le_from(reader: &mut fs::File, path: &Path) -> Result<u64, String> {
+    use std::io::Read;
+
+    let mut bytes = [0u8; 8];
+    reader
+        .read_exact(&mut bytes)
+        .map_err(|error| format!("failed to read embedded bundle header from {}: {error}", path.display()))?;
+    Ok(u64::from_le_bytes(bytes))
+}
+
+fn validate_embedded_bundle_relative_path(path: &str) -> Result<PathBuf, String> {
+    let candidate = PathBuf::from(path);
+    if candidate.is_absolute() {
+        return Err(format!("embedded bundle path {path:?} must stay relative"));
+    }
+    if candidate
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(format!("embedded bundle path {path:?} must not escape the bundle root"));
+    }
+    Ok(candidate)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -601,7 +1057,7 @@ USAGE:
 COMMANDS:
     check [path]                    Type-check a module, directory, or all apps
     compile <path> [-o <object>]    Compile a module to native object code only
-    build <path> -o <dir> [opts]    Package a runnable source-free GTK bundle
+    build <path> -o <file> [opts]   Package a runnable source-free GTK executable
     run [path] [opts]               Launch a live GTK app
     execute <path> [-- args...]     Run a headless Task program
     test <path>                     Run @test declarations in a workspace
@@ -667,15 +1123,15 @@ DESCRIPTION:
 
     This command stops at object emission. It does not currently link a
     standalone runnable GTK application. Use `aivi build` for the current
-    runnable bundle path.
+    runnable executable path.
 "
         }
         "build" => {
             "\
-    aivi build — package a runnable GTK app bundle
+    aivi build — package a runnable GTK executable
 
 USAGE:
-    aivi build <path> -o <directory> [--app <name>] [--view <name>]
+    aivi build <path> -o <executable> [--app <name>] [--view <name>]
 
 ARGS:
     <path>              Path to an .aivi source file or workspace entry
@@ -686,9 +1142,9 @@ OPTIONS:
             Required when multiple apps are defined and neither --path
             nor [run] entry is given.
 
-    -o, --output <directory>    (required)
-            Output directory for the packaged bundle. The directory will
-            contain everything needed to run the application.
+    -o, --output <executable>   (required)
+            Output path for the packaged executable. The file will be
+            directly runnable and contains the serialized app bundle.
 
     --view <name>
             Dot-separated module path to the view entry point
@@ -697,7 +1153,7 @@ OPTIONS:
 DESCRIPTION:
     Validates the same runnable surface as `aivi run` and packages the
     current runtime binary plus a serialized source-free run artifact
-    into a runnable bundle directory.
+    into a single runnable executable.
 
     This is the current runnable deployment path. It is distinct from
     `aivi compile`, which emits object code only.

@@ -1101,6 +1101,92 @@ value view =
 }
 
 #[test]
+fn prepare_run_serializes_bool_match_patterns_inside_with_bindings() {
+    let artifact = prepare_run_from_text(
+        "with-bool-match.aivi",
+        r#"
+value view =
+    <Window title="Host">
+        <with value={True} as={flag}>
+            <match on={flag}>
+                <case pattern={True}>
+                    <Label text="yes" />
+                </case>
+                <case pattern={False}>
+                    <Label text="no" />
+                </case>
+            </match>
+        </with>
+    </Window>
+"#,
+        None,
+    )
+    .expect("with-bound Bool matches should compile");
+    let root = artifact.bridge.root_node();
+    let GtkBridgeNodeKind::Widget(window) = &root.kind else {
+        panic!("expected window root, found {:?}", root.kind.tag());
+    };
+    let with_ref = window.default_children.roots[0];
+    let with_node = artifact
+        .bridge
+        .node(with_ref.plan)
+        .expect("with child should exist");
+    let GtkBridgeNodeKind::With(with_node) = &with_node.kind else {
+        panic!("expected with child, found {:?}", with_node.kind.tag());
+    };
+    let match_ref = with_node.body.roots[0];
+    let match_node = artifact
+        .bridge
+        .node(match_ref.plan)
+        .expect("match child should exist");
+    let GtkBridgeNodeKind::Match(match_node) = &match_node.kind else {
+        panic!("expected match child, found {:?}", match_node.kind.tag());
+    };
+    let truthy = artifact
+        .patterns
+        .get(match_node.cases[0].pattern)
+        .expect("true case pattern should be serialized");
+    let falsy = artifact
+        .patterns
+        .get(match_node.cases[1].pattern)
+        .expect("false case pattern should be serialized");
+    assert!(matches!(
+        truthy.kind,
+        super::RunPatternKind::Constructor {
+            callee: super::RunPatternConstructor::Builtin(aivi_hir::BuiltinTerm::True),
+            ..
+        }
+    ), "truthy pattern serialized as {:?}", truthy.kind);
+    assert!(matches!(
+        falsy.kind,
+        super::RunPatternKind::Constructor {
+            callee: super::RunPatternConstructor::Builtin(aivi_hir::BuiltinTerm::False),
+            ..
+        }
+    ), "falsy pattern serialized as {:?}", falsy.kind);
+    let plan = plan_run_hydration(
+        &RunHydrationStaticState {
+            view_name: artifact.view_name.clone(),
+            patterns: artifact.patterns.clone(),
+            bridge: artifact.bridge.clone(),
+            inputs: artifact.hydration_inputs.clone(),
+        },
+        &BTreeMap::new(),
+    )
+    .expect("with-bound Bool matches should hydrate");
+    let HydratedRunNode::Widget { children, .. } = &plan.root else {
+        panic!("expected window root");
+    };
+    let [HydratedRunNode::With { children, .. }] = children.as_ref() else {
+        panic!("expected with child under window");
+    };
+    let [HydratedRunNode::Match { active_case, .. }] = children.as_ref() else {
+        panic!("expected match child under with");
+    };
+    assert_eq!(*active_case, 0, "True scrutinee should select the True case");
+}
+
+#[test]
 fn prepare_run_accepts_expanded_widget_catalog_entries() {
     let artifact = prepare_run_from_text(
             "expanded-widget-catalog.aivi",

@@ -17,7 +17,7 @@ fn require_file_exists(path: &Path) -> Result<(), String> {
 /// sequences (`..`) or absolute path components.
 ///
 /// User-supplied names are occasionally forwarded into file-system paths (e.g.
-/// as part of bundle output directory names).  Rejecting traversal components
+/// as part of build output paths). Rejecting traversal components
 /// up front prevents an attacker from escaping the intended output root.
 fn validate_module_name(name: &str) -> Result<(), String> {
     // Reject empty names.

@@ -517,35 +517,44 @@ fn collect_run_pattern(
             for child in arguments {
                 collect_run_pattern(sources, module, *child, patterns, visited)?;
             }
-            match callee.resolution.as_ref() {
-                aivi_hir::ResolutionState::Resolved(TermResolution::Builtin(term)) => {
-                    RunPatternKind::Constructor {
-                        callee: RunPatternConstructor::Builtin(*term),
-                        arguments: arguments.clone().into_boxed_slice(),
-                    }
-                }
-                aivi_hir::ResolutionState::Resolved(TermResolution::Item(item)) => {
-                    RunPatternKind::Constructor {
-                        callee: RunPatternConstructor::Item {
-                            item: *item,
-                            variant_name: callee
-                                .path
-                                .segments()
-                                .last()
-                                .text()
-                                .to_owned()
-                                .into_boxed_str(),
-                        },
-                        arguments: arguments.clone().into_boxed_slice(),
-                    }
-                }
-                _ => RunPatternKind::UnresolvedName,
-            }
+            serialize_run_pattern_constructor(callee, arguments)
         }
-        PatternKind::UnresolvedName(_) => RunPatternKind::UnresolvedName,
+        PatternKind::UnresolvedName(reference) => {
+            serialize_run_pattern_constructor(reference, &[])
+        }
     };
     patterns.insert(pattern_id, RunPattern { kind });
     Ok(())
+}
+
+fn serialize_run_pattern_constructor(
+    callee: &aivi_hir::TermReference,
+    arguments: &[HirPatternId],
+) -> RunPatternKind {
+    match callee.resolution.as_ref() {
+        aivi_hir::ResolutionState::Resolved(TermResolution::Builtin(term)) => {
+            RunPatternKind::Constructor {
+                callee: RunPatternConstructor::Builtin(*term),
+                arguments: arguments.to_vec().into_boxed_slice(),
+            }
+        }
+        aivi_hir::ResolutionState::Resolved(TermResolution::Item(item)) => {
+            RunPatternKind::Constructor {
+                callee: RunPatternConstructor::Item {
+                    item: *item,
+                    variant_name: callee
+                        .path
+                        .segments()
+                        .last()
+                        .text()
+                        .to_owned()
+                        .into_boxed_str(),
+                },
+                arguments: arguments.to_vec().into_boxed_slice(),
+            }
+        }
+        _ => RunPatternKind::UnresolvedName,
+    }
 }
 
 fn count_unnamed_widget_children(bridge: &GtkBridgeGraph, roots: &[GtkBridgeNodeRef]) -> usize {

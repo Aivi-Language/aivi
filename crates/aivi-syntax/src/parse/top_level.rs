@@ -862,6 +862,7 @@ impl<'a> Parser<'a> {
         Some(FunctionParam {
             name,
             annotation: None,
+            is_selected: false,
             span: self.source_span_of_token(index),
         })
     }

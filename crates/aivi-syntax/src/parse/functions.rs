@@ -33,6 +33,7 @@ impl<'a> Parser<'a> {
         Some(FunctionParam {
             name,
             annotation,
+            is_selected: false,
             span: self.source_span_for_range(name_index, *cursor),
         })
     }
@@ -208,8 +209,11 @@ impl<'a> Parser<'a> {
         end: usize,
     ) -> Option<(FunctionParam, usize, bool)> {
         let start_index = self.peek_nontrivia(*cursor, end)?;
-        let parameter = self.parse_function_param(cursor, end)?;
+        let mut parameter = self.parse_function_param(cursor, end)?;
         let selected = self.consume_kind(cursor, end, TokenKind::Bang).is_some();
+        if selected {
+            parameter.is_selected = true;
+        }
         Some((parameter, start_index, selected))
     }
 
@@ -276,6 +280,7 @@ impl<'a> Parser<'a> {
                 span,
             }),
             annotation: None,
+            is_selected: false,
             span,
         }
     }

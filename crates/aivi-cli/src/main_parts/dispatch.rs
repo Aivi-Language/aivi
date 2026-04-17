@@ -15,8 +15,12 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<ExitCode, String> {
-    let mut args = env::args_os();
-    let _binary = args.next();
+    let mut argv = env::args_os().collect::<Vec<_>>();
+    let _binary = argv.remove(0);
+    if let Some(code) = maybe_run_embedded_build_output(&argv)? {
+        return Ok(code);
+    }
+    let mut args = argv.into_iter();
 
     let Some(first) = args.next() else {
         print_usage();
@@ -344,7 +348,7 @@ fn run_build(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
     }
 
     let output =
-        output.ok_or_else(|| "expected `-o`/`--output <directory>` for `build`".to_owned())?;
+        output.ok_or_else(|| "expected `-o`/`--output <executable>` for `build`".to_owned())?;
     let resolved = resolve_run_entrypoint_for_build(
         "build",
         requested_path.as_deref(),

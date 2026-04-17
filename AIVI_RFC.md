@@ -3050,7 +3050,7 @@ Pipeline: source → CST → HIR → typed core → lambda → backend → Crane
 
 If `-o` / `--output` is omitted, no output file is written but the pipeline is validated. Exits 0 on success, 1 on compilation errors.
 
-`aivi compile` stops at the honest compile boundary. Use `aivi build` when you want a runnable bundle directory; `compile` remains the object-code surface.
+`aivi compile` stops at the honest compile boundary. Use `aivi build` when you want a runnable executable; `compile` remains the object-code surface.
 
 ### 26.3 `aivi build <path> -o <output> [--view <name>]`
 
@@ -3059,17 +3059,17 @@ aivi build src/app.aivi -o build/app
 aivi build src/app.aivi -o dist/users --view mainWindow
 ```
 
-`aivi build` validates the same runnable surface as `aivi run`, then writes a bundle directory containing:
+`aivi build` validates the same runnable surface as `aivi run`, then writes a single executable file.
+The emitted executable contains:
 
-- a copied `aivi` runtime executable
+- the current `aivi` runtime host
 - a serialized `run-artifact.json` manifest for the selected view
-- a `payloads/` directory with serialized backend metadata payloads plus precompiled native-kernel
-  sidecars referenced by the manifest
-- a `run` launcher script pinned to the selected view
+- embedded backend metadata payloads plus precompiled native-kernel sidecars
+- embedded non-source workspace companion files needed at runtime (for example `assets/`)
 
-Run the packaged application via `./run` inside the emitted bundle directory.
+Run the packaged application directly via the emitted executable path.
 
-The bundle is self-contained at the AIVI layer and does not depend on workspace sources or a copied stdlib tree at launch. It still depends on the target system GTK stack. Bundle launch reuses the precompiled native sidecars for supported kernels while retaining backend metadata payloads for runtime linking and fallback execution. It is a runnable directory bundle, not yet a single native executable or direct `aivi compile` output.
+The executable is self-contained at the AIVI layer and does not depend on workspace sources or a copied stdlib tree at launch. It still depends on the target system GTK stack. Launch reuses the precompiled native sidecars for supported kernels while retaining backend metadata payloads for runtime linking and fallback execution. `aivi build` remains the runnable deployment path; `aivi compile` still emits object code only.
 
 Exits 0 on success, 1 on validation/build errors.
 

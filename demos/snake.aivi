@@ -4,6 +4,8 @@ use aivi.nonEmpty (
     init as nelInit
 )
 
+use aivi.env (EnvSource)
+
 use aivi.path (
     filename
     join
@@ -86,6 +88,11 @@ type Text -> Text
 func resolveAssetRoot = cwd => isAssetsDir cwd and hasDemosParent cwd
  T|> cwd
  F|> resolveAssetRootFromNonAssets cwd
+
+type Text -> (Option Text) -> Text
+func selectAssetRoot = cwd embeddedAssetRoot => embeddedAssetRoot
+ ||> Some root -> root
+ ||> None      -> resolveAssetRoot cwd
 
 type Text -> Text -> Text
 func assetPath = root name =>
@@ -394,6 +401,11 @@ signal tick : Signal Unit
 @source process.cwd
 signal cwd : Signal Text
 
+@source env
+signal environment : EnvSource
+
+signal embeddedAssetRoot : Signal (Option Text) = environment.get "AIVI_SNAKE_ASSET_ROOT"
+
 @source window.keyDown with {
     repeat: False,
     focusOnly: True
@@ -411,8 +423,10 @@ signal event : Signal Event = tick | keyDown
 signal state : Signal GameState = event
  +|> initial step
 
-signal assetRoot : Signal Text = cwd
-  |> resolveAssetRoot
+signal assetRoot : Signal Text =
+ &|> cwd
+ &|> embeddedAssetRoot
+  |> selectAssetRoot
 
 signal boardTiles : Signal (List RenderTile) =
  &|> state

@@ -3,7 +3,8 @@ use std::fmt::Write;
 use crate::cst::{
     BinaryOperator, ClassMember, ClassMemberName, Decorator, DecoratorArguments, DecoratorPayload,
     DomainItem, DomainMember, DomainMemberName, ExportItem, Expr, ExprKind, FromEntry, FromItem,
-    FunctionParam, Identifier, InstanceItem, InstanceMember, Item, LambdaExpr, LambdaSurfaceForm,
+    FunctionParam, FunctionSurfaceForm, Identifier, InstanceItem, InstanceMember, Item,
+    LambdaExpr, LambdaSurfaceForm,
     MapExpr, MarkupAttribute, MarkupAttributeValue, MarkupNode, Module, NamedItem, PatchBlock,
     PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment,
     Pattern, PatternKind, PipeExpr, PipeStage, PipeStageKind, ProjectionPath, QualifiedName,
@@ -400,7 +401,53 @@ impl Formatter {
 
     /// Format a `func` declaration using the canonical `=` head separator.
     fn format_fun_item(&self, item: &NamedItem) -> Vec<String> {
+        if matches!(item.function_form, FunctionSurfaceForm::SelectedSubjectSugar)
+            && item.parameters.iter().any(|p| p.is_selected)
+        {
+            return self.format_selected_subject_fun_item(item);
+        }
         self.format_explicit_fun_item(item)
+    }
+
+    fn format_selected_subject_fun_item(&self, item: &NamedItem) -> Vec<String> {
+        let mut lines = Vec::new();
+        if let Some(annotation) = self.format_fun_signature_annotation(item) {
+            lines.push(format!("type {annotation}"));
+        }
+
+        let mut header = format!("func {} =", self.item_name(&item.name));
+        for parameter in &item.parameters {
+            header.push(' ');
+            header.push_str(&self.format_function_param(parameter));
+        }
+
+        let Some(body) = item.expr_body() else {
+            lines.push(header);
+            return lines;
+        };
+
+        lines.push(header);
+        lines.extend(self.format_selected_subject_body(body));
+        lines
+    }
+
+    fn format_selected_subject_body(&self, body: &Expr) -> Vec<String> {
+        match &body.kind {
+            ExprKind::Pipe(pipe) => Block::from_lines(self.format_pipe_stage_lines(&pipe.stages))
+                .indented(PIPE_STAGE_INDENT)
+                .into_lines(),
+            ExprKind::PatchApply { patch, .. } => self
+                .format_patch_block(patch, false)
+                .prefixed("<| ")
+                .indented(INDENT_WIDTH)
+                .into_lines(),
+            _ => {
+                let force_break = self.should_force_expr_break(INDENT_WIDTH, body);
+                self.format_expr_block(body, force_break)
+                    .indented(INDENT_WIDTH)
+                    .into_lines()
+            }
+        }
     }
 
     fn format_explicit_fun_item(&self, item: &NamedItem) -> Vec<String> {
@@ -1085,7 +1132,11 @@ impl Formatter {
     }
 
     fn format_function_param(&self, parameter: &FunctionParam) -> String {
-        self.item_name(&parameter.name).to_owned()
+        let mut s = self.item_name(&parameter.name).to_owned();
+        if parameter.is_selected {
+            s.push('!');
+        }
+        s
     }
 
     fn format_signature_annotation_inline(
@@ -3178,6 +3229,46 @@ value view =
                 "type Text\n",
                 "func label = current => current.status\n",
                 "  |> trim\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_preserves_selected_subject_bang_sugar_pipe() {
+        let formatted = format_text(concat!(
+            "fun flipsFromDirection = board player coord vector!\n",
+            " |> rayFrom coord #ray\n",
+            " |> collectRay board ray\n",
+        ));
+        assert_eq!(
+            formatted,
+            concat!(
+                "func flipsFromDirection = board player coord vector!\n",
+                "  |> rayFrom coord #ray\n",
+                "  |> collectRay board ray\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_preserves_selected_subject_bang_sugar_patch() {
+        let formatted = format_text(concat!(
+            "fun recordOpponent = state! coord\n",
+            "    <| {\n",
+            "        collecting: True,\n",
+            "        closed: False,\n",
+            "        trail: [coord]\n",
+            "    }\n",
+        ));
+        assert_eq!(
+            formatted,
+            concat!(
+                "func recordOpponent = state! coord\n",
+                "    <| {\n",
+                "        collecting: True,\n",
+                "        closed: False,\n",
+                "        trail: [coord],\n",
+                "    }\n",
             )
         );
     }

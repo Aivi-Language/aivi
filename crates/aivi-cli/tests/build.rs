@@ -1,5 +1,7 @@
 use std::{
+    collections::BTreeMap,
     env, fs,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -48,8 +50,77 @@ fn repo_path(relative: &str) -> PathBuf {
         .join(relative)
 }
 
+const EMBEDDED_BUNDLE_ARCHIVE_MAGIC: [u8; 16] = *b"AIVI_ARCHIVE_V1_";
+const EMBEDDED_BUNDLE_FOOTER_MAGIC: [u8; 16] = *b"AIVI_BUNDLE_V1__";
+const EMBEDDED_BUNDLE_FOOTER_LEN: u64 = 24;
+
+fn read_embedded_bundle_entries(path: &Path) -> BTreeMap<String, Vec<u8>> {
+    let mut file = fs::File::open(path).expect("built executable should exist");
+    let file_len = file
+        .metadata()
+        .expect("built executable metadata should exist")
+        .len();
+    assert!(
+        file_len >= EMBEDDED_BUNDLE_FOOTER_LEN,
+        "built executable should contain an embedded bundle footer"
+    );
+
+    file.seek(SeekFrom::End(-(EMBEDDED_BUNDLE_FOOTER_LEN as i64)))
+        .expect("should seek to embedded bundle footer");
+    let mut magic = [0u8; 16];
+    file.read_exact(&mut magic)
+        .expect("should read embedded bundle footer magic");
+    assert_eq!(
+        magic, EMBEDDED_BUNDLE_FOOTER_MAGIC,
+        "built executable should end with the embedded bundle footer"
+    );
+    let archive_len = read_u64(&mut file);
+    let archive_offset = file_len
+        .checked_sub(EMBEDDED_BUNDLE_FOOTER_LEN + archive_len)
+        .expect("archive footer should point inside the executable");
+    file.seek(SeekFrom::Start(archive_offset))
+        .expect("should seek to embedded archive start");
+    file.read_exact(&mut magic)
+        .expect("should read embedded archive magic");
+    assert_eq!(
+        magic, EMBEDDED_BUNDLE_ARCHIVE_MAGIC,
+        "embedded archive should carry the expected magic"
+    );
+    let entry_count = read_u32(&mut file);
+    let mut entries = BTreeMap::new();
+    for _ in 0..entry_count {
+        let path_len = read_u32(&mut file) as usize;
+        let file_len = read_u64(&mut file) as usize;
+        let mut path_bytes = vec![0u8; path_len];
+        file.read_exact(&mut path_bytes)
+            .expect("should read embedded path bytes");
+        let mut contents = vec![0u8; file_len];
+        file.read_exact(&mut contents)
+            .expect("should read embedded file bytes");
+        let path = String::from_utf8(path_bytes).expect("embedded paths should be valid UTF-8");
+        entries.insert(path, contents);
+    }
+    entries
+}
+
+fn read_u32(reader: &mut fs::File) -> u32 {
+    let mut bytes = [0u8; 4];
+    reader
+        .read_exact(&mut bytes)
+        .expect("should read u32 from embedded bundle");
+    u32::from_le_bytes(bytes)
+}
+
+fn read_u64(reader: &mut fs::File) -> u64 {
+    let mut bytes = [0u8; 8];
+    reader
+        .read_exact(&mut bytes)
+        .expect("should read u64 from embedded bundle");
+    u64::from_le_bytes(bytes)
+}
+
 #[test]
-fn build_writes_a_self_contained_runnable_bundle() {
+fn build_writes_a_self_contained_runnable_executable() {
     let workspace = TempDir::new("build-static-workspace");
     workspace.write(
         "main.aivi",
@@ -59,13 +130,13 @@ value screenView =
 "#,
     );
     let output_root = TempDir::new("build-static-output");
-    let bundle_path = output_root.path().join("app-bundle");
+    let executable_path = output_root.path().join("app");
 
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("build")
         .arg(workspace.path().join("main.aivi"))
         .arg("-o")
-        .arg(&bundle_path)
+        .arg(&executable_path)
         .output()
         .expect("build command should run");
 
@@ -77,45 +148,36 @@ value screenView =
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("build bundle passed"),
+        stdout.contains("build executable passed"),
         "expected build summary, got stdout: {stdout}"
     );
     assert!(
-        stdout.contains(&bundle_path.display().to_string()),
-        "expected bundle path in stdout, got stdout: {stdout}"
+        stdout.contains(&executable_path.display().to_string()),
+        "expected executable path in stdout, got stdout: {stdout}"
     );
 
-    let runtime_path = bundle_path.join("aivi");
-    let runtime_metadata = fs::metadata(&runtime_path).expect("bundle should copy the runtime");
+    let runtime_metadata =
+        fs::metadata(&executable_path).expect("build should write the executable output");
     assert!(
         runtime_metadata.len() > 0,
-        "copied runtime should not be empty"
-    );
-
-    let launcher_path = bundle_path.join("run");
-    let launcher = fs::read_to_string(&launcher_path).expect("bundle should write a launcher");
-    assert!(
-        launcher.contains("exec \"$SCRIPT_DIR/aivi\" run"),
-        "expected launcher to invoke bundled runtime, got: {launcher}"
-    );
-    assert!(
-        launcher.contains("run-artifact.json"),
-        "expected launcher to invoke the serialized run artifact, got: {launcher}"
+        "built executable should not be empty"
     );
 
     #[cfg(unix)]
     assert_ne!(
-        fs::metadata(&launcher_path)
-            .expect("launcher metadata should exist")
-            .permissions()
-            .mode()
-            & 0o111,
+        runtime_metadata.permissions().mode() & 0o111,
         0,
-        "launcher should be executable"
+        "built executable should be executable"
     );
 
-    let run_artifact = fs::read_to_string(bundle_path.join("run-artifact.json"))
-        .expect("bundle should write the serialized run artifact");
+    let entries = read_embedded_bundle_entries(&executable_path);
+    let run_artifact = String::from_utf8(
+        entries
+            .get("run-artifact.json")
+            .expect("embedded executable should carry the serialized run artifact")
+            .clone(),
+    )
+    .expect("run artifact should stay valid UTF-8");
     assert!(
         run_artifact.contains("\"format\": \"aivi.run-artifact\""),
         "expected run artifact header, got: {run_artifact}"
@@ -124,45 +186,33 @@ value screenView =
         run_artifact.contains("\"view_name\": \"screenView\""),
         "expected bundled view name in run artifact, got: {run_artifact}"
     );
-    assert!(
-        fs::read_dir(bundle_path.join("payloads"))
-            .expect("bundle should materialize backend payloads")
-            .next()
-            .is_some(),
-        "bundle should write at least one backend payload file"
-    );
-    let payload_entries = fs::read_dir(bundle_path.join("payloads"))
-        .expect("bundle should materialize backend payloads")
-        .map(|entry| {
-            entry
-                .expect("payload dir entries should read")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
+    let payload_entries = entries
+        .keys()
+        .filter(|entry| entry.starts_with("payloads/"))
+        .cloned()
         .collect::<Vec<_>>();
     assert!(
         payload_entries.iter().any(|entry| entry.ends_with(".json")),
-        "bundle should keep serialized backend payloads, got: {payload_entries:?}"
+        "embedded executable should keep serialized backend payloads, got: {payload_entries:?}"
     );
     assert!(
         payload_entries
             .iter()
-            .any(|entry| entry.starts_with("native-") && entry.ends_with(".bin")),
-        "bundle should emit native kernel sidecars, got: {payload_entries:?}"
+            .any(|entry| entry.starts_with("payloads/native-") && entry.ends_with(".bin")),
+        "embedded executable should emit native kernel sidecars, got: {payload_entries:?}"
     );
     assert!(
-        !bundle_path.join("app/main.aivi").exists(),
-        "source-free bundles should not need workspace source files"
+        !entries.contains_key("main.aivi"),
+        "source-free executables should not embed source files"
     );
     assert!(
-        !bundle_path.join("stdlib").exists(),
-        "source-free bundles should not carry the stdlib workspace"
+        !entries.keys().any(|entry| entry.starts_with("stdlib/")),
+        "source-free executables should not carry the stdlib workspace"
     );
 }
 
 #[test]
-fn build_emits_a_source_free_bundle_even_for_workspace_closures() {
+fn build_emits_a_source_free_executable_even_for_workspace_closures() {
     let workspace = TempDir::new("build-workspace-closure");
     workspace.write("aivi.toml", "");
     workspace.write(
@@ -187,13 +237,13 @@ export (Greeting)
 "#,
     );
     let output_root = TempDir::new("build-workspace-output");
-    let bundle_path = output_root.path().join("bundle");
+    let executable_path = output_root.path().join("bundle-app");
 
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("build")
         .arg(workspace.path().join("main.aivi"))
         .arg("-o")
-        .arg(&bundle_path)
+        .arg(&executable_path)
         .output()
         .expect("build command should run");
 
@@ -202,17 +252,18 @@ export (Greeting)
         "expected workspace build to succeed, stderr was: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let entries = read_embedded_bundle_entries(&executable_path);
     assert!(
-        bundle_path.join("run-artifact.json").is_file(),
-        "bundle should write a serialized run artifact"
+        entries.contains_key("run-artifact.json"),
+        "embedded executable should carry a serialized run artifact"
     );
     assert!(
-        !bundle_path.join("app/aivi.toml").exists(),
-        "source-free bundles should not copy the workspace manifest"
+        !entries.contains_key("aivi.toml"),
+        "source-free executables should not copy the workspace manifest"
     );
     assert!(
-        !bundle_path.join("app/shared/types.aivi").exists(),
-        "source-free bundles should not copy imported workspace files"
+        !entries.contains_key("shared/types.aivi"),
+        "source-free executables should not copy imported workspace files"
     );
 }
 
@@ -220,12 +271,12 @@ export (Greeting)
 fn build_accepts_snake_and_reversi_demos() {
     let output_root = TempDir::new("build-demo-output");
     for demo in ["snake", "reversi"] {
-        let bundle_path = output_root.path().join(demo);
+        let executable_path = output_root.path().join(demo);
         let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
             .arg("build")
             .arg(repo_path(&format!("demos/{demo}.aivi")))
             .arg("-o")
-            .arg(&bundle_path)
+            .arg(&executable_path)
             .output()
             .expect("demo build command should run");
 
@@ -235,16 +286,38 @@ fn build_accepts_snake_and_reversi_demos() {
             String::from_utf8_lossy(&output.stderr)
         );
         assert!(
-            bundle_path.join("run").is_file(),
-            "expected {demo} bundle launcher to exist"
+            executable_path.is_file(),
+            "expected {demo} executable to exist"
         );
+        let entries = read_embedded_bundle_entries(&executable_path);
         assert!(
-            bundle_path.join("run-artifact.json").is_file(),
+            entries.contains_key("run-artifact.json"),
             "expected {demo} run artifact to exist"
         );
         assert!(
-            bundle_path.join("payloads").is_dir(),
-            "expected {demo} payload directory to exist"
+            entries.keys().any(|entry| entry.starts_with("payloads/")),
+            "expected {demo} payload directory to be embedded"
         );
+        assert!(
+            entries.contains_key(".aivi-launch-cwd"),
+            "expected {demo} executable to record its embedded launch cwd"
+        );
+        if demo == "snake" {
+            assert_eq!(
+                String::from_utf8(
+                    entries
+                        .get(".aivi-launch-cwd")
+                        .expect("snake launch cwd metadata should exist")
+                        .clone()
+                )
+                .expect("snake launch cwd metadata should stay valid UTF-8"),
+                "demos",
+                "snake executable should restore the demos cwd basename for asset lookup"
+            );
+            assert!(
+                entries.contains_key("demos/assets/empty.png"),
+                "snake executable should embed demo tile assets under demos/assets"
+            );
+        }
     }
 }

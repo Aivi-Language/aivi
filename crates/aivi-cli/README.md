@@ -21,7 +21,7 @@ Subcommands dispatched from `main`:
 |---|---|
 | `check` | Parse + HIR-check one or more source files; emit diagnostics |
 | `compile` | Compile a source file through the full pipeline to object code |
-| `build` | Full bundle: compile + link + package a runnable application |
+| `build` | Package a single runnable executable with the embedded runtime artifact |
 | `run` | Build and immediately execute the compiled application |
 | `execute` | Interpret a source file through the HIR/runtime path (no codegen) |
 | `test` | Discover and run `@test`-decorated declarations |
@@ -42,7 +42,7 @@ Internal modules:
 - Worker threads communicate with the scheduler exclusively via message passing; no shared mutable state crosses the thread boundary.
 - `execute` and `run` share a common session abstraction (`run_session`) to avoid duplicating GTK + scheduler setup.
 - Subcommand dispatch is argument-position based (first argument), not flag-based, to keep the CLI surface minimal.
-- `compile` stops at object emission; `build` performs the runnable source-free bundle path by writing the runtime binary, serialized run artifact, serialized backend metadata payloads, precompiled native-kernel sidecars, and launcher.
+- `compile` stops at object emission; `build` performs the runnable source-free executable path by writing a single executable with the serialized run artifact, serialized backend metadata payloads, precompiled native-kernel sidecars, and companion assets embedded inside it.
 - Exit codes follow Unix conventions: 0 for success, non-zero for any error.
 
 ## Diagnostic codes

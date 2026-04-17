@@ -29,13 +29,13 @@ fn help_compile_makes_object_boundary_explicit() {
     );
     assert!(
         stdout.contains("Use `aivi build` for the current")
-            && stdout.contains("runnable bundle path"),
+            && stdout.contains("runnable executable path"),
         "expected build guidance, got stdout: {stdout}"
     );
 }
 
 #[test]
-fn help_build_explains_current_bundle_path() {
+fn help_build_explains_current_executable_path() {
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("help")
         .arg("build")
@@ -50,8 +50,8 @@ fn help_build_explains_current_bundle_path() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("runnable bundle directory"),
-        "expected bundle wording, got stdout: {stdout}"
+        stdout.contains("single runnable executable"),
+        "expected executable wording, got stdout: {stdout}"
     );
     assert!(
         stdout.contains("current runtime binary plus a serialized source-free run artifact"),

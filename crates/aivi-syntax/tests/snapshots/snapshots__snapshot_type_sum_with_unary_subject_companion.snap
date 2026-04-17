@@ -1,5 +1,6 @@
 ---
 source: crates/aivi-syntax/tests/snapshots.rs
+assertion_line: 62
 expression: module
 ---
 Module {
@@ -265,6 +266,7 @@ Module {
                                                     },
                                                 ),
                                                 annotation: None,
+                                                is_selected: false,
                                                 span: SourceSpan {
                                                     file: FileId(
                                                         0,

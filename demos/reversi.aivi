@@ -396,7 +396,16 @@ value main =
                 <each of={[0..7]} as={y} key={y}>
                     <Box orientation="horizontal" spacing={2}>
                         <each of={[0..7]} as={x} key={y * 8 + x}>
-                            <Button label={cellLabel (Coord x y)} onClick={placeCell (Coord x y)} sensitive={legalAt (Coord x y)} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
+                            <with value={Coord x y} as={cell}>
+                                <match on={legalAt cell}>
+                                    <case pattern={True}>
+                                        <Button label={cellLabel cell} onClick={placeCell cell} sensitive={True} focusable={False} compact hasFrame={False} widthRequest={56} heightRequest={56} />
+                                    </case>
+                                    <case pattern={False}>
+                                        <Label text={cellLabel cell} widthRequest={56} heightRequest={56} />
+                                    </case>
+                                </match>
+                            </with>
                         </each>
                     </Box>
                 </each>
