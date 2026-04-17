@@ -38,7 +38,7 @@ type MiddleAssetState = {
 value boardW = 15
 value boardH = 15
 value seed0 = 2463534242
-value tileSize = 20
+value tileSize = 35
 value assetRoot = "demos/assets"
 
 type Text -> Text
@@ -366,22 +366,20 @@ from score = {
 }
 
 value main =
-    <Window title="AIVI Snake" defaultWidth={980} defaultHeight={760}>
+    <Window title="AIVI Snake" defaultWidth={boardW * tileSize} defaultHeight={boardH * tileSize}>
         <Box orientation="vertical" spacing={8} marginTop={12} marginBottom={12} marginStart={12} marginEnd={12}>
             <Label text={dirLine} />
             <Label text={scoreLine} />
             <Label text={statusLine} />
-            <ScrolledWindow hexpand={True} vexpand={True}>
-                <Box orientation="vertical" spacing={0}>
-                    <each of={indices boardH} as={y} key={y}>
-                        <Box orientation="horizontal" spacing={0}>
-                            <each of={indices boardW} as={x} key={y * boardW + x}>
-                                <Picture filename={tileAssetFor dir snake food (Cell x y)} contentFit="contain" canShrink={True} widthRequest={tileSize} heightRequest={tileSize} />
-                            </each>
-                        </Box>
-                    </each>
-                </Box>
-            </ScrolledWindow>
+            <Box orientation="vertical" spacing={0}>
+                <each of={indices boardH} as={y} key={y}>
+                    <Box orientation="horizontal" spacing={0}>
+                        <each of={indices boardW} as={x} key={y * boardW + x}>
+                            <Picture filename={tileAssetFor dir snake food (Cell x y)} contentFit="contain" canShrink={True} widthRequest={tileSize} heightRequest={tileSize} />
+                        </each>
+                    </Box>
+                </each>
+            </Box>
             <show when={gameOver}>
                 <Label text={finalScoreLine} />
             </show>
