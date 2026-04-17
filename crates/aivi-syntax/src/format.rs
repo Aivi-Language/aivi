@@ -731,7 +731,10 @@ impl Formatter {
 
         header.push_str(" = {");
         let mut lines = vec![header];
-        for member in &body.members {
+        for (index, member) in body.members.iter().enumerate() {
+            if index > 0 {
+                lines.push(String::new());
+            }
             lines.extend(self.format_domain_member(member));
         }
         lines.push("}".to_owned());
@@ -2911,6 +2914,7 @@ value view =
                 "    suffix ms\n",
                 "    type ms : Int\n",
                 "    ms = value => Duration value\n",
+                "\n",
                 "    type (*) : Duration -> Int -> Duration\n",
                 "}\n",
                 "\n",
@@ -2918,6 +2922,7 @@ value view =
                 "    suffix root\n",
                 "    type root : Text\n",
                 "    root = value => Path value\n",
+                "\n",
                 "    type (/) : Path -> Text -> Path\n",
                 "}\n",
             )

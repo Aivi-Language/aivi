@@ -3,6 +3,7 @@ use aivi.nonEmpty (
     length as nelLength
     init as nelInit
 )
+
 use aivi.path (
     filename
     join
@@ -36,9 +37,6 @@ type MiddleWindowState = {
     windows: List ((Cell, Cell), (Cell, Cell))
 }
 
-type MiddleAssetState = {
-    found: Option Text
-}
 
 type RenderTile = {
     id: Int,
@@ -52,8 +50,6 @@ value boardH = 15
 value seed0 = 2463534242
 value tileSize = 35
 value boardPixelSize = tileSize * boardW
-
-value noTextAsset : Option Text = None
 value noCellPair : Option (Cell, Cell) = None
 value noCell : Option Cell = None
 value emptyCellPairs : List (Cell, Cell) = []
@@ -86,8 +82,7 @@ func resolveAssetRootFromNonAssets = cwd => isDemosDir cwd
  F|> join cwd "demos/assets"
 
 type Text -> Text
-func resolveAssetRoot = cwd =>
-    isAssetsDir cwd and hasDemosParent cwd
+func resolveAssetRoot = cwd => isAssetsDir cwd and hasDemosParent cwd
  T|> cwd
  F|> resolveAssetRootFromNonAssets cwd
 
@@ -257,9 +252,10 @@ type List Cell -> (List (Cell, Cell))
 func adjacentPairs = cells =>
     (reduce adjacentPairStep { previous: noCell, pairs: emptyCellPairs } cells).pairs
 
-type List Cell -> (List ((Cell, Cell), (Cell, Cell)))
-func middleWindows = cells =>
-    (reduce middleWindowStep { previous: noMiddleWindowPair, windows: emptyMiddleWindows } (adjacentPairs cells)).windows
+// Takes already-computed adjacent pairs — avoids recomputing adjacentPairs per window call.
+type List (Cell, Cell) -> List ((Cell, Cell), (Cell, Cell))
+func middleWindowsFromPairs = pairs =>
+    (reduce middleWindowStep { previous: noMiddleWindowPair, windows: emptyMiddleWindows } pairs).windows
 
 type AdjacentPairState -> Cell -> AdjacentPairState
 func adjacentPairStep = state current => state.previous
@@ -288,58 +284,63 @@ type List (Cell, Cell) -> (Option (Cell, Cell))
 func lastCellPair = pairs =>
     reduce keepLastCellPair noCellPair pairs
 
-type Direction -> Snake -> Direction
-func displayHeadDirection = dir snake => firstCellPair (adjacentPairs snake.cells)
+// Head direction from already-computed adjacent pairs (no redundant adjacentPairs call).
+type Direction -> List (Cell, Cell) -> Direction
+func headDirFromPairs = dir pairs => firstCellPair pairs
  ||> Some (head, neck) -> directionFromTo neck head
  ||> None              -> dir
 
-type Text -> (Option Text)
-func someTextAsset = asset =>
-    Some asset
+// Extract (cell, asset) for one middle-window segment.
+type Text -> ((Cell, Cell), (Cell, Cell)) -> (Cell, Text)
+func windowCellAsset = assetRoot win => win
+ ||> ((prev, cur), (_, next)) ->
+     (cur, middleAssetFor assetRoot (directionFromTo cur prev) (directionFromTo cur next))
 
-type (Option Text) -> (Option Text) -> (Option Text)
-func preferAsset = first second => first
- ||> Some asset -> someTextAsset asset
- ||> None       -> second
+// Tail entry as a singleton list (empty when snake has only one cell).
+type Text -> Option (Cell, Cell) -> List (Cell, Text)
+func tailCellEntries = assetRoot tailPair => tailPair
+ ||> Some (prev, tail) -> cons (tail, tailAssetFor assetRoot (directionFromTo prev tail)) []
+ ||> None              -> []
 
-type Cell -> Cell -> Text -> (Option Text)
-func assetWhen = target cell asset => sameCell target cell
- ||> True  -> someTextAsset asset
- ||> False -> noTextAsset
+// Build [(cell, asset)] for all snake cells from precomputed pairs — called ONCE per tick.
+type Text -> Direction -> Snake -> List (Cell, Cell) -> List (Cell, Text)
+func snakeCellAssetList = assetRoot dir snake pairs =>
+    snakeCellAssetListFull assetRoot snake (headDirFromPairs dir pairs) (middleWindowsFromPairs pairs) (lastCellPair pairs)
 
-type Text -> Cell -> ((Cell, Cell), (Cell, Cell)) -> (Option Text)
-func middleAssetAtTarget = assetRoot target arg1 => arg1
- ||> ((previous, current), (_, next)) -> assetWhen target current (middleAssetFor assetRoot (directionFromTo current previous) (directionFromTo current next))
+type Text -> Snake -> Direction -> List ((Cell, Cell), (Cell, Cell)) -> Option (Cell, Cell) -> List (Cell, Text)
+func snakeCellAssetListFull = assetRoot snake headDir wins tailPair =>
+    append (cons (snake.head, headAssetFor assetRoot headDir) (map (windowCellAsset assetRoot) wins)) (tailCellEntries assetRoot tailPair)
 
-type Text -> Cell -> MiddleAssetState -> ((Cell, Cell), (Cell, Cell)) -> MiddleAssetState
-func middleAssetStep = assetRoot target state window => state.found
- ||> Some asset -> { found: someTextAsset asset }
- ||> None       -> { found: middleAssetAtTarget assetRoot target window }
+// Asset if cell matches target, None otherwise.
+type Cell -> Cell -> Text -> Option Text
+func matchCellAsset = target cell asset => cell == target
+ T|> Some asset
+ F|> None
 
-type Text -> Cell -> Snake -> (Option Text)
-func middleAssetAt = assetRoot target snake =>
-    (reduce (middleAssetStep assetRoot target) { found: noTextAsset } (middleWindows snake.cells)).found
+// Extract asset from an entry if its cell matches target.
+type Cell -> (Cell, Text) -> Option Text
+func cellEntryAsset = target entry => entry
+ ||> (cell, asset) -> matchCellAsset target cell asset
 
-type Text -> Cell -> (Cell, Cell) -> (Option Text)
-func tailAssetAtPair = assetRoot target arg1 => arg1
- ||> (previous, tail) -> assetWhen target tail (tailAssetFor assetRoot (directionFromTo previous tail))
+// Accumulate first matching asset, keeping any already-found value.
+type Cell -> Option Text -> (Cell, Text) -> Option Text
+func findAssetStep = target acc entry => acc
+ ||> Some _ -> acc
+ ||> None   -> cellEntryAsset target entry
 
-type Text -> Cell -> Snake -> (Option Text)
-func tailAssetAt = assetRoot target snake => lastCellPair (adjacentPairs snake.cells)
- ||> Some pair -> tailAssetAtPair assetRoot target pair
- ||> None      -> noTextAsset
-
-type Text -> Cell -> Direction -> Snake -> (Option Text)
-func snakeAssetAt = assetRoot target dir snake =>
-    preferAsset (assetWhen target snake.head (headAssetFor assetRoot (displayHeadDirection dir snake))) (preferAsset (middleAssetAt assetRoot target snake) (tailAssetAt assetRoot target snake))
+// Scan the precomputed snake cell list for a target cell.
+type List (Cell, Text) -> Cell -> Option Text
+func findSnakeAsset = snakeCells target =>
+    reduce (findAssetStep target) None snakeCells
 
 type Text -> Cell -> Cell -> Text
 func foodOrEmptyAsset = assetRoot target food => target == food
  ||> True  -> assetPath assetRoot "mouse.png"
  ||> False -> assetPath assetRoot "empty.png"
 
-type Text -> Direction -> Snake -> Cell -> Cell -> Text
-func tileAssetFor = assetRoot dir snake food target => snakeAssetAt assetRoot target dir snake
+// Per-tile asset lookup using the precomputed snake list (O(N) vs O(7N) before).
+type Text -> List (Cell, Text) -> Cell -> Cell -> Text
+func tileAssetFor = assetRoot snakeCells food target => findSnakeAsset snakeCells target
  ||> Some asset -> asset
  ||> None       -> foodOrEmptyAsset assetRoot target food
 
@@ -352,17 +353,26 @@ func renderTile = x y asset =>
         asset: asset
     }
 
-type Text -> Direction -> Snake -> Cell -> Int -> Int -> RenderTile
-func renderBoardTileAt = assetRoot dir snake food y x =>
-    renderTile x y (tileAssetFor assetRoot dir snake food (Cell x y))
+type Text -> List (Cell, Text) -> Cell -> Int -> Int -> RenderTile
+func renderBoardTileAt = assetRoot snakeCells food y x =>
+    renderTile x y (tileAssetFor assetRoot snakeCells food (Cell x y))
 
-type Text -> Direction -> Snake -> Cell -> Int -> (List RenderTile)
-func renderBoardRow = assetRoot dir snake food y =>
-    map (renderBoardTileAt assetRoot dir snake food y) (indices boardW)
+type Text -> List (Cell, Text) -> Cell -> Int -> (List RenderTile)
+func renderBoardRow = assetRoot snakeCells food y =>
+    map (renderBoardTileAt assetRoot snakeCells food y) (indices boardW)
+
+type Text -> Cell -> List (Cell, Text) -> (List RenderTile)
+func renderBoardTilesWithList = assetRoot food snakeCells =>
+    flatMap (renderBoardRow assetRoot snakeCells food) (indices boardH)
+
+// adjacentPairs computed ONCE here; all downstream functions reuse the result.
+type Text -> Direction -> Snake -> Cell -> List (Cell, Cell) -> (List RenderTile)
+func renderBoardTilesFromPairs = assetRoot dir snake food pairs =>
+    renderBoardTilesWithList assetRoot food (snakeCellAssetList assetRoot dir snake pairs)
 
 type Text -> Direction -> Snake -> Cell -> (List RenderTile)
 func renderBoardTiles = assetRoot dir snake food =>
-    flatMap (renderBoardRow assetRoot dir snake food) (indices boardH)
+    renderBoardTilesFromPairs assetRoot dir snake food (adjacentPairs snake.cells)
 
 type GameState -> Text -> (List RenderTile)
 func boardTilesForState = st assetRoot =>
