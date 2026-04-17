@@ -253,18 +253,27 @@ struct GtkWindowSizeQueue {
 
 impl Default for GtkWindowSizeQueue {
     fn default() -> Self {
-        Self { events: Mutex::new(VecDeque::new()) }
+        Self {
+            events: Mutex::new(VecDeque::new()),
+        }
     }
 }
 
 impl GtkWindowSizeQueue {
     fn push(&self, event: (i32, i32)) {
-        let mut guard = self.events.lock().expect("GtkWindowSizeQueue mutex should not be poisoned");
+        let mut guard = self
+            .events
+            .lock()
+            .expect("GtkWindowSizeQueue mutex should not be poisoned");
         guard.clear();
         guard.push_back(event);
     }
     fn drain(&self) -> Vec<(i32, i32)> {
-        self.events.lock().expect("GtkWindowSizeQueue mutex should not be poisoned").drain(..).collect()
+        self.events
+            .lock()
+            .expect("GtkWindowSizeQueue mutex should not be poisoned")
+            .drain(..)
+            .collect()
     }
 }
 
@@ -274,18 +283,27 @@ struct GtkWindowFocusQueue {
 
 impl Default for GtkWindowFocusQueue {
     fn default() -> Self {
-        Self { events: Mutex::new(VecDeque::new()) }
+        Self {
+            events: Mutex::new(VecDeque::new()),
+        }
     }
 }
 
 impl GtkWindowFocusQueue {
     fn push(&self, event: bool) {
-        let mut guard = self.events.lock().expect("GtkWindowFocusQueue mutex should not be poisoned");
+        let mut guard = self
+            .events
+            .lock()
+            .expect("GtkWindowFocusQueue mutex should not be poisoned");
         guard.clear();
         guard.push_back(event);
     }
     fn drain(&self) -> Vec<bool> {
-        self.events.lock().expect("GtkWindowFocusQueue mutex should not be poisoned").drain(..).collect()
+        self.events
+            .lock()
+            .expect("GtkWindowFocusQueue mutex should not be poisoned")
+            .drain(..)
+            .collect()
     }
 }
 
@@ -324,7 +342,12 @@ struct GridChildMeta {
 
 impl Default for GridChildMeta {
     fn default() -> Self {
-        Self { column: 0, row: 0, column_span: 1, row_span: 1 }
+        Self {
+            column: 0,
+            row: 0,
+            column_span: 1,
+            row_span: 1,
+        }
     }
 }
 
@@ -519,38 +542,32 @@ where
         {
             let queue_init = queue.clone();
             let notifier_init = notifier.clone();
-            clipboard.read_text_async(
-                None::<&gtk::gio::Cancellable>,
-                move |result| {
-                    let text = result
-                        .ok()
-                        .flatten()
-                        .map(|s| s.to_string())
-                        .unwrap_or_default();
-                    queue_init.push(text);
-                    if let Some(n) = notifier_init.borrow().clone() {
-                        n();
-                    }
-                },
-            );
+            clipboard.read_text_async(None::<&gtk::gio::Cancellable>, move |result| {
+                let text = result
+                    .ok()
+                    .flatten()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                queue_init.push(text);
+                if let Some(n) = notifier_init.borrow().clone() {
+                    n();
+                }
+            });
         }
         clipboard.connect_changed(move |cb| {
             let queue = queue.clone();
             let notifier = notifier.clone();
-            cb.read_text_async(
-                None::<&gtk::gio::Cancellable>,
-                move |result| {
-                    let text = result
-                        .ok()
-                        .flatten()
-                        .map(|s| s.to_string())
-                        .unwrap_or_default();
-                    queue.push(text);
-                    if let Some(n) = notifier.borrow().clone() {
-                        n();
-                    }
-                },
-            );
+            cb.read_text_async(None::<&gtk::gio::Cancellable>, move |result| {
+                let text = result
+                    .ok()
+                    .flatten()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default();
+                queue.push(text);
+                if let Some(n) = notifier.borrow().clone() {
+                    n();
+                }
+            });
         });
     }
 
@@ -757,14 +774,10 @@ where
                 adw::PasswordEntryRow::new().upcast::<gtk::Widget>()
             }
             GtkConcreteWidgetKind::Overlay => gtk::Overlay::new().upcast::<gtk::Widget>(),
-            GtkConcreteWidgetKind::MultilineEntry => {
-                gtk::TextView::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::MultilineEntry => gtk::TextView::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::Picture => gtk::Picture::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::ViewStack => adw::ViewStack::new().upcast::<gtk::Widget>(),
-            GtkConcreteWidgetKind::ViewStackPage => {
-                adw::Bin::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::ViewStackPage => adw::Bin::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::AlertDialog => {
                 adw::MessageDialog::new(None::<&gtk::Window>, None, None).upcast::<gtk::Widget>()
             }
@@ -774,9 +787,7 @@ where
             GtkConcreteWidgetKind::MenuButton => gtk::MenuButton::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::Popover => gtk::Popover::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::CenterBox => gtk::CenterBox::new().upcast::<gtk::Widget>(),
-            GtkConcreteWidgetKind::AboutDialog => {
-                adw::AboutDialog::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::AboutDialog => adw::AboutDialog::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::SplitButton => adw::SplitButton::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::NavigationSplitView => {
                 adw::NavigationSplitView::new().upcast::<gtk::Widget>()
@@ -788,7 +799,9 @@ where
             GtkConcreteWidgetKind::TabPage => {
                 let bin = adw::Bin::new();
                 let key = bin.as_ptr() as usize;
-                self.tab_page_meta.borrow_mut().insert(key, TabPageMeta::default());
+                self.tab_page_meta
+                    .borrow_mut()
+                    .insert(key, TabPageMeta::default());
                 bin.upcast::<gtk::Widget>()
             }
             GtkConcreteWidgetKind::TabBar => adw::TabBar::new().upcast::<gtk::Widget>(),
@@ -803,7 +816,9 @@ where
             GtkConcreteWidgetKind::GridChild => {
                 let bin = adw::Bin::new();
                 let key = bin.as_ptr() as usize;
-                self.grid_child_meta.borrow_mut().insert(key, GridChildMeta::default());
+                self.grid_child_meta
+                    .borrow_mut()
+                    .insert(key, GridChildMeta::default());
                 bin.upcast::<gtk::Widget>()
             }
             GtkConcreteWidgetKind::FileDialog => {
@@ -817,10 +832,9 @@ where
                     None,
                 );
                 let key = placeholder.as_ptr() as usize;
-                self.file_chooser_states.borrow_mut().insert(
-                    key,
-                    FileChooserNativeState { native },
-                );
+                self.file_chooser_states
+                    .borrow_mut()
+                    .insert(key, FileChooserNativeState { native });
                 placeholder.upcast::<gtk::Widget>()
             }
         };
@@ -1290,13 +1304,12 @@ where
                     .set_can_shrink(value);
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::WindowMaximized) => {
-                let window = widget
-                    .clone()
-                    .downcast::<gtk::Window>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let window = widget.clone().downcast::<gtk::Window>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::Window",
-                    })?;
+                    }
+                })?;
                 if value {
                     window.maximize();
                 } else {
@@ -1304,13 +1317,12 @@ where
                 }
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::WindowFullscreen) => {
-                let window = widget
-                    .clone()
-                    .downcast::<gtk::Window>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let window = widget.clone().downcast::<gtk::Window>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::Window",
-                    })?;
+                    }
+                })?;
                 if value {
                     window.fullscreen();
                 } else {
@@ -1351,13 +1363,12 @@ where
                     .set_single_line_mode(value);
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::MenuButtonActive) => {
-                let mb = widget
-                    .clone()
-                    .downcast::<gtk::MenuButton>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let mb = widget.clone().downcast::<gtk::MenuButton>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::MenuButton",
-                    })?;
+                    }
+                })?;
                 mb.set_property("active", value);
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::MenuButtonUseUnderline) => {
@@ -1427,11 +1438,19 @@ where
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::TabPageNeedsAttention) => {
                 let key = widget.as_ptr() as usize;
-                self.tab_page_meta.borrow_mut().entry(key).or_default().needs_attention = value;
+                self.tab_page_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .needs_attention = value;
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::TabPageLoading) => {
                 let key = widget.as_ptr() as usize;
-                self.tab_page_meta.borrow_mut().entry(key).or_default().loading = value;
+                self.tab_page_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .loading = value;
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::TabBarAutohide) => {
                 widget
@@ -2074,13 +2093,12 @@ where
                     .set_icon_name(if value.is_empty() { None } else { Some(value) });
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::ComboRowItems) => {
-                let row = widget
-                    .clone()
-                    .downcast::<adw::ComboRow>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let row = widget.clone().downcast::<adw::ComboRow>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "adw::ComboRow",
-                    })?;
+                    }
+                })?;
                 let items: Vec<&str> = if value.is_empty() {
                     vec![]
                 } else {
@@ -2502,7 +2520,11 @@ where
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::TabPageTitle) => {
                 let key = widget.as_ptr() as usize;
-                self.tab_page_meta.borrow_mut().entry(key).or_default().title = value.to_owned();
+                self.tab_page_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .title = value.to_owned();
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::SplitButtonLabel) => {
                 widget
@@ -2529,7 +2551,11 @@ where
                 let _ = value;
             }
             GtkPropertySetter::Text(GtkTextPropertySetter::OverlaySplitViewSidebarPosition) => {
-                let pack_type = if value == "End" { gtk::PackType::End } else { gtk::PackType::Start };
+                let pack_type = if value == "End" {
+                    gtk::PackType::End
+                } else {
+                    gtk::PackType::Start
+                };
                 widget
                     .clone()
                     .downcast::<adw::OverlaySplitView>()
@@ -2971,22 +2997,38 @@ where
             }
             GtkPropertySetter::I64(GtkI64PropertySetter::GridChildColumn) => {
                 let key = widget.as_ptr() as usize;
-                self.grid_child_meta.borrow_mut().entry(key).or_default().column = value as i32;
+                self.grid_child_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .column = value as i32;
                 Ok(())
             }
             GtkPropertySetter::I64(GtkI64PropertySetter::GridChildRow) => {
                 let key = widget.as_ptr() as usize;
-                self.grid_child_meta.borrow_mut().entry(key).or_default().row = value as i32;
+                self.grid_child_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .row = value as i32;
                 Ok(())
             }
             GtkPropertySetter::I64(GtkI64PropertySetter::GridChildColumnSpan) => {
                 let key = widget.as_ptr() as usize;
-                self.grid_child_meta.borrow_mut().entry(key).or_default().column_span = value.max(1) as i32;
+                self.grid_child_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .column_span = value.max(1) as i32;
                 Ok(())
             }
             GtkPropertySetter::I64(GtkI64PropertySetter::GridChildRowSpan) => {
                 let key = widget.as_ptr() as usize;
-                self.grid_child_meta.borrow_mut().entry(key).or_default().row_span = value.max(1) as i32;
+                self.grid_child_meta
+                    .borrow_mut()
+                    .entry(key)
+                    .or_default()
+                    .row_span = value.max(1) as i32;
                 Ok(())
             }
             GtkPropertySetter::I64(GtkI64PropertySetter::CarouselSpacing) => {
@@ -3012,13 +3054,12 @@ where
                 Ok(())
             }
             GtkPropertySetter::I64(GtkI64PropertySetter::TabViewSelectedPage) => {
-                let tab_view = widget
-                    .clone()
-                    .downcast::<adw::TabView>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let tab_view = widget.clone().downcast::<adw::TabView>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "adw::TabView",
-                    })?;
+                    }
+                })?;
                 let n = tab_view.n_pages();
                 let idx = value as i32;
                 if idx >= 0 && idx < n {
@@ -3185,13 +3226,12 @@ where
                 Ok(())
             }
             GtkPropertySetter::F64(GtkF64PropertySetter::ScaleFillLevel) => {
-                let scale = widget
-                    .clone()
-                    .downcast::<gtk::Scale>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let scale = widget.clone().downcast::<gtk::Scale>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::Scale",
-                    })?;
+                    }
+                })?;
                 scale.set_show_fill_level(true);
                 scale.set_fill_level(value);
                 Ok(())
@@ -3218,7 +3258,9 @@ where
                     .set_yalign(value as f32);
                 Ok(())
             }
-            GtkPropertySetter::F64(GtkF64PropertySetter::NavigationSplitViewSidebarWidthFraction) => {
+            GtkPropertySetter::F64(
+                GtkF64PropertySetter::NavigationSplitViewSidebarWidthFraction,
+            ) => {
                 widget
                     .clone()
                     .downcast::<adw::NavigationSplitView>()
@@ -3545,7 +3587,13 @@ where
                 for child in next {
                     let key = child.as_ptr() as usize;
                     let meta = meta_map.get(&key).cloned().unwrap_or_default();
-                    grid.attach(child, meta.column, meta.row, meta.column_span.max(1), meta.row_span.max(1));
+                    grid.attach(
+                        child,
+                        meta.column,
+                        meta.row,
+                        meta.column_span.max(1),
+                        meta.row_span.max(1),
+                    );
                 }
             }
             _ => unreachable!("replace_sequence_children requires a sequence child group"),
@@ -4571,13 +4619,12 @@ where
                     }
                 }),
             GtkEventSignal::MultilineEntryChanged => {
-                let text_view = widget
-                    .clone()
-                    .downcast::<gtk::TextView>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let text_view = widget.clone().downcast::<gtk::TextView>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::TextView",
-                    })?;
+                    }
+                })?;
                 let buffer = text_view.buffer();
                 let sid = buffer.connect_changed(move |buf| {
                     let (start, end) = buf.bounds();
@@ -4792,13 +4839,12 @@ where
                     }
                 }),
             GtkEventSignal::MenuButtonToggled => {
-                let btn = widget
-                    .clone()
-                    .downcast::<gtk::MenuButton>()
-                    .map_err(|_| GtkConcreteHostError::WidgetDowncastFailed {
+                let btn = widget.clone().downcast::<gtk::MenuButton>().map_err(|_| {
+                    GtkConcreteHostError::WidgetDowncastFailed {
                         widget: schema.markup_name.into(),
                         expected_type: "gtk::MenuButton",
-                    })?;
+                    }
+                })?;
                 use glib::prelude::ObjectExt as _;
                 btn.connect_notify_local(Some("active"), move |btn, _| {
                     use glib::prelude::ObjectExt as _;

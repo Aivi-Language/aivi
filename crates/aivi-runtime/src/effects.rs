@@ -20,7 +20,8 @@ use crate::{
     reactive_program::ReactiveProgram,
     scheduler::{
         DerivedNodeEvaluator, Generation, Publication, PublicationStamp, Scheduler,
-        SchedulerAccessError, TickOutcome, TryDerivedNodeEvaluator, WorkerPublicationSender,
+        SchedulerAccessError, SchedulerMessage, TickOutcome, TryDerivedNodeEvaluator,
+        WorkerPublicationSender,
     },
 };
 
@@ -804,6 +805,14 @@ where
         self.scheduler
             .queue_publication(publication)
             .map_err(Into::into)
+    }
+
+    pub fn take_pending_messages(&mut self) -> VecDeque<SchedulerMessage<V>> {
+        self.scheduler.take_pending_messages()
+    }
+
+    pub fn prepend_pending_messages(&mut self, messages: VecDeque<SchedulerMessage<V>>) {
+        self.scheduler.prepend_pending_messages(messages);
     }
 
     fn claim_input(&mut self, input: InputHandle) -> Result<(), TaskSourceRuntimeError> {

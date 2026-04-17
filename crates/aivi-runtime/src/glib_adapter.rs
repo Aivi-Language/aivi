@@ -220,18 +220,25 @@ impl GlibTickDrainMode {
     ) -> bool {
         match self {
             Self::UntilIdle => async_wake_requested || queued_messages > 0,
-            // For async timer-driven ticks, stop after each productive tick and
-            // yield to GTK rendering.  A new async drive task has already been
-            // spawned by `request_tick()` on the background timer thread, so
-            // the queued publication will be processed on the next GLib event
-            // loop iteration — after GTK gets a chance to render.
-            Self::AsyncWakeBudgeted => queued_messages > 0,
+            // For async timer/input-driven ticks, always stop after a single
+            // productive tick and yield to GTK rendering. Any pending timer or
+            // input publications are rescheduled onto a fresh GLib wake so the
+            // UI gets a frame opportunity between state transitions.
+            Self::AsyncWakeBudgeted => false,
             Self::UntilCurrentQueue => queued_messages > 0,
         }
     }
 
-    fn should_reschedule_after_break(self, async_wake_requested: bool) -> bool {
-        matches!(self, Self::UntilCurrentQueue) && async_wake_requested
+    fn should_reschedule_after_break(
+        self,
+        async_wake_requested: bool,
+        queued_messages: usize,
+    ) -> bool {
+        match self {
+            Self::UntilCurrentQueue => async_wake_requested,
+            Self::AsyncWakeBudgeted => async_wake_requested || queued_messages > 0,
+            Self::UntilIdle => false,
+        }
     }
 
     fn should_yield_after_tick(self, drained_ticks: usize) -> bool {
@@ -343,15 +350,17 @@ where
                 let async_wake_requested = self.tick_enqueued.load(Ordering::Acquire);
                 (
                     async_wake_requested,
+                    queued_count,
                     mode.should_continue_after_tick(async_wake_requested, queued_count),
                 )
             };
 
             drained_ticks = drained_ticks.saturating_add(1);
-            let (async_wake_requested, should_continue) = should_continue;
+            let (async_wake_requested, queued_messages, should_continue) = should_continue;
 
             if !should_continue {
-                reschedule |= mode.should_reschedule_after_break(async_wake_requested);
+                reschedule |=
+                    mode.should_reschedule_after_break(async_wake_requested, queued_messages);
                 break;
             }
             if mode.should_yield_after_tick(drained_ticks) {
@@ -473,6 +482,35 @@ impl GlibLinkedRuntimeDriver {
         .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
         self.shared
             .drive_pending_ticks(GlibTickDrainMode::UntilCurrentQueue);
+        Ok(())
+    }
+
+    pub fn queue_publication_now_isolated_budgeted(
+        &self,
+        publication: Publication<DetachedRuntimeValue>,
+    ) -> Result<(), GlibLinkedRuntimeAccessError> {
+        let parked = self
+            .with_state_mut(|state| {
+                let parked = state.linked.runtime_mut().take_pending_messages();
+                let (stamp, value) = publication.into_parts();
+                match state
+                    .linked
+                    .runtime_mut()
+                    .queue_publication(Publication::new(stamp, value.into_runtime()))
+                {
+                    Ok(()) => Ok::<_, TaskSourceRuntimeError>(parked),
+                    Err(error) => {
+                        state.linked.runtime_mut().prepend_pending_messages(parked);
+                        Err(error)
+                    }
+                }
+            })
+            .map_err(GlibLinkedRuntimeAccessError::RuntimeAccess)?;
+        self.shared
+            .drive_pending_ticks(GlibTickDrainMode::AsyncWakeBudgeted);
+        self.with_state_mut(|state| {
+            state.linked.runtime_mut().prepend_pending_messages(parked);
+        });
         Ok(())
     }
 
@@ -649,6 +687,21 @@ impl GlibLinkedRuntimeDriver {
                     repeated,
                 });
         });
+    }
+
+    pub fn collect_window_key_publications(
+        &self,
+        name: &str,
+        repeated: bool,
+    ) -> Vec<Publication<DetachedRuntimeValue>> {
+        self.with_state(|state| {
+            state
+                .providers
+                .collect_window_key_publications(&crate::providers::WindowKeyEvent {
+                    name: name.into(),
+                    repeated,
+                })
+        })
     }
 
     /// Publishes a dark-mode state change to all active `gtk.darkMode` source instances.
@@ -913,19 +966,18 @@ impl GlibLinkedRuntimeShared {
                             .failures
                             .push_back(GlibLinkedRuntimeFailure::ProviderExecution(error));
                         notify = true;
-                        (false, false)
+                        (false, 0, false)
                     } else {
                         if !outcome.scheduler().is_empty() {
                             state.outcomes.push_back(outcome);
                             notify = true;
                         }
                         let async_wake_requested = self.tick_enqueued.load(Ordering::Acquire);
+                        let queued_messages = state.linked.queued_message_count();
                         (
                             async_wake_requested,
-                            mode.should_continue_after_tick(
-                                async_wake_requested,
-                                state.linked.queued_message_count(),
-                            ),
+                            queued_messages,
+                            mode.should_continue_after_tick(async_wake_requested, queued_messages),
                         )
                     }
                 }
@@ -934,7 +986,7 @@ impl GlibLinkedRuntimeShared {
                         .failures
                         .push_back(GlibLinkedRuntimeFailure::Tick(error));
                     notify = true;
-                    (false, false)
+                    (false, 0, false)
                 }
             };
             drained_ticks = drained_ticks.saturating_add(1);
@@ -942,10 +994,11 @@ impl GlibLinkedRuntimeShared {
                 .state
                 .lock()
                 .expect("GLib linked runtime state mutex should not be poisoned") = Some(state);
-            let (async_wake_requested, should_continue) = should_continue;
+            let (async_wake_requested, queued_messages, should_continue) = should_continue;
 
             if !should_continue {
-                reschedule |= mode.should_reschedule_after_break(async_wake_requested);
+                reschedule |=
+                    mode.should_reschedule_after_break(async_wake_requested, queued_messages);
                 break;
             }
             if mode.should_yield_after_tick(drained_ticks) {
@@ -1000,7 +1053,7 @@ mod tests {
 
     use super::{
         GLIB_ASYNC_WAKE_TICK_BUDGET, GlibLinkedRuntimeDriver, GlibSchedulerDriver,
-        TickExecutionGuard,
+        GlibTickDrainMode, TickExecutionGuard,
     };
 
     struct LoweredStack {
@@ -1099,6 +1152,29 @@ mod tests {
 
     fn expected_runtime_int(value: i64) -> DetachedRuntimeValue {
         DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(value))
+    }
+
+    #[test]
+    fn async_wake_budgeted_yields_after_one_tick_and_reschedules_pending_work() {
+        assert!(
+            !GlibTickDrainMode::AsyncWakeBudgeted.should_continue_after_tick(false, 1),
+            "async wakes should yield even when more publications are already queued"
+        );
+        assert!(
+            GlibTickDrainMode::AsyncWakeBudgeted.should_reschedule_after_break(false, 1),
+            "queued follow-up publications should be rescheduled onto the next GLib wake"
+        );
+        assert!(
+            GlibTickDrainMode::AsyncWakeBudgeted.should_reschedule_after_break(true, 0),
+            "background wake requests should also reschedule after yielding"
+        );
+    }
+
+    #[test]
+    fn until_current_queue_keeps_draining_and_only_reschedules_async_followups() {
+        assert!(GlibTickDrainMode::UntilCurrentQueue.should_continue_after_tick(false, 1));
+        assert!(!GlibTickDrainMode::UntilCurrentQueue.should_reschedule_after_break(false, 1));
+        assert!(GlibTickDrainMode::UntilCurrentQueue.should_reschedule_after_break(true, 0));
     }
 
     fn pump_context(context: &MainContext, duration: Duration) {

@@ -495,7 +495,9 @@ signal count : Signal Int =
     // Cold tick — establishes the initial recurrence value (seed evaluation + first step
     // compilation). We don't assert its duration; it just must complete.
     tick_port
-        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(1)))
+        .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+            1,
+        )))
         .expect("first tick publication should queue");
     let cold_start = Instant::now();
     linked
@@ -517,7 +519,9 @@ signal count : Signal Int =
 
     for i in 2..=WARM_TICK_COUNT {
         tick_port
-            .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(i)))
+            .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+                i,
+            )))
             .expect("tick publication should queue");
         let warm_start = Instant::now();
         linked

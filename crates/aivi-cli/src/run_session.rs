@@ -747,25 +747,29 @@ impl RunSessionState {
         }
         let queued_window_keys = self.executor.host_mut().drain_window_key_events();
         for event in queued_window_keys {
-            self.driver
-                .dispatch_window_key_event(event.name.as_ref(), event.repeated);
-            self.driver.tick_now();
+            for publication in self
+                .driver
+                .collect_window_key_publications(event.name.as_ref(), event.repeated)
+            {
+                // Queue key publications ahead of older timer work, then process a single
+                // isolated tick so the turn becomes visible without collapsing already
+                // queued timer movement into the same frame.
+                self.driver
+                    .queue_publication_now_isolated_budgeted(publication)
+                    .map_err(|error| format!("failed to queue window key publication: {error}"))?;
+            }
         }
         for is_dark in self.executor.host_mut().drain_dark_mode_events() {
             self.driver.dispatch_dark_mode_changed(is_dark);
-            self.driver.tick_now();
         }
         for text in self.executor.host_mut().drain_clipboard_events() {
             self.driver.dispatch_clipboard_changed(text);
-            self.driver.tick_now();
         }
         for (width, height) in self.executor.host_mut().drain_window_size_events() {
             self.driver.dispatch_window_size_changed(width, height);
-            self.driver.tick_now();
         }
         for focused in self.executor.host_mut().drain_window_focus_events() {
             self.driver.dispatch_window_focus_changed(focused);
-            self.driver.tick_now();
         }
         let failures = self.driver.drain_failures();
         if !failures.is_empty() {
@@ -2229,6 +2233,148 @@ export main
     }
 
     #[gtk::test]
+    fn queued_window_keys_do_not_pull_pending_timer_ticks_forward() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let artifact = prepare_run_from_text(
+            "queued-window-key-no-timer-collapse.aivi",
+            r#"
+type Direction = Up | Right
+type Key = Key Text
+
+type Direction -> Text
+func dirLineFor = arg1 => arg1
+ ||> Up    -> "Up"
+ ||> Right -> "Right"
+
+type Int -> Text
+func tickLineFor = arg1 =>
+    "Ticks: {arg1}"
+
+type Key -> Direction -> Direction
+func updateDirection = key current => key
+ ||> Key "ArrowUp" -> Up
+ ||> _             -> current
+
+type Unit -> Int -> Int
+func countTick = unit current =>
+    current + 1
+
+@source timer.every 1000ms with {
+    immediate: False,
+    coalesce: True
+}
+signal tick : Signal Unit
+
+@source window.keyDown with {
+    repeat: False,
+    focusOnly: True
+}
+signal keyDown : Signal Key
+
+signal direction : Signal Direction =
+    keyDown
+     +|> Right updateDirection
+
+signal ticks : Signal Int =
+    tick
+     +|> 0 countTick
+
+from direction = {
+    dirLine: dirLineFor
+}
+
+from ticks = {
+    tickLine: tickLineFor
+}
+
+value main =
+    <Window title="Queued window key probe">
+        <Box orientation="vertical">
+            <Label text={dirLine} />
+            <Label text={tickLine} />
+        </Box>
+    </Window>
+
+export main
+"#,
+        );
+        let direction_item = required_signal_item(&artifact, "dirLine");
+        let tick_item = required_signal_item(&artifact, "tickLine");
+        let path = PathBuf::from("queued-window-key-no-timer-collapse.aivi");
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("queued window key probe should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the probe window should release startup-held timers");
+
+        let driver = harness.control().driver();
+        let timer_binding = driver
+            .source_bindings()
+            .into_iter()
+            .find(|binding| {
+                driver
+                    .source_provider(binding.instance)
+                    .is_some_and(|provider| {
+                        provider
+                            .builtin_provider()
+                            .is_some_and(|builtin| builtin.key() == "timer.every")
+                    })
+            })
+            .expect("probe should expose a timer source binding");
+        driver
+            .set_source_mode(
+                timer_binding.instance,
+                aivi_runtime::GlibLinkedSourceMode::Manual,
+            )
+            .expect("probe timer should switch to manual mode");
+
+        assert_eq!(text_signal_for(&harness, direction_item), "Right");
+        assert_eq!(text_signal_for(&harness, tick_item), "Ticks: 0");
+
+        let timer_stamp = driver
+            .current_stamp(timer_binding.input)
+            .expect("probe timer input should expose a publication stamp");
+        driver
+            .queue_publication(aivi_runtime::Publication::new(
+                timer_stamp,
+                DetachedRuntimeValue::unit(),
+            ))
+            .expect("probe timer publication should queue");
+
+        harness.with_access(|access| {
+            access
+                .executor_mut()
+                .host_mut()
+                .queue_window_key_event("ArrowUp", false);
+            access
+                .process_pending_work()
+                .expect("queued window key should process without forcing pending timer work");
+        });
+
+        assert_eq!(
+            text_signal_for(&harness, direction_item),
+            "Up",
+            "queued window key events should still update direction in the same work cycle"
+        );
+        assert_eq!(
+            text_signal_for(&harness, tick_item),
+            "Ticks: 0",
+            "processing a queued key must not also drain an already queued timer publication"
+        );
+
+        assert!(
+            pump_until(&context, Duration::from_millis(250), || {
+                text_signal_for(&harness, tick_item) == "Ticks: 1"
+            }),
+            "the queued timer publication should still apply on the later async wake"
+        );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
     fn button_click_event_payloads_use_current_markup_bindings() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let artifact = prepare_run_from_text(
@@ -2696,6 +2842,87 @@ export main
             total_kernel_calls > 0 || total_item_calls > 0,
             "profile should capture kernel or item activity for live Reversi hydration"
         );
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
+    #[ignore = "manual latency probe for snake turn hydration"]
+    fn snake_profiled_turn_hydration_reports_runtime_cost() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let path = repo_path("demos/snake.aivi");
+        let artifact = prepare_run_from_path(&path);
+        let direction_item = required_signal_item(&artifact, "dirLine");
+        let shared = RunHydrationStaticState {
+            view_name: artifact.view_name.clone(),
+            patterns: artifact.patterns.clone(),
+            bridge: artifact.bridge.clone(),
+            inputs: artifact.hydration_inputs.clone(),
+        };
+        let harness =
+            start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
+                .expect("snake demo should start a run session");
+        let context = harness.control().context();
+        let driver = harness.control().driver();
+        harness
+            .present_root_windows()
+            .expect("presenting the snake window should release startup-held timers");
+
+        for binding in driver.source_bindings() {
+            if driver
+                .source_provider(binding.instance)
+                .is_some_and(|provider| {
+                    provider
+                        .builtin_provider()
+                        .is_some_and(|builtin| builtin.key() == "timer.every")
+                })
+            {
+                driver
+                    .set_source_mode(binding.instance, aivi_runtime::GlibLinkedSourceMode::Manual)
+                    .expect("snake timer source should switch to manual mode");
+            }
+        }
+        pump_context(&context, Duration::from_millis(50));
+
+        let baseline_globals = harness.with_access(|access| {
+            access
+                .driver()
+                .current_signal_globals()
+                .expect("baseline snake globals should be readable")
+        });
+        let (_baseline_plan, baseline_profile) =
+            plan_run_hydration_profiled(&shared, &baseline_globals)
+                .expect("baseline snake hydration should be profileable");
+
+        driver.dispatch_window_key_event("ArrowUp", false);
+        assert!(
+            pump_until(&context, Duration::from_millis(250), || {
+                text_signal_for(&harness, direction_item) == "Up"
+            }),
+            "dispatching ArrowUp should update the snake direction before profiling hydration"
+        );
+
+        let turned_globals = harness.with_access(|access| {
+            access
+                .driver()
+                .current_signal_globals()
+                .expect("turned snake globals should be readable")
+        });
+        let (_turn_plan, turn_profile) = plan_run_hydration_profiled(&shared, &turned_globals)
+            .expect("turned snake hydration should be profileable");
+
+        eprintln!(
+            "snake hydration profile: baseline={:?}, turn={:?}, baseline_nodes={}, turn_nodes={}, baseline_inputs={}, turn_inputs={}",
+            baseline_profile.total_time,
+            turn_profile.total_time,
+            baseline_profile.planned_nodes,
+            turn_profile.planned_nodes,
+            baseline_profile.evaluated_inputs,
+            turn_profile.evaluated_inputs
+        );
+
+        assert!(baseline_profile.planned_nodes > 0);
+        assert!(turn_profile.planned_nodes > 0);
 
         harness.shutdown();
     }

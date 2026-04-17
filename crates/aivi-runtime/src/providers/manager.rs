@@ -112,6 +112,35 @@ impl SourceProviderManager {
             .publish(mailbox, message)
     }
 
+    pub fn collect_window_key_publications(
+        &self,
+        event: &WindowKeyEvent,
+    ) -> Vec<crate::Publication<aivi_backend::DetachedRuntimeValue>> {
+        let mut publications = Vec::new();
+        for state in self.active.values() {
+            let ActiveProviderState::Window {
+                output,
+                allow_repeat,
+                port,
+                ..
+            } = state
+            else {
+                continue;
+            };
+            if event.repeated && !allow_repeat {
+                continue;
+            }
+            let Ok(Some(value)) = output.value_for_key(&event.name) else {
+                continue;
+            };
+            publications.push(crate::Publication::new(
+                port.stamp(),
+                aivi_backend::DetachedRuntimeValue::from_runtime_owned(value),
+            ));
+        }
+        publications
+    }
+
     pub fn dispatch_window_key_event(&mut self, event: WindowKeyEvent) {
         for state in self.active.values() {
             let ActiveProviderState::Window {
@@ -820,4 +849,3 @@ impl SourceProviderManager {
         }
     }
 }
-

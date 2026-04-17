@@ -170,10 +170,7 @@ impl McpHostState {
             harness.with_access(|access| {
                 let driver = access.driver();
                 for binding in driver.source_bindings() {
-                    let _ = driver.set_source_mode(
-                        binding.instance,
-                        GlibLinkedSourceMode::Manual,
-                    );
+                    let _ = driver.set_source_mode(binding.instance, GlibLinkedSourceMode::Manual);
                 }
             });
         }

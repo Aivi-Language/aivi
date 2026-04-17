@@ -1638,7 +1638,11 @@ const WINDOW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         WINDOW_DECORATED_PROPERTY,
         WINDOW_HIDE_ON_CLOSE_PROPERTY,
     ],
-    events: &[WINDOW_CLOSE_REQUEST_EVENT, WINDOW_MAXIMIZE_EVENT, WINDOW_FULLSCREEN_EVENT],
+    events: &[
+        WINDOW_CLOSE_REQUEST_EVENT,
+        WINDOW_MAXIMIZE_EVENT,
+        WINDOW_FULLSCREEN_EVENT,
+    ],
     default_child_group_override: Some(&WINDOW_CONTENT_CHILD_GROUP),
     child_groups: &[WINDOW_CONTENT_CHILD_GROUP, WINDOW_TITLEBAR_CHILD_GROUP],
 };
@@ -1731,7 +1735,12 @@ const BOX_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         BOX_SPACING_PROPERTY,
         BOX_HOMOGENEOUS_PROPERTY,
     ],
-    events: &[SECONDARY_CLICK_EVENT, LONG_PRESS_EVENT, SWIPE_LEFT_EVENT, SWIPE_RIGHT_EVENT],
+    events: &[
+        SECONDARY_CLICK_EVENT,
+        LONG_PRESS_EVENT,
+        SWIPE_LEFT_EVENT,
+        SWIPE_RIGHT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[BOX_CHILDREN_CHILD_GROUP],
 };
@@ -2316,7 +2325,12 @@ const IMAGE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         IMAGE_PIXEL_SIZE_PROPERTY,
         IMAGE_FILE_PROPERTY,
     ],
-    events: &[SECONDARY_CLICK_EVENT, LONG_PRESS_EVENT, SWIPE_LEFT_EVENT, SWIPE_RIGHT_EVENT],
+    events: &[
+        SECONDARY_CLICK_EVENT,
+        LONG_PRESS_EVENT,
+        SWIPE_LEFT_EVENT,
+        SWIPE_RIGHT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -2956,7 +2970,12 @@ const ENTRY_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         ADW_PREFERENCES_ROW_TITLE_PROPERTY,
         ENTRY_ROW_TEXT_PROPERTY,
     ],
-    events: &[ENTRY_ROW_CHANGED_EVENT, ENTRY_ROW_ACTIVATED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
+    events: &[
+        ENTRY_ROW_CHANGED_EVENT,
+        ENTRY_ROW_ACTIVATED_EVENT,
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -3630,7 +3649,12 @@ const PASSWORD_ENTRY_ROW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         ADW_PREFERENCES_ROW_TITLE_PROPERTY,
         PASSWORD_ENTRY_ROW_TEXT_PROPERTY,
     ],
-    events: &[PASSWORD_ENTRY_ROW_CHANGED_EVENT, PASSWORD_ENTRY_ROW_ACTIVATED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
+    events: &[
+        PASSWORD_ENTRY_ROW_CHANGED_EVENT,
+        PASSWORD_ENTRY_ROW_ACTIVATED_EVENT,
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -3766,7 +3790,11 @@ const MULTILINE_ENTRY_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         MULTILINE_ENTRY_LEFT_MARGIN_PROPERTY,
         MULTILINE_ENTRY_RIGHT_MARGIN_PROPERTY,
     ],
-    events: &[MULTILINE_ENTRY_CHANGED_EVENT, FOCUS_IN_EVENT, FOCUS_OUT_EVENT],
+    events: &[
+        MULTILINE_ENTRY_CHANGED_EVENT,
+        FOCUS_IN_EVENT,
+        FOCUS_OUT_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -4260,7 +4288,11 @@ const CENTER_BOX_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     ],
     events: &[],
     default_child_group_override: Some(&CENTER_BOX_CENTER_CHILD_GROUP),
-    child_groups: &[CENTER_BOX_START_CHILD_GROUP, CENTER_BOX_CENTER_CHILD_GROUP, CENTER_BOX_END_CHILD_GROUP],
+    child_groups: &[
+        CENTER_BOX_START_CHILD_GROUP,
+        CENTER_BOX_CENTER_CHILD_GROUP,
+        CENTER_BOX_END_CHILD_GROUP,
+    ],
 };
 
 // ── AboutDialog ───────────────────────────────────────────────────────────────
@@ -4404,29 +4436,35 @@ const NAVIGATION_SPLIT_VIEW_SHOW_CONTENT_PROPERTY: GtkPropertyDescriptor = GtkPr
     setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::NavigationSplitViewShowContent),
 };
 
-const NAVIGATION_SPLIT_VIEW_SIDEBAR_WIDTH_FRACTION_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "sidebarWidthFraction",
-    value_shape: GtkPropertyValueShape::F64,
-    setter: GtkPropertySetter::F64(GtkF64PropertySetter::NavigationSplitViewSidebarWidthFraction),
-};
+const NAVIGATION_SPLIT_VIEW_SIDEBAR_WIDTH_FRACTION_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "sidebarWidthFraction",
+        value_shape: GtkPropertyValueShape::F64,
+        setter: GtkPropertySetter::F64(
+            GtkF64PropertySetter::NavigationSplitViewSidebarWidthFraction,
+        ),
+    };
 
-const NAVIGATION_SPLIT_VIEW_MIN_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "minSidebarWidth",
-    value_shape: GtkPropertyValueShape::F64,
-    setter: GtkPropertySetter::F64(GtkF64PropertySetter::NavigationSplitViewMinSidebarWidth),
-};
+const NAVIGATION_SPLIT_VIEW_MIN_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "minSidebarWidth",
+        value_shape: GtkPropertyValueShape::F64,
+        setter: GtkPropertySetter::F64(GtkF64PropertySetter::NavigationSplitViewMinSidebarWidth),
+    };
 
-const NAVIGATION_SPLIT_VIEW_MAX_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "maxSidebarWidth",
-    value_shape: GtkPropertyValueShape::F64,
-    setter: GtkPropertySetter::F64(GtkF64PropertySetter::NavigationSplitViewMaxSidebarWidth),
-};
+const NAVIGATION_SPLIT_VIEW_MAX_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "maxSidebarWidth",
+        value_shape: GtkPropertyValueShape::F64,
+        setter: GtkPropertySetter::F64(GtkF64PropertySetter::NavigationSplitViewMaxSidebarWidth),
+    };
 
-const NAVIGATION_SPLIT_VIEW_SIDEBAR_POSITION_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "sidebarPosition",
-    value_shape: GtkPropertyValueShape::Text,
-    setter: GtkPropertySetter::Text(GtkTextPropertySetter::NavigationSplitViewSidebarPosition),
-};
+const NAVIGATION_SPLIT_VIEW_SIDEBAR_POSITION_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "sidebarPosition",
+        value_shape: GtkPropertyValueShape::Text,
+        setter: GtkPropertySetter::Text(GtkTextPropertySetter::NavigationSplitViewSidebarPosition),
+    };
 
 const NAVIGATION_SPLIT_VIEW_SHOW_CONTENT_EVENT: GtkEventDescriptor = GtkEventDescriptor {
     name: "onShowContent",
@@ -4434,21 +4472,23 @@ const NAVIGATION_SPLIT_VIEW_SHOW_CONTENT_EVENT: GtkEventDescriptor = GtkEventDes
     signal: GtkEventSignal::NavigationSplitViewShowContentChanged,
 };
 
-const NAVIGATION_SPLIT_VIEW_SIDEBAR_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
-    name: "sidebar",
-    container: GtkChildContainerKind::Single,
-    mount: GtkChildMountRoute::NavigationSplitViewSidebar,
-    min_children: 0,
-    max_children: Some(1),
-};
+const NAVIGATION_SPLIT_VIEW_SIDEBAR_CHILD_GROUP: GtkChildGroupDescriptor =
+    GtkChildGroupDescriptor {
+        name: "sidebar",
+        container: GtkChildContainerKind::Single,
+        mount: GtkChildMountRoute::NavigationSplitViewSidebar,
+        min_children: 0,
+        max_children: Some(1),
+    };
 
-const NAVIGATION_SPLIT_VIEW_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor = GtkChildGroupDescriptor {
-    name: "content",
-    container: GtkChildContainerKind::Single,
-    mount: GtkChildMountRoute::NavigationSplitViewContent,
-    min_children: 0,
-    max_children: Some(1),
-};
+const NAVIGATION_SPLIT_VIEW_CONTENT_CHILD_GROUP: GtkChildGroupDescriptor =
+    GtkChildGroupDescriptor {
+        name: "content",
+        container: GtkChildContainerKind::Single,
+        mount: GtkChildMountRoute::NavigationSplitViewContent,
+        min_children: 0,
+        max_children: Some(1),
+    };
 
 const NAVIGATION_SPLIT_VIEW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "NavigationSplitView",
@@ -4479,7 +4519,10 @@ const NAVIGATION_SPLIT_VIEW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     ],
     events: &[NAVIGATION_SPLIT_VIEW_SHOW_CONTENT_EVENT],
     default_child_group_override: Some(&NAVIGATION_SPLIT_VIEW_CONTENT_CHILD_GROUP),
-    child_groups: &[NAVIGATION_SPLIT_VIEW_SIDEBAR_CHILD_GROUP, NAVIGATION_SPLIT_VIEW_CONTENT_CHILD_GROUP],
+    child_groups: &[
+        NAVIGATION_SPLIT_VIEW_SIDEBAR_CHILD_GROUP,
+        NAVIGATION_SPLIT_VIEW_CONTENT_CHILD_GROUP,
+    ],
 };
 
 // ── OverlaySplitView ──────────────────────────────────────────────────────────
@@ -4496,23 +4539,26 @@ const OVERLAY_SPLIT_VIEW_SIDEBAR_POSITION_PROPERTY: GtkPropertyDescriptor = GtkP
     setter: GtkPropertySetter::Text(GtkTextPropertySetter::OverlaySplitViewSidebarPosition),
 };
 
-const OVERLAY_SPLIT_VIEW_SIDEBAR_WIDTH_FRACTION_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "sidebarWidthFraction",
-    value_shape: GtkPropertyValueShape::F64,
-    setter: GtkPropertySetter::F64(GtkF64PropertySetter::OverlaySplitViewSidebarWidthFraction),
-};
+const OVERLAY_SPLIT_VIEW_SIDEBAR_WIDTH_FRACTION_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "sidebarWidthFraction",
+        value_shape: GtkPropertyValueShape::F64,
+        setter: GtkPropertySetter::F64(GtkF64PropertySetter::OverlaySplitViewSidebarWidthFraction),
+    };
 
-const OVERLAY_SPLIT_VIEW_MIN_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "minSidebarWidth",
-    value_shape: GtkPropertyValueShape::F64,
-    setter: GtkPropertySetter::F64(GtkF64PropertySetter::OverlaySplitViewMinSidebarWidth),
-};
+const OVERLAY_SPLIT_VIEW_MIN_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "minSidebarWidth",
+        value_shape: GtkPropertyValueShape::F64,
+        setter: GtkPropertySetter::F64(GtkF64PropertySetter::OverlaySplitViewMinSidebarWidth),
+    };
 
-const OVERLAY_SPLIT_VIEW_MAX_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "maxSidebarWidth",
-    value_shape: GtkPropertyValueShape::F64,
-    setter: GtkPropertySetter::F64(GtkF64PropertySetter::OverlaySplitViewMaxSidebarWidth),
-};
+const OVERLAY_SPLIT_VIEW_MAX_SIDEBAR_WIDTH_PROPERTY: GtkPropertyDescriptor =
+    GtkPropertyDescriptor {
+        name: "maxSidebarWidth",
+        value_shape: GtkPropertyValueShape::F64,
+        setter: GtkPropertySetter::F64(GtkF64PropertySetter::OverlaySplitViewMaxSidebarWidth),
+    };
 
 const OVERLAY_SPLIT_VIEW_SHOW_SIDEBAR_EVENT: GtkEventDescriptor = GtkEventDescriptor {
     name: "onShowSidebar",
@@ -4565,7 +4611,10 @@ const OVERLAY_SPLIT_VIEW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     ],
     events: &[OVERLAY_SPLIT_VIEW_SHOW_SIDEBAR_EVENT],
     default_child_group_override: Some(&OVERLAY_SPLIT_VIEW_CONTENT_CHILD_GROUP),
-    child_groups: &[OVERLAY_SPLIT_VIEW_SIDEBAR_CHILD_GROUP, OVERLAY_SPLIT_VIEW_CONTENT_CHILD_GROUP],
+    child_groups: &[
+        OVERLAY_SPLIT_VIEW_SIDEBAR_CHILD_GROUP,
+        OVERLAY_SPLIT_VIEW_CONTENT_CHILD_GROUP,
+    ],
 };
 
 // ── TabView ───────────────────────────────────────────────────────────────────
@@ -4633,7 +4682,11 @@ const TAB_VIEW_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         CSS_CLASSES_PROPERTY,
         TAB_VIEW_SELECTED_PAGE_PROPERTY,
     ],
-    events: &[TAB_VIEW_PAGE_ADDED_EVENT, TAB_VIEW_PAGE_CLOSED_EVENT, TAB_VIEW_SELECTED_PAGE_CHANGED_EVENT],
+    events: &[
+        TAB_VIEW_PAGE_ADDED_EVENT,
+        TAB_VIEW_PAGE_CLOSED_EVENT,
+        TAB_VIEW_SELECTED_PAGE_CHANGED_EVENT,
+    ],
     default_child_group_override: Some(&TAB_VIEW_PAGES_CHILD_GROUP),
     child_groups: &[TAB_VIEW_PAGES_CHILD_GROUP, TAB_VIEW_TAB_BAR_CHILD_GROUP],
 };
@@ -4799,9 +4852,17 @@ const CAROUSEL_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         CAROUSEL_REVEAL_DURATION_PROPERTY,
         CAROUSEL_INTERACTIVE_PROPERTY,
     ],
-    events: &[CAROUSEL_PAGE_CHANGED_EVENT, SWIPE_LEFT_EVENT, SWIPE_RIGHT_EVENT],
+    events: &[
+        CAROUSEL_PAGE_CHANGED_EVENT,
+        SWIPE_LEFT_EVENT,
+        SWIPE_RIGHT_EVENT,
+    ],
     default_child_group_override: Some(&CAROUSEL_PAGES_CHILD_GROUP),
-    child_groups: &[CAROUSEL_PAGES_CHILD_GROUP, CAROUSEL_DOTS_CHILD_GROUP, CAROUSEL_LINES_CHILD_GROUP],
+    child_groups: &[
+        CAROUSEL_PAGES_CHILD_GROUP,
+        CAROUSEL_DOTS_CHILD_GROUP,
+        CAROUSEL_LINES_CHILD_GROUP,
+    ],
 };
 
 // ── CarouselIndicatorDots ─────────────────────────────────────────────────────

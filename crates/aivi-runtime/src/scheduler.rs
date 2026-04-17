@@ -660,6 +660,19 @@ where
         self.queue_message(SchedulerMessage::DisposeOwner(owner))
     }
 
+    pub fn take_pending_messages(&mut self) -> VecDeque<SchedulerMessage<V>> {
+        self.drain_worker_publications();
+        std::mem::take(&mut self.queue)
+    }
+
+    pub fn prepend_pending_messages(&mut self, mut messages: VecDeque<SchedulerMessage<V>>) {
+        if messages.is_empty() {
+            return;
+        }
+        messages.append(&mut self.queue);
+        self.queue = messages;
+    }
+
     pub fn tick<E>(&mut self, evaluator: &mut E) -> TickOutcome
     where
         E: DerivedNodeEvaluator<V>,

@@ -262,22 +262,12 @@ impl BuiltinSourceProvider {
             Self::GtkDarkMode => {
                 // Provider-triggered stream: fires with the initial dark state on activation,
                 // then fires again on every system dark-mode change.
-                SourceContract::new(
-                    self,
-                    &NO_OPTIONS,
-                    DARK_MODE_RECURRENCE,
-                    STREAM_LIFECYCLE,
-                )
+                SourceContract::new(self, &NO_OPTIONS, DARK_MODE_RECURRENCE, STREAM_LIFECYCLE)
             }
             Self::GtkClipboard => {
                 // Provider-triggered stream: fires with Text (clipboard content) on every
                 // clipboard change. Publishes once at activation with current clipboard text.
-                SourceContract::new(
-                    self,
-                    &NO_OPTIONS,
-                    DARK_MODE_RECURRENCE,
-                    STREAM_LIFECYCLE,
-                )
+                SourceContract::new(self, &NO_OPTIONS, DARK_MODE_RECURRENCE, STREAM_LIFECYCLE)
             }
             Self::ImapConnect => {
                 SourceContract::new(self, &NO_OPTIONS, STATIC_RECURRENCE, STREAM_LIFECYCLE)
