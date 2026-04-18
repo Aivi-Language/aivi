@@ -157,16 +157,22 @@ The snake is a non-empty list of cells, but we want richer operations than a pla
 domain Snake over NonEmptyList Cell = {
     type fromCells : NonEmptyList Cell -> Snake
     fromCells = cells => cells
+
     type head : Cell
     head = nelHead self
+
     type contains : Cell -> Bool
     contains = cell => any (sameCell cell) (toList self)
+
     type length : Int
     length = nelLength self
+
     type grow : Cell -> Snake
     grow = cell => cons cell self
+
     type move : Cell -> Snake
     move = cell => fromHeadTail cell (nelInit self)
+
     type nextHead : Direction -> Cell
     nextHead = dir => moveDir dir (nelHead self)
 }

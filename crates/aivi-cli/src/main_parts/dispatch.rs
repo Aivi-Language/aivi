@@ -508,7 +508,9 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
     run_markup_file_with_launch_config(
         &resolved.entry_path,
         view.as_deref(),
-        run_session::RunLaunchConfig::default(),
+        run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
+            SourceProviderContext::current().with_entry_path(&resolved.entry_path),
+        )),
         timings,
     )
 }

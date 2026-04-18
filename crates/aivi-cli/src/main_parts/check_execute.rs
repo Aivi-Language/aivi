@@ -364,14 +364,14 @@ struct TestTaskOutcome {
 }
 
 fn execute_file(path: &Path, program_args: &[String]) -> Result<ExitCode, String> {
-    let context = current_execute_source_context(program_args)?;
+    let context = current_execute_source_context(path, program_args)?;
     let mut stdout = io::stdout().lock();
     let mut stderr = io::stderr().lock();
     execute_file_with_context(path, context, &mut stdout, &mut stderr)
 }
 
 fn test_file(path: &Path) -> Result<ExitCode, String> {
-    let context = current_execute_source_context(&[])?;
+    let context = current_execute_source_context(path, &[])?;
     let mut stdout = io::stdout().lock();
     let mut stderr = io::stderr().lock();
     test_file_with_context(path, context, &mut stdout, &mut stderr)
@@ -494,6 +494,7 @@ fn test_file_with_context(
 }
 
 fn current_execute_source_context(
+    entry_path: &Path,
     program_args: &[String],
 ) -> Result<SourceProviderContext, String> {
     let cwd = env::current_dir().map_err(|error| {
@@ -507,11 +508,7 @@ fn current_execute_source_context(
             )
         })
         .collect::<BTreeMap<_, _>>();
-    Ok(SourceProviderContext::new(
-        program_args.to_vec(),
-        cwd,
-        env_vars,
-    ))
+    Ok(SourceProviderContext::new(program_args.to_vec(), cwd, env_vars).with_entry_path(entry_path))
 }
 
 fn item_is_test(module: &HirModule, item_id: HirItemId) -> bool {

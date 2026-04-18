@@ -160,4 +160,5 @@ signal runtime : ProcessSource
 
 signal cliArgs : Signal (List Text) = runtime.args
 signal cwd : Signal Text = runtime.cwd
+signal appDir : Signal Text = runtime.appDir
 ```

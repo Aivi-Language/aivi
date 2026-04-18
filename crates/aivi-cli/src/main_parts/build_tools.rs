@@ -609,7 +609,9 @@ fn maybe_run_embedded_build_output(arguments: &[OsString]) -> Result<Option<Exit
     let exit = run_session::launch_run_with_config(
         &artifact_path,
         artifact,
-        run_session::RunLaunchConfig::default(),
+        run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
+            SourceProviderContext::current().with_app_dir(launch_cwd.clone()),
+        )),
         |_, _| {},
         |_| {},
     )?;

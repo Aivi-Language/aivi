@@ -98,6 +98,7 @@ impl std::error::Error for MailboxPublishError {}
 pub struct SourceProviderContext {
     args: Arc<[String]>,
     cwd: Arc<PathBuf>,
+    app_dir: Arc<PathBuf>,
     env: Arc<BTreeMap<String, String>>,
     stdin_override: Option<Result<Box<str>, Box<str>>>,
     stdin_text: Arc<OnceLock<Result<Box<str>, Box<str>>>>,
@@ -131,12 +132,27 @@ impl SourceProviderContext {
     pub fn new(args: Vec<String>, cwd: PathBuf, env: BTreeMap<String, String>) -> Self {
         Self {
             args: Arc::from(args.into_boxed_slice()),
+            app_dir: Arc::new(cwd.clone()),
             cwd: Arc::new(cwd),
             env: Arc::new(env),
             stdin_override: None,
             stdin_text: Arc::new(OnceLock::new()),
             custom_capability_command_executor: None,
         }
+    }
+
+    pub fn with_app_dir(mut self, app_dir: PathBuf) -> Self {
+        self.app_dir = Arc::new(app_dir);
+        self
+    }
+
+    pub fn with_entry_path(self, entry_path: &Path) -> Self {
+        let app_dir = entry_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
+        self.with_app_dir(app_dir)
     }
 
     pub fn with_stdin_text(mut self, stdin: impl Into<String>) -> Self {
@@ -170,6 +186,10 @@ impl SourceProviderContext {
 
     fn cwd_runtime_value(&self) -> RuntimeValue {
         RuntimeValue::Text(self.cwd.to_string_lossy().into_owned().into_boxed_str())
+    }
+
+    fn app_dir_runtime_value(&self) -> RuntimeValue {
+        RuntimeValue::Text(self.app_dir.to_string_lossy().into_owned().into_boxed_str())
     }
 
     fn env_runtime_value(&self, key: &str) -> RuntimeValue {
@@ -261,4 +281,3 @@ impl SourceProviderContext {
         resolved.to_string_lossy().into_owned().into_boxed_str()
     }
 }
-

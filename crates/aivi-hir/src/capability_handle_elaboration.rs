@@ -842,6 +842,14 @@ fn lower_builtin_signal_member(
                 arguments: inherited_arguments(handle, &invocation.arguments),
                 options: handle.options,
             }),
+            "appDir" => Some(SourceDecorator {
+                provider: Some(provider_name_path(
+                    invocation.span,
+                    BuiltinSourceProvider::ProcessAppDir,
+                )),
+                arguments: inherited_arguments(handle, &invocation.arguments),
+                options: handle.options,
+            }),
             _ => None,
         },
         BuiltinCapabilityFamily::Path => {
@@ -1653,7 +1661,7 @@ fn supports_builtin_signal_member(family: BuiltinCapabilityFamily, member: &str)
         BuiltinCapabilityFamily::Db => matches!(member, "connect" | "live"),
         BuiltinCapabilityFamily::Env => matches!(member, "get"),
         BuiltinCapabilityFamily::Stdio => matches!(member, "read"),
-        BuiltinCapabilityFamily::Process => matches!(member, "spawn" | "args" | "cwd"),
+        BuiltinCapabilityFamily::Process => matches!(member, "spawn" | "args" | "cwd" | "appDir"),
         BuiltinCapabilityFamily::Path => matches!(
             member,
             "home" | "configHome" | "dataHome" | "cacheHome" | "tempDir"

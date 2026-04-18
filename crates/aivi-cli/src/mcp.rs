@@ -650,7 +650,7 @@ fn prepare_launch_request(
         entry_path: entry_path.to_path_buf(),
         artifact,
         launch_config: run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
-            build_source_context(source_context)?,
+            build_source_context(source_context)?.with_entry_path(entry_path),
         )),
         sources_paused,
     })

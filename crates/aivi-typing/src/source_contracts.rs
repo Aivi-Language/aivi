@@ -24,6 +24,7 @@ pub enum BuiltinSourceProvider {
     ProcessSpawn,
     ProcessArgs,
     ProcessCwd,
+    ProcessAppDir,
     EnvGet,
     StdioRead,
     PathHome,
@@ -55,7 +56,7 @@ pub enum BuiltinSourceProvider {
 }
 
 impl BuiltinSourceProvider {
-    pub const ALL: [Self; 39] = [
+    pub const ALL: [Self; 40] = [
         Self::HttpGet,
         Self::HttpPost,
         Self::TimerEvery,
@@ -67,6 +68,7 @@ impl BuiltinSourceProvider {
         Self::ProcessSpawn,
         Self::ProcessArgs,
         Self::ProcessCwd,
+        Self::ProcessAppDir,
         Self::EnvGet,
         Self::StdioRead,
         Self::PathHome,
@@ -110,6 +112,7 @@ impl BuiltinSourceProvider {
             "process.spawn" => Some(Self::ProcessSpawn),
             "process.args" => Some(Self::ProcessArgs),
             "process.cwd" => Some(Self::ProcessCwd),
+            "process.appDir" => Some(Self::ProcessAppDir),
             "env.get" => Some(Self::EnvGet),
             "stdio.read" => Some(Self::StdioRead),
             "path.home" => Some(Self::PathHome),
@@ -155,6 +158,7 @@ impl BuiltinSourceProvider {
             Self::ProcessSpawn => "process.spawn",
             Self::ProcessArgs => "process.args",
             Self::ProcessCwd => "process.cwd",
+            Self::ProcessAppDir => "process.appDir",
             Self::EnvGet => "env.get",
             Self::StdioRead => "stdio.read",
             Self::PathHome => "path.home",
@@ -223,6 +227,7 @@ impl BuiltinSourceProvider {
             ),
             Self::ProcessArgs
             | Self::ProcessCwd
+            | Self::ProcessAppDir
             | Self::EnvGet
             | Self::StdioRead
             | Self::PathHome

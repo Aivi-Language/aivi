@@ -6115,6 +6115,7 @@ impl Validator<'_> {
                             }
                             BuiltinSourceProvider::ProcessArgs
                             | BuiltinSourceProvider::ProcessCwd
+                            | BuiltinSourceProvider::ProcessAppDir
                             | BuiltinSourceProvider::EnvGet
                             | BuiltinSourceProvider::StdioRead
                             | BuiltinSourceProvider::PathHome

@@ -487,6 +487,21 @@ impl SourceProviderManager {
                     stop,
                 }
             }
+            RuntimeSourceProvider::Builtin(BuiltinSourceProvider::ProcessAppDir) => {
+                validate_argument_count(instance, BuiltinSourceProvider::ProcessAppDir, config, 0)?;
+                reject_options(instance, BuiltinSourceProvider::ProcessAppDir, config)?;
+                let stop = Arc::new(AtomicBool::new(false));
+                publish_immediate_value(
+                    instance,
+                    BuiltinSourceProvider::ProcessAppDir,
+                    &port,
+                    self.context.app_dir_runtime_value(),
+                )?;
+                ActiveProviderState::Passive {
+                    provider: config.provider.clone(),
+                    stop,
+                }
+            }
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::EnvGet) => {
                 validate_argument_count(instance, BuiltinSourceProvider::EnvGet, config, 1)?;
                 reject_options(instance, BuiltinSourceProvider::EnvGet, config)?;

@@ -253,6 +253,7 @@ These built-ins publish one host-context snapshot when the source starts. They d
 | --- | --- | --- | --- |
 | `process.args` | none | `List Text` | Supported. Publishes the current process arguments. |
 | `process.cwd` | none | `Text` | Supported. Publishes the current working directory text. |
+| `process.appDir` | none | `Text` | Supported. Publishes the app-relative directory: the resolved entry file's parent for source-backed runs, or the extracted launch directory for packaged executables. |
 | `env.get` | `key` | `Option Text` | Supported. Publishes `Some value` when the environment variable exists, otherwise `None`. |
 | `stdio.read` | none | `Text` | Supported. Reads stdin once and publishes the text snapshot. |
 | `path.home` | none | `Text` | Supported. Fails if `HOME` is missing. |

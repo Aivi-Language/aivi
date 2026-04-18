@@ -159,6 +159,7 @@ domain Calendar over Int = {
     suffix day
     type day : Int
     day = value => Calendar value
+
     type toDays : Calendar -> Int
 }
 

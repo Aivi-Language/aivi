@@ -7,9 +7,7 @@ use aivi.nonEmpty (
 use aivi.env (EnvSource)
 
 use aivi.path (
-    filename
     join
-    parent
 )
 
 type Direction =
@@ -51,11 +49,9 @@ value boardH = 15
 value seed0 = 2463534242
 value tileSize = 35
 value boardPixelSize = tileSize * boardW
+value emptyAdjacentPairState : AdjacentPairState = { previous: None, pairs: [] }
+value emptyMiddleWindowState : MiddleWindowState = { previous: None, windows: [] }
 value noCellPair : Option (Cell, Cell) = None
-value noCell : Option Cell = None
-value emptyCellPairs : List (Cell, Cell) = []
-value noMiddleWindowPair : Option (Cell, Cell) = None
-value emptyMiddleWindows : List ((Cell, Cell), (Cell, Cell)) = []
 value noTextAsset : Option Text = None
 value emptyCellAssetPairs : List (Cell, Text) = []
 
@@ -66,33 +62,10 @@ func opposite = arg1 => arg1
  ||> East  -> West
  ||> West  -> East
 
-type Text -> Bool
-func isAssetsDir = path =>
-    filename path == Some "assets"
-
-type Text -> Bool
-func isDemosDir = path =>
-    filename path == Some "demos"
-
-type Text -> Bool
-func hasDemosParent = path => parent path
- ||> Some parentPath -> isDemosDir parentPath
- ||> None            -> False
-
-type Text -> Text
-func resolveAssetRootFromNonAssets = cwd => isDemosDir cwd
- T|> join cwd "assets"
- F|> join cwd "demos/assets"
-
-type Text -> Text
-func resolveAssetRoot = cwd => isAssetsDir cwd and hasDemosParent cwd
- T|> cwd
- F|> resolveAssetRootFromNonAssets cwd
-
 type Text -> (Option Text) -> Text
-func selectAssetRoot = cwd embeddedAssetRoot => embeddedAssetRoot
+func selectAssetRoot = appDir embeddedAssetRoot => embeddedAssetRoot
  ||> Some root -> root
- ||> None      -> resolveAssetRoot cwd
+ ||> None      -> join appDir "assets"
 
 type Text -> Text -> Text
 func assetPath = root name =>
@@ -265,12 +238,12 @@ func resolveMoveStep = st h =>
 
 type List Cell -> (List (Cell, Cell))
 func adjacentPairs = cells =>
-    (reduce adjacentPairStep { previous: noCell, pairs: emptyCellPairs } cells).pairs
+    (reduce adjacentPairStep emptyAdjacentPairState cells).pairs
 
 // Takes already-computed adjacent pairs — avoids recomputing adjacentPairs per window call.
 type List (Cell, Cell) -> List ((Cell, Cell), (Cell, Cell))
 func middleWindowsFromPairs = pairs =>
-    (reduce middleWindowStep { previous: noMiddleWindowPair, windows: emptyMiddleWindows } pairs).windows
+    (reduce middleWindowStep emptyMiddleWindowState pairs).windows
 
 type AdjacentPairState -> Cell -> AdjacentPairState
 func adjacentPairStep = state current => state.previous
@@ -398,8 +371,8 @@ func boardTilesForState = st assetRoot =>
 }
 signal tick : Signal Unit
 
-@source process.cwd
-signal cwd : Signal Text
+@source process.appDir
+signal appDir : Signal Text
 
 @source env
 signal environment : EnvSource
@@ -424,7 +397,7 @@ signal state : Signal GameState = event
  +|> initial step
 
 signal assetRoot : Signal Text =
- &|> cwd
+ &|> appDir
  &|> embeddedAssetRoot
   |> selectAssetRoot
 

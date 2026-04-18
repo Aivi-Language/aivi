@@ -53,6 +53,7 @@ domain Score over Int = {
     suffix pts
     type pts : Int
     pts = n => Score n
+
     type (+) : Score -> Score -> Score
     (+) = left right => left + right
 }
@@ -86,8 +87,10 @@ When a member operates on the current domain value, you can write it in receiver
 domain Snake over List Cell = {
     type fromCells : List Cell -> Snake
     fromCells = cells => cells
+
     type head : Cell
     head = getOrElse (Cell 0 0) (listHead self)
+
     type length : Int
     length = listLength self
 }

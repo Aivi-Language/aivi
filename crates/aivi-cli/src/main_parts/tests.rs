@@ -1780,6 +1780,9 @@ signal cliArgs : Signal (List Text)
 @source process.cwd
 signal cwd : Signal Text
 
+@source process.appDir
+signal appDir : Signal Text
+
 @source env.get "ACCESS_TOKEN"
 signal token : Signal (Option Text)
 
@@ -1802,7 +1805,7 @@ signal cacheHome : Signal Text
 signal tempDir : Signal Text
 
 value main : Task Text Unit =
-    stdoutWrite "{cliArgs}|{cwd}|{token}|{stdinText}|{homeDir}|{configHome}|{dataHome}|{cacheHome}|{tempDir}"
+    stdoutWrite "{cliArgs}|{cwd}|{appDir}|{token}|{stdinText}|{homeDir}|{configHome}|{dataHome}|{cacheHome}|{tempDir}"
 "#,
         );
     let cwd = workspace.path().join("working");
@@ -1834,6 +1837,7 @@ value main : Task Text Unit =
             ("ACCESS_TOKEN".to_owned(), "secret".to_owned()),
         ]),
     )
+    .with_entry_path(&entry)
     .with_stdin_text("payload");
 
     let (code, stdout, stderr) = execute_workspace(&entry, context);
@@ -1846,8 +1850,9 @@ value main : Task Text Unit =
     assert_eq!(
         stdout,
         format!(
-            "[alpha, beta]|{}|Some secret|payload|{}|{}|{}|{}|{}",
+            "[alpha, beta]|{}|{}|Some secret|payload|{}|{}|{}|{}|{}",
             cwd.display(),
+            workspace.path().display(),
             home.display(),
             config.display(),
             data.display(),
