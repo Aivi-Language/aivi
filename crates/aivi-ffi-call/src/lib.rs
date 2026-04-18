@@ -335,6 +335,7 @@ pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
         "aivi_arena_alloc" => Some(aivi_arena_alloc as *const () as *const u8),
         "aivi_text_concat" => Some(aivi_text_concat as *const () as *const u8),
         "aivi_bytes_append" => Some(aivi_bytes_append as *const () as *const u8),
+        "aivi_path_join" => Some(aivi_path_join as *const () as *const u8),
         "aivi_bytes_repeat" => Some(aivi_bytes_repeat as *const () as *const u8),
         "aivi_bytes_slice" => Some(aivi_bytes_slice as *const () as *const u8),
         "aivi_list_new" => Some(aivi_list_new as *const () as *const u8),
@@ -343,6 +344,7 @@ pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
         "aivi_list_len" => Some(aivi_list_len as *const () as *const u8),
         "aivi_list_get" => Some(aivi_list_get as *const () as *const u8),
         "aivi_list_slice" => Some(aivi_list_slice as *const () as *const u8),
+        "aivi_list_append" => Some(aivi_list_append as *const () as *const u8),
         "aivi_decimal_add" => Some(aivi_decimal_add as *const () as *const u8),
         "aivi_decimal_sub" => Some(aivi_decimal_sub as *const () as *const u8),
         "aivi_decimal_mul" => Some(aivi_decimal_mul as *const () as *const u8),
@@ -482,6 +484,30 @@ extern "C" fn aivi_bytes_append(left: *const u8, right: *const u8) -> *const u8 
     .unwrap_or(ptr::null())
 }
 
+extern "C" fn aivi_path_join(base: *const u8, segment: *const u8) -> *const u8 {
+    with_current_arena(|arena| {
+        // SAFETY: JIT helpers only hand us pointers produced by the len-prefixed byte contract.
+        let Some(base_bytes) = (unsafe { read_len_prefixed_bytes(base) }) else {
+            return ptr::null();
+        };
+        // SAFETY: same contract as `base_bytes`.
+        let Some(segment_bytes) = (unsafe { read_len_prefixed_bytes(segment) }) else {
+            return ptr::null();
+        };
+        let Ok(base_text) = std::str::from_utf8(base_bytes) else {
+            return ptr::null();
+        };
+        let Ok(segment_text) = std::str::from_utf8(segment_bytes) else {
+            return ptr::null();
+        };
+        let joined = std::path::Path::new(base_text).join(segment_text);
+        arena
+            .store_len_prefixed_bytes(joined.to_string_lossy().as_bytes())
+            .cast()
+    })
+    .unwrap_or(ptr::null())
+}
+
 extern "C" fn aivi_bytes_repeat(byte: i64, count: i64) -> *const u8 {
     with_current_arena(|arena| {
         let byte = byte.clamp(0, 255) as u8;
@@ -617,6 +643,43 @@ extern "C" fn aivi_list_slice(list_ptr: *const u8, start: i64, element_size: i64
         let remaining = view.count - start;
         let byte_start = start.saturating_mul(element_size);
         encode_marshaled_sequence(remaining, element_size, &view.data[byte_start..], arena)
+            .map(|pointer| pointer.cast())
+            .unwrap_or(ptr::null())
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_list_append(
+    left_ptr: *const u8,
+    right_ptr: *const u8,
+    element_size: i64,
+) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(element_size) = non_negative_usize(element_size) else {
+            return ptr::null();
+        };
+        // SAFETY: the lazy-JIT collection helpers only hand us pointers produced by
+        // `encode_marshaled_sequence`/`aivi_list_new`/`aivi_list_slice`/`aivi_list_append`.
+        let Some(left) = (unsafe { read_marshaled_sequence_view(left_ptr) }) else {
+            return ptr::null();
+        };
+        // SAFETY: same contract as `left`.
+        let Some(right) = (unsafe { read_marshaled_sequence_view(right_ptr) }) else {
+            return ptr::null();
+        };
+        if left.element_size != element_size || right.element_size != element_size {
+            return ptr::null();
+        }
+        let Some(total_count) = left.count.checked_add(right.count) else {
+            return ptr::null();
+        };
+        let Some(total_bytes) = total_count.checked_mul(element_size) else {
+            return ptr::null();
+        };
+        let mut bytes = Vec::with_capacity(total_bytes);
+        bytes.extend_from_slice(left.data.as_ref());
+        bytes.extend_from_slice(right.data.as_ref());
+        encode_marshaled_sequence(total_count, element_size, &bytes, arena)
             .map(|pointer| pointer.cast())
             .unwrap_or(ptr::null())
     })

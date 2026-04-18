@@ -621,6 +621,11 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
+            "aivi_path_join" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
             "aivi_bytes_repeat" => {
                 sig.params.push(AbiParam::new(types::I64));
                 sig.params.push(AbiParam::new(types::I64));
@@ -630,6 +635,12 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(types::I64));
                 sig.params.push(AbiParam::new(types::I64));
                 sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_append" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
             "aivi_arena_alloc" => {
@@ -853,4 +864,3 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         }
     }
 }
-

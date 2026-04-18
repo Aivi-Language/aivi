@@ -1257,6 +1257,64 @@ fun makeBlob:Bytes = seed:Int=>
     }
 
     #[test]
+    fn cached_jit_path_join_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-path-join-roundtrip.aivi",
+            r#"
+use aivi.path (
+    join
+)
+
+fun underAssets:Text = segment:Text=> join "/tmp/assets" segment
+"#,
+        );
+        let under_assets = backend.items()[find_item(&backend, "underAssets")]
+            .body
+            .expect("underAssets should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let compiled =
+                compile_kernel_jit_cached_in_dir(cache_root, &backend, under_assets).expect(
+                    "path.join helper-backed JIT kernel should compile and persist a replayable cache artifact",
+                );
+            let fingerprint = compute_kernel_fingerprint(&backend, under_assets);
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
+                .expect("compiled path.join JIT kernel should write a disk artifact");
+            let replayed = instantiate_cached_jit_kernel(&backend, under_assets, &artifact)
+                .expect("serialized path.join JIT artifact should replay into a live kernel");
+
+            assert_eq!(
+                artifact
+                    .external_funcs
+                    .iter()
+                    .map(|symbol| symbol.as_ref())
+                    .collect::<Vec<_>>(),
+                vec!["aivi_path_join"]
+            );
+            assert_eq!(
+                call_pointer_text(
+                    &compiled.caller,
+                    compiled.function,
+                    &[AbiValue::Pointer(
+                        text_abi_bytes("icon.svg").as_ptr().cast()
+                    )],
+                ),
+                "/tmp/assets/icon.svg"
+            );
+            assert_eq!(
+                call_pointer_text(
+                    &replayed.caller,
+                    replayed.function,
+                    &[AbiValue::Pointer(
+                        text_abi_bytes("icon.svg").as_ptr().cast()
+                    )],
+                ),
+                "/tmp/assets/icon.svg"
+            );
+        });
+    }
+
+    #[test]
     fn cached_jit_collection_artifact_replays_after_disk_roundtrip() {
         let backend = lower_text(
             "cache-jit-collections-roundtrip.aivi",
@@ -1594,6 +1652,22 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
         let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
             .expect("helper-backed kernel should execute inside an active arena");
         decode_pointer_bytes(value)
+    }
+
+    fn call_pointer_text(
+        caller: &FunctionCaller,
+        function: *const u8,
+        args: &[AbiValue],
+    ) -> String {
+        String::from_utf8(call_pointer_bytes(caller, function, args).into_vec())
+            .expect("helper-backed text kernel should return utf-8")
+    }
+
+    fn text_abi_bytes(text: &str) -> Box<[u8]> {
+        let mut bytes = Vec::with_capacity(8 + text.len());
+        bytes.extend_from_slice(&(text.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(text.as_bytes());
+        bytes.into_boxed_slice()
     }
 
     fn call_i64_value(caller: &FunctionCaller, function: *const u8, args: &[AbiValue]) -> AbiValue {

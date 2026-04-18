@@ -1231,6 +1231,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 kernel_id, expr_id, *callee, arguments,
                             )?;
                             let materialized_arguments = match &plan {
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(plan)) => {
+                                    let mut materialized =
+                                        Vec::with_capacity(plan.step_prefix_exprs.len() + 1);
+                                    materialized.extend(plan.step_prefix_exprs.iter().copied());
+                                    materialized.push(arguments[1]);
+                                    materialized
+                                }
                                 DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
                                     let mut materialized =
                                         Vec::with_capacity(plan.step_prefix_exprs.len() + 2);
@@ -1795,6 +1802,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 NativeEqualityShape::Text
                                 | NativeEqualityShape::Bytes
                                 | NativeEqualityShape::TaggedNullarySum
+                                | NativeEqualityShape::TaggedPayloadSum(_)
                                 | NativeEqualityShape::Aggregate(_)
                                 | NativeEqualityShape::InlineScalarOption(_)
                                 | NativeEqualityShape::NicheOption { .. } => {
@@ -3674,6 +3682,162 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     self.require_equatable_expression_pair(kernel_id, kernel, expr_id, *left, *right)?;
                 Ok(BuiltinCallPlan::StructuralEq(shape))
             }
+            crate::BuiltinClassMemberIntrinsic::Append(crate::BuiltinAppendCarrier::List) => {
+                let detail = format!("builtin class member `{intrinsic:?}`");
+                let (_parameters, result_layout) = self.require_saturated_callable_call(
+                    kernel_id, expr_id, callee, arguments, &detail,
+                )?;
+                let [left, right] = arguments else {
+                    unreachable!("saturated list append call should keep exactly two arguments");
+                };
+                let kernel = &self.program.kernels()[kernel_id];
+                let left_layout = kernel.exprs()[*left].layout;
+                let right_layout = kernel.exprs()[*right].layout;
+                let LayoutKind::List { element } = &self.program.layouts()[result_layout].kind else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "list append result must stay a List layout",
+                    ));
+                };
+                self.require_layout_match(kernel_id, *left, result_layout, left_layout, "list append left")?;
+                self.require_layout_match(
+                    kernel_id,
+                    *right,
+                    result_layout,
+                    right_layout,
+                    "list append right",
+                )?;
+                Ok(BuiltinCallPlan::ListAppend {
+                    element_layout: *element,
+                })
+            }
+            crate::BuiltinClassMemberIntrinsic::Map(crate::BuiltinFunctorCarrier::List) => {
+                let detail = format!("builtin class member `{intrinsic:?}`");
+                let (_parameters, result_layout) = self.require_saturated_callable_call(
+                    kernel_id, expr_id, callee, arguments, &detail,
+                )?;
+                let [function, subject] = arguments else {
+                    unreachable!("saturated list map call should keep exactly two arguments");
+                };
+                let kernel = &self.program.kernels()[kernel_id];
+                let Some((step_item, step_prefix_exprs)) =
+                    self.resolve_item_partial_application(kernel, *function)
+                else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        "list map currently requires an item mapper or an item mapper with bound prefix arguments",
+                    ));
+                };
+                let item_decl = self
+                    .program
+                    .items()
+                    .get(step_item)
+                    .expect("validated backend kernels keep mapper item references aligned");
+                let Some(step_body) = item_decl.body else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        "list map currently requires a mapper item body",
+                    ));
+                };
+                if item_decl.parameters.len() < step_prefix_exprs.len() + 1 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        &format!(
+                            "list map mapper `{}` binds {} prefix argument(s) but only declares {} parameter(s)",
+                            item_decl.name,
+                            step_prefix_exprs.len(),
+                            item_decl.parameters.len()
+                        ),
+                    ));
+                }
+                let remaining_arity = item_decl.parameters.len() - step_prefix_exprs.len();
+                if remaining_arity != 1 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *function,
+                        &format!(
+                            "list map mapper `{}` must leave exactly one visible parameter after binding prefix arguments, found {}",
+                            item_decl.name, remaining_arity
+                        ),
+                    ));
+                }
+
+                let subject_layout = kernel.exprs()[*subject].layout;
+                let LayoutKind::List {
+                    element: input_element_layout,
+                } = &self.program.layouts()[subject_layout].kind
+                else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        *subject,
+                        "list map currently requires a List subject",
+                    ));
+                };
+                let LayoutKind::List {
+                    element: output_element_layout,
+                } = &self.program.layouts()[result_layout].kind
+                else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "list map result must stay a List layout",
+                    ));
+                };
+                let step_body_kernel = self
+                    .program
+                    .kernels()
+                    .get(step_body)
+                    .expect("validated backend programs keep mapper body kernels aligned");
+                let mut step_prefix_layouts = Vec::with_capacity(step_prefix_exprs.len());
+                for (index, (prefix_expr, expected_layout)) in step_prefix_exprs
+                    .iter()
+                    .zip(item_decl.parameters.iter())
+                    .enumerate()
+                {
+                    let found_layout = kernel.exprs()[*prefix_expr].layout;
+                    self.require_layout_match(
+                        kernel_id,
+                        *prefix_expr,
+                        *expected_layout,
+                        found_layout,
+                        &format!(
+                            "list map mapper bound argument {index} for `{}`",
+                            item_decl.name
+                        ),
+                    )?;
+                    step_prefix_layouts.push((found_layout, *expected_layout));
+                }
+                let step_element_layout = item_decl.parameters[step_prefix_exprs.len()];
+                self.require_layout_match(
+                    kernel_id,
+                    *subject,
+                    step_element_layout,
+                    *input_element_layout,
+                    &format!("list map mapper element for `{}`", item_decl.name),
+                )?;
+                self.require_layout_match(
+                    kernel_id,
+                    expr_id,
+                    *output_element_layout,
+                    step_body_kernel.result_layout,
+                    &format!("list map result for `{}`", item_decl.name),
+                )?;
+
+                Ok(BuiltinCallPlan::ListMap(ListMapPlan {
+                    step_body,
+                    step_prefix_exprs: step_prefix_exprs.into_boxed_slice(),
+                    subject_layout,
+                    input_element_layout: *input_element_layout,
+                    step_prefix_layouts: step_prefix_layouts.into_boxed_slice(),
+                    step_element_layout,
+                    output_element_layout: *output_element_layout,
+                    step_result_layout: step_body_kernel.result_layout,
+                }))
+            }
             crate::BuiltinClassMemberIntrinsic::Reduce(crate::BuiltinFoldableCarrier::List) => {
                 let detail = format!("builtin class member `{intrinsic:?}`");
                 let (_parameters, _result_layout) = self.require_saturated_callable_call(
@@ -4148,6 +4312,25 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 )?;
                 Ok(IntrinsicCallPlan::BytesSlice)
             }
+            IntrinsicValue::PathJoin => {
+                let [base, segment] = arguments else {
+                    unreachable!("saturated `PathJoin` call should keep exactly two arguments");
+                };
+                self.require_text_expression(
+                    kernel_id,
+                    *base,
+                    kernel.exprs()[*base].layout,
+                    "path.join base",
+                )?;
+                self.require_text_expression(
+                    kernel_id,
+                    *segment,
+                    kernel.exprs()[*segment].layout,
+                    "path.join segment",
+                )?;
+                self.require_text_expression(kernel_id, expr_id, result_layout, "path.join result")?;
+                Ok(IntrinsicCallPlan::PathJoin)
+            }
             IntrinsicValue::BitAnd
             | IntrinsicValue::BitOr
             | IntrinsicValue::BitXor
@@ -4242,7 +4425,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 kernel_id,
                 expr_id,
                 &format!(
-                    "{detail} still requires backend-owned bytes/runtime lowering beyond the current empty/length/get/fromText/toText/append/repeat/slice Cranelift subset"
+                    "{detail} still requires backend-owned bytes/runtime lowering beyond the current empty/length/get/fromText/toText/append/repeat/slice/path.join Cranelift subset"
                 ),
             )),
         }
@@ -5124,6 +5307,104 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(builder.block_params(done_block)[0])
     }
 
+    fn lower_list_map(
+        &mut self,
+        kernel_id: KernelId,
+        plan: &ListMapPlan,
+        prefix_arguments: &[Value],
+        subject: Value,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let list_len = self.declare_list_len_func(kernel_id, builder)?;
+        let list_get = self.declare_list_get_func(kernel_id, builder)?;
+        let len_call = builder.ins().call(list_len, &[subject]);
+        let len = builder.inst_results(len_call)[0];
+        let input_element_abi = self.field_abi_shape(
+            kernel_id,
+            plan.input_element_layout,
+            "list map input element",
+        )?;
+        let output_element_abi = self.field_abi_shape(
+            kernel_id,
+            plan.output_element_layout,
+            "list map output element",
+        )?;
+        let output_stride = output_element_abi.size.max(1);
+        let output_stride_value = builder
+            .ins()
+            .iconst(types::I64, i64::from(output_stride));
+        let total_bytes = builder.ins().imul(len, output_stride_value);
+        let output_ptr = self.allocate_arena_bytes(
+            kernel_id,
+            total_bytes,
+            output_element_abi.align.max(1),
+            builder,
+        )?;
+
+        let mut prefix_arguments = prefix_arguments.to_vec();
+        for ((from, to), argument) in plan
+            .step_prefix_layouts
+            .iter()
+            .zip(prefix_arguments.iter_mut())
+        {
+            *argument = self.repack_value(kernel_id, *argument, *from, *to, builder)?;
+        }
+
+        let loop_block = builder.create_block();
+        let body_block = builder.create_block();
+        let done_block = builder.create_block();
+        builder.append_block_param(loop_block, types::I64);
+
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(loop_block, &[BlockArg::Value(zero)]);
+
+        builder.switch_to_block(loop_block);
+        let index = builder.block_params(loop_block)[0];
+        let at_end = builder.ins().icmp(IntCC::Equal, index, len);
+        builder
+            .ins()
+            .brif(at_end, done_block, &[], body_block, &[]);
+
+        builder.seal_block(body_block);
+        builder.switch_to_block(body_block);
+        let get_call = builder.ins().call(list_get, &[subject, index]);
+        let element_ptr = builder.inst_results(get_call)[0];
+        let element = builder
+            .ins()
+            .load(input_element_abi.ty, MemFlags::new(), element_ptr, 0);
+        let step_element = self.repack_value(
+            kernel_id,
+            element,
+            plan.input_element_layout,
+            plan.step_element_layout,
+            builder,
+        )?;
+        let mut step_arguments = Vec::with_capacity(prefix_arguments.len() + 1);
+        step_arguments.extend(prefix_arguments.iter().copied());
+        step_arguments.push(step_element);
+        let mapped = self.lower_direct_item_call(kernel_id, plan.step_body, &step_arguments, builder)?;
+        let mapped = self.repack_value(
+            kernel_id,
+            mapped,
+            plan.step_result_layout,
+            plan.output_element_layout,
+            builder,
+        )?;
+        let offset = builder.ins().imul(index, output_stride_value);
+        let offset = builder.ins().iadd(output_ptr, offset);
+        builder.ins().store(MemFlags::new(), mapped, offset, 0);
+        let next_index = builder.ins().iadd_imm(index, 1);
+        builder.ins().jump(loop_block, &[BlockArg::Value(next_index)]);
+
+        builder.seal_block(done_block);
+        builder.switch_to_block(done_block);
+        let list_new = self.declare_list_new_func(kernel_id, builder)?;
+        let call = builder
+            .ins()
+            .call(list_new, &[len, output_ptr, output_stride_value]);
+        Ok(builder.inst_results(call)[0])
+    }
+
     fn lower_direct_apply(
         &mut self,
         kernel_id: KernelId,
@@ -5392,6 +5673,38 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let tag = builder.ins().select(less, less_tag, non_less_tag);
                 self.emit_dynamic_tagged_reference(kernel_id, tag, None, builder)
             }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::ListAppend { element_layout }) => {
+                let [left, right] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct list append lowering expected exactly two materialized arguments",
+                    ));
+                };
+                let element_abi =
+                    self.field_abi_shape(kernel_id, element_layout, "list append element")?;
+                let func_ref = self.declare_list_append_func(kernel_id, builder)?;
+                let element_size = builder
+                    .ins()
+                    .iconst(types::I64, i64::from(element_abi.size));
+                let call = builder.ins().call(func_ref, &[*left, *right, element_size]);
+                Ok(builder.inst_results(call)[0])
+            }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(plan)) => {
+                let prefix_count = plan.step_prefix_layouts.len();
+                if arguments.len() != prefix_count + 1 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct list map lowering expected prefix arguments followed by subject",
+                    ));
+                }
+                let (prefix_arguments, trailing_arguments) = arguments.split_at(prefix_count);
+                let [subject] = trailing_arguments else {
+                    unreachable!("direct list map lowering keeps subject trailing");
+                };
+                self.lower_list_map(kernel_id, &plan, prefix_arguments, *subject, builder)
+            }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
                 let prefix_count = plan.step_prefix_layouts.len();
                 if arguments.len() != prefix_count + 2 {
@@ -5496,6 +5809,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 let func_ref = self.declare_bytes_slice_func(kernel_id, builder)?;
                 let call = builder.ins().call(func_ref, &[*from, *to, *bytes]);
+                Ok(builder.inst_results(call)[0])
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::PathJoin) => {
+                let [base, segment] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct path.join lowering expected exactly two materialized arguments",
+                    ));
+                };
+                let func_ref = self.declare_ptr_binop_func("aivi_path_join", kernel_id, builder)?;
+                let call = builder.ins().call(func_ref, &[*base, *segment]);
                 Ok(builder.inst_results(call)[0])
             }
             DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BitBinary(op)) => {
@@ -6516,14 +6841,28 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 if variants.iter().all(|variant| variant.payload.is_none()) {
                     return Ok(NativeEqualityShape::TaggedNullarySum);
                 }
-                Err(self.unsupported_expression(
-                    kernel_id,
-                    expr_id,
-                    &format!(
-                        "opaque layout{layout}=`{}` still requires compiled payload-aware equality beyond tag-only nullary variants",
-                        self.program.layouts()[layout]
-                    ),
-                ))
+                let mut compiled_variants = Vec::with_capacity(variants.len());
+                for variant in variants {
+                    let (payload_layout, payload_shape) = if let Some(payload_layout) = variant.payload {
+                        (
+                            Some(payload_layout),
+                            Some(Box::new(self.resolve_native_equality_shape(
+                                kernel_id,
+                                expr_id,
+                                payload_layout,
+                                visited,
+                            )?)),
+                        )
+                    } else {
+                        (None, None)
+                    };
+                    compiled_variants.push(NativeEqualityVariant {
+                        tag: crate::layout::opaque_variant_tag(variant.name.as_ref()),
+                        payload_layout,
+                        payload_shape,
+                    });
+                }
+                Ok(NativeEqualityShape::TaggedPayloadSum(compiled_variants))
             }
             _ => Err(self.unsupported_expression(
                 kernel_id,
@@ -6562,6 +6901,91 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let left_tag = builder.ins().load(types::I64, MemFlags::new(), lhs, 0);
                 let right_tag = builder.ins().load(types::I64, MemFlags::new(), rhs, 0);
                 Ok(builder.ins().icmp(IntCC::Equal, left_tag, right_tag))
+            }
+            NativeEqualityShape::TaggedPayloadSum(variants) => {
+                let left_tag = builder.ins().load(types::I64, MemFlags::new(), lhs, 0);
+                let right_tag = builder.ins().load(types::I64, MemFlags::new(), rhs, 0);
+                let tags_equal = builder.ins().icmp(IntCC::Equal, left_tag, right_tag);
+                let bool_ty = builder.func.dfg.value_type(tags_equal);
+                let true_value = builder.ins().iconst(bool_ty, 1);
+                let false_value = builder.ins().iconst(bool_ty, 0);
+                let mismatch_block = builder.create_block();
+                let merge_block = builder.create_block();
+                builder.append_block_param(merge_block, bool_ty);
+
+                let mut dispatch_block = builder.create_block();
+                builder.ins().brif(
+                    tags_equal,
+                    dispatch_block,
+                    &[],
+                    mismatch_block,
+                    &[],
+                );
+
+                builder.switch_to_block(mismatch_block);
+                builder.ins().jump(merge_block, &[BlockArg::Value(false_value)]);
+
+                for (index, variant) in variants.iter().enumerate() {
+                    let body_block = builder.create_block();
+                    let next_block = if index + 1 < variants.len() {
+                        Some(builder.create_block())
+                    } else {
+                        None
+                    };
+
+                    builder.switch_to_block(dispatch_block);
+                    let is_match = builder.ins().icmp_imm(IntCC::Equal, left_tag, variant.tag);
+                    if let Some(next_block) = next_block {
+                        builder
+                            .ins()
+                            .brif(is_match, body_block, &[], next_block, &[]);
+                    } else {
+                        builder.ins().brif(
+                            is_match,
+                            body_block,
+                            &[],
+                            mismatch_block,
+                            &[],
+                        );
+                    }
+                    builder.seal_block(dispatch_block);
+
+                    builder.switch_to_block(body_block);
+                    let variant_equal = if let (Some(payload_layout), Some(payload_shape)) =
+                        (variant.payload_layout, variant.payload_shape.as_deref())
+                    {
+                        let payload_abi = self.field_abi_shape(
+                            kernel_id,
+                            payload_layout,
+                            "tagged payload equality",
+                        )?;
+                        let left_payload =
+                            builder.ins().load(payload_abi.ty, MemFlags::new(), lhs, 8);
+                        let right_payload =
+                            builder.ins().load(payload_abi.ty, MemFlags::new(), rhs, 8);
+                        self.lower_native_equality_shape(
+                            kernel_id,
+                            expr_id,
+                            payload_shape,
+                            left_payload,
+                            right_payload,
+                            builder,
+                        )?
+                    } else {
+                        true_value
+                    };
+                    builder.ins().jump(merge_block, &[BlockArg::Value(variant_equal)]);
+                    builder.seal_block(body_block);
+
+                    if let Some(next_block) = next_block {
+                        dispatch_block = next_block;
+                    }
+                }
+
+                builder.seal_block(mismatch_block);
+                builder.seal_block(merge_block);
+                builder.switch_to_block(merge_block);
+                Ok(builder.block_params(merge_block)[0])
             }
             NativeEqualityShape::InlineScalarOption(_) => {
                 Ok(builder.ins().icmp(IntCC::Equal, lhs, rhs))
@@ -7795,6 +8219,35 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             let mut sig = self.module.make_signature();
             sig.params.push(AbiParam::new(self.pointer_type()));
             sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(types::I64));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
+    /// `aivi_list_append(left: ptr, right: ptr, element_size: i64) -> ptr`
+    fn declare_list_append_func(
+        &mut self,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let sym = "aivi_list_append";
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
+            sig.params.push(AbiParam::new(self.pointer_type()));
+            sig.params.push(AbiParam::new(self.pointer_type()));
             sig.params.push(AbiParam::new(types::I64));
             sig.returns.push(AbiParam::new(self.pointer_type()));
             let fid = self

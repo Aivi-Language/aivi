@@ -383,7 +383,21 @@ enum BuiltinCallPlan {
         greater_tag: i64,
     },
     OptionSome(OptionCodegenContract),
+    ListAppend { element_layout: LayoutId },
+    ListMap(ListMapPlan),
     ListReduce(ListReducePlan),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ListMapPlan {
+    step_body: KernelId,
+    step_prefix_exprs: Box<[KernelExprId]>,
+    subject_layout: LayoutId,
+    input_element_layout: LayoutId,
+    step_prefix_layouts: Box<[(LayoutId, LayoutId)]>,
+    step_element_layout: LayoutId,
+    output_element_layout: LayoutId,
+    step_result_layout: LayoutId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -408,6 +422,7 @@ enum IntrinsicCallPlan {
     BytesAppend,
     BytesRepeat,
     BytesSlice,
+    PathJoin,
     BitBinary(BitBinaryOp),
     BitNot,
     IntArithmetic(IntArithOp),
@@ -487,6 +502,7 @@ enum NativeEqualityShape {
     Text,
     Bytes,
     TaggedNullarySum,
+    TaggedPayloadSum(Vec<NativeEqualityVariant>),
     Aggregate(Vec<NativeEqualityField>),
     NicheOption { payload: Box<NativeEqualityShape> },
     InlineScalarOption(ScalarOptionKind),
@@ -497,6 +513,13 @@ struct NativeEqualityField {
     offset: i32,
     layout: LayoutId,
     shape: Box<NativeEqualityShape>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NativeEqualityVariant {
+    tag: i64,
+    payload_layout: Option<LayoutId>,
+    payload_shape: Option<Box<NativeEqualityShape>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

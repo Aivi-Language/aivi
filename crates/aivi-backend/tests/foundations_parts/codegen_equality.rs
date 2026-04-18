@@ -680,6 +680,59 @@ fun combine:Bytes = left:Bytes right:Bytes=>    append left right
 }
 
 #[test]
+fn cranelift_codegen_compiles_list_append_builtin() {
+    let backend = lower_text(
+        "backend-list-append-codegen.aivi",
+        r#"
+fun combine:List Int = left:(List Int) right:(List Int)=>    append left right
+"#,
+    );
+
+    compile_program(&backend).expect("list append should compile with runtime function call");
+}
+
+#[test]
+fn cranelift_codegen_compiles_opaque_payload_equality_kernels() {
+    let backend = lower_text(
+        "backend-opaque-equality-codegen.aivi",
+        r#"
+type Cell = Cell Int Int
+
+fun sameCell:Bool = left:Cell right:Cell=>    left == right
+
+fun differentCell:Bool = left:Cell right:Cell=>    left != right
+"#,
+    );
+
+    let ptr = clif_pointer_ty();
+    let same_body = backend.items()[find_item(&backend, "sameCell")]
+        .body
+        .expect("sameCell should carry a body kernel");
+    let different_body = backend.items()[find_item(&backend, "differentCell")]
+        .body
+        .expect("differentCell should carry a body kernel");
+
+    let compiled =
+        compile_program(&backend).expect("opaque payload equality over constructor types should compile");
+
+    let same_artifact = compiled
+        .kernel(same_body)
+        .expect("compiled program should retain sameCell kernel metadata");
+    assert!(same_artifact.code_size > 0);
+    assert!(same_artifact.clif.contains(&format!("({ptr}, {ptr}) -> i8")));
+    assert!(same_artifact.clif.contains("load.i64"));
+    assert!(same_artifact.clif.contains("brif"));
+
+    let different_artifact = compiled
+        .kernel(different_body)
+        .expect("compiled program should retain differentCell kernel metadata");
+    assert!(different_artifact.code_size > 0);
+    assert!(different_artifact.clif.contains(&format!("({ptr}, {ptr}) -> i8")));
+    assert!(different_artifact.clif.contains("bxor"));
+    assert!(!compiled.object().is_empty());
+}
+
+#[test]
 fn cranelift_codegen_rejects_named_domain_equality_without_native_domain_contracts() {
     let backend = lower_text(
         "backend-domain-equality-codegen.aivi",

@@ -11,7 +11,10 @@ fn static_intrinsic_arity(intrinsic: IntrinsicValue) -> Option<usize> {
         IntrinsicValue::BytesLength
         | IntrinsicValue::BytesFromText
         | IntrinsicValue::BytesToText => Some(1),
-        IntrinsicValue::BytesGet | IntrinsicValue::BytesAppend | IntrinsicValue::BytesRepeat => {
+        IntrinsicValue::BytesGet
+        | IntrinsicValue::BytesAppend
+        | IntrinsicValue::BytesRepeat
+        | IntrinsicValue::PathJoin => {
             Some(2)
         }
         IntrinsicValue::BytesSlice => Some(3),
@@ -110,6 +113,12 @@ fn static_evaluate_intrinsic_call(
             let byte = (*byte).clamp(0, 255) as u8;
             let count = (*count).max(0) as usize;
             Some(RuntimeValue::Bytes(vec![byte; count].into()))
+        }
+        (IntrinsicValue::PathJoin, [RuntimeValue::Text(base), RuntimeValue::Text(segment)]) => {
+            let joined = std::path::Path::new(base.as_ref()).join(segment.as_ref());
+            Some(RuntimeValue::Text(
+                joined.to_string_lossy().into_owned().into(),
+            ))
         }
         _ => None,
     }

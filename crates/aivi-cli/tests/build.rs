@@ -203,7 +203,9 @@ value screenView =
         .cloned()
         .collect::<Vec<_>>();
     assert!(
-        payload_entries.iter().all(|entry| !entry.ends_with(".json")),
+        payload_entries
+            .iter()
+            .all(|entry| !entry.ends_with(".json")),
         "embedded executable should not keep JSON backend payloads, got: {payload_entries:?}"
     );
     assert!(
