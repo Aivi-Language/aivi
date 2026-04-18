@@ -5423,6 +5423,34 @@ mod tests {
     }
 
     #[test]
+    fn debug_snake_general_expr_blockers() {
+        let text = fs::read_to_string(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("..")
+                .join("demos")
+                .join("snake.aivi"),
+        )
+        .expect("snake demo should be readable");
+        let lowered = lower_text_with_stdlib("demos/snake.aivi", &text);
+        assert!(
+            !lowered.has_errors(),
+            "snake demo should lower to HIR: {:?}",
+            lowered.diagnostics()
+        );
+        let report = elaborate_general_expressions(lowered.module());
+        for item in report.items() {
+            if let GeneralExprOutcome::Blocked(blocked) = &item.outcome {
+                println!(
+                    "blocked item {:?}: {}",
+                    item_name(lowered.module(), item.owner),
+                    blocked
+                );
+            }
+        }
+    }
+
+    #[test]
     fn elaborates_map_pipe_stages_in_general_expr_bodies() {
         let lowered = lower_text(
             "general-expr-blocked-map-stage.aivi",
