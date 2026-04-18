@@ -2796,13 +2796,28 @@ mod tests {
             .find_map(|root| find_widget_snapshot_by_path(root, path))
     }
 
-    fn widget_snapshot_by_id<'a>(
+    fn widget_snapshot_in_same_slot<'a>(
         roots: &'a [WidgetSnapshot],
-        id: &str,
+        previous_path: &[String],
     ) -> Option<&'a WidgetSnapshot> {
-        roots
-            .iter()
-            .find_map(|root| find_widget_snapshot_by_id(root, id))
+        let (last, parent_path) = previous_path.split_last()?;
+        let child_index = widget_path_child_index(last)?;
+        let parent_path = parent_path.iter().map(String::as_str).collect::<Vec<_>>();
+        let parent = widget_snapshot_by_path(roots, &parent_path)?;
+        parent.children.iter().find(|child| {
+            child.path.last().and_then(|segment| widget_path_child_index(segment)) == Some(child_index)
+        })
+    }
+
+    fn widget_snapshot_by_trailing_child_indexes<'a>(
+        roots: &'a [WidgetSnapshot],
+        previous_path: &[String],
+        depth: usize,
+    ) -> Option<&'a WidgetSnapshot> {
+        let needle = trailing_child_indexes(previous_path, depth)?;
+        roots.iter().find_map(|root| {
+            find_widget_snapshot_by_trailing_child_indexes(root, needle.as_slice())
+        })
     }
 
     fn find_widget_snapshot_by_path<'a>(
@@ -2822,16 +2837,34 @@ mod tests {
             .find_map(|child| find_widget_snapshot_by_path(child, path))
     }
 
-    fn find_widget_snapshot_by_id<'a>(
+    fn widget_path_child_index(segment: &str) -> Option<usize> {
+        let (_, index) = segment.rsplit_once('[')?;
+        index.strip_suffix(']')?.parse().ok()
+    }
+
+    fn trailing_child_indexes(path: &[String], depth: usize) -> Option<Vec<usize>> {
+        (path.len() >= depth).then_some(())?;
+        path.iter()
+            .rev()
+            .take(depth)
+            .map(|segment| widget_path_child_index(segment))
+            .collect::<Option<Vec<_>>>()
+            .map(|mut indexes| {
+                indexes.reverse();
+                indexes
+            })
+    }
+
+    fn find_widget_snapshot_by_trailing_child_indexes<'a>(
         node: &'a WidgetSnapshot,
-        id: &str,
+        needle: &[usize],
     ) -> Option<&'a WidgetSnapshot> {
-        if node.id == id {
+        if trailing_child_indexes(&node.path, needle.len()).as_deref() == Some(needle) {
             return Some(node);
         }
         node.children
             .iter()
-            .find_map(|child| find_widget_snapshot_by_id(child, id))
+            .find_map(|child| find_widget_snapshot_by_trailing_child_indexes(child, needle))
     }
 
     #[test]
@@ -3016,7 +3049,7 @@ mod tests {
             .into_iter()
             .next()
             .expect("reversi should expose at least one clickable opening move");
-        let opening_move_id = opening_move.id.clone();
+        let opening_move_path = opening_move.path.clone();
         let result = host
             .emit_gtk_event(EmitGtkEventArgs {
                 widget_id: Some(opening_move.id),
@@ -3049,16 +3082,17 @@ mod tests {
             "session status should report no pending hydration once the click has settled"
         );
 
-        let clicked_cell = widget_snapshot_by_id(&result.gtk, &opening_move_id)
-            .expect("the clicked board cell should still exist in the GTK snapshot");
+        let clicked_cell = widget_snapshot_in_same_slot(&result.gtk, &opening_move_path)
+            .or_else(|| widget_snapshot_by_trailing_child_indexes(&result.gtk, &opening_move_path, 2))
+            .expect("the clicked board cell should still exist at the same board position");
         assert_eq!(
             clicked_cell.text.as_deref(),
             Some("🔴"),
             "the clicked cell should redraw as the newly placed human disc"
         );
         assert!(
-            !clicked_cell.sensitive,
-            "occupied board cells should stop being clickable after the move lands"
+            !clicked_cell.actions.iter().any(|action| action == "click"),
+            "occupied board cells should stop exposing click actions after the move lands"
         );
 
         host.stop_session();
@@ -3099,7 +3133,7 @@ mod tests {
             .into_iter()
             .next()
             .expect("near-endgame reversi should expose exactly one final clickable move");
-        let final_move_id = final_move.id.clone();
+        let final_move_path = final_move.path.clone();
         let result = host
             .emit_gtk_event(EmitGtkEventArgs {
                 widget_id: Some(final_move.id),
@@ -3125,8 +3159,9 @@ mod tests {
             "session status should report no pending GTK hydration after the terminal move settles"
         );
 
-        let clicked_cell = widget_snapshot_by_id(&result.gtk, &final_move_id)
-            .expect("the terminal board cell should still exist in the GTK snapshot");
+        let clicked_cell = widget_snapshot_in_same_slot(&result.gtk, &final_move_path)
+            .or_else(|| widget_snapshot_by_trailing_child_indexes(&result.gtk, &final_move_path, 2))
+            .expect("the terminal board cell should still exist at the same board position");
         assert_eq!(
             clicked_cell.text.as_deref(),
             Some("🔴"),

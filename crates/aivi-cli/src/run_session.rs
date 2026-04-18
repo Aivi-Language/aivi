@@ -1864,11 +1864,9 @@ mod tests {
     }
 
     fn count_buttons_by_label(widget: &gtk::Widget, label: &str) -> usize {
-        let own_count = widget
-            .clone()
-            .downcast::<gtk::Button>()
-            .ok()
-            .and_then(|button| (button.label().as_deref() == Some(label)).then_some(1))
+        let own_count = widget_text(widget)
+            .is_some_and(|text| text == label)
+            .then_some(1)
             .unwrap_or(0);
         let mut child = widget.first_child();
         let mut child_count = 0;
@@ -1877,6 +1875,16 @@ mod tests {
             child = current.next_sibling();
         }
         own_count + child_count
+    }
+
+    fn widget_text(widget: &gtk::Widget) -> Option<String> {
+        if let Ok(button) = widget.clone().downcast::<gtk::Button>() {
+            return button.label().as_deref().map(ToOwned::to_owned);
+        }
+        if let Ok(label) = widget.clone().downcast::<gtk::Label>() {
+            return Some(label.text().to_string());
+        }
+        None
     }
 
     fn button_label_count_for(harness: &super::RunSessionHarness, label: &str) -> usize {
