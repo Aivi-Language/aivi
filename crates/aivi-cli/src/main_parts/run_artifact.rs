@@ -5,6 +5,8 @@ const RUN_ARTIFACT_PAYLOAD_DIR: &str = "payloads";
 const FROZEN_RUN_IMAGE_FORMAT: &str = "aivi.frozen-run-image";
 const FROZEN_RUN_IMAGE_VERSION: u32 = 1;
 const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
+const FROZEN_BACKEND_CATALOG_FORMAT: &str = "aivi.frozen-backend-catalog";
+const FROZEN_BACKEND_CATALOG_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct SerializedRunArtifact {
@@ -123,8 +125,15 @@ struct FrozenRunImage {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct FrozenBackendPayloadWire {
-    runtime_meta: Vec<u8>,
+    backend_catalog: Vec<u8>,
     native_kernels: Box<[FrozenNativeKernelPayloadWire]>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct EncodedFrozenBackendCatalog {
+    format: Box<str>,
+    version: u32,
+    catalog: aivi_backend::FrozenBackendCatalog,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -437,6 +446,7 @@ struct LoadedBackendPayload {
 }
 
 struct FrozenRegisteredBackendPayload {
+    key: u64,
     backend: aivi_runtime::hir_adapter::BackendRuntimePayload,
     native_kernels: Box<[RegisteredNativeKernelPayload]>,
 }
@@ -476,6 +486,11 @@ impl ArtifactPayloadRegistry {
             aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
                 let key = compute_runtime_meta_fingerprint(meta.as_ref())?;
                 self.register_keyed_payload(key, backend.clone(), meta.clone(), native_kernels)
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                let meta = Arc::new(catalog.as_ref().to_runtime_meta());
+                let key = compute_runtime_meta_fingerprint(meta.as_ref())?;
+                self.register_keyed_payload(key, backend.clone(), meta, native_kernels)
             }
         }
     }
@@ -575,6 +590,10 @@ impl FrozenPayloadRegistry {
             aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
                 (compute_runtime_meta_fingerprint(meta.as_ref())?, meta.clone())
             }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                let meta = Arc::new(catalog.as_ref().to_runtime_meta());
+                (compute_runtime_meta_fingerprint(meta.as_ref())?, meta)
+            }
         };
         if let Some(&handle) = self.handles_by_key.get(&key) {
             return Ok(FrozenBackendPayloadRefWire { handle });
@@ -588,6 +607,7 @@ impl FrozenPayloadRegistry {
             Box::default()
         };
         self.entries.push(FrozenRegisteredBackendPayload {
+            key,
             backend,
             native_kernels,
         });
@@ -602,6 +622,9 @@ impl FrozenPayloadRegistry {
         item: BackendItemId,
     ) -> Result<FrozenEntryHandle, String> {
         let backend = self.register_payload(backend, native_kernels)?.handle;
+        if self.include_native_kernels {
+            self.ensure_item_entry_abi(backend, item)?;
+        }
         if let Some(&handle) = self.entry_handles.get(&(backend, item)) {
             return Ok(handle);
         }
@@ -614,12 +637,192 @@ impl FrozenPayloadRegistry {
         Ok(handle)
     }
 
+    fn payload(&self, handle: FrozenBackendHandle) -> Result<&FrozenRegisteredBackendPayload, String> {
+        self.entries
+            .get(handle.0 as usize)
+            .ok_or_else(|| format!("unknown frozen backend handle {}", handle.0))
+    }
+
+    fn ensure_item_entry_abi(
+        &self,
+        handle: FrozenBackendHandle,
+        item: BackendItemId,
+    ) -> Result<(), String> {
+        let payload = self.payload(handle)?;
+        let runtime_view = match &payload.backend {
+            aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+                aivi_backend::BackendRuntimeView::Program(program.as_ref())
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
+                aivi_backend::BackendRuntimeView::Meta(meta.as_ref())
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                aivi_backend::BackendRuntimeView::FrozenCatalog(catalog.as_ref())
+            }
+        };
+        let item_meta = runtime_view.item(item).ok_or_else(|| {
+            format!(
+                "missing frozen entry item {} in backend {:016x}",
+                item.as_raw(),
+                payload.key
+            )
+        })?;
+        let kernel = item_meta.body.ok_or_else(|| {
+            format!(
+                "item {} in backend {:016x} has no compiled body; built bundles are strict compiled-only",
+                item.as_raw(),
+                payload.key
+            )
+        })?;
+        self.ensure_kernel_entry_abi(handle, kernel, "entry item")
+    }
+
+    fn ensure_kernel_entry_abi(
+        &self,
+        handle: FrozenBackendHandle,
+        kernel: aivi_backend::KernelId,
+        context: &str,
+    ) -> Result<(), String> {
+        let payload = self.payload(handle)?;
+        let artifact = payload
+            .native_kernels
+            .iter()
+            .find(|native| native.kernel == kernel)
+            .ok_or_else(|| match &payload.backend {
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+                    match aivi_backend::compile_native_kernel_artifact(program.as_ref(), kernel) {
+                        Ok(Some(_)) => format!(
+                            "missing native backend payload for {context} kernel {} in frozen backend {:016x}",
+                            kernel.as_raw(),
+                            payload.key
+                        ),
+                        Ok(None) => match aivi_backend::compile_kernel(program.as_ref(), kernel) {
+                            Ok(_) => {
+                                let detail = match aivi_backend::diagnose_native_kernel_artifact_miss(
+                                    program.as_ref(),
+                                    kernel,
+                                ) {
+                                    Ok(Some(reason)) => format!(": {reason}"),
+                                    Ok(None) => String::new(),
+                                    Err(error) => {
+                                        format!(": failed to diagnose cache artifact miss: {error}")
+                                    }
+                                };
+                                format!(
+                                    "{context} kernel {} in frozen backend {:016x} still cannot produce a cached native artifact{detail}; built bundles are strict compiled-only",
+                                    kernel.as_raw(),
+                                    payload.key
+                                )
+                            }
+                            Err(error) => format!(
+                                "{context} kernel {} in frozen backend {:016x} fails backend compilation: {error}",
+                                kernel.as_raw(),
+                                payload.key
+                            ),
+                        },
+                        Err(error) => format!(
+                            "{context} kernel {} in frozen backend {:016x} failed native compilation: {error}",
+                            kernel.as_raw(),
+                            payload.key
+                        ),
+                    }
+                }
+                _ => format!(
+                    "missing native backend payload for {context} kernel {} in frozen backend {:016x}",
+                    kernel.as_raw(),
+                    payload.key
+                ),
+            })?;
+        if !artifact.artifact.has_frozen_requested_entry_abi() {
+            let meta = match &payload.backend {
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+                    aivi_backend::BackendRuntimeMeta::from(program.as_ref())
+                }
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => meta.as_ref().clone(),
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                    catalog.as_ref().to_runtime_meta()
+                }
+            };
+            return match aivi_backend::validate_frozen_requested_kernel_abi(&meta, kernel) {
+                Ok(()) => Err(format!(
+                    "{context} kernel {} in backend {:016x} still lacks a full frozen entry ABI; built bundles are strict compiled-only",
+                    kernel.as_raw(),
+                    payload.key
+                )),
+                Err(error) => Err(format!(
+                    "{context} kernel {} in backend {:016x} cannot freeze a compiled-only entry ABI: {error}",
+                    kernel.as_raw(),
+                    payload.key
+                )),
+            };
+        }
+        Ok(())
+    }
+
+    fn attached_native_kernels(
+        &self,
+        handle: FrozenBackendHandle,
+    ) -> Result<Arc<aivi_backend::NativeKernelArtifactSet>, String> {
+        let payload = self.payload(handle)?;
+        let runtime_view = match &payload.backend {
+            aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+                aivi_backend::BackendRuntimeView::Program(program.as_ref())
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
+                aivi_backend::BackendRuntimeView::Meta(meta.as_ref())
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                aivi_backend::BackendRuntimeView::FrozenCatalog(catalog.as_ref())
+            }
+        };
+        let mut native_kernels = aivi_backend::NativeKernelArtifactSet::default();
+        for native in payload.native_kernels.iter() {
+            let fingerprint = runtime_view
+                .kernel(native.kernel)
+                .ok_or_else(|| {
+                    format!(
+                        "missing kernel {} while rebuilding frozen native payload set for backend {:016x}",
+                        native.kernel.as_raw(),
+                        payload.key
+                    )
+                })?
+                .fingerprint;
+            native_kernels.insert(fingerprint, native.artifact.clone());
+        }
+        Ok(Arc::new(native_kernels))
+    }
+
+    fn frozen_backend_payload(
+        &self,
+        handle: FrozenBackendHandle,
+    ) -> Result<aivi_runtime::hir_adapter::BackendRuntimePayload, String> {
+        let payload = self.payload(handle)?;
+        Ok(match &payload.backend {
+            aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(Arc::new(
+                    aivi_backend::FrozenBackendCatalog::from(program.as_ref()),
+                ))
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(Arc::new(
+                    aivi_backend::FrozenBackendCatalog::from(meta.as_ref()),
+                ))
+            }
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog.clone())
+            }
+        })
+    }
+
     fn collect_backends(&self) -> Result<Box<[FrozenBackendPayloadWire]>, String> {
         self.entries
             .iter()
             .map(|payload| {
                 Ok(FrozenBackendPayloadWire {
-                    runtime_meta: encode_backend_runtime_meta_bytes("frozen-image", &payload.backend)?,
+                    backend_catalog: encode_frozen_backend_catalog_bytes(
+                        "frozen-image",
+                        &payload.backend,
+                    )?,
                     native_kernels: payload
                         .native_kernels
                         .iter()
@@ -691,6 +894,18 @@ impl ArtifactPayloadLoader {
                         )
                     })?
                     .fingerprint,
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => catalog
+                    .kernels()
+                    .get(native.kernel)
+                    .ok_or_else(|| {
+                        format!(
+                            "backend payload {} is missing kernel {} required by {}",
+                            payload.program_path,
+                            native.kernel.as_raw(),
+                            native.artifact_path
+                        )
+                    })?
+                    .fingerprint,
             };
             native_kernels.insert(
                 fingerprint,
@@ -714,8 +929,10 @@ impl FrozenPayloadLoader {
     ) -> Result<Self, String> {
         let mut loaded = Vec::with_capacity(backends.len());
         for payload in backends.into_vec() {
-            let backend =
-                decode_backend_payload_bytes(&payload.runtime_meta, "frozen-image runtime meta")?;
+            let backend = decode_frozen_backend_payload_bytes(
+                &payload.backend_catalog,
+                "frozen-image backend catalog",
+            )?;
             let mut native_kernels = aivi_backend::NativeKernelArtifactSet::default();
             for native in payload.native_kernels.iter() {
                 let artifact = aivi_backend::decode_native_kernel_artifact_binary(&native.bytes)
@@ -734,9 +951,20 @@ impl FrozenPayloadLoader {
                 }
                 let fingerprint = match &backend {
                     aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
-                        aivi_backend::compute_kernel_fingerprint(program.as_ref(), native.kernel)
-                    }
-                    aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => meta
+                    aivi_backend::compute_kernel_fingerprint(program.as_ref(), native.kernel)
+                }
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => meta
+                    .kernels()
+                        .get(native.kernel)
+                        .ok_or_else(|| {
+                            format!(
+                                "frozen backend payload missing kernel {} required by bundled native artifact",
+                                native.kernel.as_raw()
+                            )
+                    })?
+                    .fingerprint,
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                    catalog
                         .kernels()
                         .get(native.kernel)
                         .ok_or_else(|| {
@@ -745,10 +973,11 @@ impl FrozenPayloadLoader {
                                 native.kernel.as_raw()
                             )
                         })?
-                        .fingerprint,
-                };
-                native_kernels.insert(fingerprint, artifact);
-            }
+                        .fingerprint
+                }
+            };
+            native_kernels.insert(fingerprint, artifact);
+        }
             loaded.push(LoadedBackendPayload {
                 backend,
                 native_kernels: Arc::new(native_kernels),
@@ -830,6 +1059,14 @@ fn collect_native_kernel_payloads(
             };
             artifact
         };
+        let artifact = aivi_backend::attach_frozen_native_kernel_abi(meta, &artifact).map_err(
+            |error| {
+                format!(
+                    "failed to freeze native ABI for kernel {} in backend {key:016x}: {error}",
+                    kernel.as_raw()
+                )
+            },
+        )?;
         let fingerprint = kernel_meta.fingerprint;
         native_kernels.push(RegisteredNativeKernelPayload {
             kernel,
@@ -865,7 +1102,40 @@ fn encode_backend_runtime_meta_bytes(
                 )
             })
         }
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+            let meta = catalog.as_ref().to_runtime_meta();
+            bincode::serialize(&meta).map_err(|error| {
+                format!(
+                    "failed to encode backend runtime metadata {relative_path} as binary: {error}"
+                )
+            })
+        }
     }
+}
+
+fn encode_frozen_backend_catalog_bytes(
+    relative_path: &str,
+    backend: &aivi_runtime::hir_adapter::BackendRuntimePayload,
+) -> Result<Vec<u8>, String> {
+    let catalog = match backend {
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+            aivi_backend::FrozenBackendCatalog::from(program.as_ref())
+        }
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
+            aivi_backend::FrozenBackendCatalog::from(meta.as_ref())
+        }
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+            catalog.as_ref().clone()
+        }
+    };
+    let encoded = EncodedFrozenBackendCatalog {
+        format: FROZEN_BACKEND_CATALOG_FORMAT.into(),
+        version: FROZEN_BACKEND_CATALOG_VERSION,
+        catalog,
+    };
+    bincode::serialize(&encoded).map_err(|error| {
+        format!("failed to encode frozen backend catalog {relative_path} as binary: {error}")
+    })
 }
 
 fn write_serialized_run_artifact_bundle(
@@ -1064,6 +1334,41 @@ fn decode_backend_payload_bytes(
         })
 }
 
+fn decode_frozen_backend_payload_bytes(
+    bytes: &[u8],
+    payload_path: &str,
+) -> Result<aivi_runtime::hir_adapter::BackendRuntimePayload, String> {
+    if let Ok(encoded) = bincode::deserialize::<EncodedFrozenBackendCatalog>(bytes) {
+        if encoded.format.as_ref() != FROZEN_BACKEND_CATALOG_FORMAT {
+            return Err(format!(
+                "failed to decode frozen backend payload {payload_path}: expected format `{FROZEN_BACKEND_CATALOG_FORMAT}`, got `{}`",
+                encoded.format
+            ));
+        }
+        if encoded.version != FROZEN_BACKEND_CATALOG_VERSION {
+            return Err(format!(
+                "failed to decode frozen backend payload {payload_path}: expected version {}, got {}",
+                FROZEN_BACKEND_CATALOG_VERSION,
+                encoded.version
+            ));
+        }
+        return Ok(aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(
+            Arc::new(encoded.catalog),
+        ));
+    }
+    if let Ok(catalog) = bincode::deserialize::<aivi_backend::FrozenBackendCatalog>(bytes) {
+        return Ok(aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(
+            Arc::new(catalog),
+        ));
+    }
+    if let Ok(meta) = bincode::deserialize::<aivi_backend::BackendRuntimeMeta>(bytes) {
+        return Ok(aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(
+            Arc::new(aivi_backend::FrozenBackendCatalog::from(&meta)),
+        ));
+    }
+    decode_backend_payload_bytes(bytes, payload_path)
+}
+
 fn serialize_run_artifact(
     artifact: &RunArtifact,
     payloads: &mut ArtifactPayloadRegistry,
@@ -1140,6 +1445,41 @@ fn serialize_run_artifact(
     })
 }
 
+fn freeze_runtime_assembly_native_kernels(
+    assembly: &HirRuntimeAssembly,
+    payloads: &mut FrozenPayloadRegistry,
+) -> Result<HirRuntimeAssembly, String> {
+    fn freeze_expr_native_kernels(
+        expr: &aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
+        payloads: &mut FrozenPayloadRegistry,
+    ) -> Result<aivi_runtime::hir_adapter::HirCompiledRuntimeExpr, String> {
+        let payload = payloads.register_payload(expr.backend.clone(), expr.native_kernels.clone())?;
+        if payloads.include_native_kernels {
+            payloads.ensure_item_entry_abi(payload.handle, expr.entry_item)?;
+        }
+        Ok(aivi_runtime::hir_adapter::HirCompiledRuntimeExpr {
+            backend: payloads.frozen_backend_payload(payload.handle)?,
+            native_kernels: payloads.attached_native_kernels(payload.handle)?,
+            entry_item: expr.entry_item,
+            parameter_signals: expr.parameter_signals.clone(),
+            required_signals: expr.required_signals.clone(),
+        })
+    }
+
+    let mut parts = assembly.clone().into_parts();
+    for signal in parts.signals.iter_mut() {
+        if let aivi_runtime::HirSignalBindingKind::Reactive { clauses, .. } = &mut signal.kind {
+            for clause in clauses.iter_mut() {
+                clause.compiled_guard =
+                    freeze_expr_native_kernels(&clause.compiled_guard, payloads)?;
+                clause.compiled_body =
+                    freeze_expr_native_kernels(&clause.compiled_body, payloads)?;
+            }
+        }
+    }
+    Ok(HirRuntimeAssembly::from_parts(parts))
+}
+
 fn serialize_frozen_run_artifact(
     artifact: &RunArtifact,
     payloads: &mut FrozenPayloadRegistry,
@@ -1160,6 +1500,15 @@ fn serialize_frozen_run_artifact(
                 .join("; ");
             format!("failed to prelink frozen runtime tables: {joined}")
         })?;
+    let frozen_runtime_assembly =
+        freeze_runtime_assembly_native_kernels(&artifact.runtime_assembly, payloads)?;
+    let backend = payloads.register_payload(
+        artifact.backend.clone(),
+        artifact.backend_native_kernels.clone(),
+    )?;
+    if payloads.include_native_kernels {
+        ensure_frozen_runtime_tables_compiled_only(payloads, backend.handle, &runtime_tables)?;
+    }
     let kind = match &artifact.kind {
         RunArtifactKind::Gtk(surface) => {
             FrozenSerializedRunArtifactKind::Gtk(FrozenSerializedRunGtkArtifact {
@@ -1217,14 +1566,11 @@ fn serialize_frozen_run_artifact(
             .collect::<Vec<_>>()
             .into_boxed_slice(),
         runtime_assembly: frozen_hir_runtime_assembly_to_wire(
-            artifact.runtime_assembly.clone(),
+            frozen_runtime_assembly,
             payloads,
         )?,
         runtime_tables: frozen_linked_runtime_tables_to_wire(&runtime_tables, payloads)?,
-        backend: payloads.register_payload(
-            artifact.backend.clone(),
-            artifact.backend_native_kernels.clone(),
-        )?,
+        backend,
         stub_signal_defaults: artifact
             .stub_signal_defaults
             .iter()
@@ -1425,6 +1771,158 @@ fn frozen_linked_runtime_tables_to_wire(
     })
 }
 
+fn ensure_frozen_runtime_tables_compiled_only(
+    payloads: &mut FrozenPayloadRegistry,
+    backend: FrozenBackendHandle,
+    tables: &aivi_runtime::BackendLinkedRuntimeTables,
+) -> Result<(), String> {
+    fn ensure_eval_lane(
+        payloads: &FrozenPayloadRegistry,
+        backend: FrozenBackendHandle,
+        lane: &aivi_runtime::startup::LinkedEvalLane,
+        context: &str,
+        fallback_kernel: Option<aivi_backend::KernelId>,
+    ) -> Result<(), String> {
+        match lane {
+            aivi_runtime::startup::LinkedEvalLane::Native(eval) => {
+                payloads.ensure_kernel_entry_abi(backend, eval.kernel, context)
+            }
+            aivi_runtime::startup::LinkedEvalLane::Fallback => {
+                if let Some(kernel) = fallback_kernel {
+                    payloads.ensure_kernel_entry_abi(backend, kernel, context)?;
+                    Err(format!(
+                        "{context} kernel {} still linked through interpreted fallback; built bundles are strict compiled-only",
+                        kernel.as_raw()
+                    ))
+                } else {
+                    Err(format!(
+                        "{context} still uses interpreted fallback; built bundles are strict compiled-only"
+                    ))
+                }
+            }
+        }
+    }
+
+    for signal in tables.derived_signals.values() {
+        if signal.entry_kernel.is_none() {
+            continue;
+        }
+        ensure_eval_lane(
+            payloads,
+            backend,
+            &signal.eval_lane,
+            "derived signal entry",
+            signal.entry_kernel,
+        )?;
+    }
+    for signal in tables.reactive_signals.values() {
+        if !signal.has_seed_body && signal.entry_kernel.is_none() {
+            continue;
+        }
+        let payload = payloads.payload(backend)?;
+        let item_name = match payload.backend.runtime_view().item(signal.backend_item) {
+            Some(item) => item.name.as_ref(),
+            None => "<missing-item>",
+        };
+        match &signal.seed_eval_lane {
+            aivi_runtime::startup::LinkedEvalLane::Native(eval) => {
+                payloads.ensure_kernel_entry_abi(
+                    backend,
+                    eval.kernel,
+                    "reactive signal seed entry",
+                )?;
+            }
+            aivi_runtime::startup::LinkedEvalLane::Fallback => {
+                if let Some(kernel) = signal.body_kernel {
+                    payloads.ensure_kernel_entry_abi(backend, kernel, "reactive signal seed entry")?;
+                    return Err(format!(
+                        "reactive signal seed entry for item {} ({item_name}) in backend {:016x} still linked through interpreted fallback via kernel {}; built bundles are strict compiled-only",
+                        signal.item.as_raw(),
+                        payload.key,
+                        kernel.as_raw()
+                    ));
+                }
+                if let Some(kernel) = signal.entry_kernel {
+                    payloads.ensure_kernel_entry_abi(backend, kernel, "reactive signal seed entry")?;
+                    return Err(format!(
+                        "reactive signal seed entry for item {} ({item_name}) in backend {:016x} still linked through interpreted fallback via entry kernel {}; built bundles are strict compiled-only",
+                        signal.item.as_raw(),
+                        payload.key,
+                        kernel.as_raw()
+                    ));
+                }
+                return Err(format!(
+                    "reactive signal seed entry for item {} ({item_name}) in backend {:016x} still uses interpreted fallback with no compiled body kernel; built bundles are strict compiled-only",
+                    signal.item.as_raw(),
+                    payload.key
+                ));
+            }
+        }
+    }
+    for clause in tables.reactive_clauses.values() {
+        let guard_backend = payloads
+            .register_payload(
+                clause.compiled_guard.backend.clone(),
+                clause.compiled_guard.native_kernels.clone(),
+            )?
+            .handle;
+        match &clause.guard_eval_lane {
+            aivi_runtime::startup::LinkedEvalLane::Native(eval) => {
+                payloads.ensure_kernel_entry_abi(guard_backend, eval.kernel, "reactive guard entry")?;
+            }
+            aivi_runtime::startup::LinkedEvalLane::Fallback => {
+                payloads.ensure_item_entry_abi(guard_backend, clause.compiled_guard.entry_item)?;
+                return Err(format!(
+                    "reactive guard entry item {} still uses interpreted fallback in backend handle {}; built bundles are strict compiled-only",
+                    clause.compiled_guard.entry_item.as_raw(),
+                    guard_backend.0
+                ));
+            }
+        }
+        let body_backend = payloads
+            .register_payload(
+                clause.compiled_body.backend.clone(),
+                clause.compiled_body.native_kernels.clone(),
+            )?
+            .handle;
+        match &clause.body_eval_lane {
+            aivi_runtime::startup::LinkedEvalLane::Native(eval) => {
+                payloads.ensure_kernel_entry_abi(body_backend, eval.kernel, "reactive body entry")?;
+            }
+            aivi_runtime::startup::LinkedEvalLane::Fallback => {
+                payloads.ensure_item_entry_abi(body_backend, clause.compiled_body.entry_item)?;
+                return Err(format!(
+                    "reactive body entry item {} still uses interpreted fallback in backend handle {}; built bundles are strict compiled-only",
+                    clause.compiled_body.entry_item.as_raw(),
+                    body_backend.0
+                ));
+            }
+        }
+    }
+    for signal in tables.linked_recurrence_signals.values() {
+        payloads.ensure_kernel_entry_abi(backend, signal.seed_kernel, "recurrence seed entry")?;
+        for &kernel in signal.step_kernels.iter() {
+            payloads.ensure_kernel_entry_abi(backend, kernel, "recurrence step entry")?;
+        }
+    }
+    for binding in tables.source_bindings.values() {
+        for argument in binding.arguments.iter() {
+            payloads.ensure_kernel_entry_abi(backend, argument.kernel, "source argument entry")?;
+        }
+        for option in binding.options.iter() {
+            payloads.ensure_kernel_entry_abi(backend, option.kernel, "source option entry")?;
+        }
+    }
+    for binding in tables.task_bindings.values() {
+        if let aivi_runtime::startup::LinkedTaskExecutionBinding::Ready { kernel, .. } =
+            &binding.execution
+        {
+            payloads.ensure_kernel_entry_abi(backend, *kernel, "task entry")?;
+        }
+    }
+    Ok(())
+}
+
 fn frozen_linked_runtime_tables_from_wire(
     wire: FrozenLinkedRuntimeTablesWire,
     payloads: &FrozenPayloadLoader,
@@ -1485,21 +1983,19 @@ fn frozen_linked_reactive_clause_from_wire(
 }
 
 fn backfill_fragment_opaque_layout_variants(artifact: &mut RunArtifact) {
-    let source_layouts = match &artifact.backend {
-        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => program.layouts(),
-        aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => meta.layouts(),
-    };
-    let source_signatures = layout_signatures(source_layouts);
-    let templates = opaque_variant_templates(source_layouts, &source_signatures);
+    let templates = collect_artifact_opaque_variant_templates(artifact);
+    let carrier_templates = collect_artifact_representational_carrier_templates(artifact);
     if templates.is_empty() {
-        return;
+        if carrier_templates.is_empty() {
+            return;
+        }
     }
 
     backfill_backend_payload_opaque_variants(&mut artifact.backend, &templates);
 
     if let Some(surface) = artifact.gtk_mut() {
         for input in surface.hydration_inputs.values_mut() {
-            backfill_compiled_run_input_opaque_variants(input, &templates);
+            backfill_compiled_run_input_opaque_variants(input, &templates, &carrier_templates);
         }
     }
 
@@ -1508,26 +2004,204 @@ fn backfill_fragment_opaque_layout_variants(artifact: &mut RunArtifact) {
         if let aivi_runtime::hir_adapter::HirSignalBindingKind::Reactive { clauses, .. } = &mut signal.kind
         {
             for clause in clauses.iter_mut() {
-                backfill_runtime_expr_opaque_variants(&mut clause.compiled_guard, &templates);
-                backfill_runtime_expr_opaque_variants(&mut clause.compiled_body, &templates);
+                backfill_runtime_expr_opaque_variants(
+                    &mut clause.compiled_guard,
+                    &templates,
+                    &carrier_templates,
+                );
+                backfill_runtime_expr_opaque_variants(
+                    &mut clause.compiled_body,
+                    &templates,
+                    &carrier_templates,
+                );
             }
         }
     }
     artifact.runtime_assembly = aivi_runtime::hir_adapter::HirRuntimeAssembly::from_parts(parts);
 }
 
-fn backfill_compiled_run_input_opaque_variants(
-    input: &mut CompiledRunInput,
-    templates: &std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+fn collect_artifact_opaque_variant_templates(
+    artifact: &RunArtifact,
+) -> std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>> {
+    let mut templates = std::collections::BTreeMap::new();
+    collect_backend_payload_opaque_variant_templates(&mut templates, &artifact.backend);
+    if let Some(surface) = artifact.gtk() {
+        for input in surface.hydration_inputs.values() {
+            collect_compiled_run_input_opaque_variant_templates(&mut templates, input);
+        }
+    }
+    let parts = artifact.runtime_assembly.clone().into_parts();
+    for signal in &parts.signals {
+        if let aivi_runtime::hir_adapter::HirSignalBindingKind::Reactive { clauses, .. } = &signal.kind
+        {
+            for clause in clauses {
+                collect_runtime_expr_opaque_variant_templates(&mut templates, &clause.compiled_guard);
+                collect_runtime_expr_opaque_variant_templates(&mut templates, &clause.compiled_body);
+            }
+        }
+    }
+    templates
+}
+
+fn collect_artifact_representational_carrier_templates(
+    artifact: &RunArtifact,
+) -> std::collections::BTreeMap<String, String> {
+    let mut templates = std::collections::BTreeMap::new();
+    collect_backend_payload_representational_carrier_templates(&mut templates, &artifact.backend);
+    if let Some(surface) = artifact.gtk() {
+        for input in surface.hydration_inputs.values() {
+            collect_compiled_run_input_representational_carrier_templates(&mut templates, input);
+        }
+    }
+    let parts = artifact.runtime_assembly.clone().into_parts();
+    for signal in &parts.signals {
+        if let aivi_runtime::hir_adapter::HirSignalBindingKind::Reactive { clauses, .. } = &signal.kind
+        {
+            for clause in clauses {
+                collect_runtime_expr_representational_carrier_templates(
+                    &mut templates,
+                    &clause.compiled_guard,
+                );
+                collect_runtime_expr_representational_carrier_templates(
+                    &mut templates,
+                    &clause.compiled_body,
+                );
+            }
+        }
+    }
+    templates
+}
+
+fn collect_compiled_run_input_opaque_variant_templates(
+    templates: &mut std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    input: &CompiledRunInput,
 ) {
     match input {
         CompiledRunInput::Expr(fragment) => {
-            backfill_run_fragment_opaque_variants(fragment, templates);
+            collect_run_fragment_opaque_variant_templates(templates, fragment);
+        }
+        CompiledRunInput::Text(text) => {
+            for segment in &text.segments {
+                if let CompiledRunTextSegment::Interpolation(fragment) = segment {
+                    collect_run_fragment_opaque_variant_templates(templates, fragment);
+                }
+            }
+        }
+    }
+}
+
+fn collect_compiled_run_input_representational_carrier_templates(
+    templates: &mut std::collections::BTreeMap<String, String>,
+    input: &CompiledRunInput,
+) {
+    match input {
+        CompiledRunInput::Expr(fragment) => {
+            collect_run_fragment_representational_carrier_templates(templates, fragment);
+        }
+        CompiledRunInput::Text(text) => {
+            for segment in &text.segments {
+                if let CompiledRunTextSegment::Interpolation(fragment) = segment {
+                    collect_run_fragment_representational_carrier_templates(templates, fragment);
+                }
+            }
+        }
+    }
+}
+
+fn collect_run_fragment_opaque_variant_templates(
+    templates: &mut std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    fragment: &CompiledRunFragment,
+) {
+    collect_backend_payload_opaque_variant_templates(templates, &fragment.execution.backend);
+}
+
+fn collect_runtime_expr_opaque_variant_templates(
+    templates: &mut std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    expr: &aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
+) {
+    collect_backend_payload_opaque_variant_templates(templates, &expr.backend);
+}
+
+fn collect_run_fragment_representational_carrier_templates(
+    templates: &mut std::collections::BTreeMap<String, String>,
+    fragment: &CompiledRunFragment,
+) {
+    collect_backend_payload_representational_carrier_templates(templates, &fragment.execution.backend);
+}
+
+fn collect_runtime_expr_representational_carrier_templates(
+    templates: &mut std::collections::BTreeMap<String, String>,
+    expr: &aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
+) {
+    collect_backend_payload_representational_carrier_templates(templates, &expr.backend);
+}
+
+fn collect_backend_payload_opaque_variant_templates(
+    templates: &mut std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    backend: &aivi_runtime::hir_adapter::BackendRuntimePayload,
+) {
+    let layouts = match backend {
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => program.layouts(),
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => meta.layouts(),
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => catalog.layouts(),
+    };
+    let signatures = layout_signatures(layouts);
+    for (signature, variants) in opaque_variant_templates(layouts, &signatures) {
+        templates.entry(signature).or_insert(variants);
+    }
+}
+
+fn collect_backend_payload_representational_carrier_templates(
+    templates: &mut std::collections::BTreeMap<String, String>,
+    backend: &aivi_runtime::hir_adapter::BackendRuntimePayload,
+) {
+    let (layouts, carrier_for) = match backend {
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => (
+            program.layouts(),
+            Box::new(|layout| program.named_domain_carrier(layout))
+                as Box<dyn Fn(aivi_backend::LayoutId) -> Option<aivi_backend::LayoutId>>,
+        ),
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => (
+            meta.layouts(),
+            Box::new(|layout| meta.named_domain_carrier(layout))
+                as Box<dyn Fn(aivi_backend::LayoutId) -> Option<aivi_backend::LayoutId>>,
+        ),
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => (
+            catalog.layouts(),
+            Box::new(|layout| catalog.named_domain_carrier(layout))
+                as Box<dyn Fn(aivi_backend::LayoutId) -> Option<aivi_backend::LayoutId>>,
+        ),
+    };
+    let signatures = layout_signatures(layouts);
+    for (layout_id, _) in layouts.iter() {
+        let Some(carrier) = carrier_for(layout_id) else {
+            continue;
+        };
+        let Some(layout_signature) = signatures.get(&layout_id) else {
+            continue;
+        };
+        let Some(carrier_signature) = signatures.get(&carrier) else {
+            continue;
+        };
+        templates
+            .entry(layout_signature.clone())
+            .or_insert_with(|| carrier_signature.clone());
+    }
+}
+
+fn backfill_compiled_run_input_opaque_variants(
+    input: &mut CompiledRunInput,
+    templates: &std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    carrier_templates: &std::collections::BTreeMap<String, String>,
+) {
+    match input {
+        CompiledRunInput::Expr(fragment) => {
+            backfill_run_fragment_opaque_variants(fragment, templates, carrier_templates);
         }
         CompiledRunInput::Text(text) => {
             for segment in text.segments.iter_mut() {
                 if let CompiledRunTextSegment::Interpolation(fragment) = segment {
-                    backfill_run_fragment_opaque_variants(fragment, templates);
+                    backfill_run_fragment_opaque_variants(fragment, templates, carrier_templates);
                 }
             }
         }
@@ -1537,28 +2211,40 @@ fn backfill_compiled_run_input_opaque_variants(
 fn backfill_run_fragment_opaque_variants(
     fragment: &mut CompiledRunFragment,
     templates: &std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    carrier_templates: &std::collections::BTreeMap<String, String>,
 ) {
     let execution = Arc::make_mut(&mut fragment.execution);
-    backfill_backend_payload_opaque_variants(&mut execution.backend, templates);
+    backfill_backend_payload_opaque_variants(&mut execution.backend, templates, carrier_templates);
 }
 
 fn backfill_runtime_expr_opaque_variants(
     expr: &mut aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
     templates: &std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    carrier_templates: &std::collections::BTreeMap<String, String>,
 ) {
-    backfill_backend_payload_opaque_variants(&mut expr.backend, templates);
+    backfill_backend_payload_opaque_variants(&mut expr.backend, templates, carrier_templates);
 }
 
 fn backfill_backend_payload_opaque_variants(
     backend: &mut aivi_runtime::hir_adapter::BackendRuntimePayload,
     templates: &std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    carrier_templates: &std::collections::BTreeMap<String, String>,
 ) {
     match backend {
         aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
-            backfill_layout_collection_opaque_variants(Arc::make_mut(program).layouts_mut(), templates);
+            let program = Arc::make_mut(program);
+            backfill_layout_collection_opaque_variants(program.layouts_mut(), templates);
+            backfill_representational_carriers_in_program(program, carrier_templates);
         }
         aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
-            backfill_layout_collection_opaque_variants(Arc::make_mut(meta).layouts_mut(), templates);
+            let meta = Arc::make_mut(meta);
+            backfill_layout_collection_opaque_variants(meta.layouts_mut(), templates);
+            backfill_representational_carriers_in_runtime_meta(meta, carrier_templates);
+        }
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+            let catalog = Arc::make_mut(catalog);
+            backfill_layout_collection_opaque_variants(catalog.layouts_mut(), templates);
+            backfill_representational_carriers_in_frozen_catalog(catalog, carrier_templates);
         }
     }
 }
@@ -1566,24 +2252,23 @@ fn backfill_backend_payload_opaque_variants(
 #[derive(Clone)]
 struct OpaqueVariantTemplate {
     name: Box<str>,
+    field_count: usize,
     field_signatures: Box<[String]>,
+    payload_signature: Option<String>,
 }
 
 fn backfill_layout_collection_opaque_variants(
     layouts: &mut aivi_core::Arena<aivi_backend::LayoutId, aivi_backend::Layout>,
     templates: &std::collections::BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
 ) {
-    let signatures = layout_signatures(layouts);
-    let by_signature = signatures
+    let mut signatures = layout_signatures(layouts);
+    let mut by_signature = signatures
         .iter()
         .map(|(layout, signature)| (signature.clone(), *layout))
         .collect::<std::collections::BTreeMap<_, _>>();
     let layout_ids = layouts.iter().map(|(layout_id, _)| layout_id).collect::<Vec<_>>();
     for layout_id in layout_ids {
-        let layout = layouts
-            .get_mut(layout_id)
-            .expect("layout collected from arena iteration should still exist");
-        let aivi_backend::LayoutKind::Opaque { variants, .. } = &mut layout.kind else {
+        let aivi_backend::LayoutKind::Opaque { variants, .. } = &layouts[layout_id].kind else {
             continue;
         };
         if !variants.is_empty() {
@@ -1598,23 +2283,137 @@ fn backfill_layout_collection_opaque_variants(
         let rebuilt = source_variants
             .iter()
             .map(|variant| {
-                let payload = match variant.field_signatures.as_ref() {
-                    [] => None,
-                    [field] => by_signature.get(field).copied(),
-                    _ => None,
-                };
+                let mut payload = variant
+                    .payload_signature
+                    .as_ref()
+                    .and_then(|signature| by_signature.get(signature).copied());
+                if payload.is_none() && variant.field_count > 1 {
+                    let field_layouts = variant
+                        .field_signatures
+                        .iter()
+                        .map(|signature| by_signature.get(signature).copied())
+                        .collect::<Option<Vec<_>>>();
+                    if let Some(field_layouts) = field_layouts {
+                        let tuple_layout = aivi_backend::Layout::new(aivi_backend::LayoutKind::Tuple(
+                            field_layouts,
+                        ));
+                        let tuple_id = layouts
+                            .alloc(tuple_layout)
+                            .expect("backfilled tuple payload layout should fit");
+                        let tuple_signature = layout_signature(layouts, tuple_id, &mut signatures);
+                        signatures.insert(tuple_id, tuple_signature.clone());
+                        by_signature.insert(tuple_signature, tuple_id);
+                        payload = Some(tuple_id);
+                    }
+                }
                 aivi_backend::VariantLayout {
                     name: variant.name.clone(),
-                    field_count: variant.field_signatures.len(),
+                    field_count: variant.field_count,
                     payload,
                 }
             })
             .collect::<Vec<_>>();
-        if rebuilt.iter().all(|variant| {
-            variant.field_count == 0 || (variant.field_count == 1 && variant.payload.is_some())
-        }) {
+        if rebuilt
+            .iter()
+            .all(|variant| variant.field_count == 0 || variant.payload.is_some())
+        {
+            let layout = layouts
+                .get_mut(layout_id)
+                .expect("layout collected from arena iteration should still exist");
+            let aivi_backend::LayoutKind::Opaque { variants, .. } = &mut layout.kind else {
+                continue;
+            };
             *variants = rebuilt;
         }
+    }
+}
+
+fn backfill_representational_carriers_in_program(
+    program: &mut aivi_backend::Program,
+    templates: &std::collections::BTreeMap<String, String>,
+) {
+    let signatures = layout_signatures(program.layouts());
+    let by_signature = signatures
+        .iter()
+        .map(|(layout, signature)| (signature.clone(), *layout))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let layout_ids = program
+        .layouts()
+        .iter()
+        .map(|(layout_id, _)| layout_id)
+        .collect::<Vec<_>>();
+    for layout_id in layout_ids {
+        if program.named_domain_carrier(layout_id).is_some() {
+            continue;
+        }
+        let Some(layout_signature) = signatures.get(&layout_id) else {
+            continue;
+        };
+        let Some(carrier_signature) = templates.get(layout_signature) else {
+            continue;
+        };
+        let Some(&carrier_layout) = by_signature.get(carrier_signature) else {
+            continue;
+        };
+        program.register_named_domain_carrier(layout_id, carrier_layout);
+    }
+}
+
+fn backfill_representational_carriers_in_runtime_meta(
+    meta: &mut aivi_backend::BackendRuntimeMeta,
+    templates: &std::collections::BTreeMap<String, String>,
+) {
+    let signatures = layout_signatures(meta.layouts());
+    let by_signature = signatures
+        .iter()
+        .map(|(layout, signature)| (signature.clone(), *layout))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let layout_ids = meta.layouts().iter().map(|(layout_id, _)| layout_id).collect::<Vec<_>>();
+    for layout_id in layout_ids {
+        if meta.named_domain_carrier(layout_id).is_some() {
+            continue;
+        }
+        let Some(layout_signature) = signatures.get(&layout_id) else {
+            continue;
+        };
+        let Some(carrier_signature) = templates.get(layout_signature) else {
+            continue;
+        };
+        let Some(&carrier_layout) = by_signature.get(carrier_signature) else {
+            continue;
+        };
+        meta.register_named_domain_carrier(layout_id, carrier_layout);
+    }
+}
+
+fn backfill_representational_carriers_in_frozen_catalog(
+    catalog: &mut aivi_backend::FrozenBackendCatalog,
+    templates: &std::collections::BTreeMap<String, String>,
+) {
+    let signatures = layout_signatures(catalog.layouts());
+    let by_signature = signatures
+        .iter()
+        .map(|(layout, signature)| (signature.clone(), *layout))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let layout_ids = catalog
+        .layouts()
+        .iter()
+        .map(|(layout_id, _)| layout_id)
+        .collect::<Vec<_>>();
+    for layout_id in layout_ids {
+        if catalog.named_domain_carrier(layout_id).is_some() {
+            continue;
+        }
+        let Some(layout_signature) = signatures.get(&layout_id) else {
+            continue;
+        };
+        let Some(carrier_signature) = templates.get(layout_signature) else {
+            continue;
+        };
+        let Some(&carrier_layout) = by_signature.get(carrier_signature) else {
+            continue;
+        };
+        catalog.register_named_domain_carrier(layout_id, carrier_layout);
     }
 }
 
@@ -1636,12 +2435,28 @@ fn opaque_variant_templates(
                 .iter()
                 .map(|variant| OpaqueVariantTemplate {
                     name: variant.name.clone(),
+                    field_count: variant.field_count,
                     field_signatures: variant
                         .payload
-                        .into_iter()
-                        .filter_map(|layout| signatures.get(&layout).cloned())
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
+                        .map(|layout| match &layouts[layout].kind {
+                            aivi_backend::LayoutKind::Tuple(elements) if variant.field_count > 1 => {
+                                elements
+                                    .iter()
+                                    .filter_map(|layout| signatures.get(layout).cloned())
+                                    .collect::<Vec<_>>()
+                                    .into_boxed_slice()
+                            }
+                            _ => signatures
+                                .get(&layout)
+                                .cloned()
+                                .into_iter()
+                                .collect::<Vec<_>>()
+                                .into_boxed_slice(),
+                        })
+                        .unwrap_or_default(),
+                    payload_signature: variant
+                        .payload
+                        .and_then(|layout| signatures.get(&layout).cloned()),
                 })
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
@@ -1760,13 +2575,11 @@ fn layout_signature(
                 .join(",")
         ),
         aivi_backend::LayoutKind::Opaque {
-            item,
             name,
             arguments,
             ..
         } => format!(
-            "opaque({:?}:{}:{})",
-            item.map(|item| item.as_raw()),
+            "opaque({}:{})",
             name,
             arguments
                 .iter()

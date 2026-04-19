@@ -301,6 +301,23 @@ fn assert_reactive_clause_body_has_entry_native_kernel(
                 kernel,
             )
         }
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+            assert!(
+                clause
+                    .compiled_body
+                    .native_kernels
+                    .get(fingerprint)
+                    .is_some(),
+                "expected `{signal_name}` clause {clause_index} body kernel {} fingerprint {:016x} to survive bundle serialization",
+                kernel.as_raw(),
+                fingerprint.as_raw()
+            );
+            aivi_backend::NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
+                catalog.as_ref(),
+                Some(clause.compiled_body.native_kernels.as_ref()),
+                kernel,
+            )
+        }
     };
     assert!(
         compiled_plan.is_some(),
@@ -316,6 +333,27 @@ fn with_native_kernel_plans<T>(enabled: bool, f: impl FnOnce() -> T) -> T {
     replace_native_kernel_plans_enabled(previous);
     clear_native_kernel_plan_cache();
     result
+}
+
+fn assert_frozen_image_backends_are_catalog_bytes(image_bytes: &[u8], context: &str) {
+    let image = bincode::deserialize::<super::FrozenRunImage>(image_bytes)
+        .unwrap_or_else(|error| panic!("{context} should decode as a frozen run image: {error}"));
+    assert!(
+        !image.backends.is_empty(),
+        "{context} should carry at least one frozen backend payload"
+    );
+    for (index, payload) in image.backends.iter().enumerate() {
+        assert!(
+            bincode::deserialize::<super::EncodedFrozenBackendCatalog>(&payload.backend_catalog)
+                .is_ok(),
+            "{context} backend payload {index} should encode an explicit frozen backend catalog wrapper"
+        );
+        assert!(
+            bincode::deserialize::<aivi_backend::BackendRuntimeMeta>(&payload.backend_catalog)
+                .is_err(),
+            "{context} backend payload {index} should not encode BackendRuntimeMeta bytes"
+        );
+    }
 }
 
 #[test]
@@ -363,13 +401,16 @@ fn resolve_run_entrypoint_uses_workspace_root_main_when_present() {
 }
 
 #[test]
-fn snake_frozen_image_roundtrip_reloads_runtime_meta_without_backend_program() {
+fn snake_frozen_image_roundtrip_reloads_frozen_catalog_without_backend_program() {
     let artifact = prepare_run_from_path(&repo_path("demos/snake.aivi"), Some("main"))
         .expect("snake demo should prepare cleanly");
     let temp = TempDir::new("snake-frozen-image-roundtrip");
     let image_path =
         super::write_frozen_run_image_bundle_without_native_kernels(temp.path(), &artifact)
             .expect("snake frozen run image should write");
+    let image_bytes =
+        fs::read(&image_path).expect("snake frozen run image should be readable from disk");
+    assert_frozen_image_backends_are_catalog_bytes(&image_bytes, "snake frozen run image");
     let reloaded = super::load_frozen_run_image(&image_path, Some("main"))
         .expect("snake frozen run image should reload");
 
@@ -377,9 +418,9 @@ fn snake_frozen_image_roundtrip_reloads_runtime_meta_without_backend_program() {
     assert!(
         matches!(
             reloaded.backend,
-            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(_)
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(_)
         ),
-        "snake frozen run image should reload runtime metadata, not BackendProgram"
+        "snake frozen run image should reload a frozen backend catalog, not BackendProgram"
     );
     assert!(
         reloaded.backend_native_kernels.is_empty(),
@@ -388,7 +429,7 @@ fn snake_frozen_image_roundtrip_reloads_runtime_meta_without_backend_program() {
 }
 
 #[test]
-fn snake_serialized_frozen_image_reloads_without_backend_program() {
+fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program() {
     with_native_kernel_plans(false, || {
         let artifact = prepare_run_from_path(&repo_path("demos/snake.aivi"), Some("main"))
             .expect("snake demo should prepare cleanly");
@@ -396,19 +437,25 @@ fn snake_serialized_frozen_image_reloads_without_backend_program() {
         let image_path =
             super::write_frozen_run_image_bundle_without_native_kernels(temp.path(), &artifact)
                 .expect("snake frozen run image should write");
+        let image_bytes =
+            fs::read(&image_path).expect("serialized snake frozen run image should be readable");
+        assert_frozen_image_backends_are_catalog_bytes(
+            &image_bytes,
+            "serialized snake frozen run image",
+        );
         let reloaded = super::load_frozen_run_image(&image_path, Some("main"))
             .expect("snake frozen run image should reload");
 
         assert!(matches!(
             reloaded.backend,
-            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(_)
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(_)
         ));
         assert!(reloaded.backend_native_kernels.is_empty());
     });
 }
 
 #[test]
-fn snake_embedded_bundle_reloads_frozen_image_without_backend_program() {
+fn snake_embedded_bundle_reloads_frozen_catalog_without_backend_program() {
     with_native_kernel_plans(false, || {
         let path = repo_path("demos/snake.aivi");
         let artifact =
@@ -424,12 +471,20 @@ fn snake_embedded_bundle_reloads_frozen_image_without_backend_program() {
             .expect("snake executable should contain an embedded bundle footer");
         let decoded = super::decode_embedded_bundle(&executable_path, &descriptor)
             .expect("snake executable embedded bundle should decode");
+        let image_bytes = decoded
+            .generated_entries
+            .get(&PathBuf::from(super::FROZEN_RUN_IMAGE_FILE_NAME))
+            .expect("snake embedded bundle should contain a frozen run image");
+        assert_frozen_image_backends_are_catalog_bytes(
+            image_bytes,
+            "snake embedded bundle frozen run image",
+        );
         let reloaded = super::load_embedded_run_artifact(&decoded.generated_entries, Some("main"))
             .expect("snake embedded bundle should reload");
 
         assert!(matches!(
             reloaded.backend,
-            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(_)
+            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(_)
         ));
         assert!(reloaded.backend_native_kernels.is_empty());
     });

@@ -276,6 +276,11 @@ impl<'a> LinkBuilder<'a> {
                 .pipelines.to_vec()
                 .into_boxed_slice();
             let has_seed_body = item.body.is_some();
+            let entry_kernel = info.body_kernel.or(item.body);
+            let dependency_layouts = entry_kernel
+                .and_then(|kernel| self.backend.kernel(kernel))
+                .map(|kernel| kernel.environment.to_vec().into_boxed_slice())
+                .unwrap_or_else(|| Vec::new().into_boxed_slice());
             let pipeline_signals = self
                 .collect_pipeline_signal_handles(binding.item, pipeline_ids.as_ref())
                 .into_boxed_slice();
@@ -283,8 +288,8 @@ impl<'a> LinkBuilder<'a> {
                 self.kernel_eval_lane(
                     self.backend,
                     self.backend_native_kernels,
-                    info.body_kernel,
-                    info.dependency_layouts.as_slice(),
+                    entry_kernel,
+                    dependency_layouts.as_ref(),
                 );
             self.reactive_signals.insert(
                 reactive,
@@ -293,10 +298,11 @@ impl<'a> LinkBuilder<'a> {
                     signal: reactive,
                     backend_item,
                     has_seed_body,
+                    entry_kernel,
                     body_kernel: info.body_kernel,
                     seed_eval_lane,
                     dependency_items: info.dependencies.clone().into_boxed_slice(),
-                    dependency_layouts: info.dependency_layouts.clone().into_boxed_slice(),
+                    dependency_layouts,
                     pipeline_signals,
                     pipeline_ids: pipeline_ids.clone(),
                 },
@@ -535,12 +541,16 @@ impl<'a> LinkBuilder<'a> {
                 continue;
             }
 
-            let dependency_layouts = info.dependency_layouts.clone().into_boxed_slice();
+            let entry_kernel = body_kernel.or(body);
+            let dependency_layouts = entry_kernel
+                .and_then(|kernel| self.backend.kernel(kernel))
+                .map(|kernel| kernel.environment.to_vec().into_boxed_slice())
+                .unwrap_or_else(|| Vec::new().into_boxed_slice());
             let eval_lane =
                 self.kernel_eval_lane(
                     self.backend,
                     self.backend_native_kernels,
-                    body_kernel,
+                    entry_kernel,
                     dependency_layouts.as_ref(),
                 );
 
@@ -550,6 +560,7 @@ impl<'a> LinkBuilder<'a> {
                     item: binding.item,
                     signal: derived,
                     backend_item,
+                    entry_kernel,
                     body_kernel,
                     eval_lane,
                     runtime_dependency_count: binding.dependencies().len(),
@@ -761,6 +772,13 @@ impl<'a> LinkBuilder<'a> {
             BackendRuntimeView::Meta(meta) => {
                 aivi_backend::NativeKernelPlan::from_runtime_meta_with_native_artifacts(
                     meta,
+                    Some(native_kernels),
+                    kernel,
+                )
+            }
+            BackendRuntimeView::FrozenCatalog(catalog) => {
+                aivi_backend::NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
+                    catalog,
                     Some(native_kernels),
                     kernel,
                 )

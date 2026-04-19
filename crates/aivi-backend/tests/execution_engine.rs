@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 
 use aivi_backend::{
     BackendExecutableProgram, BackendExecutionEngine, BackendExecutionEngineKind,
-    BackendKernelArtifactCache, ItemKind, KernelEvaluator, NativeKernelArtifactSet,
-    NativeKernelPlan, RuntimeBigInt, RuntimeDecimal, RuntimeFloat, RuntimeMap, RuntimeMapEntry,
-    RuntimeRecordField, RuntimeValue, compile_native_kernel_artifact, compile_program,
-    compute_kernel_fingerprint, decode_native_kernel_artifact_binary,
-    encode_native_kernel_artifact_binary, lower_module as lower_backend_module, validate_program,
+    BackendKernelArtifactCache, BackendRuntimeMeta, ItemKind, KernelEvaluator,
+    NativeKernelArtifactSet, NativeKernelPlan, RuntimeBigInt, RuntimeDecimal, RuntimeFloat,
+    RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeValue, attach_frozen_native_kernel_abi,
+    compile_native_kernel_artifact, compile_program, compute_kernel_fingerprint,
+    decode_native_kernel_artifact_binary, encode_native_kernel_artifact_binary,
+    lower_module as lower_backend_module, validate_program,
 };
 use aivi_base::SourceDatabase;
 use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
@@ -287,6 +288,9 @@ signal rendered = renderBoardTiles assetRoot food
     let artifact = compile_native_kernel_artifact(&backend, body_kernel)
         .expect("renderer signal body native sidecar compilation should succeed")
         .expect("supported renderer signal body should emit a native sidecar");
+    let meta = BackendRuntimeMeta::from(&backend);
+    let artifact = attach_frozen_native_kernel_abi(&meta, &artifact)
+        .expect("build lane should freeze native sidecar ABI");
     let bytes = encode_native_kernel_artifact_binary(&artifact);
     let decoded =
         decode_native_kernel_artifact_binary(&bytes).expect("encoded native sidecar should decode");
@@ -302,7 +306,6 @@ signal rendered = renderBoardTiles assetRoot food
         .create_engine()
         .evaluate_signal_body_kernel(body_kernel, &arguments, &globals)
         .expect("interpreter should evaluate renderer signal body");
-    let meta = aivi_backend::BackendRuntimeMeta::from(&backend);
     let actual = BackendExecutableProgram::from_runtime_meta(&meta)
         .with_native_kernels(&native_kernels)
         .create_engine()

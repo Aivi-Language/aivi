@@ -19,11 +19,27 @@ fn stage_subject_value(
     layout: aivi_backend::LayoutId,
     value: &RuntimeValue,
 ) -> RuntimeValue {
-    match (&backend.layout(layout).expect("linked runtime layout should exist").kind, value) {
-        (LayoutKind::Signal { .. }, RuntimeValue::Signal(_)) => value.clone(),
-        (LayoutKind::Signal { .. }, other) => RuntimeValue::Signal(Box::new(other.clone())),
-        (_, RuntimeValue::Signal(inner)) => inner.as_ref().clone(),
-        _ => value.clone(),
+    match backend {
+        BackendRuntimeView::Program(program) => {
+            aivi_backend::coerce_runtime_value(program, value.clone(), layout).unwrap_or_else(|_| {
+                match (
+                    &program.layouts()[layout]
+                        .kind,
+                    value,
+                ) {
+                    (LayoutKind::Signal { .. }, RuntimeValue::Signal(_)) => value.clone(),
+                    (LayoutKind::Signal { .. }, other) => RuntimeValue::Signal(Box::new(other.clone())),
+                    (_, RuntimeValue::Signal(inner)) => inner.as_ref().clone(),
+                    _ => value.clone(),
+                }
+            })
+        }
+        _ => match (&backend.layout(layout).expect("linked runtime layout should exist").kind, value) {
+            (LayoutKind::Signal { .. }, RuntimeValue::Signal(_)) => value.clone(),
+            (LayoutKind::Signal { .. }, other) => RuntimeValue::Signal(Box::new(other.clone())),
+            (_, RuntimeValue::Signal(inner)) => inner.as_ref().clone(),
+            _ => value.clone(),
+        },
     }
 }
 
@@ -154,6 +170,7 @@ pub struct LinkedDerivedSignal {
     pub item: hir::ItemId,
     pub signal: DerivedHandle,
     pub backend_item: BackendItemId,
+    pub entry_kernel: Option<KernelId>,
     pub body_kernel: Option<KernelId>,
     pub eval_lane: LinkedEvalLane,
     pub runtime_dependency_count: usize,
@@ -249,6 +266,7 @@ pub struct LinkedReactiveSignal {
     pub signal: SignalHandle,
     pub backend_item: BackendItemId,
     pub has_seed_body: bool,
+    pub entry_kernel: Option<KernelId>,
     pub body_kernel: Option<KernelId>,
     pub seed_eval_lane: LinkedEvalLane,
     pub dependency_items: Box<[BackendItemId]>,

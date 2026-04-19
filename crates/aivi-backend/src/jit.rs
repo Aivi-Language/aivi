@@ -8,7 +8,7 @@ use std::{
 };
 
 use aivi_ffi_call::{
-    AbiValue, AllocationArena, decode_len_prefixed_bytes, decode_marshaled_map,
+    AbiValue, AbiValueKind, AllocationArena, decode_len_prefixed_bytes, decode_marshaled_map,
     decode_marshaled_sequence, encode_len_prefixed_bytes, encode_marshaled_map,
     encode_marshaled_sequence, read_bigint_constant_bytes, read_decimal_constant_bytes,
     read_marshaled_field, with_active_arena,
@@ -17,15 +17,16 @@ use aivi_ffi_call::{
 use crate::{
     AbiPassMode, BackendExecutionEngine, BackendExecutionEngineKind, BackendExecutionOptions,
     BackendRuntimeMeta, BackendRuntimeView, EvalFrame, EvaluationCallProfile, EvaluationError,
-    ItemId, KernelEvaluationProfile, KernelEvaluator, KernelExprId, KernelFingerprint, KernelId,
-    LayoutId, LayoutKind, NativeKernelArtifact, NativeKernelArtifactSet, PrimitiveType, Program,
-    RuntimeBigInt, RuntimeCallable, RuntimeDecimal, RuntimeFloat, RuntimeMap, RuntimeMapEntry,
-    RuntimeRecordField, RuntimeValue, TASK_COMPOSITION_KERNEL_ID, TaskFunctionApplier,
+    FrozenBackendCatalog, ItemId, KernelEvaluationProfile, KernelEvaluator, KernelExprId,
+    KernelFingerprint, KernelId, LayoutId, LayoutKind, NativeKernelArtifact,
+    NativeKernelArtifactSet, PrimitiveType, Program, RuntimeBigInt, RuntimeCallable,
+    RuntimeDecimal, RuntimeFloat, RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeValue,
+    TASK_COMPOSITION_KERNEL_ID, TaskFunctionApplier,
     cache::{
         compile_kernel_jit_cached, instantiate_native_kernel_artifact,
         instantiate_native_kernel_artifact_for_runtime_meta,
     },
-    codegen::CompiledJitKernel,
+    codegen::{CodegenError, CodegenErrors, CompiledJitKernel},
     compute_kernel_fingerprint,
     program::ItemKind,
     runtime::{coerce_runtime_value, strip_signal},
@@ -45,12 +46,18 @@ pub(crate) struct LazyJitExecutionEngine<'a> {
 }
 
 pub(crate) struct NativeOnlyExecutionEngine<'a> {
-    meta: &'a BackendRuntimeMeta,
+    backend: NativeOnlyBackend<'a>,
     native_artifacts: Option<&'a NativeKernelArtifactSet>,
     last_kernel_call: Option<LastKernelCall>,
     eval_trace: Vec<EvalFrame>,
     kernel_plans: BTreeMap<KernelFingerprint, CachedKernelPlan>,
     profile: Option<KernelEvaluationProfile>,
+}
+
+#[derive(Clone, Copy)]
+enum NativeOnlyBackend<'a> {
+    Meta(&'a BackendRuntimeMeta),
+    FrozenCatalog(&'a FrozenBackendCatalog),
 }
 
 impl<'a> LazyJitExecutionEngine<'a> {
@@ -166,7 +173,12 @@ impl<'a> NativeOnlyExecutionEngine<'a> {
         native_artifacts: Option<&'a NativeKernelArtifactSet>,
         options: BackendExecutionOptions,
     ) -> Self {
-        Self::with_profile(meta, native_artifacts, options, false)
+        Self::with_profile(
+            NativeOnlyBackend::Meta(meta),
+            native_artifacts,
+            options,
+            false,
+        )
     }
 
     pub(crate) fn new_profiled(
@@ -174,17 +186,48 @@ impl<'a> NativeOnlyExecutionEngine<'a> {
         native_artifacts: Option<&'a NativeKernelArtifactSet>,
         options: BackendExecutionOptions,
     ) -> Self {
-        Self::with_profile(meta, native_artifacts, options, true)
+        Self::with_profile(
+            NativeOnlyBackend::Meta(meta),
+            native_artifacts,
+            options,
+            true,
+        )
+    }
+
+    pub(crate) fn new_frozen_catalog(
+        catalog: &'a FrozenBackendCatalog,
+        native_artifacts: Option<&'a NativeKernelArtifactSet>,
+        options: BackendExecutionOptions,
+    ) -> Self {
+        Self::with_profile(
+            NativeOnlyBackend::FrozenCatalog(catalog),
+            native_artifacts,
+            options,
+            false,
+        )
+    }
+
+    pub(crate) fn new_profiled_frozen_catalog(
+        catalog: &'a FrozenBackendCatalog,
+        native_artifacts: Option<&'a NativeKernelArtifactSet>,
+        options: BackendExecutionOptions,
+    ) -> Self {
+        Self::with_profile(
+            NativeOnlyBackend::FrozenCatalog(catalog),
+            native_artifacts,
+            options,
+            true,
+        )
     }
 
     fn with_profile(
-        meta: &'a BackendRuntimeMeta,
+        backend: NativeOnlyBackend<'a>,
         native_artifacts: Option<&'a NativeKernelArtifactSet>,
         options: BackendExecutionOptions,
         profiled: bool,
     ) -> Self {
         let mut engine = Self {
-            meta,
+            backend,
             native_artifacts,
             last_kernel_call: None,
             eval_trace: Vec::new(),
@@ -208,16 +251,20 @@ impl<'a> NativeOnlyExecutionEngine<'a> {
     }
 
     fn prepare_kernel_plan(&mut self, kernel_id: KernelId) -> KernelFingerprint {
-        let fingerprint = self.meta.kernels()[kernel_id].fingerprint;
+        let fingerprint = self
+            .backend
+            .kernel_fingerprint(kernel_id)
+            .expect("native-only backend kernel should exist");
         self.kernel_plans.entry(fingerprint).or_insert_with(|| {
-            CachedKernelPlan::build_from_runtime_meta(self.meta, self.native_artifacts, kernel_id)
+            self.backend
+                .build_kernel_plan(self.native_artifacts, kernel_id)
         });
         fingerprint
     }
 
     fn prepare_signal_body_plans(&mut self) {
         let kernels = self
-            .meta
+            .backend
             .items()
             .iter()
             .filter_map(|(_, item)| match &item.kind {
@@ -227,6 +274,59 @@ impl<'a> NativeOnlyExecutionEngine<'a> {
             .collect::<Vec<_>>();
         for kernel_id in kernels {
             self.prepare_kernel_plan(kernel_id);
+        }
+    }
+}
+
+impl NativeOnlyBackend<'_> {
+    fn items(&self) -> &aivi_core::Arena<ItemId, crate::Item> {
+        match self {
+            Self::Meta(meta) => meta.items(),
+            Self::FrozenCatalog(catalog) => catalog.items(),
+        }
+    }
+
+    fn kernel_fingerprint(&self, kernel_id: KernelId) -> Option<KernelFingerprint> {
+        match self {
+            Self::Meta(meta) => meta
+                .kernels()
+                .get(kernel_id)
+                .map(|kernel| kernel.fingerprint),
+            Self::FrozenCatalog(catalog) => catalog
+                .kernels()
+                .get(kernel_id)
+                .map(|kernel| kernel.fingerprint),
+        }
+    }
+
+    fn kernel(&self, kernel_id: KernelId) -> Option<crate::BackendRuntimeKernelRef<'_>> {
+        match self {
+            Self::Meta(meta) => BackendRuntimeView::Meta(meta).kernel(kernel_id),
+            Self::FrozenCatalog(catalog) => {
+                BackendRuntimeView::FrozenCatalog(catalog).kernel(kernel_id)
+            }
+        }
+    }
+
+    fn item_name(&self, item: ItemId) -> &str {
+        match self {
+            Self::Meta(meta) => meta.item_name(item),
+            Self::FrozenCatalog(catalog) => catalog.item_name(item),
+        }
+    }
+
+    fn build_kernel_plan(
+        &self,
+        native_artifacts: Option<&NativeKernelArtifactSet>,
+        kernel_id: KernelId,
+    ) -> CachedKernelPlan {
+        match self {
+            Self::Meta(meta) => {
+                CachedKernelPlan::build_from_runtime_meta(meta, native_artifacts, kernel_id)
+            }
+            Self::FrozenCatalog(catalog) => {
+                CachedKernelPlan::build_from_frozen_catalog(catalog, native_artifacts, kernel_id)
+            }
         }
     }
 }
@@ -613,11 +713,10 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
         let started_at = self.profile.as_ref().map(|_| Instant::now());
-        let kernel = self
-            .meta
-            .kernels()
-            .get(kernel_id)
-            .cloned()
+        let result_layout = self
+            .backend
+            .kernel(kernel_id)
+            .map(|kernel| kernel.result_layout)
             .ok_or(EvaluationError::UnknownKernel { kernel: kernel_id })?;
         if let Some((cached_result, cached_layout)) =
             self.last_kernel_call.as_ref().and_then(|last| {
@@ -632,10 +731,10 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
                 started_at.map_or(Duration::ZERO, |started| started.elapsed()),
                 true,
             );
-            if cached_layout != kernel.result_layout {
+            if cached_layout != result_layout {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
-                    expected: kernel.result_layout,
+                    expected: result_layout,
                     found: cached_result,
                 });
             }
@@ -694,7 +793,7 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
             input_subject: input_subject.cloned(),
             environment: environment.to_vec().into_boxed_slice(),
             result: result.clone(),
-            result_layout: kernel.result_layout,
+            result_layout,
         });
         Ok(result)
     }
@@ -743,7 +842,7 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
             detail: format!(
                 "built bundles do not support backend item evaluation without native kernels (item {} `{}`)",
                 item.as_raw(),
-                self.meta.item_name(item)
+                self.backend.item_name(item)
             )
             .into_boxed_str(),
         })
@@ -875,7 +974,7 @@ fn validate_compiled_inputs(
     environment: &[RuntimeValue],
 ) -> Result<(), EvaluationError> {
     match (&plan.input_plan, input_subject) {
-        (Some(expected), Some(value)) if expected.matches(value) => {}
+        (Some(expected), Some(value)) if expected.signal_coerced_value(value).is_some() => {}
         (Some(_), Some(value)) => {
             return Err(EvaluationError::KernelInputLayoutMismatch {
                 kernel: plan.kernel_id,
@@ -910,7 +1009,7 @@ fn validate_compiled_inputs(
         .zip(environment.iter())
         .enumerate()
     {
-        if !expected.matches(value) {
+        if expected.signal_coerced_value(value).is_none() {
             return Err(EvaluationError::KernelEnvironmentLayoutMismatch {
                 kernel: plan.kernel_id,
                 slot: crate::EnvSlotId::from_raw(index as u32),
@@ -1058,6 +1157,21 @@ impl CachedKernelPlan {
         };
         Self::Compiled(compiled)
     }
+
+    fn build_from_frozen_catalog(
+        catalog: &FrozenBackendCatalog,
+        native_artifacts: Option<&NativeKernelArtifactSet>,
+        kernel_id: KernelId,
+    ) -> Self {
+        let Some(compiled) = NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
+            catalog,
+            native_artifacts,
+            kernel_id,
+        ) else {
+            return Self::Fallback;
+        };
+        Self::Compiled(compiled)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1077,6 +1191,34 @@ pub struct NativeKernelPlan {
     result_plan: MarshalPlan,
     signal_slot_plans: Vec<MarshalPlan>,
     imported_item_slot_plans: Vec<MarshalPlan>,
+}
+
+const FROZEN_NATIVE_KERNEL_ABI_VERSION: u32 = 1;
+
+fn wrap_native_one(error: CodegenError) -> CodegenErrors {
+    CodegenErrors::new(vec![error])
+}
+
+impl FrozenAbiValueKind {
+    pub(crate) fn from_runtime(kind: AbiValueKind) -> Self {
+        match kind {
+            AbiValueKind::I8 => Self::I8,
+            AbiValueKind::I64 => Self::I64,
+            AbiValueKind::I128 => Self::I128,
+            AbiValueKind::F64 => Self::F64,
+            AbiValueKind::Pointer => Self::Pointer,
+        }
+    }
+
+    pub(crate) fn into_runtime(self) -> AbiValueKind {
+        match self {
+            Self::I8 => AbiValueKind::I8,
+            Self::I64 => AbiValueKind::I64,
+            Self::I128 => AbiValueKind::I128,
+            Self::F64 => AbiValueKind::F64,
+            Self::Pointer => AbiValueKind::Pointer,
+        }
+    }
 }
 
 impl NativeKernelPlan {
@@ -1106,7 +1248,28 @@ impl NativeKernelPlan {
     ) -> Option<Self> {
         let fingerprint = meta.kernels().get(kernel_id)?.fingerprint;
         let artifact = native_artifacts.and_then(|artifacts| artifacts.get(fingerprint))?;
+        if let Some(frozen_abi) = artifact.frozen_abi()
+            && let Some(plan) = Self::from_frozen_native_artifact(kernel_id, artifact, frozen_abi)
+        {
+            return Some(plan);
+        }
         Self::from_native_artifact_for_runtime_meta(meta, kernel_id, artifact)
+    }
+
+    pub fn from_frozen_catalog_with_native_artifacts(
+        catalog: &FrozenBackendCatalog,
+        native_artifacts: Option<&NativeKernelArtifactSet>,
+        kernel_id: KernelId,
+    ) -> Option<Self> {
+        let fingerprint = catalog.kernels().get(kernel_id)?.fingerprint;
+        let artifact = native_artifacts.and_then(|artifacts| artifacts.get(fingerprint))?;
+        if let Some(frozen_abi) = artifact.frozen_abi()
+            && let Some(plan) = Self::from_frozen_native_artifact(kernel_id, artifact, frozen_abi)
+        {
+            return Some(plan);
+        }
+        let meta = catalog.to_runtime_meta();
+        Self::from_native_artifact_for_runtime_meta(&meta, kernel_id, artifact)
     }
 
     pub fn from_native_artifact(
@@ -1136,6 +1299,42 @@ impl NativeKernelPlan {
             artifact,
             true,
         )
+    }
+
+    fn from_frozen_native_artifact(
+        kernel_id: KernelId,
+        artifact: &NativeKernelArtifact,
+        frozen_abi: &[u8],
+    ) -> Option<Self> {
+        let abi = decode_frozen_native_kernel_abi(frozen_abi)?;
+        if abi.requested_kernel != kernel_id {
+            return None;
+        }
+        let artifact = crate::cache::instantiate_native_kernel_artifact_for_frozen_abi(
+            frozen_abi, kernel_id, artifact,
+        )
+        .ok()?;
+        let kernel = abi.kernels.iter().find(|entry| entry.kernel == kernel_id)?;
+        Some(Self {
+            kernel_id,
+            input_layout: kernel.input_layout,
+            environment_layouts: kernel.environment_layouts.clone(),
+            result_layout: kernel.result_layout,
+            artifact,
+            input_plan: kernel.input_plan.clone(),
+            environment_plans: kernel.environment_plans.clone(),
+            result_plan: kernel.result_plan.clone()?,
+            signal_slot_plans: abi
+                .signal_slots
+                .iter()
+                .map(|slot| slot.plan.clone())
+                .collect(),
+            imported_item_slot_plans: abi
+                .imported_item_slots
+                .iter()
+                .map(|slot| slot.plan.clone())
+                .collect(),
+        })
     }
 
     fn from_compiled_jit(
@@ -1262,21 +1461,21 @@ impl PackedValueHints {
     }
 }
 
-#[derive(Clone, Copy)]
-enum ScalarOptionKind {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum ScalarOptionKind {
     Int,
     Float,
     Bool,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct AggregateFieldPlan {
     offset: usize,
     size: usize,
     plan: Box<MarshalPlan>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct RecordFieldPlan {
     label: Box<str>,
     offset: usize,
@@ -1284,7 +1483,7 @@ struct RecordFieldPlan {
     plan: Box<MarshalPlan>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct OpaqueVariantPlan {
     name: Box<str>,
     tag: i64,
@@ -1292,7 +1491,7 @@ struct OpaqueVariantPlan {
     payload: Option<Box<MarshalPlan>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 enum MarshalPlanKind {
     Unit,
     Int,
@@ -1348,6 +1547,10 @@ enum MarshalPlanKind {
     RepresentationalDomain {
         carrier: Box<MarshalPlan>,
     },
+    ErasedOpaque {
+        item: aivi_hir::ItemId,
+        type_name: Box<str>,
+    },
     Opaque {
         item: aivi_hir::ItemId,
         type_name: Box<str>,
@@ -1358,9 +1561,48 @@ enum MarshalPlanKind {
     },
 }
 
-#[derive(Clone)]
-struct MarshalPlan {
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct MarshalPlan {
     kind: MarshalPlanKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct FrozenKernelAbi {
+    pub(crate) kernel: KernelId,
+    pub(crate) parameter_kinds: Vec<FrozenAbiValueKind>,
+    pub(crate) result_kind: FrozenAbiValueKind,
+    pub(crate) input_layout: Option<LayoutId>,
+    pub(crate) environment_layouts: Vec<LayoutId>,
+    pub(crate) result_layout: LayoutId,
+    pub(crate) input_plan: Option<MarshalPlan>,
+    pub(crate) environment_plans: Vec<MarshalPlan>,
+    pub(crate) result_plan: Option<MarshalPlan>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct FrozenDataSlotAbi {
+    pub(crate) item: ItemId,
+    pub(crate) layout: LayoutId,
+    pub(crate) plan: MarshalPlan,
+    pub(crate) cell_size: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct FrozenNativeKernelArtifactAbi {
+    pub(crate) version: u32,
+    pub(crate) requested_kernel: KernelId,
+    pub(crate) kernels: Vec<FrozenKernelAbi>,
+    pub(crate) signal_slots: Vec<FrozenDataSlotAbi>,
+    pub(crate) imported_item_slots: Vec<FrozenDataSlotAbi>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum FrozenAbiValueKind {
+    I8,
+    I64,
+    I128,
+    F64,
+    Pointer,
 }
 
 impl MarshalPlan {
@@ -1533,6 +1775,18 @@ impl MarshalPlan {
                     variants,
                     ..
                 },
+            ) if variants.is_empty() => MarshalPlanKind::ErasedOpaque {
+                item: *item,
+                type_name: name.clone(),
+            },
+            (
+                AbiPassMode::ByReference,
+                LayoutKind::Opaque {
+                    item: Some(item),
+                    name,
+                    variants,
+                    ..
+                },
             ) if !variants.is_empty() => MarshalPlanKind::Opaque {
                 item: *item,
                 type_name: name.clone(),
@@ -1544,9 +1798,11 @@ impl MarshalPlan {
                             tag: crate::layout::opaque_variant_tag(variant.name.as_ref()),
                             field_count: variant.field_count,
                             payload: match variant.payload {
-                                Some(payload) => {
-                                    Some(Box::new(Self::for_layout(backend, payload)?))
-                                }
+                                Some(payload) => Some(Box::new(Self::for_layout_with_options(
+                                    backend,
+                                    payload,
+                                    decode_named_domain_as_int,
+                                )?)),
                                 None => None,
                             },
                         })
@@ -1655,6 +1911,9 @@ impl MarshalPlan {
                 value,
             ) => carrier.matches(value) || matches!(value, RuntimeValue::SuffixedInteger { .. }),
             (MarshalPlanKind::RepresentationalDomain { carrier }, value) => carrier.matches(value),
+            (MarshalPlanKind::ErasedOpaque { item, type_name }, RuntimeValue::Sum(value)) => {
+                value.item == *item && value.type_name.as_ref() == type_name.as_ref()
+            }
             (
                 MarshalPlanKind::Opaque {
                     item,
@@ -1681,12 +1940,21 @@ impl MarshalPlan {
         }
     }
 
+    fn signal_coerced_value<'a>(&self, value: &'a RuntimeValue) -> Option<&'a RuntimeValue> {
+        if self.matches(value) {
+            return Some(value);
+        }
+        let stripped = strip_signal_wrappers(value);
+        self.matches(stripped).then_some(stripped)
+    }
+
     fn pack_argument(
         &self,
         value: &RuntimeValue,
         arena: &mut AllocationArena,
         hints: &mut PackedValueHints,
     ) -> Option<AbiValue> {
+        let value = self.signal_coerced_value(value)?;
         match &self.kind {
             MarshalPlanKind::Unit => match value {
                 RuntimeValue::Unit => Some(AbiValue::I8(0)),
@@ -1719,6 +1987,9 @@ impl MarshalPlan {
         hints: &mut PackedValueHints,
     ) -> bool {
         cell.fill(0);
+        let Some(value) = self.signal_coerced_value(value) else {
+            return false;
+        };
         let Some(bytes) = self.encode_cell_bytes(value, arena, hints) else {
             return false;
         };
@@ -1745,7 +2016,7 @@ impl MarshalPlan {
         }
     }
 
-    fn cell_size(&self) -> usize {
+    pub(crate) fn cell_size(&self) -> usize {
         match &self.kind {
             MarshalPlanKind::Int | MarshalPlanKind::Float => 8,
             MarshalPlanKind::Unit | MarshalPlanKind::Bool => 1,
@@ -1755,7 +2026,7 @@ impl MarshalPlan {
         }
     }
 
-    fn cell_align(&self) -> usize {
+    pub(crate) fn cell_align(&self) -> usize {
         match &self.kind {
             MarshalPlanKind::Unit | MarshalPlanKind::Bool => 1,
             MarshalPlanKind::InlineOption(_) => 16,
@@ -1770,6 +2041,7 @@ impl MarshalPlan {
         arena: &mut AllocationArena,
         hints: &mut PackedValueHints,
     ) -> Option<Vec<u8>> {
+        let value = self.signal_coerced_value(value)?;
         match &self.kind {
             MarshalPlanKind::Unit => match value {
                 RuntimeValue::Unit => Some(vec![0]),
@@ -1821,6 +2093,7 @@ impl MarshalPlan {
         arena: &mut AllocationArena,
         hints: &mut PackedValueHints,
     ) -> Option<*const c_void> {
+        let value = self.signal_coerced_value(value)?;
         let pointer = match &self.kind {
             MarshalPlanKind::Decimal => match value {
                 RuntimeValue::Decimal(value) => {
@@ -1972,6 +2245,15 @@ impl MarshalPlan {
             },
             MarshalPlanKind::RepresentationalDomain { carrier } => {
                 pack_domain_carrier_reference(carrier, value, arena, hints)?
+            }
+            MarshalPlanKind::ErasedOpaque { item, type_name } => {
+                let RuntimeValue::Sum(sum) = value else {
+                    return None;
+                };
+                if sum.item != *item || sum.type_name.as_ref() != type_name.as_ref() {
+                    return None;
+                }
+                pack_erased_domain_value(value, arena, hints)?
             }
             MarshalPlanKind::Opaque {
                 item,
@@ -2135,6 +2417,7 @@ impl MarshalPlan {
             MarshalPlanKind::RepresentationalDomain { carrier } => {
                 unpack_domain_carrier_value(carrier, pointer, hints)
             }
+            MarshalPlanKind::ErasedOpaque { .. } => None,
             MarshalPlanKind::Opaque {
                 item,
                 type_name,
@@ -2171,6 +2454,404 @@ impl MarshalPlan {
             | MarshalPlanKind::Bool
             | MarshalPlanKind::InlineOption(_) => None,
         }
+    }
+}
+
+pub(crate) fn encode_frozen_native_kernel_abi(
+    meta: &BackendRuntimeMeta,
+    artifact: &NativeKernelArtifact,
+) -> Result<Vec<u8>, CodegenErrors> {
+    let cached = artifact.cached_artifact();
+    let abi = FrozenNativeKernelArtifactAbi {
+        version: FROZEN_NATIVE_KERNEL_ABI_VERSION,
+        requested_kernel: cached.requested_kernel,
+        kernels: cached
+            .kernels
+            .iter()
+            .map(|kernel| freeze_kernel_abi(meta, cached.requested_kernel, kernel.kernel))
+            .collect::<Result<Vec<_>, _>>()?,
+        signal_slots: cached
+            .signal_slots
+            .iter()
+            .map(|slot| freeze_slot_abi(meta, cached.requested_kernel, slot))
+            .collect::<Result<Vec<_>, _>>()?,
+        imported_item_slots: cached
+            .imported_item_slots
+            .iter()
+            .map(|slot| freeze_slot_abi(meta, cached.requested_kernel, slot))
+            .collect::<Result<Vec<_>, _>>()?,
+    };
+    bincode::serialize(&abi).map_err(|error| {
+        wrap_native_one(CodegenError::CraneliftModule {
+            kernel: Some(cached.requested_kernel),
+            message: format!("failed to encode frozen native kernel ABI: {error}").into(),
+        })
+    })
+}
+
+pub(crate) fn decode_frozen_native_kernel_abi(
+    bytes: &[u8],
+) -> Option<FrozenNativeKernelArtifactAbi> {
+    let abi: FrozenNativeKernelArtifactAbi = bincode::deserialize(bytes).ok()?;
+    (abi.version == FROZEN_NATIVE_KERNEL_ABI_VERSION).then_some(abi)
+}
+
+fn freeze_kernel_abi(
+    meta: &BackendRuntimeMeta,
+    requested_kernel: KernelId,
+    kernel_id: KernelId,
+) -> Result<FrozenKernelAbi, CodegenErrors> {
+    let kernel = meta
+        .kernels()
+        .get(kernel_id)
+        .ok_or_else(|| wrap_native_one(CodegenError::MissingKernel { kernel: kernel_id }))?;
+    let parameter_kinds = kernel
+        .convention
+        .parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| {
+            freeze_abi_value_kind(
+                meta,
+                kernel_id,
+                parameter.layout,
+                parameter.pass_mode,
+                &format!("parameter {index}"),
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let result_kind = freeze_abi_value_kind(
+        meta,
+        kernel_id,
+        kernel.convention.result.layout,
+        kernel.convention.result.pass_mode,
+        "result",
+    )?;
+    let (input_plan, environment_plans, result_plan) = if kernel_id == requested_kernel {
+        freeze_requested_kernel_plans(meta, kernel_id).unwrap_or((None, Vec::new(), None))
+    } else {
+        (None, Vec::new(), None)
+    };
+    Ok(FrozenKernelAbi {
+        kernel: kernel_id,
+        parameter_kinds,
+        result_kind,
+        input_layout: kernel.input_subject,
+        environment_layouts: kernel.environment.clone(),
+        result_layout: kernel.result_layout,
+        input_plan,
+        environment_plans,
+        result_plan,
+    })
+}
+
+fn freeze_slot_abi(
+    meta: &BackendRuntimeMeta,
+    kernel_id: KernelId,
+    slot: &crate::codegen::CachedJitDataSlot,
+) -> Result<FrozenDataSlotAbi, CodegenErrors> {
+    let plan = freeze_marshal_plan(meta, kernel_id, slot.layout, "JIT data slot")?;
+    Ok(FrozenDataSlotAbi {
+        item: slot.item,
+        layout: slot.layout,
+        cell_size: u32::try_from(plan.cell_size()).map_err(|_| {
+            wrap_native_one(CodegenError::CraneliftModule {
+                kernel: Some(kernel_id),
+                message: format!(
+                    "frozen JIT data slot for item{} exceeds 32-bit cell size",
+                    slot.item.as_raw()
+                )
+                .into(),
+            })
+        })?,
+        plan,
+    })
+}
+
+fn freeze_marshal_plan(
+    meta: &BackendRuntimeMeta,
+    kernel_id: KernelId,
+    layout: LayoutId,
+    detail: &str,
+) -> Result<MarshalPlan, CodegenErrors> {
+    MarshalPlan::for_layout_with_options(BackendRuntimeView::Meta(meta), layout, true).ok_or_else(
+        || {
+            wrap_native_one(CodegenError::UnsupportedLayout {
+                kernel: kernel_id,
+                layout,
+                detail: format!(
+                    "{detail} cannot be lowered into a frozen marshal plan for compiled-only execution; shape is `{}`",
+                    describe_layout_shape(meta, layout, 0)
+                )
+                .into(),
+            })
+        },
+    )
+}
+
+fn describe_layout_shape(meta: &BackendRuntimeMeta, layout: LayoutId, depth: usize) -> String {
+    if depth >= 3 {
+        return format!("layout{layout}");
+    }
+    match &meta.layouts()[layout].kind {
+        LayoutKind::Primitive(primitive) => format!("{primitive} [{}]", meta.layouts()[layout].abi),
+        LayoutKind::Tuple(elements) => format!(
+            "tuple({}) [{}]",
+            elements
+                .iter()
+                .map(|element| describe_layout_shape(meta, *element, depth + 1))
+                .collect::<Vec<_>>()
+                .join(", "),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Record(fields) => format!(
+            "record {{{}}} [{}]",
+            fields
+                .iter()
+                .map(|field| format!(
+                    "{}: {}",
+                    field.name,
+                    describe_layout_shape(meta, field.layout, depth + 1)
+                ))
+                .collect::<Vec<_>>()
+                .join(", "),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Sum(variants) => format!(
+            "sum({}) [{}]",
+            variants
+                .iter()
+                .map(|variant| match variant.payload {
+                    Some(payload) => format!(
+                        "{} {}",
+                        variant.name,
+                        describe_layout_shape(meta, payload, depth + 1)
+                    ),
+                    None => variant.name.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Arrow { parameter, result } => format!(
+            "arrow({} -> {}) [{}]",
+            describe_layout_shape(meta, *parameter, depth + 1),
+            describe_layout_shape(meta, *result, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::List { element } => format!(
+            "List {} [{}]",
+            describe_layout_shape(meta, *element, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Map { key, value } => format!(
+            "Map {} {} [{}]",
+            describe_layout_shape(meta, *key, depth + 1),
+            describe_layout_shape(meta, *value, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Set { element } => format!(
+            "Set {} [{}]",
+            describe_layout_shape(meta, *element, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Option { element } => format!(
+            "Option {} [{}]",
+            describe_layout_shape(meta, *element, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Result { error, value } => format!(
+            "Result {} {} [{}]",
+            describe_layout_shape(meta, *error, depth + 1),
+            describe_layout_shape(meta, *value, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Validation { error, value } => format!(
+            "Validation {} {} [{}]",
+            describe_layout_shape(meta, *error, depth + 1),
+            describe_layout_shape(meta, *value, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Signal { element } => format!(
+            "Signal {} [{}]",
+            describe_layout_shape(meta, *element, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Task { error, value } => format!(
+            "Task {} {} [{}]",
+            describe_layout_shape(meta, *error, depth + 1),
+            describe_layout_shape(meta, *value, depth + 1),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::AnonymousDomain {
+            carrier,
+            surface_member,
+        } => format!(
+            "anonymous-domain {} as {} [{}]",
+            describe_layout_shape(meta, *carrier, depth + 1),
+            surface_member,
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Domain { name, arguments } => format!(
+            "domain {}({}) [{}]",
+            name,
+            arguments
+                .iter()
+                .map(|argument| describe_layout_shape(meta, *argument, depth + 1))
+                .collect::<Vec<_>>()
+                .join(", "),
+            meta.layouts()[layout].abi
+        ),
+        LayoutKind::Opaque {
+            item,
+            name,
+            arguments,
+            variants,
+        } => format!(
+            "{}{} opaque<{}>({}) [{}]{}",
+            item.map(|item| format!("item{}:", item.as_raw()))
+                .unwrap_or_default(),
+            name,
+            arguments
+                .iter()
+                .map(|argument| describe_layout_shape(meta, *argument, depth + 1))
+                .collect::<Vec<_>>()
+                .join(", "),
+            variants
+                .iter()
+                .map(|variant| match variant.payload {
+                    Some(payload) => format!(
+                        "{}/{} {}",
+                        variant.name,
+                        variant.field_count,
+                        describe_layout_shape(meta, payload, depth + 1)
+                    ),
+                    None => format!("{}/{}", variant.name, variant.field_count),
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+            meta.layouts()[layout].abi,
+            if variants.is_empty() {
+                meta.named_domain_carrier(layout)
+                    .map_or_else(String::new, |carrier| {
+                        format!(" => {}", describe_layout_shape(meta, carrier, depth + 1))
+                    })
+            } else {
+                String::new()
+            }
+        ),
+    }
+}
+
+pub fn validate_frozen_requested_kernel_abi(
+    meta: &BackendRuntimeMeta,
+    kernel_id: KernelId,
+) -> Result<(), CodegenErrors> {
+    let _ = freeze_requested_kernel_plans(meta, kernel_id)?;
+    Ok(())
+}
+
+fn freeze_requested_kernel_plans(
+    meta: &BackendRuntimeMeta,
+    kernel_id: KernelId,
+) -> Result<(Option<MarshalPlan>, Vec<MarshalPlan>, Option<MarshalPlan>), CodegenErrors> {
+    let Some(kernel) = meta.kernels().get(kernel_id) else {
+        return Err(wrap_native_one(CodegenError::CraneliftModule {
+            kernel: Some(kernel_id),
+            message: format!(
+                "missing kernel {} while freezing requested entry ABI",
+                kernel_id.as_raw()
+            )
+            .into(),
+        }));
+    };
+    Ok((
+        kernel
+            .input_subject
+            .map(|layout| freeze_marshal_plan(meta, kernel_id, layout, "input subject"))
+            .transpose()?,
+        kernel
+            .environment
+            .iter()
+            .enumerate()
+            .map(|(index, &layout)| {
+                freeze_marshal_plan(
+                    meta,
+                    kernel_id,
+                    layout,
+                    &format!("environment argument {index}"),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        Some(freeze_marshal_plan(
+            meta,
+            kernel_id,
+            kernel.result_layout,
+            "result",
+        )?),
+    ))
+}
+
+fn freeze_abi_value_kind(
+    meta: &BackendRuntimeMeta,
+    kernel_id: KernelId,
+    layout: LayoutId,
+    pass_mode: AbiPassMode,
+    detail: &str,
+) -> Result<FrozenAbiValueKind, CodegenErrors> {
+    let kind = match pass_mode {
+        AbiPassMode::ByReference => AbiValueKind::Pointer,
+        AbiPassMode::ByValue => match &meta.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::Unit)
+            | LayoutKind::Primitive(PrimitiveType::Bool) => AbiValueKind::I8,
+            LayoutKind::Primitive(PrimitiveType::Int) => AbiValueKind::I64,
+            LayoutKind::Primitive(PrimitiveType::Float) => AbiValueKind::F64,
+            LayoutKind::Option { element }
+                if frozen_scalar_option_kind_for_layout(meta, *element).is_some() =>
+            {
+                AbiValueKind::I128
+            }
+            LayoutKind::Primitive(other) => {
+                return Err(wrap_native_one(CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout,
+                    detail: format!(
+                        "{detail} uses primitive `{other}`, but frozen replay only materializes Int, Float, Bool, and scalar Option by value"
+                    )
+                    .into(),
+                }))
+            }
+            _ => {
+                return Err(wrap_native_one(CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout,
+                    detail: format!(
+                        "{detail} uses aggregate layout `{}`; frozen replay requires explicit by-reference lowering",
+                        meta.layouts()[layout]
+                    )
+                    .into(),
+                }))
+            }
+        },
+    };
+    Ok(FrozenAbiValueKind::from_runtime(kind))
+}
+
+fn frozen_scalar_option_kind_for_layout(
+    meta: &BackendRuntimeMeta,
+    layout: LayoutId,
+) -> Option<ScalarOptionKind> {
+    match (&meta.layouts()[layout].abi, &meta.layouts()[layout].kind) {
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Int)) => {
+            Some(ScalarOptionKind::Int)
+        }
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Float)) => {
+            Some(ScalarOptionKind::Float)
+        }
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Bool)) => {
+            Some(ScalarOptionKind::Bool)
+        }
+        _ => None,
     }
 }
 

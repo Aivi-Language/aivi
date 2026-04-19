@@ -242,6 +242,15 @@ pub(crate) fn compile_kernel_jit_with_cache_artifact(
     compiler.compile_kernel_jit_with_cache_artifact(kernel_id)
 }
 
+pub(crate) fn diagnose_kernel_jit_cache_artifact_miss(
+    program: &Program,
+    kernel_id: KernelId,
+) -> Result<Option<Box<str>>, CodegenErrors> {
+    validate_backend_program(program)?;
+    let compiler = CraneliftCompiler::new_jit(program).map_err(wrap_one)?;
+    compiler.diagnose_jit_cache_artifact_miss(kernel_id)
+}
+
 pub(crate) fn instantiate_cached_jit_kernel(
     program: &Program,
     kernel_id: KernelId,
@@ -252,17 +261,24 @@ pub(crate) fn instantiate_cached_jit_kernel(
     compiler.replay_cached_jit_kernel(kernel_id, artifact, None)
 }
 
-pub(crate) fn instantiate_cached_jit_kernel_for_replay(
-    program: &Program,
+pub(crate) fn instantiate_cached_jit_kernel_for_runtime_meta(
+    meta: &BackendRuntimeMeta,
     kernel_id: KernelId,
     artifact: &CachedJitKernelArtifact,
 ) -> Result<CompiledJitKernel, CodegenErrors> {
-    let compiler = CraneliftCompiler::new_jit(program).map_err(wrap_one)?;
-    compiler.replay_cached_jit_kernel(
-        kernel_id,
-        artifact,
-        Some(artifact.kernels.iter().map(|kernel| kernel.kernel).collect::<Vec<_>>()),
-    )
+    let replay_host = Program::new();
+    let compiler = CraneliftCompiler::new_jit(&replay_host).map_err(wrap_one)?;
+    compiler.replay_cached_jit_kernel_from_runtime_meta(meta, kernel_id, artifact)
+}
+
+pub(crate) fn instantiate_cached_jit_kernel_for_frozen_abi(
+    frozen_abi: &[u8],
+    kernel_id: KernelId,
+    artifact: &CachedJitKernelArtifact,
+) -> Result<CompiledJitKernel, CodegenErrors> {
+    let replay_host = Program::new();
+    let compiler = CraneliftCompiler::new_jit(&replay_host).map_err(wrap_one)?;
+    compiler.replay_cached_jit_kernel_from_frozen_abi(frozen_abi, kernel_id, artifact)
 }
 
 /// Stable symbol name for one backend kernel.
@@ -403,6 +419,7 @@ enum BuiltinCallPlan {
     SignalApply(SignalApplyPlan),
     ListAppend { element_layout: LayoutId },
     ListMap(ListMapPlan),
+    ListFilter(ListPredicatePlan),
     ListAny(ListPredicatePlan),
     ListFind(ListFindPlan),
     ListFlatMap(ListFlatMapPlan),

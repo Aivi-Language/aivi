@@ -707,6 +707,47 @@ pub fn domain_carrier_type(
     typing.lower_hir_type(domain.carrier, &substitutions)
 }
 
+pub fn opaque_type_carrier_type(
+    module: &Module,
+    item_id: ItemId,
+    arguments: &[GateType],
+) -> Option<GateType> {
+    let Item::Type(type_item) = &module.items()[item_id] else {
+        return None;
+    };
+    let TypeItemBody::Alias(alias) = type_item.body else {
+        return None;
+    };
+    if type_item.parameters.len() != arguments.len() {
+        return None;
+    }
+    let substitutions = type_item
+        .parameters
+        .iter()
+        .copied()
+        .zip(arguments.iter().cloned())
+        .collect::<HashMap<_, _>>();
+    let mut typing = GateTypeContext::new(module);
+    if let TypeKind::Apply { callee, arguments } = &module.types()[alias].kind
+        && let TypeKind::Name(reference) = &module.types()[*callee].kind
+        && matches!(
+            reference.resolution,
+            ResolutionState::Resolved(TypeResolution::Item(resolved)) if resolved == item_id
+        )
+    {
+        let lowered_fields = arguments
+            .iter()
+            .map(|argument| typing.lower_hir_type(*argument, &substitutions))
+            .collect::<Option<Vec<_>>>()?;
+        return match lowered_fields.as_slice() {
+            [] => Some(GateType::Tuple(Vec::new())),
+            [field] => Some(field.clone()),
+            _ => Some(GateType::Tuple(lowered_fields)),
+        };
+    }
+    typing.lower_hir_type(alias, &substitutions)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OpaqueTypeVariant {
     pub name: Box<str>,

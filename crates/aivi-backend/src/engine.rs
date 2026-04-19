@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::{
     BackendRuntimeMeta, CallingConvention, CompiledKernelArtifact, CompiledProgram, EvalFrame,
-    EvaluationError, Item, ItemId, KernelEvaluationProfile, KernelEvaluator, KernelFingerprint,
-    KernelId, Layout, LayoutId, NativeKernelArtifactSet, Pipeline, Program, RuntimeValue, SourceId,
-    SourcePlan,
+    EvaluationError, FrozenBackendCatalog, Item, ItemId, KernelEvaluationProfile, KernelEvaluator,
+    KernelFingerprint, KernelId, Layout, LayoutId, NativeKernelArtifactSet, Pipeline, Program,
+    RuntimeValue, SourceId, SourcePlan,
     cache::{compile_kernel_cached, compile_program_cached},
     codegen::{CodegenErrors, compile_kernel, compile_program, compute_kernel_fingerprint},
     jit::{LazyJitExecutionEngine, NativeOnlyExecutionEngine},
@@ -73,6 +73,7 @@ pub enum BackendExecutionEngineKind {
 pub enum BackendRuntimeView<'a> {
     Program(&'a Program),
     Meta(&'a BackendRuntimeMeta),
+    FrozenCatalog(&'a FrozenBackendCatalog),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -90,6 +91,7 @@ impl<'a> BackendRuntimeView<'a> {
         match self {
             Self::Program(program) => program.items().get(item),
             Self::Meta(meta) => meta.items().get(item),
+            Self::FrozenCatalog(catalog) => catalog.items().get(item),
         }
     }
 
@@ -97,6 +99,7 @@ impl<'a> BackendRuntimeView<'a> {
         match self {
             Self::Program(program) => program.pipelines().get(pipeline),
             Self::Meta(meta) => meta.pipelines().get(pipeline),
+            Self::FrozenCatalog(catalog) => catalog.pipelines().get(pipeline),
         }
     }
 
@@ -104,6 +107,7 @@ impl<'a> BackendRuntimeView<'a> {
         match self {
             Self::Program(program) => program.layouts().get(layout),
             Self::Meta(meta) => meta.layouts().get(layout),
+            Self::FrozenCatalog(catalog) => catalog.layouts().get(layout),
         }
     }
 
@@ -111,6 +115,7 @@ impl<'a> BackendRuntimeView<'a> {
         match self {
             Self::Program(program) => program.sources().get(source),
             Self::Meta(meta) => meta.sources().get(source),
+            Self::FrozenCatalog(catalog) => catalog.sources().get(source),
         }
     }
 
@@ -118,6 +123,7 @@ impl<'a> BackendRuntimeView<'a> {
         match self {
             Self::Program(program) => program.named_domain_carrier(layout),
             Self::Meta(meta) => meta.named_domain_carrier(layout),
+            Self::FrozenCatalog(catalog) => catalog.named_domain_carrier(layout),
         }
     }
 
@@ -152,13 +158,26 @@ impl<'a> BackendRuntimeView<'a> {
                         global_items: kernel_meta.global_items.as_slice(),
                     })
             }
+            Self::FrozenCatalog(catalog) => {
+                catalog
+                    .kernels()
+                    .get(kernel)
+                    .map(|kernel_meta| BackendRuntimeKernelRef {
+                        fingerprint: kernel_meta.fingerprint,
+                        input_subject: kernel_meta.input_subject,
+                        environment: kernel_meta.environment.as_slice(),
+                        result_layout: kernel_meta.result_layout,
+                        convention: &kernel_meta.convention,
+                        global_items: kernel_meta.global_items.as_slice(),
+                    })
+            }
         }
     }
 
     pub fn as_program(self) -> Option<&'a Program> {
         match self {
             Self::Program(program) => Some(program),
-            Self::Meta(_) => None,
+            Self::Meta(_) | Self::FrozenCatalog(_) => None,
         }
     }
 }
@@ -264,6 +283,15 @@ impl<'a> BackendExecutableProgram<'a> {
     pub fn from_runtime_meta(meta: &'a BackendRuntimeMeta) -> Self {
         Self {
             backend: BackendRuntimeView::Meta(meta),
+            compiled_object: None,
+            native_kernels: None,
+            execution_options: BackendExecutionOptions::default(),
+        }
+    }
+
+    pub fn from_frozen_catalog(catalog: &'a FrozenBackendCatalog) -> Self {
+        Self {
+            backend: BackendRuntimeView::FrozenCatalog(catalog),
             compiled_object: None,
             native_kernels: None,
             execution_options: BackendExecutionOptions::default(),
@@ -381,6 +409,13 @@ impl<'a> BackendExecutableProgram<'a> {
                 self.native_kernels,
                 self.execution_options,
             )),
+            BackendRuntimeView::FrozenCatalog(catalog) => {
+                Box::new(NativeOnlyExecutionEngine::new_frozen_catalog(
+                    catalog,
+                    self.native_kernels,
+                    self.execution_options,
+                ))
+            }
         }
     }
 
@@ -407,6 +442,13 @@ impl<'a> BackendExecutableProgram<'a> {
                 self.native_kernels,
                 self.execution_options,
             )),
+            BackendRuntimeView::FrozenCatalog(catalog) => {
+                Box::new(NativeOnlyExecutionEngine::new_profiled_frozen_catalog(
+                    catalog,
+                    self.native_kernels,
+                    self.execution_options,
+                ))
+            }
         }
     }
 }

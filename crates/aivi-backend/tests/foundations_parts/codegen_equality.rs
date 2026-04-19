@@ -1701,7 +1701,7 @@ value user:User = { name: "Ada", active: True }
 }
 
 #[test]
-fn cranelift_codegen_rejects_nonrepresentational_domain_member_calls() {
+fn cranelift_codegen_compiles_ord_backed_domain_gate_predicates() {
     let backend = lower_text(
         "backend-ord-domain-codegen.aivi",
         r#"
@@ -1732,14 +1732,7 @@ signal slowWindows : Signal Window =
      ?|> (.delay > 12ms)
 "#,
     );
-    // The gate predicate still involves domain literals (12ms), which
-    // remain outside the current codegen slice. The comparison is now Ord-backed
-    // rather than a direct domain comparison operator, but the domain literal
-    // expressions still produce UnsupportedExpression errors.
-    let errors = compile_program(&backend)
-        .expect_err("domain literal expressions inside gate predicates should stay unsupported");
-    assert!(
-        !errors.errors().is_empty(),
-        "expected codegen errors for domain literal gate predicate"
-    );
+    let compiled = compile_program(&backend)
+        .expect("Ord-backed domain gate predicates should now compile through Cranelift");
+    assert!(!compiled.object().is_empty());
 }

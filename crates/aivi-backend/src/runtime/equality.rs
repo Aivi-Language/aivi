@@ -4,11 +4,14 @@ pub(crate) fn normalize_signal_kernel_result(
     raw_result: RuntimeValue,
     expected: LayoutId,
 ) -> Result<RuntimeValue, EvaluationError> {
-    let result = match raw_result {
-        RuntimeValue::Signal(value) if value_matches_layout(program, value.as_ref(), expected) => {
+    let result = match (&program.layouts()[expected].kind, raw_result) {
+        (LayoutKind::Signal { element }, value) if value_matches_layout(program, &value, *element) => {
+            value
+        }
+        (_, RuntimeValue::Signal(value)) if value_matches_layout(program, value.as_ref(), expected) => {
             *value
         }
-        value => value,
+        (_, value) => value,
     };
     if !value_matches_layout(program, &result, expected) {
         return Err(EvaluationError::KernelResultLayoutMismatch {
@@ -18,6 +21,15 @@ pub(crate) fn normalize_signal_kernel_result(
         });
     }
     Ok(result)
+}
+
+pub(crate) fn value_matches_layout_with_signal_current(
+    program: &Program,
+    value: &RuntimeValue,
+    layout: LayoutId,
+) -> bool {
+    value_matches_layout(program, value, layout)
+        || matches!(value, RuntimeValue::Signal(inner) if value_matches_layout(program, inner, layout))
 }
 
 pub(crate) fn value_matches_layout(program: &Program, value: &RuntimeValue, layout: LayoutId) -> bool {
@@ -85,6 +97,7 @@ pub(crate) fn value_matches_layout(program: &Program, value: &RuntimeValue, layo
         (LayoutKind::Signal { element }, RuntimeValue::Signal(value)) => {
             value_matches_layout(program, value, *element)
         }
+        (LayoutKind::Signal { element }, value) => value_matches_layout(program, value, *element),
         (LayoutKind::Arrow { .. }, RuntimeValue::Callable(_)) => true,
         (LayoutKind::AnonymousDomain { .. }, RuntimeValue::SuffixedInteger { .. }) => true,
         (LayoutKind::Domain { .. }, RuntimeValue::Signal(_)) => false,
@@ -384,7 +397,7 @@ fn truthy_falsy_payload(
     }
 }
 
-pub(crate) fn coerce_runtime_value(
+pub fn coerce_runtime_value(
     program: &Program,
     value: RuntimeValue,
     layout: LayoutId,
@@ -401,13 +414,38 @@ pub(crate) fn coerce_runtime_value(
     let Some(layout) = program.layouts().get(layout) else {
         return Err(value);
     };
-    let LayoutKind::Signal { element } = &layout.kind else {
-        return Err(value);
-    };
-    if value_matches_layout(program, &value, *element) {
-        Ok(RuntimeValue::Signal(Box::new(value)))
-    } else {
-        Err(value)
+    match &layout.kind {
+        LayoutKind::Option { element } => {
+            if value_matches_layout(program, &value, *element) {
+                Ok(RuntimeValue::OptionSome(Box::new(value)))
+            } else {
+                Err(value)
+            }
+        }
+        LayoutKind::Result { value: ok, error } => {
+            let matches_ok = value_matches_layout(program, &value, *ok);
+            let matches_err = value_matches_layout(program, &value, *error);
+            match (matches_ok, matches_err) {
+                (true, false) => Ok(RuntimeValue::ResultOk(Box::new(value))),
+                (false, true) => Ok(RuntimeValue::ResultErr(Box::new(value))),
+                _ => Err(value),
+            }
+        }
+        LayoutKind::Validation {
+            value: valid,
+            error: invalid,
+        } => {
+            let matches_valid = value_matches_layout(program, &value, *valid);
+            let matches_invalid = value_matches_layout(program, &value, *invalid);
+            match (matches_valid, matches_invalid) {
+                (true, false) => Ok(RuntimeValue::ValidationValid(Box::new(value))),
+                (false, true) => Ok(RuntimeValue::ValidationInvalid(Box::new(value))),
+                _ => Err(value),
+            }
+        }
+        LayoutKind::Signal { element } => coerce_runtime_value(program, value, *element)
+            .map(|inner| RuntimeValue::Signal(Box::new(inner))),
+        _ => Err(value),
     }
 }
 
@@ -496,4 +534,3 @@ fn matches_non_empty_runtime(value: &RuntimeSumValue) -> bool {
         && value.fields.len() == 2
         && matches!(value.fields.get(1), Some(RuntimeValue::List(_)))
 }
-

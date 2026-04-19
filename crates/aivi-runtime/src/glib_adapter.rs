@@ -1519,7 +1519,12 @@ signal phase : Signal Text = wake | trigger
                             .and_then(|globals| globals.get(&phase_item).cloned())
                             == Some(expected_signal_text("timer"))
                 });
-                assert_eq!(driver.failure_count(), 0);
+                if driver.failure_count() != 0 {
+                    panic!(
+                        "unexpected GLib runtime failures before db.live initial value: {:?}",
+                        driver.drain_failures()
+                    );
+                }
                 assert_eq!(
                     driver
                         .current_signal_globals()
@@ -1615,7 +1620,12 @@ signal mirror : Signal Int = count
                 });
                 pump_context(&context, Duration::from_millis(50));
 
-                assert_eq!(driver.failure_count(), 0);
+                if driver.failure_count() != 0 {
+                    panic!(
+                        "unexpected GLib runtime failures after failed db commit: {:?}",
+                        driver.drain_failures()
+                    );
+                }
                 assert_eq!(
                     driver.current_signal_value(mirror_signal).unwrap(),
                     Some(expected_runtime_int(1))
@@ -1954,7 +1964,12 @@ value failInsert : Task Text Unit =
                             .flatten()
                             .is_some()
                 });
-                assert_eq!(driver.failure_count(), 0);
+                if driver.failure_count() != 0 {
+                    panic!(
+                        "unexpected GLib runtime failures before db.live initial value: {:?}",
+                        driver.drain_failures()
+                    );
+                }
                 let rows_before = driver
                     .current_signal_value(rows_signal)
                     .expect("db.live source value should be readable")
@@ -1983,7 +1998,12 @@ value failInsert : Task Text Unit =
                             .is_some()
                 });
 
-                assert_eq!(driver.failure_count(), 0);
+                if driver.failure_count() != 0 {
+                    panic!(
+                        "unexpected GLib runtime failures after failed db commit: {:?}",
+                        driver.drain_failures()
+                    );
+                }
                 assert_eq!(
                     driver
                         .current_signal_value(rows_signal)

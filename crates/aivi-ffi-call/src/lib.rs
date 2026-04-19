@@ -334,6 +334,10 @@ pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
     match symbol {
         "aivi_arena_alloc" => Some(aivi_arena_alloc as *const () as *const u8),
         "aivi_text_concat" => Some(aivi_text_concat as *const () as *const u8),
+        "aivi_int_to_text" => Some(aivi_int_to_text as *const () as *const u8),
+        "aivi_float_to_text" => Some(aivi_float_to_text as *const () as *const u8),
+        "aivi_bool_to_text" => Some(aivi_bool_to_text as *const () as *const u8),
+        "aivi_unit_to_text" => Some(aivi_unit_to_text as *const () as *const u8),
         "aivi_bytes_append" => Some(aivi_bytes_append as *const () as *const u8),
         "aivi_path_join" => Some(aivi_path_join as *const () as *const u8),
         "aivi_bytes_repeat" => Some(aivi_bytes_repeat as *const () as *const u8),
@@ -464,6 +468,28 @@ extern "C" fn aivi_text_concat(count: i64, segments: *const *const u8) -> *const
         arena.store_len_prefixed_bytes(&joined).cast()
     })
     .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_int_to_text(value: i64) -> *const u8 {
+    with_current_arena(|arena| arena.store_len_prefixed_bytes(value.to_string().as_bytes()).cast())
+        .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_float_to_text(value: f64) -> *const u8 {
+    with_current_arena(|arena| arena.store_len_prefixed_bytes(value.to_string().as_bytes()).cast())
+        .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_bool_to_text(value: i8) -> *const u8 {
+    with_current_arena(|arena| {
+        let rendered = if value == 0 { "False" } else { "True" };
+        arena.store_len_prefixed_bytes(rendered.as_bytes()).cast()
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_unit_to_text(_: i8) -> *const u8 {
+    with_current_arena(|arena| arena.store_len_prefixed_bytes(b"()").cast()).unwrap_or(ptr::null())
 }
 
 extern "C" fn aivi_bytes_append(left: *const u8, right: *const u8) -> *const u8 {
@@ -1103,5 +1129,39 @@ mod tests {
         let pointer = with_active_arena(Rc::clone(&arena), || aivi_arena_alloc(24, 16));
         assert!(!pointer.is_null());
         assert_eq!((pointer as usize) % 16, 0);
+    }
+
+    #[test]
+    fn scalar_text_helpers_render_runtime_display_forms() {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let int_text = with_active_arena(Rc::clone(&arena), || aivi_int_to_text(42));
+        let float_text = with_active_arena(Rc::clone(&arena), || aivi_float_to_text(3.5));
+        let bool_text = with_active_arena(Rc::clone(&arena), || aivi_bool_to_text(1));
+        let unit_text = with_active_arena(Rc::clone(&arena), || aivi_unit_to_text(0));
+
+        assert_eq!(
+            decode_len_prefixed_bytes(int_text.cast())
+                .expect("int text should decode")
+                .as_ref(),
+            b"42".as_slice()
+        );
+        assert_eq!(
+            decode_len_prefixed_bytes(float_text.cast())
+                .expect("float text should decode")
+                .as_ref(),
+            b"3.5".as_slice()
+        );
+        assert_eq!(
+            decode_len_prefixed_bytes(bool_text.cast())
+                .expect("bool text should decode")
+                .as_ref(),
+            b"True".as_slice()
+        );
+        assert_eq!(
+            decode_len_prefixed_bytes(unit_text.cast())
+                .expect("unit text should decode")
+                .as_ref(),
+            b"()".as_slice()
+        );
     }
 }

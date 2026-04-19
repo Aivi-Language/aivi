@@ -239,6 +239,33 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         ))
     }
 
+    fn diagnose_jit_cache_artifact_miss(
+        mut self,
+        kernel_id: KernelId,
+    ) -> Result<Option<Box<str>>, CodegenErrors> {
+        let kernel_ids = jit_dependency_kernel_ids(self.program, kernel_id).map_err(wrap_one)?;
+        self.prevalidate_kernels(kernel_ids.iter().copied())?;
+        self.declare_kernels(kernel_ids.iter().copied(), KernelLinkage::Local)?;
+        let built_kernels = self.build_kernels(kernel_ids.iter().copied())?;
+        let emit_inputs = self.compile_machine_code(built_kernels)?;
+        for (built, _) in emit_inputs {
+            let compiled = built
+                .ctx
+                .compiled_code()
+                .expect("compilation succeeded in phase 3");
+            let relocs: Vec<ModuleReloc> = compiled
+                .buffer
+                .relocs()
+                .iter()
+                .map(|reloc| ModuleReloc::from_mach_reloc(reloc, &built.ctx.func, built.func_id))
+                .collect();
+            if let Some(reason) = self.cacheable_jit_kernel_reason(built.kernel_id, &relocs) {
+                return Ok(Some(reason));
+            }
+        }
+        Ok(None)
+    }
+
     fn replay_cached_jit_kernel(
         mut self,
         requested_kernel: KernelId,
@@ -349,6 +376,218 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         })
     }
 
+    fn replay_cached_jit_kernel_from_runtime_meta(
+        mut self,
+        meta: &BackendRuntimeMeta,
+        requested_kernel: KernelId,
+        artifact: &CachedJitKernelArtifact,
+    ) -> Result<CompiledJitKernel, CodegenErrors> {
+        let kernel_ids = artifact
+            .kernels
+            .iter()
+            .map(|kernel| kernel.kernel)
+            .collect::<Vec<_>>();
+        if artifact.requested_kernel != requested_kernel {
+            return Err(wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: "cached JIT artifact does not match the requested kernel".into(),
+            }));
+        }
+
+        self.prevalidate_replay_kernels(meta, kernel_ids.iter().copied())?;
+        self.declare_replay_kernels(meta, kernel_ids.iter().copied(), KernelLinkage::Local)?;
+        for slot in &artifact.signal_slots {
+            self.declare_replay_signal_item_slot(slot.item, slot.layout)
+                .map_err(wrap_one)?;
+        }
+        for slot in &artifact.imported_item_slots {
+            self.declare_replay_imported_item_slot(slot.item, slot.layout)
+                .map_err(wrap_one)?;
+        }
+        for descriptor in &artifact.callable_descriptors {
+            self.declare_replay_callable_item_descriptor(
+                meta,
+                descriptor.item,
+                descriptor.body,
+                descriptor.arity as usize,
+            )
+            .map_err(wrap_one)?;
+        }
+        for symbol in &artifact.external_funcs {
+            self.ensure_named_external_func_declared(symbol)
+                .map_err(wrap_one)?;
+        }
+        for literal in &artifact.literal_data {
+            self.define_cached_literal_data(&literal.symbol, literal.bytes.clone(), literal.align)
+                .map_err(wrap_one)?;
+        }
+
+        let alignment = self.module.isa().function_alignment().minimum as u64;
+        let mut requested_func_id = None;
+        for kernel in &artifact.kernels {
+            let func_id = self
+                .declared_functions
+                .get(&kernel.kernel)
+                .copied()
+                .expect("replayed JIT kernels were declared before machine code definition");
+            let relocs = kernel
+                .relocs
+                .iter()
+                .map(|reloc| self.materialize_cached_jit_reloc(reloc))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(wrap_one)?;
+            self.module
+                .define_function_bytes(func_id, alignment, kernel.bytes.as_ref(), &relocs)
+                .map_err(|error| {
+                    wrap_one(CodegenError::CraneliftModule {
+                        kernel: Some(kernel.kernel),
+                        message: error.to_string().into_boxed_str(),
+                    })
+                })?;
+            if kernel.kernel == requested_kernel {
+                requested_func_id = Some(func_id);
+            }
+        }
+
+        self.ensure_supported_jit_externals(requested_kernel)
+            .map_err(wrap_one)?;
+        let requested_func_id = requested_func_id.ok_or_else(|| {
+            wrap_one(CodegenError::MissingKernel {
+                kernel: requested_kernel,
+            })
+        })?;
+        let (signal_slots, imported_item_slots) =
+            self.materialize_replay_jit_data_slots(meta, requested_kernel)?;
+        self.module.finalize_definitions().map_err(|error| {
+            wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: error.to_string().into_boxed_str(),
+            })
+        })?;
+        let function = self.module.get_finalized_function(requested_func_id);
+        let caller = FunctionCaller::new(
+            self.build_replay_jit_call_signature(meta, requested_kernel)
+                .map_err(wrap_one)?,
+        );
+
+        Ok(CompiledJitKernel {
+            function,
+            caller,
+            signal_slots,
+            imported_item_slots,
+            _module: self.module,
+        })
+    }
+
+    fn replay_cached_jit_kernel_from_frozen_abi(
+        mut self,
+        frozen_abi: &[u8],
+        requested_kernel: KernelId,
+        artifact: &CachedJitKernelArtifact,
+    ) -> Result<CompiledJitKernel, CodegenErrors> {
+        let abi = crate::jit::decode_frozen_native_kernel_abi(frozen_abi).ok_or_else(|| {
+            wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: "cached JIT artifact carries an invalid frozen ABI payload".into(),
+            })
+        })?;
+        let kernel_ids = artifact
+            .kernels
+            .iter()
+            .map(|kernel| kernel.kernel)
+            .collect::<Vec<_>>();
+        if artifact.requested_kernel != requested_kernel || abi.requested_kernel != requested_kernel {
+            return Err(wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: "cached JIT artifact does not match the requested kernel".into(),
+            }));
+        }
+
+        self.prevalidate_frozen_replay_kernels(&abi, kernel_ids.iter().copied())?;
+        self.declare_frozen_replay_kernels(&abi, kernel_ids.iter().copied(), KernelLinkage::Local)?;
+        for slot in &abi.signal_slots {
+            self.declare_replay_signal_item_slot(slot.item, slot.layout)
+                .map_err(wrap_one)?;
+        }
+        for slot in &abi.imported_item_slots {
+            self.declare_replay_imported_item_slot(slot.item, slot.layout)
+                .map_err(wrap_one)?;
+        }
+        for descriptor in &artifact.callable_descriptors {
+            self.declare_frozen_replay_callable_item_descriptor(
+                &abi,
+                descriptor.item,
+                descriptor.body,
+                descriptor.arity as usize,
+            )
+            .map_err(wrap_one)?;
+        }
+        for symbol in &artifact.external_funcs {
+            self.ensure_named_external_func_declared(symbol)
+                .map_err(wrap_one)?;
+        }
+        for literal in &artifact.literal_data {
+            self.define_cached_literal_data(&literal.symbol, literal.bytes.clone(), literal.align)
+                .map_err(wrap_one)?;
+        }
+
+        let alignment = self.module.isa().function_alignment().minimum as u64;
+        let mut requested_func_id = None;
+        for kernel in &artifact.kernels {
+            let func_id = self
+                .declared_functions
+                .get(&kernel.kernel)
+                .copied()
+                .expect("replayed JIT kernels were declared before machine code definition");
+            let relocs = kernel
+                .relocs
+                .iter()
+                .map(|reloc| self.materialize_cached_jit_reloc(reloc))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(wrap_one)?;
+            self.module
+                .define_function_bytes(func_id, alignment, kernel.bytes.as_ref(), &relocs)
+                .map_err(|error| {
+                    wrap_one(CodegenError::CraneliftModule {
+                        kernel: Some(kernel.kernel),
+                        message: error.to_string().into_boxed_str(),
+                    })
+                })?;
+            if kernel.kernel == requested_kernel {
+                requested_func_id = Some(func_id);
+            }
+        }
+
+        self.ensure_supported_jit_externals(requested_kernel)
+            .map_err(wrap_one)?;
+        let requested_func_id = requested_func_id.ok_or_else(|| {
+            wrap_one(CodegenError::MissingKernel {
+                kernel: requested_kernel,
+            })
+        })?;
+        let (signal_slots, imported_item_slots) =
+            self.materialize_frozen_jit_data_slots(&abi, requested_kernel)?;
+        self.module.finalize_definitions().map_err(|error| {
+            wrap_one(CodegenError::CraneliftModule {
+                kernel: Some(requested_kernel),
+                message: error.to_string().into_boxed_str(),
+            })
+        })?;
+        let function = self.module.get_finalized_function(requested_func_id);
+        let caller = FunctionCaller::new(
+            self.build_frozen_replay_jit_call_signature(&abi, requested_kernel)
+                .map_err(wrap_one)?,
+        );
+
+        Ok(CompiledJitKernel {
+            function,
+            caller,
+            signal_slots,
+            imported_item_slots,
+            _module: self.module,
+        })
+    }
+
     fn build_cached_jit_artifact(
         &self,
         requested_kernel: KernelId,
@@ -406,6 +645,27 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         })
     }
 
+    fn cacheable_jit_kernel_reason(
+        &self,
+        kernel: KernelId,
+        relocs: &[ModuleReloc],
+    ) -> Option<Box<str>> {
+        for reloc in relocs {
+            if self.cacheable_jit_reloc(reloc).is_none() {
+                return Some(
+                    format!(
+                        "kernel {} cannot produce a cache artifact because relocation {} targets unsupported {}",
+                        kernel.as_raw(),
+                        reloc.offset,
+                        self.describe_cacheable_jit_reloc_target(&reloc.name)
+                    )
+                    .into_boxed_str(),
+                );
+            }
+        }
+        None
+    }
+
     fn cacheable_jit_reloc(&self, reloc: &ModuleReloc) -> Option<CachedJitReloc> {
         Some(CachedJitReloc {
             offset: reloc.offset,
@@ -447,6 +707,19 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
             ModuleRelocTarget::User { .. } => None,
         };
         cached
+    }
+
+    fn describe_cacheable_jit_reloc_target(&self, target: &ModuleRelocTarget) -> String {
+        match target {
+            ModuleRelocTarget::User { namespace, index } => {
+                format!("user relocation namespace {namespace} index {index}")
+            }
+            ModuleRelocTarget::FunctionOffset(func_id, offset) => {
+                format!("function offset func{}+{}", func_id.as_u32(), offset)
+            }
+            ModuleRelocTarget::LibCall(libcall) => format!("libcall `{libcall}`"),
+            ModuleRelocTarget::KnownSymbol(symbol) => format!("known symbol `{symbol}`"),
+        }
     }
 
     fn cacheable_jit_function_target(&self, func_id: FuncId) -> Option<CachedJitFunctionTarget> {
@@ -867,4 +1140,679 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
             }
         }
     }
+
+    fn prevalidate_replay_kernels<I>(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_ids: I,
+    ) -> Result<(), CodegenErrors>
+    where
+        I: IntoIterator<Item = KernelId>,
+    {
+        let mut errors = Vec::new();
+        for kernel_id in kernel_ids {
+            if meta.kernels().get(kernel_id).is_none() {
+                errors.push(CodegenError::MissingKernel { kernel: kernel_id });
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CodegenErrors::new(errors))
+        }
+    }
+
+    fn prevalidate_frozen_replay_kernels<I>(
+        &self,
+        abi: &FrozenNativeKernelArtifactAbi,
+        kernel_ids: I,
+    ) -> Result<(), CodegenErrors>
+    where
+        I: IntoIterator<Item = KernelId>,
+    {
+        let mut errors = Vec::new();
+        for kernel_id in kernel_ids {
+            if abi.kernels.iter().all(|kernel| kernel.kernel != kernel_id) {
+                errors.push(CodegenError::MissingKernel { kernel: kernel_id });
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CodegenErrors::new(errors))
+        }
+    }
+
+    fn declare_replay_kernels<I>(
+        &mut self,
+        meta: &BackendRuntimeMeta,
+        kernel_ids: I,
+        linkage: KernelLinkage,
+    ) -> Result<(), CodegenErrors>
+    where
+        I: IntoIterator<Item = KernelId>,
+    {
+        let mut declaration_errors = Vec::new();
+        for kernel_id in kernel_ids {
+            if let Err(error) = self.ensure_replay_kernel_declared(meta, kernel_id, linkage) {
+                declaration_errors.push(error);
+            }
+        }
+        if declaration_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CodegenErrors::new(declaration_errors))
+        }
+    }
+
+    fn declare_frozen_replay_kernels<I>(
+        &mut self,
+        abi: &FrozenNativeKernelArtifactAbi,
+        kernel_ids: I,
+        linkage: KernelLinkage,
+    ) -> Result<(), CodegenErrors>
+    where
+        I: IntoIterator<Item = KernelId>,
+    {
+        let mut declaration_errors = Vec::new();
+        for kernel_id in kernel_ids {
+            if let Err(error) = self.ensure_frozen_replay_kernel_declared(abi, kernel_id, linkage) {
+                declaration_errors.push(error);
+            }
+        }
+        if declaration_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(CodegenErrors::new(declaration_errors))
+        }
+    }
+
+    fn ensure_replay_kernel_declared(
+        &mut self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        linkage: KernelLinkage,
+    ) -> Result<FuncId, CodegenError> {
+        if let Some(func_id) = self.declared_functions.get(&kernel_id).copied() {
+            return Ok(func_id);
+        }
+        let kernel = meta
+            .kernels()
+            .get(kernel_id)
+            .ok_or(CodegenError::MissingKernel { kernel: kernel_id })?;
+        let signature = self.build_replay_signature(meta, kernel_id, kernel)?;
+        let symbol = replay_kernel_symbol(kernel_id);
+        let func_id = self
+            .module
+            .declare_function(&symbol, linkage.into_cranelift(), &signature)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(kernel_id),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_functions.insert(kernel_id, func_id);
+        Ok(func_id)
+    }
+
+    fn ensure_frozen_replay_kernel_declared(
+        &mut self,
+        abi: &FrozenNativeKernelArtifactAbi,
+        kernel_id: KernelId,
+        linkage: KernelLinkage,
+    ) -> Result<FuncId, CodegenError> {
+        if let Some(func_id) = self.declared_functions.get(&kernel_id).copied() {
+            return Ok(func_id);
+        }
+        let kernel = abi
+            .kernels
+            .iter()
+            .find(|kernel| kernel.kernel == kernel_id)
+            .ok_or(CodegenError::MissingKernel { kernel: kernel_id })?;
+        let signature = self.build_frozen_replay_signature(kernel_id, kernel)?;
+        let symbol = replay_kernel_symbol(kernel_id);
+        let func_id = self
+            .module
+            .declare_function(&symbol, linkage.into_cranelift(), &signature)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(kernel_id),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_functions.insert(kernel_id, func_id);
+        Ok(func_id)
+    }
+
+    fn build_replay_signature(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        kernel: &RuntimeKernelMeta,
+    ) -> Result<cranelift_codegen::ir::Signature, CodegenError> {
+        let mut signature = self.module.make_signature();
+        match kernel.convention.kind {
+            CallingConventionKind::RuntimeKernelV1 => {}
+        }
+        for (index, parameter) in kernel.convention.parameters.iter().enumerate() {
+            let ty = self.materialize_replay_signature_type(
+                meta,
+                kernel_id,
+                parameter.layout,
+                parameter.pass_mode,
+                &format!("parameter {}", index),
+            )?;
+            signature.params.push(AbiParam::new(ty));
+        }
+        let result = self.materialize_replay_signature_type(
+            meta,
+            kernel_id,
+            kernel.convention.result.layout,
+            kernel.convention.result.pass_mode,
+            "result",
+        )?;
+        signature.returns.push(AbiParam::new(result));
+        Ok(signature)
+    }
+
+    fn build_frozen_replay_signature(
+        &self,
+        _kernel_id: KernelId,
+        kernel: &FrozenKernelAbi,
+    ) -> Result<cranelift_codegen::ir::Signature, CodegenError> {
+        let mut signature = self.module.make_signature();
+        for parameter in &kernel.parameter_kinds {
+            signature.params.push(AbiParam::new(
+                self.materialize_frozen_signature_type(parameter.into_runtime()),
+            ));
+        }
+        signature.params.shrink_to_fit();
+        signature.returns.push(AbiParam::new(
+            self.materialize_frozen_signature_type(kernel.result_kind.into_runtime()),
+        ));
+        Ok(signature)
+    }
+
+    fn materialize_frozen_signature_type(
+        &self,
+        kind: AbiValueKind,
+    ) -> cranelift_codegen::ir::Type {
+        match kind {
+            AbiValueKind::Pointer => self.pointer_type(),
+            AbiValueKind::I8 => types::I8,
+            AbiValueKind::I64 => types::I64,
+            AbiValueKind::I128 => types::I128,
+            AbiValueKind::F64 => types::F64,
+        }
+    }
+
+    fn materialize_replay_signature_type(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        layout: LayoutId,
+        pass_mode: AbiPassMode,
+        detail: &str,
+    ) -> Result<cranelift_codegen::ir::Type, CodegenError> {
+        Ok(self.replay_abi_shape(meta, kernel_id, layout, pass_mode, detail)?.ty)
+    }
+
+    fn replay_field_abi_shape(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        layout: LayoutId,
+        detail: &str,
+    ) -> Result<AbiShape, CodegenError> {
+        self.replay_abi_shape(meta, kernel_id, layout, meta.layouts()[layout].abi, detail)
+    }
+
+    fn replay_abi_shape(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        layout: LayoutId,
+        pass_mode: AbiPassMode,
+        detail: &str,
+    ) -> Result<AbiShape, CodegenError> {
+        match pass_mode {
+            AbiPassMode::ByReference => {
+                let ty = self.pointer_type();
+                let bytes = ty.bytes();
+                Ok(AbiShape {
+                    ty,
+                    size: bytes,
+                    align: bytes,
+                })
+            }
+            AbiPassMode::ByValue => match &meta.layouts()[layout].kind {
+                LayoutKind::Primitive(PrimitiveType::Unit) => Ok(AbiShape {
+                    ty: types::I8,
+                    size: 1,
+                    align: 1,
+                }),
+                LayoutKind::Primitive(PrimitiveType::Int) => Ok(AbiShape {
+                    ty: types::I64,
+                    size: 8,
+                    align: 8,
+                }),
+                LayoutKind::Primitive(PrimitiveType::Float) => Ok(AbiShape {
+                    ty: types::F64,
+                    size: 8,
+                    align: 8,
+                }),
+                LayoutKind::Primitive(PrimitiveType::Bool) => Ok(AbiShape {
+                    ty: types::I8,
+                    size: 1,
+                    align: 1,
+                }),
+                LayoutKind::Option { element }
+                    if replay_scalar_option_kind_for_layout(meta, *element).is_some() =>
+                {
+                    Ok(AbiShape {
+                        ty: types::I128,
+                        size: 16,
+                        align: 16,
+                    })
+                }
+                LayoutKind::Primitive(other) => Err(CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout,
+                    detail: format!(
+                        "{detail} uses primitive `{other}`, but replay JIT only materializes Int, Float, Bool, and scalar Option by value"
+                    )
+                    .into_boxed_str(),
+                }),
+                _ => Err(CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout,
+                    detail: format!(
+                        "{detail} uses aggregate layout `{}`; replay JIT still requires explicit by-reference lowering",
+                        meta.layouts()[layout]
+                    )
+                    .into_boxed_str(),
+                }),
+            },
+        }
+    }
+
+    fn declare_replay_signal_item_slot(
+        &mut self,
+        item: ItemId,
+        layout: LayoutId,
+    ) -> Result<DataId, CodegenError> {
+        if let Some(data_id) = self.declared_signal_slots.get(&item).copied() {
+            return Ok(data_id);
+        }
+        let symbol = replay_signal_slot_symbol(item);
+        let data_id = self
+            .module
+            .declare_data(&symbol, Linkage::Import, false, false)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: None,
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_signal_slots.insert(item, data_id);
+        self.signal_slot_layouts.insert(item, layout);
+        Ok(data_id)
+    }
+
+    fn declare_replay_imported_item_slot(
+        &mut self,
+        item: ItemId,
+        layout: LayoutId,
+    ) -> Result<DataId, CodegenError> {
+        if let Some(data_id) = self.declared_imported_item_slots.get(&item).copied() {
+            return Ok(data_id);
+        }
+        let symbol = replay_imported_item_slot_symbol(item);
+        let data_id = self
+            .module
+            .declare_data(&symbol, Linkage::Import, false, false)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: None,
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_imported_item_slots.insert(item, data_id);
+        self.imported_item_slot_layouts.insert(item, layout);
+        Ok(data_id)
+    }
+
+    fn declare_replay_callable_item_descriptor(
+        &mut self,
+        meta: &BackendRuntimeMeta,
+        item: ItemId,
+        body: KernelId,
+        arity: usize,
+    ) -> Result<DataId, CodegenError> {
+        if let Some(data_id) = self.declared_callable_descriptors.get(&item).copied() {
+            return Ok(data_id);
+        }
+        let func_id = self.ensure_replay_kernel_declared(meta, body, KernelLinkage::Import)?;
+        let symbol = replay_callable_descriptor_symbol(item);
+        let data_id = self
+            .module
+            .declare_data(&symbol, Linkage::Local, false, false)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(body),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        let pointer_bytes = self.pointer_type().bytes() as usize;
+        let mut bytes = vec![0; pointer_bytes + 16];
+        write_u32_le(&mut bytes, pointer_bytes, item.as_raw());
+        write_u32_le(&mut bytes, pointer_bytes + 4, body.as_raw());
+        write_u32_le(
+            &mut bytes,
+            pointer_bytes + 8,
+            u32::try_from(arity).map_err(|_| CodegenError::CraneliftModule {
+                kernel: Some(body),
+                message: format!(
+                    "item callable descriptor for item{item} exceeds the current 32-bit arity metadata bound"
+                )
+                .into_boxed_str(),
+            })?,
+        );
+        write_u32_le(&mut bytes, pointer_bytes + 12, 1);
+
+        let mut data = DataDescription::new();
+        data.define(bytes.into_boxed_slice());
+        data.set_align(u64::from(self.pointer_type().bytes()).max(8));
+        let func = self.module.declare_func_in_data(func_id, &mut data);
+        data.write_function_addr(0, func);
+        self.module
+            .define_data(data_id, &data)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(body),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_callable_descriptors.insert(item, data_id);
+        self.callable_descriptor_specs.insert(item, (body, arity));
+        Ok(data_id)
+    }
+
+    fn declare_frozen_replay_callable_item_descriptor(
+        &mut self,
+        abi: &FrozenNativeKernelArtifactAbi,
+        item: ItemId,
+        body: KernelId,
+        arity: usize,
+    ) -> Result<DataId, CodegenError> {
+        if let Some(data_id) = self.declared_callable_descriptors.get(&item).copied() {
+            return Ok(data_id);
+        }
+        let func_id = self.ensure_frozen_replay_kernel_declared(abi, body, KernelLinkage::Import)?;
+        let symbol = replay_callable_descriptor_symbol(item);
+        let data_id = self
+            .module
+            .declare_data(&symbol, Linkage::Local, false, false)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(body),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        let pointer_bytes = self.pointer_type().bytes() as usize;
+        let mut bytes = vec![0; pointer_bytes + 16];
+        write_u32_le(&mut bytes, pointer_bytes, item.as_raw());
+        write_u32_le(&mut bytes, pointer_bytes + 4, body.as_raw());
+        write_u32_le(
+            &mut bytes,
+            pointer_bytes + 8,
+            u32::try_from(arity).map_err(|_| CodegenError::CraneliftModule {
+                kernel: Some(body),
+                message: format!(
+                    "item callable descriptor for item{item} exceeds the current 32-bit arity metadata bound"
+                )
+                .into_boxed_str(),
+            })?,
+        );
+        write_u32_le(&mut bytes, pointer_bytes + 12, 1);
+
+        let mut data = DataDescription::new();
+        data.define(bytes.into_boxed_slice());
+        data.set_align(u64::from(self.pointer_type().bytes()).max(8));
+        let func = self.module.declare_func_in_data(func_id, &mut data);
+        data.write_function_addr(0, func);
+        self.module
+            .define_data(data_id, &data)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: Some(body),
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_callable_descriptors.insert(item, data_id);
+        self.callable_descriptor_specs.insert(item, (body, arity));
+        Ok(data_id)
+    }
+
+    fn materialize_replay_jit_data_slots(
+        &mut self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+    ) -> Result<(Vec<JitDataSlot>, Vec<JitDataSlot>), CodegenErrors> {
+        let Some(symbols) = self.jit_symbols.as_ref() else {
+            return Err(wrap_one(CodegenError::JitModuleCreation {
+                message: "JIT compiler was created without a symbol table".into(),
+            }));
+        };
+        let mut symbol_table = symbols.lock().map_err(|_| {
+            wrap_one(CodegenError::JitModuleCreation {
+                message: "JIT symbol table is poisoned".into(),
+            })
+        })?;
+        let signal_slots = self.build_replay_jit_slots(
+            meta,
+            kernel_id,
+            &self.signal_slot_layouts,
+            replay_signal_slot_symbol,
+            &mut symbol_table,
+        )?;
+        let imported_item_slots = self.build_replay_jit_slots(
+            meta,
+            kernel_id,
+            &self.imported_item_slot_layouts,
+            replay_imported_item_slot_symbol,
+            &mut symbol_table,
+        )?;
+        Ok((signal_slots, imported_item_slots))
+    }
+
+    fn materialize_frozen_jit_data_slots(
+        &mut self,
+        abi: &FrozenNativeKernelArtifactAbi,
+        kernel_id: KernelId,
+    ) -> Result<(Vec<JitDataSlot>, Vec<JitDataSlot>), CodegenErrors> {
+        let Some(symbols) = self.jit_symbols.as_ref() else {
+            return Err(wrap_one(CodegenError::JitModuleCreation {
+                message: "JIT compiler was created without a symbol table".into(),
+            }));
+        };
+        let mut symbol_table = symbols.lock().map_err(|_| {
+            wrap_one(CodegenError::JitModuleCreation {
+                message: "JIT symbol table is poisoned".into(),
+            })
+        })?;
+        let signal_slots = self.build_frozen_jit_slots(
+            kernel_id,
+            &abi.signal_slots,
+            replay_signal_slot_symbol,
+            &mut symbol_table,
+        )?;
+        let imported_item_slots = self.build_frozen_jit_slots(
+            kernel_id,
+            &abi.imported_item_slots,
+            replay_imported_item_slot_symbol,
+            &mut symbol_table,
+        )?;
+        Ok((signal_slots, imported_item_slots))
+    }
+
+    fn build_replay_jit_slots(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        layouts: &BTreeMap<ItemId, LayoutId>,
+        symbol_for: impl Fn(ItemId) -> String,
+        symbol_table: &mut BTreeMap<Box<str>, usize>,
+    ) -> Result<Vec<JitDataSlot>, CodegenErrors> {
+        let mut slots = Vec::with_capacity(layouts.len());
+        let mut errors = Vec::new();
+        for (&item, &layout) in layouts {
+            match self.replay_field_abi_shape(meta, kernel_id, layout, "JIT imported data slot") {
+                Ok(abi) => {
+                    let mut cell = vec![0u8; abi.size as usize].into_boxed_slice();
+                    let symbol: Box<str> = symbol_for(item).into_boxed_str();
+                    symbol_table.insert(symbol.clone(), cell.as_mut_ptr() as usize);
+                    slots.push(JitDataSlot { item, layout, cell });
+                }
+                Err(error) => errors.push(error),
+            }
+        }
+        if errors.is_empty() {
+            Ok(slots)
+        } else {
+            Err(CodegenErrors::new(errors))
+        }
+    }
+
+    fn build_frozen_jit_slots(
+        &self,
+        kernel_id: KernelId,
+        slots: &[FrozenDataSlotAbi],
+        symbol_for: impl Fn(ItemId) -> String,
+        symbol_table: &mut BTreeMap<Box<str>, usize>,
+    ) -> Result<Vec<JitDataSlot>, CodegenErrors> {
+        let mut built = Vec::with_capacity(slots.len());
+        let mut errors = Vec::new();
+        for slot in slots {
+            match usize::try_from(slot.cell_size) {
+                Ok(cell_size) => {
+                    let mut cell = vec![0u8; cell_size].into_boxed_slice();
+                    let symbol: Box<str> = symbol_for(slot.item).into_boxed_str();
+                    symbol_table.insert(symbol.clone(), cell.as_mut_ptr() as usize);
+                    built.push(JitDataSlot {
+                        item: slot.item,
+                        layout: slot.layout,
+                        cell,
+                    });
+                }
+                Err(_) => errors.push(CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: format!(
+                        "frozen JIT slot for item{} uses an unsupported cell size {}",
+                        slot.item.as_raw(),
+                        slot.cell_size
+                    )
+                    .into(),
+                }),
+            }
+        }
+        if errors.is_empty() {
+            Ok(built)
+        } else {
+            Err(CodegenErrors::new(errors))
+        }
+    }
+
+    fn build_replay_jit_call_signature(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+    ) -> Result<CallSignature, CodegenError> {
+        let kernel = meta
+            .kernels()
+            .get(kernel_id)
+            .ok_or(CodegenError::MissingKernel { kernel: kernel_id })?;
+        let mut args = Vec::with_capacity(kernel.convention.parameters.len());
+        for (index, parameter) in kernel.convention.parameters.iter().enumerate() {
+            args.push(self.replay_jit_abi_value_kind_for_pass(
+                meta,
+                kernel_id,
+                parameter.layout,
+                parameter.pass_mode,
+                &format!("JIT entry parameter {index}"),
+            )?);
+        }
+        let result = self.replay_jit_abi_value_kind_for_pass(
+            meta,
+            kernel_id,
+            kernel.convention.result.layout,
+            kernel.convention.result.pass_mode,
+            "JIT entry result",
+        )?;
+        Ok(CallSignature::new(args, result))
+    }
+
+    fn build_frozen_replay_jit_call_signature(
+        &self,
+        abi: &FrozenNativeKernelArtifactAbi,
+        kernel_id: KernelId,
+    ) -> Result<CallSignature, CodegenError> {
+        let kernel = abi
+            .kernels
+            .iter()
+            .find(|kernel| kernel.kernel == kernel_id)
+            .ok_or(CodegenError::MissingKernel { kernel: kernel_id })?;
+        let args = kernel
+            .parameter_kinds
+            .iter()
+            .map(|kind| kind.into_runtime())
+            .collect::<Vec<_>>();
+        Ok(CallSignature::new(args, kernel.result_kind.into_runtime()))
+    }
+
+    fn replay_jit_abi_value_kind_for_pass(
+        &self,
+        meta: &BackendRuntimeMeta,
+        kernel_id: KernelId,
+        layout: LayoutId,
+        pass: AbiPassMode,
+        detail: &str,
+    ) -> Result<AbiValueKind, CodegenError> {
+        match pass {
+            AbiPassMode::ByReference => Ok(AbiValueKind::Pointer),
+            AbiPassMode::ByValue => {
+                let abi = self.replay_field_abi_shape(meta, kernel_id, layout, detail)?;
+                match abi.ty {
+                    types::I8 => Ok(AbiValueKind::I8),
+                    types::I64 => Ok(AbiValueKind::I64),
+                    types::I128 => Ok(AbiValueKind::I128),
+                    types::F64 => Ok(AbiValueKind::F64),
+                    other => Err(CodegenError::UnsupportedLayout {
+                        kernel: kernel_id,
+                        layout,
+                        detail: format!("{detail} lowers to unsupported JIT ABI type {other}")
+                            .into(),
+                    }),
+                }
+            }
+        }
+    }
+}
+
+fn replay_scalar_option_kind_for_layout(
+    meta: &BackendRuntimeMeta,
+    layout: LayoutId,
+) -> Option<ScalarOptionKind> {
+    match (&meta.layouts()[layout].abi, &meta.layouts()[layout].kind) {
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Int)) => {
+            Some(ScalarOptionKind::Int)
+        }
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Float)) => {
+            Some(ScalarOptionKind::Float)
+        }
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Bool)) => {
+            Some(ScalarOptionKind::Bool)
+        }
+        _ => None,
+    }
+}
+
+fn replay_kernel_symbol(kernel_id: KernelId) -> String {
+    format!("aivi_replay_kernel_{}", kernel_id.as_raw())
+}
+
+fn replay_signal_slot_symbol(item: ItemId) -> String {
+    format!("aivi_replay_signal_slot_{}", item.as_raw())
+}
+
+fn replay_imported_item_slot_symbol(item: ItemId) -> String {
+    format!("aivi_replay_import_slot_{}", item.as_raw())
+}
+
+fn replay_callable_descriptor_symbol(item: ItemId) -> String {
+    format!("aivi_replay_callable_item_{}", item.as_raw())
 }

@@ -176,7 +176,7 @@ impl<'a> KernelEvaluator<'a> {
         }
         match (kernel.input_subject, input_subject) {
             (Some(expected), Some(value)) => {
-                if !value_matches_layout(self.program, value, expected) {
+                if !value_matches_layout_with_signal_current(self.program, value, expected) {
                     return Err(EvaluationError::KernelInputLayoutMismatch {
                         kernel: kernel_id,
                         expected,
@@ -205,7 +205,7 @@ impl<'a> KernelEvaluator<'a> {
             .zip(environment.iter())
             .enumerate()
         {
-            if !value_matches_layout(self.program, value, *expected) {
+            if !value_matches_layout_with_signal_current(self.program, value, *expected) {
                 return Err(EvaluationError::KernelEnvironmentLayoutMismatch {
                     kernel: kernel_id,
                     slot: EnvSlotId::from_raw(index as u32),

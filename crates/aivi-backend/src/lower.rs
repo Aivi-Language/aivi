@@ -8,6 +8,7 @@ use aivi_core::{self as core, Arena, ArenaOverflow};
 use aivi_hir::{
     BinaryOperator as HirBinaryOperator, BuiltinTerm as HirBuiltinTerm, GateType as HirGateType,
     PipeTransformMode, UnaryOperator as HirUnaryOperator,
+    opaque_type_carrier_type as hir_opaque_type_carrier_type,
     opaque_type_variants as hir_opaque_type_variants,
 };
 use aivi_lambda::{self as lambda};
@@ -2696,7 +2697,7 @@ impl<'a> ProgramLowerer<'a> {
                 }
                 Task::BuildPipe {
                     span,
-                    layout,
+                    layout: _,
                     stages,
                 } => {
                     let lowered = drain_tail(
@@ -2708,7 +2709,7 @@ impl<'a> ProgramLowerer<'a> {
                     );
                     let mut iter = lowered.into_iter();
                     let head = iter.next().expect("pipe head should exist");
-                    let stages = stages
+                    let mut stages = stages
                         .into_iter()
                         .map(|stage| InlinePipeStage {
                             subject: stage.subject,
@@ -2775,7 +2776,33 @@ impl<'a> ProgramLowerer<'a> {
                                 }
                             },
                         })
-                        .collect();
+                        .collect::<Vec<_>>();
+                    for stage in stages.iter_mut() {
+                        match &stage.kind {
+                            InlinePipeStageKind::Transform { expr, .. } => {
+                                stage.result_layout = exprs[*expr].layout;
+                            }
+                            InlinePipeStageKind::Tap { .. } | InlinePipeStageKind::Debug { .. } => {
+                                stage.result_layout = stage.input_layout;
+                            }
+                            InlinePipeStageKind::Gate { .. } => {}
+                            InlinePipeStageKind::TruthyFalsy { truthy, .. } => {
+                                stage.result_layout = exprs[truthy.body].layout;
+                            }
+                            InlinePipeStageKind::Case { arms } => {
+                                if let Some(first) = arms.first() {
+                                    stage.result_layout = exprs[first.body].layout;
+                                }
+                            }
+                            InlinePipeStageKind::FanOut { map_expr } => {
+                                stage.result_layout = exprs[*map_expr].layout;
+                            }
+                        };
+                    }
+                    let layout = stages
+                        .last()
+                        .map(|stage| stage.result_layout)
+                        .unwrap_or_else(|| exprs[head].layout);
                     values.push(alloc_kernel_expr(
                         &mut exprs,
                         KernelExpr {
@@ -3563,6 +3590,28 @@ impl<'a> ProgramLowerer<'a> {
                     ) = (self.hir, &cache_key)
                     {
                         let carrier = aivi_hir::domain_carrier_type(
+                            hir,
+                            *item,
+                            &arguments
+                                .iter()
+                                .map(hir_gate_type_for_core_type)
+                                .collect::<Vec<_>>(),
+                        );
+                        if let Some(carrier) = carrier {
+                            let carrier_layout =
+                                self.intern_core_type(&core::Type::lower(&carrier))?;
+                            self.program
+                                .register_named_domain_carrier(id, carrier_layout);
+                        }
+                    }
+                    if let (
+                        Some(hir),
+                        core::Type::OpaqueItem {
+                            item, arguments, ..
+                        },
+                    ) = (self.hir, &cache_key)
+                    {
+                        let carrier = hir_opaque_type_carrier_type(
                             hir,
                             *item,
                             &arguments

@@ -11,6 +11,13 @@ struct LinkedDerivedEvaluator<'a> {
     pending_temporal_schedules: &'a mut Vec<PendingTemporalSchedule>,
 }
 
+fn strip_signal_value(value: RuntimeValue) -> RuntimeValue {
+    match value {
+        RuntimeValue::Signal(inner) => strip_signal_value(*inner),
+        other => other,
+    }
+}
+
 // Thread-local cache for all JIT-compiled kernel plans. Keyed by (backend address, plan key).
 //
 // `NativeKernelPlan` contains raw FFI/JIT pointers that are `!Send`.  Storing the cache here
@@ -106,18 +113,15 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
 
         let mut globals = self.committed_signals.clone();
         globals.remove(&binding.backend_item);
-        let mut dependency_environment = Vec::with_capacity(binding.dependency_items.len());
+        let mut dependency_environment = Vec::with_capacity(binding.dependency_layouts.len());
         for (index, dependency) in binding.dependency_items.iter().copied().enumerate() {
             let Some(value) = inputs.value(index) else {
                 return Ok(DerivedSignalUpdate::Clear);
             };
             let signal_value = RuntimeValue::Signal(Box::new(value.clone()));
-            let layout = binding
-                .dependency_layouts
-                .get(index)
-                .copied()
-                .expect("linked derived signal should preserve dependency layouts");
-            dependency_environment.push(stage_subject_value(self.backend_view(), layout, value));
+            if let Some(layout) = binding.dependency_layouts.get(index).copied() {
+                dependency_environment.push(stage_subject_value(self.backend_view(), layout, value));
+            }
             globals.insert(dependency, signal_value);
         }
 
@@ -790,12 +794,26 @@ impl LinkedDerivedEvaluator<'_> {
                             native.kernel,
                         )
                     }
+                    BackendRuntimePayload::FrozenCatalog(catalog) => {
+                        NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
+                            catalog.as_ref(),
+                            Some(native_kernels),
+                            native.kernel,
+                        )
+                    }
                 };
                 if let Some(compiled) = compiled {
                     cache.insert(cache_key, compiled);
                 }
             }
-            cache.get_mut(&cache_key).map(|plan| plan.execute(input, env, globals))
+            let staged_input = input.cloned().map(strip_signal_value);
+            let staged_env = env
+                .iter()
+                .cloned()
+                .map(strip_signal_value)
+                .collect::<Vec<_>>();
+            cache.get_mut(&cache_key)
+                .map(|plan| plan.execute(staged_input.as_ref(), &staged_env, globals))
         })
     }
 
@@ -827,6 +845,13 @@ impl LinkedDerivedEvaluator<'_> {
                     BackendRuntimePayload::Meta(meta) => {
                         NativeKernelPlan::from_runtime_meta_with_native_artifacts(
                             meta.as_ref(),
+                            Some(self.native_kernels),
+                            step_kernel,
+                        )
+                    }
+                    BackendRuntimePayload::FrozenCatalog(catalog) => {
+                        NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
+                            catalog.as_ref(),
                             Some(self.native_kernels),
                             step_kernel,
                         )

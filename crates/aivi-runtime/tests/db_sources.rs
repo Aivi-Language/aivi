@@ -133,6 +133,16 @@ fn assembles_db_live_spec_with_changed_refresh_and_active_when() {
         rows.spec.reconfiguration_dependencies.is_empty(),
         "db.live should not treat refreshOn or activeWhen as ordinary reactive inputs"
     );
-    assert_eq!(rows.spec.explicit_triggers.as_ref(), &[changed.signal()]);
+    assert_eq!(rows.spec.explicit_triggers.len(), 1);
+    let trigger = rows.spec.explicit_triggers[0];
+    let trigger_binding = assembly
+        .signals()
+        .iter()
+        .find(|binding| binding.signal() == trigger)
+        .expect("refreshOn trigger should resolve to a public signal binding");
+    assert!(
+        trigger == changed.signal() || trigger_binding.dependencies().contains(&changed.signal()),
+        "db.live refreshOn should resolve to users.changed or a projected signal derived from usersChanged"
+    );
     assert_eq!(rows.spec.active_when, Some(enabled.signal()));
 }

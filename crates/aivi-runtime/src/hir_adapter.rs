@@ -7,8 +7,8 @@ use std::{
 
 use aivi_backend::{
     BackendExecutableProgram, BackendRuntimeMeta, BackendRuntimeView, CommittedValueStore,
-    InlineCommittedValueStore, ItemId as BackendItemId, Program as BackendProgram,
-    lower_module_with_hir as lower_backend_module, validate_program,
+    FrozenBackendCatalog, InlineCommittedValueStore, ItemId as BackendItemId,
+    Program as BackendProgram, lower_module_with_hir as lower_backend_module, validate_program,
 };
 use aivi_base::SourceSpan;
 use aivi_core::{RuntimeFragmentSpec, lower_runtime_fragment};
@@ -1389,6 +1389,7 @@ pub enum HirSignalBindingKind {
 pub enum BackendRuntimePayload {
     Program(Arc<BackendProgram>),
     Meta(Arc<BackendRuntimeMeta>),
+    FrozenCatalog(Arc<FrozenBackendCatalog>),
 }
 
 impl BackendRuntimePayload {
@@ -1396,13 +1397,14 @@ impl BackendRuntimePayload {
         match self {
             Self::Program(program) => BackendRuntimeView::Program(program.as_ref()),
             Self::Meta(meta) => BackendRuntimeView::Meta(meta.as_ref()),
+            Self::FrozenCatalog(catalog) => BackendRuntimeView::FrozenCatalog(catalog.as_ref()),
         }
     }
 
     pub fn as_program(&self) -> Option<&Arc<BackendProgram>> {
         match self {
             Self::Program(program) => Some(program),
-            Self::Meta(_) => None,
+            Self::Meta(_) | Self::FrozenCatalog(_) => None,
         }
     }
 
@@ -1415,6 +1417,10 @@ impl BackendRuntimePayload {
                 .with_native_kernels(native_kernels),
             Self::Meta(meta) => BackendExecutableProgram::from_runtime_meta(meta.as_ref())
                 .with_native_kernels(native_kernels),
+            Self::FrozenCatalog(catalog) => {
+                BackendExecutableProgram::from_frozen_catalog(catalog.as_ref())
+                    .with_native_kernels(native_kernels)
+            }
         }
     }
 
@@ -1422,6 +1428,7 @@ impl BackendRuntimePayload {
         match self {
             Self::Program(program) => Arc::as_ptr(program) as usize,
             Self::Meta(meta) => Arc::as_ptr(meta) as usize ^ 1usize,
+            Self::FrozenCatalog(catalog) => Arc::as_ptr(catalog) as usize ^ 2usize,
         }
     }
 }
@@ -2577,13 +2584,46 @@ fn rewrite_fragment_signal_parameters(
         let Some(&layout) = entry_parameters.get(index) else {
             continue;
         };
+        let payload_layout = match &backend.layouts()[layout].kind {
+            aivi_backend::LayoutKind::Signal { element } => *element,
+            _ => layout,
+        };
         parameter_items.insert(
             item_id,
-            (aivi_backend::EnvSlotId::from_raw(index as u32), layout),
+            (
+                aivi_backend::EnvSlotId::from_raw(index as u32),
+                payload_layout,
+            ),
         );
     }
     if parameter_items.is_empty() {
         return;
+    }
+    let layout_pass_modes = backend
+        .layouts()
+        .iter()
+        .map(|(layout_id, layout)| (layout_id, layout.abi))
+        .collect::<BTreeMap<_, _>>();
+    let rewritten_entry_parameters = parameter_specs
+        .iter()
+        .map(|spec| {
+            backend
+                .items()
+                .iter()
+                .find(|(_, item)| item.name.as_ref() == spec.signal_name.as_ref())
+                .and_then(|(item_id, _item)| {
+                    parameter_items.get(&item_id).map(|(_, layout)| *layout)
+                })
+        })
+        .collect::<Vec<_>>();
+    if let Some(entry) = backend.items_mut().get_mut(entry_item) {
+        for (index, payload_layout) in rewritten_entry_parameters.into_iter().enumerate() {
+            if let (Some(layout), Some(payload_layout)) =
+                (entry.parameters.get_mut(index), payload_layout)
+            {
+                *layout = payload_layout;
+            }
+        }
     }
     let kernel_count = backend.kernels().len();
     for kernel_index in 0..kernel_count {
@@ -2591,24 +2631,106 @@ fn rewrite_fragment_signal_parameters(
         let Some(kernel) = backend.kernels_mut().get_mut(kernel_id) else {
             continue;
         };
-        kernel
-            .global_items
-            .retain(|item_id| !parameter_items.contains_key(item_id));
+        let input_payload_layout = parameter_items
+            .get(&kernel.origin.item)
+            .map(|&(_slot, payload_layout)| payload_layout);
+        if let Some(payload_layout) = input_payload_layout {
+            if let Some(layout) = kernel.input_subject.as_mut() {
+                *layout = payload_layout;
+            }
+            for parameter in kernel.convention.parameters.iter_mut() {
+                if matches!(parameter.role, aivi_backend::ParameterRole::InputSubject) {
+                    parameter.layout = payload_layout;
+                }
+            }
+        }
+        let mut kernel_slot_layout_updates = BTreeMap::new();
         let expr_count = kernel.exprs().len();
+        let mut subject_layout_update = None;
         for expr_index in 0..expr_count {
             let expr_id = aivi_backend::KernelExprId::from_raw(expr_index as u32);
             let Some(expr) = kernel.exprs_mut().get_mut(expr_id) else {
                 continue;
             };
+            if matches!(expr.kind, aivi_backend::KernelExprKind::Subject(aivi_backend::SubjectRef::Input))
+                && let Some(payload_layout) = input_payload_layout
+            {
+                expr.layout = payload_layout;
+            }
+            if matches!(
+                expr.kind,
+                aivi_backend::KernelExprKind::Subject(aivi_backend::SubjectRef::Input)
+            ) {
+                subject_layout_update = Some(expr.layout);
+                continue;
+            }
             let aivi_backend::KernelExprKind::Item(item_id) = expr.kind.clone() else {
                 continue;
             };
-            let Some(&(slot, layout)) = parameter_items.get(&item_id) else {
+            let Some(&(slot, payload_layout)) = parameter_items.get(&item_id) else {
                 continue;
             };
             expr.kind = aivi_backend::KernelExprKind::Environment(slot);
-            expr.layout = layout;
+            expr.layout = payload_layout;
+            kernel_slot_layout_updates.insert(slot.as_raw() as usize, payload_layout);
         }
+        for (slot_index, payload_layout) in kernel_slot_layout_updates {
+            if let Some(layout) = kernel.environment.get_mut(slot_index) {
+                *layout = payload_layout;
+            }
+        }
+        if let Some(subject_layout) = subject_layout_update {
+            kernel.input_subject = Some(subject_layout);
+            let input_pass_mode = *layout_pass_modes
+                .get(&subject_layout)
+                .expect("rewritten subject layout should remain addressable");
+            for parameter in kernel.convention.parameters.iter_mut() {
+                if matches!(parameter.role, aivi_backend::ParameterRole::InputSubject) {
+                    parameter.layout = subject_layout;
+                    parameter.pass_mode = input_pass_mode;
+                }
+            }
+        }
+        kernel
+            .global_items
+            .retain(|item_id| !parameter_items.contains_key(item_id));
+        let root_layout = kernel.exprs()[kernel.root].layout;
+        kernel.result_layout = root_layout;
+        kernel.convention.result.layout = root_layout;
+    }
+    for kernel_index in 0..kernel_count {
+        let kernel_id = aivi_backend::KernelId::from_raw(kernel_index as u32);
+        let root_layout = backend.kernels()[kernel_id].result_layout;
+        let pass_mode = backend.layouts()[root_layout].abi;
+        let parameter_pass_mode_updates = backend.kernels()[kernel_id]
+            .convention
+            .parameters
+            .iter()
+            .filter_map(|parameter| {
+                let aivi_backend::ParameterRole::Environment(slot) = parameter.role else {
+                    return None;
+                };
+                let layout = *backend.kernels()[kernel_id]
+                    .environment
+                    .get(slot.as_raw() as usize)?;
+                let pass_mode = *layout_pass_modes.get(&layout)?;
+                Some((slot, layout, pass_mode))
+            })
+            .collect::<Vec<_>>();
+        let Some(kernel) = backend.kernels_mut().get_mut(kernel_id) else {
+            continue;
+        };
+        for parameter in kernel.convention.parameters.iter_mut() {
+            if let aivi_backend::ParameterRole::Environment(slot) = parameter.role
+                && let Some((_, layout, parameter_pass_mode)) = parameter_pass_mode_updates
+                    .iter()
+                    .find(|(candidate, _, _)| *candidate == slot)
+            {
+                parameter.layout = *layout;
+                parameter.pass_mode = *parameter_pass_mode;
+            }
+        }
+        kernel.convention.result.pass_mode = pass_mode;
     }
 }
 
@@ -3152,7 +3274,17 @@ signal rows : Signal Int
             rows.spec.provider,
             RuntimeSourceProvider::builtin(BuiltinSourceProvider::DbLive)
         );
-        assert_eq!(rows.spec.explicit_triggers.as_ref(), &[changed.signal()]);
+        assert_eq!(rows.spec.explicit_triggers.len(), 1);
+        let trigger = rows.spec.explicit_triggers[0];
+        let trigger_binding = assembly
+            .signals()
+            .iter()
+            .find(|binding| binding.signal() == trigger)
+            .expect("refreshOn trigger should resolve to a public signal binding");
+        assert!(
+            trigger == changed.signal() || trigger_binding.dependencies().contains(&changed.signal()),
+            "db.live refreshOn should resolve to users.changed or a projected signal derived from usersChanged"
+        );
     }
 
     #[test]

@@ -54,6 +54,17 @@ pub struct BackendRuntimeMeta {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FrozenBackendCatalog {
+    items: Arena<ItemId, Item>,
+    pipelines: Arena<PipelineId, Pipeline>,
+    kernels: Arena<KernelId, RuntimeKernelMeta>,
+    layouts: Arena<LayoutId, Layout>,
+    sources: Arena<SourceId, SourcePlan>,
+    #[serde(with = "named_domain_carriers_serde")]
+    named_domain_carriers: HashMap<LayoutId, LayoutId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct DomainMemberItemWire {
     domain: HirItemId,
     member_index: usize,
@@ -291,6 +302,11 @@ impl BackendRuntimeMeta {
         self.named_domain_carriers.get(&layout).copied()
     }
 
+    pub fn register_named_domain_carrier(&mut self, layout: LayoutId, carrier: LayoutId) {
+        let prior = self.named_domain_carriers.insert(layout, carrier);
+        debug_assert!(prior.is_none_or(|existing| existing == carrier));
+    }
+
     pub fn item_name(&self, item: ItemId) -> &str {
         &self.items[item].name
     }
@@ -343,6 +359,56 @@ impl BackendRuntimeMeta {
     }
 }
 
+impl FrozenBackendCatalog {
+    pub fn items(&self) -> &Arena<ItemId, Item> {
+        &self.items
+    }
+
+    pub fn pipelines(&self) -> &Arena<PipelineId, Pipeline> {
+        &self.pipelines
+    }
+
+    pub fn kernels(&self) -> &Arena<KernelId, RuntimeKernelMeta> {
+        &self.kernels
+    }
+
+    pub fn layouts(&self) -> &Arena<LayoutId, Layout> {
+        &self.layouts
+    }
+
+    pub fn layouts_mut(&mut self) -> &mut Arena<LayoutId, Layout> {
+        &mut self.layouts
+    }
+
+    pub fn sources(&self) -> &Arena<SourceId, SourcePlan> {
+        &self.sources
+    }
+
+    pub fn named_domain_carrier(&self, layout: LayoutId) -> Option<LayoutId> {
+        self.named_domain_carriers.get(&layout).copied()
+    }
+
+    pub fn register_named_domain_carrier(&mut self, layout: LayoutId, carrier: LayoutId) {
+        let prior = self.named_domain_carriers.insert(layout, carrier);
+        debug_assert!(prior.is_none_or(|existing| existing == carrier));
+    }
+
+    pub fn item_name(&self, item: ItemId) -> &str {
+        &self.items[item].name
+    }
+
+    pub fn to_runtime_meta(&self) -> BackendRuntimeMeta {
+        BackendRuntimeMeta {
+            items: self.items.clone(),
+            pipelines: self.pipelines.clone(),
+            kernels: self.kernels.clone(),
+            layouts: self.layouts.clone(),
+            sources: self.sources.clone(),
+            named_domain_carriers: self.named_domain_carriers.clone(),
+        }
+    }
+}
+
 impl From<&Program> for BackendRuntimeMeta {
     fn from(program: &Program) -> Self {
         let mut kernels = Arena::new();
@@ -368,6 +434,25 @@ impl From<&Program> for BackendRuntimeMeta {
             sources: program.sources.clone(),
             named_domain_carriers: program.named_domain_carriers.clone(),
         }
+    }
+}
+
+impl From<&BackendRuntimeMeta> for FrozenBackendCatalog {
+    fn from(meta: &BackendRuntimeMeta) -> Self {
+        Self {
+            items: meta.items.clone(),
+            pipelines: meta.pipelines.clone(),
+            kernels: meta.kernels.clone(),
+            layouts: meta.layouts.clone(),
+            sources: meta.sources.clone(),
+            named_domain_carriers: meta.named_domain_carriers.clone(),
+        }
+    }
+}
+
+impl From<&Program> for FrozenBackendCatalog {
+    fn from(program: &Program) -> Self {
+        Self::from(&BackendRuntimeMeta::from(program))
     }
 }
 

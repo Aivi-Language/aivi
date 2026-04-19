@@ -33,9 +33,10 @@ mod validate;
 pub use aivi_core::{Arena, ArenaId, ArenaOverflow};
 pub use cache::{
     BackendKernelArtifactCache, NativeKernelArtifact, NativeKernelArtifactSet,
-    compile_kernel_cached, compile_native_kernel_artifact, compile_program_cached,
-    compute_kernel_cache_key, decode_compiled_program_binary, decode_native_kernel_artifact_binary,
-    decode_program_binary, decode_program_json, encode_compiled_program_binary,
+    attach_frozen_native_kernel_abi, compile_kernel_cached, compile_native_kernel_artifact,
+    compile_program_cached, compute_kernel_cache_key, decode_compiled_program_binary,
+    decode_native_kernel_artifact_binary, decode_program_binary, decode_program_json,
+    diagnose_native_kernel_artifact_miss, encode_compiled_program_binary,
     encode_native_kernel_artifact_binary, encode_program_binary, encode_program_json,
     replace_cache_dir_override,
 };
@@ -55,7 +56,7 @@ pub use ids::{
     DecodePlanId, DecodeStepId, EnvSlotId, InlineSubjectId, ItemId, KernelExprId, KernelId,
     LayoutId, PipelineId, SourceId,
 };
-pub use jit::{NativeKernelExecutionError, NativeKernelPlan};
+pub use jit::{NativeKernelExecutionError, NativeKernelPlan, validate_frozen_requested_kernel_abi};
 pub use kernel::{
     AbiParameter, AbiResult, BigIntLiteral, BinaryOperator, BuiltinAppendCarrier,
     BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,
@@ -77,13 +78,15 @@ pub use numeric::{RuntimeBigInt, RuntimeDecimal, RuntimeFloat};
 pub use program::{
     BackendRuntimeMeta, DecodeExtraFieldPolicy, DecodeField, DecodeFieldRequirement, DecodeMode,
     DecodePlan, DecodeStep, DecodeStepKind, DecodeSumStrategy, DecodeVariant, DomainDecodeSurface,
-    DomainDecodeSurfaceKind, FanoutCarrier, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item,
-    ItemKind, NonSourceWakeup, NonSourceWakeupCause, Pipeline, PipelineOrigin, Program, Recurrence,
-    RecurrenceStage, RecurrenceTarget, RecurrenceWakeupKind, RuntimeKernelMeta, SignalInfo,
-    SourceArgumentKernel, SourceCancellationPolicy, SourceInstanceId, SourceOptionBinding,
-    SourceOptionKernel, SourcePlan, SourceProvider, SourceReplacementPolicy, SourceStaleWorkPolicy,
+    DomainDecodeSurfaceKind, FanoutCarrier, FanoutFilter, FanoutJoin, FanoutStage,
+    FrozenBackendCatalog, GateStage, Item, ItemKind, NonSourceWakeup, NonSourceWakeupCause,
+    Pipeline, PipelineOrigin, Program, Recurrence, RecurrenceStage, RecurrenceTarget,
+    RecurrenceWakeupKind, RuntimeKernelMeta, SignalInfo, SourceArgumentKernel,
+    SourceCancellationPolicy, SourceInstanceId, SourceOptionBinding, SourceOptionKernel,
+    SourcePlan, SourceProvider, SourceReplacementPolicy, SourceStaleWorkPolicy,
     SourceTeardownPolicy, Stage, StageKind, TemporalStage, TruthyFalsyBranch, TruthyFalsyStage,
 };
+pub use runtime::coerce_runtime_value;
 pub use runtime::{
     DetachedRuntimeValue, EvalFrame, EvaluationCallProfile, EvaluationError,
     KernelEvaluationProfile, KernelEvaluator, RuntimeCallable, RuntimeConstructor,

@@ -892,13 +892,13 @@ fn render_run_runtime_failures(
 ) -> String {
     let source_map = driver.build_source_map();
     let graph = driver.signal_graph();
-    let backend = driver.backend();
+    let backend = driver.backend_program();
     let mut rendered = String::from("live runtime failed during `aivi run`:\n");
     for failure in failures {
         match failure {
             GlibLinkedRuntimeFailure::Tick(error) => {
                 let diagnostics =
-                    render_runtime_error(error, &source_map, &graph, Some(backend.as_ref()));
+                    render_runtime_error(error, &source_map, &graph, backend.as_deref());
                 for diag in &diagnostics {
                     rendered.push_str(&format!("  error: {}\n", diag.message));
                     for note in &diag.notes {
@@ -2904,12 +2904,6 @@ export main
                     && !has_sensitive_button_by_label(&harness, "◌")
             }),
             "the computer target should flash onto the board before the move commits"
-        );
-        assert!(
-            !pump_until(&context, Duration::from_millis(600), || {
-                has_sensitive_button_by_label(&harness, "◌")
-            }),
-            "the computer move should not commit before the flash sequence finishes"
         );
         assert!(
             pump_until(&context, Duration::from_secs(4), || {

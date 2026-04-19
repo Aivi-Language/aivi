@@ -28,9 +28,11 @@ use crate::{
         CachedJitCallableDescriptor, CachedJitCompiledKernel, CachedJitDataSlot,
         CachedJitFunctionTarget, CachedJitKernelArtifact, CachedJitLiteralData, CachedJitReloc,
         CachedJitRelocTarget, compile_kernel, compile_kernel_jit_with_cache_artifact,
-        compile_program, compute_kernel_fingerprint, instantiate_cached_jit_kernel,
-        instantiate_cached_jit_kernel_for_replay,
+        compile_program, compute_kernel_fingerprint, diagnose_kernel_jit_cache_artifact_miss,
+        instantiate_cached_jit_kernel, instantiate_cached_jit_kernel_for_frozen_abi,
+        instantiate_cached_jit_kernel_for_runtime_meta,
     },
+    jit::encode_frozen_native_kernel_abi,
     program::Program,
 };
 
@@ -59,11 +61,34 @@ pub fn decode_compiled_program_binary(bytes: &[u8]) -> Option<CompiledProgram> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NativeKernelArtifact(CachedJitKernelArtifact);
+pub struct NativeKernelArtifact {
+    artifact: CachedJitKernelArtifact,
+    frozen_abi: Option<Box<[u8]>>,
+}
 
 impl NativeKernelArtifact {
     pub fn requested_kernel(&self) -> KernelId {
-        self.0.requested_kernel
+        self.artifact.requested_kernel
+    }
+
+    pub fn has_frozen_requested_entry_abi(&self) -> bool {
+        let Some(frozen_abi) = self.frozen_abi() else {
+            return false;
+        };
+        crate::jit::decode_frozen_native_kernel_abi(frozen_abi).is_some_and(|abi| {
+            abi.kernels
+                .iter()
+                .find(|kernel| kernel.kernel == abi.requested_kernel)
+                .is_some_and(|kernel| kernel.result_plan.is_some())
+        })
+    }
+
+    pub(crate) fn cached_artifact(&self) -> &CachedJitKernelArtifact {
+        &self.artifact
+    }
+
+    pub(crate) fn frozen_abi(&self) -> Option<&[u8]> {
+        self.frozen_abi.as_deref()
     }
 }
 
@@ -106,15 +131,38 @@ pub fn compile_native_kernel_artifact(
         Ok((_, artifact)) => artifact,
         Err(_error) => None,
     };
-    Ok(artifact.map(NativeKernelArtifact))
+    Ok(artifact.map(|artifact| NativeKernelArtifact {
+        artifact,
+        frozen_abi: None,
+    }))
+}
+
+pub fn diagnose_native_kernel_artifact_miss(
+    program: &Program,
+    kernel_id: KernelId,
+) -> Result<Option<Box<str>>, CodegenErrors> {
+    diagnose_kernel_jit_cache_artifact_miss(program, kernel_id)
+}
+
+pub fn attach_frozen_native_kernel_abi(
+    meta: &BackendRuntimeMeta,
+    artifact: &NativeKernelArtifact,
+) -> Result<NativeKernelArtifact, CodegenErrors> {
+    if artifact.frozen_abi.is_some() {
+        return Ok(artifact.clone());
+    }
+    Ok(NativeKernelArtifact {
+        artifact: artifact.artifact.clone(),
+        frozen_abi: Some(encode_frozen_native_kernel_abi(meta, artifact)?.into_boxed_slice()),
+    })
 }
 
 pub fn encode_native_kernel_artifact_binary(artifact: &NativeKernelArtifact) -> Vec<u8> {
-    serialize_cached_jit_artifact(&artifact.0)
+    serialize_native_kernel_artifact(artifact)
 }
 
 pub fn decode_native_kernel_artifact_binary(bytes: &[u8]) -> Option<NativeKernelArtifact> {
-    deserialize_cached_jit_artifact(bytes).map(NativeKernelArtifact)
+    deserialize_native_kernel_artifact(bytes)
 }
 
 static CACHE_DIR_OVERRIDE: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
@@ -135,7 +183,15 @@ pub(crate) fn instantiate_native_kernel_artifact(
     kernel_id: KernelId,
     artifact: &NativeKernelArtifact,
 ) -> Result<crate::codegen::CompiledJitKernel, CodegenErrors> {
-    instantiate_cached_jit_kernel(program, kernel_id, &artifact.0)
+    instantiate_cached_jit_kernel(program, kernel_id, &artifact.artifact)
+}
+
+pub(crate) fn instantiate_native_kernel_artifact_for_frozen_abi(
+    frozen_abi: &[u8],
+    kernel_id: KernelId,
+    artifact: &NativeKernelArtifact,
+) -> Result<crate::codegen::CompiledJitKernel, CodegenErrors> {
+    instantiate_cached_jit_kernel_for_frozen_abi(frozen_abi, kernel_id, &artifact.artifact)
 }
 
 pub(crate) fn instantiate_native_kernel_artifact_for_runtime_meta(
@@ -143,8 +199,10 @@ pub(crate) fn instantiate_native_kernel_artifact_for_runtime_meta(
     kernel_id: KernelId,
     artifact: &NativeKernelArtifact,
 ) -> Result<crate::codegen::CompiledJitKernel, CodegenErrors> {
-    let replay_program = meta.to_replay_program();
-    instantiate_cached_jit_kernel_for_replay(&replay_program, kernel_id, &artifact.0)
+    if let Some(frozen_abi) = artifact.frozen_abi() {
+        return instantiate_native_kernel_artifact_for_frozen_abi(frozen_abi, kernel_id, artifact);
+    }
+    instantiate_cached_jit_kernel_for_runtime_meta(meta, kernel_id, &artifact.artifact)
 }
 
 /// Magic bytes: ASCII "AIVI" + format version byte.
@@ -152,11 +210,13 @@ const PROGRAM_CACHE_MAGIC: &[u8; 5] = b"AIVI\x02";
 /// Magic bytes: ASCII "AIVK" + format version byte.
 const KERNEL_CACHE_MAGIC: &[u8; 5] = b"AIVK\x01";
 /// Magic bytes: ASCII "AIVJ" + format version byte.
-const JIT_KERNEL_CACHE_MAGIC: &[u8; 5] = b"AIVJ\x01";
+const JIT_KERNEL_CACHE_MAGIC_V1: &[u8; 5] = b"AIVJ\x01";
+/// Magic bytes: ASCII "AIVJ" + format version byte.
+const JIT_KERNEL_CACHE_MAGIC_V2: &[u8; 5] = b"AIVJ\x02";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Bump when backend machine-code semantics change without a Cargo package-version change.
-const CODEGEN_NAMESPACE_REVISION: &str = "4";
+const CODEGEN_NAMESPACE_REVISION: &str = "5";
 const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
     &[("enable_llvm_abi_extensions", "1"), ("opt_level", "speed")];
 
@@ -684,7 +744,7 @@ fn deserialize_cached_jit_kernel(cursor: &mut Cursor<&[u8]>) -> Option<CachedJit
 
 fn serialize_cached_jit_artifact(artifact: &CachedJitKernelArtifact) -> Vec<u8> {
     let mut buf = Vec::new();
-    buf.extend_from_slice(JIT_KERNEL_CACHE_MAGIC);
+    buf.extend_from_slice(JIT_KERNEL_CACHE_MAGIC_V1);
     buf.extend_from_slice(&artifact.requested_kernel.as_raw().to_le_bytes());
 
     buf.extend_from_slice(&(artifact.kernels.len() as u32).to_le_bytes());
@@ -730,7 +790,7 @@ fn deserialize_cached_jit_artifact(bytes: &[u8]) -> Option<CachedJitKernelArtifa
     let mut cursor = Cursor::new(bytes);
     let mut magic = [0u8; 5];
     cursor.read_exact(&mut magic).ok()?;
-    if &magic != JIT_KERNEL_CACHE_MAGIC {
+    if &magic != JIT_KERNEL_CACHE_MAGIC_V1 {
         return None;
     }
 
@@ -794,6 +854,47 @@ fn deserialize_cached_jit_artifact(bytes: &[u8]) -> Option<CachedJitKernelArtifa
         callable_descriptors,
         literal_data,
         external_funcs,
+    })
+}
+
+fn serialize_native_kernel_artifact(artifact: &NativeKernelArtifact) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(JIT_KERNEL_CACHE_MAGIC_V2);
+    let cached = serialize_cached_jit_artifact(&artifact.artifact);
+    write_boxed_bytes(&mut buf, &cached);
+    match artifact.frozen_abi.as_deref() {
+        Some(frozen_abi) => {
+            buf.push(1);
+            write_boxed_bytes(&mut buf, frozen_abi);
+        }
+        None => buf.push(0),
+    }
+    buf
+}
+
+fn deserialize_native_kernel_artifact(bytes: &[u8]) -> Option<NativeKernelArtifact> {
+    let mut cursor = Cursor::new(bytes);
+    let mut magic = [0u8; 5];
+    cursor.read_exact(&mut magic).ok()?;
+    if &magic == JIT_KERNEL_CACHE_MAGIC_V1 {
+        return deserialize_cached_jit_artifact(bytes).map(|artifact| NativeKernelArtifact {
+            artifact,
+            frozen_abi: None,
+        });
+    }
+    if &magic != JIT_KERNEL_CACHE_MAGIC_V2 {
+        return None;
+    }
+    let cached = read_boxed_bytes(&mut cursor)?;
+    let artifact = deserialize_cached_jit_artifact(cached.as_ref())?;
+    let frozen_abi = match read_u8(&mut cursor)? {
+        0 => None,
+        1 => Some(read_boxed_bytes(&mut cursor)?),
+        _ => return None,
+    };
+    Some(NativeKernelArtifact {
+        artifact,
+        frozen_abi,
     })
 }
 

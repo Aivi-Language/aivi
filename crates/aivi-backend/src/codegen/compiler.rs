@@ -18,6 +18,15 @@ struct ResolvedSignalCallable {
     result_layout: LayoutId,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RuntimeTextInterpolationSupport {
+    Text,
+    Int,
+    Float,
+    Bool,
+    Unit,
+}
+
 impl<'a, M: Module> CraneliftCompiler<'a, M> {
     fn with_module(
         program: &'a Program,
@@ -208,6 +217,21 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 expr: interp_expr, ..
                             } = segment
                             {
+                                if self
+                                    .runtime_text_interpolation_support(
+                                        kernel.exprs()[*interp_expr].layout,
+                                    )
+                                    .is_none()
+                                {
+                                    errors.push(self.unsupported_expression(
+                                        kernel_id,
+                                        *interp_expr,
+                                        &format!(
+                                            "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
+                                            self.program.layouts()[kernel.exprs()[*interp_expr].layout]
+                                        ),
+                                    ));
+                                }
                                 work.push(*interp_expr);
                             }
                         }
@@ -250,22 +274,32 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         work.push(pipe.head);
                         let mut current_layout = kernel.exprs()[pipe.head].layout;
                         for (stage_index, stage) in pipe.stages.iter().enumerate() {
-                            if let Err(error) = self.require_layout_match(
-                                kernel_id,
-                                expr_id,
-                                stage.input_layout,
-                                current_layout,
-                                &format!("inline-pipe stage {stage_index} input"),
-                            ) {
-                                errors.push(error);
+                            if !self.layout_is_signal_of(current_layout, stage.input_layout) {
+                                if let Err(error) = self.require_layout_match(
+                                    kernel_id,
+                                    expr_id,
+                                    stage.input_layout,
+                                    current_layout,
+                                    &format!("inline-pipe stage {stage_index} input"),
+                                ) {
+                                    errors.push(error);
+                                }
                             }
                             match &stage.kind {
                                 crate::InlinePipeStageKind::Transform { expr, .. } => {
                                     work.push(*expr);
+                                    let expected_layout = self
+                                        .inline_pipe_stage_result_layout(
+                                            kernel_id,
+                                            kernel,
+                                            expr_id,
+                                            stage_index,
+                                        )
+                                        .unwrap_or(stage.result_layout);
                                     if let Err(error) = self.require_layout_match(
                                         kernel_id,
                                         expr_id,
-                                        stage.result_layout,
+                                        expected_layout,
                                         kernel.exprs()[*expr].layout,
                                         &format!("inline-pipe stage {stage_index} result"),
                                     ) {
@@ -274,10 +308,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 crate::InlinePipeStageKind::Tap { expr } => {
                                     work.push(*expr);
+                                    let expected_layout = self
+                                        .inline_pipe_stage_result_layout(
+                                            kernel_id,
+                                            kernel,
+                                            expr_id,
+                                            stage_index,
+                                        )
+                                        .unwrap_or(stage.result_layout);
                                     if let Err(error) = self.require_layout_match(
                                         kernel_id,
                                         expr_id,
-                                        stage.result_layout,
+                                        expected_layout,
                                         stage.input_layout,
                                         &format!("inline-pipe tap stage {stage_index} result"),
                                     ) {
@@ -311,7 +353,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     work.push(*map_expr);
                                 }
                             }
-                            current_layout = stage.result_layout;
+                            current_layout = self
+                                .inline_pipe_stage_result_layout(kernel_id, kernel, expr_id, stage_index)
+                                .unwrap_or(stage.result_layout);
                         }
                         if let Err(error) = self.require_layout_match(
                             kernel_id,
@@ -433,6 +477,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         match self.resolve_direct_apply_plan(kernel_id, expr_id, *callee, arguments)
                         {
                             Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(plan))) => {
+                                for argument in plan
+                                    .step_prefix_exprs
+                                    .iter()
+                                    .copied()
+                                    .chain(arguments.iter().copied().skip(1))
+                                {
+                                    work.push(argument);
+                                }
+                            }
+                            Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListFilter(plan))) => {
                                 for argument in plan
                                     .step_prefix_exprs
                                     .iter()
@@ -1150,6 +1204,25 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     builder,
                                 )?);
                             } else {
+                                for segment in &text.segments {
+                                    let crate::TextSegment::Interpolation {
+                                        expr: interp_expr, ..
+                                    } = segment
+                                    else {
+                                        continue;
+                                    };
+                                    let layout = kernel.exprs()[*interp_expr].layout;
+                                    if self.runtime_text_interpolation_support(layout).is_none() {
+                                        return Err(self.unsupported_expression(
+                                            kernel_id,
+                                            *interp_expr,
+                                            &format!(
+                                                "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
+                                                self.program.layouts()[layout]
+                                            ),
+                                        ));
+                                    }
+                                }
                                 // Dynamic: visit interpolation sub-expressions in reverse
                                 tasks.push(Task::BuildRuntimeText { expr_id });
                                 for segment in text.segments.iter().rev() {
@@ -1298,6 +1371,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             )?;
                             let materialized_arguments = match &plan {
                                 DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(plan)) => {
+                                    let mut materialized =
+                                        Vec::with_capacity(plan.step_prefix_exprs.len() + 1);
+                                    materialized.extend(plan.step_prefix_exprs.iter().copied());
+                                    materialized.push(arguments[1]);
+                                    materialized
+                                }
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListFilter(plan)) => {
                                     let mut materialized =
                                         Vec::with_capacity(plan.step_prefix_exprs.len() + 1);
                                     materialized.extend(plan.step_prefix_exprs.iter().copied());
@@ -1974,15 +2054,22 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let current_layout = if stage_index == 0 {
                         kernel.exprs()[pipe.head].layout
                     } else {
-                        pipe.stages[stage_index - 1].result_layout
+                        self.inline_pipe_stage_result_layout(
+                            kernel_id,
+                            kernel,
+                            pipe_expr,
+                            stage_index - 1,
+                        )?
                     };
-                    self.require_layout_match(
-                        kernel_id,
-                        pipe_expr,
-                        stage.input_layout,
-                        current_layout,
-                        &format!("inline-pipe stage {stage_index} input"),
-                    )?;
+                    if !self.layout_is_signal_of(current_layout, stage.input_layout) {
+                        self.require_layout_match(
+                            kernel_id,
+                            pipe_expr,
+                            stage.input_layout,
+                            current_layout,
+                            &format!("inline-pipe stage {stage_index} input"),
+                        )?;
+                    }
                     inline_subjects[stage.subject.index()] = Some(current);
                     if let Some(slot) = stage.subject_memo {
                         inline_subjects[slot.index()] = Some(current);
@@ -2042,7 +2129,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             }
                             let result_abi = self.field_abi_shape(
                                 kernel_id,
-                                stage.result_layout,
+                                self.inline_pipe_stage_result_layout(
+                                    kernel_id,
+                                    kernel,
+                                    pipe_expr,
+                                    stage_index,
+                                )?,
                                 "case result",
                             )?;
                             let merge_block = builder.create_block();
@@ -2097,7 +2189,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         crate::InlinePipeStageKind::TruthyFalsy { truthy, falsy: _ } => {
                             let result_abi = self.field_abi_shape(
                                 kernel_id,
-                                stage.result_layout,
+                                self.inline_pipe_stage_result_layout(
+                                    kernel_id,
+                                    kernel,
+                                    pipe_expr,
+                                    stage_index,
+                                )?,
                                 "truthy-falsy result",
                             )?;
                             let truthy_block = builder.create_block();
@@ -2303,10 +2400,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             "transform continuation must only be queued for transform stages"
                         );
                     };
+                    let expected_layout =
+                        self.inline_pipe_stage_result_layout(kernel_id, kernel, pipe_expr, stage_index)?;
                     self.require_layout_match(
                         kernel_id,
                         pipe_expr,
-                        stage.result_layout,
+                        expected_layout,
                         kernel.exprs()[*expr].layout,
                         &format!("inline-pipe stage {stage_index} result"),
                     )?;
@@ -2335,10 +2434,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let crate::InlinePipeStageKind::Tap { .. } = &stage.kind else {
                         unreachable!("tap continuation must only be queued for tap stages");
                     };
+                    let expected_layout =
+                        self.inline_pipe_stage_result_layout(kernel_id, kernel, pipe_expr, stage_index)?;
                     self.require_layout_match(
                         kernel_id,
                         pipe_expr,
-                        stage.result_layout,
+                        expected_layout,
                         stage.input_layout,
                         &format!("inline-pipe tap stage {stage_index} result"),
                     )?;
@@ -2480,8 +2581,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             crate::TextSegment::Fragment { raw, .. } => {
                                 self.materialize_text_constant(kernel_id, raw.as_ref(), builder)?
                             }
-                            crate::TextSegment::Interpolation { .. } => {
-                                interp_iter.next().expect("interpolation value")
+                            crate::TextSegment::Interpolation { expr, .. } => {
+                                self.emit_runtime_text_interpolation_segment(
+                                    kernel_id,
+                                    *expr,
+                                    kernel.exprs()[*expr].layout,
+                                    interp_iter.next().expect("interpolation value"),
+                                    builder,
+                                )?
                             }
                         };
                         seg_values.push(v);
@@ -3180,6 +3287,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     "list wrapper `map`",
                 )?,
             )),
+            "filter" | "__aivi_list_filter" => {
+                DirectApplyPlan::Builtin(BuiltinCallPlan::ListFilter(
+                    self.plan_list_predicate_from_callable(
+                        kernel_id,
+                        *function,
+                        *subject,
+                        "list wrapper `filter` predicate",
+                    )?,
+                ))
+            }
             "any" | "__aivi_list_any" => {
                 self.require_bool_expression(
                     kernel_id,
@@ -5548,6 +5665,22 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 Ok(value)
             }
             (
+                LayoutKind::Option {
+                    element: from_element,
+                },
+                LayoutKind::Option {
+                    element: to_element,
+                },
+            ) if matches!(
+                self.option_codegen_contract(from),
+                Some(OptionCodegenContract::NicheReference)
+            ) && matches!(
+                self.option_codegen_contract(to),
+                Some(OptionCodegenContract::NicheReference)
+            ) && self.layouts_call_compatible(*from_element, *to_element) => {
+                Ok(value)
+            }
+            (
                 LayoutKind::List {
                     element: from_element,
                 },
@@ -6244,6 +6377,105 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(builder.inst_results(call)[0])
     }
 
+    fn lower_list_filter(
+        &mut self,
+        kernel_id: KernelId,
+        plan: &ListPredicatePlan,
+        prefix_arguments: &[Value],
+        subject: Value,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let list_len = self.declare_list_len_func(kernel_id, builder)?;
+        let list_get = self.declare_list_get_func(kernel_id, builder)?;
+        let len_call = builder.ins().call(list_len, &[subject]);
+        let len = builder.inst_results(len_call)[0];
+        let element_abi =
+            self.field_abi_shape(kernel_id, plan.element_layout, "list filter element")?;
+        let stride = element_abi.size.max(1);
+        let stride_value = builder.ins().iconst(types::I64, i64::from(stride));
+        let total_bytes = builder.ins().imul(len, stride_value);
+        let output_ptr =
+            self.allocate_arena_bytes(kernel_id, total_bytes, element_abi.align.max(1), builder)?;
+
+        let mut prefix_arguments = prefix_arguments.to_vec();
+        for ((from, to), argument) in plan
+            .step_prefix_layouts
+            .iter()
+            .zip(prefix_arguments.iter_mut())
+        {
+            *argument = self.repack_value(kernel_id, *argument, *from, *to, builder)?;
+        }
+
+        let loop_block = builder.create_block();
+        let body_block = builder.create_block();
+        let keep_block = builder.create_block();
+        let skip_block = builder.create_block();
+        let done_block = builder.create_block();
+        builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(loop_block, types::I64);
+        builder.append_block_param(done_block, types::I64);
+
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder
+            .ins()
+            .jump(loop_block, &[BlockArg::Value(zero), BlockArg::Value(zero)]);
+
+        builder.switch_to_block(loop_block);
+        let index = builder.block_params(loop_block)[0];
+        let kept = builder.block_params(loop_block)[1];
+        let at_end = builder.ins().icmp(IntCC::Equal, index, len);
+        builder
+            .ins()
+            .brif(at_end, done_block, &[BlockArg::Value(kept)], body_block, &[]);
+
+        builder.seal_block(body_block);
+        builder.switch_to_block(body_block);
+        let get_call = builder.ins().call(list_get, &[subject, index]);
+        let element_ptr = builder.inst_results(get_call)[0];
+        let element = builder
+            .ins()
+            .load(element_abi.ty, MemFlags::new(), element_ptr, 0);
+        let step_element = self.repack_value(
+            kernel_id,
+            element,
+            plan.element_layout,
+            plan.step_element_layout,
+            builder,
+        )?;
+        let mut step_arguments = Vec::with_capacity(prefix_arguments.len() + 1);
+        step_arguments.extend(prefix_arguments.iter().copied());
+        step_arguments.push(step_element);
+        let keep =
+            self.lower_direct_item_call(kernel_id, plan.step_body, &step_arguments, builder)?;
+        builder.ins().brif(keep, keep_block, &[], skip_block, &[]);
+
+        builder.seal_block(keep_block);
+        builder.switch_to_block(keep_block);
+        let out_offset = builder.ins().imul(kept, stride_value);
+        let out_ptr = builder.ins().iadd(output_ptr, out_offset);
+        builder.ins().store(MemFlags::new(), element, out_ptr, 0);
+        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_kept = builder.ins().iadd_imm(kept, 1);
+        builder.ins().jump(
+            loop_block,
+            &[BlockArg::Value(next_index), BlockArg::Value(next_kept)],
+        );
+
+        builder.seal_block(skip_block);
+        builder.switch_to_block(skip_block);
+        let next_index = builder.ins().iadd_imm(index, 1);
+        builder
+            .ins()
+            .jump(loop_block, &[BlockArg::Value(next_index), BlockArg::Value(kept)]);
+
+        builder.seal_block(done_block);
+        builder.switch_to_block(done_block);
+        let kept_len = builder.block_params(done_block)[0];
+        let list_new = self.declare_list_new_func(kernel_id, builder)?;
+        let call = builder.ins().call(list_new, &[kept_len, output_ptr, stride_value]);
+        Ok(builder.inst_results(call)[0])
+    }
+
     fn emit_empty_list(
         &mut self,
         kernel_id: KernelId,
@@ -6921,6 +7153,21 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 self.lower_list_map(kernel_id, &plan, prefix_arguments, *subject, builder)
             }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::ListFilter(plan)) => {
+                let prefix_count = plan.step_prefix_layouts.len();
+                if arguments.len() != prefix_count + 1 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct list filter lowering expected prefix arguments followed by subject",
+                    ));
+                }
+                let (prefix_arguments, trailing_arguments) = arguments.split_at(prefix_count);
+                let [subject] = trailing_arguments else {
+                    unreachable!("direct list filter lowering keeps subject trailing");
+                };
+                self.lower_list_filter(kernel_id, &plan, prefix_arguments, *subject, builder)
+            }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListAny(plan)) => {
                 let prefix_count = plan.step_prefix_layouts.len();
                 if arguments.len() != prefix_count + 1 {
@@ -7516,6 +7763,106 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     self.program.layouts()[layout]
                 ),
             )),
+        }
+    }
+
+    fn runtime_text_interpolation_support(
+        &self,
+        layout: LayoutId,
+    ) -> Option<RuntimeTextInterpolationSupport> {
+        match &self.program.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::Text) => Some(RuntimeTextInterpolationSupport::Text),
+            LayoutKind::Primitive(PrimitiveType::Int)
+                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
+            {
+                Some(RuntimeTextInterpolationSupport::Int)
+            }
+            LayoutKind::Primitive(PrimitiveType::Float)
+                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
+            {
+                Some(RuntimeTextInterpolationSupport::Float)
+            }
+            LayoutKind::Primitive(PrimitiveType::Bool)
+                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
+            {
+                Some(RuntimeTextInterpolationSupport::Bool)
+            }
+            LayoutKind::Primitive(PrimitiveType::Unit)
+                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
+            {
+                Some(RuntimeTextInterpolationSupport::Unit)
+            }
+            LayoutKind::AnonymousDomain { carrier, .. } => {
+                self.runtime_text_interpolation_support(*carrier)
+            }
+            LayoutKind::Domain { .. } => self
+                .program
+                .named_domain_carrier(layout)
+                .and_then(|carrier| self.runtime_text_interpolation_support(carrier)),
+            _ => None,
+        }
+    }
+
+    fn emit_runtime_text_interpolation_segment(
+        &mut self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        layout: LayoutId,
+        value: Value,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let Some(support) = self.runtime_text_interpolation_support(layout) else {
+            return Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!(
+                    "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
+                    self.program.layouts()[layout]
+                ),
+            ));
+        };
+        match support {
+            RuntimeTextInterpolationSupport::Text => Ok(value),
+            RuntimeTextInterpolationSupport::Int => {
+                let func = self.declare_scalar_to_text_func(
+                    "aivi_int_to_text",
+                    types::I64,
+                    kernel_id,
+                    builder,
+                )?;
+                let call = builder.ins().call(func, &[value]);
+                Ok(builder.inst_results(call)[0])
+            }
+            RuntimeTextInterpolationSupport::Float => {
+                let func = self.declare_scalar_to_text_func(
+                    "aivi_float_to_text",
+                    types::F64,
+                    kernel_id,
+                    builder,
+                )?;
+                let call = builder.ins().call(func, &[value]);
+                Ok(builder.inst_results(call)[0])
+            }
+            RuntimeTextInterpolationSupport::Bool => {
+                let func = self.declare_scalar_to_text_func(
+                    "aivi_bool_to_text",
+                    types::I8,
+                    kernel_id,
+                    builder,
+                )?;
+                let call = builder.ins().call(func, &[value]);
+                Ok(builder.inst_results(call)[0])
+            }
+            RuntimeTextInterpolationSupport::Unit => {
+                let func = self.declare_scalar_to_text_func(
+                    "aivi_unit_to_text",
+                    types::I8,
+                    kernel_id,
+                    builder,
+                )?;
+                let call = builder.ins().call(func, &[value]);
+                Ok(builder.inst_results(call)[0])
+            }
         }
     }
 
@@ -9027,6 +9374,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         pass_mode: AbiPassMode,
         detail: &str,
     ) -> Result<AbiShape, CodegenError> {
+        if let LayoutKind::Signal { element } = &self.program.layouts()[layout].kind {
+            return self.abi_shape(
+                kernel_id,
+                *element,
+                self.program.layouts()[*element].abi,
+                detail,
+            );
+        }
         match pass_mode {
             AbiPassMode::ByReference => {
                 let ty = self.pointer_type();
@@ -9139,6 +9494,33 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             let mut sig = self.module.make_signature();
             sig.params.push(AbiParam::new(types::I64));
             sig.params.push(AbiParam::new(self.pointer_type()));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
+    fn declare_scalar_to_text_func(
+        &mut self,
+        sym: &'static str,
+        arg_type: types::Type,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
+            sig.params.push(AbiParam::new(arg_type));
             sig.returns.push(AbiParam::new(self.pointer_type()));
             let fid = self
                 .module
@@ -9584,6 +9966,70 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 ),
             )),
         }
+    }
+
+    fn inline_pipe_stage_result_layout(
+        &self,
+        kernel_id: KernelId,
+        kernel: &crate::Kernel,
+        pipe_expr: KernelExprId,
+        stage_index: usize,
+    ) -> Result<LayoutId, CodegenError> {
+        let pipe_expr_ref = &kernel.exprs()[pipe_expr];
+        let KernelExprKind::Pipe(pipe) = &pipe_expr_ref.kind else {
+            unreachable!("inline pipe stage result layout requires a pipe expression");
+        };
+        let stage = &pipe.stages[stage_index];
+        match &stage.kind {
+            crate::InlinePipeStageKind::Transform { expr, .. } => Ok(kernel.exprs()[*expr].layout),
+            crate::InlinePipeStageKind::Tap { .. }
+            | crate::InlinePipeStageKind::Debug { .. }
+            | crate::InlinePipeStageKind::Gate { .. } => Ok(stage.result_layout),
+            crate::InlinePipeStageKind::TruthyFalsy { truthy, falsy } => {
+                let truthy_layout = kernel.exprs()[truthy.body].layout;
+                let falsy_layout = kernel.exprs()[falsy.body].layout;
+                self.require_layout_match(
+                    kernel_id,
+                    falsy.body,
+                    truthy_layout,
+                    falsy_layout,
+                    &format!("inline-pipe truthy/falsy stage {stage_index} branch result"),
+                )?;
+                Ok(truthy_layout)
+            }
+            crate::InlinePipeStageKind::Case { arms } => {
+                let Some(first) = arms.first() else {
+                    return Err(self.unsupported_inline_pipe_stage(
+                        kernel_id,
+                        pipe_expr,
+                        stage_index,
+                        "empty Case arms",
+                    ));
+                };
+                let first_layout = kernel.exprs()[first.body].layout;
+                for arm in arms.iter().skip(1) {
+                    self.require_layout_match(
+                        kernel_id,
+                        arm.body,
+                        first_layout,
+                        kernel.exprs()[arm.body].layout,
+                        &format!("inline-pipe case stage {stage_index} arm result"),
+                    )?;
+                }
+                Ok(first_layout)
+            }
+            crate::InlinePipeStageKind::FanOut { map_expr } => Ok(kernel.exprs()[*map_expr].layout),
+        }
+    }
+
+    fn layout_is_signal_of(&self, signal_layout: LayoutId, payload_layout: LayoutId) -> bool {
+        self.program
+            .layouts()
+            .get(signal_layout)
+            .is_some_and(|layout| matches!(
+                &layout.kind,
+                crate::LayoutKind::Signal { element } if *element == payload_layout
+            ))
     }
 
     fn extract_truthy_falsy_payload(

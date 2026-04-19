@@ -482,7 +482,7 @@ signal next = increment base
 }
 
 #[test]
-fn linked_runtime_keeps_payload_sensitive_text_option_bodies_on_fallback_lane() {
+fn linked_runtime_executes_payload_sensitive_text_option_bodies_on_native_lane() {
     let lowered = lower_text(
         "runtime-startup-derived-fallback-lane.aivi",
         r#"
@@ -517,8 +517,8 @@ signal chosen : Signal Text =
         "signal body kernels should still be linked for fallback evaluation"
     );
     assert!(
-        matches!(linked_chosen.eval_lane, LinkedEvalLane::Fallback),
-        "payload-sensitive Option Text matches must remain on the fallback lane"
+        matches!(linked_chosen.eval_lane, LinkedEvalLane::Native(_)),
+        "payload-sensitive Option Text matches should now lower onto the native lane"
     );
 
     linked.tick().expect("linked runtime tick should succeed");
@@ -1706,8 +1706,8 @@ signal total : Signal Int = ready | readyAndEnabled
         .expect("reactive signal metadata should link");
 
     assert!(
-        matches!(reactive.seed_eval_lane, LinkedEvalLane::Fallback),
-        "reactive seeds should now be classified onto an explicit eval lane even when they stay on fallback"
+        matches!(reactive.seed_eval_lane, LinkedEvalLane::Native(_)),
+        "reactive seeds should use native lanes when their seed kernels can compile"
     );
 
     let clauses = linked
@@ -1722,12 +1722,12 @@ signal total : Signal Int = ready | readyAndEnabled
     );
     for clause in clauses {
         assert!(
-            matches!(clause.guard_eval_lane, LinkedEvalLane::Fallback),
-            "reactive guards should now be classified onto explicit eval lanes even when they stay on fallback"
+            matches!(clause.guard_eval_lane, LinkedEvalLane::Native(_)),
+            "reactive guards should use native lanes when their fragment kernels can compile"
         );
         assert!(
-            matches!(clause.body_eval_lane, LinkedEvalLane::Fallback),
-            "reactive bodies should now be classified onto explicit eval lanes even when they stay on fallback"
+            matches!(clause.body_eval_lane, LinkedEvalLane::Native(_)),
+            "reactive bodies should use native lanes when their fragment kernels can compile"
         );
     }
 }
@@ -1785,7 +1785,7 @@ signal tickSeen : Signal Bool = event
 }
 
 #[test]
-fn linked_runtime_keeps_pattern_reactive_guards_on_fallback_lanes() {
+fn linked_runtime_executes_pattern_reactive_guards_on_native_lanes() {
     let lowered = lower_text(
         "runtime-startup-pattern-reactive-fallback-lanes.aivi",
         r#"
@@ -1825,8 +1825,8 @@ signal tickSeen : Signal Bool = event
     assert!(
         clauses
             .iter()
-            .any(|clause| matches!(clause.guard_eval_lane, LinkedEvalLane::Fallback)),
-        "payload-sensitive pattern guards should stay on the fallback lane"
+            .all(|clause| matches!(clause.guard_eval_lane, LinkedEvalLane::Native(_))),
+        "payload-sensitive pattern guards should now lower onto native lanes"
     );
 }
 
