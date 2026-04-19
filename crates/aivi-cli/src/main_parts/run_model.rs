@@ -61,7 +61,8 @@ struct RunArtifact {
     required_signal_globals: BTreeMap<BackendItemId, Box<str>>,
     runtime_assembly: HirRuntimeAssembly,
     runtime_link: aivi_runtime::BackendRuntimeLinkSeed,
-    backend: Arc<BackendProgram>,
+    runtime_tables: Option<aivi_runtime::BackendLinkedRuntimeTables>,
+    backend: aivi_runtime::hir_adapter::BackendRuntimePayload,
     backend_native_kernels: Arc<aivi_backend::NativeKernelArtifactSet>,
     /// Default values to publish into stub Input signal handles for cross-module
     /// workspace imports before the first hydration cycle. Keyed by the input handle
@@ -86,6 +87,13 @@ struct RunGtkArtifact {
 impl RunArtifact {
     fn gtk(&self) -> Option<&RunGtkArtifact> {
         match &self.kind {
+            RunArtifactKind::Gtk(surface) => Some(surface),
+            RunArtifactKind::HeadlessTask { .. } => None,
+        }
+    }
+
+    fn gtk_mut(&mut self) -> Option<&mut RunGtkArtifact> {
+        match &mut self.kind {
             RunArtifactKind::Gtk(surface) => Some(surface),
             RunArtifactKind::HeadlessTask { .. } => None,
         }
@@ -147,35 +155,29 @@ struct RunValidationBlocker {
 
 #[derive(Clone, Debug)]
 struct RunFragmentExecutionUnit {
-    backend: Arc<BackendProgram>,
+    backend: aivi_runtime::hir_adapter::BackendRuntimePayload,
     native_kernels: Arc<aivi_backend::NativeKernelArtifactSet>,
-    cache_key: u64,
 }
 
 impl RunFragmentExecutionUnit {
     fn new(
-        backend: Arc<BackendProgram>,
+        backend: aivi_runtime::hir_adapter::BackendRuntimePayload,
         native_kernels: Arc<aivi_backend::NativeKernelArtifactSet>,
-        cache_key: u64,
     ) -> Self {
         Self {
             backend,
             native_kernels,
-            cache_key,
         }
     }
 
-    fn backend(&self) -> &BackendProgram {
-        self.backend.as_ref()
-    }
-
-    fn cache_key(&self) -> u64 {
-        self.cache_key
+    fn backend_view(&self) -> aivi_backend::BackendRuntimeView<'_> {
+        self.backend.runtime_view()
     }
 
     fn create_engine(&self, profiled: bool) -> BackendExecutionEngineHandle<'_> {
-        let executable = BackendExecutableProgram::interpreted(self.backend.as_ref())
-            .with_native_kernels(self.native_kernels.as_ref())
+        let executable = self
+            .backend
+            .executable_program(self.native_kernels.as_ref())
             .with_execution_options(aivi_backend::BackendExecutionOptions {
                 prefer_interpreter: cfg!(test),
                 ..Default::default()

@@ -224,19 +224,19 @@ where
     metrics.stub_signal_defaults = stub_signal_defaults_started.elapsed();
     on_stage_completed("stub signal defaults", metrics.stub_signal_defaults);
     metrics.total = total_started.elapsed();
-    Ok(PreparedRunArtifact {
-        artifact: RunArtifact {
-            view_name: selected.value.name.text().into(),
-            kind,
-            required_signal_globals,
-            runtime_assembly,
-            runtime_link,
-            backend: lowered.backend,
-            backend_native_kernels: Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
-            stub_signal_defaults,
-        },
-        metrics,
-    })
+    let mut artifact = RunArtifact {
+        view_name: selected.value.name.text().into(),
+        kind,
+        required_signal_globals,
+        runtime_assembly,
+        runtime_link,
+        runtime_tables: None,
+        backend: aivi_runtime::hir_adapter::BackendRuntimePayload::Program(lowered.backend),
+        backend_native_kernels: Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
+        stub_signal_defaults,
+    };
+    backfill_fragment_opaque_layout_variants(&mut artifact);
+    Ok(PreparedRunArtifact { artifact, metrics })
 }
 
 #[derive(Clone, Copy)]
