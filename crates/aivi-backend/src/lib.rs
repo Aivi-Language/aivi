@@ -56,7 +56,10 @@ pub use ids::{
     DecodePlanId, DecodeStepId, EnvSlotId, InlineSubjectId, ItemId, KernelExprId, KernelId,
     LayoutId, PipelineId, SourceId,
 };
-pub use jit::{NativeKernelExecutionError, NativeKernelPlan, validate_frozen_requested_kernel_abi};
+pub use jit::{
+    NativeKernelExecutionError, NativeKernelPlan, diagnose_frozen_native_kernel_plan,
+    validate_frozen_requested_kernel_abi,
+};
 pub use kernel::{
     AbiParameter, AbiResult, BigIntLiteral, BinaryOperator, BuiltinAppendCarrier,
     BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,

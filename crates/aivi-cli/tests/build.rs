@@ -125,6 +125,38 @@ fn bytes_contain(haystack: &[u8], needle: &[u8]) -> bool {
         .any(|window| window == needle)
 }
 
+#[cfg(unix)]
+fn assert_executable_launches(executable_path: &Path) {
+    let output = Command::new("timeout")
+        .arg("5")
+        .arg("stdbuf")
+        .arg("-oL")
+        .arg("-eL")
+        .arg(executable_path)
+        .output()
+        .expect("standalone executable launch probe should run");
+    assert_eq!(
+        output.status.code(),
+        Some(124),
+        "expected built executable to stay alive until timeout, stdout was: {}, stderr was: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(&format!(
+            "running GTK view `main` from {}",
+            executable_path.display()
+        )),
+        "expected standalone launch to report the built executable path, got stdout: {stdout}"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "expected standalone launch probe stderr to stay empty, got: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[test]
 fn build_writes_a_self_contained_runnable_executable() {
     let workspace = TempDir::new("build-static-workspace");
@@ -342,5 +374,7 @@ fn build_accepts_snake_and_reversi_demos() {
                 "snake executable should embed demo tile assets under demos/assets"
             );
         }
+        #[cfg(unix)]
+        assert_executable_launches(&executable_path);
     }
 }

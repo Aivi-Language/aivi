@@ -893,6 +893,18 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
+            "aivi_int_to_text" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_float_to_text" => {
+                sig.params.push(AbiParam::new(types::F64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bool_to_text" | "aivi_unit_to_text" => {
+                sig.params.push(AbiParam::new(types::I8));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
             "aivi_bytes_append" => {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.params.push(AbiParam::new(self.pointer_type()));
@@ -1371,6 +1383,15 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         pass_mode: AbiPassMode,
         detail: &str,
     ) -> Result<AbiShape, CodegenError> {
+        if let LayoutKind::Signal { element } = &meta.layouts()[layout].kind {
+            return self.replay_abi_shape(
+                meta,
+                kernel_id,
+                *element,
+                meta.layouts()[*element].abi,
+                detail,
+            );
+        }
         match pass_mode {
             AbiPassMode::ByReference => {
                 let ty = self.pointer_type();

@@ -94,7 +94,7 @@ impl NativeKernelArtifact {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NativeKernelArtifactSet {
-    artifacts: BTreeMap<KernelFingerprint, NativeKernelArtifact>,
+    artifacts: BTreeMap<KernelFingerprint, BTreeMap<KernelId, NativeKernelArtifact>>,
 }
 
 impl NativeKernelArtifactSet {
@@ -103,7 +103,7 @@ impl NativeKernelArtifactSet {
     }
 
     pub fn len(&self) -> usize {
-        self.artifacts.len()
+        self.artifacts.values().map(BTreeMap::len).sum()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -111,7 +111,19 @@ impl NativeKernelArtifactSet {
     }
 
     pub fn get(&self, fingerprint: KernelFingerprint) -> Option<&NativeKernelArtifact> {
-        self.artifacts.get(&fingerprint)
+        self.artifacts
+            .get(&fingerprint)
+            .and_then(|artifacts| artifacts.values().next())
+    }
+
+    pub fn get_for_kernel(
+        &self,
+        fingerprint: KernelFingerprint,
+        kernel_id: KernelId,
+    ) -> Option<&NativeKernelArtifact> {
+        self.artifacts
+            .get(&fingerprint)
+            .and_then(|artifacts| artifacts.get(&kernel_id).or_else(|| artifacts.values().next()))
     }
 
     pub fn insert(
@@ -119,7 +131,10 @@ impl NativeKernelArtifactSet {
         fingerprint: KernelFingerprint,
         artifact: NativeKernelArtifact,
     ) -> Option<NativeKernelArtifact> {
-        self.artifacts.insert(fingerprint, artifact)
+        self.artifacts
+            .entry(fingerprint)
+            .or_default()
+            .insert(artifact.requested_kernel(), artifact)
     }
 }
 

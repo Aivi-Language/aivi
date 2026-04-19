@@ -756,6 +756,23 @@ impl FrozenPayloadRegistry {
                 )),
             };
         }
+        let native_kernels = self.attached_native_kernels(handle)?;
+        let aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) =
+            self.frozen_backend_payload(handle)?
+        else {
+            unreachable!("frozen backend payload conversion should always produce a catalog");
+        };
+        if let Err(detail) = aivi_backend::diagnose_frozen_native_kernel_plan(
+            catalog.as_ref(),
+            native_kernels.as_ref(),
+            kernel,
+        ) {
+            return Err(format!(
+                "{context} kernel {} in backend {:016x} cannot materialize a frozen native execution plan: {detail}; built bundles are strict compiled-only",
+                kernel.as_raw(),
+                payload.key
+            ));
+        }
         Ok(())
     }
 
@@ -1036,7 +1053,7 @@ fn collect_native_kernel_payloads(
 ) -> Result<Box<[RegisteredNativeKernelPayload]>, String> {
     let mut native_kernels = Vec::new();
     for (kernel, kernel_meta) in meta.kernels().iter() {
-        let artifact = if let Some(artifact) = provided.get(kernel_meta.fingerprint) {
+        let artifact = if let Some(artifact) = provided.get_for_kernel(kernel_meta.fingerprint, kernel) {
             artifact.clone()
         } else {
             let Some(program) = backend.as_program() else {
@@ -1991,7 +2008,11 @@ fn backfill_fragment_opaque_layout_variants(artifact: &mut RunArtifact) {
         }
     }
 
-    backfill_backend_payload_opaque_variants(&mut artifact.backend, &templates);
+    backfill_backend_payload_opaque_variants(
+        &mut artifact.backend,
+        &templates,
+        &carrier_templates,
+    );
 
     if let Some(surface) = artifact.gtk_mut() {
         for input in surface.hydration_inputs.values_mut() {

@@ -40,7 +40,7 @@ pub(crate) struct LazyJitExecutionEngine<'a> {
     item_cache: BTreeMap<ItemId, RuntimeValue>,
     item_stack: BTreeSet<ItemId>,
     eval_trace: Vec<EvalFrame>,
-    kernel_plans: BTreeMap<KernelFingerprint, CachedKernelPlan>,
+    kernel_plans: BTreeMap<KernelId, CachedKernelPlan>,
     jit_profile: Option<KernelEvaluationProfile>,
     combined_profile: Option<KernelEvaluationProfile>,
 }
@@ -50,7 +50,7 @@ pub(crate) struct NativeOnlyExecutionEngine<'a> {
     native_artifacts: Option<&'a NativeKernelArtifactSet>,
     last_kernel_call: Option<LastKernelCall>,
     eval_trace: Vec<EvalFrame>,
-    kernel_plans: BTreeMap<KernelFingerprint, CachedKernelPlan>,
+    kernel_plans: BTreeMap<KernelId, CachedKernelPlan>,
     profile: Option<KernelEvaluationProfile>,
 }
 
@@ -143,12 +143,11 @@ impl<'a> LazyJitExecutionEngine<'a> {
         }
     }
 
-    fn prepare_kernel_plan(&mut self, kernel_id: KernelId) -> KernelFingerprint {
-        let fingerprint = compute_kernel_fingerprint(self.program, kernel_id);
-        self.kernel_plans.entry(fingerprint).or_insert_with(|| {
+    fn prepare_kernel_plan(&mut self, kernel_id: KernelId) -> KernelId {
+        self.kernel_plans.entry(kernel_id).or_insert_with(|| {
             CachedKernelPlan::build(self.program, self.native_artifacts, kernel_id)
         });
-        fingerprint
+        kernel_id
     }
 
     fn prepare_signal_body_plans(&mut self) {
@@ -250,16 +249,15 @@ impl<'a> NativeOnlyExecutionEngine<'a> {
         }
     }
 
-    fn prepare_kernel_plan(&mut self, kernel_id: KernelId) -> KernelFingerprint {
-        let fingerprint = self
-            .backend
+    fn prepare_kernel_plan(&mut self, kernel_id: KernelId) -> KernelId {
+        self.backend
             .kernel_fingerprint(kernel_id)
             .expect("native-only backend kernel should exist");
-        self.kernel_plans.entry(fingerprint).or_insert_with(|| {
+        self.kernel_plans.entry(kernel_id).or_insert_with(|| {
             self.backend
                 .build_kernel_plan(self.native_artifacts, kernel_id)
         });
-        fingerprint
+        kernel_id
     }
 
     fn prepare_signal_body_plans(&mut self) {
@@ -868,7 +866,7 @@ impl TaskFunctionApplier for NativeOnlyExecutionEngine<'_> {
 mod tests {
     use super::LazyJitExecutionEngine;
     use crate::{
-        BackendExecutionOptions, ItemId, ItemKind, Program, compute_kernel_fingerprint,
+        BackendExecutionOptions, ItemId, ItemKind, Program,
         lower_module as lower_backend_module, validate_program,
     };
     use aivi_base::SourceDatabase;
@@ -931,11 +929,9 @@ signal derived = base
                 .expect("direct signal dependency should lower a body kernel"),
             other => panic!("expected signal item, found {other:?}"),
         };
-        let fingerprint = compute_kernel_fingerprint(&backend, body_kernel);
-
         let engine = LazyJitExecutionEngine::new(&backend, BackendExecutionOptions::default());
 
-        assert!(!engine.kernel_plans.contains_key(&fingerprint));
+        assert!(!engine.kernel_plans.contains_key(&body_kernel));
     }
 
     #[test]
@@ -954,8 +950,6 @@ signal derived = base
                 .expect("direct signal dependency should lower a body kernel"),
             other => panic!("expected signal item, found {other:?}"),
         };
-        let fingerprint = compute_kernel_fingerprint(&backend, body_kernel);
-
         let engine = LazyJitExecutionEngine::new(
             &backend,
             BackendExecutionOptions {
@@ -964,7 +958,7 @@ signal derived = base
             },
         );
 
-        assert!(engine.kernel_plans.contains_key(&fingerprint));
+        assert!(engine.kernel_plans.contains_key(&body_kernel));
     }
 }
 
@@ -1121,7 +1115,15 @@ fn execute_compiled_kernel(
     .map_err(|_| CompiledKernelFailure::Fallback("native call failed".into()))?;
     plan.result_plan
         .unpack_result(call_result, &hints)
-        .ok_or_else(|| CompiledKernelFailure::Fallback("failed to unmarshal native result".into()))
+        .ok_or_else(|| {
+            CompiledKernelFailure::Fallback(
+                format!(
+                    "failed to unmarshal native result {:?} with plan {:?}",
+                    call_result, plan.result_plan
+                )
+                .into_boxed_str(),
+            )
+        })
 }
 
 enum CachedKernelPlan {
@@ -1199,6 +1201,77 @@ fn wrap_native_one(error: CodegenError) -> CodegenErrors {
     CodegenErrors::new(vec![error])
 }
 
+pub fn diagnose_frozen_native_kernel_plan(
+    catalog: &FrozenBackendCatalog,
+    native_artifacts: &NativeKernelArtifactSet,
+    kernel_id: KernelId,
+) -> Result<(), Box<str>> {
+    let kernel = catalog
+        .kernels()
+        .get(kernel_id)
+        .ok_or_else(|| format!("missing frozen kernel {}", kernel_id.as_raw()).into_boxed_str())?;
+    let artifact = native_artifacts
+        .get_for_kernel(kernel.fingerprint, kernel_id)
+        .ok_or_else(|| {
+            format!(
+                "missing frozen native artifact for kernel {} fingerprint {:016x}",
+                kernel_id.as_raw(),
+                kernel.fingerprint.as_raw()
+            )
+            .into_boxed_str()
+        })?;
+    let frozen_abi = artifact.frozen_abi().ok_or_else(|| {
+        format!(
+            "native artifact for kernel {} is missing frozen ABI bytes",
+            kernel_id.as_raw()
+        )
+        .into_boxed_str()
+    })?;
+    let abi = decode_frozen_native_kernel_abi(frozen_abi).ok_or_else(|| {
+        format!(
+            "native artifact for kernel {} carries an invalid frozen ABI payload",
+            kernel_id.as_raw()
+        )
+        .into_boxed_str()
+    })?;
+    if artifact.requested_kernel() != kernel_id || abi.requested_kernel != kernel_id {
+        return Err(format!(
+            "native artifact for kernel {} was frozen for requested kernel {} / ABI kernel {}",
+            kernel_id.as_raw(),
+            artifact.requested_kernel().as_raw(),
+            abi.requested_kernel.as_raw()
+        )
+        .into_boxed_str());
+    }
+    let abi_kernel = abi
+        .kernels
+        .iter()
+        .find(|entry| entry.kernel == kernel_id)
+        .ok_or_else(|| {
+            format!(
+                "frozen ABI for kernel {} is missing its requested kernel entry",
+                kernel_id.as_raw()
+            )
+            .into_boxed_str()
+        })?;
+    if abi_kernel.result_plan.is_none() {
+        return Err(format!(
+            "frozen ABI for kernel {} is missing its requested result marshal plan",
+            kernel_id.as_raw()
+        )
+        .into_boxed_str());
+    }
+    crate::cache::instantiate_native_kernel_artifact_for_frozen_abi(frozen_abi, kernel_id, artifact)
+        .map(|_| ())
+        .map_err(|error| {
+            format!(
+                "failed to instantiate frozen native artifact for kernel {}: {error}",
+                kernel_id.as_raw()
+            )
+            .into_boxed_str()
+        })
+}
+
 impl FrozenAbiValueKind {
     pub(crate) fn from_runtime(kind: AbiValueKind) -> Self {
         match kind {
@@ -1233,7 +1306,8 @@ impl NativeKernelPlan {
         kernel_id: KernelId,
     ) -> Option<Self> {
         let fingerprint = compute_kernel_fingerprint(program, kernel_id);
-        if let Some(artifact) = native_artifacts.and_then(|artifacts| artifacts.get(fingerprint))
+        if let Some(artifact) =
+            native_artifacts.and_then(|artifacts| artifacts.get_for_kernel(fingerprint, kernel_id))
             && let Some(plan) = Self::from_native_artifact(program, kernel_id, artifact)
         {
             return Some(plan);
@@ -1247,7 +1321,8 @@ impl NativeKernelPlan {
         kernel_id: KernelId,
     ) -> Option<Self> {
         let fingerprint = meta.kernels().get(kernel_id)?.fingerprint;
-        let artifact = native_artifacts.and_then(|artifacts| artifacts.get(fingerprint))?;
+        let artifact =
+            native_artifacts.and_then(|artifacts| artifacts.get_for_kernel(fingerprint, kernel_id))?;
         if let Some(frozen_abi) = artifact.frozen_abi()
             && let Some(plan) = Self::from_frozen_native_artifact(kernel_id, artifact, frozen_abi)
         {
@@ -1262,7 +1337,8 @@ impl NativeKernelPlan {
         kernel_id: KernelId,
     ) -> Option<Self> {
         let fingerprint = catalog.kernels().get(kernel_id)?.fingerprint;
-        let artifact = native_artifacts.and_then(|artifacts| artifacts.get(fingerprint))?;
+        let artifact =
+            native_artifacts.and_then(|artifacts| artifacts.get_for_kernel(fingerprint, kernel_id))?;
         if let Some(frozen_abi) = artifact.frozen_abi()
             && let Some(plan) = Self::from_frozen_native_artifact(kernel_id, artifact, frozen_abi)
         {
@@ -1956,6 +2032,7 @@ impl MarshalPlan {
     ) -> Option<AbiValue> {
         let value = self.signal_coerced_value(value)?;
         match &self.kind {
+            MarshalPlanKind::Signal { element } => element.pack_argument(value, arena, hints),
             MarshalPlanKind::Unit => match value {
                 RuntimeValue::Unit => Some(AbiValue::I8(0)),
                 _ => None,
@@ -2001,6 +2078,9 @@ impl MarshalPlan {
     }
 
     fn unpack_result(&self, value: AbiValue, hints: &PackedValueHints) -> Option<RuntimeValue> {
+        if let MarshalPlanKind::Signal { element } = &self.kind {
+            return element.unpack_result(value, hints);
+        }
         match (&self.kind, value) {
             (MarshalPlanKind::Unit, AbiValue::I8(_)) => Some(RuntimeValue::Unit),
             (MarshalPlanKind::Int, AbiValue::I64(value)) => Some(RuntimeValue::Int(value)),
@@ -2799,6 +2879,15 @@ fn freeze_abi_value_kind(
     pass_mode: AbiPassMode,
     detail: &str,
 ) -> Result<FrozenAbiValueKind, CodegenErrors> {
+    if let LayoutKind::Signal { element } = &meta.layouts()[layout].kind {
+        return freeze_abi_value_kind(
+            meta,
+            kernel_id,
+            *element,
+            meta.layouts()[*element].abi,
+            detail,
+        );
+    }
     let kind = match pass_mode {
         AbiPassMode::ByReference => AbiValueKind::Pointer,
         AbiPassMode::ByValue => match &meta.layouts()[layout].kind {

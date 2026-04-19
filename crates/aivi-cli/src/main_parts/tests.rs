@@ -272,7 +272,7 @@ fn assert_reactive_clause_body_has_entry_native_kernel(
     let compiled_plan = match &clause.compiled_body.backend {
         aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
             let mut native_kernels = clause.compiled_body.native_kernels.as_ref().clone();
-            if native_kernels.get(fingerprint).is_none() {
+            if native_kernels.get_for_kernel(fingerprint, kernel).is_none() {
                 let native = aivi_backend::compile_native_kernel_artifact(program.as_ref(), kernel)
                     .expect("program-backed reactive body kernel should compile natively")
                     .expect("program-backed reactive body kernel should emit a native artifact");
@@ -289,7 +289,7 @@ fn assert_reactive_clause_body_has_entry_native_kernel(
                 clause
                     .compiled_body
                     .native_kernels
-                    .get(fingerprint)
+                    .get_for_kernel(fingerprint, kernel)
                     .is_some(),
                 "expected `{signal_name}` clause {clause_index} body kernel {} fingerprint {:016x} to survive bundle serialization",
                 kernel.as_raw(),
@@ -306,7 +306,7 @@ fn assert_reactive_clause_body_has_entry_native_kernel(
                 clause
                     .compiled_body
                     .native_kernels
-                    .get(fingerprint)
+                    .get_for_kernel(fingerprint, kernel)
                     .is_some(),
                 "expected `{signal_name}` clause {clause_index} body kernel {} fingerprint {:016x} to survive bundle serialization",
                 kernel.as_raw(),

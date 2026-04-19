@@ -211,28 +211,37 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         ) {
                             errors.push(error);
                         }
-                        // Allow both static and dynamic (interpolation) text
                         for segment in &text.segments {
                             if let crate::TextSegment::Interpolation {
                                 expr: interp_expr, ..
                             } = segment
                             {
-                                if self
-                                    .runtime_text_interpolation_support(
-                                        kernel.exprs()[*interp_expr].layout,
-                                    )
-                                    .is_none()
-                                {
-                                    errors.push(self.unsupported_expression(
-                                        kernel_id,
-                                        *interp_expr,
-                                        &format!(
-                                            "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
-                                            self.program.layouts()[kernel.exprs()[*interp_expr].layout]
-                                        ),
-                                    ));
+                                let static_value =
+                                    match self.evaluate_static_value(kernel_id, kernel, *interp_expr) {
+                                        Ok(value) => value,
+                                        Err(error) => {
+                                            errors.push(error);
+                                            None
+                                        }
+                                    };
+                                if static_value.is_none() {
+                                    if self
+                                        .runtime_text_interpolation_support(
+                                            kernel.exprs()[*interp_expr].layout,
+                                        )
+                                        .is_none()
+                                    {
+                                        errors.push(self.unsupported_expression(
+                                            kernel_id,
+                                            *interp_expr,
+                                            &format!(
+                                                "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
+                                                self.program.layouts()[kernel.exprs()[*interp_expr].layout]
+                                            ),
+                                        ));
+                                    }
+                                    work.push(*interp_expr);
                                 }
-                                work.push(*interp_expr);
                             }
                         }
                     }
@@ -859,6 +868,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             },
             BuildRuntimeText {
                 expr_id: KernelExprId,
+                static_interpolations: Box<[Option<Box<str>>]>,
             },
             BuildRuntimeList {
                 expr_id: KernelExprId,
@@ -1195,46 +1205,63 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 "Text literal",
                             )?;
                             // Try static first
-                            if let Ok(Some(rendered)) =
-                                self.render_static_text_literal(kernel_id, kernel, expr_id, text)
-                            {
-                                values.push(self.materialize_text_constant(
-                                    kernel_id,
+                        if let Ok(Some(rendered)) =
+                            self.render_static_text_literal(kernel_id, kernel, expr_id, text)
+                        {
+                            values.push(self.materialize_text_constant(
+                                kernel_id,
                                     rendered.as_ref(),
                                     builder,
                                 )?);
-                            } else {
-                                for segment in &text.segments {
-                                    let crate::TextSegment::Interpolation {
-                                        expr: interp_expr, ..
-                                    } = segment
-                                    else {
-                                        continue;
-                                    };
-                                    let layout = kernel.exprs()[*interp_expr].layout;
-                                    if self.runtime_text_interpolation_support(layout).is_none() {
-                                        return Err(self.unsupported_expression(
-                                            kernel_id,
-                                            *interp_expr,
-                                            &format!(
-                                                "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
-                                                self.program.layouts()[layout]
-                                            ),
-                                        ));
-                                    }
+                        } else {
+                            let mut static_interpolations = Vec::new();
+                            for segment in &text.segments {
+                                let crate::TextSegment::Interpolation {
+                                    expr: interp_expr, ..
+                                } = segment
+                                else {
+                                    continue;
+                                };
+                                if let Some(value) =
+                                    self.evaluate_static_value(kernel_id, kernel, *interp_expr)?
+                                {
+                                    static_interpolations.push(Some(value.to_string().into_boxed_str()));
+                                    continue;
                                 }
-                                // Dynamic: visit interpolation sub-expressions in reverse
-                                tasks.push(Task::BuildRuntimeText { expr_id });
-                                for segment in text.segments.iter().rev() {
-                                    if let crate::TextSegment::Interpolation {
-                                        expr: interp_expr,
-                                        ..
-                                    } = segment
-                                    {
-                                        tasks.push(Task::Visit(*interp_expr));
-                                    }
+                                let layout = kernel.exprs()[*interp_expr].layout;
+                                if self.runtime_text_interpolation_support(layout).is_none() {
+                                    return Err(self.unsupported_expression(
+                                        kernel_id,
+                                        *interp_expr,
+                                        &format!(
+                                            "runtime text interpolation currently supports Text/Int/Float/Bool/Unit carriers at the native ABI boundary, found `{}`",
+                                            self.program.layouts()[layout]
+                                        ),
+                                    ));
+                                }
+                                static_interpolations.push(None);
+                            }
+                            // Dynamic: visit interpolation sub-expressions in reverse
+                            let static_interpolations =
+                                static_interpolations.into_boxed_slice();
+                            tasks.push(Task::BuildRuntimeText {
+                                expr_id,
+                                static_interpolations: static_interpolations.clone(),
+                            });
+                            let mut interp_index = static_interpolations.len();
+                            for segment in text.segments.iter().rev() {
+                                if let crate::TextSegment::Interpolation {
+                                    expr: interp_expr,
+                                    ..
+                                } = segment
+                                {
+                                        interp_index -= 1;
+                                        if static_interpolations[interp_index].is_none() {
+                                            tasks.push(Task::Visit(*interp_expr));
+                                        }
                                 }
                             }
+                        }
                         }
                         KernelExprKind::Tuple(elements) => {
                             // Try static materialization first; fall back to runtime aggregate
@@ -2555,7 +2582,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         builder,
                     )?);
                 }
-                Task::BuildRuntimeText { expr_id } => {
+                Task::BuildRuntimeText {
+                    expr_id,
+                    static_interpolations,
+                } => {
                     let text_segments = {
                         let expr = &kernel.exprs()[expr_id];
                         let KernelExprKind::Text(text) = &expr.kind else {
@@ -2564,9 +2594,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         text.segments.clone()
                     };
 
-                    let n_interps = text_segments
+                    let n_interps = static_interpolations
                         .iter()
-                        .filter(|s| matches!(s, crate::TextSegment::Interpolation { .. }))
+                        .filter(|segment| segment.is_none())
                         .count();
 
                     let mut interp_values: Vec<Value> = (0..n_interps)
@@ -2576,19 +2606,30 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
                     let mut seg_values: Vec<Value> = Vec::with_capacity(text_segments.len());
                     let mut interp_iter = interp_values.into_iter();
+                    let mut static_interp_iter = static_interpolations.iter();
                     for segment in &text_segments {
                         let v = match segment {
                             crate::TextSegment::Fragment { raw, .. } => {
                                 self.materialize_text_constant(kernel_id, raw.as_ref(), builder)?
                             }
                             crate::TextSegment::Interpolation { expr, .. } => {
-                                self.emit_runtime_text_interpolation_segment(
-                                    kernel_id,
-                                    *expr,
-                                    kernel.exprs()[*expr].layout,
-                                    interp_iter.next().expect("interpolation value"),
-                                    builder,
-                                )?
+                                match static_interp_iter
+                                    .next()
+                                    .expect("static interpolation metadata should align with text segments")
+                                {
+                                    Some(rendered) => self.materialize_text_constant(
+                                        kernel_id,
+                                        rendered.as_ref(),
+                                        builder,
+                                    )?,
+                                    None => self.emit_runtime_text_interpolation_segment(
+                                        kernel_id,
+                                        *expr,
+                                        kernel.exprs()[*expr].layout,
+                                        interp_iter.next().expect("interpolation value"),
+                                        builder,
+                                    )?,
+                                }
                             }
                         };
                         seg_values.push(v);
