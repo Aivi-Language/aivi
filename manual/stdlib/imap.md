@@ -275,9 +275,7 @@ Alias for background IMAP work that either returns `A` or fails with `ImapError`
 }
 signal snapshots : Signal (Result ImapError (List ImapSnapshot))
 
-@source imap.idle accounts with {
-    mailbox: "INBOX"
-}
+@source imap.idle accounts with { mailbox: "INBOX" }
 signal liveEvent : Signal (Result ImapError ImapLiveEvent)
 
 @source imap.fetchBody request

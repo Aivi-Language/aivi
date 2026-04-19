@@ -87,6 +87,10 @@ impl SourceProviderManager {
         }
     }
 
+    pub fn app_dir(&self) -> &Path {
+        self.context.app_dir()
+    }
+
     pub fn active_provider(&self, instance: SourceInstanceId) -> Option<&RuntimeSourceProvider> {
         self.active
             .get(&instance)

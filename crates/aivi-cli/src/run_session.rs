@@ -267,6 +267,10 @@ impl RunLaunchConfig {
     pub(super) fn new(providers: SourceProviderManager) -> Self {
         Self { providers }
     }
+
+    fn app_dir(&self) -> &Path {
+        self.providers.app_dir()
+    }
 }
 
 #[allow(dead_code)]
@@ -406,10 +410,6 @@ impl<'a> RunSessionAccess<'a> {
         self.session.lifecycle.phase()
     }
 
-    pub(super) fn runtime_error(&self) -> Option<&str> {
-        self.session.lifecycle.runtime_error()
-    }
-
     pub(super) fn driver(&self) -> GlibLinkedRuntimeDriver {
         self.session.driver.clone()
     }
@@ -445,13 +445,6 @@ impl<'a> RunSessionAccess<'a> {
 
     pub(super) fn queued_message_count(&self) -> usize {
         self.session.driver.queued_message_count()
-    }
-
-    pub(super) fn has_pending_gtk_events(&self) -> bool {
-        match &self.session.kind {
-            RunSessionKind::Gtk(state) => state.executor.host().has_pending_events(),
-            RunSessionKind::HeadlessTask => false,
-        }
     }
 
     pub(super) fn outcome_count(&self) -> usize {
@@ -710,10 +703,6 @@ impl RunSessionLifecycle {
 
     fn has_runtime_error(&self) -> bool {
         self.runtime_error.is_some()
-    }
-
-    fn runtime_error(&self) -> Option<&str> {
-        self.runtime_error.as_deref()
     }
 
     fn mark_running(&mut self) {
@@ -1024,12 +1013,12 @@ where
         required_signal_globals,
         runtime_assembly,
         runtime_link,
-        runtime_tables,
         backend,
         backend_native_kernels,
         stub_signal_defaults,
     } = artifact;
-    if matches!(kind, RunArtifactKind::Gtk(_)) {
+    let should_sync_gnome_tray_backend = matches!(kind, RunArtifactKind::Gtk(_));
+    if should_sync_gnome_tray_backend {
         let gtk_init_started = Instant::now();
         gtk::init()
             .map_err(|error| format!("failed to initialize GTK for {}: {error}", path.display()))?;
@@ -1043,57 +1032,21 @@ where
         );
     }
     let runtime_link_started = Instant::now();
-    let linked = if let Some(runtime_tables) = runtime_tables {
-        aivi_runtime::link_backend_runtime_with_tables_and_native_kernels_from_payload(
-            runtime_assembly,
-            backend.clone(),
-            backend_native_kernels.clone(),
-            runtime_tables,
-        )
-        .map_err(|errors| {
-            let mut rendered = String::from(
-                "failed to instantiate frozen backend runtime for `aivi build` output:\n",
-            );
-            for error in errors.errors() {
-                rendered.push_str("- ");
-                if let Some(program) = backend.as_program() {
-                    rendered.push_str(&render_backend_runtime_link_error(
-                        error,
-                        None,
-                        program.as_ref(),
-                    ));
-                } else {
-                    rendered.push_str(&error.to_string());
-                }
-                rendered.push('\n');
-            }
-            rendered
-        })?
-    } else {
-        aivi_runtime::link_backend_runtime_with_seed_and_native_kernels_from_payload(
-            runtime_assembly,
-            backend.clone(),
-            backend_native_kernels.clone(),
-            &runtime_link,
-        )
-        .map_err(|errors| {
-            let mut rendered = String::from("failed to link backend runtime for `aivi run`:\n");
-            for error in errors.errors() {
-                rendered.push_str("- ");
-                if let Some(program) = backend.as_program() {
-                    rendered.push_str(&render_backend_runtime_link_error(
-                        error,
-                        None,
-                        program.as_ref(),
-                    ));
-                } else {
-                    rendered.push_str(&error.to_string());
-                }
-                rendered.push('\n');
-            }
-            rendered
-        })?
-    };
+    let linked = aivi_runtime::link_backend_runtime_with_seed_and_native_kernels(
+        runtime_assembly,
+        backend.clone(),
+        backend_native_kernels.clone(),
+        &runtime_link,
+    )
+    .map_err(|errors| {
+        let mut rendered = String::from("failed to link backend runtime for `aivi run`:\n");
+        for error in errors.errors() {
+            rendered.push_str("- ");
+            rendered.push_str(&render_backend_runtime_link_error(error, None, &backend));
+            rendered.push('\n');
+        }
+        rendered
+    })?;
     let runtime_link = runtime_link_started.elapsed();
     record_startup_stage(
         &mut startup_metrics,
@@ -1124,12 +1077,21 @@ where
             context.wakeup();
         })
     };
+    let app_dir = launch_config.app_dir().to_path_buf();
     let driver = GlibLinkedRuntimeDriver::new(
         context.clone(),
         linked,
         launch_config.providers,
         Some(session_notifier.clone()),
     );
+    if should_sync_gnome_tray_backend
+        && let Err(error) = maybe_sync_gnome_tray_backend(path, &app_dir, &driver)
+    {
+        eprintln!(
+            "warning: failed to synchronize GNOME tray backend for {}: {error}",
+            path.display()
+        );
+    }
 
     // Pre-seed default values for stub cross-module signal imports so that hydration
     // can fire immediately on first tick instead of waiting indefinitely for signals
@@ -1194,31 +1156,31 @@ where
     {
         let mut borrowed = session.borrow_mut();
         if let RunSessionKind::Gtk(state) = &mut borrowed.kind {
-            let weak_session = Rc::downgrade(&session);
-            let schedule_state = schedule_state.clone();
-            state
-                .executor
-                .host_mut()
-                .set_event_notifier(Some(Rc::new(move || {
-                    let Some(session) = weak_session.upgrade() else {
-                        return;
-                    };
-                    let mut borrowed = match session.try_borrow_mut() {
-                        Ok(session) => session,
-                        Err(_) => {
-                            schedule_run_session(&session, &schedule_state);
-                            return;
-                        }
-                    };
-                    if borrowed.lifecycle.has_runtime_error()
-                        || matches!(borrowed.lifecycle.phase(), RunSessionPhase::Stopped)
-                    {
+        let weak_session = Rc::downgrade(&session);
+        let schedule_state = schedule_state.clone();
+        state
+            .executor
+            .host_mut()
+            .set_event_notifier(Some(Rc::new(move || {
+                let Some(session) = weak_session.upgrade() else {
+                    return;
+                };
+                let mut borrowed = match session.try_borrow_mut() {
+                    Ok(session) => session,
+                    Err(_) => {
+                        schedule_run_session(&session, &schedule_state);
                         return;
                     }
-                    if let Err(error) = borrowed.process_pending_work() {
-                        borrowed.fail(error);
-                    }
-                })));
+                };
+                if borrowed.lifecycle.has_runtime_error()
+                    || matches!(borrowed.lifecycle.phase(), RunSessionPhase::Stopped)
+                {
+                    return;
+                }
+                if let Err(error) = borrowed.process_pending_work() {
+                    borrowed.fail(error);
+                }
+            })));
         }
     }
     {
@@ -1397,6 +1359,536 @@ where
     Ok(ExitCode::SUCCESS)
 }
 
+const TRAY_ACTION_PATH: &str = "/io/aivi/Tray";
+const TRAY_ACTION_INTERFACE: &str = "io.aivi.Tray";
+const TRAY_ACTION_MEMBER: &str = "Action";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GnomeTrayExtensionSyncOutcome {
+    uuid: String,
+    fresh_install: bool,
+    live_enable_error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct GnomeShellExtensionMetadata {
+    uuid: String,
+}
+
+struct GnomeTrayHostConfig {
+    launcher_argv: Vec<String>,
+    tray_argv: Vec<String>,
+    launcher_pid_path: String,
+    daemon_pid_path: String,
+    tray_pid_path: String,
+    tray_bus_name: String,
+}
+
+fn maybe_sync_gnome_tray_backend(
+    launch_path: &Path,
+    app_dir: &Path,
+    driver: &GlibLinkedRuntimeDriver,
+) -> Result<(), String> {
+    if !is_gnome_shell_session() {
+        return Ok(());
+    }
+    let Some(extension_source_dir) = discover_gnome_tray_extension_dir(app_dir) else {
+        return Ok(());
+    };
+    let Some(tray_bus_name) = discover_tray_bus_name(driver) else {
+        return Ok(());
+    };
+    if let Err(error) = sync_gnome_shell_overlay() {
+        eprintln!("warning: failed to refresh GNOME Shell extension overlay: {error}");
+    }
+
+    let launcher_argv = launcher_command_argv(launch_path)?;
+    let tray_argv = tray_command_argv(launch_path, app_dir)?.unwrap_or_else(|| launcher_argv.clone());
+    let outcome = sync_gnome_tray_extension(
+        &extension_source_dir,
+        &GnomeTrayHostConfig::for_bus_name(
+            &tray_bus_name,
+            launcher_argv,
+            tray_argv,
+            xdg_data_home()?.join(runtime_dir_name_for_bus(&tray_bus_name)),
+        )?,
+    )?;
+
+    if outcome.fresh_install {
+        if let Some(error) = outcome.live_enable_error {
+            println!(
+                "installed GNOME tray backend `{}`; GNOME Shell may need a new session before it appears ({error})",
+                outcome.uuid
+            );
+        } else {
+            println!(
+                "installed GNOME tray backend `{}`; first GNOME Shell session may still need a reload before it appears",
+                outcome.uuid
+            );
+        }
+    } else if let Some(error) = outcome.live_enable_error {
+        eprintln!(
+            "warning: updated GNOME tray backend `{}` but could not re-enable it live: {error}",
+            outcome.uuid
+        );
+    } else {
+        println!("updated GNOME tray backend `{}`", outcome.uuid);
+    }
+
+    Ok(())
+}
+
+impl GnomeTrayHostConfig {
+    fn for_bus_name(
+        tray_bus_name: &str,
+        launcher_argv: Vec<String>,
+        tray_argv: Vec<String>,
+        runtime_dir: PathBuf,
+    ) -> Result<Self, String> {
+        std::fs::create_dir_all(&runtime_dir)
+            .map_err(|error| format!("failed to create {}: {error}", runtime_dir.display()))?;
+        Ok(Self {
+            launcher_argv,
+            tray_argv,
+            launcher_pid_path: runtime_dir.join("launcher.pid").display().to_string(),
+            daemon_pid_path: runtime_dir.join("daemon.pid").display().to_string(),
+            tray_pid_path: runtime_dir.join("tray.pid").display().to_string(),
+            tray_bus_name: tray_bus_name.to_owned(),
+        })
+    }
+}
+
+fn is_gnome_shell_session() -> bool {
+    let Some(current_desktop) = std::env::var_os("XDG_CURRENT_DESKTOP") else {
+        return false;
+    };
+    current_desktop
+        .to_string_lossy()
+        .split(':')
+        .any(|segment| segment.eq_ignore_ascii_case("gnome") || segment.eq_ignore_ascii_case("ubuntu"))
+}
+
+fn discover_gnome_tray_extension_dir(app_dir: &Path) -> Option<PathBuf> {
+    [
+        app_dir.join("tray/gnome-shell-extension"),
+        app_dir.join("apps/tray/gnome-shell-extension"),
+    ]
+    .into_iter()
+    .find(|candidate| {
+        candidate.join("metadata.json").is_file() && candidate.join("extension.js").is_file()
+    })
+}
+
+fn discover_tray_bus_name(driver: &GlibLinkedRuntimeDriver) -> Option<String> {
+    for binding in driver.source_bindings() {
+        if driver
+            .source_provider(binding.instance)
+            .and_then(|provider| provider.builtin_provider())
+            .is_none_or(|provider| provider.key() != "dbus.method")
+        {
+            continue;
+        }
+        let Ok(config) = driver.evaluate_source_config(binding.instance) else {
+            continue;
+        };
+        let Some(destination) = config.arguments.first().and_then(|value| value.as_runtime().as_text())
+        else {
+            continue;
+        };
+        let mut path = None;
+        let mut interface = None;
+        let mut member = None;
+        for option in &config.options {
+            let Some(value) = option.value.as_runtime().as_text() else {
+                continue;
+            };
+            match option.option_name.as_ref() {
+                "path" => path = Some(value),
+                "interface" => interface = Some(value),
+                "member" => member = Some(value),
+                _ => {}
+            }
+        }
+        if path == Some(TRAY_ACTION_PATH)
+            && interface == Some(TRAY_ACTION_INTERFACE)
+            && member == Some(TRAY_ACTION_MEMBER)
+        {
+            return Some(destination.to_owned());
+        }
+    }
+    None
+}
+
+fn launcher_command_argv(launch_path: &Path) -> Result<Vec<String>, String> {
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("failed to determine current executable: {error}"))?;
+    let executable = canonical_display_path(&executable);
+    if launch_path.extension().and_then(|value| value.to_str()) == Some("aivi") {
+        Ok(vec![
+            executable,
+            "run".to_owned(),
+            canonical_display_path(launch_path),
+        ])
+    } else {
+        Ok(vec![executable])
+    }
+}
+
+fn tray_command_argv(launch_path: &Path, app_dir: &Path) -> Result<Option<Vec<String>>, String> {
+    if launch_path.extension().and_then(|value| value.to_str()) != Some("aivi") {
+        return Ok(None);
+    }
+    let executable = std::env::current_exe()
+        .map_err(|error| format!("failed to determine current executable: {error}"))?;
+    let executable = canonical_display_path(&executable);
+    let tray_entry = [app_dir.join("tray/main.aivi"), app_dir.join("apps/tray/main.aivi")]
+        .into_iter()
+        .find(|candidate| candidate.is_file());
+    Ok(tray_entry.map(|entry| {
+        vec![
+            executable,
+            "run".to_owned(),
+            canonical_display_path(&entry),
+        ]
+    }))
+}
+
+fn canonical_display_path(path: &Path) -> String {
+    std::fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .display()
+        .to_string()
+}
+
+fn xdg_data_home() -> Result<PathBuf, String> {
+    if let Some(value) = std::env::var_os("XDG_DATA_HOME") {
+        return Ok(PathBuf::from(value));
+    }
+    let home = std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_owned())?;
+    Ok(PathBuf::from(home).join(".local/share"))
+}
+
+fn xdg_config_home() -> Result<PathBuf, String> {
+    if let Some(value) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Ok(PathBuf::from(value));
+    }
+    let home = std::env::var_os("HOME").ok_or_else(|| "HOME is not set".to_owned())?;
+    Ok(PathBuf::from(home).join(".config"))
+}
+
+fn runtime_dir_name_for_bus(bus_name: &str) -> String {
+    let mut segments = bus_name.split('.').collect::<Vec<_>>();
+    if segments.last().is_some_and(|segment| segment.eq_ignore_ascii_case("tray")) {
+        segments.pop();
+    }
+    let chosen = segments
+        .iter()
+        .rev()
+        .find(|segment| !matches!(segment.to_ascii_lowercase().as_str(), "io" | "com" | "org" | "net"))
+        .copied()
+        .unwrap_or(bus_name);
+    let sanitized = chosen
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    if sanitized.is_empty() {
+        "aivi-tray".to_owned()
+    } else {
+        sanitized
+    }
+}
+
+fn sync_gnome_tray_extension(
+    extension_source_dir: &Path,
+    host_config: &GnomeTrayHostConfig,
+) -> Result<GnomeTrayExtensionSyncOutcome, String> {
+    let metadata_path = extension_source_dir.join("metadata.json");
+    let metadata_text = std::fs::read_to_string(&metadata_path)
+        .map_err(|error| format!("failed to read {}: {error}", metadata_path.display()))?;
+    let metadata: GnomeShellExtensionMetadata = serde_json::from_str(&metadata_text)
+        .map_err(|error| format!("failed to parse {}: {error}", metadata_path.display()))?;
+
+    let extension_root = xdg_data_home()?.join("gnome-shell/extensions");
+    let installed_extension_dir = extension_root.join(&metadata.uuid);
+    let fresh_install = !installed_extension_dir.is_dir();
+    std::fs::create_dir_all(&extension_root)
+        .map_err(|error| format!("failed to create {}: {error}", extension_root.display()))?;
+    if installed_extension_dir.exists() {
+        std::fs::remove_dir_all(&installed_extension_dir).map_err(|error| {
+            format!(
+                "failed to replace {}: {error}",
+                installed_extension_dir.display()
+            )
+        })?;
+    }
+    copy_gnome_tray_extension_dir(extension_source_dir, &installed_extension_dir, host_config)?;
+
+    let live_enable_error = match run_command(
+        "gnome-extensions",
+        ["enable", metadata.uuid.as_str()],
+    ) {
+        Ok(()) => None,
+        Err(error) => Some(error),
+    };
+
+    Ok(GnomeTrayExtensionSyncOutcome {
+        uuid: metadata.uuid,
+        fresh_install,
+        live_enable_error,
+    })
+}
+
+fn copy_gnome_tray_extension_dir(
+    source_dir: &Path,
+    target_dir: &Path,
+    host_config: &GnomeTrayHostConfig,
+) -> Result<(), String> {
+    let mut entries = std::fs::read_dir(source_dir)
+        .map_err(|error| format!("failed to read {}: {error}", source_dir.display()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("failed to read {}: {error}", source_dir.display()))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    std::fs::create_dir_all(target_dir)
+        .map_err(|error| format!("failed to create {}: {error}", target_dir.display()))?;
+    for entry in entries {
+        let source_path = entry.path();
+        let target_path = target_dir.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("failed to stat {}: {error}", source_path.display()))?;
+        if file_type.is_dir() {
+            copy_gnome_tray_extension_dir(&source_path, &target_path, host_config)?;
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+        if entry.file_name() == "extension.js" {
+            let template = std::fs::read_to_string(&source_path)
+                .map_err(|error| format!("failed to read {}: {error}", source_path.display()))?;
+            let rendered = render_gnome_tray_extension_source(&template, host_config)?;
+            std::fs::write(&target_path, rendered)
+                .map_err(|error| format!("failed to write {}: {error}", target_path.display()))?;
+            let permissions = std::fs::metadata(&source_path)
+                .map_err(|error| format!("failed to stat {}: {error}", source_path.display()))?
+                .permissions();
+            std::fs::set_permissions(&target_path, permissions).map_err(|error| {
+                format!(
+                    "failed to set permissions on {}: {error}",
+                    target_path.display()
+                )
+            })?;
+            continue;
+        }
+        std::fs::copy(&source_path, &target_path).map_err(|error| {
+            format!(
+                "failed to copy {} to {}: {error}",
+                source_path.display(),
+                target_path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn render_gnome_tray_extension_source(
+    source: &str,
+    host_config: &GnomeTrayHostConfig,
+) -> Result<String, String> {
+    let launcher_argv_json = serde_json::to_string(&host_config.launcher_argv)
+        .map_err(|error| format!("failed to encode launcher argv: {error}"))?;
+    let tray_argv_json = serde_json::to_string(&host_config.tray_argv)
+        .map_err(|error| format!("failed to encode tray argv: {error}"))?;
+    let launcher_pid_json = serde_json::to_string(&host_config.launcher_pid_path)
+        .map_err(|error| format!("failed to encode launcher pid path: {error}"))?;
+    let daemon_pid_json = serde_json::to_string(&host_config.daemon_pid_path)
+        .map_err(|error| format!("failed to encode daemon pid path: {error}"))?;
+    let tray_pid_json = serde_json::to_string(&host_config.tray_pid_path)
+        .map_err(|error| format!("failed to encode tray pid path: {error}"))?;
+    let tray_bus_json = serde_json::to_string(&host_config.tray_bus_name)
+        .map_err(|error| format!("failed to encode tray bus name: {error}"))?;
+
+    Ok(source
+        .replace("__LAUNCHER_ARGV_JSON__", &launcher_argv_json)
+        .replace("__TRAY_ARGV_JSON__", &tray_argv_json)
+        .replace("__LAUNCHER_PID_FILE_JSON__", &launcher_pid_json)
+        .replace("__DAEMON_PID_FILE_JSON__", &daemon_pid_json)
+        .replace("__TRAY_PID_FILE_JSON__", &tray_pid_json)
+        .replace("__TRAY_BUS_NAME_JSON__", &tray_bus_json))
+}
+
+fn sync_gnome_shell_overlay() -> Result<(), String> {
+    let shell_lib = find_gnome_shell_library()
+        .ok_or_else(|| "could not locate gnome-shell libshell resource library".to_owned())?;
+    let extracted = run_command_capture(
+        "gresource",
+        [
+            "extract",
+            shell_lib.to_string_lossy().as_ref(),
+            "/org/gnome/shell/ui/extensionSystem.js",
+        ],
+    )?;
+    let patched = patch_gnome_shell_extension_system_source(&extracted)?;
+    let overlay_dir = xdg_data_home()?.join("aivi/gnome-shell-overlay");
+    std::fs::create_dir_all(&overlay_dir)
+        .map_err(|error| format!("failed to create {}: {error}", overlay_dir.display()))?;
+    let overlay_file = overlay_dir.join("extensionSystem.js");
+    std::fs::write(&overlay_file, patched)
+        .map_err(|error| format!("failed to write {}: {error}", overlay_file.display()))?;
+
+    let overlay_value = match std::env::var("G_RESOURCE_OVERLAYS") {
+        Ok(existing) if !existing.is_empty() => {
+            format!(
+                "/org/gnome/shell/ui/extensionSystem.js={}:{}",
+                overlay_file.display(),
+                existing
+            )
+        }
+        _ => format!("/org/gnome/shell/ui/extensionSystem.js={}", overlay_file.display()),
+    };
+
+    let environment_dir = xdg_config_home()?.join("environment.d");
+    std::fs::create_dir_all(&environment_dir)
+        .map_err(|error| format!("failed to create {}: {error}", environment_dir.display()))?;
+    let environment_file = environment_dir.join("90-aivi-gnome-shell-overlay.conf");
+    std::fs::write(&environment_file, format!("G_RESOURCE_OVERLAYS={overlay_value}\n"))
+        .map_err(|error| format!("failed to write {}: {error}", environment_file.display()))?;
+    let _ = std::process::Command::new("systemctl")
+        .env("G_RESOURCE_OVERLAYS", &overlay_value)
+        .args(["--user", "import-environment", "G_RESOURCE_OVERLAYS"])
+        .output();
+    let _ = std::process::Command::new("dbus-update-activation-environment")
+        .env("G_RESOURCE_OVERLAYS", &overlay_value)
+        .args(["--systemd", "G_RESOURCE_OVERLAYS"])
+        .output();
+    Ok(())
+}
+
+fn find_gnome_shell_library() -> Option<PathBuf> {
+    [Path::new("/usr/lib"), Path::new("/usr/lib64")]
+        .into_iter()
+        .find_map(|root| find_gnome_shell_library_in(root, 4))
+}
+
+fn find_gnome_shell_library_in(root: &Path, remaining_depth: usize) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(root).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_file() {
+            let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if name.starts_with("libshell-")
+                && name.ends_with(".so")
+                && path
+                    .parent()
+                    .and_then(|parent| parent.file_name())
+                    .is_some_and(|segment| segment == "gnome-shell")
+            {
+                return Some(path);
+            }
+            continue;
+        }
+        if !file_type.is_dir() || remaining_depth == 0 {
+            continue;
+        }
+        if let Some(found) = find_gnome_shell_library_in(&path, remaining_depth - 1) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn patch_gnome_shell_extension_system_source(source: &str) -> Result<String, String> {
+    let source = replace_once(
+        source,
+        "    enableExtension(uuid) {\n        if (!this._extensions.has(uuid))\n            return false;\n",
+        "    enableExtension(uuid) {\n        if (!this._extensions.has(uuid) && !this._findExtensionOnDisk(uuid))\n            return false;\n",
+        "enableExtension()",
+    )?;
+    let source = replace_once(
+        &source,
+        "    disableExtension(uuid) {\n        if (!this._extensions.has(uuid))\n            return false;\n",
+        "    disableExtension(uuid) {\n        if (!this._extensions.has(uuid) && !this._findExtensionOnDisk(uuid))\n            return false;\n",
+        "disableExtension()",
+    )?;
+    let source = replace_once(
+        &source,
+        "    _getModeExtensions() {\n",
+        "    _findExtensionOnDisk(uuid) {\n        let perUserDir = Gio.File.new_for_path(global.userdatadir);\n        const includeUserDir = global.settings.get_boolean('allow-extension-installation');\n\n        for (const {file: dir, info} of FileUtils.collectFromDatadirs('extensions', includeUserDir)) {\n            if (info.get_file_type() !== Gio.FileType.DIRECTORY)\n                continue;\n            if (info.get_name() !== uuid)\n                continue;\n\n            let type = dir.has_prefix(perUserDir)\n                ? ExtensionType.PER_USER\n                : ExtensionType.SYSTEM;\n            if (Desktop.is('ubuntu') && this.isModeExtension(uuid) && type === ExtensionType.PER_USER) {\n                log(`Found user extension ${uuid}, but not loading from ${dir.get_path()} directory as part of session mode.`);\n                return null;\n            }\n\n            return {dir, type};\n        }\n\n        return null;\n    }\n\n    async _loadMissingExtensions(uuids) {\n        const missingUuids = uuids.filter(uuid => !this.lookup(uuid));\n        for (const uuid of missingUuids) {\n            const location = this._findExtensionOnDisk(uuid);\n            if (!location)\n                continue;\n\n            let extension;\n            try {\n                extension = this.createExtensionObject(uuid, location.dir, location.type);\n            } catch (error) {\n                logError(error, `Could not load extension ${uuid}`);\n                continue;\n            }\n\n            // eslint-disable-next-line no-await-in-loop\n            await this.loadExtension(extension);\n        }\n    }\n\n    _getModeExtensions() {\n",
+        "_getModeExtensions()",
+    )?;
+    replace_once(
+        &source,
+        "    async _onEnabledExtensionsChanged() {\n        let newEnabledExtensions = this._getEnabledExtensions();\n\n",
+        "    async _onEnabledExtensionsChanged() {\n        let newEnabledExtensions = this._getEnabledExtensions();\n\n        await this._loadMissingExtensions(newEnabledExtensions);\n\n",
+        "_onEnabledExtensionsChanged()",
+    )
+}
+
+fn replace_once(source: &str, from: &str, to: &str, label: &str) -> Result<String, String> {
+    let Some(index) = source.find(from) else {
+        return Err(format!("could not patch {label} in GNOME Shell extensionSystem.js"));
+    };
+    let mut patched = String::with_capacity(source.len() + to.len().saturating_sub(from.len()));
+    patched.push_str(&source[..index]);
+    patched.push_str(to);
+    patched.push_str(&source[index + from.len()..]);
+    Ok(patched)
+}
+
+fn run_command<I, S>(program: &str, args: I) -> Result<(), String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|error| format!("failed to run `{program}`: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(format_command_failure(program, output))
+}
+
+fn run_command_capture<I, S>(program: &str, args: I) -> Result<String, String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let output = std::process::Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|error| format!("failed to run `{program}`: {error}"))?;
+    if !output.status.success() {
+        return Err(format_command_failure(program, output));
+    }
+    String::from_utf8(output.stdout)
+        .map_err(|error| format!("`{program}` produced non-UTF-8 output: {error}"))
+}
+
+fn format_command_failure(program: &str, output: std::process::Output) -> String {
+    let status = output.status;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    match (stdout.is_empty(), stderr.is_empty()) {
+        (true, true) => format!("`{program}` failed with {status}"),
+        (false, true) => format!("`{program}` failed with {status}: {stdout}"),
+        (true, false) => format!("`{program}` failed with {status}: {stderr}"),
+        (false, false) => format!("`{program}` failed with {status}: {stderr}; stdout: {stdout}"),
+    }
+}
+
 fn schedule_run_session(
     session: &Rc<RefCell<RunSessionState>>,
     schedule_state: &RunSessionScheduleState,
@@ -1515,6 +2007,7 @@ mod tests {
         sync::Once,
         time::{Duration, Instant},
     };
+    use tempfile::TempDir;
 
     fn ensure_interpreted_run_session_tests() {
         static ONCE: Once = Once::new();
@@ -1525,6 +2018,110 @@ mod tests {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .join(path)
+    }
+
+    #[test]
+    fn renders_gnome_tray_extension_host_config_placeholders() {
+        let rendered = super::render_gnome_tray_extension_source(
+            "launcher=__LAUNCHER_ARGV_JSON__ tray=__TRAY_ARGV_JSON__ lp=__LAUNCHER_PID_FILE_JSON__ dp=__DAEMON_PID_FILE_JSON__ tp=__TRAY_PID_FILE_JSON__ bus=__TRAY_BUS_NAME_JSON__",
+            &super::GnomeTrayHostConfig {
+                launcher_argv: vec!["aivi".into(), "run".into(), "/tmp/main.aivi".into()],
+                tray_argv: vec!["aivi".into(), "run".into(), "/tmp/tray.aivi".into()],
+                launcher_pid_path: "/tmp/launcher.pid".into(),
+                daemon_pid_path: "/tmp/daemon.pid".into(),
+                tray_pid_path: "/tmp/tray.pid".into(),
+                tray_bus_name: "io.mailfox.Tray".into(),
+            },
+        )
+        .expect("host config placeholders should render");
+        assert!(rendered.contains(r#"launcher=["aivi","run","/tmp/main.aivi"]"#));
+        assert!(rendered.contains(r#"tray=["aivi","run","/tmp/tray.aivi"]"#));
+        assert!(rendered.contains(r#"lp="/tmp/launcher.pid""#));
+        assert!(rendered.contains(r#"dp="/tmp/daemon.pid""#));
+        assert!(rendered.contains(r#"tp="/tmp/tray.pid""#));
+        assert!(rendered.contains(r#"bus="io.mailfox.Tray""#));
+    }
+
+    #[test]
+    fn patches_gnome_shell_extension_system_source_for_live_rescan() {
+        let source = concat!(
+            "    enableExtension(uuid) {\n",
+            "        if (!this._extensions.has(uuid))\n",
+            "            return false;\n",
+            "    }\n",
+            "    disableExtension(uuid) {\n",
+            "        if (!this._extensions.has(uuid))\n",
+            "            return false;\n",
+            "    }\n",
+            "    _getModeExtensions() {\n",
+            "    }\n",
+            "    async _onEnabledExtensionsChanged() {\n",
+            "        let newEnabledExtensions = this._getEnabledExtensions();\n\n",
+            "    }\n",
+        );
+        let patched = super::patch_gnome_shell_extension_system_source(source)
+            .expect("patching should succeed for shell overlay fixture");
+        assert!(patched.contains("_findExtensionOnDisk(uuid)"));
+        assert!(patched.contains("await this._loadMissingExtensions(newEnabledExtensions);"));
+        assert!(patched.contains("!this._extensions.has(uuid) && !this._findExtensionOnDisk(uuid)"));
+    }
+
+    #[test]
+    fn copies_gnome_tray_extension_dir_and_renders_extension_js() {
+        let source = TempDir::new().expect("source tempdir should create");
+        let target = TempDir::new().expect("target tempdir should create");
+        std::fs::write(
+            source.path().join("metadata.json"),
+            r#"{"uuid":"mailfox@mailfox.app"}"#,
+        )
+        .expect("metadata fixture should write");
+        std::fs::write(
+            source.path().join("extension.js"),
+            "launcher=__LAUNCHER_ARGV_JSON__ tray=__TRAY_ARGV_JSON__ bus=__TRAY_BUS_NAME_JSON__",
+        )
+        .expect("extension fixture should write");
+        std::fs::create_dir_all(source.path().join("icons"))
+            .expect("nested fixture dir should create");
+        std::fs::write(source.path().join("icons/mailfox.svg"), "<svg />")
+            .expect("nested fixture file should write");
+
+        let installed = target.path().join("mailfox@mailfox.app");
+        super::copy_gnome_tray_extension_dir(
+            source.path(),
+            &installed,
+            &super::GnomeTrayHostConfig {
+                launcher_argv: vec!["aivi".into(), "run".into(), "/tmp/main.aivi".into()],
+                tray_argv: vec!["aivi".into(), "run".into(), "/tmp/tray.aivi".into()],
+                launcher_pid_path: "/tmp/launcher.pid".into(),
+                daemon_pid_path: "/tmp/daemon.pid".into(),
+                tray_pid_path: "/tmp/tray.pid".into(),
+                tray_bus_name: "io.mailfox.Tray".into(),
+            },
+        )
+        .expect("extension dir should install");
+
+        let rendered = std::fs::read_to_string(installed.join("extension.js"))
+            .expect("rendered extension should read");
+        assert!(rendered.contains(r#"["aivi","run","/tmp/main.aivi"]"#));
+        assert!(rendered.contains(r#"["aivi","run","/tmp/tray.aivi"]"#));
+        assert!(rendered.contains(r#""io.mailfox.Tray""#));
+        assert!(
+            installed.join("metadata.json").is_file(),
+            "metadata should copy into installed extension dir"
+        );
+        assert!(
+            installed.join("icons/mailfox.svg").is_file(),
+            "nested tray assets should copy into installed extension dir"
+        );
+    }
+
+    #[test]
+    fn runtime_dir_name_for_tray_bus_uses_service_stem() {
+        assert_eq!(super::runtime_dir_name_for_bus("io.mailfox.Tray"), "mailfox");
+        assert_eq!(
+            super::runtime_dir_name_for_bus("org.example.Workbench.Tray"),
+            "workbench"
+        );
     }
 
     fn prepare_run_from_path(path: &Path) -> crate::RunArtifact {
@@ -3152,9 +3749,8 @@ export main
         harness.shutdown();
     }
 
-    #[gtk::test]
+    #[test]
     fn headless_run_session_starts_without_gtk_windows_and_activates_sources() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let artifact = prepare_run_from_text(
             "headless-run.aivi",
             r#"
@@ -3170,9 +3766,12 @@ value main : Task Text Unit =
 "#,
         );
         let path = Path::new("headless-run.aivi");
-        let harness =
-            start_run_session_with_launch_config(path, artifact, RunLaunchConfig::default())
-                .expect("headless run session should start without GTK setup");
+        let harness = start_run_session_with_launch_config(
+            path,
+            artifact,
+            RunLaunchConfig::default(),
+        )
+        .expect("headless run session should start without GTK setup");
 
         assert!(
             harness.root_windows().is_empty(),
