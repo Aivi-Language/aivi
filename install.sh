@@ -13,10 +13,14 @@ EXT_DIR="$REPO_ROOT/tooling/packages/vscode-aivi"
 # ── 1. Install the CLI crate via cargo ─────────────────────────────────────
 if [[ "${1:-}" == "--debug" ]]; then
     echo "==> Installing aivi CLI (debug)..."
-    cargo install --path "$REPO_ROOT/crates/aivi-cli" --debug --force
+    cargo build --manifest-path "$REPO_ROOT/Cargo.toml" -p aivi-cli
+    mkdir -p "${CARGO_HOME:-${HOME}/.cargo}/bin"
+    install -m 0755 "$REPO_ROOT/target/debug/aivi" "${CARGO_HOME:-${HOME}/.cargo}/bin/aivi"
 else
     echo "==> Installing aivi CLI (release)..."
-    cargo install --path "$REPO_ROOT/crates/aivi-cli" --force
+    cargo build --manifest-path "$REPO_ROOT/Cargo.toml" --release -p aivi-cli
+    mkdir -p "${CARGO_HOME:-${HOME}/.cargo}/bin"
+    install -m 0755 "$REPO_ROOT/target/release/aivi" "${CARGO_HOME:-${HOME}/.cargo}/bin/aivi"
 fi
 
 INSTALL_DIR="${CARGO_HOME:-${HOME}/.cargo}/bin"

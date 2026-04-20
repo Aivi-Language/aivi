@@ -305,51 +305,60 @@ fn spawn_goa_mail_accounts_worker(
             publish_goa_mail_accounts(&connection, &port, &plan)?;
             let publish_port = port.clone();
             let publish_plan = plan.clone();
-            let subscription_added = connection.signal_subscribe(
+            let subscription_added = connection.subscribe_to_signal(
                 Some("org.gnome.OnlineAccounts"),
                 Some("org.freedesktop.DBus.ObjectManager"),
                 Some("InterfacesAdded"),
                 None,
                 None,
                 DBusSignalFlags::NONE,
-                move |connection, _, _, _, _, _| {
-                    let _ = publish_goa_mail_accounts(connection, &publish_port, &publish_plan);
+                move |signal| {
+                    let _ = publish_goa_mail_accounts(
+                        signal.connection,
+                        &publish_port,
+                        &publish_plan,
+                    );
                 },
             );
             let publish_port = port.clone();
             let publish_plan = plan.clone();
-            let subscription_removed = connection.signal_subscribe(
+            let subscription_removed = connection.subscribe_to_signal(
                 Some("org.gnome.OnlineAccounts"),
                 Some("org.freedesktop.DBus.ObjectManager"),
                 Some("InterfacesRemoved"),
                 None,
                 None,
                 DBusSignalFlags::NONE,
-                move |connection, _, _, _, _, _| {
-                    let _ = publish_goa_mail_accounts(connection, &publish_port, &publish_plan);
+                move |signal| {
+                    let _ = publish_goa_mail_accounts(
+                        signal.connection,
+                        &publish_port,
+                        &publish_plan,
+                    );
                 },
             );
             let publish_port = port.clone();
             let publish_plan = plan.clone();
-            let subscription_changed = connection.signal_subscribe(
+            let subscription_changed = connection.subscribe_to_signal(
                 Some("org.gnome.OnlineAccounts"),
                 Some("org.freedesktop.DBus.Properties"),
                 Some("PropertiesChanged"),
                 None,
                 None,
                 DBusSignalFlags::NONE,
-                move |connection, _, _, _, _, _| {
-                    let _ = publish_goa_mail_accounts(connection, &publish_port, &publish_plan);
+                move |signal| {
+                    let _ = publish_goa_mail_accounts(
+                        signal.connection,
+                        &publish_port,
+                        &publish_plan,
+                    );
                 },
             );
             let _ = startup_tx.send(Ok(()));
             main_loop.run();
-            #[allow(deprecated)]
-            {
-                connection.signal_unsubscribe(subscription_added);
-                connection.signal_unsubscribe(subscription_removed);
-                connection.signal_unsubscribe(subscription_changed);
-            }
+            drop(subscription_added);
+            drop(subscription_removed);
+            drop(subscription_changed);
             Ok::<(), Box<str>>(())
         });
         match startup {

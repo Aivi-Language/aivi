@@ -40,3 +40,6 @@ serde_json = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+[patch.crates-io]
+imap-proto = { path = "vendor/imap-proto" }

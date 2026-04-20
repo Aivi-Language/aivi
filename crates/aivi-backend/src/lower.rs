@@ -1945,7 +1945,6 @@ impl<'a> ProgramLowerer<'a> {
             },
             BuildPipe {
                 span: SourceSpan,
-                layout: LayoutId,
                 stages: Vec<InlinePipeStageSpec>,
             },
         }
@@ -2488,7 +2487,6 @@ impl<'a> ProgramLowerer<'a> {
                             }
                             tasks.push(Task::BuildPipe {
                                 span: expr.span,
-                                layout,
                                 stages: stage_specs,
                             });
                             for child in children.into_iter().rev() {
@@ -2695,11 +2693,7 @@ impl<'a> ProgramLowerer<'a> {
                         },
                     )?);
                 }
-                Task::BuildPipe {
-                    span,
-                    layout: _,
-                    stages,
-                } => {
+                Task::BuildPipe { span, stages } => {
                     let lowered = drain_tail(
                         &mut values,
                         1 + stages

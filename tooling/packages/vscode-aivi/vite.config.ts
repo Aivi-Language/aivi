@@ -26,6 +26,7 @@ export default defineConfig({
     sourcemap: true,
     minify: false,
     target: "node18",
+    chunkSizeWarningLimit: 1024,
     emptyOutDir: true,
   },
   resolve: {

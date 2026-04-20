@@ -417,6 +417,7 @@ struct GtkGroupNodeWire {
     body: GtkChildGroup,
 }
 
+#[allow(dead_code)]
 struct ArtifactPayloadRegistry {
     include_native_kernels: bool,
     entries: BTreeMap<Box<str>, RegisteredBackendPayload>,
@@ -428,11 +429,13 @@ impl Default for ArtifactPayloadRegistry {
     }
 }
 
+#[allow(dead_code)]
 struct RegisteredBackendPayload {
     backend: aivi_runtime::hir_adapter::BackendRuntimePayload,
     native_kernels: Box<[RegisteredNativeKernelPayload]>,
 }
 
+#[allow(dead_code)]
 struct RegisteredNativeKernelPayload {
     kernel: aivi_backend::KernelId,
     artifact_path: Box<str>,
@@ -464,6 +467,7 @@ struct FrozenPayloadLoader {
     entries: Vec<FrozenEntryWire>,
 }
 
+#[allow(dead_code)]
 impl ArtifactPayloadRegistry {
     fn new(include_native_kernels: bool) -> Self {
         Self {
@@ -1099,6 +1103,7 @@ fn collect_native_kernel_payloads(
     Ok(native_kernels.into_boxed_slice())
 }
 
+#[allow(dead_code)]
 fn encode_backend_runtime_meta_bytes(
     relative_path: &str,
     backend: &aivi_runtime::hir_adapter::BackendRuntimePayload,
@@ -1155,6 +1160,7 @@ fn encode_frozen_backend_catalog_bytes(
     })
 }
 
+#[allow(dead_code)]
 fn write_serialized_run_artifact_bundle(
     root: &Path,
     artifact: &RunArtifact,
@@ -1293,6 +1299,7 @@ fn load_serialized_run_artifact_from_bytes(
     deserialize_run_artifact(serialized, payload_reader)
 }
 
+#[allow(dead_code)]
 fn load_frozen_run_image(path: &Path, requested_view: Option<&str>) -> Result<RunArtifact, String> {
     let bytes = fs::read(path).map_err(|error| format!("failed to read {}: {error}", path.display()))?;
     load_frozen_run_image_from_bytes(&bytes, requested_view)
@@ -1386,6 +1393,7 @@ fn decode_frozen_backend_payload_bytes(
     decode_backend_payload_bytes(bytes, payload_path)
 }
 
+#[allow(dead_code)]
 fn serialize_run_artifact(
     artifact: &RunArtifact,
     payloads: &mut ArtifactPayloadRegistry,
@@ -2613,6 +2621,7 @@ fn layout_signature(
     signature
 }
 
+#[allow(dead_code)]
 fn compiled_run_input_to_wire(
     input: &CompiledRunInput,
     payloads: &mut ArtifactPayloadRegistry,
@@ -2725,6 +2734,7 @@ fn frozen_compiled_run_input_from_wire(
     }
 }
 
+#[allow(dead_code)]
 fn compiled_run_fragment_to_wire(
     fragment: &CompiledRunFragment,
     payloads: &mut ArtifactPayloadRegistry,
@@ -2793,6 +2803,7 @@ fn frozen_compiled_run_fragment_from_wire(
     })
 }
 
+#[allow(dead_code)]
 fn hir_runtime_assembly_to_wire(
     assembly: HirRuntimeAssembly,
     payloads: &mut ArtifactPayloadRegistry,
@@ -2887,6 +2898,7 @@ fn frozen_hir_runtime_assembly_from_wire(
     }))
 }
 
+#[allow(dead_code)]
 fn hir_signal_binding_to_wire(
     binding: aivi_runtime::HirSignalBinding,
     payloads: &mut ArtifactPayloadRegistry,
@@ -3071,6 +3083,7 @@ fn frozen_hir_signal_binding_from_wire(
     })
 }
 
+#[allow(dead_code)]
 fn hir_reactive_update_binding_to_wire(
     binding: aivi_runtime::HirReactiveUpdateBinding,
     payloads: &mut ArtifactPayloadRegistry,
@@ -3154,6 +3167,7 @@ fn frozen_hir_reactive_update_binding_from_wire(
     })
 }
 
+#[allow(dead_code)]
 fn hir_compiled_runtime_expr_to_wire(
     expr: aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
     payloads: &mut ArtifactPayloadRegistry,

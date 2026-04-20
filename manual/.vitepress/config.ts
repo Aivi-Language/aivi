@@ -61,6 +61,9 @@ export default defineConfig({
   },
 
   vite: {
+    build: {
+      chunkSizeWarningLimit: 1024,
+    },
     server: {
       fs: {
         allow: [repoRoot],
