@@ -317,6 +317,19 @@ value shownStatus = " ready "
 
 That style gives each step a reusable name and often reads better in longer pipes.
 
+When a unary helper body starts with a pipe operator, you can omit the explicit `.` head and
+start the body directly with the stages:
+
+```aivi
+type Text -> Text
+func trimStatus =
+ ||> " ready " -> "ready"
+ ||> _         -> .
+```
+
+This is sugar for the same unary-subject function you would otherwise write as `func trimStatus = .`
+followed by the same pipe stages.
+
 ## Structural patches
 
 Use `<|` to produce an updated value without mutating the original:

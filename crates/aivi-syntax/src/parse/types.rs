@@ -357,10 +357,30 @@ impl<'a> Parser<'a> {
             .unwrap_or(end);
 
         let (function_form, parameters, body) = if let Some((parameters, body)) =
-            self.parse_unary_subject_function_body(name_index, cursor, member_end)
+            self.parse_unary_subject_function_body(
+                name_index,
+                cursor,
+                member_end,
+                "type companion member",
+            )
         {
             (
                 FunctionSurfaceForm::UnarySubjectSugar,
+                parameters,
+                body.and_then(|body| match body {
+                    NamedItemBody::Expr(expr) => Some(expr),
+                    _ => None,
+                }),
+            )
+        } else if let Some((parameters, body)) = self.parse_pipe_subject_function_body(
+            name_index,
+            cursor,
+            member_end,
+            "type companion member",
+        )
+        {
+            (
+                FunctionSurfaceForm::LeadingPipeSubjectSugar,
                 parameters,
                 body.and_then(|body| match body {
                     NamedItemBody::Expr(expr) => Some(expr),
@@ -428,7 +448,7 @@ impl<'a> Parser<'a> {
                             "insert a parameter such as `self` before `=>`",
                         )
                         .with_note(
-                            "receiver-only helpers can use the shortcut `name = .field` or `name = .`",
+                            "receiver-only helpers can use `name = .field`, `name = .`, or start directly with a pipe operator",
                         ),
                     );
                 }
@@ -436,12 +456,12 @@ impl<'a> Parser<'a> {
             } else {
                 self.diagnostics.push(
                     Diagnostic::error(
-                        "type companion member body must use `name = self => ...` or `name = . ...`",
+                        "type companion member body must use `name = self => ...`, `name = . ...`, or start with a pipe operator",
                     )
                         .with_code(MISSING_TYPE_COMPANION_BODY)
                         .with_primary_label(
                             self.source_span_of_token(eq_index),
-                            "expected `.` or parameters followed by `=>`",
+                            "expected `.`, a leading pipe operator, or parameters followed by `=>`",
                         ),
                 );
                 None

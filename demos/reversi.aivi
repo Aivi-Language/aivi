@@ -209,10 +209,9 @@ func stateFor = board phase =>
     Ready (boardStateFor board phase)
 
 type BoardState -> State
-func prepareComputerFromReady = ready =>
-    head ready.computerMoves
-  ||> Some cell -> Ready (ready <| { phase: ComputerPreparing cell })
-  ||> None      -> Ready ready
+func prepareComputerFromReady = ready => head ready.computerMoves
+ ||> Some cell -> Ready (ready <| { phase: ComputerPreparing cell })
+ ||> None      -> Ready ready
 
 type BoardState -> State
 func settleComputerTurn = state => nonEmpty state.humanMoves
@@ -228,10 +227,9 @@ func prepareComputerTurn = board =>
     prepareComputerFromReady (boardStateFor board HumanReady)
 
 type Int -> State
-func openingState = ignored =>
-    matrixInit 8 8 buildInitialDisc
-  ||> Ok board -> stateFor board HumanReady
-  ||> Err error -> SetupError error
+func openingState = ignored => matrixInit 8 8 buildInitialDisc
+ ||> Ok board  -> stateFor board HumanReady
+ ||> Err error -> SetupError error
 
 type Coord -> BoardState -> State
 func clickReady = cell ready => phaseAllowsHumanInput ready.phase and any (sameCoord cell) ready.humanMoves
@@ -240,7 +238,7 @@ func clickReady = cell ready => phaseAllowsHumanInput ready.phase and any (sameC
 
 type Coord -> State -> State
 func clickState = cell state => state
- ||> Ready ready -> clickReady cell ready
+ ||> Ready ready      -> clickReady cell ready
  ||> SetupError error -> SetupError error
 
 type BoardState -> State
@@ -251,13 +249,13 @@ func flashReady = ready => ready.phase
 
 type State -> State
 func flashState = state => state
- ||> Ready ready -> flashReady ready
+ ||> Ready ready      -> flashReady ready
  ||> SetupError error -> SetupError error
 
 type BoardState -> Coord -> Int -> State
 func stepAnimation = state cell step => step
   |> . + 1 #next
- |> next >= 4
+  |> next >= 4
  T|> afterComputerMove (applyMove state.board White cell)
  F|> Ready (state <| { phase: ComputerAnimating cell next })
 
@@ -284,12 +282,9 @@ func winnerLine = board =>
 
 type MatrixError -> Text
 func matrixErrorText = error => error
- ||> NegativeWidth width ->
-     "Opening board width must be non-negative, got {width}."
- ||> NegativeHeight height ->
-     "Opening board height must be non-negative, got {height}."
- ||> RaggedRows rowIndex expected actual ->
-     "Opening board row {rowIndex} has width {actual}, expected {expected}."
+ ||> NegativeWidth width                 -> "Opening board width must be non-negative, got {width}."
+ ||> NegativeHeight height               -> "Opening board height must be non-negative, got {height}."
+ ||> RaggedRows rowIndex expected actual -> "Opening board row {rowIndex} has width {actual}, expected {expected}."
 
 type Bool -> Text
 func emptyCellLabel = legal => legal
@@ -314,12 +309,12 @@ func renderCell = cell legal phase board => phaseTarget phase
 
 type State -> Bool
 func stateGameOver = state => state
- ||> Ready ready -> length ready.humanMoves == 0 and length ready.computerMoves == 0
+ ||> Ready ready  -> length ready.humanMoves == 0 and length ready.computerMoves == 0
  ||> SetupError _ -> True
 
 type State -> Text
 func stateWinnerLine = state => state
- ||> Ready ready -> winnerLine ready.board
+ ||> Ready ready      -> winnerLine ready.board
  ||> SetupError error -> matrixErrorText error
 
 type Coord -> Coord -> Bool
@@ -332,17 +327,17 @@ func readyLegalAt = cell ready =>
 
 type Coord -> State -> Bool
 func stateLegalAt = cell state => state
- ||> Ready ready -> readyLegalAt cell ready
+ ||> Ready ready  -> readyLegalAt cell ready
  ||> SetupError _ -> False
 
 type Coord -> State -> Text
 func stateCellLabel = cell state => state
- ||> Ready ready -> renderCell cell (readyLegalAt cell ready) ready.phase ready.board
+ ||> Ready ready  -> renderCell cell (readyLegalAt cell ready) ready.phase ready.board
  ||> SetupError _ -> "×"
 
 type State -> Phase
 func statePhase = state => state
- ||> Ready ready -> ready.phase
+ ||> Ready ready  -> ready.phase
  ||> SetupError _ -> HumanReady
 
 from state = {

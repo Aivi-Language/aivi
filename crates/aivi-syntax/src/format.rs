@@ -408,6 +408,12 @@ impl Formatter {
         {
             return self.format_selected_subject_fun_item(item);
         }
+        if matches!(
+            item.function_form,
+            FunctionSurfaceForm::LeadingPipeSubjectSugar
+        ) {
+            return self.format_leading_pipe_fun_item(item);
+        }
         self.format_explicit_fun_item(item)
     }
 
@@ -450,6 +456,30 @@ impl Formatter {
                     .into_lines()
             }
         }
+    }
+
+    fn format_leading_pipe_fun_item(&self, item: &NamedItem) -> Vec<String> {
+        let mut lines = Vec::new();
+        if let Some(annotation) = self.format_fun_signature_annotation(item) {
+            lines.push(format!("type {annotation}"));
+        }
+
+        let header = format!("func {} =", self.item_name(&item.name));
+        let Some(body) = item.expr_body() else {
+            lines.push(header);
+            return lines;
+        };
+        let ExprKind::Pipe(pipe) = &body.kind else {
+            return self.format_explicit_fun_item(item);
+        };
+
+        lines.push(header);
+        lines.extend(
+            Block::from_lines(self.format_pipe_stage_lines(&pipe.stages))
+                .indented(PIPE_STAGE_INDENT)
+                .into_lines(),
+        );
+        lines
     }
 
     fn format_explicit_fun_item(&self, item: &NamedItem) -> Vec<String> {
@@ -971,7 +1001,38 @@ impl Formatter {
     }
 
     fn format_type_companion_member(&self, member: &crate::TypeCompanionMember) -> Vec<String> {
+        if matches!(
+            member.function_form,
+            FunctionSurfaceForm::LeadingPipeSubjectSugar
+        ) {
+            return self.format_leading_pipe_type_companion_member(member);
+        }
         self.format_explicit_type_companion_member(member)
+    }
+
+    fn format_leading_pipe_type_companion_member(
+        &self,
+        member: &crate::TypeCompanionMember,
+    ) -> Vec<String> {
+        let mut lines = Vec::new();
+        self.push_type_companion_annotation(&mut lines, member);
+
+        let header = format!("{}{} =", spaces(INDENT_WIDTH), member.name.text);
+        let Some(body) = &member.body else {
+            lines.push(header);
+            return lines;
+        };
+        let ExprKind::Pipe(pipe) = &body.kind else {
+            return self.format_explicit_type_companion_member(member);
+        };
+
+        lines.push(header);
+        lines.extend(
+            Block::from_lines(self.format_pipe_stage_lines(&pipe.stages))
+                .indented(INDENT_WIDTH + PIPE_STAGE_INDENT)
+                .into_lines(),
+        );
+        lines
     }
 
     fn format_explicit_type_companion_member(
@@ -3236,6 +3297,21 @@ value view =
     }
 
     #[test]
+    fn formatter_preserves_leading_pipe_subject_function_bodies() {
+        let formatted =
+            format_text("type Text -> Text\nfunc trimStatus=\n ||>\" ready \"->\"ready\"\n ||>_->.\n");
+        assert_eq!(
+            formatted,
+            concat!(
+                "type Text -> Text\n",
+                "func trimStatus =\n",
+                " ||> \" ready \" -> \"ready\"\n",
+                " ||> _         -> .\n",
+            )
+        );
+    }
+
+    #[test]
     fn formatter_preserves_selected_subject_bang_sugar_pipe() {
         let formatted = format_text(concat!(
             "fun flipsFromDirection = board player coord vector!\n",
@@ -3341,6 +3417,27 @@ value view =
                 "\n",
                 "    type opponent : Player -> Player\n",
                 "    opponent = self => self\n",
+                "     ||> Human    -> Computer\n",
+                "     ||> Computer -> Human\n",
+                "}\n",
+            )
+        );
+    }
+
+    #[test]
+    fn formatter_preserves_leading_pipe_subject_type_companion_bodies() {
+        let formatted = format_text(
+            "type Player = {\n    | Human\n    | Computer\n\n    type opponent:Player -> Player\n    opponent=\n     ||> Human->Computer\n     ||> Computer->Human\n}\n",
+        );
+        assert_eq!(
+            formatted,
+            concat!(
+                "type Player = {\n",
+                "    | Human\n",
+                "    | Computer\n",
+                "\n",
+                "    type opponent : Player -> Player\n",
+                "    opponent =\n",
                 "     ||> Human    -> Computer\n",
                 "     ||> Computer -> Human\n",
                 "}\n",

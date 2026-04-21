@@ -464,7 +464,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parse a `func` declaration: `func name = params => body` or `func name = .`.
+    /// Parse a `func` declaration: `func name = params => body`, `func name = .`,
+    /// or `func name =` followed by pipe stages.
     fn parse_fun_item(&mut self, base: ItemBase, keyword_index: usize, end: usize) -> NamedItem {
         let mut cursor = keyword_index + 1;
         let name = self.parse_named_item_name(keyword_index, &mut cursor, end, "func declaration");
@@ -478,6 +479,7 @@ impl<'a> Parser<'a> {
                 self.is_function_param_token(index)
                     || self.tokens[index].kind() == TokenKind::Arrow
                     || self.starts_unary_subject_function(cursor, end)
+                    || self.starts_pipe_subject_function(cursor, end)
             }) {
                 let anchor_span = name
                     .as_ref()
@@ -504,9 +506,22 @@ impl<'a> Parser<'a> {
         }
 
         let (function_form, parameters, body) = if let Some((parameters, body)) =
-            self.parse_unary_subject_function_body(keyword_index, &mut cursor, end)
+            self.parse_unary_subject_function_body(
+                keyword_index,
+                &mut cursor,
+                end,
+                "func declaration",
+            )
         {
             (FunctionSurfaceForm::UnarySubjectSugar, parameters, body)
+        } else if let Some((parameters, body)) = self.parse_pipe_subject_function_body(
+            keyword_index,
+            &mut cursor,
+            end,
+            "func declaration",
+        )
+        {
+            (FunctionSurfaceForm::LeadingPipeSubjectSugar, parameters, body)
         } else if let Some((parameters, body)) =
             self.parse_selected_subject_function_body(&mut cursor, end, "func declaration")
         {
@@ -550,7 +565,7 @@ impl<'a> Parser<'a> {
                 self.missing_body_diagnostic(
                     keyword_index,
                     "func declaration is missing its body",
-                    "expected `=>` followed by a body expression",
+                    "expected a leading pipe operator or `=>` followed by a body expression",
                 );
                 None
             };

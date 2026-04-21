@@ -49,11 +49,17 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn starts_pipe_subject_function(&self, start: usize, end: usize) -> bool {
+        self.peek_nontrivia(start, end)
+            .is_some_and(|index| self.tokens[index].kind().is_pipe_operator())
+    }
+
     fn parse_unary_subject_function_body(
         &mut self,
-        keyword_index: usize,
+        anchor_index: usize,
         cursor: &mut usize,
         end: usize,
+        declaration_name: &str,
     ) -> Option<(Vec<FunctionParam>, Option<NamedItemBody>)> {
         let head_start = self.peek_nontrivia(*cursor, end)?;
         if !matches!(
@@ -84,12 +90,53 @@ impl<'a> Parser<'a> {
                     ExprStop::default(),
                 )
             })
-            .and_then(|expr| self.finish_expression_body(cursor, end, "func declaration", expr))
+            .and_then(|expr| self.finish_expression_body(cursor, end, declaration_name, expr))
             .or_else(|| {
+                let message = format!("{declaration_name} is missing its body after `=`");
                 self.missing_body_diagnostic(
-                    keyword_index,
-                    "func declaration is missing its body after `=`",
-                    "expected an expression using `.` or parameters followed by `=>`",
+                    anchor_index,
+                    &message,
+                    "expected an expression using `.`, a leading pipe operator, or parameters followed by `=>`",
+                );
+                None
+            });
+        Some((vec![parameter], body))
+    }
+
+    fn parse_pipe_subject_function_body(
+        &mut self,
+        anchor_index: usize,
+        cursor: &mut usize,
+        end: usize,
+        declaration_name: &str,
+    ) -> Option<(Vec<FunctionParam>, Option<NamedItemBody>)> {
+        let stage_start = self.peek_nontrivia(*cursor, end)?;
+        if !self.tokens[stage_start].kind().is_pipe_operator() {
+            return None;
+        }
+        let parameter =
+            self.implicit_function_subject_parameter_at(self.source_span_of_token(stage_start));
+        let head = self.implicit_function_subject_expr_at(
+            &parameter,
+            self.source_span_of_token(stage_start),
+        );
+        let body = self
+            .with_implicit_lambda_disabled(|parser| {
+                parser.parse_subject_root_expr_from_head(
+                    stage_start,
+                    head,
+                    cursor,
+                    end,
+                    ExprStop::default(),
+                )
+            })
+            .and_then(|expr| self.finish_expression_body(cursor, end, declaration_name, expr))
+            .or_else(|| {
+                let message = format!("{declaration_name} is missing its body after `=`");
+                self.missing_body_diagnostic(
+                    anchor_index,
+                    &message,
+                    "expected a pipe body, an expression using `.`, or parameters followed by `=>`",
                 );
                 None
             });

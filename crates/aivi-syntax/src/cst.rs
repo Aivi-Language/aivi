@@ -829,8 +829,11 @@ pub struct FunctionParam {
 pub enum FunctionSurfaceForm {
     #[default]
     Explicit,
-    /// `func name = .`, `func name = .field`, or `func name = "Hello {.}"`.
+    /// `func name = .`, `func name = .field`, `func name = "Hello {.}"`,
+    /// or other expressions rooted in the ambient subject shorthand.
     UnarySubjectSugar,
+    /// `func name =` followed directly by pipe stages.
+    LeadingPipeSubjectSugar,
     /// `func name = state! coord |> ...` or `func name = state { path.to.value! } |> ...`.
     SelectedSubjectSugar,
 }

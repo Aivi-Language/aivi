@@ -370,6 +370,49 @@ fn parser_builds_sum_type_companions_with_unary_subject_sugar() {
 }
 
 #[test]
+fn parser_builds_sum_type_companions_with_leading_pipe_body_sugar() {
+    let (_, parsed) = load(
+        r#"type Player = {
+    | Human
+    | Computer
+
+    type Player -> Player
+    opponent =
+     ||> Human    -> Computer
+     ||> Computer -> Human
+}
+"#,
+    );
+
+    assert!(
+        !parsed.has_errors(),
+        "{:?}",
+        parsed.all_diagnostics().collect::<Vec<_>>()
+    );
+    let Item::Type(item) = &parsed.module.items[0] else {
+        panic!("expected type item");
+    };
+    let Some(TypeDeclBody::Sum(sum)) = item.type_body() else {
+        panic!("expected sum type body");
+    };
+    assert_eq!(sum.companions.len(), 1);
+    assert_eq!(
+        sum.companions[0].function_form,
+        FunctionSurfaceForm::LeadingPipeSubjectSugar
+    );
+    assert_eq!(sum.companions[0].parameters.len(), 1);
+    assert!(matches!(
+        sum.companions[0].body.as_ref().map(|expr| &expr.kind),
+        Some(ExprKind::Pipe(pipe))
+            if matches!(
+                pipe.head.as_deref(),
+                Some(Expr { kind: ExprKind::Name(identifier), .. })
+                    if identifier.text == IMPLICIT_FUNCTION_SUBJECT_NAME
+            )
+    ));
+}
+
+#[test]
 fn parser_builds_inline_annotated_sum_type_companions_with_unary_subject_sugar() {
     let (_, parsed) = load(
         r#"type Player = {
@@ -2057,6 +2100,65 @@ fun scoreLineFor:Text = "Score: {.}"
                     interpolation.expr.kind,
                     ExprKind::Name(ref identifier)
                         if identifier.text == IMPLICIT_FUNCTION_SUBJECT_NAME
+                )
+    ));
+}
+
+#[test]
+fn parser_accepts_leading_pipe_operator_unary_function_bodies() {
+    let (_, parsed) = load(
+        r#"fun trimStatus:Text =
+  ||> " ready " -> "ready"
+  ||> _ -> .
+fun currentStatus:Text =
+  |> .status
+"#,
+    );
+
+    assert!(
+        !parsed.has_errors(),
+        "expected leading-pipe unary sugar to parse cleanly: {:?}",
+        parsed.all_diagnostics().collect::<Vec<_>>()
+    );
+
+    let Item::Fun(trim_status) = &parsed.module.items[0] else {
+        panic!("expected trimStatus function item");
+    };
+    assert_eq!(
+        trim_status.function_form,
+        FunctionSurfaceForm::LeadingPipeSubjectSugar
+    );
+    assert_eq!(trim_status.parameters.len(), 1);
+    assert!(matches!(
+        trim_status.expr_body().map(|expr| &expr.kind),
+        Some(ExprKind::Pipe(pipe))
+            if matches!(
+                pipe.head.as_deref(),
+                Some(Expr { kind: ExprKind::Name(identifier), .. })
+                    if identifier.text == IMPLICIT_FUNCTION_SUBJECT_NAME
+            )
+                && matches!(pipe.stages.first().map(|stage| &stage.kind), Some(PipeStageKind::Case(_)))
+    ));
+
+    let Item::Fun(current_status) = &parsed.module.items[1] else {
+        panic!("expected currentStatus function item");
+    };
+    assert_eq!(
+        current_status.function_form,
+        FunctionSurfaceForm::LeadingPipeSubjectSugar
+    );
+    assert_eq!(current_status.parameters.len(), 1);
+    assert!(matches!(
+        current_status.expr_body().map(|expr| &expr.kind),
+        Some(ExprKind::Pipe(pipe))
+            if matches!(
+                pipe.head.as_deref(),
+                Some(Expr { kind: ExprKind::Name(identifier), .. })
+                    if identifier.text == IMPLICIT_FUNCTION_SUBJECT_NAME
+            )
+                && matches!(
+                    pipe.stages.first().map(|stage| &stage.kind),
+                    Some(PipeStageKind::Transform { .. })
                 )
     ));
 }
