@@ -252,10 +252,15 @@ fn build_markup_bundle(
     }
 
     let lowered = snapshot.entry_hir();
+    let workspace_hir_arcs = collect_workspace_hirs_sorted(&snapshot);
+    let workspace_hirs: Vec<(&str, &HirModule)> = workspace_hir_arcs
+        .iter()
+        .map(|(name, arc)| (name.as_str(), arc.module()))
+        .collect();
     let artifact = match prepare_run_artifact_with_query_context(
         &snapshot.sources,
         lowered.module(),
-        &[],
+        &workspace_hirs,
         requested_view,
         Some(snapshot.backend_query_context()),
     ) {

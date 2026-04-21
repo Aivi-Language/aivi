@@ -1086,6 +1086,14 @@ impl<'a> ModuleLowerer<'a> {
                 .iter()
                 .filter_map(|dependency| self.map_dependency(hir_id, *dependency))
                 .collect::<Vec<_>>();
+            if dependencies.is_empty() {
+                if let Some(body) = signal.body {
+                    dependencies = aivi_hir::collect_signal_dependencies_for_expr(self.hir, body)
+                        .iter()
+                        .filter_map(|dependency| self.map_dependency(hir_id, *dependency))
+                        .collect::<Vec<_>>();
+                }
+            }
             // Also include imported workspace signal dependencies.
             // These are tracked in import_item_map by ImportId, not in item_map.
             for &import_id in &signal.import_signal_dependencies {
@@ -2789,14 +2797,12 @@ impl<'a> ModuleLowerer<'a> {
             .clone();
 
         // If this import resolves to a pre-compiled workspace module item, reuse it
-        // directly instead of creating a bodyless stub. Signal imports are excluded:
-        // they must always use the deterministic synthetic formula (hir_item_count + import_id)
-        // so the origin matches what the runtime assembly builder independently derives for
-        // signal lookup. Using the workspace item's origin (which has a different base) would
-        // break the assembly → backend item mapping in startup.rs index_origins.
+        // directly instead of creating a bodyless stub. This includes Signal imports:
+        // imported workspace signals must keep the real compiled workspace item so
+        // runtime linking and hydration can observe the actual source/derived graph
+        // rather than a disconnected input placeholder.
         let (kind, parameters) = self.import_item_shape(import, &binding)?;
-        if !matches!(kind, ItemKind::Signal(_))
-            && let Some(module_name) = binding
+        if let Some(module_name) = binding
                 .source_module
                 .as_deref()
                 .or_else(|| self.import_to_module.get(&import).map(|name| name.as_ref()))

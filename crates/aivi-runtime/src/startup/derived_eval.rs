@@ -461,11 +461,12 @@ impl LinkedDerivedEvaluator<'_> {
                     dependency_environment,
                     globals,
                 ) {
-                    None => Err(BackendRuntimeError::MissingNativeDerivedPlan {
+                    None => self.evaluate_fallback_derived_value(
                         signal,
-                        item: binding.item,
-                        kernel: native.kernel,
-                    }),
+                        binding,
+                        dependency_environment,
+                        globals,
+                    ),
                     Some(Ok(value)) => Ok(value),
                     Some(Err(NativeKernelExecutionError::FallbackRequired)) => {
                         self.evaluate_fallback_derived_value(
@@ -564,11 +565,12 @@ impl LinkedDerivedEvaluator<'_> {
                     dependency_environment,
                     globals,
                 ) {
-                    None => Err(BackendRuntimeError::MissingNativeReactiveSeedPlan {
+                    None => self.evaluate_fallback_reactive_seed_value(
                         signal,
-                        item: binding.item,
-                        kernel: native.kernel,
-                    }),
+                        binding,
+                        dependency_environment,
+                        globals,
+                    ),
                     Some(Ok(value)) => Ok(value),
                     Some(Err(NativeKernelExecutionError::FallbackRequired)) => self
                         .evaluate_fallback_reactive_seed_value(
@@ -605,6 +607,10 @@ impl LinkedDerivedEvaluator<'_> {
             engine
                 .evaluate_signal_body_kernel(body_kernel, dependency_environment, globals)
                 .map_err(|error| self.reactive_seed_eval_error(signal, binding.item, error))
+        } else if let Some(entry_kernel) = binding.entry_kernel {
+            engine
+                .evaluate_kernel(entry_kernel, None, dependency_environment, globals)
+                .map_err(|error| self.reactive_seed_eval_error(signal, binding.item, error))
         } else {
             engine
                 .evaluate_item(binding.backend_item, globals)
@@ -634,12 +640,14 @@ impl LinkedDerivedEvaluator<'_> {
                     env,
                     globals,
                 ) {
-                    None => Err(BackendRuntimeError::MissingNativeReactiveGuardPlan {
-                        signal,
-                        clause,
-                        item: binding.owner,
-                        kernel: native.kernel,
-                    }),
+                    None => self.evaluate_fallback_reactive_fragment_value(
+                        &guard_backend,
+                        guard_native_kernels.as_ref(),
+                        binding.compiled_guard.entry_item,
+                        env,
+                        |error| self.reactive_guard_eval_error(signal, clause, binding.owner, error),
+                        globals,
+                    ),
                     Some(Ok(value)) => Ok(value),
                     Some(Err(NativeKernelExecutionError::FallbackRequired)) => {
                         self.evaluate_fallback_reactive_fragment_value(
@@ -690,12 +698,14 @@ impl LinkedDerivedEvaluator<'_> {
                     env,
                     globals,
                 ) {
-                    None => Err(BackendRuntimeError::MissingNativeReactiveBodyPlan {
-                        signal,
-                        clause,
-                        item: binding.owner,
-                        kernel: native.kernel,
-                    }),
+                    None => self.evaluate_fallback_reactive_fragment_value(
+                        &frag_backend,
+                        frag_native_kernels.as_ref(),
+                        fragment.entry_item,
+                        env,
+                        |error| self.reactive_body_eval_error(signal, clause, binding.owner, error),
+                        globals,
+                    ),
                     Some(Ok(value)) => Ok(value),
                     Some(Err(NativeKernelExecutionError::FallbackRequired)) => self
                         .evaluate_fallback_reactive_fragment_value(
@@ -735,6 +745,10 @@ impl LinkedDerivedEvaluator<'_> {
         if let Some(body_kernel) = binding.body_kernel {
             engine
                 .evaluate_signal_body_kernel(body_kernel, dependency_environment, globals)
+                .map_err(|error| self.derived_eval_error(signal, binding.item, error))
+        } else if let Some(entry_kernel) = binding.entry_kernel {
+            engine
+                .evaluate_kernel(entry_kernel, None, dependency_environment, globals)
                 .map_err(|error| self.derived_eval_error(signal, binding.item, error))
         } else {
             engine

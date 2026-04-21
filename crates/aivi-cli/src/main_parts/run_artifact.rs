@@ -8,7 +8,7 @@ const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
 const FROZEN_BACKEND_CATALOG_FORMAT: &str = "aivi.frozen-backend-catalog";
 const FROZEN_BACKEND_CATALOG_VERSION: u32 = 1;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
-const SOURCE_RUN_CACHE_VERSION: u32 = 1;
+const SOURCE_RUN_CACHE_VERSION: u32 = 2;
 const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "2";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
@@ -1273,13 +1273,13 @@ fn load_cached_source_run_artifact(
 ) -> Option<RunArtifact> {
     let cache_dir = source_run_cache_dir(cache_home, entry_path, requested_view);
     let manifest_path = cache_dir.join(SOURCE_RUN_CACHE_METADATA_FILE_NAME);
-    let image_path = cache_dir.join(FROZEN_RUN_IMAGE_FILE_NAME);
+    let artifact_path = cache_dir.join(RUN_ARTIFACT_FILE_NAME);
     let manifest = read_source_run_cache_manifest(&manifest_path).ok()?;
     validate_source_run_cache_manifest(&manifest, entry_path, requested_view).ok()?;
     if !source_run_cache_dependencies_match(&manifest) {
         return None;
     }
-    load_frozen_run_image(&image_path, requested_view).ok()
+    load_serialized_run_artifact(&artifact_path, requested_view).ok()
 }
 
 fn store_cached_source_run_artifact(
@@ -1292,7 +1292,7 @@ fn store_cached_source_run_artifact(
     let cache_dir = source_run_cache_dir(cache_home, entry_path, requested_view);
     fs::create_dir_all(&cache_dir)
         .map_err(|error| format!("failed to create {}: {error}", cache_dir.display()))?;
-    write_frozen_run_image_bundle_without_native_kernels(&cache_dir, artifact)?;
+    write_serialized_run_artifact_bundle(&cache_dir, artifact)?;
     let manifest = build_source_run_cache_manifest(entry_path, requested_view, snapshot)?;
     let manifest_path = cache_dir.join(SOURCE_RUN_CACHE_METADATA_FILE_NAME);
     let bytes = serde_json::to_vec(&manifest)

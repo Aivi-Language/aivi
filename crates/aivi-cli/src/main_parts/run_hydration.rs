@@ -196,6 +196,9 @@ fn extend_run_required_signal_globals(
     match input {
         CompiledRunInput::Expr(fragment) => {
             for dependency in &fragment.required_signal_globals {
+                if !matches!(dependency.kind, CompiledRunGlobalKind::Signal) {
+                    continue;
+                }
                 required
                     .entry(dependency.runtime_item)
                     .or_insert_with(|| dependency.name.clone());
@@ -207,6 +210,9 @@ fn extend_run_required_signal_globals(
                     continue;
                 };
                 for dependency in &fragment.required_signal_globals {
+                    if !matches!(dependency.kind, CompiledRunGlobalKind::Signal) {
+                        continue;
+                    }
                     required
                         .entry(dependency.runtime_item)
                         .or_insert_with(|| dependency.name.clone());
@@ -316,6 +322,7 @@ struct CompiledRuntimeFragmentUnit {
 struct RunFragmentCompiler<'a> {
     sources: &'a SourceDatabase,
     module: &'a HirModule,
+    workspace_hirs: &'a [(&'a str, &'a HirModule)],
     view_owner: aivi_hir::ItemId,
     sites: &'a aivi_hir::MarkupRuntimeExprSites,
     runtime_backend: &'a BackendProgram,
@@ -329,6 +336,7 @@ impl<'a> RunFragmentCompiler<'a> {
     fn new(
         sources: &'a SourceDatabase,
         module: &'a HirModule,
+        workspace_hirs: &'a [(&'a str, &'a HirModule)],
         view_owner: aivi_hir::ItemId,
         sites: &'a aivi_hir::MarkupRuntimeExprSites,
         runtime_backend: &'a BackendProgram,
@@ -338,6 +346,7 @@ impl<'a> RunFragmentCompiler<'a> {
         Self {
             sources,
             module,
+            workspace_hirs,
             view_owner,
             sites,
             runtime_backend,
@@ -384,6 +393,7 @@ impl<'a> RunFragmentCompiler<'a> {
         };
         let unit = compile_runtime_fragment_backend_unit(
             self.module,
+            self.workspace_hirs,
             &fragment,
             self.query_context,
             &format!(
@@ -543,16 +553,15 @@ impl<'a> RunFragmentCompiler<'a> {
             })?;
         let kind = if matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
             CompiledRunGlobalKind::Signal
-        } else {
-            let Some(_body) = runtime_decl.body else {
-                return Err(format!(
-                    "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
-                    expr.as_raw(),
-                    fragment_item,
-                    signal_name,
-                ));
-            };
+        } else if runtime_decl.body.is_some() {
             CompiledRunGlobalKind::RuntimeItem
+        } else {
+            return Err(format!(
+                "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
+                expr.as_raw(),
+                fragment_item,
+                signal_name,
+            ));
         };
         Ok(Some(CompiledRunSignalGlobal {
             fragment_item,
@@ -565,6 +574,7 @@ impl<'a> RunFragmentCompiler<'a> {
 
 fn compile_runtime_fragment_backend_unit(
     module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
     fragment: &RuntimeFragmentSpec,
     query_context: Option<BackendQueryContext<'_>>,
     error_context: &str,
@@ -579,16 +589,22 @@ fn compile_runtime_fragment_backend_unit(
             .map_err(|error| format!("{error_context}: {error}"));
     }
 
-    compile_local_runtime_fragment_backend_unit(module, fragment, error_context)
+    compile_local_runtime_fragment_backend_unit(module, workspace_hirs, fragment, error_context)
 }
 
 fn compile_local_runtime_fragment_backend_unit(
     module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
     fragment: &RuntimeFragmentSpec,
     error_context: &str,
 ) -> Result<CompiledRuntimeFragmentUnit, String> {
-    let core = lower_runtime_fragment(module, fragment)
-        .map_err(|error| format!("{error_context} into typed core: {error}"))?;
+    let core = if workspace_hirs.is_empty() {
+        lower_runtime_fragment(module, fragment)
+            .map_err(|error| format!("{error_context} into typed core: {error}"))?
+    } else {
+        aivi_core::lower_runtime_fragment_with_workspace(module, workspace_hirs, fragment)
+            .map_err(|error| format!("{error_context} into typed core: {error}"))?
+    };
     validate_core_module(&core.module)
         .map_err(|error| format!("{error_context} during typed-core validation: {error}"))?;
     let lambda = lower_lambda_module(&core.module)

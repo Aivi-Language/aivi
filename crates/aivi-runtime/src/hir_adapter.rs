@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     fmt,
     sync::Arc,
     time::{Duration, Instant},
@@ -101,6 +101,36 @@ pub fn assemble_hir_runtime_with_items_profiled(
     .build_profiled()
 }
 
+pub fn assemble_hir_runtime_with_items_and_workspace<'a>(
+    module: &'a hir::Module,
+    workspace_hirs: &[(&'a str, &'a hir::Module)],
+    included_items: &HashSet<hir::ItemId>,
+) -> Result<HirRuntimeAssembly, HirRuntimeAdapterErrors> {
+    assemble_hir_runtime_with_items_and_workspace_profiled(module, workspace_hirs, included_items)
+        .map(|profiled| profiled.assembly)
+}
+
+pub fn assemble_hir_runtime_with_items_and_workspace_profiled<'a>(
+    module: &'a hir::Module,
+    workspace_hirs: &[(&'a str, &'a hir::Module)],
+    included_items: &HashSet<hir::ItemId>,
+) -> Result<ProfiledHirRuntimeAssembly, HirRuntimeAdapterErrors> {
+    let source_lifecycles = hir::elaborate_source_lifecycles(module);
+    let source_decode_programs = hir::generate_source_decode_programs(module);
+    let recurrences = hir::elaborate_recurrences(module);
+    let gates = hir::elaborate_gates(module);
+    HirRuntimeAssemblyBuilder::new_with_items_and_workspace(
+        module,
+        &source_lifecycles,
+        &source_decode_programs,
+        &recurrences,
+        &gates,
+        included_items,
+        workspace_hirs,
+    )
+    .build_profiled()
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HirRuntimeAssemblyStats {
     pub reactive_guard_fragments: usize,
@@ -122,6 +152,7 @@ pub struct HirRuntimeAssemblyBuilder<'a> {
     recurrences: &'a hir::RecurrenceElaborationReport,
     gates: &'a hir::GateElaborationReport,
     included_items: Option<&'a HashSet<hir::ItemId>>,
+    workspace_hirs: &'a [(&'a str, &'a hir::Module)],
 }
 
 impl<'a> HirRuntimeAssemblyBuilder<'a> {
@@ -139,6 +170,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
             recurrences,
             gates,
             None,
+            &[],
         )
     }
 
@@ -157,6 +189,27 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
             recurrences,
             gates,
             Some(included_items),
+            &[],
+        )
+    }
+
+    pub const fn new_with_items_and_workspace(
+        module: &'a hir::Module,
+        source_lifecycles: &'a hir::SourceLifecycleElaborationReport,
+        source_decode_programs: &'a hir::SourceDecodeProgramReport,
+        recurrences: &'a hir::RecurrenceElaborationReport,
+        gates: &'a hir::GateElaborationReport,
+        included_items: &'a HashSet<hir::ItemId>,
+        workspace_hirs: &'a [(&'a str, &'a hir::Module)],
+    ) -> Self {
+        Self::new_internal(
+            module,
+            source_lifecycles,
+            source_decode_programs,
+            recurrences,
+            gates,
+            Some(included_items),
+            workspace_hirs,
         )
     }
 
@@ -167,6 +220,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         recurrences: &'a hir::RecurrenceElaborationReport,
         gates: &'a hir::GateElaborationReport,
         included_items: Option<&'a HashSet<hir::ItemId>>,
+        workspace_hirs: &'a [(&'a str, &'a hir::Module)],
     ) -> Self {
         Self {
             module,
@@ -175,6 +229,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
             recurrences,
             gates,
             included_items,
+            workspace_hirs,
         }
     }
 
@@ -200,195 +255,100 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         let mut owners = Vec::new();
         let mut signals = Vec::new();
         let mut public_signals = BTreeMap::<hir::ItemId, SignalHandle>::new();
-        let mut public_signal_names = BTreeMap::<String, SignalHandle>::new();
         let mut source_inputs = BTreeMap::<hir::ItemId, InputHandle>::new();
-
-        for (item_id, item) in self.module.items().iter() {
-            if !self.includes_item(item_id) {
-                continue;
-            }
-            let hir::Item::Signal(signal) = item else {
-                continue;
-            };
-            if signal.is_source_capability_handle {
-                continue;
-            }
-            let has_source = signal.source_metadata.is_some();
-            let has_body = signal.body.is_some();
-            let has_reactive_updates = !signal.reactive_updates.is_empty();
-
-            let owner = match graph_builder.add_owner(signal.name.text(), None) {
-                Ok(owner) => owner,
-                Err(err) => {
-                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                    continue;
-                }
-            };
-            owners.push(HirOwnerBinding {
-                item: item_id,
-                span: signal.header.span,
-                name: signal.name.text().into(),
-                handle: owner,
-            });
-
-            let (kind, source_input) = if has_reactive_updates {
-                let reactive = match graph_builder.add_reactive(signal.name.text(), Some(owner)) {
-                    Ok(signal) => signal,
-                    Err(err) => {
-                        errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                        continue;
-                    }
-                };
-                let source_input = if has_source {
-                    match graph_builder
-                        .add_input(format!("{}#source", signal.name.text()), Some(owner))
-                    {
-                        Ok(input) => Some(input),
-                        Err(err) => {
-                            errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                            continue;
-                        }
-                    }
-                } else {
-                    None
-                };
-                public_signals.insert(item_id, reactive);
-                public_signal_names.insert(signal.name.text().to_owned(), reactive);
-                (
-                    HirSignalBindingKind::Reactive {
-                        signal: reactive,
-                        dependencies: Vec::new().into_boxed_slice(),
-                        seed_dependencies: Vec::new().into_boxed_slice(),
-                        clauses: Vec::new().into_boxed_slice(),
-                    },
-                    source_input,
-                )
-            } else if has_body {
-                let derived = match graph_builder.add_derived(signal.name.text(), Some(owner)) {
-                    Ok(derived) => derived,
-                    Err(err) => {
-                        errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                        continue;
-                    }
-                };
-                let source_input = if has_source {
-                    match graph_builder
-                        .add_input(format!("{}#source", signal.name.text()), Some(owner))
-                    {
-                        Ok(input) => Some(input),
-                        Err(err) => {
-                            errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                            continue;
-                        }
-                    }
-                } else {
-                    None
-                };
-                let temporal_helpers = match signal.body {
-                    Some(body) => add_temporal_helper_inputs(
-                        self.module,
-                        &mut graph_builder,
-                        signal.name.text(),
-                        owner,
-                        body,
-                    ),
-                    None => Ok(Vec::new().into_boxed_slice()),
-                };
-                let temporal_helpers = match temporal_helpers {
-                    Ok(helpers) => helpers,
-                    Err(err) => {
-                        errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                        continue;
-                    }
-                };
-                public_signals.insert(item_id, derived.as_signal());
-                public_signal_names.insert(signal.name.text().to_owned(), derived.as_signal());
-                (
-                    HirSignalBindingKind::Derived {
-                        signal: derived,
-                        dependencies: Vec::new().into_boxed_slice(),
-                        temporal_trigger_dependencies: Vec::new().into_boxed_slice(),
-                        temporal_helpers,
-                    },
-                    source_input,
-                )
-            } else {
-                let input = match graph_builder.add_input(signal.name.text(), Some(owner)) {
-                    Ok(input) => input,
-                    Err(err) => {
-                        errors.push(HirRuntimeAdapterError::GraphBuild(err));
-                        continue;
-                    }
-                };
-                public_signals.insert(item_id, input.as_signal());
-                public_signal_names.insert(signal.name.text().to_owned(), input.as_signal());
-                (HirSignalBindingKind::Input { signal: input }, Some(input))
-            };
-
-            if let Some(input) = source_input {
-                source_inputs.insert(item_id, input);
-            }
-            signals.push(HirSignalBinding {
-                item: item_id,
-                span: signal.header.span,
-                name: signal.name.text().into(),
-                owner,
-                kind,
-                source_input,
-            });
+        let mut signal_origins = BTreeMap::<hir::ItemId, RuntimeSignalOrigin>::new();
+        let workspace_modules = build_workspace_runtime_modules(self.module, self.workspace_hirs);
+        let mut workspace_states = Vec::with_capacity(workspace_modules.len());
+        for (module_index, workspace_module) in workspace_modules.iter().enumerate() {
+            workspace_states.push(seed_runtime_module_signals(
+                workspace_module.module,
+                workspace_module.item_origin_offset,
+                module_index,
+                |_| true,
+                &mut graph_builder,
+                &mut owners,
+                &mut signals,
+                &mut public_signals,
+                &mut source_inputs,
+                &mut signal_origins,
+                &mut errors,
+            ));
         }
-
-        // Add stub Input signal entries for all workspace Signal import bindings.
-        // These use the same deterministic synthetic HirItemId formula as lower.rs:
-        //   synthetic_id = hir_item_count + import_id.as_raw()
-        // This ensures signal_items_by_handle can map signal handles → backend items.
-        let hir_item_count =
-            u32::try_from(self.module.items().iter().count()).expect("HIR item count fits u32");
-        for (import_id, binding) in self.module.imports().iter() {
-            let hir::ImportBindingMetadata::Value {
-                ty: hir::ImportValueType::Signal(_),
-            } = &binding.metadata
-            else {
-                continue;
-            };
-            let signal_name = binding.local_name.text();
-            let synthetic_item_id = hir::ItemId::from_raw(hir_item_count + import_id.as_raw());
-            let owner = match graph_builder.add_owner(signal_name, None) {
-                Ok(owner) => owner,
-                Err(err) => {
-                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
+        let entry_module_index = workspace_modules.len();
+        let mut entry_state = seed_runtime_module_signals(
+            self.module,
+            0,
+            entry_module_index,
+            |item| self.includes_item(item),
+            &mut graph_builder,
+            &mut owners,
+            &mut signals,
+            &mut public_signals,
+            &mut source_inputs,
+            &mut signal_origins,
+            &mut errors,
+        );
+        let mut workspace_signal_exports = BTreeMap::<String, BTreeMap<String, hir::ItemId>>::new();
+        for (workspace_module, state) in workspace_modules.iter().zip(workspace_states.iter_mut()) {
+            for (import_id, binding) in workspace_module.module.imports().iter() {
+                let hir::ImportBindingMetadata::Value {
+                    ty: hir::ImportValueType::Signal(_),
+                } = &binding.metadata
+                else {
                     continue;
-                }
-            };
-            let input = match graph_builder.add_input(signal_name, Some(owner)) {
-                Ok(input) => input,
-                Err(err) => {
-                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                };
+                let Some(source_module) =
+                    workspace_import_source_module(binding, &state.import_to_module, import_id)
+                else {
                     continue;
-                }
-            };
-            public_signals.insert(synthetic_item_id, input.as_signal());
-            public_signal_names.insert(signal_name.to_owned(), input.as_signal());
-            source_inputs.insert(synthetic_item_id, input);
-            owners.push(HirOwnerBinding {
-                item: synthetic_item_id,
-                span: binding.span,
-                name: signal_name.into(),
-                handle: owner,
-            });
-            signals.push(HirSignalBinding {
-                item: synthetic_item_id,
-                span: binding.span,
-                name: signal_name.into(),
-                owner,
-                kind: HirSignalBindingKind::Input { signal: input },
-                source_input: Some(input),
-            });
+                };
+                let Some(source_exports) = workspace_signal_exports.get(source_module) else {
+                    continue;
+                };
+                let Some(&global_item) = source_exports.get(binding.imported_name.text()) else {
+                    continue;
+                };
+                state
+                    .export_signal_items
+                    .entry(binding.local_name.text().to_owned())
+                    .or_insert(global_item);
+            }
+            workspace_signal_exports
+                .insert(workspace_module.name.to_owned(), state.export_signal_items.clone());
         }
+        for (workspace_module, state) in workspace_modules.iter().zip(workspace_states.iter_mut()) {
+            let import_to_module = state.import_to_module.clone();
+            seed_runtime_import_signal_handles(
+                workspace_module.module,
+                &import_to_module,
+                &workspace_signal_exports,
+                &public_signals,
+                state,
+            );
+        }
+        let entry_import_to_module = entry_state.import_to_module.clone();
+        seed_runtime_import_signal_handles(
+            self.module,
+            &entry_import_to_module,
+            &workspace_signal_exports,
+            &public_signals,
+            &mut entry_state,
+        );
 
         let mut next_reactive_clause_raw = 0u32;
         for binding in &mut signals {
-            let Some(hir::Item::Signal(signal)) = self.module.items().get(binding.item) else {
+            let Some(origin) = signal_origins.get(&binding.item).copied() else {
+                continue;
+            };
+            let (module, module_state) = if origin.module_index < workspace_modules.len() {
+                (
+                    workspace_modules[origin.module_index].module,
+                    &workspace_states[origin.module_index],
+                )
+            } else {
+                (self.module, &entry_state)
+            };
+            let Some(hir::Item::Signal(signal)) = module.items().get(origin.local_item) else {
                 continue;
             };
             match &mut binding.kind {
@@ -400,31 +360,39 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                     temporal_helpers,
                 } => {
                     let mut resolved = resolve_signal_dependencies(
-                        self.module,
-                        binding.item,
+                        module,
+                        origin.local_item,
                         &signal.signal_dependencies,
-                        &public_signals,
+                        &module_state.public_signals,
                         &mut errors,
                     );
                     let mut resolved_temporal_triggers = resolve_signal_dependencies(
-                        self.module,
-                        binding.item,
+                        module,
+                        origin.local_item,
                         &signal.temporal_input_dependencies,
-                        &public_signals,
+                        &module_state.public_signals,
                         &mut errors,
                     );
-                    // Resolve imported signal dependencies (workspace module signals
-                    // referenced via TermResolution::Import). These use the same
-                    // synthetic ItemId formula as the import stub block above.
                     for &import_id in &signal.import_signal_dependencies {
-                        let synthetic_id =
-                            hir::ItemId::from_raw(hir_item_count + import_id.as_raw());
-                        match public_signals.get(&synthetic_id).copied() {
+                        match module_state.import_signal_handles.get(&import_id).copied() {
                             Some(handle) => push_unique_signal(&mut resolved, handle),
                             None => errors.push(HirRuntimeAdapterError::UnknownSignalDependency {
                                 owner: binding.item,
-                                dependency: synthetic_id,
+                                dependency: runtime_signal_import_item_id(
+                                    module,
+                                    module_state.item_origin_offset,
+                                    import_id,
+                                ),
                             }),
+                        }
+                    }
+                    if resolved.is_empty() {
+                        if let Some(body) = signal.body {
+                            resolved = collect_direct_signal_dependencies(
+                                module,
+                                body,
+                                &module_state.public_signal_names,
+                            );
                         }
                     }
                     let mut graph_dependencies = resolved
@@ -464,9 +432,9 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         .body
                         .map(|body| {
                             collect_pipe_stage_signal_dependencies(
-                                self.module,
+                                module,
                                 body,
-                                &public_signal_names,
+                                &module_state.public_signal_names,
                             )
                         })
                         .unwrap_or_default();
@@ -474,35 +442,54 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         .body
                         .map(|body| {
                             let mut dependencies = resolve_signal_dependencies(
-                                self.module,
-                                binding.item,
-                                &hir::collect_signal_dependencies_for_expr(self.module, body),
-                                &public_signals,
+                                module,
+                                origin.local_item,
+                                &hir::collect_signal_dependencies_for_expr(module, body),
+                                &module_state.public_signals,
                                 &mut errors,
                             );
                             if dependencies.is_empty() {
                                 dependencies = collect_direct_signal_dependencies(
-                                    self.module,
+                                    module,
                                     body,
-                                    &public_signal_names,
+                                    &module_state.public_signal_names,
                                 );
                             }
                             dependencies
                         })
                         .unwrap_or_default();
+                    for &import_id in &signal.import_signal_dependencies {
+                        match module_state.import_signal_handles.get(&import_id).copied() {
+                            Some(handle) => {
+                                push_unique_signal(&mut resolved_seed_dependencies, handle)
+                            }
+                            None => errors.push(HirRuntimeAdapterError::UnknownSignalDependency {
+                                owner: binding.item,
+                                dependency: runtime_signal_import_item_id(
+                                    module,
+                                    module_state.item_origin_offset,
+                                    import_id,
+                                ),
+                            }),
+                        }
+                    }
                     let mut reactive_dependencies = signal_pipeline_dependencies.clone();
                     for dependency in &resolved_seed_dependencies {
                         push_unique_signal(&mut reactive_dependencies, *dependency);
                     }
 
-                    let payload_type = hir::signal_payload_type(self.module, signal);
+                    let payload_type = hir::signal_payload_type(module, signal);
                     let mut clause_bindings = Vec::with_capacity(signal.reactive_updates.len());
                     let mut clause_specs = Vec::with_capacity(signal.reactive_updates.len());
                     for (clause_index, update) in signal.reactive_updates.iter().enumerate() {
                         let trigger_parameter_items =
                             update.trigger_source.into_iter().collect::<Vec<_>>();
                         let trigger_signal = match update.trigger_source {
-                            Some(source_item) => match public_signals.get(&source_item).copied() {
+                            Some(source_item) => match module_state
+                                .public_signals
+                                .get(&source_item)
+                                .copied()
+                            {
                                 Some(signal) => Some(signal),
                                 None => {
                                     errors.push(HirRuntimeAdapterError::UnknownSignalDependency {
@@ -542,38 +529,38 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                             let signal_bool_type =
                                 hir::GateType::Signal(Box::new(bool_type.clone()));
                             compile_runtime_expr_fragment(
-                                self.module,
+                                module,
                                 binding.item,
                                 update.span,
                                 update.guard,
                                 &signal_bool_type,
                                 guard_name.clone(),
-                                &public_signals,
+                                &module_state.public_signals,
                                 &[],
                                 ReactiveFragmentRole::Guard,
                             )
                             .or_else(|_| {
                                 compile_runtime_expr_fragment(
-                                    self.module,
+                                    module,
                                     binding.item,
                                     update.span,
                                     update.guard,
                                     &bool_type,
                                     guard_name,
-                                    &public_signals,
+                                    &module_state.public_signals,
                                     &[],
                                     ReactiveFragmentRole::Guard,
                                 )
                             })
                         } else {
                             compile_runtime_expr_fragment(
-                                self.module,
+                                module,
                                 binding.item,
                                 update.span,
                                 update.guard,
                                 &bool_type,
                                 guard_name,
-                                &public_signals,
+                                &module_state.public_signals,
                                 &[],
                                 ReactiveFragmentRole::Guard,
                             )
@@ -599,38 +586,38 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                             let signal_body_type =
                                 hir::GateType::Signal(Box::new(body_type.clone()));
                             compile_runtime_expr_fragment(
-                                self.module,
+                                module,
                                 binding.item,
                                 update.span,
                                 update.body,
                                 &signal_body_type,
                                 body_name.clone(),
-                                &public_signals,
+                                &module_state.public_signals,
                                 trigger_parameter_items.as_slice(),
                                 ReactiveFragmentRole::Body,
                             )
                             .or_else(|_| {
                                 compile_runtime_expr_fragment(
-                                    self.module,
+                                    module,
                                     binding.item,
                                     update.span,
                                     update.body,
                                     &body_type,
                                     body_name,
-                                    &public_signals,
+                                    &module_state.public_signals,
                                     trigger_parameter_items.as_slice(),
                                     ReactiveFragmentRole::Body,
                                 )
                             })
                         } else {
                             compile_runtime_expr_fragment(
-                                self.module,
+                                module,
                                 binding.item,
                                 update.span,
                                 update.body,
                                 &body_type,
                                 body_name,
-                                &public_signals,
+                                &module_state.public_signals,
                                 trigger_parameter_items.as_slice(),
                                 ReactiveFragmentRole::Body,
                             )
@@ -659,9 +646,9 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         }
                         if guard_dependencies.is_empty() {
                             guard_dependencies = collect_direct_signal_dependencies(
-                                self.module,
+                                module,
                                 update.guard,
-                                &public_signal_names,
+                                &module_state.public_signal_names,
                             );
                         }
                         let mut body_dependencies = signal_pipeline_dependencies.clone();
@@ -673,9 +660,9 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                         }
                         if body_dependencies.is_empty() {
                             body_dependencies = collect_direct_signal_dependencies(
-                                self.module,
+                                module,
                                 update.body,
-                                &public_signal_names,
+                                &module_state.public_signal_names,
                             );
                         }
                         for dependency in guard_dependencies
@@ -728,7 +715,6 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                 }
             }
         }
-
         let mut task_wakeups = BTreeMap::new();
         for node in self.recurrences.nodes() {
             if !self.includes_item(node.owner) {
@@ -748,7 +734,13 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         let mut sources = Vec::new();
         let mut seen_source_owners = BTreeSet::new();
         for binding in &signals {
-            let Some(hir::Item::Signal(signal)) = self.module.items().get(binding.item) else {
+            let Some(origin) = signal_origins.get(&binding.item).copied() else {
+                continue;
+            };
+            if origin.module_index != entry_module_index {
+                continue;
+            }
+            let Some(hir::Item::Signal(signal)) = self.module.items().get(origin.local_item) else {
                 continue;
             };
             if signal.source_metadata.is_none() {
@@ -1051,6 +1043,312 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         spec.decode = Some(decode.clone());
         Ok(spec)
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RuntimeWorkspaceModule<'a> {
+    name: &'a str,
+    module: &'a hir::Module,
+    item_origin_offset: u32,
+}
+
+#[derive(Clone, Debug, Default)]
+struct RuntimeModuleSignalState {
+    item_origin_offset: u32,
+    public_signals: BTreeMap<hir::ItemId, SignalHandle>,
+    public_signal_names: BTreeMap<String, SignalHandle>,
+    import_signal_handles: BTreeMap<hir::ImportId, SignalHandle>,
+    export_signal_items: BTreeMap<String, hir::ItemId>,
+    import_to_module: HashMap<hir::ImportId, Box<str>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RuntimeSignalOrigin {
+    module_index: usize,
+    local_item: hir::ItemId,
+}
+
+fn build_workspace_runtime_modules<'a>(
+    entry_module: &hir::Module,
+    workspace_hirs: &[(&'a str, &'a hir::Module)],
+) -> Vec<RuntimeWorkspaceModule<'a>> {
+    let entry_item_count =
+        u32::try_from(entry_module.items().iter().count()).expect("HIR item count fits u32");
+    let entry_import_count =
+        u32::try_from(entry_module.imports().iter().count()).expect("HIR import count fits u32");
+    let mut next_origin = entry_item_count + entry_import_count;
+    let mut modules = Vec::with_capacity(workspace_hirs.len());
+    for (name, module) in workspace_hirs {
+        modules.push(RuntimeWorkspaceModule {
+            name,
+            module,
+            item_origin_offset: next_origin,
+        });
+        let item_count =
+            u32::try_from(module.items().iter().count()).expect("HIR item count fits u32");
+        let import_count =
+            u32::try_from(module.imports().iter().count()).expect("HIR import count fits u32");
+        next_origin = next_origin
+            .saturating_add(item_count)
+            .saturating_add(import_count);
+    }
+    modules
+}
+
+fn seed_runtime_module_signals(
+    module: &hir::Module,
+    item_origin_offset: u32,
+    module_index: usize,
+    includes_item: impl Fn(hir::ItemId) -> bool,
+    graph_builder: &mut SignalGraphBuilder,
+    owners: &mut Vec<HirOwnerBinding>,
+    signals: &mut Vec<HirSignalBinding>,
+    public_signals: &mut BTreeMap<hir::ItemId, SignalHandle>,
+    source_inputs: &mut BTreeMap<hir::ItemId, InputHandle>,
+    signal_origins: &mut BTreeMap<hir::ItemId, RuntimeSignalOrigin>,
+    errors: &mut Vec<HirRuntimeAdapterError>,
+) -> RuntimeModuleSignalState {
+    let mut state = RuntimeModuleSignalState {
+        item_origin_offset,
+        import_to_module: runtime_import_to_module_map(module),
+        ..RuntimeModuleSignalState::default()
+    };
+    for (local_item_id, item) in module.items().iter() {
+        if !includes_item(local_item_id) {
+            continue;
+        }
+        let hir::Item::Signal(signal) = item else {
+            continue;
+        };
+        if signal.is_source_capability_handle {
+            continue;
+        }
+        let item_id = runtime_global_item_id(item_origin_offset, local_item_id);
+        let has_source = signal.source_metadata.is_some();
+        let has_body = signal.body.is_some();
+        let has_reactive_updates = !signal.reactive_updates.is_empty();
+
+        let owner = match graph_builder.add_owner(signal.name.text(), None) {
+            Ok(owner) => owner,
+            Err(err) => {
+                errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                continue;
+            }
+        };
+        owners.push(HirOwnerBinding {
+            item: item_id,
+            span: signal.header.span,
+            name: signal.name.text().into(),
+            handle: owner,
+        });
+
+        let (kind, source_input) = if has_reactive_updates {
+            let reactive = match graph_builder.add_reactive(signal.name.text(), Some(owner)) {
+                Ok(signal) => signal,
+                Err(err) => {
+                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                    continue;
+                }
+            };
+            let source_input = if has_source {
+                match graph_builder.add_input(format!("{}#source", signal.name.text()), Some(owner)) {
+                    Ok(input) => Some(input),
+                    Err(err) => {
+                        errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
+            public_signals.insert(item_id, reactive);
+            state.public_signals.insert(local_item_id, reactive);
+            state.public_signals.insert(item_id, reactive);
+            state
+                .public_signal_names
+                .insert(signal.name.text().to_owned(), reactive);
+            state
+                .export_signal_items
+                .insert(signal.name.text().to_owned(), item_id);
+            (
+                HirSignalBindingKind::Reactive {
+                    signal: reactive,
+                    dependencies: Vec::new().into_boxed_slice(),
+                    seed_dependencies: Vec::new().into_boxed_slice(),
+                    clauses: Vec::new().into_boxed_slice(),
+                },
+                source_input,
+            )
+        } else if has_body {
+            let derived = match graph_builder.add_derived(signal.name.text(), Some(owner)) {
+                Ok(derived) => derived,
+                Err(err) => {
+                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                    continue;
+                }
+            };
+            let source_input = if has_source {
+                match graph_builder.add_input(format!("{}#source", signal.name.text()), Some(owner)) {
+                    Ok(input) => Some(input),
+                    Err(err) => {
+                        errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
+            let temporal_helpers = match signal.body {
+                Some(body) => add_temporal_helper_inputs(
+                    module,
+                    graph_builder,
+                    signal.name.text(),
+                    owner,
+                    body,
+                ),
+                None => Ok(Vec::new().into_boxed_slice()),
+            };
+            let temporal_helpers = match temporal_helpers {
+                Ok(helpers) => helpers,
+                Err(err) => {
+                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                    continue;
+                }
+            };
+            public_signals.insert(item_id, derived.as_signal());
+            state.public_signals.insert(local_item_id, derived.as_signal());
+            state.public_signals.insert(item_id, derived.as_signal());
+            state
+                .public_signal_names
+                .insert(signal.name.text().to_owned(), derived.as_signal());
+            state
+                .export_signal_items
+                .insert(signal.name.text().to_owned(), item_id);
+            (
+                HirSignalBindingKind::Derived {
+                    signal: derived,
+                    dependencies: Vec::new().into_boxed_slice(),
+                    temporal_trigger_dependencies: Vec::new().into_boxed_slice(),
+                    temporal_helpers,
+                },
+                source_input,
+            )
+        } else {
+            let input = match graph_builder.add_input(signal.name.text(), Some(owner)) {
+                Ok(input) => input,
+                Err(err) => {
+                    errors.push(HirRuntimeAdapterError::GraphBuild(err));
+                    continue;
+                }
+            };
+            public_signals.insert(item_id, input.as_signal());
+            state.public_signals.insert(local_item_id, input.as_signal());
+            state.public_signals.insert(item_id, input.as_signal());
+            state
+                .public_signal_names
+                .insert(signal.name.text().to_owned(), input.as_signal());
+            state
+                .export_signal_items
+                .insert(signal.name.text().to_owned(), item_id);
+            (HirSignalBindingKind::Input { signal: input }, Some(input))
+        };
+
+        if let Some(input) = source_input {
+            source_inputs.insert(item_id, input);
+        }
+        signal_origins.insert(
+            item_id,
+            RuntimeSignalOrigin {
+                module_index,
+                local_item: local_item_id,
+            },
+        );
+        signals.push(HirSignalBinding {
+            item: item_id,
+            span: signal.header.span,
+            name: signal.name.text().into(),
+            owner,
+            kind,
+            source_input,
+        });
+    }
+    state
+}
+
+fn runtime_import_to_module_map(module: &hir::Module) -> HashMap<hir::ImportId, Box<str>> {
+    let mut map = HashMap::new();
+    for (_, item) in module.items().iter() {
+        let hir::Item::Use(use_item) = item else {
+            continue;
+        };
+        let module_name: Box<str> = use_item.module.to_string().into();
+        for import_id in use_item.imports.iter().copied() {
+            map.insert(import_id, module_name.clone());
+        }
+    }
+    map
+}
+
+fn seed_runtime_import_signal_handles(
+    module: &hir::Module,
+    import_to_module: &HashMap<hir::ImportId, Box<str>>,
+    workspace_signal_exports: &BTreeMap<String, BTreeMap<String, hir::ItemId>>,
+    public_signals: &BTreeMap<hir::ItemId, SignalHandle>,
+    state: &mut RuntimeModuleSignalState,
+) {
+    for (import_id, binding) in module.imports().iter() {
+        let hir::ImportBindingMetadata::Value {
+            ty: hir::ImportValueType::Signal(_),
+        } = &binding.metadata
+        else {
+            continue;
+        };
+        let Some(source_module) = workspace_import_source_module(binding, import_to_module, import_id)
+        else {
+            continue;
+        };
+        let Some(source_exports) = workspace_signal_exports.get(source_module) else {
+            continue;
+        };
+        let Some(&global_item) = source_exports.get(binding.imported_name.text()) else {
+            continue;
+        };
+        let Some(&handle) = public_signals.get(&global_item) else {
+            continue;
+        };
+        state.import_signal_handles.insert(import_id, handle);
+        state
+            .public_signal_names
+            .insert(binding.local_name.text().to_owned(), handle);
+    }
+}
+
+fn workspace_import_source_module<'a>(
+    binding: &'a hir::ImportBinding,
+    import_to_module: &'a HashMap<hir::ImportId, Box<str>>,
+    import_id: hir::ImportId,
+) -> Option<&'a str> {
+    binding
+        .source_module
+        .as_deref()
+        .or_else(|| import_to_module.get(&import_id).map(|name| name.as_ref()))
+}
+
+fn runtime_global_item_id(offset: u32, item: hir::ItemId) -> hir::ItemId {
+    hir::ItemId::from_raw(offset.saturating_add(item.as_raw()))
+}
+
+fn runtime_signal_import_item_id(
+    module: &hir::Module,
+    item_origin_offset: u32,
+    import_id: hir::ImportId,
+) -> hir::ItemId {
+    let item_count = u32::try_from(module.items().iter().count()).expect("HIR item count fits u32");
+    hir::ItemId::from_raw(
+        item_origin_offset
+            .saturating_add(item_count)
+            .saturating_add(import_id.as_raw()),
+    )
 }
 
 fn collect_db_changed_bindings(

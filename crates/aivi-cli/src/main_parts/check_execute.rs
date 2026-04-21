@@ -332,7 +332,11 @@ fn run_markup_file_with_launch_config(
     }
 
     let lowered = snapshot.entry_hir();
-    let workspace_hirs: Vec<(&str, &HirModule)> = Vec::new();
+    let workspace_hir_arcs = collect_workspace_hirs_sorted(&snapshot);
+    let workspace_hirs: Vec<(&str, &HirModule)> = workspace_hir_arcs
+        .iter()
+        .map(|(name, arc)| (name.as_str(), arc.module()))
+        .collect();
     let mut report_prelaunch_stage = |stage: &'static str, duration: Duration| {
         if timings {
             print_run_prelaunch_stage_progress(stage, duration, total_start.elapsed());
@@ -747,6 +751,7 @@ fn prepare_backend_only_test_artifact(
 ) -> Result<ExecuteArtifact, String> {
     let lowered = compile_runtime_fragment_backend_unit(
         module,
+        &[],
         fragment,
         query_context,
         "failed to compile backend-only `aivi test` fragment",

@@ -39,7 +39,9 @@ pub use hir_adapter::{
     HirRuntimeAssemblyParts, HirRuntimeAssemblyStats, HirRuntimeGatePlan,
     HirRuntimeInstantiationError, HirSignalBinding, HirSignalBindingKind, HirSourceBinding,
     HirTaskBinding, ProfiledHirRuntimeAssembly, assemble_hir_runtime,
-    assemble_hir_runtime_with_items, assemble_hir_runtime_with_items_profiled,
+    assemble_hir_runtime_with_items, assemble_hir_runtime_with_items_and_workspace,
+    assemble_hir_runtime_with_items_and_workspace_profiled,
+    assemble_hir_runtime_with_items_profiled,
 };
 pub use providers::{
     MailboxPublishError, SourceProviderContext, SourceProviderExecutionError, SourceProviderManager,

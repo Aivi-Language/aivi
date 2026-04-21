@@ -1,6 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use aivi_backend::{RuntimeCustomCapabilityCommandPlan, RuntimeNamedValue};
+use aivi_backend::{
+    RuntimeCustomCapabilityCommandPlan, RuntimeNamedValue, compile_native_kernel_artifact,
+};
 use aivi_base::SourceDatabase;
 use aivi_hir::{Item, lower_module as lower_hir_module};
 use aivi_lambda::lower_module as lower_lambda_module;
@@ -357,6 +359,68 @@ signal users : Signal Text
     assert!(
         config.options.is_empty(),
         "scheduler-owned lifecycle options should not leak into provider config"
+    );
+}
+
+#[test]
+fn linked_runtime_missing_native_reactive_seed_plan_falls_back() {
+    let lowered = lower_text(
+        "runtime-startup-missing-native-reactive-seed-plan-falls-back.aivi",
+        r#"
+signal ready = True
+signal maybeName : Option Text = Some "Ada"
+
+signal total : Signal Int = ready
+  ||> ready True => 42
+  ||> _ => 0
+"#,
+    );
+    let assembly =
+        crate::assemble_hir_runtime(lowered.hir.module()).expect("runtime assembly should build");
+    let mut linked = link_backend_runtime(
+        assembly,
+        &lowered.core,
+        std::sync::Arc::new(lowered.backend.clone()),
+    )
+    .expect("reactive fallback fixture should link successfully");
+    let total_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "total"))
+        .expect("total signal binding should exist")
+        .signal();
+    let reactive_binding = linked
+        .reactive_signals
+        .get_mut(&total_signal)
+        .expect("fixture should lower total as reactive signal");
+    let seed_kernel = reactive_binding
+        .entry_kernel
+        .expect("reactive seed should preserve its entry kernel");
+    let unsupported_kernel = lowered
+        .backend
+        .kernels()
+        .iter()
+        .enumerate()
+        .find_map(|(index, _)| {
+            let kernel = aivi_backend::KernelId::from_raw(index as u32);
+            match compile_native_kernel_artifact(&lowered.backend, kernel) {
+                Ok(None) => Some(kernel),
+                _ => None,
+            }
+        })
+        .expect("fixture should include a kernel without native codegen support");
+    reactive_binding.seed_eval_lane = LinkedEvalLane::Native(LinkedNativeKernelEval {
+        kernel: unsupported_kernel,
+        dependency_layouts: reactive_binding.dependency_layouts.clone(),
+        result_layout: lowered.backend.kernels()[seed_kernel].result_layout,
+    });
+
+    linked
+        .tick()
+        .expect("missing native reactive seed plan should fall back");
+    assert_eq!(
+        linked.runtime().current_value(total_signal).unwrap(),
+        Some(&RuntimeValue::Int(42)),
+        "fallback reactive seed evaluation should still compute the reactive seed"
     );
 }
 

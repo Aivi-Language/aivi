@@ -1,5 +1,4 @@
 use super::*;
-
 type MainContextTask<S> = Box<dyn FnOnce(&mut S) + Send + 'static>;
 
 #[derive(Clone)]
@@ -806,16 +805,20 @@ impl RunSessionState {
                             })?;
                     }
                 }
-                for is_dark in state.executor.host_mut().drain_dark_mode_events() {
+                let dark_mode_events = state.executor.host_mut().drain_dark_mode_events();
+                for is_dark in dark_mode_events {
                     self.driver.dispatch_dark_mode_changed(is_dark);
                 }
-                for text in state.executor.host_mut().drain_clipboard_events() {
+                let clipboard_events = state.executor.host_mut().drain_clipboard_events();
+                for text in clipboard_events {
                     self.driver.dispatch_clipboard_changed(text);
                 }
-                for (width, height) in state.executor.host_mut().drain_window_size_events() {
+                let window_size_events = state.executor.host_mut().drain_window_size_events();
+                for (width, height) in window_size_events {
                     self.driver.dispatch_window_size_changed(width, height);
                 }
-                for focused in state.executor.host_mut().drain_window_focus_events() {
+                let window_focus_events = state.executor.host_mut().drain_window_focus_events();
+                for focused in window_focus_events {
                     self.driver.dispatch_window_focus_changed(focused);
                 }
                 let failures = self.driver.drain_failures();

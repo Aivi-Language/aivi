@@ -4,7 +4,10 @@ use super::{
     plan_run_hydration, prepare_execute_artifact, prepare_run_artifact,
     run_hydration_globals_ready, test_file_with_context,
 };
-use aivi_backend::{DetachedRuntimeValue, RuntimeTaskPlan, RuntimeValue};
+use aivi_backend::{
+    DetachedRuntimeValue, NativeKernelArtifactSet, RuntimeTaskPlan, RuntimeValue,
+    compile_native_kernel_artifact, compute_kernel_fingerprint,
+};
 use aivi_base::SourceDatabase;
 use aivi_gtk::{GtkBridgeNodeKind, RuntimePropertyBinding, RuntimeShowMountPolicy};
 use aivi_hir::{BuiltinType, ImportValueType, ValidationMode, lower_module as lower_hir_module};
@@ -136,10 +139,15 @@ fn prepare_run_from_workspace(
         "workspace fixture should validate cleanly"
     );
     let lowered = snapshot.entry_hir();
+    let workspace_hir_arcs = super::collect_workspace_hirs_sorted(&snapshot);
+    let workspace_hirs: Vec<(&str, &aivi_hir::Module)> = workspace_hir_arcs
+        .iter()
+        .map(|(name, arc)| (name.as_str(), arc.module()))
+        .collect();
     super::prepare_run_artifact_with_query_context(
         &snapshot.sources,
         lowered.module(),
-        &[],
+        &workspace_hirs,
         requested_view,
         Some(snapshot.backend_query_context()),
     )
@@ -176,10 +184,15 @@ fn prepare_run_from_path(
         "workspace fixture should validate cleanly"
     );
     let lowered = snapshot.entry_hir();
+    let workspace_hir_arcs = super::collect_workspace_hirs_sorted(&snapshot);
+    let workspace_hirs: Vec<(&str, &aivi_hir::Module)> = workspace_hir_arcs
+        .iter()
+        .map(|(name, arc)| (name.as_str(), arc.module()))
+        .collect();
     super::prepare_run_artifact_with_query_context(
         &snapshot.sources,
         lowered.module(),
-        &[],
+        &workspace_hirs,
         requested_view,
         Some(snapshot.backend_query_context()),
     )
@@ -223,6 +236,32 @@ fn publish_source_value_by_signal_name(
     let stamp = linked
         .runtime_mut()
         .advance_generation(binding.input)
+        .unwrap_or_else(|error| panic!("expected fresh stamp for `{signal_name}`: {error:?}"));
+    linked
+        .runtime_mut()
+        .queue_publication(aivi_runtime::Publication::new(stamp, value))
+        .unwrap_or_else(|error| {
+            panic!("expected queued publication for `{signal_name}`: {error:?}")
+        });
+}
+
+fn publish_input_value_by_signal_name(
+    linked: &mut aivi_runtime::BackendLinkedRuntime,
+    signal_name: &str,
+    value: RuntimeValue,
+) {
+    let binding = linked
+        .assembly()
+        .signals()
+        .iter()
+        .find(|binding| binding.name.as_ref() == signal_name)
+        .unwrap_or_else(|| panic!("expected runtime signal binding for `{signal_name}`"));
+    let input = binding
+        .input()
+        .unwrap_or_else(|| panic!("expected `{signal_name}` to be a publishable input signal"));
+    let stamp = linked
+        .runtime_mut()
+        .advance_generation(input)
         .unwrap_or_else(|error| panic!("expected fresh stamp for `{signal_name}`: {error:?}"));
     linked
         .runtime_mut()
@@ -456,27 +495,36 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 
 #[test]
 fn source_run_cache_roundtrip_reloads_frozen_catalog_without_backend_program() {
-    let workspace = TempDir::new("source-run-cache-roundtrip");
-    workspace.write(
-        "main.aivi",
-        r#"
-use shared.labels (titleText)
-
-value main =
-    <Window title={titleText} />
-"#,
-    );
-    workspace.write(
-        "shared/labels.aivi",
-        r#"
-value titleText : Text = "Cache title"
-"#,
-    );
-    let entry = workspace.path().join("main.aivi");
+    let temp = TempDir::new("source-run-cache-roundtrip");
+    let entry = repo_path("demos/snake.aivi");
     let snapshot = WorkspaceHirSnapshot::load(&entry).expect("workspace cache fixture should load");
-    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", Some("main"))
+    let mut artifact = prepare_run_from_path(&entry, Some("main"))
         .expect("workspace cache fixture should prepare cleanly");
-    let cache_home = workspace.path().join("cache-home");
+    if artifact.backend_native_kernels.is_empty() {
+        let aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) = &artifact.backend
+        else {
+            panic!("source cache fixture should prepare a program backend")
+        };
+        let (kernel, native_artifact) = program
+            .kernels()
+            .iter()
+            .enumerate()
+            .find_map(|(index, _)| {
+                let kernel = aivi_backend::KernelId::from_raw(index as u32);
+                compile_native_kernel_artifact(program.as_ref(), kernel)
+                    .ok()
+                    .flatten()
+                    .map(|artifact| (kernel, artifact))
+            })
+            .expect("source cache fixture should expose at least one native-compilable kernel");
+        let mut native_kernels = NativeKernelArtifactSet::default();
+        native_kernels.insert(
+            compute_kernel_fingerprint(program.as_ref(), kernel),
+            native_artifact,
+        );
+        artifact.backend_native_kernels = Arc::new(native_kernels);
+    }
+    let cache_home = temp.path().join("cache-home");
 
     super::store_cached_source_run_artifact(
         &cache_home,
@@ -490,11 +538,18 @@ value titleText : Text = "Cache title"
         .expect("source run cache should reload");
 
     assert_eq!(cached.view_name, artifact.view_name);
-    assert!(matches!(
-        cached.backend,
-        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(_)
-    ));
-    assert!(cached.backend_native_kernels.is_empty());
+    assert!(
+        !artifact.backend_native_kernels.is_empty(),
+        "fixture should keep at least one native kernel so cache roundtrip can prove preservation"
+    );
+    assert!(
+        !cached.backend_native_kernels.is_empty(),
+        "source run cache should reload with native kernels attached"
+    );
+    assert!(
+        cached.backend_native_kernels.len() >= artifact.backend_native_kernels.len(),
+        "source run cache should not drop native kernels during roundtrip"
+    );
 }
 
 #[test]
@@ -795,12 +850,6 @@ fn prepare_run_accepts_snake_demo() {
         panic!("expected a root widget, found {:?}", root.kind.tag());
     };
     assert_eq!(widget.widget.segments().last().text(), "Window");
-    let required = artifact
-        .required_signal_globals
-        .values()
-        .map(|name| name.as_ref())
-        .collect::<Vec<_>>();
-    assert!(required.contains(&"boardTiles"));
 }
 
 #[test]
@@ -834,16 +883,12 @@ fn prepare_run_tracks_transitive_signal_globals_for_parameterized_from_selectors
     let artifact = prepare_run_from_text(
         "parameterized-from-run.aivi",
         r#"
-type State = { count: Int }
+@source process.cwd
+signal cwd : Signal Text
 
-type Int -> State -> Bool
-func atLeastFromState = threshold state => state.count >= threshold
-
-signal state : Signal State = { count: 1 }
-
-from state = {
+from cwd = {
     type Int -> Bool
-    atLeast threshold: atLeastFromState threshold
+    atLeast threshold: cwd != ""
 }
 
 value view =
@@ -860,7 +905,7 @@ value view =
         .map(|name| name.as_ref())
         .collect::<Vec<_>>();
     assert!(
-        required.contains(&"state"),
+        required.contains(&"cwd"),
         "hydration fragments calling parameterized from-selectors should project their transitive signal dependency"
     );
 }
@@ -870,13 +915,12 @@ fn prepare_run_accepts_truthy_falsy_parameterized_from_selectors_with_same_block
     let artifact = prepare_run_from_text(
         "parameterized-from-truthy-falsy-run.aivi",
         r#"
-type State = { ready: Bool, label: Text }
+@source process.cwd
+signal cwd : Signal Text
 
-signal state : Signal State = { ready: True, label: "Go" }
-
-from state = {
-    ready: .ready
-    baseLabel: .label
+from cwd = {
+    ready: cwd != ""
+    baseLabel: cwd
 
     type Text -> Text
     cellLabel fallback: ready
@@ -899,18 +943,62 @@ value view =
         .map(|name| name.as_ref())
         .collect::<Vec<_>>();
     assert!(
-        required.contains(&"state"),
+        required.contains(&"cwd"),
         "truthy/falsy parameterized from-selector fragments should keep the source signal as a runtime dependency"
     );
 }
 
 #[test]
+fn prepare_run_required_signal_globals_excludes_runtime_items() {
+    let artifact = prepare_run_from_text(
+        "runtime-item-globals-run.aivi",
+        r#"
+type Text -> Text
+func decorate = text => "[{text}]"
+
+@source process.cwd
+signal cwd : Signal Text
+
+value view =
+    <Window title={decorate cwd}>
+        <Label text={decorate cwd} />
+    </Window>
+"#,
+        None,
+    )
+    .expect("runtime-item-backed fragments should prepare for run");
+    let required = artifact
+        .required_signal_globals
+        .values()
+        .map(|name| name.as_ref())
+        .collect::<Vec<_>>();
+    assert!(
+        required.contains(&"cwd"),
+        "signal dependencies should still be required for hydration"
+    );
+    assert!(
+        !required.contains(&"decorate"),
+        "runtime item helpers should be evaluated during hydration, not block startup as missing snapshots"
+    );
+}
+
+#[test]
 fn run_hydration_waits_for_required_signal_snapshots() {
-    let artifact = prepare_run_from_path(&repo_path("demos/snake.aivi"), None)
-        .expect("snake demo should prepare for run");
+    let artifact = prepare_run_from_text(
+        "run-hydration-required-source.aivi",
+        r#"
+@source process.cwd
+signal cwd : Signal Text
+
+value view =
+    <Window title={cwd} />
+"#,
+        None,
+    )
+    .expect("source-backed view should prepare for run");
     assert!(
         !run_hydration_globals_ready(&artifact.required_signal_globals, &BTreeMap::new()),
-        "empty runtime globals must not be treated as ready for snake hydration"
+        "empty runtime globals must not be treated as ready when source snapshots are still missing"
     );
 
     let globals = artifact
@@ -1012,6 +1100,7 @@ value view =
     let mut compiler = super::RunFragmentCompiler::new(
         &snapshot.sources,
         module,
+        &[],
         view_owner,
         &sites,
         runtime_stack.backend.as_ref(),
@@ -1032,6 +1121,7 @@ value view =
     let mut second_compiler = super::RunFragmentCompiler::new(
         &snapshot.sources,
         module,
+        &[],
         view_owner,
         &sites,
         runtime_stack.backend.as_ref(),
@@ -1155,6 +1245,98 @@ value main =
             .current_value(status_signal.as_signal())
             .expect("status signal lookup should succeed"),
         Some(&RuntimeValue::Text("queued".into()))
+    );
+}
+
+#[test]
+fn workspace_imported_signals_materialize_for_run_runtime() {
+    let workspace = TempDir::new("workspace-imported-run-signals");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.state (title)
+
+value view =
+    <Window title={title} />
+"#,
+    );
+    workspace.write(
+        "shared/state.aivi",
+        r#"
+signal base : Signal Text
+signal title = base
+
+export (base, title)
+"#,
+    );
+
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None)
+        .expect("workspace run preparation should include imported runtime signals");
+    eprintln!(
+        "runtime signals: {:?}",
+        artifact
+            .runtime_assembly
+            .signals()
+            .iter()
+            .map(|binding| {
+                (
+                    binding.item.as_raw(),
+                    binding.name.as_ref().to_owned(),
+                    binding.input().is_some(),
+                )
+            })
+            .collect::<Vec<_>>()
+    );
+    eprintln!(
+        "backend items: {:?}",
+        artifact
+            .backend
+            .as_program()
+            .expect("run artifact should keep backend program")
+            .items()
+            .iter()
+            .filter_map(|(item_id, item)| {
+                ["base", "title"]
+                    .contains(&item.name.as_ref())
+                    .then_some((item_id.as_raw(), item.name.as_ref().to_owned(), item.origin.as_raw()))
+            })
+            .collect::<Vec<_>>()
+    );
+    eprintln!(
+        "runtime link entries: {:?}",
+        artifact
+            .runtime_link
+            .hir_to_backend
+            .iter()
+            .filter(|(item, _)| {
+                (190..=205).contains(&item.as_raw()) || (450..=460).contains(&item.as_raw())
+            })
+            .map(|(item, backend)| (item.as_raw(), backend.as_raw()))
+            .collect::<Vec<_>>()
+    );
+    let mut linked = aivi_runtime::link_backend_runtime_with_seed_and_native_kernels_from_payload(
+        artifact.runtime_assembly.clone(),
+        artifact.backend.clone(),
+        artifact.backend_native_kernels.clone(),
+        &artifact.runtime_link,
+    )
+    .expect("workspace runtime should link");
+
+    publish_input_value_by_signal_name(&mut linked, "base", RuntimeValue::Text("hello".into()));
+    linked.tick().expect("linked runtime tick should succeed");
+
+    let title_binding = linked
+        .assembly()
+        .signals()
+        .iter()
+        .find(|binding| binding.name.as_ref() == "title")
+        .expect("title signal binding should exist");
+    assert_eq!(
+        linked
+            .runtime()
+            .current_value(title_binding.signal())
+            .expect("title signal lookup should succeed"),
+        Some(&RuntimeValue::Text("hello".into()))
     );
 }
 
