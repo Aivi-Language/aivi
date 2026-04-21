@@ -55,7 +55,7 @@ value tileSize = 35
 value boardPixelSize = tileSize * boardW
 
 type Direction -> Direction
-func opposite = arg1 => arg1
+func opposite =
  ||> North -> South
  ||> South -> North
  ||> East  -> West
@@ -78,7 +78,7 @@ func moveDir = d c => (d, c)
  ||> (West, Cell x y)  -> Cell (x - 1) y
 
 type Cell -> Bool
-func outside = arg1 => arg1
+func outside =
  ||> Cell x y -> x < 0 or x >= boardW or y < 0 or y >= boardH
 
 type Int -> Int
@@ -129,7 +129,7 @@ func spawnFood = s =>
     Cell (s % boardW) (nextSeed s % boardH)
 
 type Direction -> Text
-func dirAssetSlug = arg1 => arg1
+func dirAssetSlug =
  ||> North -> "north"
  ||> South -> "south"
  ||> East  -> "east"
@@ -236,13 +236,13 @@ func resolveMoveStep = st h =>
     }
 
 type List Cell -> (List CPair)
-func adjacentPairs = cells => cells
+func adjacentPairs =
  ||> []               -> []
  ||> [first, ...rest] -> adjacentPairsFromFirstCell first rest
 
 // Takes already-computed adjacent pairs — avoids recomputing adjacentPairs per window call.
 type List CPair -> List QPair
-func middleWindowsFromPairs = pairs => pairs
+func middleWindowsFromPairs =
  ||> []               -> []
  ||> [first, ...rest] -> middleWindowsFromFirstPair first rest
 
@@ -252,7 +252,7 @@ func adjacentPairsFromFirstCell = first rest => rest
   |> adjacentPairStatePairs
 
 type AdjacentPairState -> List CPair
-func adjacentPairStatePairs = state => state
+func adjacentPairStatePairs =
  ||> (_, pairs) -> pairs
 
 type AdjacentPairState -> Cell -> AdjacentPairState
@@ -260,7 +260,7 @@ func adjacentPairStep = state current => state
  ||> (previous, pairs) -> (current, append pairs [(previous, current)])
 
 type MiddleWindowState -> List QPair
-func middleWindowStateWindows = state => state
+func middleWindowStateWindows =
  ||> (_, windows) -> windows
 
 type MiddleWindowState -> CPair -> MiddleWindowState
@@ -273,7 +273,7 @@ func middleWindowsFromFirstPair = first rest => rest
   |> middleWindowStateWindows
 
 type List CPair -> (Option CPair)
-func firstCellPair = pairs => pairs
+func firstCellPair =
  ||> [first, ..._] -> Some first
  ||> []            -> None
 
@@ -282,7 +282,7 @@ func keepLastCellPair = ignored pair =>
     pair
 
 type List CPair -> (Option CPair)
-func lastCellPair = pairs => pairs
+func lastCellPair =
  ||> []               -> None
  ||> [first, ...rest] -> lastCellPairFromFirst first rest
 

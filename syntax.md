@@ -82,6 +82,11 @@ type Int -> Int -> Int
 func addFrom = amount value => value
   |> add amount
 
+type Text -> Text
+func trimStatus =
+ ||> " ready " -> "ready"
+ ||> _         -> .
+
 type Counter -> Int -> Counter
 func bump = counter delta => counter
     <| {
@@ -96,11 +101,12 @@ func readNested = state => state.x.y.z
 Rules:
 
 - `value` = constant binding only; uses `=`.
-- `func` = function declaration; uses `=` after the name, then parameters plus `=>`.
+- `func` = function declaration; uses `=` after the name, then either parameters plus `=>`, unary subject sugar such as `.field` / `"Hello {.}"`, or a unary body that starts directly with a pipe operator.
 - Anonymous lambda expressions also use `=>` and may take one or more named parameters: `value isCell = coord => coord == cell`, `value next = 0 |> x => x + 1`.
 - Function signatures live on a preceding `type` line: `type Int -> Int -> Int`.
 - Inside `from` blocks, the same standalone `type` line form attaches to the immediately following entry.
 - `func` headers keep parameters unannotated: `func add = x y => ...`.
+- Leading-pipe unary sugar is declaration-only: `func name =` followed by `|>`, `||>`, `T|>`, and friends elaborates as if the implicit unary subject were the pipe head.
 - Shorthand subject lambdas are available only for unary composed dot-rooted expressions: `. == cell` means `value => value == cell`, `.score >= threshold` means `value => value.score >= threshold`. Bare `.` and `.field` keep their existing ambient-subject meaning.
 - Ignored unary inputs stay explicit: `func constant = _ => ...`.
 - Constraint prefixes, when present, live on the `type` line: `type Eq A => A -> Bool`.
@@ -132,7 +138,7 @@ type Player = {
     | Computer
 
     type opponent : Player -> Player
-    opponent = self => self
+    opponent =
      ||> Human    -> Computer
      ||> Computer -> Human
 }
@@ -150,7 +156,7 @@ Rules:
 - Companion members elaborate to ordinary top-level callables and use ordinary `use` / `export`
   rules.
 - Companion member `type` lines spell the full function type, including the receiver.
-- Companion member bodies use ordinary function forms such as `name = self => ...`.
+- Companion member bodies use ordinary function forms such as `name = self => ...`, `name = .field`, or `name =` followed directly by pipe stages.
 
 ### 2.4 `class` and `instance`
 

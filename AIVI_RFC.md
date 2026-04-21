@@ -262,7 +262,7 @@ value answer = 42
 value greeting = "hello"
 ```
 
-`func` — function declarations (with parameters), uses `=>`:
+`func` — function declarations, using `=` after the name and then one of the ordinary function-body forms:
 
 ```aivi
 type Int -> Int -> Int
@@ -270,6 +270,11 @@ func add = x y=>    x + y
 
 type Text -> Text
 func greet = name=>    "Hello, {name}"
+
+type Text -> Text
+func trimStatus =
+ ||> " ready " -> "ready"
+ ||> _         -> .
 ```
 
 When a continuation should start from one parameter, keep that parameter explicit in the body:
@@ -295,6 +300,12 @@ func absolute = value=> value < 0 T|> 0 - value
 ```
 
 The parser disambiguates by position: `value` or `func` at the start of a top-level form is a keyword; `value` as a subsequent token after the function name is a parameter.
+
+Normative rules:
+
+- `func name = params => body` remains the ordinary explicit function form.
+- Unary subject sugar also accepts `func name = .field`, `func name = "Hello {.}"`, and `func name = .` followed by pipe stages.
+- When a unary function body starts with a pipe operator directly after `=`, that body elaborates as if the implicit unary subject were the head of the pipe spine. This is declaration sugar only; it is not a general expression-level omission of pipe heads.
 
 ### 5.0.2 `type` — ADT declarations
 
@@ -612,7 +623,7 @@ type Player = {
     | Computer
 
     type opponent : Player -> Player
-    opponent = self => self
+    opponent =
      ||> Human    -> Computer
      ||> Computer -> Human
 
@@ -633,7 +644,7 @@ Normative rules:
 - companion members follow ordinary `use` / `export` rules; exporting the type does not implicitly
   export its companion members
 - companion member `type` lines spell the full function type, including the receiver
-- companion bodies use ordinary function forms such as `name = self => ...`
+- companion bodies use ordinary function forms such as `name = self => ...`, `name = .field`, or `name =` followed directly by pipe stages
 - naming the receiver as an explicit `self` parameter is accepted, but not required
 - the feature colocates total helpers; it does not introduce methods, mutation, or open-world
   extension

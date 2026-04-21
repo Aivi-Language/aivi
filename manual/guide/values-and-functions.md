@@ -126,23 +126,17 @@ func compareWithPrevious = value => value
 
 When a unary function starts from its argument directly, you can omit the explicit parameter and use `.` as the implicit subject:
 
+For example, `func statusLineFor = .status` projects directly from the implicit subject, and
+`func scoreLineFor = "Score: {.}"` interpolates it without introducing an explicit parameter.
+
+The same shorthand also works for pipe-rooted bodies. When the unary body starts with a pipe
+operator, you can omit the explicit `.` head and start directly with the stages:
+
 ```aivi
 type Text -> Text
-func trimStatus = arg1 => arg1
+func trimStatus =
  ||> " ready " -> "ready"
  ||> _         -> .
-```
-
-The same shorthand works for subject projections and text interpolation:
-
-```aivi
-type GameState -> Text
-func statusLineFor = arg1 =>
-    arg1.status
-
-type Int -> Text
-func scoreLineFor = arg1 =>
-    "Score: {arg1}"
 ```
 
 If the unary input is intentionally ignored, write `_ => ...` explicitly:
@@ -302,7 +296,7 @@ stable name:
 
 ```aivi
 type Text -> Text
-func trimStatus = arg1 => arg1
+func trimStatus =
  ||> " ready " -> "ready"
  ||> _         -> .
 
@@ -317,18 +311,9 @@ value shownStatus = " ready "
 
 That style gives each step a reusable name and often reads better in longer pipes.
 
-When a unary helper body starts with a pipe operator, you can omit the explicit `.` head and
-start the body directly with the stages:
-
-```aivi
-type Text -> Text
-func trimStatus =
- ||> " ready " -> "ready"
- ||> _         -> .
-```
-
-This is sugar for the same unary-subject function you would otherwise write as `func trimStatus = .`
-followed by the same pipe stages.
+When a unary helper body starts with a pipe operator, the leading-pipe form is equivalent to the
+same helper written with an explicit unary subject head such as `func trimStatus = .` followed by
+the same stages.
 
 ## Structural patches
 

@@ -41,6 +41,25 @@ Primary user-facing docs:
 - `AIVI_RFC.md` — function and companion header rules
 - `wiki/pipe-algebra.md` — lowering/semantics summary
 
+### Leading-pipe unary subject sugar
+
+Unary `func` bodies and unary companion helpers may now start directly with a pipe operator after
+`=`. The declaration still means "one implicit subject argument", but the old identity head is
+omitted from the pipe spine.
+
+Examples:
+
+- `func trimStatus =` followed by `||>` arms
+- `func emptyCellLabel =` followed by `T|>` / `F|>` branches
+- companion helper `opponent =` followed by `||>` arms
+
+Primary user-facing docs:
+
+- `manual/guide/values-and-functions.md` — unary subject sugar and leading-pipe examples
+- `syntax.md` — codegen-safe syntax sheet rules
+- `AIVI_RFC.md` — normative `func` and companion rules
+- `wiki/demo-audit.md` — Snake / Reversi adoption note
+
 ### Pipe memos `#name`
 
 `#name` binds a stage input or stage result inside one ordinary pipe spine, including grouped branch
@@ -68,9 +87,8 @@ Primary user-facing docs:
 
 - The `fix(pipes): correct syntax for truthy/falsy pipe carriers in documentation` commit adjusted
   documentation only; it did not add a new surface form.
-- The Reversi-focused cleanup commits exercised `#name` memos and selected-subject headers more
-  broadly in demos, but they relied on the same surface already described above rather than adding
-  new syntax.
+- Snake and Reversi now also exercise the leading-pipe unary subject form in ordinary helper
+  declarations, so the showcase demos cover both selected-subject and implicit-unary pipe starts.
 
 ## Sources
 
@@ -81,6 +99,7 @@ Primary user-facing docs:
 - `manual/guide/types.md`
 - `manual/guide/values-and-functions.md`
 - `manual/guide/record-patterns.md`
+- `syntax.md`
 - `wiki/signal-model.md`
 - `wiki/pipe-algebra.md`
 - `wiki/type-system.md`

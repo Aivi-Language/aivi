@@ -18,6 +18,7 @@ Performed: 2026-04-06. All issues below are fixed in the demo files.
 - **Patch operator**: `<|` used correctly for record field updates.
 - **Predicate search via `any`**: `Snake.contains` and similar helpers now route through `any`, with small typed predicates like `sameCell` where general-expression lowering wants explicit parameter types. Plain list membership still lives on `contains value list`.
 - **Timer source**: `@source timer.every 120ms with { immediate: False, coalesce: True }` — correct Duration literal with options.
+- **Leading-pipe unary helpers**: small case-split helpers like `opposite`, `outside`, `dirAssetSlug`, and `adjacentPairs` now use the declaration sugar that starts directly with pipe stages after `=`.
 
 ### ❌ Issues found & fixed
 
@@ -79,6 +80,7 @@ func resolveMoveGrow = st h =>
 - **All game logic is pure** — no side-effectful operations in the computation layer.
 - **Correct signal merge syntax** and recurrence with `+|>`.
 - **Markup**: Good use of `<each>`, `<with>`, `<show>`, `HeaderBar`.
+- **Leading-pipe unary helpers**: `flashState`, `matrixErrorText`, `emptyCellLabel`, `stateWinnerLine`, and related helpers now demonstrate the new unary declaration sugar directly in the demo.
 
 ### ❌ Issues found & fixed
 
@@ -176,6 +178,11 @@ The tiebreaker semantics (fewer flips wins when positional scores are equal) ali
 
 - `demos/reversi.aivi` now builds the opening board through checked `matrixInit 8 8 buildInitialDisc` instead of stale `matrixFilled` semantics.
 - Setup failure is now explicit in the demo state (`SetupError MatrixError`) instead of silently fabricating a fallback board, so the checked matrix constructor policy stays intact even in the showcase app.
+
+### 2026-04-21 syntax rollout note
+
+- `demos/snake.aivi` and `demos/reversi.aivi` now adopt the leading-pipe unary helper surface in places that previously spelled an explicit identity head such as `state => state`.
+- The rollout is syntax-only: semantics stay identical because the parser elaborates the new form as an implicit unary subject feeding the same pipe spine.
 
 ---
 

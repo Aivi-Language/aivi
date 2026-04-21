@@ -248,7 +248,7 @@ func flashReady = ready => ready.phase
  ||> HumanReady                  -> Ready ready
 
 type State -> State
-func flashState = state => state
+func flashState =
  ||> Ready ready      -> flashReady ready
  ||> SetupError error -> SetupError error
 
@@ -281,13 +281,13 @@ func winnerLine = board =>
     winnerText (matrixCount isBlackDisc board) (matrixCount isWhiteDisc board)
 
 type MatrixError -> Text
-func matrixErrorText = error => error
+func matrixErrorText =
  ||> NegativeWidth width                 -> "Opening board width must be non-negative, got {width}."
  ||> NegativeHeight height               -> "Opening board height must be non-negative, got {height}."
  ||> RaggedRows rowIndex expected actual -> "Opening board row {rowIndex} has width {actual}, expected {expected}."
 
 type Bool -> Text
-func emptyCellLabel = legal => legal
+func emptyCellLabel =
  T|> "◌"
  F|> "·"
 
@@ -308,12 +308,12 @@ func renderCell = cell legal phase board => phaseTarget phase
  ||> None        -> baseCellLabel legal (discAt board cell)
 
 type State -> Bool
-func stateGameOver = state => state
+func stateGameOver =
  ||> Ready ready  -> length ready.humanMoves == 0 and length ready.computerMoves == 0
  ||> SetupError _ -> True
 
 type State -> Text
-func stateWinnerLine = state => state
+func stateWinnerLine =
  ||> Ready ready      -> winnerLine ready.board
  ||> SetupError error -> matrixErrorText error
 
@@ -336,7 +336,7 @@ func stateCellLabel = cell state => state
  ||> SetupError _ -> "×"
 
 type State -> Phase
-func statePhase = state => state
+func statePhase =
  ||> Ready ready  -> ready.phase
  ||> SetupError _ -> HumanReady
 

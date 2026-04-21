@@ -507,3 +507,10 @@ Audited the 2026-04-14..2026-04-21 commit slice for wiki/manual/RFC drift.
 - Updated `wiki/cli.md` for the new source-run cache path (`run-artifact.bin` plus manifest, keyed
   by source fingerprints) and refreshed `wiki/gtk-bridge.md` / `wiki/stdlib.md` for the newer collection
   widgets, strict `WebView`, secret/notification/tray/GOA surfaces, and IMAP wiring.
+
+## [2026-04-21] ingest | leading-pipe unary sugar
+
+Aligned the new unary declaration sugar across demos and docs.  
+Updated `demos/snake.aivi`, `demos/reversi.aivi`, `manual/guide/values-and-functions.md`,
+`syntax.md`, `AIVI_RFC.md`, and the wiki syntax/demo pages so unary bodies may start directly with
+pipe operators after `=`.
