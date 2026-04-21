@@ -685,6 +685,57 @@ fn resolve_run_entrypoint_uses_manifest_run_entry_when_multiple_apps_exist() {
     assert_eq!(resolved.manifest_view, None);
 }
 
+#[test]
+fn run_manifest_spawn_all_apps_skips_when_run_entry_exists() {
+    let workspace = TempDir::new("run-manifest-spawn-skip");
+    workspace.write(
+        "aivi.toml",
+        concat!(
+            "[run]\n",
+            "entry = \"apps/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"main\"\n",
+            "entry = \"apps/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"daemon\"\n",
+            "entry = \"apps/daemon/main.aivi\"\n",
+        ),
+    );
+
+    let manifest = super::parse_manifest(workspace.path()).expect("manifest should parse");
+
+    assert!(
+        !super::should_spawn_all_manifest_apps(&manifest),
+        "[run] entry should stay default target instead of fan-out spawning all apps"
+    );
+}
+
+#[test]
+fn run_manifest_spawn_all_apps_only_when_no_run_entry_exists() {
+    let workspace = TempDir::new("run-manifest-spawn-all");
+    workspace.write(
+        "aivi.toml",
+        concat!(
+            "[[app]]\n",
+            "name = \"ui\"\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "\n",
+            "[[app]]\n",
+            "name = \"tray\"\n",
+            "entry = \"apps/tray/main.aivi\"\n",
+        ),
+    );
+
+    let manifest = super::parse_manifest(workspace.path()).expect("manifest should parse");
+
+    assert!(
+        super::should_spawn_all_manifest_apps(&manifest),
+        "multi-app workspaces without [run] entry should still fan out"
+    );
+}
+
 fn execute_workspace(path: &Path, context: SourceProviderContext) -> (ExitCode, String, String) {
     ensure_interpreted_main_parts_tests();
     let mut stdout = Vec::new();
@@ -1764,6 +1815,66 @@ export (ReaderTab, MarkdownTab, TextTab, selectTab)
         artifact.event_handlers.get(&handler.handler),
         Some(ResolvedRunEventHandler {
             payload: ResolvedRunEventPayload::ScopedInput,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn prepare_run_accepts_reexported_cross_module_signal_event_hooks() {
+    let workspace = TempDir::new("reexported-event-hook");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.state (openMailfox)
+
+value view =
+    <Window title="Host">
+        <Button label="Open" onClick={openMailfox} />
+    </Window>
+"#,
+    );
+    workspace.write(
+        "shared/state.aivi",
+        r#"
+use shared.signals (openMailfox)
+
+export openMailfox
+"#,
+    );
+    workspace.write(
+        "shared/signals.aivi",
+        r#"
+signal openMailfox : Signal Unit
+
+export openMailfox
+"#,
+    );
+
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None)
+        .expect("workspace run preparation should accept re-exported signal event hooks");
+    let widget = artifact
+        .bridge
+        .nodes()
+        .iter()
+        .find_map(|node| match &node.kind {
+            GtkBridgeNodeKind::Widget(widget)
+                if widget.widget.segments().last().text() == "Button" =>
+            {
+                Some(widget)
+            }
+            _ => None,
+        })
+        .expect("bridge should keep the re-exported button widget");
+    let handler = widget
+        .event_hooks
+        .first()
+        .expect("button should keep one re-exported event hook");
+    assert!(artifact.event_handlers.contains_key(&handler.handler));
+    assert!(matches!(
+        artifact.event_handlers.get(&handler.handler),
+        Some(ResolvedRunEventHandler {
+            payload: ResolvedRunEventPayload::GtkPayload,
             ..
         })
     ));

@@ -1173,41 +1173,117 @@ fn workspace_import_signal_item(
         .source_module
         .as_deref()
         .map(str::to_owned)
-        .or_else(|| {
-            module.items().iter().find_map(|(_, item)| {
-                let Item::Use(use_item) = item else {
-                    return None;
-                };
-                use_item
-                    .imports
-                    .iter()
-                    .copied()
-                    .find(|candidate| *candidate == import_id)
-                    .map(|_| use_item.module.to_string())
-            })
-        })?;
-    let entry_item_count = u32::try_from(module.items().iter().count()).ok()?;
-    let entry_import_count = u32::try_from(module.imports().iter().count()).ok()?;
+        .or_else(|| workspace_import_source_module(module, import_id))?;
+    let workspace_exports = workspace_signal_exports(module, workspace_hirs)?;
+    workspace_exports
+        .get(source_module.as_str())
+        .and_then(|exports| exports.get(import_binding.imported_name.text()).copied())
+}
+
+fn workspace_signal_exports<'a>(
+    entry_module: &HirModule,
+    workspace_hirs: &[(&'a str, &'a HirModule)],
+) -> Option<BTreeMap<&'a str, BTreeMap<String, aivi_hir::ItemId>>> {
+    let entry_item_count = u32::try_from(entry_module.items().iter().count()).ok()?;
+    let entry_import_count = u32::try_from(entry_module.imports().iter().count()).ok()?;
     let mut next_origin = entry_item_count + entry_import_count;
+    let mut module_offsets = HashMap::new();
+    let mut import_to_module = HashMap::new();
     for (name, workspace_module) in workspace_hirs {
-        if *name == source_module.as_str() {
-            let local_item = workspace_module.items().iter().find_map(|(item_id, item)| match item {
-                Item::Signal(signal) if signal.name.text() == import_binding.imported_name.text() => {
-                    Some(item_id)
-                }
-                _ => None,
-            })?;
-            return Some(aivi_hir::ItemId::from_raw(
-                next_origin.saturating_add(local_item.as_raw()),
-            ));
-        }
+        module_offsets.insert(*name, next_origin);
+        import_to_module.insert(*name, workspace_import_to_module(workspace_module));
         let item_count = u32::try_from(workspace_module.items().iter().count()).ok()?;
         let import_count = u32::try_from(workspace_module.imports().iter().count()).ok()?;
         next_origin = next_origin
             .saturating_add(item_count)
             .saturating_add(import_count);
     }
-    None
+
+    let mut exports = BTreeMap::<&str, BTreeMap<String, aivi_hir::ItemId>>::new();
+    for (name, workspace_module) in workspace_hirs {
+        let offset = *module_offsets.get(name)?;
+        let mut module_exports = BTreeMap::new();
+        for (item_id, item) in workspace_module.items().iter() {
+            let Item::Signal(signal) = item else {
+                continue;
+            };
+            module_exports.insert(
+                signal.name.text().to_owned(),
+                aivi_hir::ItemId::from_raw(offset.saturating_add(item_id.as_raw())),
+            );
+        }
+        exports.insert(*name, module_exports);
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (name, workspace_module) in workspace_hirs {
+            let Some(source_modules) = import_to_module.get(name) else {
+                continue;
+            };
+            let mut pending = Vec::new();
+            for (workspace_import_id, binding) in workspace_module.imports().iter() {
+                let ImportBindingMetadata::Value {
+                    ty: ImportValueType::Signal(_),
+                } = &binding.metadata
+                else {
+                    continue;
+                };
+                let Some(source_module) = binding
+                    .source_module
+                    .as_deref()
+                    .or_else(|| source_modules.get(&workspace_import_id).map(|value| value.as_ref()))
+                else {
+                    continue;
+                };
+                let Some(source_exports) = exports.get(source_module) else {
+                    continue;
+                };
+                let Some(&item_id) = source_exports.get(binding.imported_name.text()) else {
+                    continue;
+                };
+                pending.push((binding.local_name.text().to_owned(), item_id));
+            }
+            let Some(module_exports) = exports.get_mut(name) else {
+                continue;
+            };
+            for (local_name, item_id) in pending {
+                if module_exports.insert(local_name, item_id).is_none() {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    Some(exports)
+}
+
+fn workspace_import_source_module(module: &HirModule, import_id: ImportId) -> Option<String> {
+    module.items().iter().find_map(|(_, item)| {
+        let Item::Use(use_item) = item else {
+            return None;
+        };
+        use_item
+            .imports
+            .iter()
+            .copied()
+            .find(|candidate| *candidate == import_id)
+            .map(|_| use_item.module.to_string())
+    })
+}
+
+fn workspace_import_to_module(module: &HirModule) -> HashMap<ImportId, Box<str>> {
+    let mut import_to_module = HashMap::new();
+    for (_, item) in module.items().iter() {
+        let Item::Use(use_item) = item else {
+            continue;
+        };
+        for import_id in use_item.imports.iter().copied() {
+            import_to_module.insert(import_id, use_item.module.to_string().into_boxed_str());
+        }
+    }
+    import_to_module
 }
 
 /// Checks whether a resolved signal inner type accepts the given GTK event payload.

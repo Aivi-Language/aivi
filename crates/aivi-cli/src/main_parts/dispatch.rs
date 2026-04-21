@@ -455,12 +455,13 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
     })?;
 
     // When no explicit path or --app was given and the manifest defines multiple
-    // [[app]] entries, launch every app as a separate subprocess so each gets its
-    // own GTK main loop.
+    // [[app]] entries without a [run] entry, launch every app as a separate
+    // subprocess so each gets its own GTK main loop. If [run] entry exists, it
+    // remains the default target and may itself spawn sidecars.
     if requested_path.is_none() && requested_app.is_none() {
         let workspace_root = discover_workspace_root_from_directory(&cwd);
         if let Ok(manifest) = parse_manifest(&workspace_root)
-            && manifest.apps.len() > 1 {
+            && should_spawn_all_manifest_apps(&manifest) {
                 let exe = env::current_exe()
                     .map_err(|e| format!("failed to locate aivi executable: {e}"))?;
                 let mut children: Vec<std::process::Child> = manifest
@@ -513,6 +514,10 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
         )),
         timings,
     )
+}
+
+fn should_spawn_all_manifest_apps(manifest: &aivi_query::AiviManifest) -> bool {
+    manifest.run.entry.is_none() && manifest.apps.len() > 1
 }
 
 #[derive(Debug)]

@@ -8,8 +8,8 @@ const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
 const FROZEN_BACKEND_CATALOG_FORMAT: &str = "aivi.frozen-backend-catalog";
 const FROZEN_BACKEND_CATALOG_VERSION: u32 = 1;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
-const SOURCE_RUN_CACHE_VERSION: u32 = 2;
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "2";
+const SOURCE_RUN_CACHE_VERSION: u32 = 3;
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "3";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 
@@ -141,6 +141,11 @@ struct FrozenRunImage {
     artifact: FrozenSerializedRunArtifact,
     backends: Box<[FrozenBackendPayloadWire]>,
     entries: Box<[FrozenEntryWire]>,
+}
+
+struct FrozenPreparedRunImage {
+    bytes: Vec<u8>,
+    artifact: RunArtifact,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -476,6 +481,7 @@ struct FrozenRegisteredBackendPayload {
 
 struct FrozenPayloadRegistry {
     include_native_kernels: bool,
+    freeze_backends: bool,
     handles_by_key: BTreeMap<u64, FrozenBackendHandle>,
     entries: Vec<FrozenRegisteredBackendPayload>,
     entry_handles: BTreeMap<(FrozenBackendHandle, BackendItemId), FrozenEntryHandle>,
@@ -592,8 +598,13 @@ impl ArtifactPayloadRegistry {
 
 impl FrozenPayloadRegistry {
     fn new(include_native_kernels: bool) -> Self {
+        Self::new_with_mode(include_native_kernels, true)
+    }
+
+    fn new_with_mode(include_native_kernels: bool, freeze_backends: bool) -> Self {
         Self {
             include_native_kernels,
+            freeze_backends,
             handles_by_key: BTreeMap::new(),
             entries: Vec::new(),
             entry_handles: BTreeMap::new(),
@@ -646,7 +657,7 @@ impl FrozenPayloadRegistry {
         item: BackendItemId,
     ) -> Result<FrozenEntryHandle, String> {
         let backend = self.register_payload(backend, native_kernels)?.handle;
-        if self.include_native_kernels {
+        if self.include_native_kernels && self.freeze_backends {
             self.ensure_item_entry_abi(backend, item)?;
         }
         if let Some(&handle) = self.entry_handles.get(&(backend, item)) {
@@ -838,20 +849,24 @@ impl FrozenPayloadRegistry {
         handle: FrozenBackendHandle,
     ) -> Result<aivi_runtime::hir_adapter::BackendRuntimePayload, String> {
         let payload = self.payload(handle)?;
-        Ok(match &payload.backend {
-            aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
-                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(Arc::new(
-                    aivi_backend::FrozenBackendCatalog::from(program.as_ref()),
-                ))
+        Ok(if self.freeze_backends {
+            match &payload.backend {
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
+                    aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(Arc::new(
+                        aivi_backend::FrozenBackendCatalog::from(program.as_ref()),
+                    ))
+                }
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
+                    aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(Arc::new(
+                        aivi_backend::FrozenBackendCatalog::from(meta.as_ref()),
+                    ))
+                }
+                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+                    aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog.clone())
+                }
             }
-            aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
-                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(Arc::new(
-                    aivi_backend::FrozenBackendCatalog::from(meta.as_ref()),
-                ))
-            }
-            aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
-                aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog.clone())
-            }
+        } else {
+            payload.backend.clone()
         })
     }
 
@@ -860,10 +875,11 @@ impl FrozenPayloadRegistry {
             .iter()
             .map(|payload| {
                 Ok(FrozenBackendPayloadWire {
-                    backend_catalog: encode_frozen_backend_catalog_bytes(
-                        "frozen-image",
-                        &payload.backend,
-                    )?,
+                    backend_catalog: if self.freeze_backends {
+                        encode_frozen_backend_catalog_bytes("frozen-image", &payload.backend)?
+                    } else {
+                        encode_backend_payload_bytes("frozen-image", &payload.backend)?
+                    },
                     native_kernels: payload
                         .native_kernels
                         .iter()
@@ -1155,6 +1171,37 @@ fn encode_backend_runtime_meta_bytes(
     }
 }
 
+fn encode_backend_payload_bytes(
+    relative_path: &str,
+    backend: &aivi_runtime::hir_adapter::BackendRuntimePayload,
+) -> Result<Vec<u8>, String> {
+    match backend {
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => aivi_backend::encode_program_binary(
+            program.as_ref(),
+        )
+        .map_err(|error| {
+            format!(
+                "failed to encode backend payload {relative_path} as binary program: {error}"
+            )
+        }),
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => bincode::serialize(meta.as_ref())
+            .map_err(|error| {
+                format!(
+                    "failed to encode backend payload {relative_path} as binary runtime metadata: {error}"
+                )
+            }),
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
+            encode_frozen_backend_catalog_bytes(relative_path, backend).or_else(|_| {
+                bincode::serialize(catalog.as_ref()).map_err(|error| {
+                    format!(
+                        "failed to encode backend payload {relative_path} as binary frozen catalog: {error}"
+                    )
+                })
+            })
+        }
+    }
+}
+
 fn encode_frozen_backend_catalog_bytes(
     relative_path: &str,
     backend: &aivi_runtime::hir_adapter::BackendRuntimePayload,
@@ -1196,6 +1243,35 @@ fn write_serialized_run_artifact_bundle(
     Ok(artifact_path)
 }
 
+fn encode_frozen_run_image_bytes_with_options(
+    artifact: &RunArtifact,
+    include_native_kernels: bool,
+    freeze_backends: bool,
+) -> Result<Vec<u8>, String> {
+    let mut payloads = FrozenPayloadRegistry::new_with_mode(include_native_kernels, freeze_backends);
+    let serialized = serialize_frozen_run_artifact(artifact, &mut payloads)?;
+    let image = FrozenRunImage {
+        format: FROZEN_RUN_IMAGE_FORMAT.into(),
+        version: FROZEN_RUN_IMAGE_VERSION,
+        artifact: serialized,
+        backends: payloads.collect_backends()?,
+        entries: payloads.collect_entries(),
+    };
+    bincode::serialize(&image).map_err(|error| {
+        format!("failed to encode {FROZEN_RUN_IMAGE_FILE_NAME} as binary: {error}")
+    })
+}
+
+fn freeze_run_artifact(artifact: &RunArtifact) -> Result<FrozenPreparedRunImage, String> {
+    let bytes = encode_frozen_run_image_bytes_with_options(artifact, true, false)?;
+    let mut frozen = load_frozen_run_image_from_bytes(&bytes, Some(artifact.view_name.as_ref()))?;
+    frozen.sources = artifact.sources.clone();
+    Ok(FrozenPreparedRunImage {
+        bytes,
+        artifact: frozen,
+    })
+}
+
 fn write_frozen_run_image_bundle(root: &Path, artifact: &RunArtifact) -> Result<PathBuf, String> {
     write_frozen_run_image_bundle_with_options(root, artifact, true)
 }
@@ -1212,20 +1288,10 @@ fn write_frozen_run_image_bundle_with_options(
     artifact: &RunArtifact,
     include_native_kernels: bool,
 ) -> Result<PathBuf, String> {
-    let mut payloads = FrozenPayloadRegistry::new(include_native_kernels);
-    let serialized = serialize_frozen_run_artifact(artifact, &mut payloads)?;
     fs::create_dir_all(root)
         .map_err(|error| format!("failed to create {}: {error}", root.display()))?;
     let image_path = root.join(FROZEN_RUN_IMAGE_FILE_NAME);
-    let image = FrozenRunImage {
-        format: FROZEN_RUN_IMAGE_FORMAT.into(),
-        version: FROZEN_RUN_IMAGE_VERSION,
-        artifact: serialized,
-        backends: payloads.collect_backends()?,
-        entries: payloads.collect_entries(),
-    };
-    let bytes = bincode::serialize(&image)
-        .map_err(|error| format!("failed to encode {} as binary: {error}", image_path.display()))?;
+    let bytes = encode_frozen_run_image_bytes_with_options(artifact, include_native_kernels, true)?;
     fs::write(&image_path, bytes)
         .map_err(|error| format!("failed to write {}: {error}", image_path.display()))?;
     Ok(image_path)
@@ -1263,6 +1329,19 @@ fn maybe_load_serialized_run_artifact(
     if extension != "json" && extension != "bin" {
         return Ok(None);
     }
+    if extension == "bin" {
+        return match load_frozen_run_image(path, requested_view) {
+            Ok(artifact) => Ok(Some(artifact)),
+            Err(frozen_error) => load_serialized_run_artifact(path, requested_view)
+                .map(Some)
+                .map_err(|serialized_error| {
+                    format!(
+                        "failed to decode {} as frozen run image ({frozen_error}) or serialized run artifact ({serialized_error})",
+                        path.display()
+                    )
+                }),
+        };
+    }
     load_serialized_run_artifact(path, requested_view).map(Some)
 }
 
@@ -1273,15 +1352,20 @@ fn load_cached_source_run_artifact(
 ) -> Option<RunArtifact> {
     let cache_dir = source_run_cache_dir(cache_home, entry_path, requested_view);
     let manifest_path = cache_dir.join(SOURCE_RUN_CACHE_METADATA_FILE_NAME);
-    let artifact_path = cache_dir.join(RUN_ARTIFACT_FILE_NAME);
     let manifest = read_source_run_cache_manifest(&manifest_path).ok()?;
     validate_source_run_cache_manifest(&manifest, entry_path, requested_view).ok()?;
     if !source_run_cache_dependencies_match(&manifest) {
         return None;
     }
+    let frozen_image_path = cache_dir.join(FROZEN_RUN_IMAGE_FILE_NAME);
+    if frozen_image_path.is_file() {
+        return load_frozen_run_image(&frozen_image_path, requested_view).ok();
+    }
+    let artifact_path = cache_dir.join(RUN_ARTIFACT_FILE_NAME);
     load_serialized_run_artifact(&artifact_path, requested_view).ok()
 }
 
+#[allow(dead_code)]
 fn store_cached_source_run_artifact(
     cache_home: &Path,
     entry_path: &Path,
@@ -1289,16 +1373,31 @@ fn store_cached_source_run_artifact(
     snapshot: &WorkspaceHirSnapshot,
     artifact: &RunArtifact,
 ) -> Result<(), String> {
+    let frozen = freeze_run_artifact(artifact)?;
+    store_cached_frozen_run_image(cache_home, entry_path, requested_view, snapshot, &frozen.bytes)
+}
+
+fn store_cached_frozen_run_image(
+    cache_home: &Path,
+    entry_path: &Path,
+    requested_view: Option<&str>,
+    snapshot: &WorkspaceHirSnapshot,
+    frozen_image_bytes: &[u8],
+) -> Result<(), String> {
     let cache_dir = source_run_cache_dir(cache_home, entry_path, requested_view);
     fs::create_dir_all(&cache_dir)
         .map_err(|error| format!("failed to create {}: {error}", cache_dir.display()))?;
-    write_serialized_run_artifact_bundle(&cache_dir, artifact)?;
+    let image_path = cache_dir.join(FROZEN_RUN_IMAGE_FILE_NAME);
+    fs::write(&image_path, frozen_image_bytes)
+        .map_err(|error| format!("failed to write {}: {error}", image_path.display()))?;
     let manifest = build_source_run_cache_manifest(entry_path, requested_view, snapshot)?;
     let manifest_path = cache_dir.join(SOURCE_RUN_CACHE_METADATA_FILE_NAME);
     let bytes = serde_json::to_vec(&manifest)
         .map_err(|error| format!("failed to encode source run cache manifest: {error}"))?;
     fs::write(&manifest_path, bytes)
         .map_err(|error| format!("failed to write {}: {error}", manifest_path.display()))?;
+    let legacy_path = cache_dir.join(RUN_ARTIFACT_FILE_NAME);
+    let _ = fs::remove_file(legacy_path);
     Ok(())
 }
 
@@ -1647,7 +1746,7 @@ fn freeze_runtime_assembly_native_kernels(
         payloads: &mut FrozenPayloadRegistry,
     ) -> Result<aivi_runtime::hir_adapter::HirCompiledRuntimeExpr, String> {
         let payload = payloads.register_payload(expr.backend.clone(), expr.native_kernels.clone())?;
-        if payloads.include_native_kernels {
+        if payloads.include_native_kernels && payloads.freeze_backends {
             payloads.ensure_item_entry_abi(payload.handle, expr.entry_item)?;
         }
         Ok(aivi_runtime::hir_adapter::HirCompiledRuntimeExpr {
@@ -1699,7 +1798,7 @@ fn serialize_frozen_run_artifact(
         artifact.backend.clone(),
         artifact.backend_native_kernels.clone(),
     )?;
-    if payloads.include_native_kernels {
+    if payloads.include_native_kernels && payloads.freeze_backends {
         ensure_frozen_runtime_tables_compiled_only(payloads, backend.handle, &runtime_tables)?;
     }
     let kind = match &artifact.kind {

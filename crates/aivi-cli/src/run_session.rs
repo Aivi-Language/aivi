@@ -97,7 +97,6 @@ pub(super) struct RunSessionHarness {
     control: RunSessionControl,
     root_windows: Vec<gtk::Window>,
     startup_metrics: RunStartupMetrics,
-    startup_manual_sources: RefCell<Option<Box<[aivi_runtime::SourceInstanceId]>>>,
 }
 
 #[allow(dead_code)]
@@ -250,11 +249,17 @@ struct RunGtkSessionState {
     event_handlers: BTreeMap<HirExprId, ResolvedRunEventHandler>,
     executor: GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     hydration: RunHydrationCoordinator,
+    startup_gate: RunStartupGate,
 }
 
 enum RunSessionKind {
     Gtk(Box<RunGtkSessionState>),
     HeadlessTask,
+}
+
+struct RunStartupGate {
+    manual_sources: Option<Box<[aivi_runtime::SourceInstanceId]>>,
+    roots_presented: bool,
 }
 
 impl Default for RunLaunchConfig {
@@ -354,19 +359,14 @@ impl RunSessionHarness {
         for window in &self.root_windows {
             window.present();
         }
-        let Some(instances) = self.startup_manual_sources.borrow_mut().take() else {
-            return Ok(());
-        };
-        for instance in instances.iter().copied() {
-            self.control
-                .driver()
-                .set_source_mode(instance, aivi_runtime::GlibLinkedSourceMode::Live)
-                .map_err(|error| {
-                    format!(
-                        "failed to release startup timer source {} into live mode: {error}",
-                        instance.as_raw()
-                    )
-                })?;
+        let driver = self.control.driver();
+        let mut session = self.session.borrow_mut();
+        if let RunSessionKind::Gtk(state) = &mut session.kind {
+            let initial_hydration_applied = state.hydration.latest_applied().is_some();
+            state
+                .startup_gate
+                .mark_roots_presented(&driver, initial_hydration_applied)?;
+            session.process_pending_work()?;
         }
         Ok(())
     }
@@ -700,6 +700,48 @@ impl RunHydrationCoordinator {
     }
 }
 
+impl RunStartupGate {
+    fn new(manual_sources: Option<Box<[aivi_runtime::SourceInstanceId]>>) -> Self {
+        Self {
+            manual_sources,
+            roots_presented: false,
+        }
+    }
+
+    fn mark_roots_presented(
+        &mut self,
+        driver: &GlibLinkedRuntimeDriver,
+        initial_hydration_applied: bool,
+    ) -> Result<(), String> {
+        self.roots_presented = true;
+        self.release_if_ready(driver, initial_hydration_applied)
+    }
+
+    fn release_if_ready(
+        &mut self,
+        driver: &GlibLinkedRuntimeDriver,
+        initial_hydration_applied: bool,
+    ) -> Result<(), String> {
+        if !self.roots_presented || !initial_hydration_applied {
+            return Ok(());
+        }
+        let Some(instances) = self.manual_sources.take() else {
+            return Ok(());
+        };
+        for instance in instances.iter().copied() {
+            driver
+                .set_source_mode(instance, aivi_runtime::GlibLinkedSourceMode::Live)
+                .map_err(|error| {
+                    format!(
+                        "failed to release startup timer source {} into live mode: {error}",
+                        instance.as_raw()
+                    )
+                })?;
+        }
+        Ok(())
+    }
+}
+
 impl RunSessionLifecycle {
     fn new() -> Self {
         Self {
@@ -830,15 +872,21 @@ impl RunSessionState {
                     ));
                 }
                 self.driver.drain_outcomes();
-                let required_signal_globals = self.required_signal_globals.clone();
-                let latest_requested = state.hydration.latest_requested();
-                state
-                    .hydration
-                    .request_current(&self.driver, &required_signal_globals)?;
-                if state.hydration.latest_requested() != latest_requested {
-                    state.hydration.apply_ready_immediate(&mut state.executor)?;
+                if state.startup_gate.roots_presented {
+                    let required_signal_globals = self.required_signal_globals.clone();
+                    let latest_requested = state.hydration.latest_requested();
+                    state
+                        .hydration
+                        .request_current(&self.driver, &required_signal_globals)?;
+                    if state.hydration.latest_requested() != latest_requested {
+                        state.hydration.apply_ready_immediate(&mut state.executor)?;
+                    }
+                    state.hydration.apply_ready(&mut state.executor)?;
+                    state.startup_gate.release_if_ready(
+                        &self.driver,
+                        state.hydration.latest_applied().is_some(),
+                    )?;
                 }
-                state.hydration.apply_ready(&mut state.executor)?;
             }
             RunSessionKind::HeadlessTask => {
                 let failures = self.driver.drain_failures();
@@ -1190,7 +1238,7 @@ where
         request_tx: main_context_requests.sender(),
         notifier: session_notifier.clone(),
     };
-    let (session_kind, startup_manual_sources) = match kind {
+    let session_kind = match kind {
         RunArtifactKind::Gtk(surface) => {
             let executor = GtkRuntimeExecutor::new(
                 surface.bridge.clone(),
@@ -1203,29 +1251,27 @@ where
                     path.display()
                 )
             })?;
-            let startup_manual_sources = Some(hold_startup_timer_sources(&driver)?);
-            (
-                RunSessionKind::Gtk(Box::new(RunGtkSessionState {
-                    event_handlers: surface.event_handlers,
-                    executor,
-                    hydration: RunHydrationCoordinator::new(
-                        Arc::new(RunHydrationStaticState {
-                            view_name: view_name.clone(),
-                            patterns: surface.patterns,
-                            bridge: surface.bridge,
-                            inputs: surface.hydration_inputs,
-                            runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
-                                backend.clone(),
-                                backend_native_kernels.clone(),
-                            )),
-                        }),
-                        session_notifier.clone(),
-                    ),
-                })),
-                startup_manual_sources,
-            )
+            let startup_manual_sources = hold_startup_timer_sources(&driver)?;
+            RunSessionKind::Gtk(Box::new(RunGtkSessionState {
+                event_handlers: surface.event_handlers,
+                executor,
+                hydration: RunHydrationCoordinator::new(
+                    Arc::new(RunHydrationStaticState {
+                        view_name: view_name.clone(),
+                        patterns: surface.patterns,
+                        bridge: surface.bridge,
+                        inputs: surface.hydration_inputs,
+                        runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+                            backend.clone(),
+                            backend_native_kernels.clone(),
+                        )),
+                    }),
+                    session_notifier.clone(),
+                ),
+                startup_gate: RunStartupGate::new(Some(startup_manual_sources)),
+            }))
         }
-        RunArtifactKind::HeadlessTask { .. } => (RunSessionKind::HeadlessTask, None),
+        RunArtifactKind::HeadlessTask { .. } => RunSessionKind::HeadlessTask,
     };
     let schedule_state = RunSessionScheduleState::default();
     let session = Rc::new(RefCell::new(RunSessionState {
@@ -1322,18 +1368,6 @@ where
         session.process_pending_work().map_err(|error| {
             format!("failed to start run view `{}`: {error}", session.view_name)
         })?;
-        let driver = session.driver.clone();
-        let required_signal_globals = session.required_signal_globals.clone();
-        if let RunSessionKind::Gtk(state) = &mut session.kind
-            && state.hydration.latest_requested().is_none()
-        {
-            state
-                .hydration
-                .request_current(&driver, &required_signal_globals)
-                .map_err(|error| {
-                    format!("failed to start run view `{}`: {error}", session.view_name)
-                })?;
-        }
     }
     let initial_runtime_tick = initial_runtime_tick_started.elapsed();
     record_startup_stage(
@@ -1344,23 +1378,10 @@ where
         &mut on_stage_completed,
     );
     if matches!(&session.borrow().kind, RunSessionKind::Gtk(_)) {
-        let initial_hydration_wait_started = Instant::now();
-        while {
-            let session = session.borrow();
-            matches!(
-                &session.kind,
-                RunSessionKind::Gtk(state)
-                    if state.hydration.latest_applied().is_none()
-                        && !session.lifecycle.has_runtime_error()
-            )
-        } {
-            context.iteration(true);
-        }
-        let initial_hydration_wait = initial_hydration_wait_started.elapsed();
         record_startup_stage(
             &mut startup_metrics,
             RunStartupStage::InitialHydrationWait,
-            initial_hydration_wait,
+            Duration::ZERO,
             startup_started.elapsed(),
             &mut on_stage_completed,
         );
@@ -1397,7 +1418,6 @@ where
         control,
         root_windows,
         startup_metrics,
-        startup_manual_sources: RefCell::new(startup_manual_sources),
     })
 }
 
@@ -1545,7 +1565,8 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
 mod tests {
     use super::{
         HydrationRevisionState, MainContextRequestQueue, RunFragmentExecutionUnit, RunLaunchConfig,
-        RunSessionLifecycle, RunSessionPhase, RunSessionScheduleState, RunStartupStage,
+        RunSessionLifecycle, RunSessionPhase, RunSessionScheduleState, RunStartupGate,
+        RunStartupStage,
         project_run_hydration_globals, start_run_session_with_launch_config,
         start_run_session_with_launch_config_and_reporter,
     };
@@ -2214,8 +2235,8 @@ mod tests {
     }
 
     #[test]
-    fn startup_manual_sources_take_once() {
-        let sources = std::cell::RefCell::new(Some(
+    fn startup_gate_starts_unpresented_with_manual_sources() {
+        let gate = RunStartupGate::new(Some(
             vec![
                 aivi_runtime::SourceInstanceId::from_raw(1),
                 aivi_runtime::SourceInstanceId::from_raw(2),
@@ -2223,15 +2244,13 @@ mod tests {
             .into_boxed_slice(),
         ));
 
+        assert!(!gate.roots_presented);
         assert_eq!(
-            sources
-                .borrow_mut()
-                .take()
+            gate.manual_sources
                 .as_deref()
                 .map(|items: &[aivi_runtime::SourceInstanceId]| items.len()),
-            Some(2_usize)
+            Some(2)
         );
-        assert!(sources.borrow_mut().take().is_none());
     }
 
     #[gtk::test]

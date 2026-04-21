@@ -117,6 +117,7 @@ impl std::ops::Deref for RunArtifact {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct RunArtifactPreparationMetrics {
     source_run_cache_load: Duration,
+    frozen_image_prepare: Duration,
     source_run_cache_store: Duration,
     source_run_cache_hit: bool,
     workspace_collection: Duration,

@@ -357,15 +357,57 @@ fn run_markup_file_with_launch_config(
         }
     };
     prepared.metrics.source_run_cache_load = source_run_cache_load;
-    let artifact_metrics = prepared.metrics;
+    let mut artifact_metrics = prepared.metrics;
+    let frozen_artifact = {
+        let freeze_started = Instant::now();
+        match freeze_run_artifact(&prepared.artifact) {
+            Ok(frozen) => {
+                artifact_metrics.frozen_image_prepare = freeze_started.elapsed();
+                artifact_metrics.total += artifact_metrics.frozen_image_prepare;
+                Some(frozen)
+            }
+            Err(error) => {
+                if timings {
+                    eprintln!("warning: failed to freeze source run artifact for warm launch: {error}");
+                }
+                None
+            }
+        }
+    };
     let query_cache = snapshot.frontend.db.cache_stats();
-    let cache_artifact = cache_home
-        .as_ref()
-        .map(|_| prepared.artifact.clone());
+    if let Some(cache_home) = cache_home.as_deref() {
+        if let Some(frozen) = frozen_artifact.as_ref() {
+            let cache_store_started = Instant::now();
+            match store_cached_frozen_run_image(
+                cache_home,
+                path,
+                requested_view,
+                &snapshot,
+                &frozen.bytes,
+            ) {
+                Ok(()) => {
+                    artifact_metrics.source_run_cache_store = cache_store_started.elapsed();
+                    if timings {
+                        eprintln!(
+                            "note: stored source run cache under {}",
+                            cache_home.join("aivi").join("run-cache").display()
+                        );
+                    }
+                }
+                Err(error) if timings => {
+                    eprintln!("warning: failed to store source run cache: {error}");
+                }
+                Err(_) => {}
+            }
+        }
+    }
+    let launch_artifact = frozen_artifact
+        .map(|frozen| frozen.artifact)
+        .unwrap_or(prepared.artifact);
 
     run_session::launch_run_with_config(
         path,
-        prepared.artifact,
+        launch_artifact,
         launch_config,
         move |stage, startup_metrics| {
             if timings {
@@ -373,20 +415,6 @@ fn run_markup_file_with_launch_config(
                 }
             },
             move |startup_metrics| {
-                let mut artifact_metrics = artifact_metrics;
-                if let (Some(cache_home), Some(cache_artifact)) =
-                    (cache_home.as_deref(), cache_artifact.as_ref())
-                {
-                    let cache_store_started = Instant::now();
-                    let _ = store_cached_source_run_artifact(
-                        cache_home,
-                        path,
-                        requested_view,
-                        &snapshot,
-                        cache_artifact,
-                    );
-                    artifact_metrics.source_run_cache_store = cache_store_started.elapsed();
-                }
                 if timings {
                     print_run_timing_report(
                         path,

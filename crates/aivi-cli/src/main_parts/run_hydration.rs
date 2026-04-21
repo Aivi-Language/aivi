@@ -77,7 +77,11 @@ fn print_run_prelaunch_timing_details(
         }
     );
     eprintln!(
-        "  source run cache store:    {:>8.2?} (post-present)",
+        "  frozen image prep:         {:>8.2?}",
+        artifact.frozen_image_prepare
+    );
+    eprintln!(
+        "  source run cache store:    {:>8.2?} (artifact write)",
         artifact.source_run_cache_store
     );
     eprintln!("  load + parse:              {:>8.2?}", load_duration);
