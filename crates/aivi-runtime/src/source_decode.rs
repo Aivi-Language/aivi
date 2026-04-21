@@ -39,6 +39,102 @@ impl ExternalSourceValue {
     }
 }
 
+const VALUE_PREVIEW_CHAR_LIMIT: usize = 120;
+const VALUE_PREVIEW_DEPTH_LIMIT: usize = 2;
+
+fn truncate_preview(mut preview: String) -> Box<str> {
+    if preview.chars().count() <= VALUE_PREVIEW_CHAR_LIMIT {
+        return preview.into_boxed_str();
+    }
+    preview = preview.chars().take(VALUE_PREVIEW_CHAR_LIMIT).collect();
+    preview.push('…');
+    preview.into_boxed_str()
+}
+
+fn preview_text_literal(text: &str) -> Box<str> {
+    truncate_preview(format!("{text:?}"))
+}
+
+fn preview_external_source_value(value: &ExternalSourceValue, depth: usize) -> String {
+    if depth >= VALUE_PREVIEW_DEPTH_LIMIT {
+        return match value {
+            ExternalSourceValue::List(values) => {
+                format!(
+                    "[…; {} item{}]",
+                    values.len(),
+                    if values.len() == 1 { "" } else { "s" }
+                )
+            }
+            ExternalSourceValue::Record(fields) => format!(
+                "{{…; {} field{}}}",
+                fields.len(),
+                if fields.len() == 1 { "" } else { "s" }
+            ),
+            ExternalSourceValue::Variant {
+                name,
+                payload: Some(_),
+            } => format!("{name}(…)"),
+            ExternalSourceValue::Variant {
+                name,
+                payload: None,
+            } => name.to_string(),
+            ExternalSourceValue::Text(text) => format!("{text:?}"),
+            ExternalSourceValue::Bytes(bytes) => format!("bytes[{}]", bytes.len()),
+            ExternalSourceValue::Unit => "()".to_owned(),
+            ExternalSourceValue::Bool(value) => value.to_string(),
+            ExternalSourceValue::Int(value) => value.to_string(),
+            ExternalSourceValue::Float(value) => value.to_string(),
+        };
+    }
+
+    match value {
+        ExternalSourceValue::Unit => "()".to_owned(),
+        ExternalSourceValue::Bool(value) => value.to_string(),
+        ExternalSourceValue::Int(value) => value.to_string(),
+        ExternalSourceValue::Float(value) => value.to_string(),
+        ExternalSourceValue::Text(text) => format!("{text:?}"),
+        ExternalSourceValue::Bytes(bytes) => format!("bytes{:?}", bytes),
+        ExternalSourceValue::List(values) => {
+            let mut rendered = values
+                .iter()
+                .take(3)
+                .map(|value| preview_external_source_value(value, depth + 1))
+                .collect::<Vec<_>>();
+            if values.len() > 3 {
+                rendered.push("…".to_owned());
+            }
+            format!("[{}]", rendered.join(", "))
+        }
+        ExternalSourceValue::Record(fields) => {
+            let mut rendered = fields
+                .iter()
+                .take(3)
+                .map(|(name, value)| {
+                    format!(
+                        "{name}: {}",
+                        preview_external_source_value(value, depth + 1)
+                    )
+                })
+                .collect::<Vec<_>>();
+            if fields.len() > 3 {
+                rendered.push("…".to_owned());
+            }
+            format!("{{{}}}", rendered.join(", "))
+        }
+        ExternalSourceValue::Variant {
+            name,
+            payload: Some(payload),
+        } => format!(
+            "{name}({})",
+            preview_external_source_value(payload, depth + 1)
+        ),
+        ExternalSourceValue::Variant {
+            name,
+            payload: None,
+        } => name.to_string(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceDecodeProgramSupportError {
     UnsupportedScalar { scalar: &'static str },
@@ -169,9 +265,17 @@ impl std::fmt::Display for DecodePathSegment {
 
 /// A decode error enriched with a breadcrumb path through the nested structure.
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SourceDecodeActualValue {
+    pub kind: &'static str,
+    pub preview: Box<str>,
+}
+
+/// A decode error enriched with a breadcrumb path through the nested structure.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SourceDecodeErrorWithPath {
     pub path: Vec<DecodePathSegment>,
     pub error: SourceDecodeError,
+    pub actual: Option<SourceDecodeActualValue>,
 }
 
 impl SourceDecodeErrorWithPath {
@@ -179,11 +283,28 @@ impl SourceDecodeErrorWithPath {
         Self {
             path: Vec::new(),
             error,
+            actual: None,
         }
     }
 
     fn with_segment(mut self, segment: DecodePathSegment) -> Self {
         self.path.insert(0, segment);
+        self
+    }
+
+    fn with_actual_value(mut self, value: &ExternalSourceValue) -> Self {
+        self.actual = Some(SourceDecodeActualValue {
+            kind: value_kind(value),
+            preview: truncate_preview(preview_external_source_value(value, 0)),
+        });
+        self
+    }
+
+    fn with_actual_preview(mut self, kind: &'static str, preview: impl Into<Box<str>>) -> Self {
+        self.actual = Some(SourceDecodeActualValue {
+            kind,
+            preview: preview.into(),
+        });
         self
     }
 
@@ -204,6 +325,9 @@ impl SourceDecodeErrorWithPath {
         let mut out = String::new();
         out.push_str("source decode error\n");
         out.push_str(&format!("  path: {}\n", self.path_string()));
+        if let Some(actual) = &self.actual {
+            out.push_str(&format!("  actual {}: {}\n", actual.kind, actual.preview));
+        }
 
         match &self.error {
             SourceDecodeError::TypeMismatch { expected, found } => {
@@ -314,6 +438,7 @@ pub fn parse_json_text(text: &str) -> Result<ExternalSourceValue, SourceDecodeEr
         SourceDecodeErrorWithPath::new(SourceDecodeError::InvalidJson {
             detail: error.to_string().into_boxed_str(),
         })
+        .with_actual_preview("json text", preview_text_literal(text))
     })?;
     external_from_json(value).map_err(SourceDecodeErrorWithPath::new)
 }
@@ -537,26 +662,27 @@ fn decode_step(
     depth: usize,
 ) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
     if depth > MAX_DECODE_DEPTH {
-        return Err(SourceDecodeErrorWithPath::new(
-            SourceDecodeError::TypeMismatch {
+        return Err(
+            SourceDecodeErrorWithPath::new(SourceDecodeError::TypeMismatch {
                 expected: "value within nesting depth limit",
                 found: "structure nested too deeply (> 512 levels)",
-            },
-        ));
+            })
+            .with_actual_value(value),
+        );
     }
     match step {
         DecodeProgramStep::Scalar { scalar } => match scalar {
             aivi_typing::PrimitiveType::Unit => match value {
                 ExternalSourceValue::Unit => Ok(RuntimeValue::Unit),
-                other => Err(wrap(type_mismatch("unit", other))),
+                other => Err(wrap(other, type_mismatch("unit", other))),
             },
             aivi_typing::PrimitiveType::Bool => match value {
                 ExternalSourceValue::Bool(value) => Ok(RuntimeValue::Bool(*value)),
-                other => Err(wrap(type_mismatch("bool", other))),
+                other => Err(wrap(other, type_mismatch("bool", other))),
             },
             aivi_typing::PrimitiveType::Int => match value {
                 ExternalSourceValue::Int(value) => Ok(RuntimeValue::Int(*value)),
-                other => Err(wrap(type_mismatch("integer", other))),
+                other => Err(wrap(other, type_mismatch("integer", other))),
             },
             aivi_typing::PrimitiveType::Float => match value {
                 ExternalSourceValue::Int(value) => Ok(RuntimeValue::Float(
@@ -564,11 +690,11 @@ fn decode_step(
                         .expect("all i64 values should map to finite f64 values"),
                 )),
                 ExternalSourceValue::Float(value) => Ok(RuntimeValue::Float(*value)),
-                other => Err(wrap(type_mismatch("float", other))),
+                other => Err(wrap(other, type_mismatch("float", other))),
             },
             aivi_typing::PrimitiveType::Text => match value {
                 ExternalSourceValue::Text(value) => Ok(RuntimeValue::Text(value.clone())),
-                other => Err(wrap(type_mismatch("text", other))),
+                other => Err(wrap(other, type_mismatch("text", other))),
             },
             aivi_typing::PrimitiveType::Decimal => decode_literal_scalar(
                 value,
@@ -577,7 +703,7 @@ fn decode_step(
                 RuntimeDecimal::parse_literal,
                 RuntimeValue::Decimal,
             )
-            .map_err(wrap),
+            .map_err(|error| wrap(value, error)),
             aivi_typing::PrimitiveType::BigInt => decode_literal_scalar(
                 value,
                 "BigInt",
@@ -585,18 +711,23 @@ fn decode_step(
                 RuntimeBigInt::parse_literal,
                 RuntimeValue::BigInt,
             )
-            .map_err(wrap),
-            aivi_typing::PrimitiveType::Bytes => decode_bytes_scalar(value).map_err(wrap),
+            .map_err(|error| wrap(value, error)),
+            aivi_typing::PrimitiveType::Bytes => {
+                decode_bytes_scalar(value).map_err(|error| wrap(value, error))
+            }
         },
         DecodeProgramStep::Tuple { elements } => {
             let ExternalSourceValue::List(values) = value else {
-                return Err(wrap(type_mismatch("list/tuple", value)));
+                return Err(wrap(value, type_mismatch("list/tuple", value)));
             };
             if values.len() != elements.len() {
-                return Err(wrap(SourceDecodeError::InvalidTupleLength {
-                    expected: elements.len(),
-                    found: values.len(),
-                }));
+                return Err(wrap(
+                    value,
+                    SourceDecodeError::InvalidTupleLength {
+                        expected: elements.len(),
+                        found: values.len(),
+                    },
+                ));
             }
             let decoded = elements
                 .iter()
@@ -614,14 +745,17 @@ fn decode_step(
             extra_fields,
         } => {
             let ExternalSourceValue::Record(values) = value else {
-                return Err(wrap(type_mismatch("record/object", value)));
+                return Err(wrap(value, type_mismatch("record/object", value)));
             };
             let mut decoded = Vec::with_capacity(fields.len());
             for field in fields {
                 let Some(value) = values.get(field.name.as_str()) else {
-                    return Err(wrap(SourceDecodeError::MissingField {
-                        field: field.name.as_str().into(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingField {
+                            field: field.name.as_str().into(),
+                        },
+                    ));
                 };
                 decoded.push(RuntimeRecordField {
                     label: field.name.as_str().into(),
@@ -642,9 +776,12 @@ fn decode_step(
                     .cloned()
                     .collect::<Vec<_>>();
                 if !extras.is_empty() {
-                    return Err(wrap(SourceDecodeError::UnexpectedFields {
-                        fields: extras.into_boxed_slice(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::UnexpectedFields {
+                            fields: extras.into_boxed_slice(),
+                        },
+                    ));
                 }
             }
             Ok(RuntimeValue::Record(decoded))
@@ -655,32 +792,41 @@ fn decode_step(
                     (name.as_ref(), payload.as_deref())
                 }
                 ExternalSourceValue::Text(name) => (name.as_ref(), None),
-                other => return Err(wrap(type_mismatch("explicit sum variant", other))),
+                other => return Err(wrap(other, type_mismatch("explicit sum variant", other))),
             };
             let Some(variant) = variants
                 .iter()
                 .find(|variant| variant.name.as_str() == name)
             else {
-                return Err(wrap(SourceDecodeError::UnknownVariant {
-                    found: name.into(),
-                    expected: variants
-                        .iter()
-                        .map(|variant| variant.name.as_str().into())
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
-                }));
+                return Err(wrap(
+                    value,
+                    SourceDecodeError::UnknownVariant {
+                        found: name.into(),
+                        expected: variants
+                            .iter()
+                            .map(|variant| variant.name.as_str().into())
+                            .collect::<Vec<_>>()
+                            .into_boxed_slice(),
+                    },
+                ));
             };
             let fields = match (variant.payload, payload) {
                 (None, None) => Vec::new(),
                 (None, Some(_)) => {
-                    return Err(wrap(SourceDecodeError::UnexpectedVariantPayload {
-                        variant: variant.name.as_str().into(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::UnexpectedVariantPayload {
+                            variant: variant.name.as_str().into(),
+                        },
+                    ));
                 }
                 (Some(_), None) => {
-                    return Err(wrap(SourceDecodeError::MissingVariantPayload {
-                        variant: variant.name.as_str().into(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: variant.name.as_str().into(),
+                        },
+                    ));
                 }
                 (Some(payload_step), Some(payload)) => {
                     let decoded =
@@ -706,16 +852,17 @@ fn decode_step(
                 fields,
             }))
         }
-        DecodeProgramStep::Domain { surface, .. } => {
-            Err(wrap(SourceDecodeError::UnsupportedProgram(
+        DecodeProgramStep::Domain { surface, .. } => Err(wrap(
+            value,
+            SourceDecodeError::UnsupportedProgram(
                 SourceDecodeProgramSupportError::UnsupportedDomain {
                     member_name: surface.member_name.clone(),
                 },
-            )))
-        }
+            ),
+        )),
         DecodeProgramStep::List { element } => {
             let ExternalSourceValue::List(values) = value else {
-                return Err(wrap(type_mismatch("list", value)));
+                return Err(wrap(value, type_mismatch("list", value)));
             };
             let decoded = values
                 .iter()
@@ -730,24 +877,30 @@ fn decode_step(
         DecodeProgramStep::Option { element } => match value {
             ExternalSourceValue::Variant { name, payload } if name.as_ref() == "None" => {
                 if payload.is_some() {
-                    return Err(wrap(SourceDecodeError::UnexpectedVariantPayload {
-                        variant: name.clone(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::UnexpectedVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
                 }
                 Ok(RuntimeValue::OptionNone)
             }
             ExternalSourceValue::Variant { name, payload } if name.as_ref() == "Some" => {
                 let Some(payload) = payload.as_deref() else {
-                    return Err(wrap(SourceDecodeError::MissingVariantPayload {
-                        variant: name.clone(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
                 };
                 Ok(RuntimeValue::OptionSome(Box::new(
                     decode_step(program, program.step(*element), payload, depth + 1)
                         .map_err(|e| e.with_segment(DecodePathSegment::Payload))?,
                 )))
             }
-            other => Err(wrap(type_mismatch("option variant", other))),
+            other => Err(wrap(other, type_mismatch("option variant", other))),
         },
         DecodeProgramStep::Result {
             error,
@@ -755,9 +908,12 @@ fn decode_step(
         } => match value {
             ExternalSourceValue::Variant { name, payload } if name.as_ref() == "Ok" => {
                 let Some(payload) = payload.as_deref() else {
-                    return Err(wrap(SourceDecodeError::MissingVariantPayload {
-                        variant: name.clone(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
                 };
                 Ok(RuntimeValue::ResultOk(Box::new(
                     decode_step(program, program.step(*value_step), payload, depth + 1)
@@ -766,16 +922,19 @@ fn decode_step(
             }
             ExternalSourceValue::Variant { name, payload } if name.as_ref() == "Err" => {
                 let Some(payload) = payload.as_deref() else {
-                    return Err(wrap(SourceDecodeError::MissingVariantPayload {
-                        variant: name.clone(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
                 };
                 Ok(RuntimeValue::ResultErr(Box::new(
                     decode_step(program, program.step(*error), payload, depth + 1)
                         .map_err(|e| e.with_segment(DecodePathSegment::Variant("Err".into())))?,
                 )))
             }
-            other => Err(wrap(type_mismatch("result variant", other))),
+            other => Err(wrap(other, type_mismatch("result variant", other))),
         },
         DecodeProgramStep::Validation {
             error,
@@ -783,9 +942,12 @@ fn decode_step(
         } => match value {
             ExternalSourceValue::Variant { name, payload } if name.as_ref() == "Valid" => {
                 let Some(payload) = payload.as_deref() else {
-                    return Err(wrap(SourceDecodeError::MissingVariantPayload {
-                        variant: name.clone(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
                 };
                 Ok(RuntimeValue::ValidationValid(Box::new(
                     decode_step(program, program.step(*value_step), payload, depth + 1)
@@ -794,9 +956,12 @@ fn decode_step(
             }
             ExternalSourceValue::Variant { name, payload } if name.as_ref() == "Invalid" => {
                 let Some(payload) = payload.as_deref() else {
-                    return Err(wrap(SourceDecodeError::MissingVariantPayload {
-                        variant: name.clone(),
-                    }));
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
                 };
                 Ok(RuntimeValue::ValidationInvalid(Box::new(
                     decode_step(program, program.step(*error), payload, depth + 1).map_err(
@@ -804,14 +969,14 @@ fn decode_step(
                     )?,
                 )))
             }
-            other => Err(wrap(type_mismatch("validation variant", other))),
+            other => Err(wrap(other, type_mismatch("validation variant", other))),
         },
     }
 }
 
 /// Wrap a plain `SourceDecodeError` into a `SourceDecodeErrorWithPath` with an empty path.
-fn wrap(error: SourceDecodeError) -> SourceDecodeErrorWithPath {
-    SourceDecodeErrorWithPath::new(error)
+fn wrap(value: &ExternalSourceValue, error: SourceDecodeError) -> SourceDecodeErrorWithPath {
+    SourceDecodeErrorWithPath::new(error).with_actual_value(value)
 }
 
 fn type_mismatch(expected: &'static str, value: &ExternalSourceValue) -> SourceDecodeError {
@@ -1127,5 +1292,47 @@ signal bytes : Signal Bytes
                 value: 256,
             }
         );
+    }
+
+    #[test]
+    fn invalid_json_errors_capture_actual_input_preview() {
+        let error = parse_json_text("{not json")
+            .expect_err("malformed JSON should surface a source decode error");
+        assert_eq!(
+            error.actual.as_ref().map(|actual| actual.kind),
+            Some("json text")
+        );
+        assert!(
+            error
+                .actual
+                .as_ref()
+                .is_some_and(|actual| actual.preview.contains("{not json"))
+        );
+        assert!(error.render_formatted().contains("actual json text:"));
+    }
+
+    #[test]
+    fn decode_type_mismatches_capture_actual_value_preview() {
+        let program = decode_program(
+            "source-decode-type-mismatch.aivi",
+            r#"
+@source custom.feed
+signal count : Signal Int
+"#,
+            "count",
+        );
+        let error = decode_external(&program, &ExternalSourceValue::Text("hello".into()))
+            .expect_err("text should not decode as Int");
+        assert_eq!(
+            error.actual.as_ref().map(|actual| actual.kind),
+            Some("text")
+        );
+        assert!(
+            error
+                .actual
+                .as_ref()
+                .is_some_and(|actual| actual.preview.contains("hello"))
+        );
+        assert!(error.render_formatted().contains("actual text:"));
     }
 }

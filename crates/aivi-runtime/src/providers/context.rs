@@ -103,7 +103,16 @@ pub struct SourceProviderContext {
     stdin_override: Option<Result<Box<str>, Box<str>>>,
     stdin_text: Arc<OnceLock<Result<Box<str>, Box<str>>>>,
     custom_capability_command_executor: Option<Arc<dyn CustomCapabilityCommandExecutor>>,
+    decode_diagnostic_reporter: Arc<std::sync::Mutex<Option<Arc<DecodeDiagnosticReporter>>>>,
 }
+
+type DecodeDiagnosticReporter = dyn Fn(
+        SourceInstanceId,
+        aivi_typing::BuiltinSourceProvider,
+        crate::SourceDecodeErrorWithPath,
+    ) + Send
+    + Sync
+    + 'static;
 
 impl Default for SourceProviderContext {
     fn default() -> Self {
@@ -138,6 +147,7 @@ impl SourceProviderContext {
             stdin_override: None,
             stdin_text: Arc::new(OnceLock::new()),
             custom_capability_command_executor: None,
+            decode_diagnostic_reporter: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -181,6 +191,32 @@ impl SourceProviderContext {
         &self,
     ) -> Option<&Arc<dyn CustomCapabilityCommandExecutor>> {
         self.custom_capability_command_executor.as_ref()
+    }
+
+    pub(crate) fn set_decode_diagnostic_reporter(
+        &mut self,
+        reporter: Arc<DecodeDiagnosticReporter>,
+    ) {
+        *self
+            .decode_diagnostic_reporter
+            .lock()
+            .expect("decode diagnostic reporter mutex should not be poisoned") = Some(reporter);
+    }
+
+    pub(crate) fn report_decode_diagnostic(
+        &self,
+        instance: SourceInstanceId,
+        provider: aivi_typing::BuiltinSourceProvider,
+        error: &crate::SourceDecodeErrorWithPath,
+    ) {
+        let reporter = self
+            .decode_diagnostic_reporter
+            .lock()
+            .expect("decode diagnostic reporter mutex should not be poisoned")
+            .clone();
+        if let Some(reporter) = reporter {
+            reporter(instance, provider, error.clone());
+        }
     }
 
     fn args_runtime_value(&self) -> RuntimeValue {

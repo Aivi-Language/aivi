@@ -49,7 +49,9 @@ pub use reactive_program::{
     ReactivePartitionId, ReactiveProgram, ReactiveProgramParts, ReactiveReactiveNode,
     ReactiveSignalNode, ReactiveSignalNodeKind,
 };
-pub use runtime_errors::render_runtime_error;
+pub use runtime_errors::{
+    render_provider_execution_error, render_runtime_error, render_source_decode_error,
+};
 pub use scheduler::{
     DependencyValue, DependencyValues, DerivedNodeEvaluator, DerivedSignalUpdate,
     DroppedPublication, Generation, Publication, PublicationDropReason, PublicationStamp,

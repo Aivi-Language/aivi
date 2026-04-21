@@ -242,6 +242,8 @@ enum PayloadDecodeMode {
 
 #[derive(Clone)]
 struct RequestResultPlan {
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
     decode: hir::SourceDecodeProgram,
     success_mode: PayloadDecodeMode,
     error: ErrorPlan,
@@ -304,6 +306,8 @@ impl RequestResultPlan {
         };
         let error = ErrorPlan::from_step(instance, provider, &decode, *error)?;
         Ok(Self {
+            instance,
+            provider,
             decode,
             success_mode,
             error,
@@ -332,6 +336,15 @@ impl RequestResultPlan {
             &ExternalSourceValue::variant_with_payload("Err", payload),
         )
         .map_err(|error| error.to_string().into_boxed_str())
+    }
+
+    fn decode_error_value(
+        &self,
+        context: &SourceProviderContext,
+        error: &SourceDecodeErrorWithPath,
+    ) -> Result<RuntimeValue, Box<str>> {
+        context.report_decode_diagnostic(self.instance, self.provider, error);
+        self.error_value(TextSourceErrorKind::Decode, &error.to_string())
     }
 }
 
@@ -1023,9 +1036,10 @@ fn base64_encode(input: &[u8]) -> String {
 fn spawn_api_worker(
     port: DetachedRuntimePublicationPort,
     plan: ApiPlan,
+    context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
-    spawn_http_worker(port, plan.into_http_plan(), stop)
+    spawn_http_worker(port, plan.into_http_plan(), context, stop)
 }
 
 #[derive(Clone)]
@@ -1491,6 +1505,8 @@ impl ProcessPlan {
 
 #[derive(Clone)]
 struct ProcessEventPlan {
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
     decode: hir::SourceDecodeProgram,
     spawned: Option<ProcessVariantPlan>,
     stdout: Option<ProcessVariantPlan>,
@@ -1539,6 +1555,8 @@ impl ProcessEventPlan {
             });
         };
         let mut plan = Self {
+            instance,
+            provider,
             decode: decode.clone(),
             spawned: None,
             stdout: None,
@@ -1648,6 +1666,14 @@ impl ProcessEventPlan {
             _ => return Ok(None),
         };
         decode_external(&self.decode, &raw).map(Some)
+    }
+
+    fn report_decode_error(
+        &self,
+        context: &SourceProviderContext,
+        error: &SourceDecodeErrorWithPath,
+    ) {
+        context.report_decode_diagnostic(self.instance, self.provider, error);
     }
 }
 
@@ -2355,6 +2381,8 @@ enum PortalErrorKind {
 
 #[derive(Clone)]
 struct PortalOpenFileOutputPlan {
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
     decode: hir::SourceDecodeProgram,
     error: ErrorPlan,
 }
@@ -2386,6 +2414,8 @@ impl PortalOpenFileOutputPlan {
         };
         validate_portal_file_selection_step(instance, provider, &decode, *value)?;
         Ok(Self {
+            instance,
+            provider,
             error: ErrorPlan::from_step(instance, provider, &decode, *error)?,
             decode,
         })
@@ -2438,10 +2468,21 @@ impl PortalOpenFileOutputPlan {
         )
         .map_err(|error| error.to_string().into_boxed_str())
     }
+
+    fn decode_error_value(
+        &self,
+        context: &SourceProviderContext,
+        error: &SourceDecodeErrorWithPath,
+    ) -> Result<RuntimeValue, Box<str>> {
+        context.report_decode_diagnostic(self.instance, self.provider, error);
+        self.error_value(PortalErrorKind::Decode, &error.to_string())
+    }
 }
 
 #[derive(Clone)]
 struct PortalOpenUriOutputPlan {
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
     decode: hir::SourceDecodeProgram,
     error: ErrorPlan,
 }
@@ -2472,6 +2513,8 @@ impl PortalOpenUriOutputPlan {
         };
         validate_portal_uri_result_step(instance, provider, &decode, *value)?;
         Ok(Self {
+            instance,
+            provider,
             error: ErrorPlan::from_step(instance, provider, &decode, *error)?,
             decode,
         })
@@ -2521,10 +2564,21 @@ impl PortalOpenUriOutputPlan {
         )
         .map_err(|error| error.to_string().into_boxed_str())
     }
+
+    fn decode_error_value(
+        &self,
+        context: &SourceProviderContext,
+        error: &SourceDecodeErrorWithPath,
+    ) -> Result<RuntimeValue, Box<str>> {
+        context.report_decode_diagnostic(self.instance, self.provider, error);
+        self.error_value(PortalErrorKind::Decode, &error.to_string())
+    }
 }
 
 #[derive(Clone)]
 struct PortalScreenshotOutputPlan {
+    instance: SourceInstanceId,
+    provider: BuiltinSourceProvider,
     decode: hir::SourceDecodeProgram,
     error: ErrorPlan,
 }
@@ -2557,6 +2611,8 @@ impl PortalScreenshotOutputPlan {
         };
         validate_portal_screenshot_result_step(instance, provider, &decode, *value)?;
         Ok(Self {
+            instance,
+            provider,
             error: ErrorPlan::from_step(instance, provider, &decode, *error)?,
             decode,
         })
@@ -2592,6 +2648,15 @@ impl PortalScreenshotOutputPlan {
             &ExternalSourceValue::variant_with_payload("Err", payload),
         )
         .map_err(|error| error.to_string().into_boxed_str())
+    }
+
+    fn decode_error_value(
+        &self,
+        context: &SourceProviderContext,
+        error: &SourceDecodeErrorWithPath,
+    ) -> Result<RuntimeValue, Box<str>> {
+        context.report_decode_diagnostic(self.instance, self.provider, error);
+        self.error_value(PortalErrorKind::Decode, &error.to_string())
     }
 }
 

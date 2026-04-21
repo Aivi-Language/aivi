@@ -1822,6 +1822,7 @@ fn deserialize_run_artifact(
             .into_iter()
             .map(|entry| (entry.item, entry.name))
             .collect(),
+        sources: None,
         runtime_assembly: hir_runtime_assembly_from_wire(serialized.runtime_assembly, &mut payloads)?,
         runtime_link: serialized.runtime_link,
         runtime_tables: None,
@@ -1884,6 +1885,7 @@ fn deserialize_frozen_run_artifact(
             .into_iter()
             .map(|entry| (entry.item, entry.name))
             .collect(),
+        sources: None,
         runtime_assembly: frozen_hir_runtime_assembly_from_wire(serialized.runtime_assembly, payloads)?,
         runtime_link: aivi_runtime::BackendRuntimeLinkSeed {
             hir_to_backend: Box::new([]),

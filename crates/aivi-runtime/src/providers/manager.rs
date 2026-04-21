@@ -95,6 +95,21 @@ impl SourceProviderManager {
         self.context.cache_home()
     }
 
+    pub fn set_decode_diagnostic_reporter(
+        &mut self,
+        reporter: Arc<
+            dyn Fn(
+                    SourceInstanceId,
+                    aivi_typing::BuiltinSourceProvider,
+                    crate::SourceDecodeErrorWithPath,
+                ) + Send
+                + Sync
+                + 'static,
+        >,
+    ) {
+        self.context.set_decode_diagnostic_reporter(reporter);
+    }
+
     pub fn active_provider(&self, instance: SourceInstanceId) -> Option<&RuntimeSourceProvider> {
         self.active
             .get(&instance)
@@ -333,7 +348,7 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::HttpGet) => {
                 let plan = HttpPlan::parse(instance, BuiltinSourceProvider::HttpGet, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_http_worker(port, plan, stop.clone());
+                let handle = spawn_http_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -348,7 +363,7 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::HttpPost) => {
                 let plan = HttpPlan::parse(instance, BuiltinSourceProvider::HttpPost, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_http_worker(port, plan, stop.clone());
+                let handle = spawn_http_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -369,7 +384,8 @@ impl SourceProviderManager {
             ) => {
                 let plan = ApiPlan::parse(instance, *provider, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_api_worker(port, plan, stop.clone());
+                let handle =
+                    spawn_api_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -385,7 +401,8 @@ impl SourceProviderManager {
                 let plan = FsReadPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
                 if action_kind == SourceLifecycleActionKind::Reconfigure || plan.read_on_start {
-                    let handle = spawn_fs_read_worker(port, plan, stop.clone());
+                    let handle =
+                        spawn_fs_read_worker(port, plan, self.context.clone(), stop.clone());
                     self.thread_handles
                         .lock()
                         .unwrap()
@@ -401,7 +418,8 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::FsWatch) => {
                 let plan = FsWatchPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_fs_watch_worker(port, plan, stop.clone());
+                let handle =
+                    spawn_fs_watch_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -416,7 +434,8 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::SocketConnect) => {
                 let plan = SocketPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_socket_worker(port, plan, stop.clone());
+                let handle =
+                    spawn_socket_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -436,7 +455,13 @@ impl SourceProviderManager {
                     .expect("mailbox hub mutex should not be poisoned")
                     .subscribe(&plan.mailbox, plan.buffer);
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_mailbox_worker(port, plan.clone(), receiver, stop.clone());
+                let handle = spawn_mailbox_worker(
+                    port,
+                    plan.clone(),
+                    self.context.clone(),
+                    receiver,
+                    stop.clone(),
+                );
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -453,7 +478,8 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::ProcessSpawn) => {
                 let plan = ProcessPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_process_worker(port, plan, stop.clone());
+                let handle =
+                    spawn_process_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -790,7 +816,8 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::PortalOpenFile) => {
                 let plan = PortalOpenFilePlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_portal_open_file_worker(port, plan, stop.clone());
+                let handle =
+                    spawn_portal_open_file_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -805,7 +832,8 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::PortalOpenUri) => {
                 let plan = PortalOpenUriPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_portal_open_uri_worker(port, plan, stop.clone());
+                let handle =
+                    spawn_portal_open_uri_worker(port, plan, self.context.clone(), stop.clone());
                 self.thread_handles
                     .lock()
                     .unwrap()
@@ -820,7 +848,12 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::PortalScreenshot) => {
                 let plan = PortalScreenshotPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle = spawn_portal_screenshot_worker(port, plan, stop.clone());
+                let handle = spawn_portal_screenshot_worker(
+                    port,
+                    plan,
+                    self.context.clone(),
+                    stop.clone(),
+                );
                 self.thread_handles
                     .lock()
                     .unwrap()

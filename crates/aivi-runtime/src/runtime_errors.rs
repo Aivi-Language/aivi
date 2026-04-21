@@ -6,7 +6,10 @@ use aivi_backend::{
 };
 use aivi_base::{Diagnostic, DiagnosticCode};
 
-use crate::{graph::SignalGraph, source_map::RuntimeSourceMap, startup::BackendRuntimeError};
+use crate::{
+    SourceProviderExecutionError, graph::SignalGraph, source_map::RuntimeSourceMap,
+    startup::BackendRuntimeError,
+};
 
 const RUNTIME_DOMAIN: &str = "runtime";
 
@@ -14,6 +17,10 @@ const SIGNAL_EVAL_FAILED: DiagnosticCode =
     DiagnosticCode::new(RUNTIME_DOMAIN, "SIGNAL_EVAL_FAILED");
 const SOURCE_EVAL_FAILED: DiagnosticCode =
     DiagnosticCode::new(RUNTIME_DOMAIN, "SOURCE_EVAL_FAILED");
+const SOURCE_PROVIDER_FAILED: DiagnosticCode =
+    DiagnosticCode::new(RUNTIME_DOMAIN, "SOURCE_PROVIDER_FAILED");
+const SOURCE_DECODE_FAILED: DiagnosticCode =
+    DiagnosticCode::new(RUNTIME_DOMAIN, "SOURCE_DECODE_FAILED");
 const TASK_EVAL_FAILED: DiagnosticCode = DiagnosticCode::new(RUNTIME_DOMAIN, "TASK_EVAL_FAILED");
 const RUNTIME_INTERNAL: DiagnosticCode = DiagnosticCode::new(RUNTIME_DOMAIN, "INTERNAL");
 
@@ -753,4 +760,247 @@ pub fn render_runtime_error(
             ]
         }
     }
+}
+
+/// Convert a [`SourceProviderExecutionError`] into one or more [`Diagnostic`]s.
+pub fn render_provider_execution_error(
+    error: &SourceProviderExecutionError,
+    source_map: &RuntimeSourceMap,
+) -> Vec<Diagnostic> {
+    let (instance, provider_key, message, help) = match error {
+        SourceProviderExecutionError::MissingDecodeProgram { instance, provider } => (
+            *instance,
+            provider.key(),
+            format!("source provider `{}` is missing its runtime decode program", provider.key()),
+            Some("this is likely a compiler/runtime wiring bug rather than an application error".to_owned()),
+        ),
+        SourceProviderExecutionError::UnsupportedDecodeProgram {
+            instance,
+            provider,
+            detail,
+        } => (
+            *instance,
+            provider.key(),
+            format!(
+                "source provider `{}` cannot execute its runtime decode program: {detail}",
+                provider.key()
+            ),
+            Some(
+                "simplify the source payload annotation or runtime shape until this provider path is implemented"
+                    .to_owned(),
+            ),
+        ),
+        SourceProviderExecutionError::UnsupportedProviderShape {
+            instance,
+            provider,
+            detail,
+        } => (
+            *instance,
+            provider.key(),
+            format!(
+                "source provider `{}` cannot execute this source shape: {detail}",
+                provider.key()
+            ),
+            Some("adjust the @source declaration to a supported provider shape".to_owned()),
+        ),
+        SourceProviderExecutionError::InvalidArgumentCount {
+            instance,
+            provider,
+            expected,
+            found,
+        } => (
+            *instance,
+            provider.key(),
+            format!(
+                "source provider `{}` expected {expected} argument(s), found {found}",
+                provider.key()
+            ),
+            Some("check the @source arguments against the provider contract".to_owned()),
+        ),
+        SourceProviderExecutionError::InvalidArgument {
+            instance,
+            provider,
+            index,
+            expected,
+            value,
+        } => (
+            *instance,
+            provider.key(),
+            format!(
+                "source provider `{}` received invalid argument {index}: expected {expected}, found {value}",
+                provider.key()
+            ),
+            Some("adjust the argument expression so it matches the provider's expected runtime type".to_owned()),
+        ),
+        SourceProviderExecutionError::InvalidOption {
+            instance,
+            provider,
+            option_name,
+            expected,
+            value,
+        } => (
+            *instance,
+            provider.key(),
+            format!(
+                "source provider `{}` received invalid `{option_name}` option: expected {expected}, found {value}",
+                provider.key()
+            ),
+            Some("change the option value to the provider's supported shape".to_owned()),
+        ),
+        SourceProviderExecutionError::UnsupportedOption {
+            instance,
+            provider,
+            option_name,
+        } => (
+            *instance,
+            provider.key(),
+            format!(
+                "source provider `{}` does not support the `{option_name}` option at runtime yet",
+                provider.key()
+            ),
+            Some("remove that option or switch to a provider/runtime path that supports it".to_owned()),
+        ),
+        SourceProviderExecutionError::ZeroTimerInterval { instance } => (
+            *instance,
+            "timer",
+            "timer sources must use a strictly positive duration".to_owned(),
+            Some("replace `0ms` or a negative duration with a positive interval such as `100ms`".to_owned()),
+        ),
+        SourceProviderExecutionError::StartFailed {
+            instance,
+            provider,
+            detail,
+        } => (
+            *instance,
+            provider.key(),
+            format!("source provider `{}` failed to start: {detail}", provider.key()),
+            None,
+        ),
+    };
+
+    let source_name = source_map
+        .source_name(instance)
+        .unwrap_or("(unknown source)");
+    let mut diag = Diagnostic::error(format!(
+        "source `{source_name}` failed during provider startup: {message}"
+    ))
+    .with_code(SOURCE_PROVIDER_FAILED)
+    .with_note(format!("provider key: `{provider_key}`"));
+
+    if let Some(span) = source_map.source_span(instance) {
+        diag = diag.with_primary_label(span, "source declared here");
+    }
+
+    if let Some(help) = help {
+        diag = diag.with_help(help);
+    }
+
+    vec![diag]
+}
+
+/// Convert a structured source-boundary decode failure into one or more [`Diagnostic`]s.
+pub fn render_source_decode_error(
+    instance: crate::SourceInstanceId,
+    provider: aivi_typing::BuiltinSourceProvider,
+    error: &crate::SourceDecodeErrorWithPath,
+    source_map: &RuntimeSourceMap,
+) -> Vec<Diagnostic> {
+    let source_name = source_map
+        .source_name(instance)
+        .unwrap_or("(unknown source)");
+    let mut diag = match &error.error {
+        crate::SourceDecodeError::InvalidJson { detail } => Diagnostic::error(format!(
+            "source `{source_name}` received malformed JSON at the app boundary: {detail}"
+        )),
+        crate::SourceDecodeError::UnsupportedNumber { value } => Diagnostic::error(format!(
+            "source `{source_name}` received unsupported JSON number `{value}`"
+        )),
+        crate::SourceDecodeError::InvalidScalarLiteral { scalar, value } => Diagnostic::error(
+            format!(
+                "source `{source_name}` could not decode {scalar} literal from external value `{value}`"
+            ),
+        ),
+        crate::SourceDecodeError::InvalidBytesElementKind { index, found } => Diagnostic::error(
+            format!(
+                "source `{source_name}` expected byte array element {index} to be an integer, found {found}"
+            ),
+        ),
+        crate::SourceDecodeError::InvalidByteValue { index, value } => Diagnostic::error(format!(
+            "source `{source_name}` expected byte array element {index} to be within 0..=255, found {value}"
+        )),
+        crate::SourceDecodeError::TypeMismatch { expected, found } => Diagnostic::error(format!(
+            "source `{source_name}` expected {expected} at `{}`, found {found}",
+            error.path_string()
+        )),
+        crate::SourceDecodeError::InvalidTupleLength { expected, found } => Diagnostic::error(
+            format!(
+                "source `{source_name}` expected tuple/list length {expected} at `{}`, found {found}",
+                error.path_string()
+            ),
+        ),
+        crate::SourceDecodeError::MissingField { field } => Diagnostic::error(format!(
+            "source `{source_name}` is missing required field `{field}` at `{}`",
+            error.path_string()
+        )),
+        crate::SourceDecodeError::UnexpectedFields { fields } => Diagnostic::error(format!(
+            "source `{source_name}` received unexpected field(s) {} at `{}`",
+            fields.join(", "),
+            error.path_string()
+        )),
+        crate::SourceDecodeError::UnknownVariant { found, expected } => Diagnostic::error(format!(
+            "source `{source_name}` received unknown variant `{found}` at `{}`; expected one of {}",
+            error.path_string(),
+            expected.join(", ")
+        )),
+        crate::SourceDecodeError::MissingVariantPayload { variant } => Diagnostic::error(format!(
+            "source `{source_name}` expected variant `{variant}` to carry a payload at `{}`",
+            error.path_string()
+        )),
+        crate::SourceDecodeError::UnexpectedVariantPayload { variant } => Diagnostic::error(
+            format!(
+                "source `{source_name}` expected variant `{variant}` to be payloadless at `{}`",
+                error.path_string()
+            ),
+        ),
+        crate::SourceDecodeError::UnsupportedProgram(detail) => Diagnostic::error(format!(
+            "source `{source_name}` uses a decode shape that runtime source decoding cannot execute yet: {detail}"
+        )),
+    }
+    .with_code(SOURCE_DECODE_FAILED)
+    .with_note(format!("provider key: `{}`", provider.key()))
+    .with_note(format!("decode path: {}", error.path_string()));
+
+    if let Some(span) = source_map.source_span(instance) {
+        diag = diag.with_primary_label(span, "source payload expectation declared here");
+    }
+
+    if let Some(actual) = &error.actual {
+        diag = diag.with_note(format!("actual {}: {}", actual.kind, actual.preview));
+    }
+
+    diag = match &error.error {
+        crate::SourceDecodeError::InvalidJson { .. } => diag.with_help(
+            "ensure the external payload is valid JSON and matches the declared @source output type",
+        ),
+        crate::SourceDecodeError::TypeMismatch { .. }
+        | crate::SourceDecodeError::InvalidTupleLength { .. }
+        | crate::SourceDecodeError::MissingField { .. }
+        | crate::SourceDecodeError::UnexpectedFields { .. }
+        | crate::SourceDecodeError::UnknownVariant { .. }
+        | crate::SourceDecodeError::MissingVariantPayload { .. }
+        | crate::SourceDecodeError::UnexpectedVariantPayload { .. } => diag.with_help(
+            "adjust the incoming payload shape or relax the @source output annotation so they agree",
+        ),
+        crate::SourceDecodeError::InvalidScalarLiteral { .. }
+        | crate::SourceDecodeError::InvalidBytesElementKind { .. }
+        | crate::SourceDecodeError::InvalidByteValue { .. }
+        | crate::SourceDecodeError::UnsupportedNumber { .. } => diag.with_help(
+            "normalize the boundary value into the exact scalar form that the @source annotation expects",
+        ),
+        crate::SourceDecodeError::UnsupportedProgram(_) => diag.with_help(
+            "simplify the @source payload type or extend runtime decoding support for this shape",
+        ),
+    };
+
+    vec![diag]
 }

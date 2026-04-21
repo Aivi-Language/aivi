@@ -60,7 +60,7 @@ use aivi_runtime::{
     BackendLinkedRuntime, GlibLinkedRuntimeDriver, GlibLinkedRuntimeFailure, HirRuntimeAssembly,
     InputHandle as RuntimeInputHandle, Publication, SourceProviderContext, SourceProviderManager,
     assemble_hir_runtime_with_items, assemble_hir_runtime_with_items_profiled,
-    execute_runtime_value_with_context, link_backend_runtime, render_runtime_error,
+    execute_runtime_value_with_context, link_backend_runtime,
 };
 use aivi_syntax::{Formatter, lex_module, parse_module};
 use gtk::{glib, prelude::*};

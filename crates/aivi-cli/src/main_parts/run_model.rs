@@ -59,6 +59,7 @@ struct RunArtifact {
     view_name: Box<str>,
     kind: RunArtifactKind,
     required_signal_globals: BTreeMap<BackendItemId, Box<str>>,
+    sources: Option<aivi_base::SourceDatabase>,
     runtime_assembly: HirRuntimeAssembly,
     runtime_link: aivi_runtime::BackendRuntimeLinkSeed,
     runtime_tables: Option<aivi_runtime::BackendLinkedRuntimeTables>,

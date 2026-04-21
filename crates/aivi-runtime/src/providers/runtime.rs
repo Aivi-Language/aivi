@@ -732,6 +732,7 @@ fn spawn_notification_events_worker(
 fn spawn_portal_open_file_worker(
     port: DetachedRuntimePublicationPort,
     plan: PortalOpenFilePlan,
+    provider_context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -762,6 +763,7 @@ fn spawn_portal_open_file_worker(
             let output = plan.output.clone();
             let publish_port = port.clone();
             let loop_quit = main_loop.clone();
+            let decode_context = provider_context.clone();
             #[allow(deprecated)]
             let mut subscription_id = connection.signal_subscribe(
                 Some(FREEDESKTOP_PORTAL_DESTINATION),
@@ -805,7 +807,7 @@ fn spawn_portal_open_file_worker(
                         Err(error) => {
                             portal_publish_error(
                                 &publish_port,
-                                output.error_value(PortalErrorKind::Decode, &error.to_string()),
+                                output.decode_error_value(&decode_context, &error),
                             );
                         }
                     }
@@ -886,6 +888,7 @@ fn spawn_portal_open_file_worker(
                 let output = plan.output.clone();
                 let publish_port = port.clone();
                 let loop_quit = main_loop.clone();
+                let decode_context = provider_context.clone();
                 #[allow(deprecated)]
                 {
                     subscription_id = connection.signal_subscribe(
@@ -932,10 +935,7 @@ fn spawn_portal_open_file_worker(
                                 Err(error) => {
                                     portal_publish_error(
                                         &publish_port,
-                                        output.error_value(
-                                            PortalErrorKind::Decode,
-                                            &error.to_string(),
-                                        ),
+                                        output.decode_error_value(&decode_context, &error),
                                     );
                                 }
                             }
@@ -954,6 +954,7 @@ fn spawn_portal_open_file_worker(
 fn spawn_portal_open_uri_worker(
     port: DetachedRuntimePublicationPort,
     plan: PortalOpenUriPlan,
+    provider_context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -985,6 +986,7 @@ fn spawn_portal_open_uri_worker(
             let publish_port = port.clone();
             let loop_quit = main_loop.clone();
             let uri_for_signal = plan.uri.clone();
+            let decode_context = provider_context.clone();
             #[allow(deprecated)]
             let mut subscription_id = connection.signal_subscribe(
                 Some(FREEDESKTOP_PORTAL_DESTINATION),
@@ -1010,7 +1012,7 @@ fn spawn_portal_open_uri_worker(
                         Err(error) => {
                             portal_publish_error(
                                 &publish_port,
-                                output.error_value(PortalErrorKind::Decode, &error.to_string()),
+                                output.decode_error_value(&decode_context, &error),
                             );
                         }
                     }
@@ -1061,6 +1063,7 @@ fn spawn_portal_open_uri_worker(
                 let publish_port = port.clone();
                 let loop_quit = main_loop.clone();
                 let uri = plan.uri.clone();
+                let decode_context = provider_context.clone();
                 #[allow(deprecated)]
                 {
                     subscription_id = connection.signal_subscribe(
@@ -1089,10 +1092,7 @@ fn spawn_portal_open_uri_worker(
                                 Err(error) => {
                                     portal_publish_error(
                                         &publish_port,
-                                        output.error_value(
-                                            PortalErrorKind::Decode,
-                                            &error.to_string(),
-                                        ),
+                                        output.decode_error_value(&decode_context, &error),
                                     );
                                 }
                             }
@@ -1111,6 +1111,7 @@ fn spawn_portal_open_uri_worker(
 fn spawn_portal_screenshot_worker(
     port: DetachedRuntimePublicationPort,
     plan: PortalScreenshotPlan,
+    provider_context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -1141,6 +1142,7 @@ fn spawn_portal_screenshot_worker(
             let output = plan.output.clone();
             let publish_port = port.clone();
             let loop_quit = main_loop.clone();
+            let decode_context = provider_context.clone();
             #[allow(deprecated)]
             let mut subscription_id = connection.signal_subscribe(
                 Some(FREEDESKTOP_PORTAL_DESTINATION),
@@ -1186,7 +1188,7 @@ fn spawn_portal_screenshot_worker(
                         Err(error) => {
                             portal_publish_error(
                                 &publish_port,
-                                output.error_value(PortalErrorKind::Decode, &error.to_string()),
+                                output.decode_error_value(&decode_context, &error),
                             );
                         }
                     }
@@ -1229,6 +1231,7 @@ fn spawn_portal_screenshot_worker(
                 let output = plan.output.clone();
                 let publish_port = port.clone();
                 let loop_quit = main_loop.clone();
+                let decode_context = provider_context.clone();
                 #[allow(deprecated)]
                 {
                     subscription_id = connection.signal_subscribe(
@@ -1277,10 +1280,7 @@ fn spawn_portal_screenshot_worker(
                                 Err(error) => {
                                     portal_publish_error(
                                         &publish_port,
-                                        output.error_value(
-                                            PortalErrorKind::Decode,
-                                            &error.to_string(),
-                                        ),
+                                        output.decode_error_value(&decode_context, &error),
                                     );
                                 }
                             }
@@ -1599,6 +1599,7 @@ fn spawn_timer_after(
 fn spawn_http_worker(
     port: DetachedRuntimePublicationPort,
     plan: HttpPlan,
+    context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -1606,7 +1607,7 @@ fn spawn_http_worker(
             if stop.load(Ordering::Acquire) {
                 return;
             }
-            let Some(value) = execute_http_cycle(&plan, &port) else {
+            let Some(value) = execute_http_cycle(&plan, &context, &port) else {
                 return;
             };
             if stop.load(Ordering::Acquire) {
@@ -1630,6 +1631,7 @@ fn spawn_http_worker(
 
 fn execute_http_cycle(
     plan: &HttpPlan,
+    context: &SourceProviderContext,
     port: &DetachedRuntimePublicationPort,
 ) -> Option<RuntimeValue> {
     let mut attempt = 0;
@@ -1641,10 +1643,7 @@ fn execute_http_cycle(
             Ok(body) => match plan.result.success_from_text(&body) {
                 Ok(value) => return Some(value),
                 Err(error) => {
-                    return plan
-                        .result
-                        .error_value(TextSourceErrorKind::Decode, &error.to_string())
-                        .ok();
+                    return plan.result.decode_error_value(context, &error).ok();
                 }
             },
             Err(HttpRequestFailure::Cancelled) => return None,
@@ -1681,6 +1680,7 @@ fn execute_http_cycle(
 fn spawn_fs_read_worker(
     port: DetachedRuntimePublicationPort,
     plan: FsReadPlan,
+    context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -1696,10 +1696,7 @@ fn spawn_fs_read_worker(
         let result = match fs::read_to_string(&plan.path) {
             Ok(text) => match plan.result.success_from_text(&text) {
                 Ok(value) => value,
-                Err(error) => match plan
-                    .result
-                    .error_value(TextSourceErrorKind::Decode, &error.to_string())
-                {
+                Err(error) => match plan.result.decode_error_value(&context, &error) {
                     Ok(value) => value,
                     Err(_) => return,
                 },
@@ -1723,6 +1720,7 @@ fn spawn_fs_read_worker(
 fn spawn_fs_watch_worker(
     port: DetachedRuntimePublicationPort,
     plan: FsWatchPlan,
+    _context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -1823,6 +1821,7 @@ fn dir_signatures(root: &Path) -> BTreeMap<PathBuf, FileSignature> {
 fn spawn_socket_worker(
     port: DetachedRuntimePublicationPort,
     plan: SocketPlan,
+    context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -1874,10 +1873,8 @@ fn spawn_socket_worker(
                                 let line_text = line.trim_end_matches(['\r', '\n']).to_owned();
                                 let value = match plan.result.success_from_text(&line_text) {
                                     Ok(value) => value,
-                                    Err(error) => match plan.result.error_value(
-                                        TextSourceErrorKind::Decode,
-                                        &error.to_string(),
-                                    ) {
+                                    Err(error) => match plan.result.decode_error_value(&context, &error)
+                                    {
                                         Ok(value) => value,
                                         Err(_) => break,
                                     },
@@ -1938,6 +1935,7 @@ fn spawn_socket_worker(
 fn spawn_mailbox_worker(
     port: DetachedRuntimePublicationPort,
     plan: MailboxPlan,
+    context: SourceProviderContext,
     receiver: mpsc::Receiver<Box<str>>,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
@@ -1959,10 +1957,7 @@ fn spawn_mailbox_worker(
                 Ok(message) => {
                     let value = match plan.result.success_from_text(&message) {
                         Ok(value) => value,
-                        Err(error) => match plan
-                            .result
-                            .error_value(TextSourceErrorKind::Decode, &error.to_string())
-                        {
+                        Err(error) => match plan.result.decode_error_value(&context, &error) {
                             Ok(value) => value,
                             Err(_) => return,
                         },
@@ -1997,6 +1992,7 @@ fn spawn_mailbox_worker(
 fn spawn_process_worker(
     port: DetachedRuntimePublicationPort,
     plan: ProcessPlan,
+    context: SourceProviderContext,
     stop: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
@@ -2048,24 +2044,26 @@ fn spawn_process_worker(
         let stdout_handle = child.stdout.take().map(|stdout| {
             let port = port.clone();
             let events = plan.events.clone();
+            let context = context.clone();
             let bytes_mode = plan.stdout_mode == ProcessStreamMode::Bytes;
             thread::spawn(move || {
                 if bytes_mode {
-                    read_process_stream_bytes(stdout, port, events, true)
+                    read_process_stream_bytes(stdout, port, events, context, true)
                 } else {
-                    read_process_stream(stdout, port, events, true)
+                    read_process_stream(stdout, port, events, context, true)
                 }
             })
         });
         let stderr_handle = child.stderr.take().map(|stderr| {
             let port = port.clone();
             let events = plan.events.clone();
+            let context = context.clone();
             let bytes_mode = plan.stderr_mode == ProcessStreamMode::Bytes;
             thread::spawn(move || {
                 if bytes_mode {
-                    read_process_stream_bytes(stderr, port, events, false)
+                    read_process_stream_bytes(stderr, port, events, context, false)
                 } else {
-                    read_process_stream(stderr, port, events, false)
+                    read_process_stream(stderr, port, events, context, false)
                 }
             })
         });
@@ -2109,6 +2107,7 @@ fn read_process_stream(
     stream: impl std::io::Read,
     port: DetachedRuntimePublicationPort,
     plan: ProcessEventPlan,
+    context: SourceProviderContext,
     stdout: bool,
 ) {
     let mut reader = BufReader::new(stream);
@@ -2124,6 +2123,9 @@ fn read_process_stream(
                 } else {
                     plan.stderr_value(line_text)
                 };
+                if let Err(error) = &value {
+                    plan.report_decode_error(&context, error);
+                }
                 if let Ok(Some(value)) = value
                     && port
                         .publish(DetachedRuntimeValue::from_runtime_owned(value))
@@ -2141,6 +2143,7 @@ fn read_process_stream_bytes(
     stream: impl std::io::Read,
     port: DetachedRuntimePublicationPort,
     plan: ProcessEventPlan,
+    context: SourceProviderContext,
     stdout: bool,
 ) {
     let mut reader = BufReader::new(stream);
@@ -2155,6 +2158,9 @@ fn read_process_stream_bytes(
                 } else {
                     plan.stderr_bytes_value(chunk)
                 };
+                if let Err(error) = &value {
+                    plan.report_decode_error(&context, error);
+                }
                 if let Ok(Some(value)) = value
                     && port
                         .publish(DetachedRuntimeValue::from_runtime_owned(value))

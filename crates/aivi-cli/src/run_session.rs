@@ -240,6 +240,7 @@ struct RunSessionState {
     view_name: Box<str>,
     kind: RunSessionKind,
     driver: GlibLinkedRuntimeDriver,
+    sources: Option<aivi_base::SourceDatabase>,
     required_signal_globals: BTreeMap<BackendItemId, Box<str>>,
     main_context_requests: MainContextRequestQueue<RunSessionState>,
     main_loop: glib::MainLoop,
@@ -819,7 +820,11 @@ impl RunSessionState {
                 }
                 let failures = self.driver.drain_failures();
                 if !failures.is_empty() {
-                    return Err(render_run_runtime_failures(&self.driver, &failures));
+                    return Err(render_run_runtime_failures(
+                        &self.driver,
+                        self.sources.as_ref(),
+                        &failures,
+                    ));
                 }
                 self.driver.drain_outcomes();
                 let required_signal_globals = self.required_signal_globals.clone();
@@ -835,7 +840,11 @@ impl RunSessionState {
             RunSessionKind::HeadlessTask => {
                 let failures = self.driver.drain_failures();
                 if !failures.is_empty() {
-                    return Err(render_run_runtime_failures(&self.driver, &failures));
+                    return Err(render_run_runtime_failures(
+                        &self.driver,
+                        self.sources.as_ref(),
+                        &failures,
+                    ));
                 }
                 self.driver.drain_outcomes();
             }
@@ -892,35 +901,41 @@ impl RunSessionState {
 
 fn render_run_runtime_failures(
     driver: &GlibLinkedRuntimeDriver,
+    sources: Option<&aivi_base::SourceDatabase>,
     failures: &[GlibLinkedRuntimeFailure],
 ) -> String {
     let source_map = driver.build_source_map();
     let graph = driver.signal_graph();
     let backend = driver.backend_program();
+    let fallback_sources;
+    let sources = if let Some(sources) = sources {
+        sources
+    } else {
+        fallback_sources = aivi_base::SourceDatabase::new();
+        &fallback_sources
+    };
+    let renderer = aivi_base::DiagnosticRenderer::new(aivi_base::ColorMode::Auto);
     let mut rendered = String::from("live runtime failed during `aivi run`:\n");
     for failure in failures {
         match failure {
             GlibLinkedRuntimeFailure::Tick(error) => {
-                let diagnostics =
-                    render_runtime_error(error, &source_map, &graph, backend.as_deref());
-                for diag in &diagnostics {
-                    rendered.push_str(&format!("  error: {}\n", diag.message));
-                    for note in &diag.notes {
-                        rendered.push_str(&format!("  note: {note}\n"));
-                    }
-                    for help in &diag.help {
-                        rendered.push_str(&format!("  help: {help}\n"));
-                    }
-                }
+                let diagnostics = aivi_runtime::render_runtime_error(
+                    error,
+                    &source_map,
+                    &graph,
+                    backend.as_deref(),
+                );
+                rendered.push_str(&renderer.render_all(diagnostics.iter(), sources));
+                rendered.push('\n');
             }
-            other => {
-                rendered.push_str("  ");
-                rendered.push_str(&other.to_string());
+            GlibLinkedRuntimeFailure::ProviderExecution(error) => {
+                let diagnostics = aivi_runtime::render_provider_execution_error(error, &source_map);
+                rendered.push_str(&renderer.render_all(diagnostics.iter(), sources));
                 rendered.push('\n');
             }
         }
     }
-    rendered
+    rendered.trim_end().to_owned()
 }
 
 fn run_hydration_worker_loop(
@@ -1014,7 +1029,7 @@ pub(super) fn start_run_session_with_launch_config(
 fn start_run_session_with_launch_config_and_reporter<F>(
     path: &Path,
     artifact: RunArtifact,
-    launch_config: RunLaunchConfig,
+    mut launch_config: RunLaunchConfig,
     mut on_stage_completed: F,
 ) -> Result<RunSessionHarness, String>
 where
@@ -1026,6 +1041,7 @@ where
         view_name,
         kind,
         required_signal_globals,
+        sources,
         runtime_assembly,
         runtime_link,
         runtime_tables,
@@ -1033,6 +1049,25 @@ where
         backend_native_kernels,
         stub_signal_defaults,
     } = artifact;
+    if let Some(diagnostic_sources) = sources.clone() {
+        let diagnostic_source_map =
+            aivi_runtime::RuntimeSourceMap::from_assembly(&runtime_assembly);
+        launch_config
+            .providers
+            .set_decode_diagnostic_reporter(Arc::new(move |instance, provider, error| {
+                let diagnostics = aivi_runtime::render_source_decode_error(
+                    instance,
+                    provider,
+                    &error,
+                    &diagnostic_source_map,
+                );
+                let renderer = aivi_base::DiagnosticRenderer::new(aivi_base::ColorMode::Auto);
+                eprintln!(
+                    "{}",
+                    renderer.render_all(diagnostics.iter(), &diagnostic_sources)
+                );
+            }));
+    }
     if matches!(kind, RunArtifactKind::Gtk(_)) {
         let gtk_init_started = Instant::now();
         gtk::init()
@@ -1194,6 +1229,7 @@ where
         view_name: view_name.clone(),
         kind: session_kind,
         driver,
+        sources,
         required_signal_globals,
         main_context_requests,
         main_loop: main_loop.clone(),
@@ -1505,9 +1541,10 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        HydrationRevisionState, MainContextRequestQueue, RunLaunchConfig, RunSessionLifecycle,
-        RunSessionPhase, RunSessionScheduleState, RunStartupStage, project_run_hydration_globals,
-        start_run_session_with_launch_config, start_run_session_with_launch_config_and_reporter,
+        HydrationRevisionState, MainContextRequestQueue, RunFragmentExecutionUnit, RunLaunchConfig,
+        RunSessionLifecycle, RunSessionPhase, RunSessionScheduleState, RunStartupStage,
+        project_run_hydration_globals, start_run_session_with_launch_config,
+        start_run_session_with_launch_config_and_reporter,
     };
     use crate::{RunHydrationStaticState, plan_run_hydration_profiled};
     use aivi_backend::{DetachedRuntimeValue, ItemId as BackendItemId, RuntimeValue};
@@ -1520,7 +1557,7 @@ mod tests {
         collections::BTreeMap,
         env,
         path::{Path, PathBuf},
-        sync::Once,
+        sync::{Arc, Once},
         time::{Duration, Instant},
     };
 

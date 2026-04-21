@@ -225,6 +225,7 @@ where
         view_name: selected.value.name.text().into(),
         kind,
         required_signal_globals,
+        sources: Some(sources.clone()),
         runtime_assembly,
         runtime_link,
         runtime_tables: None,
