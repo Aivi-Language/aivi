@@ -2,8 +2,10 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     ffi::c_void,
+    panic::{AssertUnwindSafe, catch_unwind},
     ptr,
     rc::Rc,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -1294,9 +1296,25 @@ impl FrozenAbiValueKind {
     }
 }
 
+static NATIVE_COMPILE_PANIC_HOOK_LOCK: Mutex<()> = Mutex::new(());
+
+fn compile_kernel_jit_catch_panic(
+    program: &Program,
+    kernel_id: KernelId,
+) -> Option<CompiledJitKernel> {
+    let _guard = NATIVE_COMPILE_PANIC_HOOK_LOCK.lock().ok()?;
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let compiled = catch_unwind(AssertUnwindSafe(|| {
+        compile_kernel_jit_cached(program, kernel_id)
+    }));
+    std::panic::set_hook(hook);
+    compiled.ok()?.ok()
+}
+
 impl NativeKernelPlan {
     pub fn compile(program: &Program, kernel_id: KernelId) -> Option<Self> {
-        let artifact = compile_kernel_jit_cached(program, kernel_id).ok()?;
+        let artifact = compile_kernel_jit_catch_panic(program, kernel_id)?;
         Self::from_compiled_jit(program, kernel_id, artifact)
     }
 

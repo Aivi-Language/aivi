@@ -67,6 +67,19 @@ fn print_run_prelaunch_timing_details(
     query_cache: QueryCacheStats,
     artifact: RunArtifactPreparationMetrics,
 ) {
+    eprintln!(
+        "  source run cache load:     {:>8.2?} ({})",
+        artifact.source_run_cache_load,
+        if artifact.source_run_cache_hit {
+            "hit"
+        } else {
+            "miss"
+        }
+    );
+    eprintln!(
+        "  source run cache store:    {:>8.2?} (post-present)",
+        artifact.source_run_cache_store
+    );
     eprintln!("  load + parse:              {:>8.2?}", load_duration);
     eprintln!("  syntax check:              {:>8.2?}", syntax_duration);
     eprintln!("  HIR lowering:              {:>8.2?}", hir_duration);
@@ -449,15 +462,11 @@ impl<'a> RunFragmentCompiler<'a> {
                         required.insert(fragment_item);
                     }
                     _ => {
-                        let Some(body) = decl.body else {
-                            return Err(format!(
-                                "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
-                                expr.as_raw(),
-                                fragment_item,
-                                decl.name
-                            ));
-                        };
-                        kernels.push(body);
+                        if let Some(body) = decl.body {
+                            kernels.push(body);
+                        } else {
+                            required.insert(fragment_item);
+                        }
                     }
                 }
             }
@@ -513,13 +522,11 @@ impl<'a> RunFragmentCompiler<'a> {
                 .items()
                 .iter()
                 .find_map(|(backend_item, item)| {
-                    (item.name.as_ref() == signal_name.as_ref()
-                        && matches!(item.kind, aivi_backend::ItemKind::Signal(_)))
-                    .then_some(backend_item)
+                    (item.name.as_ref() == signal_name.as_ref()).then_some(backend_item)
                 })
                 .ok_or_else(|| {
                     format!(
-                        "runtime fragment {} needs signal `{signal_name}` (synthetic origin) but no matching signal found",
+                        "runtime fragment {} needs global `{signal_name}` (synthetic origin) but no matching runtime item found",
                         expr.as_raw(),
                     )
                 })?
@@ -534,16 +541,24 @@ impl<'a> RunFragmentCompiler<'a> {
                     runtime_item,
                 )
             })?;
-        if !matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
-            return Err(format!(
-                "live run backend item {} for signal `{signal_name}` is not a signal",
-                runtime_item,
-            ));
-        }
+        let kind = if matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
+            CompiledRunGlobalKind::Signal
+        } else {
+            let Some(_body) = runtime_decl.body else {
+                return Err(format!(
+                    "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
+                    expr.as_raw(),
+                    fragment_item,
+                    signal_name,
+                ));
+            };
+            CompiledRunGlobalKind::RuntimeItem
+        };
         Ok(Some(CompiledRunSignalGlobal {
             fragment_item,
             runtime_item,
             name: signal_name,
+            kind,
         }))
     }
 }
@@ -681,7 +696,7 @@ fn plan_run_node<'a>(
                     properties.push(HydratedRunProperty {
                         input: setter.input,
                         value: DetachedRuntimeValue::from_runtime_owned(evaluate_run_input(
-                            &shared.inputs,
+                            shared,
                             globals,
                             setter.input,
                             env,
@@ -699,7 +714,7 @@ fn plan_run_node<'a>(
                 event_inputs.push(HydratedRunProperty {
                     input: event.input,
                     value: DetachedRuntimeValue::from_runtime_owned(evaluate_run_input(
-                        &shared.inputs,
+                        shared,
                         globals,
                         event.input,
                         env,
@@ -737,7 +752,7 @@ fn plan_run_node<'a>(
         }),
         GtkBridgeNodeKind::Show(show) => {
             let when = runtime_truthy_bool(evaluate_run_input(
-                &shared.inputs,
+                shared,
                 globals,
                 show.when.input,
                 env,
@@ -754,7 +769,7 @@ fn plan_run_node<'a>(
                 RuntimeShowMountPolicy::KeepMounted { decision } => (
                     Some(decision.input),
                     runtime_bool(evaluate_run_input(
-                        &shared.inputs,
+                        shared,
                         globals,
                         decision.input,
                         env,
@@ -792,7 +807,7 @@ fn plan_run_node<'a>(
         }
         GtkBridgeNodeKind::Each(each) => {
             let values = runtime_list_values(evaluate_run_input(
-                &shared.inputs,
+                shared,
                 globals,
                 each.collection.input,
                 env,
@@ -844,7 +859,7 @@ fn plan_run_node<'a>(
                         let mut child_env = env.clone();
                         child_env.insert(each.binding, value);
                         let collection_key = runtime_collection_key(evaluate_run_input(
-                            &shared.inputs,
+                            shared,
                             globals,
                             key_input.input,
                             &child_env,
@@ -907,7 +922,7 @@ fn plan_run_node<'a>(
         }
         GtkBridgeNodeKind::Match(match_node) => {
             let value = evaluate_run_input(
-                &shared.inputs,
+                shared,
                 globals,
                 match_node.scrutinee.input,
                 env,
@@ -969,7 +984,7 @@ fn plan_run_node<'a>(
         }),
         GtkBridgeNodeKind::With(with_node) => {
             let value = evaluate_run_input(
-                &shared.inputs,
+                shared,
                 globals,
                 with_node.value.input,
                 env,
@@ -1154,7 +1169,7 @@ fn apply_run_node(
 }
 
 fn evaluate_run_input<'a>(
-    inputs: &'a BTreeMap<RuntimeInputHandle, CompiledRunInput>,
+    shared: &'a RunHydrationStaticState,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     input: RuntimeInputHandle,
     env: &RuntimeBindingEnv,
@@ -1162,7 +1177,7 @@ fn evaluate_run_input<'a>(
     profiler: &mut RunHydrationProfiler,
 ) -> Result<RuntimeValue, String> {
     profiler.record_input();
-    let compiled = inputs.get(&input).ok_or_else(|| {
+    let compiled = shared.inputs.get(&input).ok_or_else(|| {
         format!(
             "missing compiled runtime input {} for live run hydration",
             input.as_raw()
@@ -1170,15 +1185,16 @@ fn evaluate_run_input<'a>(
     })?;
     match compiled {
         CompiledRunInput::Expr(fragment) => {
-            evaluate_compiled_run_fragment(fragment, globals, env, evaluators, profiler)
+            evaluate_compiled_run_fragment(shared, fragment, globals, env, evaluators, profiler)
         }
         CompiledRunInput::Text(text) => {
-            evaluate_compiled_run_text(text, globals, env, evaluators, profiler)
+            evaluate_compiled_run_text(shared, text, globals, env, evaluators, profiler)
         }
     }
 }
 
 fn evaluate_compiled_run_fragment<'a>(
+    shared: &'a RunHydrationStaticState,
     fragment: &'a CompiledRunFragment,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     env: &RuntimeBindingEnv,
@@ -1201,27 +1217,39 @@ fn evaluate_compiled_run_fragment<'a>(
         .collect::<Result<Vec<_>, _>>()?;
     let execution_key = Arc::as_ptr(&fragment.execution) as usize;
     let kernel_profiling_enabled = profiler.kernel_profiling_enabled();
+    let runtime_execution_key = Arc::as_ptr(&shared.runtime_execution) as usize;
+    let mut required_globals = BTreeMap::new();
+    for dep in &fragment.required_signal_globals {
+        let value = match dep.kind {
+            CompiledRunGlobalKind::Signal => globals.get(&dep.runtime_item).cloned().ok_or_else(|| {
+                format!(
+                    "runtime expression {} requires current signal `{}` (runtime item {}) but no committed snapshot exists",
+                    fragment.expr.as_raw(),
+                    dep.name,
+                    dep.runtime_item
+                )
+            })?,
+            CompiledRunGlobalKind::RuntimeItem => {
+                let runtime_evaluator = evaluators
+                    .entry(runtime_execution_key)
+                    .or_insert_with(|| shared.runtime_execution.create_engine(kernel_profiling_enabled));
+                runtime_evaluator
+                    .evaluate_item(dep.runtime_item, globals)
+                    .map_err(|error| {
+                        format!(
+                            "runtime expression {} could not evaluate global `{}` (runtime item {}): {error}",
+                            fragment.expr.as_raw(),
+                            dep.name,
+                            dep.runtime_item
+                        )
+                    })?
+            }
+        };
+        required_globals.insert(dep.fragment_item, value);
+    }
     let evaluator = evaluators
         .entry(execution_key)
         .or_insert_with(|| fragment.execution.create_engine(kernel_profiling_enabled));
-    let required_globals = fragment
-        .required_signal_globals
-        .iter()
-        .map(|dep| {
-            globals
-                .get(&dep.runtime_item)
-                .cloned()
-                .map(|value| (dep.fragment_item, value))
-                .ok_or_else(|| {
-                    format!(
-                        "runtime expression {} requires current signal `{}` (runtime item {}) but no committed snapshot exists",
-                        fragment.expr.as_raw(),
-                        dep.name,
-                        dep.runtime_item
-                    )
-                })
-        })
-        .collect::<Result<BTreeMap<_, _>, _>>()?;
     let item = fragment
         .execution
         .backend_view()
@@ -1275,6 +1303,7 @@ fn backend_items_by_hir(
 }
 
 fn evaluate_compiled_run_text<'a>(
+    shared: &'a RunHydrationStaticState,
     text: &'a CompiledRunText,
     globals: &BTreeMap<BackendItemId, RuntimeValue>,
     env: &RuntimeBindingEnv,
@@ -1288,7 +1317,7 @@ fn evaluate_compiled_run_text<'a>(
             CompiledRunTextSegment::Text(text) => rendered.push_str(text),
             CompiledRunTextSegment::Interpolation(fragment) => {
                 let value = strip_signal_runtime_value(evaluate_compiled_run_fragment(
-                    fragment, globals, env, evaluators, profiler,
+                    shared, fragment, globals, env, evaluators, profiler,
                 )?);
                 if matches!(value, RuntimeValue::Callable(_)) {
                     return Err(format!(

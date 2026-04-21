@@ -159,6 +159,11 @@ impl SourceProviderContext {
         self.app_dir.as_ref()
     }
 
+    pub fn cache_home(&self) -> Result<PathBuf, Box<str>> {
+        self.cache_home_text()
+            .map(|path| PathBuf::from(path.as_ref()))
+    }
+
     pub fn with_stdin_text(mut self, stdin: impl Into<String>) -> Self {
         self.stdin_override = Some(Ok(stdin.into().into_boxed_str()));
         self

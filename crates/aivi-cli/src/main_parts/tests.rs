@@ -455,6 +455,95 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 }
 
 #[test]
+fn source_run_cache_roundtrip_reloads_frozen_catalog_without_backend_program() {
+    let workspace = TempDir::new("source-run-cache-roundtrip");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.labels (titleText)
+
+value main =
+    <Window title={titleText} />
+"#,
+    );
+    workspace.write(
+        "shared/labels.aivi",
+        r#"
+value titleText : Text = "Cache title"
+"#,
+    );
+    let entry = workspace.path().join("main.aivi");
+    let snapshot = WorkspaceHirSnapshot::load(&entry).expect("workspace cache fixture should load");
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", Some("main"))
+        .expect("workspace cache fixture should prepare cleanly");
+    let cache_home = workspace.path().join("cache-home");
+
+    super::store_cached_source_run_artifact(
+        &cache_home,
+        &entry,
+        Some("main"),
+        &snapshot,
+        &artifact,
+    )
+    .expect("source run cache should store");
+    let cached = super::load_cached_source_run_artifact(&cache_home, &entry, Some("main"))
+        .expect("source run cache should reload");
+
+    assert_eq!(cached.view_name, artifact.view_name);
+    assert!(matches!(
+        cached.backend,
+        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(_)
+    ));
+    assert!(cached.backend_native_kernels.is_empty());
+}
+
+#[test]
+fn source_run_cache_invalidates_when_dependency_changes() {
+    let workspace = TempDir::new("source-run-cache-invalidate");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.labels (titleText)
+
+value main =
+    <Window title={titleText} />
+"#,
+    );
+    let dependency = workspace.write(
+        "shared/labels.aivi",
+        r#"
+value titleText : Text = "Before"
+"#,
+    );
+    let entry = workspace.path().join("main.aivi");
+    let snapshot = WorkspaceHirSnapshot::load(&entry).expect("workspace cache fixture should load");
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", Some("main"))
+        .expect("workspace cache fixture should prepare cleanly");
+    let cache_home = workspace.path().join("cache-home");
+
+    super::store_cached_source_run_artifact(
+        &cache_home,
+        &entry,
+        Some("main"),
+        &snapshot,
+        &artifact,
+    )
+    .expect("source run cache should store");
+    fs::write(
+        &dependency,
+        r#"
+value titleText : Text = "After"
+"#,
+    )
+    .expect("dependency rewrite should succeed");
+
+    assert!(
+        super::load_cached_source_run_artifact(&cache_home, &entry, Some("main")).is_none(),
+        "source run cache should miss after dependency content changes"
+    );
+}
+
+#[test]
 fn snake_embedded_bundle_reloads_frozen_catalog_without_backend_program() {
     with_native_kernel_plans(false, || {
         let path = repo_path("demos/snake.aivi");
@@ -1181,6 +1270,10 @@ fn run_hydration_planner_precomputes_control_and_setter_updates_off_thread() {
         patterns: artifact.patterns.clone(),
         bridge: artifact.bridge.clone(),
         inputs: artifact.hydration_inputs.clone(),
+        runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+            artifact.backend.clone(),
+            artifact.backend_native_kernels.clone(),
+        )),
     };
     let plan = plan_run_hydration(&shared, &BTreeMap::new())
         .expect("inline planner window should plan without runtime globals");
@@ -1261,6 +1354,10 @@ value view =
         patterns: artifact.patterns.clone(),
         bridge: artifact.bridge.clone(),
         inputs: artifact.hydration_inputs.clone(),
+        runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+            artifact.backend.clone(),
+            artifact.backend_native_kernels.clone(),
+        )),
     };
     let plan = plan_run_hydration(&shared, &BTreeMap::new())
         .expect("truthy carrier show conditions should hydrate");
@@ -1672,6 +1769,10 @@ value view =
             patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
+            runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+                artifact.backend.clone(),
+                artifact.backend_native_kernels.clone(),
+            )),
         },
         &BTreeMap::new(),
     )

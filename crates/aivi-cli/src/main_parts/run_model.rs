@@ -115,6 +115,9 @@ impl std::ops::Deref for RunArtifact {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct RunArtifactPreparationMetrics {
+    source_run_cache_load: Duration,
+    source_run_cache_store: Duration,
+    source_run_cache_hit: bool,
     workspace_collection: Duration,
     markup_lowering: Duration,
     widget_bridge_lowering: Duration,
@@ -205,11 +208,18 @@ struct RunFragmentParameter {
     name: Box<str>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum CompiledRunGlobalKind {
+    Signal,
+    RuntimeItem,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct CompiledRunSignalGlobal {
     fragment_item: BackendItemId,
     runtime_item: BackendItemId,
     name: Box<str>,
+    kind: CompiledRunGlobalKind,
 }
 
 #[derive(Clone, Debug)]
@@ -307,6 +317,7 @@ struct RunHydrationStaticState {
     patterns: RunPatternTable,
     bridge: GtkBridgeGraph,
     inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
+    runtime_execution: Arc<RunFragmentExecutionUnit>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

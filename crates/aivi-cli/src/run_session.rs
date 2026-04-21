@@ -267,6 +267,10 @@ impl RunLaunchConfig {
     pub(super) fn new(providers: SourceProviderManager) -> Self {
         Self { providers }
     }
+
+    pub(super) fn cache_home(&self) -> Result<PathBuf, Box<str>> {
+        self.providers.cache_home()
+    }
 }
 
 #[allow(dead_code)]
@@ -1172,6 +1176,10 @@ where
                             patterns: surface.patterns,
                             bridge: surface.bridge,
                             inputs: surface.hydration_inputs,
+                            runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+                                backend.clone(),
+                                backend_native_kernels.clone(),
+                            )),
                         }),
                         session_notifier.clone(),
                     ),
@@ -2945,6 +2953,10 @@ export main
             patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
+            runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+                artifact.backend.clone(),
+                artifact.backend_native_kernels.clone(),
+            )),
         };
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
@@ -3022,6 +3034,10 @@ export main
             patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
+            runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+                artifact.backend.clone(),
+                artifact.backend_native_kernels.clone(),
+            )),
         };
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())

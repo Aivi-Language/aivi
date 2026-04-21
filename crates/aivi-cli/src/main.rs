@@ -6,10 +6,11 @@ mod run_session;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
     env,
     ffi::OsString,
     fs,
+    hash::{Hash, Hasher},
     io::{self, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,

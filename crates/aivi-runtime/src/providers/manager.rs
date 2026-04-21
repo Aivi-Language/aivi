@@ -91,6 +91,10 @@ impl SourceProviderManager {
         self.context.app_dir()
     }
 
+    pub fn cache_home(&self) -> Result<PathBuf, Box<str>> {
+        self.context.cache_home()
+    }
+
     pub fn active_provider(&self, instance: SourceInstanceId) -> Option<&RuntimeSourceProvider> {
         self.active
             .get(&instance)

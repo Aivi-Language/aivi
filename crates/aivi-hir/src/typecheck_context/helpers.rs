@@ -765,6 +765,17 @@ mod helper_tests {
         assert_eq!(type_constructor_arity(TypeConstructorHead::Item(foreign), &module), 0);
         assert!(domain_carrier_type(&module, foreign, &[]).is_none());
         assert!(opaque_type_carrier_type(&module, foreign, &[]).is_none());
+        assert!(
+            opaque_type_variants(
+                &module,
+                &GateType::OpaqueItem {
+                    item: foreign,
+                    name: "Foreign".to_owned(),
+                    arguments: Vec::new(),
+                },
+            )
+            .is_none()
+        );
     }
 }
 
@@ -928,7 +939,7 @@ pub fn opaque_type_variants(module: &Module, subject: &GateType) -> Option<Vec<O
             arguments,
             ..
         } => {
-            let Item::Type(type_item) = &module.items()[*item] else {
+            let Item::Type(type_item) = module.items().get(*item)? else {
                 return None;
             };
             let TypeItemBody::Sum(variants) = &type_item.body else {

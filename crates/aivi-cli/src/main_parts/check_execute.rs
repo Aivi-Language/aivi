@@ -252,6 +252,52 @@ fn run_markup_file_with_launch_config(
         );
     }
 
+    let cache_lookup_started = Instant::now();
+    let cache_home = launch_config.cache_home().ok();
+    let cached_artifact = cache_home
+        .as_deref()
+        .and_then(|cache_home| load_cached_source_run_artifact(cache_home, path, requested_view));
+    let source_run_cache_load = cache_lookup_started.elapsed();
+    if timings {
+        print_run_prelaunch_stage_progress(
+            "source run cache lookup",
+            source_run_cache_load,
+            total_start.elapsed(),
+        );
+    }
+    if let Some(artifact) = cached_artifact {
+        let artifact_metrics = RunArtifactPreparationMetrics {
+            source_run_cache_load,
+            source_run_cache_hit: true,
+            total: source_run_cache_load,
+            ..RunArtifactPreparationMetrics::default()
+        };
+        return run_session::launch_run_with_config(
+            path,
+            artifact,
+            launch_config,
+            move |stage, startup_metrics| {
+                if timings {
+                    print_run_startup_stage_progress(stage, *startup_metrics);
+                }
+            },
+            move |startup_metrics| {
+                if timings {
+                    print_run_timing_report(
+                        path,
+                        Duration::default(),
+                        Duration::default(),
+                        Duration::default(),
+                        QueryCacheStats::default(),
+                        artifact_metrics,
+                        *startup_metrics,
+                        total_start.elapsed(),
+                    );
+                }
+            },
+        );
+    }
+
     let t0 = Instant::now();
     let snapshot = WorkspaceHirSnapshot::load(path)?;
     let load_duration = t0.elapsed();
@@ -286,20 +332,7 @@ fn run_markup_file_with_launch_config(
     }
 
     let lowered = snapshot.entry_hir();
-    let t0 = Instant::now();
-    let workspace_hir_arcs = collect_workspace_hirs_sorted(&snapshot);
-    let workspace_collection_duration = t0.elapsed();
-    if timings {
-        print_run_prelaunch_stage_progress(
-            "workspace collect",
-            workspace_collection_duration,
-            total_start.elapsed(),
-        );
-    }
-    let workspace_hirs: Vec<(&str, &HirModule)> = workspace_hir_arcs
-        .iter()
-        .map(|(name, arc)| (name.as_str(), arc.module()))
-        .collect();
+    let workspace_hirs: Vec<(&str, &HirModule)> = Vec::new();
     let mut report_prelaunch_stage = |stage: &'static str, duration: Duration| {
         if timings {
             print_run_prelaunch_stage_progress(stage, duration, total_start.elapsed());
@@ -319,9 +352,12 @@ fn run_markup_file_with_launch_config(
             return Ok(ExitCode::FAILURE);
         }
     };
-    prepared.metrics.workspace_collection = workspace_collection_duration;
+    prepared.metrics.source_run_cache_load = source_run_cache_load;
     let artifact_metrics = prepared.metrics;
     let query_cache = snapshot.frontend.db.cache_stats();
+    let cache_artifact = cache_home
+        .as_ref()
+        .map(|_| prepared.artifact.clone());
 
     run_session::launch_run_with_config(
         path,
@@ -330,14 +366,28 @@ fn run_markup_file_with_launch_config(
         move |stage, startup_metrics| {
             if timings {
                 print_run_startup_stage_progress(stage, *startup_metrics);
-            }
-        },
-        move |startup_metrics| {
-            if timings {
-                print_run_timing_report(
-                    path,
-                    load_duration,
-                    syntax_duration,
+                }
+            },
+            move |startup_metrics| {
+                let mut artifact_metrics = artifact_metrics;
+                if let (Some(cache_home), Some(cache_artifact)) =
+                    (cache_home.as_deref(), cache_artifact.as_ref())
+                {
+                    let cache_store_started = Instant::now();
+                    let _ = store_cached_source_run_artifact(
+                        cache_home,
+                        path,
+                        requested_view,
+                        &snapshot,
+                        cache_artifact,
+                    );
+                    artifact_metrics.source_run_cache_store = cache_store_started.elapsed();
+                }
+                if timings {
+                    print_run_timing_report(
+                        path,
+                        load_duration,
+                        syntax_duration,
                     hir_duration,
                     query_cache,
                     artifact_metrics,

@@ -1,12 +1,32 @@
 const RUN_ARTIFACT_FORMAT: &str = "aivi.run-artifact";
-const RUN_ARTIFACT_VERSION: u32 = 3;
+const RUN_ARTIFACT_VERSION: u32 = 4;
 const RUN_ARTIFACT_FILE_NAME: &str = "run-artifact.bin";
 const RUN_ARTIFACT_PAYLOAD_DIR: &str = "payloads";
 const FROZEN_RUN_IMAGE_FORMAT: &str = "aivi.frozen-run-image";
-const FROZEN_RUN_IMAGE_VERSION: u32 = 1;
+const FROZEN_RUN_IMAGE_VERSION: u32 = 2;
 const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
 const FROZEN_BACKEND_CATALOG_FORMAT: &str = "aivi.frozen-backend-catalog";
 const FROZEN_BACKEND_CATALOG_VERSION: u32 = 1;
+const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
+const SOURCE_RUN_CACHE_VERSION: u32 = 1;
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "2";
+const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
+const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct SourceRunCacheManifest {
+    format: Box<str>,
+    version: u32,
+    entry_path: Box<str>,
+    requested_view: Option<Box<str>>,
+    dependencies: Box<[SourceRunCacheDependency]>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct SourceRunCacheDependency {
+    path: Box<str>,
+    fingerprint: u64,
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct SerializedRunArtifact {
@@ -1246,6 +1266,42 @@ fn maybe_load_serialized_run_artifact(
     load_serialized_run_artifact(path, requested_view).map(Some)
 }
 
+fn load_cached_source_run_artifact(
+    cache_home: &Path,
+    entry_path: &Path,
+    requested_view: Option<&str>,
+) -> Option<RunArtifact> {
+    let cache_dir = source_run_cache_dir(cache_home, entry_path, requested_view);
+    let manifest_path = cache_dir.join(SOURCE_RUN_CACHE_METADATA_FILE_NAME);
+    let image_path = cache_dir.join(FROZEN_RUN_IMAGE_FILE_NAME);
+    let manifest = read_source_run_cache_manifest(&manifest_path).ok()?;
+    validate_source_run_cache_manifest(&manifest, entry_path, requested_view).ok()?;
+    if !source_run_cache_dependencies_match(&manifest) {
+        return None;
+    }
+    load_frozen_run_image(&image_path, requested_view).ok()
+}
+
+fn store_cached_source_run_artifact(
+    cache_home: &Path,
+    entry_path: &Path,
+    requested_view: Option<&str>,
+    snapshot: &WorkspaceHirSnapshot,
+    artifact: &RunArtifact,
+) -> Result<(), String> {
+    let cache_dir = source_run_cache_dir(cache_home, entry_path, requested_view);
+    fs::create_dir_all(&cache_dir)
+        .map_err(|error| format!("failed to create {}: {error}", cache_dir.display()))?;
+    write_frozen_run_image_bundle_without_native_kernels(&cache_dir, artifact)?;
+    let manifest = build_source_run_cache_manifest(entry_path, requested_view, snapshot)?;
+    let manifest_path = cache_dir.join(SOURCE_RUN_CACHE_METADATA_FILE_NAME);
+    let bytes = serde_json::to_vec(&manifest)
+        .map_err(|error| format!("failed to encode source run cache manifest: {error}"))?;
+    fs::write(&manifest_path, bytes)
+        .map_err(|error| format!("failed to write {}: {error}", manifest_path.display()))?;
+    Ok(())
+}
+
 fn load_serialized_run_artifact(
     path: &Path,
     requested_view: Option<&str>,
@@ -1297,6 +1353,118 @@ fn load_serialized_run_artifact_from_bytes(
         ));
     }
     deserialize_run_artifact(serialized, payload_reader)
+}
+
+fn source_run_cache_dir(
+    cache_home: &Path,
+    entry_path: &Path,
+    requested_view: Option<&str>,
+) -> PathBuf {
+    let mut hasher = DefaultHasher::new();
+    SOURCE_RUN_CACHE_FORMAT.hash(&mut hasher);
+    SOURCE_RUN_CACHE_VERSION.hash(&mut hasher);
+    SOURCE_RUN_CACHE_NAMESPACE_REVISION.hash(&mut hasher);
+    env!("CARGO_PKG_VERSION").hash(&mut hasher);
+    normalize_source_run_cache_path(entry_path)
+        .to_string_lossy()
+        .hash(&mut hasher);
+    requested_view.hash(&mut hasher);
+    cache_home
+        .join("aivi")
+        .join(SOURCE_RUN_CACHE_DIR)
+        .join(format!("{:016x}", hasher.finish()))
+}
+
+fn normalize_source_run_cache_path(path: &Path) -> PathBuf {
+    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    fs::canonicalize(path)
+        .or_else(|_| fs::canonicalize(cwd.join(path)))
+        .unwrap_or_else(|_| {
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                cwd.join(path)
+            }
+        })
+}
+
+fn build_source_run_cache_manifest(
+    entry_path: &Path,
+    requested_view: Option<&str>,
+    snapshot: &WorkspaceHirSnapshot,
+) -> Result<SourceRunCacheManifest, String> {
+    let mut dependencies = snapshot
+        .files
+        .iter()
+        .map(|file| {
+            let path = normalize_source_run_cache_path(&file.path(&snapshot.frontend.db));
+            let fingerprint = source_run_cache_file_fingerprint(&path)?;
+            Ok(SourceRunCacheDependency {
+                path: path.to_string_lossy().into_owned().into_boxed_str(),
+                fingerprint,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    dependencies.sort_by(|left, right| left.path.cmp(&right.path));
+    dependencies.dedup_by(|left, right| left.path == right.path);
+    Ok(SourceRunCacheManifest {
+        format: SOURCE_RUN_CACHE_FORMAT.into(),
+        version: SOURCE_RUN_CACHE_VERSION,
+        entry_path: normalize_source_run_cache_path(entry_path)
+            .to_string_lossy()
+            .into_owned()
+            .into_boxed_str(),
+        requested_view: requested_view.map(|view| view.into()),
+        dependencies: dependencies.into_boxed_slice(),
+    })
+}
+
+fn read_source_run_cache_manifest(path: &Path) -> Result<SourceRunCacheManifest, String> {
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| format!("failed to decode {}: {error}", path.display()))
+}
+
+fn validate_source_run_cache_manifest(
+    manifest: &SourceRunCacheManifest,
+    entry_path: &Path,
+    requested_view: Option<&str>,
+) -> Result<(), String> {
+    if manifest.format.as_ref() != SOURCE_RUN_CACHE_FORMAT {
+        return Err(format!(
+            "source run cache format mismatch: expected `{SOURCE_RUN_CACHE_FORMAT}`, got `{}`",
+            manifest.format
+        ));
+    }
+    if manifest.version != SOURCE_RUN_CACHE_VERSION {
+        return Err(format!(
+            "source run cache version mismatch: expected {}, got {}",
+            SOURCE_RUN_CACHE_VERSION, manifest.version
+        ));
+    }
+    if manifest.entry_path.as_ref()
+        != normalize_source_run_cache_path(entry_path).to_string_lossy()
+    {
+        return Err("source run cache entry path mismatch".to_owned());
+    }
+    if manifest.requested_view.as_deref() != requested_view {
+        return Err("source run cache view mismatch".to_owned());
+    }
+    Ok(())
+}
+
+fn source_run_cache_dependencies_match(manifest: &SourceRunCacheManifest) -> bool {
+    manifest.dependencies.iter().all(|dependency| {
+        source_run_cache_file_fingerprint(Path::new(dependency.path.as_ref()))
+            .is_ok_and(|fingerprint| fingerprint == dependency.fingerprint)
+    })
+}
+
+fn source_run_cache_file_fingerprint(path: &Path) -> Result<u64, String> {
+    let bytes = fs::read(path).map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    Ok(hasher.finish())
 }
 
 #[allow(dead_code)]
