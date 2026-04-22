@@ -17,6 +17,8 @@ struct RunProgressState {
     startup_history: Vec<Duration>,
     recent: VecDeque<(Box<str>, Duration)>,
     rendered_lines: usize,
+    frame_index: usize,
+    color_enabled: bool,
 }
 
 struct RunProgressStageState {
@@ -32,6 +34,7 @@ impl RunProgressReporter {
                 thread: None,
             };
         }
+        let color_enabled = progress_color_enabled();
         let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let state = Arc::new(std::sync::Mutex::new(RunProgressState {
             title: compact_progress_path(path).into(),
@@ -41,6 +44,8 @@ impl RunProgressReporter {
             startup_history: Vec::new(),
             recent: VecDeque::new(),
             rendered_lines: 0,
+            frame_index: 0,
+            color_enabled,
         }));
         let thread = {
             let state = Arc::clone(&state);
@@ -172,6 +177,7 @@ fn render_run_progress(state: &Arc<std::sync::Mutex<RunProgressState>>) {
         let lines = build_run_progress_lines(&state);
         let previous_lines = state.rendered_lines;
         state.rendered_lines = lines.len();
+        state.frame_index = state.frame_index.wrapping_add(1);
         (lines, previous_lines)
     };
     let mut stderr = io::stderr().lock();
@@ -185,22 +191,97 @@ fn render_run_progress(state: &Arc<std::sync::Mutex<RunProgressState>>) {
 }
 
 fn build_run_progress_lines(state: &RunProgressState) -> Vec<String> {
+    let prep_status = progress_lane_status(
+        state.prelaunch_current.as_ref(),
+        state.prelaunch_history.is_empty(),
+    );
+    let startup_status = progress_lane_status(
+        state.startup_current.as_ref(),
+        state.startup_history.is_empty(),
+    );
+    let prep_label = pad_progress_text(
+        &current_progress_label(state.prelaunch_current.as_ref(), state.prelaunch_history.is_empty()),
+        24,
+    );
+    let startup_label = pad_progress_text(
+        &current_progress_label(state.startup_current.as_ref(), state.startup_history.is_empty()),
+        24,
+    );
     vec![
-        format!("╭─ aivi run • {}", state.title),
         format!(
-            "│ prep    {}  {:<24} {}",
-            progress_sparkline(&state.prelaunch_history),
-            current_progress_label(state.prelaunch_current.as_ref(), state.prelaunch_history.is_empty()),
-            current_progress_elapsed(state.prelaunch_current.as_ref()),
+            "{} {} {} {}",
+            progress_paint_rgb(state.color_enabled, (102, 217, 239), "╭─"),
+            progress_paint_rgb(state.color_enabled, (189, 147, 249), "aivi run"),
+            progress_paint_dim(state.color_enabled, "•"),
+            progress_paint_dim(state.color_enabled, &state.title),
         ),
         format!(
-            "│ startup {}  {:<24} {}",
-            progress_sparkline(&state.startup_history),
-            current_progress_label(state.startup_current.as_ref(), state.startup_history.is_empty()),
-            current_progress_elapsed(state.startup_current.as_ref()),
+            "{} {} {}  {}  {} {}",
+            progress_paint_dim(state.color_enabled, "│"),
+            progress_paint_rgb(state.color_enabled, (102, 217, 239), "prep   "),
+            progress_orbit(state.frame_index, prep_status, state.color_enabled),
+            progress_sparkline(
+                &state.prelaunch_history,
+                state.color_enabled,
+                (77, 208, 225),
+                (124, 77, 255),
+            ),
+            prep_label,
+            progress_paint_dim(
+                state.color_enabled,
+                &current_progress_elapsed(state.prelaunch_current.as_ref()),
+            ),
         ),
-        format!("╰─ recent  {}", recent_progress_summary(&state.recent)),
+        format!(
+            "{} {} {}  {}  {} {}",
+            progress_paint_dim(state.color_enabled, "│"),
+            progress_paint_rgb(state.color_enabled, (255, 121, 198), "startup"),
+            progress_orbit(state.frame_index.wrapping_add(2), startup_status, state.color_enabled),
+            progress_sparkline(
+                &state.startup_history,
+                state.color_enabled,
+                (255, 184, 108),
+                (255, 85, 85),
+            ),
+            startup_label,
+            progress_paint_dim(
+                state.color_enabled,
+                &current_progress_elapsed(state.startup_current.as_ref()),
+            ),
+        ),
+        format!(
+            "{} {}  {}",
+            progress_paint_dim(state.color_enabled, "╰─"),
+            progress_paint_rgb(state.color_enabled, (139, 233, 253), "recent"),
+            progress_paint_dim(state.color_enabled, &recent_progress_summary(&state.recent)),
+        ),
     ]
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProgressLaneStatus {
+    Queued,
+    Active,
+    Complete,
+}
+
+fn progress_lane_status(current: Option<&RunProgressStageState>, empty: bool) -> ProgressLaneStatus {
+    match current {
+        Some(_) => ProgressLaneStatus::Active,
+        None if empty => ProgressLaneStatus::Queued,
+        None => ProgressLaneStatus::Complete,
+    }
+}
+
+fn pad_progress_text(text: &str, width: usize) -> String {
+    let char_len = text.chars().count();
+    if char_len >= width {
+        return text.to_owned();
+    }
+    let mut padded = String::with_capacity(text.len() + width - char_len);
+    padded.push_str(text);
+    padded.extend(std::iter::repeat_n(' ', width - char_len));
+    padded
 }
 
 fn current_progress_label(current: Option<&RunProgressStageState>, empty: bool) -> String {
@@ -228,11 +309,16 @@ fn recent_progress_summary(recent: &VecDeque<(Box<str>, Duration)>) -> String {
         .join(" · ")
 }
 
-fn progress_sparkline(samples: &[Duration]) -> String {
+fn progress_sparkline(
+    samples: &[Duration],
+    color_enabled: bool,
+    start_color: (u8, u8, u8),
+    end_color: (u8, u8, u8),
+) -> String {
     const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     const WIDTH: usize = 10;
     if samples.is_empty() {
-        return "··········".to_owned();
+        return progress_paint_rgb(color_enabled, (98, 114, 164), "··········");
     }
     let window = if samples.len() > WIDTH {
         &samples[samples.len() - WIDTH..]
@@ -246,13 +332,72 @@ fn progress_sparkline(samples: &[Duration]) -> String {
         .unwrap_or(Duration::from_millis(1))
         .max(Duration::from_millis(1));
     let mut rendered = String::new();
-    for _ in 0..(WIDTH - window.len()) {
-        rendered.push('·');
+    for index in 0..(WIDTH - window.len()) {
+        rendered.push_str(&progress_paint_rgb(
+            color_enabled,
+            lerp_progress_color((98, 114, 164), start_color, index, WIDTH.saturating_sub(1)),
+            "·",
+        ));
     }
-    for sample in window {
+    for (position, sample) in window.iter().enumerate() {
         let ratio = sample.as_secs_f64() / max.as_secs_f64();
-        let index = (ratio * ((BLOCKS.len() - 1) as f64)).round() as usize;
-        rendered.push(BLOCKS[index.min(BLOCKS.len() - 1)]);
+        let block_index = (ratio * ((BLOCKS.len() - 1) as f64)).round() as usize;
+        let glyph = BLOCKS[block_index.min(BLOCKS.len() - 1)].to_string();
+        let color_index = WIDTH - window.len() + position;
+        rendered.push_str(&progress_paint_rgb(
+            color_enabled,
+            lerp_progress_color(start_color, end_color, color_index, WIDTH.saturating_sub(1)),
+            &glyph,
+        ));
+    }
+    rendered
+}
+
+fn progress_orbit(
+    frame_index: usize,
+    status: ProgressLaneStatus,
+    color_enabled: bool,
+) -> String {
+    const FRAMES: &[char] = &['⣴', '⣾', '⣶', '⣤', '⣄'];
+    const ACTIVE_COLORS: &[(u8, u8, u8)] = &[
+        (139, 233, 253),
+        (80, 250, 123),
+        (255, 184, 108),
+        (255, 121, 198),
+        (189, 147, 249),
+    ];
+    const COMPLETE_COLORS: &[(u8, u8, u8)] = &[
+        (80, 250, 123),
+        (98, 220, 140),
+        (118, 200, 154),
+        (138, 180, 168),
+        (158, 160, 182),
+    ];
+    const QUEUED_COLORS: &[(u8, u8, u8)] = &[
+        (98, 114, 164),
+        (98, 114, 164),
+        (98, 114, 164),
+        (98, 114, 164),
+        (98, 114, 164),
+    ];
+    let mut rendered = String::new();
+    let colors = match status {
+        ProgressLaneStatus::Queued => QUEUED_COLORS,
+        ProgressLaneStatus::Active => ACTIVE_COLORS,
+        ProgressLaneStatus::Complete => COMPLETE_COLORS,
+    };
+    for offset in 0..FRAMES.len() {
+        let glyph = match status {
+            ProgressLaneStatus::Queued => '·',
+            ProgressLaneStatus::Active => FRAMES[(frame_index + offset) % FRAMES.len()],
+            ProgressLaneStatus::Complete => '⣶',
+        }
+        .to_string();
+        rendered.push_str(&progress_paint_rgb(
+            color_enabled,
+            colors[offset],
+            &glyph,
+        ));
     }
     rendered
 }
@@ -294,6 +439,54 @@ fn format_duration_compact(duration: Duration) -> String {
     } else {
         format!("{:.0}µs", duration.as_secs_f64() * 1_000_000.0)
     }
+}
+
+fn progress_color_enabled() -> bool {
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+    if std::env::var_os("FORCE_COLOR").is_some() {
+        return true;
+    }
+    io::stderr().is_terminal()
+}
+
+fn progress_paint_rgb(color_enabled: bool, color: (u8, u8, u8), text: &str) -> String {
+    if !color_enabled {
+        return text.to_owned();
+    }
+    format!(
+        "\x1b[38;2;{};{};{}m{text}\x1b[0m",
+        color.0, color.1, color.2
+    )
+}
+
+fn progress_paint_dim(color_enabled: bool, text: &str) -> String {
+    if !color_enabled {
+        return text.to_owned();
+    }
+    format!("\x1b[2m{text}\x1b[0m")
+}
+
+fn lerp_progress_color(
+    start: (u8, u8, u8),
+    end: (u8, u8, u8),
+    index: usize,
+    max_index: usize,
+) -> (u8, u8, u8) {
+    if max_index == 0 {
+        return start;
+    }
+    let t = index as f32 / max_index as f32;
+    (
+        lerp_progress_channel(start.0, end.0, t),
+        lerp_progress_channel(start.1, end.1, t),
+        lerp_progress_channel(start.2, end.2, t),
+    )
+}
+
+fn lerp_progress_channel(start: u8, end: u8, t: f32) -> u8 {
+    ((start as f32) + ((end as f32) - (start as f32)) * t).round() as u8
 }
 
 fn print_run_timing_report(

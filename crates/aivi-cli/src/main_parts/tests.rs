@@ -17,12 +17,12 @@ use aivi_runtime::{
 };
 use aivi_syntax::parse_module;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     env, fs,
     path::{Path, PathBuf},
     process::ExitCode,
     sync::{Arc, Once},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 fn fixture(path: &str) -> PathBuf {
@@ -2873,4 +2873,69 @@ fn execute_runtime_task_plan_returns_pure_payload() {
     assert_eq!(result, RuntimeValue::Bool(true));
     assert!(stdout.is_empty());
     assert!(stderr.is_empty());
+}
+
+#[test]
+fn progress_lines_render_braille_spinner_with_color() {
+    let state = super::RunProgressState {
+        title: "demos/snake.aivi".into(),
+        prelaunch_current: Some(super::RunProgressStageState {
+            label: "HIR lowering".into(),
+            started_at: Instant::now() - Duration::from_millis(180),
+        }),
+        startup_current: None,
+        prelaunch_history: vec![Duration::from_millis(35), Duration::from_millis(120)],
+        startup_history: vec![Duration::from_millis(15)],
+        recent: VecDeque::from([
+            ("load + parse".into(), Duration::from_millis(331)),
+            ("syntax check".into(), Duration::from_micros(48)),
+        ]),
+        rendered_lines: 0,
+        frame_index: 0,
+        color_enabled: true,
+    };
+
+    let lines = super::build_run_progress_lines(&state);
+
+    assert!(
+        lines.iter().any(|line| line.contains("\x1b[38;2;")),
+        "progress output should emit truecolor ANSI escapes when colors are enabled"
+    );
+    assert!(
+        lines[1].contains("⣴") || lines[1].contains("⣾") || lines[1].contains("⣶"),
+        "active prep lane should render the braille spinner trail"
+    );
+}
+
+#[test]
+fn progress_lines_stay_plain_when_color_disabled() {
+    let state = super::RunProgressState {
+        title: "demos/reversi.aivi".into(),
+        prelaunch_current: None,
+        startup_current: Some(super::RunProgressStageState {
+            label: "session setup".into(),
+            started_at: Instant::now() - Duration::from_millis(95),
+        }),
+        prelaunch_history: vec![Duration::from_millis(40)],
+        startup_history: vec![Duration::from_millis(10), Duration::from_millis(90)],
+        recent: VecDeque::from([("runtime link".into(), Duration::from_micros(274))]),
+        rendered_lines: 0,
+        frame_index: 2,
+        color_enabled: false,
+    };
+
+    let lines = super::build_run_progress_lines(&state);
+
+    assert!(
+        lines.iter().all(|line| !line.contains("\x1b[")),
+        "plain progress rendering should not include ANSI escapes"
+    );
+    assert!(
+        lines[2].contains("⣴")
+            || lines[2].contains("⣾")
+            || lines[2].contains("⣶")
+            || lines[2].contains("⣤")
+            || lines[2].contains("⣄"),
+        "active startup lane should keep the braille spinner trail without color"
+    );
 }
