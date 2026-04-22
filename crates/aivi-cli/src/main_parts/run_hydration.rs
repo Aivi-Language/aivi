@@ -1,3 +1,301 @@
+#[derive(Clone, Default)]
+struct RunProgressHandle {
+    state: Option<Arc<std::sync::Mutex<RunProgressState>>>,
+    stop: Option<Arc<std::sync::atomic::AtomicBool>>,
+}
+
+struct RunProgressReporter {
+    handle: RunProgressHandle,
+    thread: Option<JoinHandle<()>>,
+}
+
+struct RunProgressState {
+    title: Box<str>,
+    prelaunch_current: Option<RunProgressStageState>,
+    startup_current: Option<RunProgressStageState>,
+    prelaunch_history: Vec<Duration>,
+    startup_history: Vec<Duration>,
+    recent: VecDeque<(Box<str>, Duration)>,
+    rendered_lines: usize,
+}
+
+struct RunProgressStageState {
+    label: Box<str>,
+    started_at: Instant,
+}
+
+impl RunProgressReporter {
+    fn new(path: &Path, enabled: bool) -> Self {
+        if !enabled || !io::stderr().is_terminal() {
+            return Self {
+                handle: RunProgressHandle::default(),
+                thread: None,
+            };
+        }
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let state = Arc::new(std::sync::Mutex::new(RunProgressState {
+            title: compact_progress_path(path).into(),
+            prelaunch_current: None,
+            startup_current: None,
+            prelaunch_history: Vec::new(),
+            startup_history: Vec::new(),
+            recent: VecDeque::new(),
+            rendered_lines: 0,
+        }));
+        let thread = {
+            let state = Arc::clone(&state);
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    render_run_progress(&state);
+                    thread::sleep(Duration::from_millis(120));
+                }
+                render_run_progress(&state);
+            })
+        };
+        Self {
+            handle: RunProgressHandle {
+                state: Some(state),
+                stop: Some(stop),
+            },
+            thread: Some(thread),
+        }
+    }
+
+    fn handle(&self) -> RunProgressHandle {
+        self.handle.clone()
+    }
+}
+
+impl Drop for RunProgressReporter {
+    fn drop(&mut self) {
+        if let Some(stop) = &self.handle.stop {
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+impl RunProgressHandle {
+    fn start_prelaunch(&self, label: &'static str) {
+        let Some(state) = &self.state else {
+            return;
+        };
+        let mut state = state
+            .lock()
+            .expect("run progress state mutex should not be poisoned");
+        state.prelaunch_current = Some(RunProgressStageState {
+            label: label.into(),
+            started_at: Instant::now(),
+        });
+    }
+
+    fn finish_prelaunch(&self, label: &'static str, duration: Duration) {
+        let Some(state) = &self.state else {
+            return;
+        };
+        let mut state = state
+            .lock()
+            .expect("run progress state mutex should not be poisoned");
+        state.prelaunch_current = None;
+        push_progress_sample(&mut state.prelaunch_history, duration, 10);
+        push_recent_progress(&mut state.recent, label, duration);
+    }
+
+    fn mark_launching(&self) {
+        let Some(state) = &self.state else {
+            return;
+        };
+        let mut state = state
+            .lock()
+            .expect("run progress state mutex should not be poisoned");
+        state.startup_current = Some(RunProgressStageState {
+            label: "launching session".into(),
+            started_at: Instant::now(),
+        });
+    }
+
+    fn finish_startup_stage(
+        &self,
+        stage: run_session::RunStartupStage,
+        startup: run_session::RunStartupMetrics,
+    ) {
+        let Some(state) = &self.state else {
+            return;
+        };
+        let mut state = state
+            .lock()
+            .expect("run progress state mutex should not be poisoned");
+        push_progress_sample(&mut state.startup_history, startup.stage_duration(stage), 10);
+        push_recent_progress(&mut state.recent, stage.label(), startup.stage_duration(stage));
+    }
+
+    fn finish_launch(&self) {
+        let Some(state) = &self.state else {
+            return;
+        };
+        {
+            let mut state = state
+                .lock()
+                .expect("run progress state mutex should not be poisoned");
+            state.prelaunch_current = None;
+            state.startup_current = None;
+        }
+        if let Some(stop) = &self.stop {
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+fn push_progress_sample(samples: &mut Vec<Duration>, duration: Duration, max_len: usize) {
+    samples.push(duration);
+    if samples.len() > max_len {
+        let drop_count = samples.len() - max_len;
+        samples.drain(0..drop_count);
+    }
+}
+
+fn push_recent_progress(recent: &mut VecDeque<(Box<str>, Duration)>, label: &str, duration: Duration) {
+    recent.push_back((label.into(), duration));
+    while recent.len() > 3 {
+        recent.pop_front();
+    }
+}
+
+fn render_run_progress(state: &Arc<std::sync::Mutex<RunProgressState>>) {
+    let (lines, previous_lines) = {
+        let mut state = state
+            .lock()
+            .expect("run progress state mutex should not be poisoned");
+        let lines = build_run_progress_lines(&state);
+        let previous_lines = state.rendered_lines;
+        state.rendered_lines = lines.len();
+        (lines, previous_lines)
+    };
+    let mut stderr = io::stderr().lock();
+    if previous_lines > 0 {
+        let _ = write!(stderr, "\x1b[{}A", previous_lines);
+    }
+    for line in &lines {
+        let _ = write!(stderr, "\r\x1b[2K{}\n", line);
+    }
+    let _ = stderr.flush();
+}
+
+fn build_run_progress_lines(state: &RunProgressState) -> Vec<String> {
+    vec![
+        format!("╭─ aivi run • {}", state.title),
+        format!(
+            "│ prep    {}  {:<24} {}",
+            progress_sparkline(&state.prelaunch_history),
+            current_progress_label(state.prelaunch_current.as_ref(), state.prelaunch_history.is_empty()),
+            current_progress_elapsed(state.prelaunch_current.as_ref()),
+        ),
+        format!(
+            "│ startup {}  {:<24} {}",
+            progress_sparkline(&state.startup_history),
+            current_progress_label(state.startup_current.as_ref(), state.startup_history.is_empty()),
+            current_progress_elapsed(state.startup_current.as_ref()),
+        ),
+        format!("╰─ recent  {}", recent_progress_summary(&state.recent)),
+    ]
+}
+
+fn current_progress_label(current: Option<&RunProgressStageState>, empty: bool) -> String {
+    match current {
+        Some(stage) => format!("{}…", stage.label),
+        None if empty => "queued".to_owned(),
+        None => "complete".to_owned(),
+    }
+}
+
+fn current_progress_elapsed(current: Option<&RunProgressStageState>) -> String {
+    current
+        .map(|stage| format_duration_compact(stage.started_at.elapsed()))
+        .unwrap_or_default()
+}
+
+fn recent_progress_summary(recent: &VecDeque<(Box<str>, Duration)>) -> String {
+    if recent.is_empty() {
+        return "waiting for stage data".to_owned();
+    }
+    recent
+        .iter()
+        .map(|(label, duration)| format!("{} {}", truncate_progress_label(label, 18), format_duration_compact(*duration)))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn progress_sparkline(samples: &[Duration]) -> String {
+    const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    const WIDTH: usize = 10;
+    if samples.is_empty() {
+        return "··········".to_owned();
+    }
+    let window = if samples.len() > WIDTH {
+        &samples[samples.len() - WIDTH..]
+    } else {
+        samples
+    };
+    let max = window
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or(Duration::from_millis(1))
+        .max(Duration::from_millis(1));
+    let mut rendered = String::new();
+    for _ in 0..(WIDTH - window.len()) {
+        rendered.push('·');
+    }
+    for sample in window {
+        let ratio = sample.as_secs_f64() / max.as_secs_f64();
+        let index = (ratio * ((BLOCKS.len() - 1) as f64)).round() as usize;
+        rendered.push(BLOCKS[index.min(BLOCKS.len() - 1)]);
+    }
+    rendered
+}
+
+fn truncate_progress_label(label: &str, max_len: usize) -> String {
+    let chars = label.chars().collect::<Vec<_>>();
+    if chars.len() <= max_len {
+        return label.to_owned();
+    }
+    chars[..max_len.saturating_sub(1)]
+        .iter()
+        .collect::<String>()
+        + "…"
+}
+
+fn compact_progress_path(path: &Path) -> String {
+    let rendered = path.display().to_string();
+    if rendered.chars().count() <= 56 {
+        return rendered;
+    }
+    let tail = rendered
+        .chars()
+        .rev()
+        .take(53)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect::<String>();
+    format!("…{tail}")
+}
+
+fn format_duration_compact(duration: Duration) -> String {
+    if duration >= Duration::from_secs(60) {
+        format!("{:.1}m", duration.as_secs_f64() / 60.0)
+    } else if duration >= Duration::from_secs(1) {
+        format!("{:.1}s", duration.as_secs_f64())
+    } else if duration >= Duration::from_millis(1) {
+        format!("{:.0}ms", duration.as_secs_f64() * 1000.0)
+    } else {
+        format!("{:.0}µs", duration.as_secs_f64() * 1_000_000.0)
+    }
+}
+
 fn print_run_timing_report(
     path: &Path,
     load_duration: Duration,
@@ -320,7 +618,6 @@ fn default_runtime_value_for_import_type(ty: &ImportValueType) -> Option<Runtime
 struct CompiledRuntimeFragmentUnit {
     core: Arc<aivi_core::LoweredRuntimeFragment>,
     backend: Arc<BackendProgram>,
-    execution_cache_key: u64,
 }
 
 struct RunFragmentCompiler<'a> {
@@ -333,7 +630,6 @@ struct RunFragmentCompiler<'a> {
     runtime_backend_by_hir: &'a BTreeMap<aivi_hir::ItemId, BackendItemId>,
     query_context: Option<BackendQueryContext<'a>>,
     compiled_fragments: BTreeMap<HirExprId, CompiledRunFragment>,
-    execution_units: BTreeMap<u64, Arc<RunFragmentExecutionUnit>>,
 }
 
 impl<'a> RunFragmentCompiler<'a> {
@@ -357,7 +653,6 @@ impl<'a> RunFragmentCompiler<'a> {
             runtime_backend_by_hir,
             query_context,
             compiled_fragments: BTreeMap::new(),
-            execution_units: BTreeMap::new(),
         }
     }
 
@@ -372,208 +667,239 @@ impl<'a> RunFragmentCompiler<'a> {
     }
 
     fn compile_uncached(&mut self, expr: HirExprId) -> Result<CompiledRunFragment, String> {
-        let site = self.sites.get(expr).ok_or_else(|| {
-            format!(
-                "run view references expression {} at {} without a collected runtime environment",
-                expr.as_raw(),
-                source_location(self.sources, self.module.exprs()[expr].span)
-            )
-        })?;
-        let body =
-            elaborate_runtime_expr_with_env(self.module, expr, &site.parameters, Some(&site.ty))
-                .map_err(|blocked| {
-                    format!(
-                        "failed to elaborate runtime expression at {}: {}",
-                        source_location(self.sources, site.span),
-                        blocked
-                    )
-                })?;
-        let fragment = RuntimeFragmentSpec {
-            name: format!("__run_fragment_{}", expr.as_raw()).into_boxed_str(),
-            owner: self.view_owner,
-            body_expr: expr,
-            parameters: site.parameters.clone(),
-            body,
-        };
-        let unit = compile_runtime_fragment_backend_unit(
+        compile_run_fragment_for_input(
             self.module,
+            self.sources,
             self.workspace_hirs,
-            &fragment,
+            self.view_owner,
+            self.sites,
+            self.runtime_backend,
+            self.runtime_backend_by_hir,
             self.query_context,
-            &format!(
-                "failed to compile runtime expression at {}",
-                source_location(self.sources, site.span)
-            ),
-        )?;
-        let execution = self
-            .execution_units
-            .entry(unit.execution_cache_key)
-            .or_insert_with(|| {
-                Arc::new(RunFragmentExecutionUnit::new(
-                    aivi_runtime::hir_adapter::BackendRuntimePayload::Program(unit.backend.clone()),
-                    Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
-                ))
-            })
-            .clone();
-        let backend = unit.backend.as_ref();
-        let item = backend
-            .items()
-            .iter()
-            .find_map(|(item_id, item)| (item.name == unit.core.entry_name).then_some(item_id))
-            .ok_or_else(|| {
-                format!(
-                    "backend lowering did not preserve runtime fragment `{}` for expression at {}",
-                    unit.core.entry_name,
-                    source_location(self.sources, site.span)
-                )
-            })?;
-        let required_signal_globals = self
-            .collect_fragment_signal_global_items(backend, item, expr)?
-            .into_iter()
-            .map(|fragment_item| {
-                self.link_fragment_signal_global(expr, &unit, backend, fragment_item)
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect();
-        Ok(CompiledRunFragment {
             expr,
-            parameters: runtime_fragment_parameters(&site.parameters),
-            execution,
-            item,
-            required_signal_globals,
-        })
+        )
     }
+}
 
-    fn collect_fragment_signal_global_items(
-        &self,
-        backend: &BackendProgram,
-        entry_item: BackendItemId,
-        expr: HirExprId,
-    ) -> Result<Vec<BackendItemId>, String> {
-        let mut required = BTreeSet::new();
-        let mut visited_items = BTreeSet::new();
-        let mut kernels = backend.items()[entry_item]
-            .body
-            .into_iter()
-            .collect::<Vec<_>>();
-        while let Some(kernel_id) = kernels.pop() {
-            let kernel = &backend.kernels()[kernel_id];
-            for &fragment_item in &kernel.global_items {
-                if !visited_items.insert(fragment_item) {
-                    continue;
-                }
-                let decl = backend.items().get(fragment_item).ok_or_else(|| {
-                    format!(
-                        "compiled runtime fragment {} references missing backend item {}",
-                        expr.as_raw(),
-                        fragment_item
-                    )
-                })?;
-                match decl.kind {
-                    aivi_backend::ItemKind::Signal(_) => {
-                        required.insert(fragment_item);
-                    }
-                    _ => {
-                        if let Some(body) = decl.body {
-                            kernels.push(body);
-                        } else {
-                            required.insert(fragment_item);
-                        }
-                    }
-                }
-            }
-        }
-        Ok(required.into_iter().collect())
-    }
-
-    fn link_fragment_signal_global(
-        &self,
-        expr: HirExprId,
-        unit: &CompiledRuntimeFragmentUnit,
-        backend: &BackendProgram,
-        fragment_item: BackendItemId,
-    ) -> Result<Option<CompiledRunSignalGlobal>, String> {
-        let fragment_decl = backend.items().get(fragment_item).ok_or_else(|| {
+fn compile_run_fragment_for_input(
+    module: &HirModule,
+    sources: &SourceDatabase,
+    workspace_hirs: &[(&str, &HirModule)],
+    view_owner: aivi_hir::ItemId,
+    sites: &aivi_hir::MarkupRuntimeExprSites,
+    runtime_backend: &BackendProgram,
+    runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
+    query_context: Option<BackendQueryContext<'_>>,
+    expr: HirExprId,
+) -> Result<CompiledRunFragment, String> {
+    let site = sites.get(expr).ok_or_else(|| {
+        format!(
+            "run view references expression {} at {} without a collected runtime environment",
+            expr.as_raw(),
+            source_location(sources, module.exprs()[expr].span)
+        )
+    })?;
+    let body = elaborate_runtime_expr_with_env(module, expr, &site.parameters, Some(&site.ty))
+        .map_err(|blocked| {
             format!(
-                "compiled runtime fragment {} references missing backend item {}",
-                expr.as_raw(),
-                fragment_item
+                "failed to elaborate runtime expression at {}: {}",
+                source_location(sources, site.span),
+                blocked
             )
         })?;
-        let core_item = unit
-            .core
-            .module
-            .items()
-            .get(fragment_decl.origin)
-            .ok_or_else(|| {
+    let fragment = RuntimeFragmentSpec {
+        name: format!("__run_fragment_{}", expr.as_raw()).into_boxed_str(),
+        owner: view_owner,
+        body_expr: expr,
+        parameters: site.parameters.clone(),
+        body,
+    };
+    let unit = compile_runtime_fragment_backend_unit(
+        module,
+        workspace_hirs,
+        &fragment,
+        query_context,
+        &format!(
+            "failed to compile runtime expression at {}",
+            source_location(sources, site.span)
+        ),
+    )?;
+    let execution = Arc::new(RunFragmentExecutionUnit::new(
+        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(unit.backend.clone()),
+        Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
+    ));
+    let backend = unit.backend.as_ref();
+    let item = backend
+        .items()
+        .iter()
+        .find_map(|(item_id, item)| (item.name == unit.core.entry_name).then_some(item_id))
+        .ok_or_else(|| {
+            format!(
+                "backend lowering did not preserve runtime fragment `{}` for expression at {}",
+                unit.core.entry_name,
+                source_location(sources, site.span)
+            )
+        })?;
+    let required_signal_globals = collect_fragment_signal_global_items_for_run(
+        runtime_backend,
+        runtime_backend_by_hir,
+        module,
+        &unit,
+        backend,
+        item,
+        expr,
+    )?;
+    Ok(CompiledRunFragment {
+        expr,
+        parameters: runtime_fragment_parameters(&site.parameters),
+        execution,
+        item,
+        required_signal_globals,
+    })
+}
+
+fn collect_fragment_signal_global_items_for_run(
+    runtime_backend: &BackendProgram,
+    runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
+    module: &HirModule,
+    unit: &CompiledRuntimeFragmentUnit,
+    backend: &BackendProgram,
+    entry_item: BackendItemId,
+    expr: HirExprId,
+) -> Result<Vec<CompiledRunSignalGlobal>, String> {
+    let mut required = BTreeSet::new();
+    let mut visited_items = BTreeSet::new();
+    let mut kernels = backend.items()[entry_item]
+        .body
+        .into_iter()
+        .collect::<Vec<_>>();
+    while let Some(kernel_id) = kernels.pop() {
+        let kernel = &backend.kernels()[kernel_id];
+        for &fragment_item in &kernel.global_items {
+            if !visited_items.insert(fragment_item) {
+                continue;
+            }
+            let decl = backend.items().get(fragment_item).ok_or_else(|| {
                 format!(
-                    "compiled runtime fragment {} lost core→HIR origin for backend item {}",
+                    "compiled runtime fragment {} references missing backend item {}",
                     expr.as_raw(),
                     fragment_item
                 )
             })?;
-        let hir_item = core_item.origin;
-        let hir_lookup = self.module.items().get(hir_item);
-        let signal_name: Box<str> = match hir_lookup {
-            Some(Item::Signal(signal)) => signal.name.text().into(),
-            Some(_) => return Ok(None),
-            None => core_item.name.clone(),
-        };
-        let runtime_item = if hir_lookup.is_some() {
-            self.runtime_backend_by_hir
-                .get(&hir_item)
-                .copied()
-                .ok_or_else(|| {
-                    format!(
-                        "runtime fragment {} needs signal `{signal_name}` but the live run backend has no matching item",
-                        expr.as_raw(),
-                    )
-                })?
-        } else {
-            self.runtime_backend
-                .items()
-                .iter()
-                .find_map(|(backend_item, item)| {
-                    (item.name.as_ref() == signal_name.as_ref()).then_some(backend_item)
-                })
-                .ok_or_else(|| {
-                    format!(
-                        "runtime fragment {} needs global `{signal_name}` (synthetic origin) but no matching runtime item found",
-                        expr.as_raw(),
-                    )
-                })?
-        };
-        let runtime_decl = self
-            .runtime_backend
-            .items()
-            .get(runtime_item)
+            match decl.kind {
+                aivi_backend::ItemKind::Signal(_) => {
+                    required.insert(fragment_item);
+                }
+                _ => {
+                    if let Some(body) = decl.body {
+                        kernels.push(body);
+                    } else {
+                        required.insert(fragment_item);
+                    }
+                }
+            }
+        }
+    }
+    required
+        .into_iter()
+        .map(|fragment_item| {
+            link_fragment_signal_global_for_run(
+                runtime_backend,
+                runtime_backend_by_hir,
+                module,
+                unit,
+                backend,
+                expr,
+                fragment_item,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|globals| globals.into_iter().flatten().collect())
+}
+
+fn link_fragment_signal_global_for_run(
+    runtime_backend: &BackendProgram,
+    runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
+    module: &HirModule,
+    unit: &CompiledRuntimeFragmentUnit,
+    backend: &BackendProgram,
+    expr: HirExprId,
+    fragment_item: BackendItemId,
+) -> Result<Option<CompiledRunSignalGlobal>, String> {
+    let fragment_decl = backend.items().get(fragment_item).ok_or_else(|| {
+        format!(
+            "compiled runtime fragment {} references missing backend item {}",
+            expr.as_raw(),
+            fragment_item
+        )
+    })?;
+    let core_item = unit
+        .core
+        .module
+        .items()
+        .get(fragment_decl.origin)
+        .ok_or_else(|| {
+            format!(
+                "compiled runtime fragment {} lost core→HIR origin for backend item {}",
+                expr.as_raw(),
+                fragment_item
+            )
+        })?;
+    let hir_item = core_item.origin;
+    let hir_lookup = module.items().get(hir_item);
+    let signal_name: Box<str> = match hir_lookup {
+        Some(Item::Signal(signal)) => signal.name.text().into(),
+        Some(_) => return Ok(None),
+        None => core_item.name.clone(),
+    };
+    let runtime_item = if hir_lookup.is_some() {
+        runtime_backend_by_hir
+            .get(&hir_item)
+            .copied()
             .ok_or_else(|| {
                 format!(
-                    "live run backend is missing runtime item {} for signal `{signal_name}`",
-                    runtime_item,
+                    "runtime fragment {} needs signal `{signal_name}` but the live run backend has no matching item",
+                    expr.as_raw(),
                 )
-            })?;
-        let kind = if matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
-            CompiledRunGlobalKind::Signal
-        } else if runtime_decl.body.is_some() {
-            CompiledRunGlobalKind::RuntimeItem
-        } else {
-            return Err(format!(
-                "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
-                expr.as_raw(),
-                fragment_item,
-                signal_name,
-            ));
-        };
-        Ok(Some(CompiledRunSignalGlobal {
-            fragment_item,
+            })?
+    } else {
+        runtime_backend
+            .items()
+            .iter()
+            .find_map(|(backend_item, item)| {
+                (item.name.as_ref() == signal_name.as_ref()).then_some(backend_item)
+            })
+            .ok_or_else(|| {
+                format!(
+                    "runtime fragment {} needs global `{signal_name}` (synthetic origin) but no matching runtime item found",
+                    expr.as_raw(),
+                )
+            })?
+    };
+    let runtime_decl = runtime_backend.items().get(runtime_item).ok_or_else(|| {
+        format!(
+            "live run backend is missing runtime item {} for signal `{signal_name}`",
             runtime_item,
-            name: signal_name,
-            kind,
-        }))
-    }
+        )
+    })?;
+    let kind = if matches!(runtime_decl.kind, aivi_backend::ItemKind::Signal(_)) {
+        CompiledRunGlobalKind::Signal
+    } else if runtime_decl.body.is_some() {
+        CompiledRunGlobalKind::RuntimeItem
+    } else {
+        return Err(format!(
+            "compiled runtime fragment {} references global item {} ({}) without a body kernel or live signal binding",
+            expr.as_raw(),
+            fragment_item,
+            signal_name,
+        ));
+    };
+    Ok(Some(CompiledRunSignalGlobal {
+        fragment_item,
+        runtime_item,
+        name: signal_name,
+        kind,
+    }))
 }
 
 fn compile_runtime_fragment_backend_unit(
@@ -588,7 +914,6 @@ fn compile_runtime_fragment_backend_unit(
             .map(|unit| CompiledRuntimeFragmentUnit {
                 core: unit.core_arc(),
                 backend: unit.backend_arc(),
-                execution_cache_key: unit.fingerprint().as_u64(),
             })
             .map_err(|error| format!("{error_context}: {error}"));
     }
@@ -609,21 +934,13 @@ fn compile_local_runtime_fragment_backend_unit(
         aivi_core::lower_runtime_fragment_with_workspace(module, workspace_hirs, fragment)
             .map_err(|error| format!("{error_context} into typed core: {error}"))?
     };
-    validate_core_module(&core.module)
-        .map_err(|error| format!("{error_context} during typed-core validation: {error}"))?;
     let lambda = lower_lambda_module(&core.module)
         .map_err(|error| format!("{error_context} into typed lambda: {error}"))?;
-    validate_lambda_module(&lambda)
-        .map_err(|error| format!("{error_context} during typed-lambda validation: {error}"))?;
     let backend = lower_backend_module(&lambda, module)
         .map_err(|error| format!("{error_context} into backend IR: {error}"))?;
-    validate_program(&backend)
-        .map_err(|error| format!("{error_context} during backend validation: {error}"))?;
-    let execution_cache_key = compute_program_fingerprint(&backend);
     Ok(CompiledRuntimeFragmentUnit {
         core: Arc::new(core),
         backend: Arc::new(backend),
-        execution_cache_key,
     })
 }
 

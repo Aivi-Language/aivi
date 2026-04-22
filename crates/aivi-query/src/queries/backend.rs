@@ -158,7 +158,6 @@ impl WholeProgramBackendUnit {
 pub struct RuntimeFragmentBackendUnit {
     entry: SourceFile,
     entry_hir: Arc<HirModuleResult>,
-    fragment: Arc<RuntimeFragmentSpec>,
     core: Arc<LoweredRuntimeFragment>,
     lambda: Arc<lambda::Module>,
     backend: Arc<backend::Program>,
@@ -176,14 +175,6 @@ impl RuntimeFragmentBackendUnit {
 
     pub fn entry_hir_arc(&self) -> Arc<HirModuleResult> {
         Arc::clone(&self.entry_hir)
-    }
-
-    pub fn fragment(&self) -> &RuntimeFragmentSpec {
-        self.fragment.as_ref()
-    }
-
-    pub fn fragment_arc(&self) -> Arc<RuntimeFragmentSpec> {
-        Arc::clone(&self.fragment)
     }
 
     pub fn core(&self) -> &LoweredRuntimeFragment {
@@ -294,7 +285,14 @@ pub(crate) struct RuntimeFragmentUnitCacheKey {
 pub(crate) struct RuntimeFragmentUnitCacheEntry {
     pub(crate) entry_hir: Arc<HirModuleResult>,
     pub(crate) workspace_modules: Arc<[WorkspaceHirModule]>,
+    pub(crate) fragment: Arc<RuntimeFragmentSpec>,
     pub(crate) value: Arc<Result<Arc<RuntimeFragmentBackendUnit>, BackendUnitError>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct WorkspaceModulesCacheEntry {
+    pub(crate) entry_hir: Arc<HirModuleResult>,
+    pub(crate) value: Arc<[WorkspaceHirModule]>,
 }
 
 /// Collect non-stdlib workspace modules reachable from `file`, ordered so direct
@@ -356,6 +354,7 @@ pub fn runtime_fragment_backend_unit(
     if let Some(cached) = db.runtime_fragment_cache_entry(key)
         && Arc::ptr_eq(&cached.entry_hir, &entry_hir)
         && workspace_modules_match(&cached.workspace_modules, &workspace_modules)
+        && cached.fragment.as_ref() == fragment
     {
         return clone_cached_value(&cached.value);
     }
@@ -371,6 +370,7 @@ pub fn runtime_fragment_backend_unit(
         RuntimeFragmentUnitCacheEntry {
             entry_hir,
             workspace_modules,
+            fragment: Arc::new(fragment.clone()),
             value: Arc::clone(&value),
         },
     );
@@ -476,20 +476,16 @@ fn lower_runtime_fragment_backend_unit(
         lower_runtime_fragment_with_workspace(entry_hir.module(), &workspace_hirs, fragment)
     }
     .map_err(BackendUnitError::CoreLowering)?;
-    validate_core_module(&core.module).map_err(BackendUnitError::CoreValidation)?;
 
     let lambda = lower_lambda_module(&core.module).map_err(BackendUnitError::LambdaLowering)?;
-    validate_lambda_module(&lambda).map_err(BackendUnitError::LambdaValidation)?;
 
     let backend = lower_backend_module(&lambda, entry_hir.module())
         .map_err(BackendUnitError::BackendLowering)?;
-    validate_program(&backend).map_err(BackendUnitError::BackendValidation)?;
 
     let fingerprint = RuntimeFragmentFingerprint(stable_fingerprint(&backend));
     Ok(Arc::new(RuntimeFragmentBackendUnit {
         entry: file,
         entry_hir,
-        fragment: Arc::new(fragment.clone()),
         core: Arc::new(core),
         lambda: Arc::new(lambda),
         backend: Arc::new(backend),
@@ -502,6 +498,11 @@ fn collect_workspace_hir_modules(
     file: SourceFile,
     entry_hir: &Arc<HirModuleResult>,
 ) -> Arc<[WorkspaceHirModule]> {
+    if let Some(cached) = db.workspace_modules_cache_entry(file)
+        && Arc::ptr_eq(&cached.entry_hir, entry_hir)
+    {
+        return cached.value;
+    }
     let workspace = Workspace::discover(db, file);
     let mut module_map = HashMap::<String, WorkspaceHirModule>::new();
     for candidate in db.files() {
@@ -597,12 +598,20 @@ fn collect_workspace_hir_modules(
         ordered_names.extend(remaining);
     }
 
-    Arc::from(
+    let ordered: Arc<[WorkspaceHirModule]> = Arc::from(
         ordered_names
             .into_iter()
             .filter_map(|name| module_map.remove(&name))
             .collect::<Vec<_>>(),
-    )
+    );
+    db.store_workspace_modules_cache_entry(
+        file,
+        WorkspaceModulesCacheEntry {
+            entry_hir: Arc::clone(entry_hir),
+            value: Arc::clone(&ordered),
+        },
+    );
+    ordered
 }
 
 fn enqueue_workspace_imports(
@@ -646,7 +655,16 @@ fn runtime_fragment_cache_key(
     fragment: &RuntimeFragmentSpec,
 ) -> RuntimeFragmentUnitCacheKey {
     let mut hasher = FxHasher::default();
-    format!("{fragment:?}").hash(&mut hasher);
+    fragment.owner.hash(&mut hasher);
+    fragment.body_expr.hash(&mut hasher);
+    fragment.name.hash(&mut hasher);
+    fragment.parameters.len().hash(&mut hasher);
+    for parameter in &fragment.parameters {
+        parameter.binding.hash(&mut hasher);
+        parameter.name.hash(&mut hasher);
+        std::mem::discriminant(&parameter.kind).hash(&mut hasher);
+        std::mem::discriminant(&parameter.ty).hash(&mut hasher);
+    }
     RuntimeFragmentUnitCacheKey {
         file_id: file.id,
         fragment_key: hasher.finish(),

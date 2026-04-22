@@ -232,32 +232,45 @@ fn run_markup_file_with_launch_config(
     timings: bool,
 ) -> Result<ExitCode, String> {
     let total_start = Instant::now();
+    let progress = RunProgressReporter::new(path, !timings);
+    let progress_handle = progress.handle();
     require_file_exists(path)?;
     if let Some(view) = requested_view {
         validate_module_name(view)?;
     }
     if let Some(artifact) = maybe_load_serialized_run_artifact(path, requested_view)? {
+        progress_handle.mark_launching();
         return run_session::launch_run_with_config(
             path,
             artifact,
             launch_config,
-            move |stage, startup_metrics| {
-                if timings {
-                    print_run_startup_stage_progress(stage, *startup_metrics);
+            {
+                let progress_handle = progress_handle.clone();
+                move |stage, startup_metrics| {
+                    progress_handle.finish_startup_stage(stage, *startup_metrics);
+                    if timings {
+                        print_run_startup_stage_progress(stage, *startup_metrics);
+                    }
                 }
             },
-            move |_| {
-                let _ = total_start;
+            {
+                let progress_handle = progress_handle.clone();
+                move |_| {
+                    progress_handle.finish_launch();
+                    let _ = total_start;
+                }
             },
         );
     }
 
+    progress_handle.start_prelaunch("source run cache lookup");
     let cache_lookup_started = Instant::now();
     let cache_home = launch_config.cache_home().ok();
     let cached_artifact = cache_home
         .as_deref()
         .and_then(|cache_home| load_cached_source_run_artifact(cache_home, path, requested_view));
     let source_run_cache_load = cache_lookup_started.elapsed();
+    progress_handle.finish_prelaunch("source run cache lookup", source_run_cache_load);
     if timings {
         print_run_prelaunch_stage_progress(
             "source run cache lookup",
@@ -272,44 +285,57 @@ fn run_markup_file_with_launch_config(
             total: source_run_cache_load,
             ..RunArtifactPreparationMetrics::default()
         };
+        progress_handle.mark_launching();
         return run_session::launch_run_with_config(
             path,
             artifact,
             launch_config,
-            move |stage, startup_metrics| {
-                if timings {
-                    print_run_startup_stage_progress(stage, *startup_metrics);
+            {
+                let progress_handle = progress_handle.clone();
+                move |stage, startup_metrics| {
+                    progress_handle.finish_startup_stage(stage, *startup_metrics);
+                    if timings {
+                        print_run_startup_stage_progress(stage, *startup_metrics);
+                    }
                 }
             },
-            move |startup_metrics| {
-                if timings {
-                    print_run_timing_report(
-                        path,
-                        Duration::default(),
-                        Duration::default(),
-                        Duration::default(),
-                        QueryCacheStats::default(),
-                        artifact_metrics,
-                        *startup_metrics,
-                        total_start.elapsed(),
-                    );
+            {
+                let progress_handle = progress_handle.clone();
+                move |startup_metrics| {
+                    progress_handle.finish_launch();
+                    if timings {
+                        print_run_timing_report(
+                            path,
+                            Duration::default(),
+                            Duration::default(),
+                            Duration::default(),
+                            QueryCacheStats::default(),
+                            artifact_metrics,
+                            *startup_metrics,
+                            total_start.elapsed(),
+                        );
+                    }
                 }
             },
         );
     }
 
+    progress_handle.start_prelaunch("load + parse");
     let t0 = Instant::now();
     let snapshot = WorkspaceHirSnapshot::load(path)?;
     let load_duration = t0.elapsed();
+    progress_handle.finish_prelaunch("load + parse", load_duration);
     if timings {
         print_run_prelaunch_stage_progress("load + parse", load_duration, total_start.elapsed());
     }
 
+    progress_handle.start_prelaunch("syntax check");
     let t0 = Instant::now();
     let syntax_failed = workspace_syntax_failed(&snapshot, |sources, diagnostics| {
         print_diagnostics(sources, diagnostics.iter())
     });
     let syntax_duration = t0.elapsed();
+    progress_handle.finish_prelaunch("syntax check", syntax_duration);
     if timings {
         print_run_prelaunch_stage_progress("syntax check", syntax_duration, total_start.elapsed());
     }
@@ -317,6 +343,7 @@ fn run_markup_file_with_launch_config(
         return Ok(ExitCode::FAILURE);
     }
 
+    progress_handle.start_prelaunch("HIR lowering");
     let t0 = Instant::now();
     let (hir_lowering_failed, hir_validation_failed) = workspace_hir_failed(
         &snapshot,
@@ -324,6 +351,7 @@ fn run_markup_file_with_launch_config(
         |sources, diagnostics| print_diagnostics(sources, diagnostics.iter()),
     );
     let hir_duration = t0.elapsed();
+    progress_handle.finish_prelaunch("HIR lowering", hir_duration);
     if timings {
         print_run_prelaunch_stage_progress("HIR lowering", hir_duration, total_start.elapsed());
     }
@@ -332,14 +360,32 @@ fn run_markup_file_with_launch_config(
     }
 
     let lowered = snapshot.entry_hir();
+    progress_handle.start_prelaunch("workspace collect");
+    let workspace_collection_started = Instant::now();
     let workspace_hir_arcs = collect_workspace_hirs_sorted(&snapshot);
+    let workspace_collection = workspace_collection_started.elapsed();
+    progress_handle.finish_prelaunch("workspace collect", workspace_collection);
+    if timings {
+        print_run_prelaunch_stage_progress(
+            "workspace collect",
+            workspace_collection,
+            total_start.elapsed(),
+        );
+    }
     let workspace_hirs: Vec<(&str, &HirModule)> = workspace_hir_arcs
         .iter()
         .map(|(name, arc)| (name.as_str(), arc.module()))
         .collect();
-    let mut report_prelaunch_stage = |stage: &'static str, duration: Duration| {
-        if timings {
-            print_run_prelaunch_stage_progress(stage, duration, total_start.elapsed());
+    let mut report_prelaunch_stage = {
+        let progress_handle = progress_handle.clone();
+        move |event: RunPreparationStageEvent| match event {
+            RunPreparationStageEvent::Started(stage) => progress_handle.start_prelaunch(stage),
+            RunPreparationStageEvent::Completed(stage, duration) => {
+                progress_handle.finish_prelaunch(stage, duration);
+                if timings {
+                    print_run_prelaunch_stage_progress(stage, duration, total_start.elapsed());
+                }
+            }
         }
     };
     let mut prepared = match prepare_run_artifact_with_metrics_and_progress(
@@ -357,6 +403,7 @@ fn run_markup_file_with_launch_config(
         }
     };
     prepared.metrics.source_run_cache_load = source_run_cache_load;
+    prepared.metrics.workspace_collection = workspace_collection;
     let mut artifact_metrics = prepared.metrics;
     let frozen_artifact = {
         let freeze_started = Instant::now();
@@ -405,27 +452,36 @@ fn run_markup_file_with_launch_config(
         .map(|frozen| frozen.artifact)
         .unwrap_or(prepared.artifact);
 
+    progress_handle.mark_launching();
     run_session::launch_run_with_config(
         path,
         launch_artifact,
         launch_config,
-        move |stage, startup_metrics| {
-            if timings {
-                print_run_startup_stage_progress(stage, *startup_metrics);
+        {
+            let progress_handle = progress_handle.clone();
+            move |stage, startup_metrics| {
+                progress_handle.finish_startup_stage(stage, *startup_metrics);
+                if timings {
+                    print_run_startup_stage_progress(stage, *startup_metrics);
                 }
-            },
+            }
+        },
+        {
+            let progress_handle = progress_handle.clone();
             move |startup_metrics| {
+                progress_handle.finish_launch();
                 if timings {
                     print_run_timing_report(
                         path,
                         load_duration,
                         syntax_duration,
-                    hir_duration,
-                    query_cache,
-                    artifact_metrics,
-                    *startup_metrics,
-                    total_start.elapsed(),
-                );
+                        hir_duration,
+                        query_cache,
+                        artifact_metrics,
+                        *startup_metrics,
+                        total_start.elapsed(),
+                    );
+                }
             }
         },
     )

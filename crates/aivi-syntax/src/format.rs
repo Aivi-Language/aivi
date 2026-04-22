@@ -3298,8 +3298,9 @@ value view =
 
     #[test]
     fn formatter_preserves_leading_pipe_subject_function_bodies() {
-        let formatted =
-            format_text("type Text -> Text\nfunc trimStatus=\n ||>\" ready \"->\"ready\"\n ||>_->.\n");
+        let formatted = format_text(
+            "type Text -> Text\nfunc trimStatus=\n ||>\" ready \"->\"ready\"\n ||>_->.\n",
+        );
         assert_eq!(
             formatted,
             concat!(

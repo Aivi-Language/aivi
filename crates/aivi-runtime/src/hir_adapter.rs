@@ -8,13 +8,14 @@ use std::{
 use aivi_backend::{
     BackendExecutableProgram, BackendRuntimeMeta, BackendRuntimeView, CommittedValueStore,
     FrozenBackendCatalog, InlineCommittedValueStore, ItemId as BackendItemId,
-    Program as BackendProgram, lower_module_with_hir as lower_backend_module, validate_program,
+    Program as BackendProgram, lower_module_with_hir as lower_backend_module,
 };
 use aivi_base::SourceSpan;
 use aivi_core::{RuntimeFragmentSpec, lower_runtime_fragment};
 use aivi_hir as hir;
-use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
+use aivi_lambda::lower_module as lower_lambda_module;
 use aivi_typing::RecurrenceTarget;
+use rayon::prelude::*;
 
 use crate::{
     effects::{
@@ -313,8 +314,10 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                     .entry(binding.local_name.text().to_owned())
                     .or_insert(global_item);
             }
-            workspace_signal_exports
-                .insert(workspace_module.name.to_owned(), state.export_signal_items.clone());
+            workspace_signal_exports.insert(
+                workspace_module.name.to_owned(),
+                state.export_signal_items.clone(),
+            );
         }
         for (workspace_module, state) in workspace_modules.iter().zip(workspace_states.iter_mut()) {
             let import_to_module = state.import_to_module.clone();
@@ -481,220 +484,129 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                     let payload_type = hir::signal_payload_type(module, signal);
                     let mut clause_bindings = Vec::with_capacity(signal.reactive_updates.len());
                     let mut clause_specs = Vec::with_capacity(signal.reactive_updates.len());
-                    for (clause_index, update) in signal.reactive_updates.iter().enumerate() {
-                        let trigger_parameter_items =
-                            update.trigger_source.into_iter().collect::<Vec<_>>();
-                        let trigger_signal = match update.trigger_source {
-                            Some(source_item) => match module_state
-                                .public_signals
-                                .get(&source_item)
+                    let clause_compile_started = Instant::now();
+                    let reactive_parallelism =
+                        bounded_fragment_parallelism(signal.reactive_updates.len());
+                    let batch_size = fragment_batch_size(signal.reactive_updates.len());
+                    for (chunk_index, update_batch) in
+                        signal.reactive_updates.chunks(batch_size).enumerate()
+                    {
+                        let chunk_start = chunk_index * batch_size;
+                        let compile_clause =
+                            |(offset, update): (usize, &hir::ReactiveUpdateClause)| {
+                                compile_reactive_clause_fragments(
+                                    module,
+                                    &module_state.public_signals,
+                                    binding.item,
+                                    chunk_start + offset,
+                                    update,
+                                    payload_type.as_ref(),
+                                )
+                            };
+                        let compiled_clauses = if reactive_parallelism <= 1 {
+                            update_batch
+                                .iter()
+                                .enumerate()
+                                .map(compile_clause)
+                                .collect::<Vec<_>>()
+                        } else {
+                            match fragment_thread_pool() {
+                                Some(pool) => pool.install(|| {
+                                    update_batch
+                                        .par_iter()
+                                        .enumerate()
+                                        .map(compile_clause)
+                                        .collect::<Vec<_>>()
+                                }),
+                                None => update_batch
+                                    .iter()
+                                    .enumerate()
+                                    .map(compile_clause)
+                                    .collect::<Vec<_>>(),
+                            }
+                        };
+                        for compiled in compiled_clauses {
+                            stats.reactive_guard_fragments += usize::from(compiled.guard_attempted);
+                            stats.reactive_body_fragments += usize::from(compiled.body_attempted);
+                            if !compiled.errors.is_empty() {
+                                errors.extend(compiled.errors.into_vec());
+                                continue;
+                            }
+                            let update = &signal.reactive_updates[compiled.clause_index];
+                            let guard_fragment = compiled.guard_fragment.expect(
+                                "successful reactive clause compilation should produce a guard",
+                            );
+                            let body_fragment = compiled.body_fragment.expect(
+                                "successful reactive clause compilation should produce a body",
+                            );
+                            let mut guard_dependencies = guard_fragment
+                                .parameter_signals
+                                .iter()
+                                .copied()
+                                .collect::<Vec<_>>();
+                            for signal in guard_fragment
+                                .required_signals
+                                .iter()
+                                .map(|signal| signal.signal)
+                            {
+                                push_unique_signal(&mut guard_dependencies, signal);
+                            }
+                            if guard_dependencies.is_empty() {
+                                guard_dependencies = collect_direct_signal_dependencies(
+                                    module,
+                                    update.guard,
+                                    &module_state.public_signal_names,
+                                );
+                            }
+                            let mut body_dependencies = signal_pipeline_dependencies.clone();
+                            for signal in &body_fragment.parameter_signals {
+                                push_unique_signal(&mut body_dependencies, *signal);
+                            }
+                            for signal in &body_fragment.required_signals {
+                                push_unique_signal(&mut body_dependencies, signal.signal);
+                            }
+                            if body_dependencies.is_empty() {
+                                body_dependencies = collect_direct_signal_dependencies(
+                                    module,
+                                    update.body,
+                                    &module_state.public_signal_names,
+                                );
+                            }
+                            for dependency in guard_dependencies
+                                .iter()
+                                .chain(body_dependencies.iter())
                                 .copied()
                             {
-                                Some(signal) => Some(signal),
-                                None => {
-                                    errors.push(HirRuntimeAdapterError::UnknownSignalDependency {
-                                        owner: binding.item,
-                                        dependency: source_item,
-                                    });
-                                    continue;
-                                }
-                            },
-                            None => None,
-                        };
-                        let Some(payload_type) = payload_type.as_ref() else {
-                            errors.push(HirRuntimeAdapterError::ReactiveUpdateUnknownPayloadType {
-                                owner: binding.item,
-                                clause_span: update.span,
+                                push_unique_signal(&mut reactive_dependencies, dependency);
+                            }
+                            if let Some(trigger_signal) = compiled.trigger_signal {
+                                push_unique_signal(&mut reactive_dependencies, trigger_signal);
+                            }
+                            clause_bindings.push(HirReactiveUpdateBinding {
+                                span: update.span,
+                                keyword_span: update.keyword_span,
+                                target_span: update.target_span,
+                                guard: update.guard,
+                                body: update.body,
+                                body_mode: update.body_mode,
+                                clause: ReactiveClauseHandle::from_raw(next_reactive_clause_raw),
+                                trigger_signal: compiled.trigger_signal,
+                                guard_dependencies: guard_dependencies.clone().into_boxed_slice(),
+                                body_dependencies: body_dependencies.clone().into_boxed_slice(),
+                                compiled_guard: guard_fragment,
+                                compiled_body: body_fragment,
                             });
-                            continue;
-                        };
-                        let bool_type = hir::GateType::Primitive(hir::BuiltinType::Bool);
-                        let body_type = match update.body_mode {
-                            hir::ReactiveUpdateBodyMode::Payload => payload_type.clone(),
-                            hir::ReactiveUpdateBodyMode::OptionalPayload => {
-                                hir::GateType::Option(Box::new(payload_type.clone()))
-                            }
-                        };
-                        stats.reactive_guard_fragments += 1;
-                        let guard_started = Instant::now();
-                        let guard_name = format!(
-                            "__reactive_guard_{}_{}",
-                            binding.item.as_raw(),
-                            clause_index
-                        )
-                        .into_boxed_str();
-                        let guard_fragment = match if update.body_mode
-                            == hir::ReactiveUpdateBodyMode::OptionalPayload
-                        {
-                            let signal_bool_type =
-                                hir::GateType::Signal(Box::new(bool_type.clone()));
-                            compile_runtime_expr_fragment(
-                                module,
-                                binding.item,
-                                update.span,
-                                update.guard,
-                                &signal_bool_type,
-                                guard_name.clone(),
-                                &module_state.public_signals,
-                                &[],
-                                ReactiveFragmentRole::Guard,
-                            )
-                            .or_else(|_| {
-                                compile_runtime_expr_fragment(
-                                    module,
-                                    binding.item,
-                                    update.span,
-                                    update.guard,
-                                    &bool_type,
-                                    guard_name,
-                                    &module_state.public_signals,
-                                    &[],
-                                    ReactiveFragmentRole::Guard,
+                            next_reactive_clause_raw = next_reactive_clause_raw.wrapping_add(1);
+                            clause_specs.push(
+                                ReactiveClauseBuilderSpec::new(
+                                    guard_dependencies,
+                                    body_dependencies,
                                 )
-                            })
-                        } else {
-                            compile_runtime_expr_fragment(
-                                module,
-                                binding.item,
-                                update.span,
-                                update.guard,
-                                &bool_type,
-                                guard_name,
-                                &module_state.public_signals,
-                                &[],
-                                ReactiveFragmentRole::Guard,
-                            )
-                        } {
-                            Ok(fragment) => {
-                                stats.reactive_fragment_compile_duration += guard_started.elapsed();
-                                fragment
-                            }
-                            Err(error) => {
-                                stats.reactive_fragment_compile_duration += guard_started.elapsed();
-                                errors.push(error);
-                                continue;
-                            }
-                        };
-                        stats.reactive_body_fragments += 1;
-                        let body_started = Instant::now();
-                        let body_name =
-                            format!("__reactive_body_{}_{}", binding.item.as_raw(), clause_index)
-                                .into_boxed_str();
-                        let body_fragment = match if update.body_mode
-                            == hir::ReactiveUpdateBodyMode::OptionalPayload
-                        {
-                            let signal_body_type =
-                                hir::GateType::Signal(Box::new(body_type.clone()));
-                            compile_runtime_expr_fragment(
-                                module,
-                                binding.item,
-                                update.span,
-                                update.body,
-                                &signal_body_type,
-                                body_name.clone(),
-                                &module_state.public_signals,
-                                trigger_parameter_items.as_slice(),
-                                ReactiveFragmentRole::Body,
-                            )
-                            .or_else(|_| {
-                                compile_runtime_expr_fragment(
-                                    module,
-                                    binding.item,
-                                    update.span,
-                                    update.body,
-                                    &body_type,
-                                    body_name,
-                                    &module_state.public_signals,
-                                    trigger_parameter_items.as_slice(),
-                                    ReactiveFragmentRole::Body,
-                                )
-                            })
-                        } else {
-                            compile_runtime_expr_fragment(
-                                module,
-                                binding.item,
-                                update.span,
-                                update.body,
-                                &body_type,
-                                body_name,
-                                &module_state.public_signals,
-                                trigger_parameter_items.as_slice(),
-                                ReactiveFragmentRole::Body,
-                            )
-                        } {
-                            Ok(fragment) => {
-                                stats.reactive_fragment_compile_duration += body_started.elapsed();
-                                fragment
-                            }
-                            Err(error) => {
-                                stats.reactive_fragment_compile_duration += body_started.elapsed();
-                                errors.push(error);
-                                continue;
-                            }
-                        };
-                        let mut guard_dependencies = guard_fragment
-                            .parameter_signals
-                            .iter()
-                            .copied()
-                            .collect::<Vec<_>>();
-                        for signal in guard_fragment
-                            .required_signals
-                            .iter()
-                            .map(|signal| signal.signal)
-                        {
-                            push_unique_signal(&mut guard_dependencies, signal);
-                        }
-                        if guard_dependencies.is_empty() {
-                            guard_dependencies = collect_direct_signal_dependencies(
-                                module,
-                                update.guard,
-                                &module_state.public_signal_names,
+                                .with_trigger_signal(compiled.trigger_signal),
                             );
                         }
-                        let mut body_dependencies = signal_pipeline_dependencies.clone();
-                        for signal in &body_fragment.parameter_signals {
-                            push_unique_signal(&mut body_dependencies, *signal);
-                        }
-                        for signal in &body_fragment.required_signals {
-                            push_unique_signal(&mut body_dependencies, signal.signal);
-                        }
-                        if body_dependencies.is_empty() {
-                            body_dependencies = collect_direct_signal_dependencies(
-                                module,
-                                update.body,
-                                &module_state.public_signal_names,
-                            );
-                        }
-                        for dependency in guard_dependencies
-                            .iter()
-                            .chain(body_dependencies.iter())
-                            .copied()
-                        {
-                            push_unique_signal(&mut reactive_dependencies, dependency);
-                        }
-                        if let Some(trigger_signal) = trigger_signal {
-                            push_unique_signal(&mut reactive_dependencies, trigger_signal);
-                        }
-                        clause_bindings.push(HirReactiveUpdateBinding {
-                            span: update.span,
-                            keyword_span: update.keyword_span,
-                            target_span: update.target_span,
-                            guard: update.guard,
-                            body: update.body,
-                            body_mode: update.body_mode,
-                            clause: ReactiveClauseHandle::from_raw(next_reactive_clause_raw),
-                            trigger_signal,
-                            guard_dependencies: guard_dependencies.clone().into_boxed_slice(),
-                            body_dependencies: body_dependencies.clone().into_boxed_slice(),
-                            compiled_guard: guard_fragment,
-                            compiled_body: body_fragment,
-                        });
-                        next_reactive_clause_raw = next_reactive_clause_raw.wrapping_add(1);
-                        clause_specs.push(
-                            ReactiveClauseBuilderSpec::new(guard_dependencies, body_dependencies)
-                                .with_trigger_signal(trigger_signal),
-                        );
                     }
+                    stats.reactive_fragment_compile_duration += clause_compile_started.elapsed();
                     if let Some(source_input) = binding.source_input {
                         let source_signal = source_input.as_signal();
                         push_unique_signal(&mut reactive_dependencies, source_signal);
@@ -1151,7 +1063,8 @@ fn seed_runtime_module_signals(
                 }
             };
             let source_input = if has_source {
-                match graph_builder.add_input(format!("{}#source", signal.name.text()), Some(owner)) {
+                match graph_builder.add_input(format!("{}#source", signal.name.text()), Some(owner))
+                {
                     Ok(input) => Some(input),
                     Err(err) => {
                         errors.push(HirRuntimeAdapterError::GraphBuild(err));
@@ -1188,7 +1101,8 @@ fn seed_runtime_module_signals(
                 }
             };
             let source_input = if has_source {
-                match graph_builder.add_input(format!("{}#source", signal.name.text()), Some(owner)) {
+                match graph_builder.add_input(format!("{}#source", signal.name.text()), Some(owner))
+                {
                     Ok(input) => Some(input),
                     Err(err) => {
                         errors.push(HirRuntimeAdapterError::GraphBuild(err));
@@ -1216,7 +1130,9 @@ fn seed_runtime_module_signals(
                 }
             };
             public_signals.insert(item_id, derived.as_signal());
-            state.public_signals.insert(local_item_id, derived.as_signal());
+            state
+                .public_signals
+                .insert(local_item_id, derived.as_signal());
             state.public_signals.insert(item_id, derived.as_signal());
             state
                 .public_signal_names
@@ -1242,7 +1158,9 @@ fn seed_runtime_module_signals(
                 }
             };
             public_signals.insert(item_id, input.as_signal());
-            state.public_signals.insert(local_item_id, input.as_signal());
+            state
+                .public_signals
+                .insert(local_item_id, input.as_signal());
             state.public_signals.insert(item_id, input.as_signal());
             state
                 .public_signal_names
@@ -1303,7 +1221,8 @@ fn seed_runtime_import_signal_handles(
         else {
             continue;
         };
-        let Some(source_module) = workspace_import_source_module(binding, import_to_module, import_id)
+        let Some(source_module) =
+            workspace_import_source_module(binding, import_to_module, import_id)
         else {
             continue;
         };
@@ -2646,6 +2565,227 @@ impl ReactiveFragmentRole {
     }
 }
 
+struct CompiledReactiveClause {
+    clause_index: usize,
+    trigger_signal: Option<SignalHandle>,
+    guard_fragment: Option<HirCompiledRuntimeExpr>,
+    body_fragment: Option<HirCompiledRuntimeExpr>,
+    guard_attempted: bool,
+    body_attempted: bool,
+    errors: Box<[HirRuntimeAdapterError]>,
+}
+
+fn bounded_fragment_parallelism(work_items: usize) -> usize {
+    if work_items <= 1 {
+        return 1;
+    }
+    configured_fragment_parallelism().min(work_items).max(1)
+}
+
+fn fragment_batch_size(work_items: usize) -> usize {
+    bounded_fragment_parallelism(work_items)
+        .saturating_mul(8)
+        .max(1)
+}
+
+fn configured_fragment_parallelism() -> usize {
+    const DEFAULT_MAX_THREADS: usize = 2;
+    let available = std::thread::available_parallelism()
+        .map(|threads| threads.get())
+        .unwrap_or(1);
+    let configured = std::env::var("AIVI_FRAGMENT_PARALLELISM")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|threads| *threads > 0)
+        .unwrap_or(DEFAULT_MAX_THREADS);
+    configured.min(available).max(1)
+}
+
+fn fragment_thread_pool() -> Option<&'static rayon::ThreadPool> {
+    static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+    if configured_fragment_parallelism() <= 1 {
+        return None;
+    }
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(configured_fragment_parallelism())
+            .build()
+            .ok()
+    })
+    .as_ref()
+}
+
+fn compile_reactive_clause_fragments(
+    module: &hir::Module,
+    public_signals: &BTreeMap<hir::ItemId, SignalHandle>,
+    owner: hir::ItemId,
+    clause_index: usize,
+    update: &hir::ReactiveUpdateClause,
+    payload_type: Option<&hir::GateType>,
+) -> CompiledReactiveClause {
+    let Some(payload_type) = payload_type else {
+        return CompiledReactiveClause {
+            clause_index,
+            trigger_signal: None,
+            guard_fragment: None,
+            body_fragment: None,
+            guard_attempted: false,
+            body_attempted: false,
+            errors: vec![HirRuntimeAdapterError::ReactiveUpdateUnknownPayloadType {
+                owner,
+                clause_span: update.span,
+            }]
+            .into_boxed_slice(),
+        };
+    };
+    let trigger_signal = match update.trigger_source {
+        Some(source_item) => match public_signals.get(&source_item).copied() {
+            Some(signal) => Some(signal),
+            None => {
+                return CompiledReactiveClause {
+                    clause_index,
+                    trigger_signal: None,
+                    guard_fragment: None,
+                    body_fragment: None,
+                    guard_attempted: false,
+                    body_attempted: false,
+                    errors: vec![HirRuntimeAdapterError::UnknownSignalDependency {
+                        owner,
+                        dependency: source_item,
+                    }]
+                    .into_boxed_slice(),
+                };
+            }
+        },
+        None => None,
+    };
+    let bool_type = hir::GateType::Primitive(hir::BuiltinType::Bool);
+    let body_type = match update.body_mode {
+        hir::ReactiveUpdateBodyMode::Payload => payload_type.clone(),
+        hir::ReactiveUpdateBodyMode::OptionalPayload => {
+            hir::GateType::Option(Box::new(payload_type.clone()))
+        }
+    };
+    let trigger_parameter_items = update.trigger_source.into_iter().collect::<Vec<_>>();
+
+    let guard_name =
+        format!("__reactive_guard_{}_{}", owner.as_raw(), clause_index).into_boxed_str();
+    let guard_fragment = match if update.body_mode == hir::ReactiveUpdateBodyMode::OptionalPayload {
+        let signal_bool_type = hir::GateType::Signal(Box::new(bool_type.clone()));
+        compile_runtime_expr_fragment(
+            module,
+            owner,
+            update.span,
+            update.guard,
+            &signal_bool_type,
+            guard_name.clone(),
+            public_signals,
+            &[],
+            ReactiveFragmentRole::Guard,
+        )
+        .or_else(|_| {
+            compile_runtime_expr_fragment(
+                module,
+                owner,
+                update.span,
+                update.guard,
+                &bool_type,
+                guard_name,
+                public_signals,
+                &[],
+                ReactiveFragmentRole::Guard,
+            )
+        })
+    } else {
+        compile_runtime_expr_fragment(
+            module,
+            owner,
+            update.span,
+            update.guard,
+            &bool_type,
+            guard_name,
+            public_signals,
+            &[],
+            ReactiveFragmentRole::Guard,
+        )
+    } {
+        Ok(fragment) => fragment,
+        Err(error) => {
+            return CompiledReactiveClause {
+                clause_index,
+                trigger_signal,
+                guard_fragment: None,
+                body_fragment: None,
+                guard_attempted: true,
+                body_attempted: false,
+                errors: vec![error].into_boxed_slice(),
+            };
+        }
+    };
+    let body_name = format!("__reactive_body_{}_{}", owner.as_raw(), clause_index).into_boxed_str();
+    let body_fragment = match if update.body_mode == hir::ReactiveUpdateBodyMode::OptionalPayload {
+        let signal_body_type = hir::GateType::Signal(Box::new(body_type.clone()));
+        compile_runtime_expr_fragment(
+            module,
+            owner,
+            update.span,
+            update.body,
+            &signal_body_type,
+            body_name.clone(),
+            public_signals,
+            trigger_parameter_items.as_slice(),
+            ReactiveFragmentRole::Body,
+        )
+        .or_else(|_| {
+            compile_runtime_expr_fragment(
+                module,
+                owner,
+                update.span,
+                update.body,
+                &body_type,
+                body_name,
+                public_signals,
+                trigger_parameter_items.as_slice(),
+                ReactiveFragmentRole::Body,
+            )
+        })
+    } else {
+        compile_runtime_expr_fragment(
+            module,
+            owner,
+            update.span,
+            update.body,
+            &body_type,
+            body_name,
+            public_signals,
+            trigger_parameter_items.as_slice(),
+            ReactiveFragmentRole::Body,
+        )
+    } {
+        Ok(fragment) => fragment,
+        Err(error) => {
+            return CompiledReactiveClause {
+                clause_index,
+                trigger_signal,
+                guard_fragment: Some(guard_fragment),
+                body_fragment: None,
+                guard_attempted: true,
+                body_attempted: true,
+                errors: vec![error].into_boxed_slice(),
+            };
+        }
+    };
+    CompiledReactiveClause {
+        clause_index,
+        trigger_signal,
+        guard_fragment: Some(guard_fragment),
+        body_fragment: Some(body_fragment),
+        guard_attempted: true,
+        body_attempted: true,
+        errors: Box::default(),
+    }
+}
+
 fn compile_runtime_expr_fragment(
     module: &hir::Module,
     owner: hir::ItemId,
@@ -2709,15 +2849,6 @@ fn compile_runtime_expr_fragment(
             message: error.to_string().into_boxed_str(),
         }
     })?;
-    validate_lambda_module(&lambda).map_err(|error| {
-        HirRuntimeAdapterError::ReactiveUpdateFragmentLowering {
-            owner,
-            clause_span,
-            role: role.label(),
-            stage: "typed lambda validation",
-            message: error.to_string().into_boxed_str(),
-        }
-    })?;
     let mut backend = lower_backend_module(&lambda, module).map_err(|error| {
         HirRuntimeAdapterError::ReactiveUpdateFragmentLowering {
             owner,
@@ -2728,15 +2859,6 @@ fn compile_runtime_expr_fragment(
         }
     })?;
     rewrite_fragment_signal_parameters(&mut backend, name.as_ref(), &parameter_specs);
-    validate_program(&backend).map_err(|error| {
-        HirRuntimeAdapterError::ReactiveUpdateFragmentLowering {
-            owner,
-            clause_span,
-            role: role.label(),
-            stage: "backend validation",
-            message: error.to_string().into_boxed_str(),
-        }
-    })?;
     let entry_item = backend
         .items()
         .iter()

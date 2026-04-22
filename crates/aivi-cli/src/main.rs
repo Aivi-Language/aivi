@@ -6,12 +6,12 @@ mod run_session;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
+    collections::{BTreeMap, BTreeSet, HashMap, VecDeque, hash_map::DefaultHasher},
     env,
     ffi::OsString,
     fs,
     hash::{Hash, Hasher},
-    io::{self, Read, Write},
+    io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     rc::Rc,
@@ -53,18 +53,19 @@ use aivi_lambda::{lower_module as lower_lambda_module, validate_module as valida
 use aivi_query::{
     HirModuleResult, QueryCacheStats, RootDatabase, SourceFile as QuerySourceFile,
     discover_workspace_root_from_directory, hir_module as query_hir_module, parse_manifest,
-    parsed_file as query_parsed_file, resolve_v1_entrypoint, runtime_fragment_backend_unit,
-    whole_program_backend_unit_with_items,
+    parsed_file as query_parsed_file, reachable_workspace_hir_modules, resolve_v1_entrypoint,
+    runtime_fragment_backend_unit, whole_program_backend_unit_with_items,
 };
 use aivi_runtime::{
     BackendLinkedRuntime, GlibLinkedRuntimeDriver, GlibLinkedRuntimeFailure, HirRuntimeAssembly,
     InputHandle as RuntimeInputHandle, Publication, SourceProviderContext, SourceProviderManager,
     assemble_hir_runtime_with_items, assemble_hir_runtime_with_items_and_workspace_profiled,
-    assemble_hir_runtime_with_items_profiled,
-    execute_runtime_value_with_context, link_backend_runtime,
+    assemble_hir_runtime_with_items_profiled, execute_runtime_value_with_context,
+    link_backend_runtime,
 };
 use aivi_syntax::{Formatter, lex_module, parse_module};
 use gtk::{glib, prelude::*};
+use rayon::prelude::*;
 
 include!("main_parts/dispatch.rs");
 include!("main_parts/workspace.rs");

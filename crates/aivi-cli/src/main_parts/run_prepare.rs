@@ -1,3 +1,8 @@
+enum RunPreparationStageEvent {
+    Started(&'static str),
+    Completed(&'static str, Duration),
+}
+
 fn prepare_run_artifact(
     sources: &SourceDatabase,
     module: &HirModule,
@@ -37,7 +42,7 @@ fn prepare_run_artifact_with_metrics_and_query_context(
         workspace_hirs,
         requested_view,
         query_context,
-        |_, _| {},
+        |_| {},
     )
 }
 
@@ -47,10 +52,10 @@ fn prepare_run_artifact_with_metrics_and_progress<F>(
     workspace_hirs: &[(&str, &HirModule)],
     requested_view: Option<&str>,
     query_context: Option<BackendQueryContext<'_>>,
-    mut on_stage_completed: F,
+    mut on_stage_event: F,
 ) -> Result<PreparedRunArtifact, String>
 where
-    F: FnMut(&'static str, Duration),
+    F: FnMut(RunPreparationStageEvent),
 {
     let total_started = Instant::now();
     let mut metrics = RunArtifactPreparationMetrics {
@@ -67,6 +72,7 @@ where
     })?;
     let gtk_preparation = match selected.kind {
         SelectedRunEntryKind::Gtk => {
+            on_stage_event(RunPreparationStageEvent::Started("markup lowering"));
             let markup_lowering_started = Instant::now();
             let plan = lower_markup_expr(module, selected.value.body).map_err(|error| {
                 format!(
@@ -75,7 +81,11 @@ where
                 )
             })?;
             metrics.markup_lowering = markup_lowering_started.elapsed();
-            on_stage_completed("markup lowering", metrics.markup_lowering);
+            on_stage_event(RunPreparationStageEvent::Completed(
+                "markup lowering",
+                metrics.markup_lowering,
+            ));
+            on_stage_event(RunPreparationStageEvent::Started("GTK bridge lowering"));
             let widget_bridge_lowering_started = Instant::now();
             let bridge = lower_widget_bridge(&plan).map_err(|error| {
                 format!(
@@ -84,15 +94,23 @@ where
                 )
             })?;
             metrics.widget_bridge_lowering = widget_bridge_lowering_started.elapsed();
-            on_stage_completed("GTK bridge lowering", metrics.widget_bridge_lowering);
+            on_stage_event(RunPreparationStageEvent::Completed(
+                "GTK bridge lowering",
+                metrics.widget_bridge_lowering,
+            ));
+            on_stage_event(RunPreparationStageEvent::Started("run plan validation"));
             let run_plan_validation_started = Instant::now();
             validate_run_plan(sources, &bridge)?;
             metrics.run_plan_validation = run_plan_validation_started.elapsed();
-            on_stage_completed("run plan validation", metrics.run_plan_validation);
+            on_stage_event(RunPreparationStageEvent::Completed(
+                "run plan validation",
+                metrics.run_plan_validation,
+            ));
             Some(bridge)
         }
         SelectedRunEntryKind::HeadlessTaskMain => None,
     };
+    on_stage_event(RunPreparationStageEvent::Started("full-program lowering"));
     let runtime_backend_lowering_started = Instant::now();
     let lowered = if workspace_hirs.is_empty() {
         if let Some(query_context) = query_context {
@@ -118,9 +136,13 @@ where
         )?
     };
     metrics.runtime_backend_lowering = runtime_backend_lowering_started.elapsed();
-    on_stage_completed("full-program lowering", metrics.runtime_backend_lowering);
+    on_stage_event(RunPreparationStageEvent::Completed(
+        "full-program lowering",
+        metrics.runtime_backend_lowering,
+    ));
     metrics.runtime_backend_item_count = lowered.backend.items().iter().count();
     metrics.runtime_backend_kernel_count = lowered.backend.kernels().iter().count();
+    on_stage_event(RunPreparationStageEvent::Started("runtime assembly"));
     let runtime_assembly_started = Instant::now();
     let profiled_runtime_assembly = if workspace_hirs.is_empty() {
         assemble_hir_runtime_with_items_profiled(module, &included_items)
@@ -137,17 +159,20 @@ where
         rendered
     })?;
     metrics.runtime_assembly = runtime_assembly_started.elapsed();
-    on_stage_completed("runtime assembly", metrics.runtime_assembly);
+    on_stage_event(RunPreparationStageEvent::Completed(
+        "runtime assembly",
+        metrics.runtime_assembly,
+    ));
     metrics.reactive_guard_fragment_count =
         profiled_runtime_assembly.stats.reactive_guard_fragments;
     metrics.reactive_body_fragment_count = profiled_runtime_assembly.stats.reactive_body_fragments;
     metrics.reactive_fragment_compilation = profiled_runtime_assembly
         .stats
         .reactive_fragment_compile_duration;
-    on_stage_completed(
+    on_stage_event(RunPreparationStageEvent::Completed(
         "reactive fragment compile",
         metrics.reactive_fragment_compilation,
-    );
+    ));
     let runtime_assembly = profiled_runtime_assembly.assembly;
     let runtime_backend_by_hir = backend_items_by_hir(&lowered.core, lowered.backend.as_ref());
     let runtime_link =
@@ -164,6 +189,7 @@ where
                 rendered
             })?;
     let kind = if let Some(bridge) = gtk_preparation {
+        on_stage_event(RunPreparationStageEvent::Started("runtime expr sites"));
         let markup_site_collection_started = Instant::now();
         let sites = collect_markup_runtime_expr_sites(module, selected.value.body).map_err(|error| {
             let span_info = match &error {
@@ -178,7 +204,11 @@ where
             )
         })?;
         metrics.markup_site_collection = markup_site_collection_started.elapsed();
-        on_stage_completed("runtime expr sites", metrics.markup_site_collection);
+        on_stage_event(RunPreparationStageEvent::Completed(
+            "runtime expr sites",
+            metrics.markup_site_collection,
+        ));
+        on_stage_event(RunPreparationStageEvent::Started("hydration fragments"));
         let hydration_fragment_compilation_started = Instant::now();
         let (hydration_inputs, hydration_metrics) = compile_run_inputs(
             sources,
@@ -189,15 +219,16 @@ where
             &bridge,
             lowered.backend.as_ref(),
             &runtime_backend_by_hir,
-            None,
+            query_context,
         )?;
         metrics.hydration_fragment_compilation = hydration_fragment_compilation_started.elapsed();
-        on_stage_completed(
+        on_stage_event(RunPreparationStageEvent::Completed(
             "hydration fragments",
             metrics.hydration_fragment_compilation,
-        );
+        ));
         metrics.hydration_fragment_count = hydration_metrics.compiled_fragment_count;
         let patterns = collect_run_patterns(sources, module, &bridge)?;
+        on_stage_event(RunPreparationStageEvent::Started("event handler resolve"));
         let event_handler_resolution_started = Instant::now();
         let event_handlers = resolve_run_event_handlers(
             module,
@@ -208,7 +239,10 @@ where
             sources,
         )?;
         metrics.event_handler_resolution = event_handler_resolution_started.elapsed();
-        on_stage_completed("event handler resolve", metrics.event_handler_resolution);
+        on_stage_event(RunPreparationStageEvent::Completed(
+            "event handler resolve",
+            metrics.event_handler_resolution,
+        ));
         RunArtifactKind::Gtk(RunGtkArtifact {
             patterns,
             bridge,
@@ -229,10 +263,14 @@ where
         RunArtifactKind::Gtk(surface) => collect_run_required_signal_globals(&surface.hydration_inputs),
         RunArtifactKind::HeadlessTask { .. } => BTreeMap::new(),
     };
+    on_stage_event(RunPreparationStageEvent::Started("stub signal defaults"));
     let stub_signal_defaults_started = Instant::now();
     let stub_signal_defaults = collect_stub_signal_defaults(module, &runtime_assembly);
     metrics.stub_signal_defaults = stub_signal_defaults_started.elapsed();
-    on_stage_completed("stub signal defaults", metrics.stub_signal_defaults);
+    on_stage_event(RunPreparationStageEvent::Completed(
+        "stub signal defaults",
+        metrics.stub_signal_defaults,
+    ));
     metrics.total = total_started.elapsed();
     let mut artifact = RunArtifact {
         view_name: selected.value.name.text().into(),
@@ -1497,8 +1535,88 @@ fn compile_run_inputs(
     ),
     String,
 > {
+    let input_specs = collect_run_input_specs_from_bridge(module, bridge);
     let mut inputs = BTreeMap::new();
     let mut metrics = RunInputCompilationMetrics::default();
+    if query_context.is_some() {
+        let unique_exprs = collect_unique_run_input_exprs(&input_specs);
+        let compile_expr = |expr| {
+            compile_run_fragment_for_input(
+                module,
+                sources,
+                workspace_hirs,
+                view_owner,
+                sites,
+                runtime_backend,
+                runtime_backend_by_hir,
+                query_context,
+                expr,
+            )
+            .map(|fragment| (expr, fragment))
+        };
+        let parallelism = bounded_fragment_parallelism(unique_exprs.len());
+        let batch_size = fragment_batch_size(unique_exprs.len());
+        let mut compiled_fragments = BTreeMap::new();
+        for expr_batch in unique_exprs.chunks(batch_size) {
+            let batch_results = if parallelism <= 1 {
+                expr_batch
+                    .iter()
+                    .copied()
+                    .map(compile_expr)
+                    .collect::<Result<Vec<_>, _>>()?
+            } else {
+                match fragment_thread_pool() {
+                    Some(pool) => pool.install(|| {
+                        expr_batch
+                            .par_iter()
+                            .copied()
+                            .map(compile_expr)
+                            .collect::<Result<Vec<_>, _>>()
+                    })?,
+                    None => expr_batch
+                        .iter()
+                        .copied()
+                        .map(compile_expr)
+                        .collect::<Result<Vec<_>, _>>()?,
+                }
+            };
+            compiled_fragments.extend(batch_results);
+        }
+        metrics.compiled_fragment_count = compiled_fragments.len();
+        for (input, spec) in input_specs {
+            let compiled = match spec {
+                RunInputSpec::Expr(expr) => CompiledRunInput::Expr(
+                    compiled_fragments
+                        .get(&expr)
+                        .cloned()
+                        .expect("parallel run fragment compilation should cover every unique expr"),
+                ),
+                RunInputSpec::Text(text) => {
+                    let mut segments = Vec::with_capacity(text.segments.len());
+                    for segment in text.segments {
+                        match segment {
+                            aivi_hir::TextSegment::Text(text) => {
+                                segments.push(CompiledRunTextSegment::Text(text.raw));
+                            }
+                            aivi_hir::TextSegment::Interpolation(interpolation) => {
+                                segments.push(CompiledRunTextSegment::Interpolation(
+                                    compiled_fragments
+                                        .get(&interpolation.expr)
+                                        .cloned()
+                                        .expect("parallel run fragment compilation should cover interpolation exprs"),
+                                ));
+                            }
+                        }
+                    }
+                    CompiledRunInput::Text(CompiledRunText {
+                        segments: segments.into_boxed_slice(),
+                    })
+                }
+            };
+            inputs.insert(input, compiled);
+        }
+        return Ok((inputs, metrics));
+    }
     let mut compiler = RunFragmentCompiler::new(
         sources,
         module,
@@ -1516,7 +1634,7 @@ fn compile_run_inputs(
         }
         Ok::<_, String>(fragment)
     };
-    for (input, spec) in collect_run_input_specs_from_bridge(module, bridge) {
+    for (input, spec) in input_specs {
         let compiled = match spec {
             RunInputSpec::Expr(expr) => CompiledRunInput::Expr(compile_fragment(expr)?),
             RunInputSpec::Text(text) => {
@@ -1541,4 +1659,63 @@ fn compile_run_inputs(
         inputs.insert(input, compiled);
     }
     Ok((inputs, metrics))
+}
+
+fn bounded_fragment_parallelism(work_items: usize) -> usize {
+    if work_items <= 1 {
+        return 1;
+    }
+    configured_fragment_parallelism().min(work_items).max(1)
+}
+
+fn fragment_batch_size(work_items: usize) -> usize {
+    bounded_fragment_parallelism(work_items).saturating_mul(8).max(1)
+}
+
+fn configured_fragment_parallelism() -> usize {
+    const DEFAULT_MAX_THREADS: usize = 2;
+    let available = std::thread::available_parallelism()
+        .map(|threads| threads.get())
+        .unwrap_or(1);
+    let configured = std::env::var("AIVI_FRAGMENT_PARALLELISM")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|threads| *threads > 0)
+        .unwrap_or(DEFAULT_MAX_THREADS);
+    configured.min(available).max(1)
+}
+
+fn fragment_thread_pool() -> Option<&'static rayon::ThreadPool> {
+    static POOL: std::sync::OnceLock<Option<rayon::ThreadPool>> = std::sync::OnceLock::new();
+    if configured_fragment_parallelism() <= 1 {
+        return None;
+    }
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(configured_fragment_parallelism())
+            .build()
+            .ok()
+    })
+    .as_ref()
+}
+
+fn collect_unique_run_input_exprs(
+    input_specs: &BTreeMap<RuntimeInputHandle, RunInputSpec>,
+) -> Vec<HirExprId> {
+    let mut exprs = BTreeSet::new();
+    for spec in input_specs.values() {
+        match spec {
+            RunInputSpec::Expr(expr) => {
+                exprs.insert(*expr);
+            }
+            RunInputSpec::Text(text) => {
+                for segment in &text.segments {
+                    if let aivi_hir::TextSegment::Interpolation(interpolation) = segment {
+                        exprs.insert(interpolation.expr);
+                    }
+                }
+            }
+        }
+    }
+    exprs.into_iter().collect()
 }

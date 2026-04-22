@@ -16,7 +16,7 @@ use crate::{
         HirModuleResult, ParsedFileResult,
         backend::{
             RuntimeFragmentUnitCacheEntry, RuntimeFragmentUnitCacheKey, WholeProgramUnitCacheEntry,
-            WholeProgramUnitCacheKey,
+            WholeProgramUnitCacheKey, WorkspaceModulesCacheEntry,
         },
     },
 };
@@ -133,6 +133,7 @@ struct DbState {
     paths: FxHashMap<PathBuf, SourceFile>,
     parsed: FxHashMap<u32, Cached<ParsedFileResult>>,
     hir: FxHashMap<u32, Cached<HirModuleResult>>,
+    workspace_modules: FxHashMap<u32, WorkspaceModulesCacheEntry>,
     whole_program_units: FxHashMap<WholeProgramUnitCacheKey, WholeProgramUnitCacheEntry>,
     runtime_fragment_units: FxHashMap<RuntimeFragmentUnitCacheKey, RuntimeFragmentUnitCacheEntry>,
     file_deps: FileDeps,
@@ -141,6 +142,7 @@ struct DbState {
 fn invalidate_file_caches(state: &mut DbState, file_id: u32) {
     state.parsed.remove(&file_id);
     state.hir.remove(&file_id);
+    state.workspace_modules.remove(&file_id);
     state
         .whole_program_units
         .retain(|key, _| key.file_id != file_id);
@@ -454,6 +456,24 @@ impl RootDatabase {
         key: WholeProgramUnitCacheKey,
     ) -> Option<WholeProgramUnitCacheEntry> {
         self.state.read().whole_program_units.get(&key).cloned()
+    }
+
+    pub(crate) fn workspace_modules_cache_entry(
+        &self,
+        file: SourceFile,
+    ) -> Option<WorkspaceModulesCacheEntry> {
+        self.state.read().workspace_modules.get(&file.id).cloned()
+    }
+
+    pub(crate) fn store_workspace_modules_cache_entry(
+        &self,
+        file: SourceFile,
+        entry: WorkspaceModulesCacheEntry,
+    ) {
+        let mut state = self.state.write();
+        if state.files.contains_key(&file.id) {
+            state.workspace_modules.insert(file.id, entry);
+        }
     }
 
     pub(crate) fn store_whole_program_cache_entry(

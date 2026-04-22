@@ -16,6 +16,7 @@ glib = "0.22.3"
 serde.workspace = true
 serde_json.workspace = true
 regex = "1"
+rayon = "1"
 url = "2.5"
 ureq = "2"
 fastrand = "2"
