@@ -1,8 +1,9 @@
 use super::{
     HydratedRunNode, ResolvedRunEventHandler, ResolvedRunEventPayload, RunFragmentExecutionUnit,
-    RunHydrationStaticState, WorkspaceHirSnapshot, check_file, execute_file_with_context,
-    plan_run_hydration, prepare_execute_artifact, prepare_run_artifact,
-    run_hydration_globals_ready, test_file_with_context,
+    RunHydrationPreparationMode, RunHydrationStaticState, WorkspaceHirSnapshot, check_file,
+    execute_file_with_context, plan_run_hydration, prepare_execute_artifact, prepare_run_artifact,
+    prepare_run_artifact_with_metrics_and_progress, run_hydration_globals_ready,
+    test_file_with_context,
 };
 use aivi_backend::{
     DetachedRuntimeValue, NativeKernelArtifactSet, RuntimeTaskPlan, RuntimeValue,
@@ -105,6 +106,44 @@ fn prepare_run_from_text(
         validation.diagnostics()
     );
     prepare_run_artifact(&sources, lowered.module(), &[], requested_view)
+}
+
+fn prepare_run_from_text_with_hydration_mode(
+    path: &str,
+    source: &str,
+    requested_view: Option<&str>,
+    hydration_mode: RunHydrationPreparationMode,
+) -> Result<super::RunArtifact, String> {
+    ensure_interpreted_main_parts_tests();
+    let mut sources = SourceDatabase::new();
+    let file_id = sources.add_file(path, source);
+    let file = &sources[file_id];
+    let parsed = parse_module(file);
+    assert!(!parsed.has_errors(), "test input should parse cleanly");
+    let lowered = lower_hir_module(&parsed.module);
+    assert!(
+        !lowered.has_errors(),
+        "test input should lower cleanly: {:?}",
+        lowered.diagnostics()
+    );
+    let validation = lowered
+        .module()
+        .validate(ValidationMode::RequireResolvedNames);
+    assert!(
+        validation.diagnostics().is_empty(),
+        "test input should validate cleanly: {:?}",
+        validation.diagnostics()
+    );
+    prepare_run_artifact_with_metrics_and_progress(
+        &sources,
+        lowered.module(),
+        &[],
+        requested_view,
+        None,
+        hydration_mode,
+        |_| {},
+    )
+    .map(|prepared| prepared.artifact)
 }
 
 fn prepare_run_from_workspace(
@@ -683,6 +722,56 @@ fn resolve_run_entrypoint_uses_manifest_run_entry_when_multiple_apps_exist() {
 
     assert_eq!(resolved.entry_path, expected);
     assert_eq!(resolved.manifest_view, None);
+    assert!(resolved.manifest_launch.is_empty());
+}
+
+#[test]
+fn resolve_run_entrypoint_carries_manifest_launch_parts() {
+    let workspace = TempDir::new("run-entry-manifest-launch-parts");
+    workspace.write(
+        "aivi.toml",
+        concat!(
+            "[run]\n",
+            "entry = \"apps/launcher/main.aivi\"\n",
+            "view = \"splash\"\n",
+            "\n",
+            "[[run.launch]]\n",
+            "label = \"UI\"\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "view = \"main\"\n",
+            "\n",
+            "[[run.launch]]\n",
+            "label = \"Daemon\"\n",
+            "entry = \"apps/daemon/main.aivi\"\n",
+        ),
+    );
+    let launcher = workspace.write(
+        "apps/launcher/main.aivi",
+        "value splash = <Window title=\"Launcher\" />\n",
+    );
+    let ui = workspace.write(
+        "apps/ui/main.aivi",
+        "value main = <Window title=\"UI\" />\n",
+    );
+    let daemon = workspace.write(
+        "apps/daemon/main.aivi",
+        "value main = <Window title=\"Daemon\" />\n",
+    );
+    let cwd = workspace.path().join("tooling/nested");
+    fs::create_dir_all(&cwd).expect("nested tooling directory should exist");
+
+    let resolved = super::resolve_run_entrypoint(&cwd, None, None)
+        .expect("manifest [run] entry should carry launch metadata");
+
+    assert_eq!(resolved.entry_path, launcher);
+    assert_eq!(resolved.manifest_view.as_deref(), Some("splash"));
+    assert_eq!(resolved.manifest_launch.len(), 2);
+    assert_eq!(resolved.manifest_launch[0].label(), "UI");
+    assert_eq!(resolved.manifest_launch[0].entry_path(), ui.as_path());
+    assert_eq!(resolved.manifest_launch[0].view(), Some("main"));
+    assert_eq!(resolved.manifest_launch[1].label(), "Daemon");
+    assert_eq!(resolved.manifest_launch[1].entry_path(), daemon.as_path());
+    assert_eq!(resolved.manifest_launch[1].view(), None);
 }
 
 #[test]
@@ -1070,6 +1159,117 @@ value view =
 }
 
 #[test]
+fn deferred_live_hydration_compiles_inputs_on_first_plan() {
+    let artifact = prepare_run_from_text_with_hydration_mode(
+        "deferred-live-run.aivi",
+        r#"
+@source process.cwd
+signal cwd : Signal Text
+
+value view =
+    <Window title={cwd} />
+"#,
+        None,
+        RunHydrationPreparationMode::DeferredLive,
+    )
+    .expect("deferred live view should prepare for run");
+    assert!(
+        artifact.hydration_inputs.is_empty(),
+        "deferred live preparation should skip eager hydration fragment compilation"
+    );
+    assert!(
+        !artifact.deferred_hydration_inputs.is_empty(),
+        "deferred live preparation should retain hydration input specs for on-demand compile"
+    );
+    let signal = *artifact
+        .required_signal_globals
+        .keys()
+        .next()
+        .expect("deferred live preparation should still project required signal handles");
+    let shared = RunHydrationStaticState {
+        view_name: artifact.view_name.clone(),
+        patterns: artifact.patterns.clone(),
+        bridge: artifact.bridge.clone(),
+        inputs: artifact.hydration_inputs.clone(),
+        deferred_inputs: artifact.deferred_hydration_inputs.clone(),
+        deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+        lazy_hydration: artifact.lazy_hydration.clone(),
+        signal_items_by_handle: BTreeMap::new(),
+        runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
+            artifact.backend.clone(),
+            artifact.backend_native_kernels.clone(),
+        )),
+    };
+    let globals = BTreeMap::from([(
+        signal,
+        DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Text("ready".into())),
+    )]);
+    let plan = plan_run_hydration(&shared, &globals)
+        .expect("deferred live hydration should compile inputs on first plan");
+    assert!(
+        !shared
+            .deferred_input_cache
+            .lock()
+            .expect("deferred hydration cache lock")
+            .is_empty(),
+        "first hydration plan should populate the deferred input cache"
+    );
+    let HydratedRunNode::Widget { .. } = &plan.root else {
+        panic!("expected a window hydration root");
+    };
+}
+
+#[test]
+fn deferred_live_event_handlers_stay_lazy_until_dispatch() {
+    let artifact = prepare_run_from_text_with_hydration_mode(
+        "deferred-live-event-hook.aivi",
+        r#"
+signal selected : Signal Text
+
+value view =
+    <Window title="Host">
+        <Button label="Select" onClick={selected "Beta"} />
+    </Window>
+"#,
+        None,
+        RunHydrationPreparationMode::DeferredLive,
+    )
+    .expect("deferred live event hook view should prepare for run");
+    assert!(
+        artifact.event_handlers.is_empty(),
+        "deferred live preparation should skip eager event handler resolution"
+    );
+    let context = artifact
+        .lazy_event_handlers
+        .as_ref()
+        .expect("deferred live preparation should retain lazy event handler context");
+    let widget = artifact
+        .bridge
+        .nodes()
+        .iter()
+        .find_map(|node| match &node.kind {
+            GtkBridgeNodeKind::Widget(widget)
+                if widget.widget.segments().last().text() == "Button" =>
+            {
+                Some(widget)
+            }
+            _ => None,
+        })
+        .expect("bridge should keep the button widget");
+    let handler = widget
+        .event_hooks
+        .first()
+        .expect("button should keep one event hook");
+    let resolved = super::resolve_deferred_run_event_handler(context, handler.handler)
+        .expect("deferred live event hook should resolve on demand");
+    assert_eq!(resolved.signal_name.as_ref(), "selected");
+    assert!(matches!(
+        resolved.payload,
+        ResolvedRunEventPayload::ScopedInput
+    ));
+}
+
+#[test]
 fn prepare_run_prefers_named_view_when_present() {
     let artifact = prepare_run_from_text(
         "named-view.aivi",
@@ -1127,20 +1327,32 @@ value view =
     let snapshot = WorkspaceHirSnapshot::load(&entry).expect("workspace snapshot should load");
     let lowered = snapshot.entry_hir();
     let module = lowered.module();
+    let workspace_hir_arcs = super::collect_workspace_hirs_sorted(&snapshot);
+    let workspace_hirs: Vec<(&str, &aivi_hir::Module)> = workspace_hir_arcs
+        .iter()
+        .map(|(name, arc)| (name.as_str(), arc.module()))
+        .collect();
     let view = super::select_run_view(module, None).expect("view should resolve");
     let view_owner = super::find_value_owner(module, view).expect("view owner should resolve");
     let plan = super::lower_markup_expr(module, view.body)
         .expect("view markup should lower into a GTK plan");
     let bridge = super::lower_widget_bridge(&plan).expect("GTK plan should lower into a bridge");
-    let sites = super::collect_markup_runtime_expr_sites(module, view.body)
+    let sites = super::collect_run_markup_expr_sites(&snapshot.sources, module, &workspace_hirs)
         .expect("runtime expression sites should collect");
     let included_items = super::production_item_ids(module);
     let runtime_stack =
         super::lower_runtime_backend_stack_with_items_fast(module, &included_items, "`aivi run`")
             .expect("runtime backend stack should lower");
+    let runtime_assembly = super::assemble_hir_runtime_with_items_profiled_and_progress(
+        module,
+        &included_items,
+        |_| {},
+    )
+    .expect("runtime assembly should lower")
+    .assembly;
     let runtime_backend_by_hir =
         super::backend_items_by_hir(&runtime_stack.core, runtime_stack.backend.as_ref());
-    let expr = super::collect_run_input_specs_from_bridge(module, &bridge)
+    let expr = super::collect_run_input_specs_from_bridge(module, &workspace_hirs, &bridge)
         .into_values()
         .find_map(|spec| match spec {
             super::RunInputSpec::Expr(expr) => Some(expr),
@@ -1154,6 +1366,7 @@ value view =
         &[],
         view_owner,
         &sites,
+        &runtime_assembly,
         runtime_stack.backend.as_ref(),
         &runtime_backend_by_hir,
         Some(snapshot.backend_query_context()),
@@ -1175,6 +1388,7 @@ value view =
         &[],
         view_owner,
         &sites,
+        &runtime_assembly,
         runtime_stack.backend.as_ref(),
         &runtime_backend_by_hir,
         Some(snapshot.backend_query_context()),
@@ -1461,6 +1675,10 @@ fn run_hydration_planner_precomputes_control_and_setter_updates_off_thread() {
         patterns: artifact.patterns.clone(),
         bridge: artifact.bridge.clone(),
         inputs: artifact.hydration_inputs.clone(),
+        deferred_inputs: BTreeMap::new(),
+        deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+        lazy_hydration: None,
+        signal_items_by_handle: BTreeMap::new(),
         runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
             artifact.backend.clone(),
             artifact.backend_native_kernels.clone(),
@@ -1545,6 +1763,10 @@ value view =
         patterns: artifact.patterns.clone(),
         bridge: artifact.bridge.clone(),
         inputs: artifact.hydration_inputs.clone(),
+        deferred_inputs: BTreeMap::new(),
+        deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+        lazy_hydration: None,
+        signal_items_by_handle: BTreeMap::new(),
         runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
             artifact.backend.clone(),
             artifact.backend_native_kernels.clone(),
@@ -1821,6 +2043,193 @@ export (ReaderTab, MarkdownTab, TextTab, selectTab)
 }
 
 #[test]
+fn prepare_run_accepts_imported_markup_components() {
+    let workspace = TempDir::new("workspace-imported-markup-component");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.header (Header)
+
+value view =
+    <Window title="Host">
+        <Window.titlebar>
+            <Header />
+        </Window.titlebar>
+        <Label text="Hello" />
+    </Window>
+"#,
+    );
+    workspace.write(
+        "shared/header.aivi",
+        r#"
+value Header =
+    <HeaderBar />
+
+export Header
+"#,
+    );
+
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None)
+        .expect("workspace run preparation should accept imported markup components");
+    let has_header_bar = artifact.bridge.nodes().iter().any(|node| {
+        matches!(
+            &node.kind,
+            GtkBridgeNodeKind::Widget(widget)
+                if widget.widget.segments().last().text() == "HeaderBar"
+        )
+    });
+    assert!(
+        has_header_bar,
+        "bridge should include the imported HeaderBar widget"
+    );
+}
+
+#[test]
+fn prepare_run_accepts_imported_dynamic_markup_components() {
+    let workspace = TempDir::new("workspace-imported-dynamic-markup-component");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.header (Header)
+
+value view =
+    <Window title="Host">
+        <Header />
+    </Window>
+"#,
+    );
+    workspace.write(
+        "shared/header.aivi",
+        r#"
+value title : Text = "Mailfox"
+
+value Header =
+    <Label text={title} />
+
+export Header
+"#,
+    );
+
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None)
+        .expect("workspace run preparation should accept imported dynamic markup components");
+    let has_dynamic_label = artifact.bridge.nodes().iter().any(|node| {
+        matches!(
+            &node.kind,
+            GtkBridgeNodeKind::Widget(widget)
+                if widget.widget.segments().last().text() == "Label"
+                    && widget.properties.iter().any(|property| matches!(
+                        property,
+                        RuntimePropertyBinding::Setter(setter) if setter.name.text() == "text"
+                    ))
+        )
+    });
+    assert!(
+        has_dynamic_label,
+        "bridge should preserve the imported dynamic label setter"
+    );
+    assert!(
+        !artifact.hydration_inputs.is_empty(),
+        "imported dynamic markup should collect hydration inputs"
+    );
+}
+
+#[test]
+fn prepare_run_accepts_imported_component_local_signal_aliases() {
+    let workspace = TempDir::new("workspace-imported-component-local-signal-alias");
+    workspace.write(
+        "main.aivi",
+        r#"
+use shared.header (Header)
+
+value view =
+    <Window title="Host">
+        <Header />
+    </Window>
+"#,
+    );
+    workspace.write(
+        "shared/state.aivi",
+        r#"
+@source process.cwd
+signal searchText : Signal Text
+
+export searchText
+"#,
+    );
+    workspace.write(
+        "shared/header.aivi",
+        r#"
+use shared.state (searchText)
+
+signal currentSearchText = searchText
+
+value Header =
+    <Label text={currentSearchText} />
+
+export Header
+"#,
+    );
+
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None)
+        .expect("workspace run preparation should accept imported component-local signal aliases");
+    assert!(
+        !artifact.hydration_inputs.is_empty(),
+        "imported alias-backed setters should still produce hydration inputs"
+    );
+}
+
+#[test]
+fn prepare_run_accepts_workspace_signal_imports_across_multiple_modules() {
+    let workspace = TempDir::new("workspace-signal-import-origins");
+    workspace.write(
+        "main.aivi",
+        r#"
+use features.first (firstLabel)
+use features.second (secondLabel)
+
+value title = firstLabel
+value subtitle = secondLabel
+value view =
+    <Window title={title}>
+        <Label text={subtitle} />
+    </Window>
+"#,
+    );
+    workspace.write(
+        "shared/state.aivi",
+        r#"
+signal title : Signal Text = "Mailfox"
+
+export title
+"#,
+    );
+    workspace.write(
+        "features/first.aivi",
+        r#"
+use shared.state (title)
+
+value firstLabel : Text = title
+
+export firstLabel
+"#,
+    );
+    workspace.write(
+        "features/second.aivi",
+        r#"
+use shared.state (title)
+
+value secondLabel : Text = title
+
+export secondLabel
+"#,
+    );
+
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None)
+        .expect("workspace run preparation should accept signal imports across multiple modules");
+    assert_eq!(artifact.view_name.as_ref(), "view");
+}
+
+#[test]
 fn prepare_run_accepts_reexported_cross_module_signal_event_hooks() {
     let workspace = TempDir::new("reexported-event-hook");
     workspace.write(
@@ -2020,6 +2429,10 @@ value view =
             patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
+            deferred_inputs: BTreeMap::new(),
+            deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+            lazy_hydration: None,
+            signal_items_by_handle: BTreeMap::new(),
             runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
                 artifact.backend.clone(),
                 artifact.backend_native_kernels.clone(),
@@ -2884,6 +3297,7 @@ fn progress_lines_render_braille_spinner_with_color() {
             started_at: Instant::now() - Duration::from_millis(180),
         }),
         startup_current: None,
+        launch_parts: Vec::new(),
         prelaunch_history: vec![Duration::from_millis(35), Duration::from_millis(120)],
         startup_history: vec![Duration::from_millis(15)],
         recent: VecDeque::from([
@@ -2916,6 +3330,7 @@ fn progress_lines_stay_plain_when_color_disabled() {
             label: "session setup".into(),
             started_at: Instant::now() - Duration::from_millis(95),
         }),
+        launch_parts: Vec::new(),
         prelaunch_history: vec![Duration::from_millis(40)],
         startup_history: vec![Duration::from_millis(10), Duration::from_millis(90)],
         recent: VecDeque::from([("runtime link".into(), Duration::from_micros(274))]),
@@ -2963,6 +3378,7 @@ fn finish_launch_keeps_progress_live_after_first_present() {
             label: "launching session".into(),
             started_at: Instant::now(),
         }),
+        launch_parts: Vec::new(),
         prelaunch_history: vec![Duration::from_millis(12)],
         startup_history: vec![Duration::from_millis(48)],
         recent: VecDeque::new(),
@@ -3009,6 +3425,7 @@ fn update_prelaunch_replaces_current_stage_label() {
             started_at: Instant::now(),
         }),
         startup_current: None,
+        launch_parts: Vec::new(),
         prelaunch_history: Vec::new(),
         startup_history: Vec::new(),
         recent: VecDeque::new(),

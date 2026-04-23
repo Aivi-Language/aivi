@@ -1,17 +1,23 @@
-use std::{collections::HashMap, error::Error, fmt};
+use std::{
+    collections::{BTreeMap, HashMap},
+    error::Error,
+    fmt,
+};
 
+use aivi_base::FileId;
 use aivi_hir::{
-    BindingId, ControlNode, ControlNodeId, ExprId, ExprKind, MarkupAttribute, MarkupAttributeValue,
-    MarkupNodeId, MarkupNodeKind, Module, Name, NamePath, NonEmpty, PatternId, TextLiteral,
-    TextSegment,
+    BindingId, ControlNode, ControlNodeId, ExprId, ExprKind, Item, MarkupAttribute,
+    MarkupAttributeValue, MarkupNodeId, MarkupNodeKind, Module, Name, NamePath, NonEmpty,
+    PatternId, TextLiteral, TextSegment,
 };
 
 use crate::plan::{
-    AttributeSite, CaseNode, ChildOp, ChildUpdateMode, EachNode, EmptyNode, EventHookPlan,
-    EventHookStrategy, EventHookTeardown, FragmentNode, GroupNode, MatchNode, PlanNode, PlanNodeId,
-    PlanNodeKind, PropertyPlan, RepeatedChildPolicy, SetterBindingPlan, SetterSource,
-    SetterTeardown, SetterUpdateStrategy, ShowMountPolicy, ShowNode, StableNodeId,
-    StaticPropertyPlan, StaticPropertyValue, WidgetNode, WidgetPlan, WithNode,
+    AttributeSite, BindingRef, CaseNode, ChildOp, ChildUpdateMode, EachNode, EmptyNode,
+    EventHookPlan, EventHookStrategy, EventHookTeardown, ExprRef, FragmentNode, GroupNode,
+    InterpolatedText, MatchNode, PatternRef, PlanNode, PlanNodeId, PlanNodeKind, PropertyPlan,
+    RepeatedChildPolicy, SetterBindingPlan, SetterSource, SetterTeardown, SetterUpdateStrategy,
+    ShowMountPolicy, ShowNode, StableNodeId, StaticPropertyPlan, StaticPropertyValue, WidgetNode,
+    WidgetPlan, WithNode,
 };
 use crate::schema::{lookup_widget_event, lookup_widget_schema};
 
@@ -67,6 +73,7 @@ pub enum LoweringError {
     ExpectedMarkupExpr(ExprId),
     MissingMarkupNode(MarkupNodeId),
     MissingControlNode(ControlNodeId),
+    MissingWorkspaceModule(FileId),
     MissingExpr(ExprId),
     MissingBinding(BindingId),
     MissingPattern(PatternId),
@@ -106,6 +113,14 @@ pub enum LoweringError {
         name: String,
         span: aivi_base::SourceSpan,
     },
+    ComponentHasAttributes {
+        name: String,
+        span: aivi_base::SourceSpan,
+    },
+    ComponentHasChildren {
+        name: String,
+        span: aivi_base::SourceSpan,
+    },
 }
 
 impl fmt::Display for LoweringError {
@@ -117,6 +132,12 @@ impl fmt::Display for LoweringError {
             }
             Self::MissingControlNode(node) => {
                 write!(f, "control node {node:?} was not found in the HIR module")
+            }
+            Self::MissingWorkspaceModule(file) => {
+                write!(
+                    f,
+                    "workspace module {file} was not found during markup lowering"
+                )
             }
             Self::MissingExpr(expr) => {
                 write!(f, "expression {expr:?} was not found in the HIR module")
@@ -163,6 +184,12 @@ impl fmt::Display for LoweringError {
             Self::UnknownWidget { name, .. } => {
                 write!(f, "widget `{name}` is not known to the GTK schema registry")
             }
+            Self::ComponentHasAttributes { name, .. } => {
+                write!(f, "markup component `{name}` does not accept attributes")
+            }
+            Self::ComponentHasChildren { name, .. } => {
+                write!(f, "markup component `{name}` does not accept child nodes")
+            }
         }
     }
 }
@@ -171,12 +198,36 @@ impl Error for LoweringError {}
 
 /// Lower one HIR markup expression with the default lowering options.
 pub fn lower_markup_expr(module: &Module, expr: ExprId) -> Result<WidgetPlan, LoweringError> {
-    lower_markup_expr_with_options(module, expr, LoweringOptions::default())
+    lower_markup_expr_with_workspace_and_options(module, &[], expr, LoweringOptions::default())
+}
+
+/// Lower one HIR markup expression with workspace modules available for imported component lookup.
+pub fn lower_markup_expr_with_workspace(
+    module: &Module,
+    workspace_hirs: &[(&str, &Module)],
+    expr: ExprId,
+) -> Result<WidgetPlan, LoweringError> {
+    lower_markup_expr_with_workspace_and_options(
+        module,
+        workspace_hirs,
+        expr,
+        LoweringOptions::default(),
+    )
 }
 
 /// Lower one HIR markup expression with explicit lowering options.
 pub fn lower_markup_expr_with_options(
     module: &Module,
+    expr: ExprId,
+    options: LoweringOptions,
+) -> Result<WidgetPlan, LoweringError> {
+    lower_markup_expr_with_workspace_and_options(module, &[], expr, options)
+}
+
+/// Lower one HIR markup expression with explicit lowering options and workspace context.
+pub fn lower_markup_expr_with_workspace_and_options(
+    module: &Module,
+    workspace_hirs: &[(&str, &Module)],
     expr: ExprId,
     options: LoweringOptions,
 ) -> Result<WidgetPlan, LoweringError> {
@@ -187,12 +238,12 @@ pub fn lower_markup_expr_with_options(
     let ExprKind::Markup(root) = expr_node.kind else {
         return Err(LoweringError::ExpectedMarkupExpr(expr));
     };
-    lower_markup_root_with_options(module, root, options)
+    lower_markup_root_with_workspace_and_options(module, workspace_hirs, root, options)
 }
 
 /// Lower one HIR markup root with the default lowering options.
 pub fn lower_markup_root(module: &Module, root: MarkupNodeId) -> Result<WidgetPlan, LoweringError> {
-    lower_markup_root_with_options(module, root, LoweringOptions::default())
+    lower_markup_root_with_workspace_and_options(module, &[], root, LoweringOptions::default())
 }
 
 /// Lower one HIR markup root into a typed widget plan.
@@ -201,121 +252,197 @@ pub fn lower_markup_root_with_options(
     root: MarkupNodeId,
     options: LoweringOptions,
 ) -> Result<WidgetPlan, LoweringError> {
-    let mut lowering = Lowering::new(module, options);
+    lower_markup_root_with_workspace_and_options(module, &[], root, options)
+}
+
+/// Lower one HIR markup root into a typed widget plan with workspace context.
+pub fn lower_markup_root_with_workspace_and_options(
+    module: &Module,
+    workspace_hirs: &[(&str, &Module)],
+    root: MarkupNodeId,
+    options: LoweringOptions,
+) -> Result<WidgetPlan, LoweringError> {
+    let mut lowering = Lowering::new(module, workspace_hirs, options);
     let root = lowering.lower_root(root)?;
     let plan = WidgetPlan::new(root, lowering.nodes);
     plan.validate().map_err(LoweringError::InvalidPlan)?;
     Ok(plan)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ExpansionInstanceId(u32);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ComponentTarget {
+    module_file: FileId,
+    root: MarkupNodeId,
+}
+
 struct Lowering<'module> {
-    module: &'module Module,
+    entry_module: &'module Module,
+    modules_by_file: HashMap<FileId, &'module Module>,
+    import_to_module: HashMap<FileId, HashMap<aivi_hir::ImportId, Box<str>>>,
+    workspace_component_exports: BTreeMap<String, BTreeMap<String, ComponentTarget>>,
     options: LoweringOptions,
     nodes: Vec<PlanNode>,
-    markup_nodes: HashMap<MarkupNodeId, PlanNodeId>,
-    control_nodes: HashMap<ControlNodeId, PlanNodeId>,
+    markup_nodes: HashMap<MarkupVisitKey, PlanNodeId>,
+    control_nodes: HashMap<ControlVisitKey, PlanNodeId>,
+    next_expansion_instance: u32,
 }
 
 impl<'module> Lowering<'module> {
-    fn new(module: &'module Module, options: LoweringOptions) -> Self {
+    fn new(
+        module: &'module Module,
+        workspace_hirs: &[(&str, &'module Module)],
+        options: LoweringOptions,
+    ) -> Self {
+        let mut modules_by_file = HashMap::new();
+        modules_by_file.insert(module.file(), module);
+        let mut import_to_module = HashMap::new();
+        import_to_module.insert(module.file(), workspace_import_to_module(module));
+        for (_, workspace_module) in workspace_hirs {
+            modules_by_file.insert(workspace_module.file(), *workspace_module);
+            import_to_module.insert(
+                workspace_module.file(),
+                workspace_import_to_module(workspace_module),
+            );
+        }
         Self {
-            module,
+            entry_module: module,
+            modules_by_file,
+            import_to_module,
+            workspace_component_exports: workspace_component_exports(workspace_hirs),
             options,
             nodes: Vec::new(),
             markup_nodes: HashMap::new(),
             control_nodes: HashMap::new(),
+            next_expansion_instance: 0,
         }
     }
 
     fn lower_root(&mut self, root: MarkupNodeId) -> Result<PlanNodeId, LoweringError> {
-        let mut worklist = vec![PendingNode::Markup {
+        self.lower_root_in_context(self.entry_module.file(), root, None)
+    }
+
+    fn lower_root_in_context(
+        &mut self,
+        module_file: FileId,
+        root: MarkupNodeId,
+        expansion: Option<ExpansionInstanceId>,
+    ) -> Result<PlanNodeId, LoweringError> {
+        let root_key = MarkupVisitKey {
+            module_file,
             id: root,
+            expansion,
+        };
+        let mut worklist = vec![PendingNode::Markup {
+            key: root_key,
             state: VisitState::Enter,
         }];
 
         while let Some(node) = worklist.pop() {
             match node {
                 PendingNode::Markup {
-                    id,
+                    key,
                     state: VisitState::Enter,
                 } => {
-                    if self.markup_nodes.contains_key(&id) {
+                    if self.markup_nodes.contains_key(&key) {
                         continue;
                     }
                     let node = self
-                        .module
+                        .module_for_file(key.module_file)?
                         .markup_nodes()
-                        .get(id)
-                        .ok_or(LoweringError::MissingMarkupNode(id))?;
+                        .get(key.id)
+                        .ok_or(LoweringError::MissingMarkupNode(key.id))?;
                     worklist.push(PendingNode::Markup {
-                        id,
+                        key,
                         state: VisitState::Exit,
                     });
                     match &node.kind {
                         MarkupNodeKind::Element(element) => {
                             for child in element.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
                         }
                         MarkupNodeKind::Control(control) => {
                             worklist.push(PendingNode::Control {
-                                id: *control,
+                                key: ControlVisitKey {
+                                    module_file: key.module_file,
+                                    id: *control,
+                                    expansion: key.expansion,
+                                },
                                 state: VisitState::Enter,
                             });
                         }
                     }
                 }
                 PendingNode::Markup {
-                    id,
+                    key,
                     state: VisitState::Exit,
                 } => {
-                    if self.markup_nodes.contains_key(&id) {
+                    if self.markup_nodes.contains_key(&key) {
                         continue;
                     }
                     let node = self
-                        .module
+                        .module_for_file(key.module_file)?
                         .markup_nodes()
-                        .get(id)
-                        .ok_or(LoweringError::MissingMarkupNode(id))?;
+                        .get(key.id)
+                        .ok_or(LoweringError::MissingMarkupNode(key.id))?;
                     let plan_id = match &node.kind {
-                        MarkupNodeKind::Element(element) => {
-                            self.lower_element(id, node.span, element)?
-                        }
-                        MarkupNodeKind::Control(control) => {
-                            self.control_nodes.get(control).copied().ok_or(
-                                LoweringError::MissingLoweredControlBranch {
-                                    parent: StableNodeId::Markup(id),
-                                    branch: *control,
-                                },
-                            )?
-                        }
+                        MarkupNodeKind::Element(element) => self.lower_element(
+                            key.module_file,
+                            key.id,
+                            key.expansion,
+                            node.span,
+                            element,
+                        )?,
+                        MarkupNodeKind::Control(control) => self
+                            .control_nodes
+                            .get(&ControlVisitKey {
+                                module_file: key.module_file,
+                                id: *control,
+                                expansion: key.expansion,
+                            })
+                            .copied()
+                            .ok_or(LoweringError::MissingLoweredControlBranch {
+                                parent: stable_markup_id(key.module_file, key.id, key.expansion),
+                                branch: *control,
+                            })?,
                     };
-                    self.markup_nodes.insert(id, plan_id);
+                    self.markup_nodes.insert(key, plan_id);
                 }
                 PendingNode::Control {
-                    id,
+                    key,
                     state: VisitState::Enter,
                 } => {
-                    if self.control_nodes.contains_key(&id) {
+                    if self.control_nodes.contains_key(&key) {
                         continue;
                     }
                     let node = self
-                        .module
+                        .module_for_file(key.module_file)?
                         .control_nodes()
-                        .get(id)
-                        .ok_or(LoweringError::MissingControlNode(id))?;
+                        .get(key.id)
+                        .ok_or(LoweringError::MissingControlNode(key.id))?;
                     worklist.push(PendingNode::Control {
-                        id,
+                        key,
                         state: VisitState::Exit,
                     });
                     match node {
                         ControlNode::Show(show) => {
                             for child in show.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -323,13 +450,21 @@ impl<'module> Lowering<'module> {
                         ControlNode::Each(each) => {
                             if let Some(empty) = each.empty {
                                 worklist.push(PendingNode::Control {
-                                    id: empty,
+                                    key: ControlVisitKey {
+                                        module_file: key.module_file,
+                                        id: empty,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
                             for child in each.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -337,7 +472,11 @@ impl<'module> Lowering<'module> {
                         ControlNode::Empty(empty) => {
                             for child in empty.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -345,7 +484,11 @@ impl<'module> Lowering<'module> {
                         ControlNode::Match(match_node) => {
                             for case in match_node.cases.iter().rev() {
                                 worklist.push(PendingNode::Control {
-                                    id: *case,
+                                    key: ControlVisitKey {
+                                        module_file: key.module_file,
+                                        id: *case,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -353,7 +496,11 @@ impl<'module> Lowering<'module> {
                         ControlNode::Case(case) => {
                             for child in case.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -361,7 +508,11 @@ impl<'module> Lowering<'module> {
                         ControlNode::Fragment(fragment) => {
                             for child in fragment.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -369,7 +520,11 @@ impl<'module> Lowering<'module> {
                         ControlNode::With(with_node) => {
                             for child in with_node.children.iter().rev() {
                                 worklist.push(PendingNode::Markup {
-                                    id: *child,
+                                    key: MarkupVisitKey {
+                                        module_file: key.module_file,
+                                        id: *child,
+                                        expansion: key.expansion,
+                                    },
                                     state: VisitState::Enter,
                                 });
                             }
@@ -377,26 +532,27 @@ impl<'module> Lowering<'module> {
                     }
                 }
                 PendingNode::Control {
-                    id,
+                    key,
                     state: VisitState::Exit,
                 } => {
-                    if self.control_nodes.contains_key(&id) {
+                    if self.control_nodes.contains_key(&key) {
                         continue;
                     }
                     let node = self
-                        .module
+                        .module_for_file(key.module_file)?
                         .control_nodes()
-                        .get(id)
-                        .ok_or(LoweringError::MissingControlNode(id))?;
-                    let plan_id = self.lower_control(id, node)?;
-                    self.control_nodes.insert(id, plan_id);
+                        .get(key.id)
+                        .ok_or(LoweringError::MissingControlNode(key.id))?;
+                    let plan_id =
+                        self.lower_control(key.module_file, key.id, key.expansion, node)?;
+                    self.control_nodes.insert(key, plan_id);
                 }
             }
         }
 
         let root = self
             .markup_nodes
-            .get(&root)
+            .get(&root_key)
             .copied()
             .ok_or(LoweringError::MissingMarkupNode(root))?;
         if let Some(PlanNode {
@@ -415,11 +571,13 @@ impl<'module> Lowering<'module> {
 
     fn lower_element(
         &mut self,
+        module_file: FileId,
         id: MarkupNodeId,
+        expansion: Option<ExpansionInstanceId>,
         span: aivi_base::SourceSpan,
         element: &aivi_hir::MarkupElement,
     ) -> Result<PlanNodeId, LoweringError> {
-        let stable_id = StableNodeId::Markup(id);
+        let stable_id = stable_markup_id(module_file, id, expansion);
         if let Some((widget, group)) = split_widget_child_group(&element.name) {
             if !element.attributes.is_empty() {
                 return Err(LoweringError::ChildGroupHasAttributes {
@@ -427,7 +585,13 @@ impl<'module> Lowering<'module> {
                     span,
                 });
             }
-            let children = self.child_ops_from_markup(stable_id, None, &element.children)?;
+            let children = self.child_ops_from_markup(
+                stable_id,
+                None,
+                &element.children,
+                module_file,
+                expansion,
+            )?;
             return Ok(self.push_node(PlanNode {
                 stable_id,
                 span,
@@ -440,15 +604,41 @@ impl<'module> Lowering<'module> {
         }
         let widget_name_str = crate::schema::widget_leaf_name(&element.name).to_string();
         if lookup_widget_schema(&element.name).is_none() {
+            if let Some(component_target) = self.resolve_component_root(module_file, &element.name)
+            {
+                if !element.attributes.is_empty() {
+                    return Err(LoweringError::ComponentHasAttributes {
+                        name: widget_name_str,
+                        span,
+                    });
+                }
+                if !element.children.is_empty() {
+                    return Err(LoweringError::ComponentHasChildren {
+                        name: crate::schema::widget_leaf_name(&element.name).to_string(),
+                        span,
+                    });
+                }
+                let expansion = self.allocate_expansion();
+                return self.lower_root_in_context(
+                    component_target.module_file,
+                    component_target.root,
+                    Some(expansion),
+                );
+            }
             return Err(LoweringError::UnknownWidget {
                 name: widget_name_str,
                 span,
             });
         }
-        let children =
-            self.child_ops_from_markup(stable_id, Some(&element.name), &element.children)?;
+        let children = self.child_ops_from_markup(
+            stable_id,
+            Some(&element.name),
+            &element.children,
+            module_file,
+            expansion,
+        )?;
         let (properties, event_hooks) =
-            self.lower_attributes(stable_id, &element.name, &element.attributes)?;
+            self.lower_attributes(module_file, stable_id, &element.name, &element.attributes)?;
         Ok(self.push_node(PlanNode {
             stable_id,
             span,
@@ -463,34 +653,52 @@ impl<'module> Lowering<'module> {
 
     fn lower_control(
         &mut self,
+        module_file: FileId,
         id: ControlNodeId,
+        expansion: Option<ExpansionInstanceId>,
         node: &ControlNode,
     ) -> Result<PlanNodeId, LoweringError> {
-        let stable_id = StableNodeId::Control(id);
+        let stable_id = stable_control_id(module_file, id, expansion);
         let kind = match node {
             ControlNode::Show(show) => {
-                self.require_expr(show.when)?;
+                self.require_expr(module_file, show.when)?;
                 if let Some(keep_mounted) = show.keep_mounted {
-                    self.require_expr(keep_mounted)?;
+                    self.require_expr(module_file, keep_mounted)?;
                 }
                 PlanNodeKind::Show(ShowNode {
-                    when: show.when,
-                    mount: show
-                        .keep_mounted
-                        .map_or(ShowMountPolicy::UnmountWhenHidden, |decision| {
-                            ShowMountPolicy::KeepMounted { decision }
-                        }),
-                    children: self.child_ops_from_markup(stable_id, None, &show.children)?,
+                    when: ExprRef {
+                        origin_file: module_file,
+                        expr: show.when,
+                    },
+                    mount: show.keep_mounted.map_or(
+                        ShowMountPolicy::UnmountWhenHidden,
+                        |decision| ShowMountPolicy::KeepMounted {
+                            decision: ExprRef {
+                                origin_file: module_file,
+                                expr: decision,
+                            },
+                        },
+                    ),
+                    children: self.child_ops_from_markup(
+                        stable_id,
+                        None,
+                        &show.children,
+                        module_file,
+                        expansion,
+                    )?,
                 })
             }
             ControlNode::Each(each) => {
-                self.require_expr(each.collection)?;
-                self.require_binding(each.binding)?;
+                self.require_expr(module_file, each.collection)?;
+                self.require_binding(module_file, each.binding)?;
                 let child_policy = match each.key {
                     Some(key) => {
-                        self.require_expr(key)?;
+                        self.require_expr(module_file, key)?;
                         RepeatedChildPolicy::Keyed {
-                            key,
+                            key: ExprRef {
+                                origin_file: module_file,
+                                expr: key,
+                            },
                             updates: ChildUpdateMode::Localized,
                         }
                     }
@@ -500,49 +708,97 @@ impl<'module> Lowering<'module> {
                 };
                 let empty_branch = each
                     .empty
-                    .map(|empty| self.control_plan_id(stable_id, empty))
+                    .map(|empty| self.control_plan_id(stable_id, empty, module_file, expansion))
                     .transpose()?;
                 PlanNodeKind::Each(EachNode {
-                    collection: each.collection,
-                    binding: each.binding,
+                    collection: ExprRef {
+                        origin_file: module_file,
+                        expr: each.collection,
+                    },
+                    binding: BindingRef {
+                        origin_file: module_file,
+                        binding: each.binding,
+                    },
                     child_policy,
-                    item_children: self.child_ops_from_markup(stable_id, None, &each.children)?,
+                    item_children: self.child_ops_from_markup(
+                        stable_id,
+                        None,
+                        &each.children,
+                        module_file,
+                        expansion,
+                    )?,
                     empty_branch,
                 })
             }
             ControlNode::Empty(empty) => PlanNodeKind::Empty(EmptyNode {
-                children: self.child_ops_from_markup(stable_id, None, &empty.children)?,
+                children: self.child_ops_from_markup(
+                    stable_id,
+                    None,
+                    &empty.children,
+                    module_file,
+                    expansion,
+                )?,
             }),
             ControlNode::Match(match_node) => {
-                self.require_expr(match_node.scrutinee)?;
+                self.require_expr(module_file, match_node.scrutinee)?;
                 let mut cases = Vec::with_capacity(match_node.cases.len());
                 for case in match_node.cases.iter() {
-                    cases.push(self.control_plan_id(stable_id, *case)?);
+                    cases.push(self.control_plan_id(stable_id, *case, module_file, expansion)?);
                 }
                 let cases = NonEmpty::from_vec(cases)
                     .expect("validated HIR match controls always carry at least one case");
                 PlanNodeKind::Match(MatchNode {
-                    scrutinee: match_node.scrutinee,
+                    scrutinee: ExprRef {
+                        origin_file: module_file,
+                        expr: match_node.scrutinee,
+                    },
                     cases,
                 })
             }
             ControlNode::Case(case) => {
-                self.require_pattern(case.pattern)?;
+                self.require_pattern(module_file, case.pattern)?;
                 PlanNodeKind::Case(CaseNode {
-                    pattern: case.pattern,
-                    children: self.child_ops_from_markup(stable_id, None, &case.children)?,
+                    pattern: PatternRef {
+                        origin_file: module_file,
+                        pattern: case.pattern,
+                    },
+                    children: self.child_ops_from_markup(
+                        stable_id,
+                        None,
+                        &case.children,
+                        module_file,
+                        expansion,
+                    )?,
                 })
             }
             ControlNode::Fragment(fragment) => PlanNodeKind::Fragment(FragmentNode {
-                children: self.child_ops_from_markup(stable_id, None, &fragment.children)?,
+                children: self.child_ops_from_markup(
+                    stable_id,
+                    None,
+                    &fragment.children,
+                    module_file,
+                    expansion,
+                )?,
             }),
             ControlNode::With(with_node) => {
-                self.require_expr(with_node.value)?;
-                self.require_binding(with_node.binding)?;
+                self.require_expr(module_file, with_node.value)?;
+                self.require_binding(module_file, with_node.binding)?;
                 PlanNodeKind::With(WithNode {
-                    value: with_node.value,
-                    binding: with_node.binding,
-                    children: self.child_ops_from_markup(stable_id, None, &with_node.children)?,
+                    value: ExprRef {
+                        origin_file: module_file,
+                        expr: with_node.value,
+                    },
+                    binding: BindingRef {
+                        origin_file: module_file,
+                        binding: with_node.binding,
+                    },
+                    children: self.child_ops_from_markup(
+                        stable_id,
+                        None,
+                        &with_node.children,
+                        module_file,
+                        expansion,
+                    )?,
                 })
             }
         };
@@ -556,6 +812,7 @@ impl<'module> Lowering<'module> {
 
     fn lower_attributes(
         &self,
+        module_file: FileId,
         owner: StableNodeId,
         widget: &aivi_hir::NamePath,
         attributes: &[MarkupAttribute],
@@ -577,12 +834,15 @@ impl<'module> Lowering<'module> {
                     }));
                 }
                 MarkupAttributeValue::Text(text) => {
-                    self.require_text(text)?;
+                    self.require_text(module_file, text)?;
                     if text.has_interpolation() {
                         properties.push(PropertyPlan::Setter(SetterBindingPlan {
                             site,
                             name: attribute.name.clone(),
-                            source: SetterSource::InterpolatedText(text.clone()),
+                            source: SetterSource::InterpolatedText(InterpolatedText {
+                                origin_file: module_file,
+                                literal: text.clone(),
+                            }),
                             update: SetterUpdateStrategy::DirectSetter,
                             teardown: SetterTeardown::CancelSubscription,
                         }));
@@ -595,12 +855,15 @@ impl<'module> Lowering<'module> {
                     }
                 }
                 MarkupAttributeValue::Expr(expr) => {
-                    self.require_expr(*expr)?;
+                    self.require_expr(module_file, *expr)?;
                     if self.options.lowers_as_event(widget, attribute) {
                         event_hooks.push(EventHookPlan {
                             site,
                             name: attribute.name.clone(),
-                            handler: *expr,
+                            handler: ExprRef {
+                                origin_file: module_file,
+                                expr: *expr,
+                            },
                             hookup: EventHookStrategy::DirectSignal,
                             teardown: EventHookTeardown::DisconnectHandler,
                         });
@@ -608,7 +871,10 @@ impl<'module> Lowering<'module> {
                         properties.push(PropertyPlan::Setter(SetterBindingPlan {
                             site,
                             name: attribute.name.clone(),
-                            source: SetterSource::Expr(*expr),
+                            source: SetterSource::Expr(ExprRef {
+                                origin_file: module_file,
+                                expr: *expr,
+                            }),
                             update: SetterUpdateStrategy::DirectSetter,
                             teardown: SetterTeardown::CancelSubscription,
                         }));
@@ -624,16 +890,24 @@ impl<'module> Lowering<'module> {
         parent: StableNodeId,
         widget: Option<&NamePath>,
         children: &[MarkupNodeId],
+        module_file: FileId,
+        expansion: Option<ExpansionInstanceId>,
     ) -> Result<Vec<ChildOp>, LoweringError> {
         children
             .iter()
             .map(|child| {
-                let plan_id = self.markup_nodes.get(child).copied().ok_or(
-                    LoweringError::MissingLoweredMarkupChild {
+                let plan_id = self
+                    .markup_nodes
+                    .get(&MarkupVisitKey {
+                        module_file,
+                        id: *child,
+                        expansion,
+                    })
+                    .copied()
+                    .ok_or(LoweringError::MissingLoweredMarkupChild {
                         parent,
                         child: *child,
-                    },
-                )?;
+                    })?;
                 if let Some(PlanNode {
                     span,
                     kind: PlanNodeKind::Group(group_node),
@@ -679,41 +953,111 @@ impl<'module> Lowering<'module> {
         &self,
         parent: StableNodeId,
         branch: ControlNodeId,
+        module_file: FileId,
+        expansion: Option<ExpansionInstanceId>,
     ) -> Result<PlanNodeId, LoweringError> {
         self.control_nodes
-            .get(&branch)
+            .get(&ControlVisitKey {
+                module_file,
+                id: branch,
+                expansion,
+            })
             .copied()
             .ok_or(LoweringError::MissingLoweredControlBranch { parent, branch })
     }
 
-    fn require_expr(&self, expr: ExprId) -> Result<(), LoweringError> {
-        self.module
+    fn resolve_component_root(
+        &self,
+        module_file: FileId,
+        name: &NamePath,
+    ) -> Option<ComponentTarget> {
+        let leaf = crate::schema::widget_leaf_name(name);
+        self.find_markup_component(self.module_for_file(module_file).ok()?, leaf)
+            .map(|root| ComponentTarget { module_file, root })
+            .or_else(|| {
+                self.module_for_file(module_file)
+                    .ok()?
+                    .imports()
+                    .iter()
+                    .find(|(_, import)| import.local_name.text() == leaf)
+                    .and_then(|(import_id, import)| {
+                        let source_module = import.source_module.as_deref().or_else(|| {
+                            self.import_to_module
+                                .get(&module_file)
+                                .and_then(|map| map.get(&import_id).map(|value| value.as_ref()))
+                        })?;
+                        self.workspace_component_exports
+                            .get(source_module)
+                            .and_then(|exports| exports.get(import.imported_name.text()).copied())
+                    })
+            })
+    }
+
+    fn find_markup_component(&self, module: &Module, name: &str) -> Option<MarkupNodeId> {
+        module
+            .root_items()
+            .iter()
+            .chain(module.ambient_items().iter())
+            .find_map(|item_id| match &module.items()[*item_id] {
+                Item::Value(value) if value.name.text() == name => {
+                    match module.exprs()[value.body].kind {
+                        ExprKind::Markup(root) => Some(root),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+    }
+
+    fn module_for_file(&self, module_file: FileId) -> Result<&'module Module, LoweringError> {
+        self.modules_by_file
+            .get(&module_file)
+            .copied()
+            .ok_or(LoweringError::MissingWorkspaceModule(module_file))
+    }
+
+    fn allocate_expansion(&mut self) -> ExpansionInstanceId {
+        let next = self.next_expansion_instance;
+        self.next_expansion_instance = self.next_expansion_instance.saturating_add(1);
+        ExpansionInstanceId(next)
+    }
+
+    fn require_expr(&self, module_file: FileId, expr: ExprId) -> Result<(), LoweringError> {
+        self.module_for_file(module_file)?
             .exprs()
             .get(expr)
             .map(|_| ())
             .ok_or(LoweringError::MissingExpr(expr))
     }
 
-    fn require_binding(&self, binding: BindingId) -> Result<(), LoweringError> {
-        self.module
+    fn require_binding(
+        &self,
+        module_file: FileId,
+        binding: BindingId,
+    ) -> Result<(), LoweringError> {
+        self.module_for_file(module_file)?
             .bindings()
             .get(binding)
             .map(|_| ())
             .ok_or(LoweringError::MissingBinding(binding))
     }
 
-    fn require_pattern(&self, pattern: PatternId) -> Result<(), LoweringError> {
-        self.module
+    fn require_pattern(
+        &self,
+        module_file: FileId,
+        pattern: PatternId,
+    ) -> Result<(), LoweringError> {
+        self.module_for_file(module_file)?
             .patterns()
             .get(pattern)
             .map(|_| ())
             .ok_or(LoweringError::MissingPattern(pattern))
     }
 
-    fn require_text(&self, text: &TextLiteral) -> Result<(), LoweringError> {
+    fn require_text(&self, module_file: FileId, text: &TextLiteral) -> Result<(), LoweringError> {
         for segment in &text.segments {
             if let TextSegment::Interpolation(interpolation) = segment {
-                self.require_expr(interpolation.expr)?;
+                self.require_expr(module_file, interpolation.expr)?;
             }
         }
         Ok(())
@@ -750,6 +1094,89 @@ fn same_name_path(left: &NamePath, right: &NamePath) -> bool {
         .eq(right.segments().iter().map(Name::text))
 }
 
+fn workspace_import_to_module(module: &Module) -> HashMap<aivi_hir::ImportId, Box<str>> {
+    let mut import_to_module = HashMap::new();
+    for (_, item) in module.items().iter() {
+        let Item::Use(use_item) = item else {
+            continue;
+        };
+        for import_id in use_item.imports.iter().copied() {
+            import_to_module.insert(import_id, use_item.module.to_string().into_boxed_str());
+        }
+    }
+    import_to_module
+}
+
+fn workspace_component_exports(
+    workspace_hirs: &[(&str, &Module)],
+) -> BTreeMap<String, BTreeMap<String, ComponentTarget>> {
+    let mut import_to_module = HashMap::new();
+    for (name, workspace_module) in workspace_hirs {
+        import_to_module.insert(
+            (*name).to_owned(),
+            workspace_import_to_module(workspace_module),
+        );
+    }
+
+    let mut exports = BTreeMap::<String, BTreeMap<String, ComponentTarget>>::new();
+    for (name, workspace_module) in workspace_hirs {
+        let mut module_exports = BTreeMap::new();
+        for (_, item) in workspace_module.items().iter() {
+            let Item::Value(value) = item else {
+                continue;
+            };
+            let ExprKind::Markup(root) = workspace_module.exprs()[value.body].kind else {
+                continue;
+            };
+            module_exports.insert(
+                value.name.text().to_owned(),
+                ComponentTarget {
+                    module_file: workspace_module.file(),
+                    root,
+                },
+            );
+        }
+        exports.insert((*name).to_owned(), module_exports);
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (name, workspace_module) in workspace_hirs {
+            let Some(source_modules) = import_to_module.get(*name) else {
+                continue;
+            };
+            let mut pending = Vec::new();
+            for (workspace_import_id, binding) in workspace_module.imports().iter() {
+                let Some(source_module) = binding.source_module.as_deref().or_else(|| {
+                    source_modules
+                        .get(&workspace_import_id)
+                        .map(|value| value.as_ref())
+                }) else {
+                    continue;
+                };
+                let Some(source_exports) = exports.get(source_module) else {
+                    continue;
+                };
+                let Some(&target) = source_exports.get(binding.imported_name.text()) else {
+                    continue;
+                };
+                pending.push((binding.local_name.text().to_owned(), target));
+            }
+            let Some(module_exports) = exports.get_mut(*name) else {
+                continue;
+            };
+            for (local_name, target) in pending {
+                if module_exports.insert(local_name, target).is_none() {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    exports
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum VisitState {
     Enter,
@@ -759,11 +1186,55 @@ enum VisitState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PendingNode {
     Markup {
-        id: MarkupNodeId,
+        key: MarkupVisitKey,
         state: VisitState,
     },
     Control {
-        id: ControlNodeId,
+        key: ControlVisitKey,
         state: VisitState,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct MarkupVisitKey {
+    module_file: FileId,
+    id: MarkupNodeId,
+    expansion: Option<ExpansionInstanceId>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct ControlVisitKey {
+    module_file: FileId,
+    id: ControlNodeId,
+    expansion: Option<ExpansionInstanceId>,
+}
+
+fn stable_markup_id(
+    module_file: FileId,
+    id: MarkupNodeId,
+    expansion: Option<ExpansionInstanceId>,
+) -> StableNodeId {
+    match expansion {
+        Some(expansion) => StableNodeId::ExpandedMarkup {
+            expansion: expansion.0,
+            origin_file: module_file,
+            origin: id,
+        },
+        None => StableNodeId::Markup(id),
+    }
+}
+
+fn stable_control_id(
+    module_file: FileId,
+    id: ControlNodeId,
+    expansion: Option<ExpansionInstanceId>,
+) -> StableNodeId {
+    match expansion {
+        Some(expansion) => StableNodeId::ExpandedControl {
+            expansion: expansion.0,
+            origin_file: module_file,
+            origin: id,
+        },
+        None => StableNodeId::Control(id),
+    }
 }

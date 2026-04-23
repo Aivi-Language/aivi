@@ -53,6 +53,7 @@ const howToSection: DocSection = {
     { text: 'Model Loading and Error States', link: '/how-to/loading-and-error-states' },
     { text: 'Work with Timers', link: '/how-to/work-with-timers' },
     { text: 'Organize Modules', link: '/how-to/organize-modules' },
+    { text: 'Launch Multiple Entries', link: '/how-to/launch-multiple-entries' },
     { text: 'OpenAPI-backed Services', link: '/guide/openapi-source' },
     { text: 'Integration Patterns', link: '/guide/integrations' },
   ],

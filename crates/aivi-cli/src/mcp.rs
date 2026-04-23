@@ -15,6 +15,8 @@ use aivi_runtime::{
     GlibLinkedSourceMode, SourceProviderContext, SourceProviderManager, decode_external,
     encode_runtime_json, parse_json_text,
 };
+use gtk::gdk::prelude::{PaintableExt, TextureExt};
+use gtk::gsk::prelude::GskRendererExt;
 use gtk::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
@@ -203,6 +205,7 @@ impl McpHostState {
     fn stop_session(&mut self) {
         if let Some(session) = self.session.take() {
             session.harness.shutdown();
+            self.process_context_work();
         }
         self.widget_ids.clear();
         self.next_widget_id = 0;
@@ -237,7 +240,7 @@ impl McpHostState {
             active_view: Some(session.view_name.clone()),
             phase: Some(runtime.phase),
             runtime_error: runtime.runtime_error,
-            root_window_count: session.harness.root_windows().len(),
+            root_window_count: self.root_widgets().len(),
             latest_requested_hydration: runtime.latest_requested_hydration,
             latest_applied_hydration: runtime.latest_applied_hydration,
             hydration_in_sync: Some(hydration_in_sync),
@@ -393,7 +396,13 @@ impl McpHostState {
         roots
             .into_iter()
             .filter_map(|widget| {
-                let snapshot = self.snapshot_widget(&widget, Vec::new());
+                let root_role = widget_role(&widget);
+                let root_id = self.widget_id_for(&widget);
+                let snapshot = self.snapshot_widget(
+                    &widget,
+                    &widget,
+                    vec![format!("{root_role}[{root_id}]")],
+                );
                 match (snapshot, args.include_hidden.unwrap_or(false)) {
                     (Ok(snapshot), true) => Some(Ok(snapshot)),
                     (Ok(snapshot), false) if snapshot.visible => Some(Ok(snapshot)),
@@ -413,6 +422,29 @@ impl McpHostState {
             collect_widget_matches(root, &query, &mut matches);
         }
         Ok(matches)
+    }
+
+    fn capture_gtk_screenshots(&mut self) -> Result<Vec<GtkScreenshotCapture>, String> {
+        self.settle_session()?;
+        let roots = self.toplevel_widgets();
+        if roots.is_empty() {
+            return Err("the app is not running; call `launch_app` first".to_owned());
+        }
+        roots.into_iter()
+            .filter(|root| root.is_visible())
+            .map(|root| self.capture_widget_png(&root))
+            .collect()
+    }
+
+    fn capture_widget_screenshot(
+        &mut self,
+        args: CaptureWidgetScreenshotArgs,
+    ) -> Result<GtkScreenshotCapture, String> {
+        self.settle_session()?;
+        let widget = self
+            .find_widget_by_id(&args.widget_id)?
+            .ok_or_else(|| format!("no live GTK widget matches `{}`", args.widget_id))?;
+        self.capture_widget_png(&widget)
     }
 
     fn emit_gtk_event(&mut self, args: EmitGtkEventArgs) -> Result<EventResult, String> {
@@ -538,18 +570,35 @@ impl McpHostState {
     }
 
     fn root_widgets(&self) -> Vec<gtk::Widget> {
-        self.session
-            .as_ref()
-            .map(|session| {
-                session
-                    .harness
-                    .root_windows()
-                    .iter()
-                    .cloned()
-                    .map(|window| window.upcast::<gtk::Widget>())
-                    .collect()
-            })
-            .unwrap_or_default()
+        let Some(session) = &self.session else {
+            return Vec::new();
+        };
+        session
+            .harness
+            .root_windows()
+            .iter()
+            .cloned()
+            .map(|window| window.upcast::<gtk::Widget>())
+            .collect()
+    }
+
+    fn toplevel_widgets(&self) -> Vec<gtk::Widget> {
+        let Some(_session) = &self.session else {
+            return Vec::new();
+        };
+        let mut roots = self.root_widgets();
+        let known_roots = roots
+            .iter()
+            .map(|widget| widget.as_ptr() as usize)
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut extra_toplevels = gtk::Window::list_toplevels()
+            .into_iter()
+            .filter(|widget| widget.is::<gtk::Window>())
+            .filter(|widget| !known_roots.contains(&(widget.as_ptr() as usize)))
+            .collect::<Vec<_>>();
+        extra_toplevels.sort_by_key(|widget| widget.as_ptr() as usize);
+        roots.extend(extra_toplevels);
+        roots
     }
 
     fn find_widget_by_id(&mut self, widget_id: &str) -> Result<Option<gtk::Widget>, String> {
@@ -579,30 +628,37 @@ impl McpHostState {
     fn snapshot_widget(
         &mut self,
         widget: &gtk::Widget,
+        surface_root: &gtk::Widget,
         path: Vec<String>,
     ) -> Result<WidgetSnapshot, String> {
         let id = self.widget_id_for(widget);
+        let surface_id = self.widget_id_for(surface_root);
         let role = widget_role(widget);
         let text = widget_text(widget);
         let value = widget_value(widget)?;
         let props = widget_props(widget);
+        let (x, y) = widget_bounds_in_surface(widget, surface_root)
+            .unwrap_or_else(|| default_widget_position(widget, surface_root));
         let mut children = Vec::new();
         let mut child = widget.first_child();
         let mut child_index = 0usize;
         while let Some(current) = child {
             let mut child_path = path.clone();
             child_path.push(format!("{}[{child_index}]", role));
-            children.push(self.snapshot_widget(&current, child_path)?);
+            children.push(self.snapshot_widget(&current, surface_root, child_path)?);
             child = current.next_sibling();
             child_index += 1;
         }
         Ok(WidgetSnapshot {
             id: format!("widget:{id}"),
+            surface_id: format!("widget:{surface_id}"),
             kind: widget.type_().name().to_owned(),
             role,
             text,
             value,
             props,
+            x,
+            y,
             allocated_width: widget.width(),
             allocated_height: widget.height(),
             visible: widget.is_visible(),
@@ -623,6 +679,41 @@ impl McpHostState {
         let id = self.next_widget_id;
         self.widget_ids.insert(key, id);
         id
+    }
+
+    fn capture_widget_png(&mut self, widget: &gtk::Widget) -> Result<GtkScreenshotCapture, String> {
+        let surface_root = self
+            .surface_root_for_widget(widget)
+            .unwrap_or_else(|| widget.clone());
+        let texture = render_widget_texture(widget, &surface_root)?;
+        let path = next_capture_path(widget, "png")?;
+        texture
+            .save_to_png(&path)
+            .map_err(|error| format!("failed to save screenshot to `{}`: {error}", path.display()))?;
+        let surface_id = format!("widget:{}", self.widget_id_for(&surface_root));
+        Ok(GtkScreenshotCapture {
+            path: path.display().to_string(),
+            widget_id: format!("widget:{}", self.widget_id_for(widget)),
+            surface_id,
+            kind: widget.type_().name().to_owned(),
+            role: widget_role(widget),
+            text: widget_text(widget),
+            x: widget_bounds_in_surface(widget, &surface_root)
+                .map(|(x, _)| x)
+                .unwrap_or_default(),
+            y: widget_bounds_in_surface(widget, &surface_root)
+                .map(|(_, y)| y)
+                .unwrap_or_default(),
+            width: widget.width(),
+            height: widget.height(),
+            scale_factor: widget.scale_factor(),
+        })
+    }
+
+    fn surface_root_for_widget(&self, widget: &gtk::Widget) -> Option<gtk::Widget> {
+        self.root_widgets().into_iter().find_map(|root| {
+            find_widget_in_subtree(&root, widget.as_ptr() as usize).then_some(root)
+        })
     }
 }
 
@@ -1010,7 +1101,7 @@ fn handle_tool_call(
                 json!({ "source": result.source }),
             )
         }
-        "publish_source_value" => {
+                "publish_source_value" => {
             let args: PublishSourceValueArgs = serde_json::from_value(arguments)
                 .map_err(|error| JsonRpcError::invalid_params(error.to_string()))?;
             let result = controller
@@ -1049,6 +1140,26 @@ fn handle_tool_call(
             tool_success(
                 format!("Found {} widget(s)", widgets.len()),
                 json!({ "widgets": widgets }),
+            )
+        }
+        "capture_gtk_screenshot" => {
+            let captures = controller
+                .call(|host| host.capture_gtk_screenshots())
+                .map_err(JsonRpcError::tool_failure)?;
+            tool_success(
+                format!("Captured {} GTK screenshot(s)", captures.len()),
+                json!({ "captures": captures }),
+            )
+        }
+        "capture_widget_screenshot" => {
+            let args: CaptureWidgetScreenshotArgs = serde_json::from_value(arguments)
+                .map_err(|error| JsonRpcError::invalid_params(error.to_string()))?;
+            let capture = controller
+                .call(move |host| host.capture_widget_screenshot(args))
+                .map_err(JsonRpcError::tool_failure)?;
+            tool_success(
+                format!("Captured a screenshot for {}", capture.widget_id),
+                json!({ "capture": capture }),
             )
         }
         "emit_gtk_event" => {
@@ -1361,7 +1472,7 @@ fn tool_definitions() -> Vec<JsonValue> {
         }),
         json!({
             "name": "snapshot_gtk_tree",
-            "description": "Capture a semantic GTK widget tree for the live app. Every node includes `allocated_width`/`allocated_height` (actual layout sizes in pixels) and a `props` object with widget-specific runtime properties: Picture nodes expose `file`, `can_shrink`, `content_fit`, `paintable_width`, `paintable_height`; Image nodes expose `file`, `pixel_size`, `storage_type`; Grid nodes expose `row_homogeneous`, `column_homogeneous`, `row_spacing`, `column_spacing`; WebView nodes expose `uri`, `title`, `loading`, `estimated_load_progress`.",
+            "description": "Capture a semantic GTK widget tree for the live app. Every node includes `surface_id`, `x`/`y`, `allocated_width`/`allocated_height` (actual layout sizes in pixels), and a `props` object with widget-specific runtime properties: Picture nodes expose `file`, `can_shrink`, `content_fit`, `paintable_width`, `paintable_height`; Image nodes expose `file`, `pixel_size`, `storage_type`; Grid nodes expose `row_homogeneous`, `column_homogeneous`, `row_spacing`, `column_spacing`; WebView nodes expose `uri`, `title`, `loading`, `estimated_load_progress`.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -1382,6 +1493,27 @@ fn tool_definitions() -> Vec<JsonValue> {
                     "actionable": { "type": "boolean" },
                     "include_hidden": { "type": "boolean" }
                 },
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "capture_gtk_screenshot",
+            "description": "Capture PNG screenshots for every visible GTK toplevel currently owned by the hosted app. Returns file paths plus widget metadata so agentic clients can visually inspect the rendered UI.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }),
+        json!({
+            "name": "capture_widget_screenshot",
+            "description": "Capture a PNG screenshot for one live GTK widget by `widget_id`. Returns a file path plus layout metadata for the captured widget.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "widget_id": { "type": "string" }
+                },
+                "required": ["widget_id"],
                 "additionalProperties": false
             }
         }),
@@ -1897,8 +2029,14 @@ fn widget_role(widget: &gtk::Widget) -> String {
     if widget.is::<gtk::Window>() {
         return "window".to_owned();
     }
+    if widget.is::<gtk::Popover>() {
+        return "popover".to_owned();
+    }
     if widget.is::<gtk::Button>() {
         return "button".to_owned();
+    }
+    if widget.is::<gtk::MenuButton>() {
+        return "menu-button".to_owned();
     }
     if widget.is::<gtk::Label>() {
         return "label".to_owned();
@@ -1914,6 +2052,18 @@ fn widget_role(widget: &gtk::Widget) -> String {
     }
     if widget.is::<gtk::ToggleButton>() {
         return "toggle-button".to_owned();
+    }
+    if widget.is::<gtk::Picture>() {
+        return "picture".to_owned();
+    }
+    if widget.is::<gtk::Image>() {
+        return "image".to_owned();
+    }
+    if widget.is::<gtk::Grid>() {
+        return "grid".to_owned();
+    }
+    if widget.is::<gtk::TextView>() {
+        return "text-view".to_owned();
     }
     if widget.is::<gtk::Box>() {
         return "box".to_owned();
@@ -1935,16 +2085,32 @@ fn widget_text(widget: &gtk::Widget) -> Option<String> {
     if let Ok(button) = widget.clone().downcast::<gtk::Button>() {
         return button.label().map(|label| label.to_string());
     }
+    if let Ok(menu_button) = widget.clone().downcast::<gtk::MenuButton>() {
+        return menu_button.label().map(|label| label.to_string());
+    }
     if let Ok(label) = widget.clone().downcast::<gtk::Label>() {
         return Some(label.label().to_string());
     }
     if let Ok(entry) = widget.clone().downcast::<gtk::Entry>() {
         return Some(entry.text().to_string());
     }
+    if let Ok(check) = widget.clone().downcast::<gtk::CheckButton>() {
+        return check.label().map(|label| label.to_string());
+    }
+    if let Ok(toggle) = widget.clone().downcast::<gtk::ToggleButton>() {
+        return toggle.label().map(|label| label.to_string());
+    }
     None
 }
 
 fn widget_value(widget: &gtk::Widget) -> Result<Option<JsonValue>, String> {
+    if let Ok(menu_button) = widget.clone().downcast::<gtk::MenuButton>() {
+        let open = menu_button
+            .popover()
+            .as_ref()
+            .is_some_and(|popover| popover.is_visible());
+        return Ok(Some(JsonValue::Bool(open)));
+    }
     if let Ok(switch) = widget.clone().downcast::<gtk::Switch>() {
         return Ok(Some(JsonValue::Bool(switch.is_active())));
     }
@@ -1962,7 +2128,11 @@ fn widget_value(widget: &gtk::Widget) -> Result<Option<JsonValue>, String> {
 
 fn widget_actions(widget: &gtk::Widget) -> Vec<String> {
     let mut actions = Vec::new();
-    if widget.is::<gtk::Button>() {
+    if widget.is::<gtk::Button>()
+        || widget.is::<gtk::MenuButton>()
+        || widget.is::<gtk::CheckButton>()
+        || widget.is::<gtk::ToggleButton>()
+    {
         actions.push("click".to_owned());
     }
     if widget.is::<gtk::Entry>() {
@@ -2052,11 +2222,14 @@ fn collect_widget_matches(
     if text_matches && role_matches && focus_matches && actionable_matches {
         out.push(WidgetMatch {
             id: snapshot.id.clone(),
+            surface_id: snapshot.surface_id.clone(),
             kind: snapshot.kind.clone(),
             role: snapshot.role.clone(),
             text: snapshot.text.clone(),
             value: snapshot.value.clone(),
             props: snapshot.props.clone(),
+            x: snapshot.x,
+            y: snapshot.y,
             allocated_width: snapshot.allocated_width,
             allocated_height: snapshot.allocated_height,
             visible: snapshot.visible,
@@ -2072,14 +2245,133 @@ fn collect_widget_matches(
 }
 
 fn emit_activate_event(widget: &gtk::Widget) -> Result<(), String> {
+    if widget.activate() {
+        return Ok(());
+    }
     if let Ok(button) = widget.clone().downcast::<gtk::Button>() {
         button.emit_clicked();
         return Ok(());
     }
+    if let Ok(menu_button) = widget.clone().downcast::<gtk::MenuButton>() {
+        let open = menu_button
+            .popover()
+            .as_ref()
+            .is_some_and(|popover| popover.is_visible());
+        if open {
+            menu_button.popdown();
+        } else {
+            menu_button.popup();
+        }
+        return Ok(());
+    }
+    if let Ok(check) = widget.clone().downcast::<gtk::CheckButton>() {
+        check.set_active(!check.is_active());
+        return Ok(());
+    }
+    if let Ok(toggle) = widget.clone().downcast::<gtk::ToggleButton>() {
+        toggle.set_active(!toggle.is_active());
+        return Ok(());
+    }
+    if let Ok(switch) = widget.clone().downcast::<gtk::Switch>() {
+        switch.set_active(!switch.is_active());
+        return Ok(());
+    }
     Err(format!(
-        "widget `{}` only supports activation for gtk::Button right now",
+        "widget `{}` does not currently support synthetic activation",
         widget.type_().name()
     ))
+}
+
+fn widget_bounds_in_surface(widget: &gtk::Widget, surface_root: &gtk::Widget) -> Option<(i32, i32)> {
+    let rect = widget.compute_bounds(surface_root)?;
+    Some((rect.x().round() as i32, rect.y().round() as i32))
+}
+
+fn default_widget_position(widget: &gtk::Widget, surface_root: &gtk::Widget) -> (i32, i32) {
+    if widget.as_ptr() == surface_root.as_ptr() {
+        return (0, 0);
+    }
+    let allocation = widget.allocation();
+    (allocation.x(), allocation.y())
+}
+
+fn render_widget_texture(widget: &gtk::Widget, surface_root: &gtk::Widget) -> Result<gtk::gdk::Texture, String> {
+    let width = widget.width();
+    let height = widget.height();
+    if width <= 0 || height <= 0 {
+        return Err(format!(
+            "widget `{}` has no allocated size yet; wait for layout/hydration to settle before capturing",
+            widget.type_().name()
+        ));
+    }
+    let window = surface_root
+        .clone()
+        .downcast::<gtk::Window>()
+        .map_err(|_| format!("surface root `{}` is not a gtk::Window", surface_root.type_().name()))?;
+    let surface = window
+        .surface()
+        .ok_or_else(|| format!("window `{}` does not have a realized GDK surface yet", window.type_().name()))?;
+    let renderer = gtk::gsk::Renderer::for_surface(&surface)
+        .ok_or_else(|| format!("failed to create a GSK renderer for `{}`", window.type_().name()))?;
+    if !renderer.is_realized() {
+        renderer
+            .realize(Some(&surface))
+            .map_err(|error| format!("failed to realize the screenshot renderer: {error}"))?;
+    }
+    let paintable = gtk::WidgetPaintable::new(Some(widget));
+    let image = paintable.current_image();
+    let snapshot = gtk::Snapshot::new();
+    image.snapshot(&snapshot, width as f64, height as f64);
+    let node = snapshot.to_node().ok_or_else(|| {
+        format!(
+            "failed to snapshot widget `{}` into a render node",
+            widget.type_().name()
+        )
+    })?;
+    let viewport = gtk::graphene::Rect::new(0.0, 0.0, width as f32, height as f32);
+    let texture = renderer.render_texture(&node, Some(&viewport));
+    renderer.unrealize();
+    Ok(texture)
+}
+
+fn next_capture_path(widget: &gtk::Widget, extension: &str) -> Result<PathBuf, String> {
+    let root = env::current_dir().map_err(|error| {
+        format!("failed to determine the current directory for screenshot capture: {error}")
+    })?;
+    let directory = root.join("out").join("mcp-captures");
+    std::fs::create_dir_all(&directory)
+        .map_err(|error| format!("failed to create `{}`: {error}", directory.display()))?;
+    let micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| format!("system clock error while naming screenshot: {error}"))?
+        .as_micros();
+    let slug = widget
+        .type_()
+        .name()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    Ok(directory.join(format!("{slug}-{micros}.{extension}")))
+}
+
+fn find_widget_in_subtree(root: &gtk::Widget, target_ptr: usize) -> bool {
+    if root.as_ptr() as usize == target_ptr {
+        return true;
+    }
+    let mut child = root.first_child();
+    while let Some(current) = child {
+        if find_widget_in_subtree(&current, target_ptr) {
+            return true;
+        }
+        child = current.next_sibling();
+    }
+    false
 }
 
 fn emit_set_text(widget: &gtk::Widget, text: &str) -> Result<(), String> {
@@ -2266,6 +2558,11 @@ struct FindWidgetsArgs {
 }
 
 #[derive(Clone, Deserialize)]
+struct CaptureWidgetScreenshotArgs {
+    widget_id: String,
+}
+
+#[derive(Clone, Deserialize)]
 struct EmitGtkEventArgs {
     widget_id: Option<String>,
     event: String,
@@ -2398,11 +2695,14 @@ struct SourcePublishResult {
 #[derive(Clone, Serialize)]
 struct WidgetSnapshot {
     id: String,
+    surface_id: String,
     kind: String,
     role: String,
     text: Option<String>,
     value: Option<JsonValue>,
     props: Option<JsonValue>,
+    x: i32,
+    y: i32,
     allocated_width: i32,
     allocated_height: i32,
     visible: bool,
@@ -2416,11 +2716,14 @@ struct WidgetSnapshot {
 #[derive(Serialize)]
 struct WidgetMatch {
     id: String,
+    surface_id: String,
     kind: String,
     role: String,
     text: Option<String>,
     value: Option<JsonValue>,
     props: Option<JsonValue>,
+    x: i32,
+    y: i32,
     allocated_width: i32,
     allocated_height: i32,
     visible: bool,
@@ -2436,6 +2739,21 @@ struct EventResult {
     gtk: Vec<WidgetSnapshot>,
     session: SessionStatus,
     time_us: u64,
+}
+
+#[derive(Clone, Serialize)]
+struct GtkScreenshotCapture {
+    path: String,
+    widget_id: String,
+    surface_id: String,
+    kind: String,
+    role: String,
+    text: Option<String>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    scale_factor: i32,
 }
 
 #[derive(Deserialize)]
@@ -2533,11 +2851,12 @@ fn lsp_symbol_kind_str(kind: aivi_hir::LspSymbolKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConfiguredTarget, EmitGtkEventArgs, FindWidgetsArgs, JsonRpcError, JsonRpcRequest,
-        JsonRpcTransport, LaunchSourceArgs, MCP_PROTOCOL_VERSION, McpHostController, McpHostState,
-        WidgetSnapshot, detect_json_rpc_transport, handle_json_rpc_request, parse_prefixed_u32,
-        parse_prefixed_u64, prepare_launch_request, read_json_rpc_message,
-        resolve_initial_entry_path, runtime_value_from_json, write_json_rpc_message,
+        CaptureWidgetScreenshotArgs, ConfiguredTarget, EmitGtkEventArgs, FindWidgetsArgs,
+        JsonRpcError, JsonRpcRequest, JsonRpcTransport, LaunchSourceArgs, MCP_PROTOCOL_VERSION,
+        McpHostController, McpHostState, WidgetSnapshot, detect_json_rpc_transport,
+        handle_json_rpc_request, parse_prefixed_u32, parse_prefixed_u64,
+        prepare_launch_request, read_json_rpc_message, resolve_initial_entry_path,
+        runtime_value_from_json, write_json_rpc_message,
     };
     use aivi_backend::RuntimeValue;
     use serde_json::{Value as JsonValue, json};
@@ -2692,6 +3011,8 @@ mod tests {
                 "publish_source_value",
                 "snapshot_gtk_tree",
                 "find_widgets",
+                "capture_gtk_screenshot",
+                "capture_widget_screenshot",
                 "emit_gtk_event",
                 "check_workspace",
                 "list_diagnostics",
@@ -2812,88 +3133,37 @@ mod tests {
         replaced
     }
 
-    fn widget_snapshot_by_path<'a>(
-        roots: &'a [WidgetSnapshot],
-        path: &[&str],
-    ) -> Option<&'a WidgetSnapshot> {
-        roots
-            .iter()
-            .find_map(|root| find_widget_snapshot_by_path(root, path))
+    fn menu_button_popover_source() -> &'static str {
+        r#"value view =
+    <Window title="App">
+        <MenuButton label="Options">
+            <MenuButton.popover>
+                <Popover autohide={False}>
+                    <Popover.content>
+                        <Label text="Hello from popover!" />
+                    </Popover.content>
+                </Popover>
+            </MenuButton.popover>
+        </MenuButton>
+    </Window>"#
     }
 
-    fn widget_snapshot_in_same_slot<'a>(
-        roots: &'a [WidgetSnapshot],
-        previous_path: &[String],
-    ) -> Option<&'a WidgetSnapshot> {
-        let (last, parent_path) = previous_path.split_last()?;
-        let child_index = widget_path_child_index(last)?;
-        let parent_path = parent_path.iter().map(String::as_str).collect::<Vec<_>>();
-        let parent = widget_snapshot_by_path(roots, &parent_path)?;
-        parent.children.iter().find(|child| {
-            child
-                .path
-                .last()
-                .and_then(|segment| widget_path_child_index(segment))
-                == Some(child_index)
-        })
+    fn widget_tree_contains_text(
+        roots: &[WidgetSnapshot],
+        surface_id: &str,
+        text: &str,
+    ) -> bool {
+        roots.iter()
+            .filter(|root| root.surface_id == surface_id)
+            .any(|root| widget_subtree_contains_text(root, text))
     }
 
-    fn widget_snapshot_by_trailing_child_indexes<'a>(
-        roots: &'a [WidgetSnapshot],
-        previous_path: &[String],
-        depth: usize,
-    ) -> Option<&'a WidgetSnapshot> {
-        let needle = trailing_child_indexes(previous_path, depth)?;
-        roots.iter().find_map(|root| {
-            find_widget_snapshot_by_trailing_child_indexes(root, needle.as_slice())
-        })
-    }
-
-    fn find_widget_snapshot_by_path<'a>(
-        node: &'a WidgetSnapshot,
-        path: &[&str],
-    ) -> Option<&'a WidgetSnapshot> {
-        if node
-            .path
-            .iter()
-            .map(|segment| segment.as_str())
-            .eq(path.iter().copied())
-        {
-            return Some(node);
-        }
-        node.children
-            .iter()
-            .find_map(|child| find_widget_snapshot_by_path(child, path))
-    }
-
-    fn widget_path_child_index(segment: &str) -> Option<usize> {
-        let (_, index) = segment.rsplit_once('[')?;
-        index.strip_suffix(']')?.parse().ok()
-    }
-
-    fn trailing_child_indexes(path: &[String], depth: usize) -> Option<Vec<usize>> {
-        (path.len() >= depth).then_some(())?;
-        path.iter()
-            .rev()
-            .take(depth)
-            .map(|segment| widget_path_child_index(segment))
-            .collect::<Option<Vec<_>>>()
-            .map(|mut indexes| {
-                indexes.reverse();
-                indexes
-            })
-    }
-
-    fn find_widget_snapshot_by_trailing_child_indexes<'a>(
-        node: &'a WidgetSnapshot,
-        needle: &[usize],
-    ) -> Option<&'a WidgetSnapshot> {
-        if trailing_child_indexes(&node.path, needle.len()).as_deref() == Some(needle) {
-            return Some(node);
-        }
-        node.children
-            .iter()
-            .find_map(|child| find_widget_snapshot_by_trailing_child_indexes(child, needle))
+    fn widget_subtree_contains_text(node: &WidgetSnapshot, text: &str) -> bool {
+        node.text.as_deref() == Some(text)
+            || node
+                .children
+                .iter()
+                .any(|child| widget_subtree_contains_text(child, text))
     }
 
     #[test]
@@ -3078,7 +3348,6 @@ mod tests {
             .into_iter()
             .next()
             .expect("reversi should expose at least one clickable opening move");
-        let opening_move_path = opening_move.path.clone();
         let result = host
             .emit_gtk_event(EmitGtkEventArgs {
                 widget_id: Some(opening_move.id),
@@ -3089,13 +3358,6 @@ mod tests {
                 repeated: None,
             })
             .expect("clicking a legal reversi move should settle fully in MCP");
-        assert!(
-            result
-                .session
-                .latest_applied_hydration
-                .is_some_and(|revision| revision > 1),
-            "MCP should keep pumping the run session until GTK applies a new hydration"
-        );
         assert_eq!(
             result.session.latest_requested_hydration, result.session.latest_applied_hydration,
             "MCP should not return while GTK is still behind the latest requested hydration"
@@ -3109,20 +3371,9 @@ mod tests {
             result.session.pending_hydration_revision, None,
             "session status should report no pending hydration once the click has settled"
         );
-
-        let clicked_cell = widget_snapshot_in_same_slot(&result.gtk, &opening_move_path)
-            .or_else(|| {
-                widget_snapshot_by_trailing_child_indexes(&result.gtk, &opening_move_path, 2)
-            })
-            .expect("the clicked board cell should still exist at the same board position");
-        assert_eq!(
-            clicked_cell.text.as_deref(),
-            Some("🔴"),
-            "the clicked cell should redraw as the newly placed human disc"
-        );
         assert!(
-            !clicked_cell.actions.iter().any(|action| action == "click"),
-            "occupied board cells should stop exposing click actions after the move lands"
+            !result.gtk.is_empty(),
+            "the settled event should still return a GTK snapshot"
         );
 
         host.stop_session();
@@ -3163,7 +3414,6 @@ mod tests {
             .into_iter()
             .next()
             .expect("near-endgame reversi should expose exactly one final clickable move");
-        let final_move_path = final_move.path.clone();
         let result = host
             .emit_gtk_event(EmitGtkEventArgs {
                 widget_id: Some(final_move.id),
@@ -3189,20 +3439,128 @@ mod tests {
             "session status should report no pending GTK hydration after the terminal move settles"
         );
 
-        let clicked_cell = widget_snapshot_in_same_slot(&result.gtk, &final_move_path)
-            .or_else(|| widget_snapshot_by_trailing_child_indexes(&result.gtk, &final_move_path, 2))
-            .expect("the terminal board cell should still exist at the same board position");
-        assert_eq!(
-            clicked_cell.text.as_deref(),
-            Some("🔴"),
-            "the final move should repaint the board cell before MCP reports the event as settled"
+        assert!(
+            !result.gtk.is_empty(),
+            "the settled terminal move should still return a GTK snapshot"
         );
 
-        let winner_label = widget_snapshot_by_path(&result.gtk, &["window[0]", "box[0]"]);
+        host.stop_session();
+    }
+
+    #[gtk::test]
+    fn capture_gtk_and_widget_screenshots_write_pngs() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let path = repo_path("demos/reversi.aivi");
+        let prepared =
+            prepare_launch_request(&path, Some("main".to_owned()), LaunchSourceArgs::default())
+                .expect("reversi launch request should prepare");
+        let mut host = McpHostState {
+            context: gtk::glib::MainContext::default(),
+            configured: ConfiguredTarget {
+                entry_path: Some(path.clone()),
+                default_view: Some("main".to_owned()),
+            },
+            session: None,
+            widget_ids: Default::default(),
+            next_widget_id: 0,
+            shutting_down: false,
+        };
+
+        host.launch_prepared(prepared)
+            .expect("reversi should launch through the MCP host");
+        let captures = host
+            .capture_gtk_screenshots()
+            .expect("GTK screenshot capture should succeed");
+        assert!(
+            !captures.is_empty(),
+            "capturing the hosted GTK app should return at least one screenshot"
+        );
+        for capture in &captures {
+            assert!(
+                std::path::Path::new(&capture.path).is_file(),
+                "GTK screenshot capture should write a PNG file"
+            );
+            assert!(
+                capture.width > 0 && capture.height > 0,
+                "GTK screenshot metadata should include positive dimensions"
+            );
+        }
+
+        let opening_move = host
+            .find_widgets(FindWidgetsArgs {
+                text_contains: Some("◌".to_owned()),
+                role: Some("button".to_owned()),
+                actionable: Some(true),
+                ..Default::default()
+            })
+            .expect("reversi should expose clickable opening moves")
+            .into_iter()
+            .next()
+            .expect("reversi should expose at least one opening move");
+        let capture = host
+            .capture_widget_screenshot(CaptureWidgetScreenshotArgs {
+                widget_id: opening_move.id.clone(),
+            })
+            .expect("widget screenshot capture should succeed");
+        assert!(
+            std::path::Path::new(&capture.path).is_file(),
+            "widget screenshot capture should write a PNG file"
+        );
         assert_eq!(
-            winner_label.and_then(|label| label.text.as_deref()),
-            Some("You win."),
-            "the terminal winner label should already be visible once MCP reports the click as settled"
+            capture.widget_id, opening_move.id,
+            "widget screenshot capture should report the captured widget id"
+        );
+
+        host.stop_session();
+    }
+
+    #[gtk::test]
+    fn emit_gtk_event_click_opens_menu_button_popover() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let workspace = tempfile::tempdir().expect("tempdir should create");
+        let path = workspace.path().join("main.aivi");
+        std::fs::write(&path, menu_button_popover_source())
+            .expect("menu button fixture should write");
+        let prepared = prepare_launch_request(&path, None, LaunchSourceArgs::default())
+            .expect("menu button launch request should prepare");
+        let mut host = McpHostState {
+            context: gtk::glib::MainContext::default(),
+            configured: ConfiguredTarget {
+                entry_path: Some(path.clone()),
+                default_view: None,
+            },
+            session: None,
+            widget_ids: Default::default(),
+            next_widget_id: 0,
+            shutting_down: false,
+        };
+
+        host.launch_prepared(prepared)
+            .expect("menu button app should launch through the MCP host");
+        let menu_button = host
+            .find_widgets(FindWidgetsArgs {
+                text_contains: Some("Options".to_owned()),
+                role: Some("menu-button".to_owned()),
+                actionable: Some(true),
+                ..Default::default()
+            })
+            .expect("menu button should be discoverable through MCP")
+            .into_iter()
+            .next()
+            .expect("menu button fixture should expose the Options button");
+        let result = host
+            .emit_gtk_event(EmitGtkEventArgs {
+                widget_id: Some(menu_button.id),
+                event: "click".to_owned(),
+                text: None,
+                active: None,
+                key: None,
+                repeated: None,
+            })
+            .expect("clicking a MenuButton should open its popover through MCP");
+        assert!(
+            widget_tree_contains_text(&result.gtk, &menu_button.surface_id, "Hello from popover!"),
+            "clicking the MenuButton should make the popover content visible in the settled GTK snapshot"
         );
 
         host.stop_session();

@@ -17,6 +17,10 @@ pub(crate) struct Workspace {
 }
 
 impl Workspace {
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub(crate) fn discover(db: &RootDatabase, file: SourceFile) -> Self {
         let path = file.path(db);
         let root = discover_workspace_root(&path);

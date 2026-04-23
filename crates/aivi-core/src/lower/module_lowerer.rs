@@ -2829,14 +2829,16 @@ impl<'a> ModuleLowerer<'a> {
 
         // Use a deterministic synthetic origin for Signal imports so that the runtime assembly
         // builder can independently derive the same HirItemId for the same import without
-        // coordination: signal import N gets hir_item_count + N.
+        // coordination: signal import N gets item_origin_offset + hir_item_count + N.
         let origin = if matches!(kind, ItemKind::Signal(_)) {
-            HirItemId::from_raw(self.hir_item_count.checked_add(import.as_raw()).ok_or(
-                LoweringError::ArenaOverflow {
-                    arena: "deterministic signal import origins",
-                    attempted_len: usize::MAX,
-                },
-            )?)
+            let local_origin =
+                self.hir_item_count
+                    .checked_add(import.as_raw())
+                    .ok_or(LoweringError::ArenaOverflow {
+                        arena: "deterministic signal import origins",
+                        attempted_len: usize::MAX,
+                    })?;
+            HirItemId::from_raw(self.item_origin_offset.saturating_add(local_origin))
         } else {
             self.next_synthetic_item_origin()?
         };

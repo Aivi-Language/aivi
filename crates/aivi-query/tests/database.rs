@@ -238,6 +238,41 @@ fn hir_queries_reject_non_exported_legacy_stdlib_names() {
 }
 
 #[test]
+fn hir_queries_refresh_workspace_hoists_after_workspace_files_change() {
+    let workspace = TempDir::new("workspace-hoist-refresh");
+    let main_path = workspace.write("main.aivi", "value answer = plusOne 41\n");
+
+    let db = RootDatabase::new();
+    let main = SourceFile::new(
+        &db,
+        main_path.clone(),
+        fs::read_to_string(&main_path).expect("main fixture should exist"),
+    );
+
+    let first = hir_module(&db, main);
+    assert!(
+        first.hir_diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("unknown term `plusOne`")),
+        "without a hoisted provider the symbol should stay unresolved: {:?}",
+        first.hir_diagnostics()
+    );
+
+    workspace.write(
+        "shared/ops.aivi",
+        "hoist\nfunc plusOne = x =>\n    x + 1\n",
+    );
+    assert!(main.set_text(&db, "value answer = plusOne 41\n\n".to_owned()));
+
+    let second = hir_module(&db, main);
+    assert!(
+        second.hir_diagnostics().is_empty(),
+        "new workspace hoists should become visible after invalidation: {:?}",
+        second.hir_diagnostics()
+    );
+}
+
+#[test]
 fn hir_queries_matrix_module_exports_public_api() {
     let workspace = TempDir::new("bundled-stdlib-matrix-api");
     let main_path = workspace.write(

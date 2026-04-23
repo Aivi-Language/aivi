@@ -3084,15 +3084,24 @@ The executable is self-contained at the AIVI layer and does not depend on worksp
 
 Exits 0 on success, 1 on validation/build errors.
 
-### 26.4 `aivi run <path> [--view <name>]`
+### 26.4 `aivi run [<path>] [--path <path>] [--app <name>] [--view <name>]`
 
 ```
 aivi run src/app.aivi
+aivi run --app tray
 aivi run src/app.aivi --view mainWindow
 aivi run build/app/run-artifact.bin
 ```
 
 The path may be a source/workspace entry or a serialized `run-artifact.bin`.
+When no explicit path is given, the CLI resolves the nearest-workspace default in this order:
+
+1. selected `[[app]]` from `--app <name>`
+2. workspace `[run] entry`
+3. implicit `<workspace-root>/main.aivi`
+
+If a workspace defines multiple `[[app]]` entries and no `[run] entry`, the CLI may launch each
+app as a separate child `aivi run --app ...` process instead of guessing one default.
 
 View selection rules:
 
@@ -3104,6 +3113,30 @@ View selection rules:
 The selected root must be a `Window`. The CLI does not auto-wrap arbitrary widgets into windows.
 
 `aivi run` links the compiled runtime stack, evaluates the selected view fragments against committed runtime snapshots, re-evaluates after each meaningful committed tick, and applies GTK updates through the bridge executor.
+
+When the selected default target comes from `[run] entry`, the same manifest may declare
+additional `[[run.launch]]` parts:
+
+```toml
+[run]
+entry = "apps/launcher/main.aivi"
+
+[[run.launch]]
+label = "Main window"
+entry = "apps/ui/main.aivi"
+
+[[run.launch]]
+label = "Daemon"
+entry = "apps/daemon/main.aivi"
+view = "main"
+```
+
+Each launch part is resolved relative to the manifest workspace root, waits until the parent
+launcher session is ready, and then spawns as a child `aivi run --path <entry> [--view ...]`
+process. A launcher may be a visible GTK splash entry or a headless supervisor `Task`. The live
+run progress tracker includes a dedicated launch lane that reports queued, starting, started, and
+failed state for those parts. Explicit `--path` / `--app` runs target one entry directly and do
+not inherit the default `[run.launch]` fan-out.
 
 When the input is a serialized run artifact, the bundled view is already fixed. `--view <name>` may be omitted or must match the bundled view exactly.
 

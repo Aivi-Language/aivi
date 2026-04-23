@@ -35,6 +35,21 @@ pub struct RunConfig {
     /// Default view name for `aivi run` / `aivi build`.
     /// Overridden by `--view` on the CLI.
     pub view: Option<String>,
+
+    /// Additional AIVI entrypoints to launch alongside the selected run entry.
+    #[serde(default)]
+    pub launch: Vec<RunLaunchConfig>,
+}
+
+/// One entry from a `[[run.launch]]` array, declaring an additional AIVI run target.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct RunLaunchConfig {
+    /// Human-readable label shown in progress/status surfaces.
+    pub label: String,
+    /// Entry file path relative to the workspace root.
+    pub entry: String,
+    /// Optional default view name for the launched entry.
+    pub view: Option<String>,
 }
 
 /// One entry from a `[[app]]` array, declaring a named application target.

@@ -51,7 +51,7 @@ pub use lower::{
     LoweredRuntimeFragment, LoweringError, LoweringErrors, RuntimeFragmentSpec, lower_module,
     lower_module_with_items, lower_runtime_fragment, lower_runtime_fragment_with_workspace,
     lower_runtime_module, lower_runtime_module_with_items, lower_runtime_module_with_workspace,
-    runtime_fragment_included_items,
+    runtime_fragment_included_items, runtime_workspace_item_origin_offsets,
 };
 pub use module::{
     DecodeField, DecodeProgram, DecodeStep, DecodeVariant, DomainDecodeSurface,

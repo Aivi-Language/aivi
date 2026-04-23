@@ -21,7 +21,9 @@ pub use entry::{
     EntrypointOrigin, EntrypointResolutionError, ResolvedEntrypoint, resolve_v1_entrypoint,
 };
 pub use inputs::SourceFile;
-pub use manifest::{AiviManifest, AppConfig, RunConfig, WorkspaceConfig, parse_manifest};
+pub use manifest::{
+    AiviManifest, AppConfig, RunConfig, RunLaunchConfig, WorkspaceConfig, parse_manifest,
+};
 pub use queries::{
     BackendUnitError, HirModuleResult, ParsedFileResult, RuntimeFragmentBackendUnit,
     RuntimeFragmentFingerprint, StableFingerprint, WholeProgramBackendUnit,

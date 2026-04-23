@@ -194,3 +194,50 @@ fn named_app_overrides_manifest_run_entry() {
     assert_eq!(resolved.entry_path(), tray.as_path());
     assert_eq!(resolved.manifest_view(), Some("quickCompose"));
 }
+
+#[test]
+fn run_entry_resolves_manifest_launch_parts() {
+    let workspace = ScratchDir::new("run-launch-parts");
+    workspace.write(
+        "aivi.toml",
+        concat!(
+            "[run]\n",
+            "entry = \"apps/launcher/main.aivi\"\n",
+            "\n",
+            "[[run.launch]]\n",
+            "label = \"Main window\"\n",
+            "entry = \"apps/ui/main.aivi\"\n",
+            "view = \"main\"\n",
+            "\n",
+            "[[run.launch]]\n",
+            "label = \"Daemon\"\n",
+            "entry = \"apps/daemon/main.aivi\"\n",
+        ),
+    );
+    let launcher = workspace.write(
+        "apps/launcher/main.aivi",
+        "value main = <Window title=\"Launcher\" />\n",
+    );
+    let ui = workspace.write(
+        "apps/ui/main.aivi",
+        "value main = <Window title=\"UI\" />\n",
+    );
+    let daemon = workspace.write(
+        "apps/daemon/main.aivi",
+        "value main : Task Text Unit = stdoutWrite \"\"\n",
+    );
+    let cwd = workspace.mkdir("tooling");
+
+    let resolved = resolve_v1_entrypoint(&cwd, None, None)
+        .expect("[[run.launch]] entries should resolve alongside the selected run entry");
+
+    assert_eq!(resolved.entry_path(), launcher.as_path());
+    let launch = resolved.manifest_launch();
+    assert_eq!(launch.len(), 2);
+    assert_eq!(launch[0].label(), "Main window");
+    assert_eq!(launch[0].entry_path(), ui.as_path());
+    assert_eq!(launch[0].view(), Some("main"));
+    assert_eq!(launch[1].label(), "Daemon");
+    assert_eq!(launch[1].entry_path(), daemon.as_path());
+    assert_eq!(launch[1].view(), None);
+}

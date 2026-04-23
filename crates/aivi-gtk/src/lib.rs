@@ -23,7 +23,9 @@ pub use host::{
 };
 pub use lower::{
     LoweringError, LoweringOptions, lower_markup_expr, lower_markup_expr_with_options,
+    lower_markup_expr_with_workspace, lower_markup_expr_with_workspace_and_options,
     lower_markup_root, lower_markup_root_with_options,
+    lower_markup_root_with_workspace_and_options,
 };
 pub use plan::*;
 pub use runtime_adapter::{

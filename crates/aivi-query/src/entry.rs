@@ -25,6 +25,14 @@ pub struct ResolvedEntrypoint {
     workspace_root: PathBuf,
     origin: EntrypointOrigin,
     manifest_view: Option<String>,
+    manifest_launch: Box<[ResolvedLaunchPart]>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedLaunchPart {
+    label: Box<str>,
+    entry_path: PathBuf,
+    view: Option<String>,
 }
 
 impl ResolvedEntrypoint {
@@ -33,12 +41,14 @@ impl ResolvedEntrypoint {
         workspace_root: PathBuf,
         origin: EntrypointOrigin,
         manifest_view: Option<String>,
+        manifest_launch: Vec<ResolvedLaunchPart>,
     ) -> Self {
         Self {
             entry_path,
             workspace_root,
             origin,
             manifest_view,
+            manifest_launch: manifest_launch.into_boxed_slice(),
         }
     }
 
@@ -58,6 +68,24 @@ impl ResolvedEntrypoint {
     pub fn manifest_view(&self) -> Option<&str> {
         self.manifest_view.as_deref()
     }
+
+    pub fn manifest_launch(&self) -> &[ResolvedLaunchPart] {
+        self.manifest_launch.as_ref()
+    }
+}
+
+impl ResolvedLaunchPart {
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    pub fn entry_path(&self) -> &Path {
+        &self.entry_path
+    }
+
+    pub fn view(&self) -> Option<&str> {
+        self.view.as_deref()
+    }
 }
 
 /// Errors returned while resolving a workspace entrypoint.
@@ -69,6 +97,12 @@ pub enum EntrypointResolutionError {
     },
     ManifestEntryNotFound {
         workspace_root: PathBuf,
+        manifest_entry: String,
+        resolved_path: PathBuf,
+    },
+    ManifestLaunchEntryNotFound {
+        workspace_root: PathBuf,
+        launch_label: String,
         manifest_entry: String,
         resolved_path: PathBuf,
     },
@@ -93,6 +127,7 @@ impl EntrypointResolutionError {
         match self {
             Self::MissingImplicitEntrypoint { workspace_root, .. }
             | Self::ManifestEntryNotFound { workspace_root, .. }
+            | Self::ManifestLaunchEntryNotFound { workspace_root, .. }
             | Self::AmbiguousApp { workspace_root, .. }
             | Self::UnknownApp { workspace_root, .. } => workspace_root,
             Self::ManifestParseError { .. } => Path::new("."),
@@ -103,6 +138,7 @@ impl EntrypointResolutionError {
         match self {
             Self::MissingImplicitEntrypoint { expected_path, .. } => expected_path,
             Self::ManifestEntryNotFound { resolved_path, .. } => resolved_path,
+            Self::ManifestLaunchEntryNotFound { resolved_path, .. } => resolved_path,
             Self::AmbiguousApp { .. }
             | Self::UnknownApp { .. }
             | Self::ManifestParseError { .. } => Path::new("."),
@@ -127,6 +163,16 @@ impl fmt::Display for EntrypointResolutionError {
                 f,
                 "`[run] entry = \"{}\"` in aivi.toml resolves to {}, which does not exist",
                 manifest_entry,
+                resolved_path.display()
+            ),
+            Self::ManifestLaunchEntryNotFound {
+                launch_label,
+                manifest_entry,
+                resolved_path,
+                ..
+            } => write!(
+                f,
+                "`[[run.launch]]` entry `{launch_label}` points at `{manifest_entry}`, which resolves to {} and does not exist",
                 resolved_path.display()
             ),
             Self::ManifestParseError { message } => write!(f, "{message}"),
@@ -185,6 +231,7 @@ pub fn resolve_v1_entrypoint(
             workspace_root,
             EntrypointOrigin::ExplicitPath,
             manifest_view,
+            Vec::new(),
         ));
     }
 
@@ -217,6 +264,7 @@ pub fn resolve_v1_entrypoint(
             workspace_root,
             EntrypointOrigin::ManifestEntry,
             manifest_view,
+            Vec::new(),
         ));
     }
 
@@ -229,11 +277,13 @@ pub fn resolve_v1_entrypoint(
                 resolved_path: entry_path,
             });
         }
+        let manifest_launch = resolve_manifest_launch_parts(&workspace_root, &manifest)?;
         return Ok(ResolvedEntrypoint::new(
             entry_path,
             workspace_root,
             EntrypointOrigin::ManifestEntry,
             manifest.run.view,
+            manifest_launch,
         ));
     }
 
@@ -256,6 +306,7 @@ pub fn resolve_v1_entrypoint(
                 workspace_root,
                 EntrypointOrigin::ManifestEntry,
                 manifest_view,
+                Vec::new(),
             ));
         }
 
@@ -278,5 +329,33 @@ pub fn resolve_v1_entrypoint(
         workspace_root,
         EntrypointOrigin::ImplicitWorkspaceMain,
         manifest.run.view,
+        Vec::new(),
     ))
+}
+
+fn resolve_manifest_launch_parts(
+    workspace_root: &Path,
+    manifest: &crate::AiviManifest,
+) -> Result<Vec<ResolvedLaunchPart>, EntrypointResolutionError> {
+    manifest
+        .run
+        .launch
+        .iter()
+        .map(|part| {
+            let entry_path = workspace_root.join(&part.entry);
+            if !entry_path.is_file() {
+                return Err(EntrypointResolutionError::ManifestLaunchEntryNotFound {
+                    workspace_root: workspace_root.to_path_buf(),
+                    launch_label: part.label.clone(),
+                    manifest_entry: part.entry.clone(),
+                    resolved_path: entry_path,
+                });
+            }
+            Ok(ResolvedLaunchPart {
+                label: part.label.clone().into_boxed_str(),
+                entry_path,
+                view: part.view.clone(),
+            })
+        })
+        .collect()
 }

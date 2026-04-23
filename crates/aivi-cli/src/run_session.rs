@@ -4,6 +4,33 @@ type MainContextTask<S> = Box<dyn FnOnce(&mut S) + Send + 'static>;
 #[derive(Clone)]
 pub(super) struct RunLaunchConfig {
     providers: SourceProviderManager,
+    launch_parts: Arc<[RunLaunchPart]>,
+    launch_part_observer: Option<Arc<dyn Fn(RunLaunchPartProgressEvent) + Send + Sync + 'static>>,
+}
+
+pub(crate) const RUN_LAUNCH_PART_NOTIFY_ENV: &str = "AIVI_LAUNCH_PART_NOTIFY";
+pub(crate) const RUN_LAUNCH_PART_READY_MARKER: &str = "__AIVI_LAUNCH_PART_READY__";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct RunLaunchPart {
+    label: Box<str>,
+    entry_path: PathBuf,
+    view: Option<Box<str>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum RunLaunchPartProgressStatus {
+    Queued,
+    Launching,
+    Started,
+    Failed(Box<str>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct RunLaunchPartProgressEvent {
+    pub index: usize,
+    pub label: Box<str>,
+    pub status: RunLaunchPartProgressStatus,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,7 +146,7 @@ struct MainContextRequestQueue<S> {
 #[derive(Debug)]
 struct RunHydrationRequest {
     revision: u64,
-    globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
+    globals: BTreeMap<SignalHandle, DetachedRuntimeValue>,
 }
 
 #[derive(Debug)]
@@ -139,7 +166,7 @@ struct HydrationRevisionState {
     next_revision: u64,
     latest_requested: Option<u64>,
     latest_applied: Option<u64>,
-    latest_requested_globals: Option<BTreeMap<BackendItemId, DetachedRuntimeValue>>,
+    latest_requested_globals: Option<BTreeMap<SignalHandle, DetachedRuntimeValue>>,
 }
 
 struct RunHydrationCoordinator {
@@ -338,14 +365,15 @@ struct RunSessionState {
     kind: RunSessionKind,
     driver: GlibLinkedRuntimeDriver,
     sources: Option<aivi_base::SourceDatabase>,
-    required_signal_globals: BTreeMap<BackendItemId, Box<str>>,
+    required_signal_globals: BTreeMap<SignalHandle, Box<str>>,
     main_context_requests: MainContextRequestQueue<RunSessionState>,
     main_loop: glib::MainLoop,
     lifecycle: RunSessionLifecycle,
 }
 
 struct RunGtkSessionState {
-    event_handlers: BTreeMap<HirExprId, ResolvedRunEventHandler>,
+    event_handlers: BTreeMap<ExprRef, ResolvedRunEventHandler>,
+    lazy_event_handlers: Option<Arc<LazyRunEventHandlerContext>>,
     executor: GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     hydration: RunHydrationCoordinator,
     startup_gate: RunStartupGate,
@@ -369,11 +397,71 @@ impl Default for RunLaunchConfig {
 
 impl RunLaunchConfig {
     pub(super) fn new(providers: SourceProviderManager) -> Self {
-        Self { providers }
+        Self {
+            providers,
+            launch_parts: Arc::new([]),
+            launch_part_observer: None,
+        }
     }
 
     pub(super) fn cache_home(&self) -> Result<PathBuf, Box<str>> {
         self.providers.cache_home()
+    }
+
+    pub(super) fn with_launch_parts(mut self, launch_parts: Vec<RunLaunchPart>) -> Self {
+        self.launch_parts = launch_parts.into();
+        self
+    }
+
+    pub(super) fn with_launch_part_observer(
+        mut self,
+        observer: Arc<dyn Fn(RunLaunchPartProgressEvent) + Send + Sync + 'static>,
+    ) -> Self {
+        self.launch_part_observer = Some(observer);
+        self
+    }
+
+    pub(super) fn launch_parts(&self) -> &[RunLaunchPart] {
+        self.launch_parts.as_ref()
+    }
+
+    fn notify_launch_part(&self, index: usize, label: &str, status: RunLaunchPartProgressStatus) {
+        let Some(observer) = &self.launch_part_observer else {
+            return;
+        };
+        observer(RunLaunchPartProgressEvent {
+            index,
+            label: label.into(),
+            status,
+        });
+    }
+}
+
+impl RunLaunchPart {
+    pub(super) fn new(
+        label: impl Into<Box<str>>,
+        entry_path: PathBuf,
+        view: Option<String>,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            entry_path,
+            view: view.map(Into::into),
+        }
+    }
+
+    pub(super) fn label(&self) -> &str {
+        &self.label
+    }
+
+    #[cfg(test)]
+    pub(super) fn entry_path(&self) -> &Path {
+        &self.entry_path
+    }
+
+    #[cfg(test)]
+    pub(super) fn view(&self) -> Option<&str> {
+        self.view.as_deref()
     }
 }
 
@@ -652,7 +740,7 @@ impl RunHydrationWorker {
     fn request(
         &self,
         revision: u64,
-        globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
+        globals: BTreeMap<SignalHandle, DetachedRuntimeValue>,
     ) -> Result<(), String> {
         self.request_tx
             .as_ref()
@@ -705,12 +793,12 @@ impl HydrationRevisionState {
 
     fn should_request_globals(
         &self,
-        globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
+        globals: &BTreeMap<SignalHandle, DetachedRuntimeValue>,
     ) -> bool {
         self.latest_requested_globals.as_ref() != Some(globals)
     }
 
-    fn mark_requested_globals(&mut self, globals: BTreeMap<BackendItemId, DetachedRuntimeValue>) {
+    fn mark_requested_globals(&mut self, globals: BTreeMap<SignalHandle, DetachedRuntimeValue>) {
         self.latest_requested_globals = Some(globals);
     }
 
@@ -753,21 +841,27 @@ impl RunHydrationCoordinator {
     fn request_current(
         &mut self,
         driver: &GlibLinkedRuntimeDriver,
-        required_signal_globals: &BTreeMap<BackendItemId, Box<str>>,
+        required_signal_globals: &BTreeMap<SignalHandle, Box<str>>,
     ) -> Result<(), String> {
-        let globals = driver
-            .current_signal_globals()
-            .map_err(|error| format!("{error}"))?;
-        let projected = project_run_hydration_globals(required_signal_globals, &globals);
-        if !run_hydration_globals_ready(required_signal_globals, &projected) {
+        let globals = required_signal_globals
+            .keys()
+            .filter_map(|&signal| {
+                driver
+                    .current_signal_value(signal)
+                    .map_err(|error| format!("{error}"))
+                    .transpose()
+                    .map(|value| value.map(|value| (signal, value)))
+            })
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+        if !run_hydration_globals_ready(required_signal_globals, &globals) {
             return Ok(());
         }
-        self.request(projected)
+        self.request(globals)
     }
 
     fn request(
         &mut self,
-        globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
+        globals: BTreeMap<SignalHandle, DetachedRuntimeValue>,
     ) -> Result<(), String> {
         if !self.revisions.should_request_globals(&globals) {
             return Ok(());
@@ -940,7 +1034,8 @@ impl RunSessionState {
                     let mut sink = RunEventSink {
                         driver: &self.driver,
                         executor: &state.executor,
-                        handlers: &state.event_handlers,
+                        handlers: &mut state.event_handlers,
+                        lazy_handlers: state.lazy_event_handlers.as_deref(),
                     };
                     for event in queued_events {
                         state
@@ -1158,13 +1253,14 @@ fn run_hydration_worker_loop(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn project_run_hydration_globals(
-    required: &BTreeMap<BackendItemId, Box<str>>,
-    globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
-) -> BTreeMap<BackendItemId, DetachedRuntimeValue> {
+    required: &BTreeMap<SignalHandle, Box<str>>,
+    globals: &BTreeMap<SignalHandle, DetachedRuntimeValue>,
+) -> BTreeMap<SignalHandle, DetachedRuntimeValue> {
     required
         .keys()
-        .filter_map(|item| globals.get(item).cloned().map(|value| (*item, value)))
+        .filter_map(|signal| globals.get(signal).cloned().map(|value| (*signal, value)))
         .collect()
 }
 
@@ -1214,6 +1310,21 @@ fn record_startup_stage<F>(
     on_stage_completed(stage, startup_metrics);
 }
 
+fn startup_debug_enabled() -> bool {
+    env::var_os("AIVI_DEBUG_STARTUP").is_some()
+}
+
+pub(super) fn startup_debug_log(message: &str) {
+    if !startup_debug_enabled() {
+        return;
+    }
+    let _ = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/tmp/aivi-startup-debug.log")
+        .and_then(|mut file| writeln!(file, "{message}"));
+}
+
 pub(super) fn start_run_session_with_launch_config(
     path: &Path,
     artifact: RunArtifact,
@@ -1233,6 +1344,7 @@ where
 {
     let startup_started = Instant::now();
     let mut startup_metrics = RunStartupMetrics::default();
+    let debug_startup = startup_debug_enabled();
     let RunArtifact {
         view_name,
         kind,
@@ -1282,6 +1394,9 @@ where
             }));
     }
     if matches!(kind, RunArtifactKind::Gtk(_)) {
+        if debug_startup {
+            startup_debug_log("startup: gtk init begin");
+        }
         let gtk_init_started = Instant::now();
         gtk::init().map_err(|error| {
             render_run_error_report(
@@ -1302,8 +1417,26 @@ where
             startup_started.elapsed(),
             &mut on_stage_completed,
         );
+        if debug_startup {
+            startup_debug_log("startup: gtk init done");
+        }
+    }
+    if debug_startup {
+        startup_debug_log("startup: runtime link begin");
     }
     let runtime_link_started = Instant::now();
+    let signal_items_by_handle = runtime_assembly
+        .signals()
+        .iter()
+        .filter_map(|binding| {
+            runtime_link
+                .hir_to_backend
+                .iter()
+                .find_map(|(hir_item, backend_item)| {
+                    (*hir_item == binding.item).then_some((binding.signal(), *backend_item))
+                })
+        })
+        .collect::<BTreeMap<_, _>>();
     let linked = if let Some(runtime_tables) = runtime_tables {
         aivi_runtime::link_backend_runtime_with_tables_and_native_kernels_from_payload(
             runtime_assembly,
@@ -1375,15 +1508,21 @@ where
             )
         })?
     };
-    let runtime_link = runtime_link_started.elapsed();
+    let runtime_link_elapsed = runtime_link_started.elapsed();
     record_startup_stage(
         &mut startup_metrics,
         RunStartupStage::RuntimeLink,
-        runtime_link,
+        runtime_link_elapsed,
         startup_started.elapsed(),
         &mut on_stage_completed,
     );
+    if debug_startup {
+        startup_debug_log("startup: runtime link done");
+    }
 
+    if debug_startup {
+        startup_debug_log("startup: session setup begin");
+    }
     let session_setup_started = Instant::now();
     let context = glib::MainContext::default();
     let scheduled_session = Arc::new(std::sync::Mutex::new(
@@ -1453,6 +1592,7 @@ where
             let startup_manual_sources = hold_startup_timer_sources(&driver)?;
             RunSessionKind::Gtk(Box::new(RunGtkSessionState {
                 event_handlers: surface.event_handlers,
+                lazy_event_handlers: surface.lazy_event_handlers,
                 executor,
                 hydration: RunHydrationCoordinator::new(
                     Arc::new(RunHydrationStaticState {
@@ -1460,6 +1600,10 @@ where
                         patterns: surface.patterns,
                         bridge: surface.bridge,
                         inputs: surface.hydration_inputs,
+                        deferred_inputs: surface.deferred_hydration_inputs,
+                        deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+                        lazy_hydration: surface.lazy_hydration,
+                        signal_items_by_handle: signal_items_by_handle.clone(),
                         runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
                             backend.clone(),
                             backend_native_kernels.clone(),
@@ -1560,6 +1704,9 @@ where
         startup_started.elapsed(),
         &mut on_stage_completed,
     );
+    if debug_startup {
+        startup_debug_log("startup: session setup done");
+    }
 
     let initial_runtime_tick_started = Instant::now();
     session.borrow().driver.tick_now();
@@ -1636,6 +1783,7 @@ pub(super) fn launch_run_with_config<P, F>(
     path: &Path,
     artifact: RunArtifact,
     launch_config: RunLaunchConfig,
+    show_running_line: bool,
     mut on_progress: P,
     on_started: F,
 ) -> Result<ExitCode, String>
@@ -1643,6 +1791,7 @@ where
     P: FnMut(RunStartupStage, &RunStartupMetrics),
     F: FnOnce(&RunStartupMetrics),
 {
+    let post_present_launch = launch_config.clone();
     let harness = start_run_session_with_launch_config_and_reporter(
         path,
         artifact,
@@ -1651,28 +1800,157 @@ where
     )?;
 
     let startup_metrics = if harness.root_windows().is_empty() {
-        println!(
-            "running headless entry `{}` from {}",
-            harness.view_name(),
-            path.display()
-        );
+        if show_running_line {
+            println!(
+                "running headless entry `{}` from {}",
+                harness.view_name(),
+                path.display()
+            );
+        }
+        post_present_launch.launch_additional_parts()?;
         harness.startup_metrics()
     } else {
-        println!(
-            "running GTK view `{}` from {}",
-            harness.view_name(),
-            path.display()
-        );
+        if show_running_line {
+            println!(
+                "running GTK view `{}` from {}",
+                harness.view_name(),
+                path.display()
+            );
+        }
         harness.install_quit_on_last_window_close();
         let present_started = Instant::now();
         harness.present_root_windows()?;
+        post_present_launch.launch_additional_parts()?;
         harness
             .startup_metrics()
             .with_window_presentation(present_started.elapsed())
     };
+    if env::var_os(RUN_LAUNCH_PART_NOTIFY_ENV).is_some() {
+        println!("{RUN_LAUNCH_PART_READY_MARKER}");
+    }
     on_started(&startup_metrics);
     harness.run_main_loop()?;
     Ok(ExitCode::SUCCESS)
+}
+
+impl RunLaunchConfig {
+    fn launch_additional_parts(&self) -> Result<(), String> {
+        if self.launch_parts.is_empty() {
+            return Ok(());
+        }
+        for (index, part) in self.launch_parts.iter().enumerate() {
+            self.notify_launch_part(index, part.label(), RunLaunchPartProgressStatus::Queued);
+        }
+        let executable = env::current_exe()
+            .map_err(|error| format!("failed to determine current aivi executable: {error}"))?;
+        for (index, part) in self.launch_parts.iter().enumerate() {
+            self.notify_launch_part(index, part.label(), RunLaunchPartProgressStatus::Launching);
+            let mut command = std::process::Command::new(&executable);
+            command
+                .arg("__launch-part")
+                .arg("--path")
+                .arg(&part.entry_path)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null());
+            command.env(RUN_LAUNCH_PART_NOTIFY_ENV, "1");
+            if let Some(view) = &part.view {
+                command.arg("--view").arg(view.as_ref());
+            }
+            match command.spawn() {
+                Ok(mut child) => {
+                    let stdout = child.stdout.take();
+                    spawn_launch_part_monitor(
+                        self.launch_part_observer.clone(),
+                        index,
+                        part.label().into(),
+                        stdout,
+                        child,
+                    );
+                }
+                Err(error) => {
+                    self.notify_launch_part(
+                        index,
+                        part.label(),
+                        RunLaunchPartProgressStatus::Failed(error.to_string().into()),
+                    );
+                    return Err(format!(
+                        "failed to launch `{}` from {}: {error}",
+                        part.label(),
+                        part.entry_path.display()
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn spawn_launch_part_monitor(
+    observer: Option<Arc<dyn Fn(RunLaunchPartProgressEvent) + Send + Sync + 'static>>,
+    index: usize,
+    label: Box<str>,
+    stdout: Option<std::process::ChildStdout>,
+    mut child: std::process::Child,
+) {
+    thread::spawn(move || {
+        use std::io::BufRead as _;
+
+        let mut ready = false;
+        if let Some(stdout) = stdout {
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                if line == RUN_LAUNCH_PART_READY_MARKER {
+                    ready = true;
+                    notify_launch_part_observer(
+                        &observer,
+                        index,
+                        &label,
+                        RunLaunchPartProgressStatus::Started,
+                    );
+                }
+            }
+        }
+        match child.wait() {
+            Ok(status) if status.success() && ready => {}
+            Ok(status) if status.success() => notify_launch_part_observer(
+                &observer,
+                index,
+                &label,
+                RunLaunchPartProgressStatus::Failed("exited before ready".into()),
+            ),
+            Ok(status) => notify_launch_part_observer(
+                &observer,
+                index,
+                &label,
+                RunLaunchPartProgressStatus::Failed(
+                    format!("exited {}", status.code().unwrap_or_default()).into(),
+                ),
+            ),
+            Err(error) => notify_launch_part_observer(
+                &observer,
+                index,
+                &label,
+                RunLaunchPartProgressStatus::Failed(error.to_string().into()),
+            ),
+        }
+    });
+}
+
+fn notify_launch_part_observer(
+    observer: &Option<Arc<dyn Fn(RunLaunchPartProgressEvent) + Send + Sync + 'static>>,
+    index: usize,
+    label: &str,
+    status: RunLaunchPartProgressStatus,
+) {
+    let Some(observer) = observer else {
+        return;
+    };
+    observer(RunLaunchPartProgressEvent {
+        index,
+        label: label.into(),
+        status,
+    });
 }
 
 fn schedule_run_session(
@@ -1722,7 +2000,8 @@ fn spawn_run_session_callback(
 struct RunEventSink<'a> {
     driver: &'a GlibLinkedRuntimeDriver,
     executor: &'a GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
-    handlers: &'a BTreeMap<HirExprId, ResolvedRunEventHandler>,
+    handlers: &'a mut BTreeMap<ExprRef, ResolvedRunEventHandler>,
+    lazy_handlers: Option<&'a LazyRunEventHandlerContext>,
 }
 
 impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
@@ -1733,13 +2012,19 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
         route: &aivi_gtk::GtkEventRoute,
         value: RunHostValue,
     ) -> Result<(), Self::Error> {
-        let handler = self.handlers.get(&route.binding.handler).ok_or_else(|| {
-            format!(
+        let handler = if let Some(handler) = self.handlers.get(&route.binding.handler).cloned() {
+            handler
+        } else if let Some(context) = self.lazy_handlers {
+            let resolved = crate::resolve_deferred_run_event_handler(context, route.binding.handler)?;
+            self.handlers.insert(route.binding.handler, resolved.clone());
+            resolved
+        } else {
+            return Err(format!(
                 "missing resolved event handler for expression {} on route {}",
-                route.binding.handler.as_raw(),
+                route.binding.handler.expr.as_raw(),
                 route.id
-            )
-        })?;
+            ));
+        };
         let payload = match handler.payload {
             ResolvedRunEventPayload::GtkPayload => value.0,
             ResolvedRunEventPayload::ScopedInput => self
@@ -1782,10 +2067,11 @@ mod tests {
         start_run_session_with_launch_config_and_reporter,
     };
     use crate::{RunHydrationStaticState, plan_run_hydration_profiled};
-    use aivi_backend::{DetachedRuntimeValue, ItemId as BackendItemId, RuntimeValue};
+    use crate::{RunHydrationPreparationMode, prepare_run_artifact_with_metrics_and_progress};
+    use aivi_backend::{DetachedRuntimeValue, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
-    use aivi_runtime::set_native_kernel_plans_enabled;
+    use aivi_runtime::{SignalHandle, set_native_kernel_plans_enabled};
     use aivi_syntax::parse_module;
     use gtk::prelude::*;
     use std::{
@@ -1880,6 +2166,44 @@ mod tests {
         );
         crate::prepare_run_artifact(&sources, lowered.module(), &[], None)
             .expect("run-session text fixture should prepare")
+    }
+
+    fn prepare_run_from_text_with_hydration_mode(
+        path: &str,
+        source: &str,
+        hydration_mode: RunHydrationPreparationMode,
+    ) -> crate::RunArtifact {
+        ensure_interpreted_run_session_tests();
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(path, source);
+        let file = &sources[file_id];
+        let parsed = parse_module(file);
+        assert!(!parsed.has_errors(), "test input should parse cleanly");
+        let lowered = lower_hir_module(&parsed.module);
+        assert!(
+            !lowered.has_errors(),
+            "test input should lower cleanly: {:?}",
+            lowered.diagnostics()
+        );
+        let validation = lowered
+            .module()
+            .validate(ValidationMode::RequireResolvedNames);
+        assert!(
+            validation.diagnostics().is_empty(),
+            "test input should validate cleanly: {:?}",
+            validation.diagnostics()
+        );
+        prepare_run_artifact_with_metrics_and_progress(
+            &sources,
+            lowered.module(),
+            &[],
+            None,
+            None,
+            hydration_mode,
+            |_| {},
+        )
+        .map(|prepared| prepared.artifact)
+        .expect("run-session text fixture with hydration mode should prepare")
     }
 
     fn prepare_reversi_run() -> (PathBuf, crate::RunArtifact) {
@@ -2061,27 +2385,22 @@ mod tests {
         );
     }
 
-    fn required_signal_item(artifact: &crate::RunArtifact, name: &str) -> aivi_backend::ItemId {
+    fn required_signal_item(artifact: &crate::RunArtifact, name: &str) -> SignalHandle {
         artifact
             .required_signal_globals
             .iter()
-            .find_map(|(item, current)| (current.as_ref() == name).then_some(*item))
+            .find_map(|(signal, current)| (current.as_ref() == name).then_some(*signal))
             .unwrap_or_else(|| panic!("snake demo should expose `{name}` for hydration"))
     }
 
-    fn text_signal_for(
-        harness: &super::RunSessionHarness,
-        signal_item: aivi_backend::ItemId,
-    ) -> String {
+    fn text_signal_for(harness: &super::RunSessionHarness, signal_item: SignalHandle) -> String {
         harness.with_access(|access| {
-            let globals = access
+            let value = access
                 .driver()
-                .current_signal_globals()
-                .expect("signal globals should be readable");
-            let value = globals
-                .get(&signal_item)
-                .expect("required text signal should exist")
-                .as_runtime();
+                .current_signal_value(signal_item)
+                .expect("signal value should be readable")
+                .unwrap_or_else(|| panic!("required text signal should exist"))
+                .into_runtime();
             match value {
                 RuntimeValue::Text(text) => text.to_string(),
                 RuntimeValue::Signal(inner) => match inner.as_ref() {
@@ -2181,18 +2500,16 @@ mod tests {
 
     fn board_tiles_for(
         harness: &super::RunSessionHarness,
-        board_item: aivi_backend::ItemId,
+        board_item: SignalHandle,
     ) -> Vec<SnakeRenderTile> {
         harness.with_access(|access| {
-            let globals = access
+            let value = access
                 .driver()
-                .current_signal_globals()
-                .expect("signal globals should be readable");
-            let value = globals
-                .get(&board_item)
-                .expect("required board tile signal should exist")
-                .as_runtime();
-            let RuntimeValue::List(items) = runtime_signal_payload(value) else {
+                .current_signal_value(board_item)
+                .expect("signal value should be readable")
+                .unwrap_or_else(|| panic!("required board tile signal should exist"))
+                .into_runtime();
+            let RuntimeValue::List(items) = runtime_signal_payload(&value) else {
                 panic!("expected board tile signal to be a List, found {value:?}");
             };
             items
@@ -2376,9 +2693,26 @@ mod tests {
     #[test]
     fn hydration_revision_state_skips_duplicate_requested_globals() {
         let mut revisions = HydrationRevisionState::default();
+        let artifact = prepare_run_from_text(
+            "revision-globals.aivi",
+            r#"
+@source process.cwd
+signal alpha : Signal Text
+
+@source process.argv
+signal gamma : Signal Text
+
+value view =
+    <Window title={alpha}>
+        <Label text={gamma} />
+    </Window>
+"#,
+        );
+        let alpha = required_signal_item(&artifact, "alpha");
+        let gamma = required_signal_item(&artifact, "gamma");
         let mut first_globals = BTreeMap::new();
         first_globals.insert(
-            BackendItemId::from_raw(1),
+            alpha,
             DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(7)),
         );
 
@@ -2391,7 +2725,7 @@ mod tests {
 
         let mut second_globals = first_globals.clone();
         second_globals.insert(
-            BackendItemId::from_raw(2),
+            gamma,
             DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(9)),
         );
         assert!(revisions.should_request_globals(&second_globals));
@@ -2399,21 +2733,39 @@ mod tests {
 
     #[test]
     fn project_run_hydration_globals_keeps_only_required_items() {
-        let required = BTreeMap::from([
-            (BackendItemId::from_raw(1), "alpha".into()),
-            (BackendItemId::from_raw(3), "gamma".into()),
-        ]);
+        let artifact = prepare_run_from_text(
+            "project-globals.aivi",
+            r#"
+@source process.cwd
+signal alpha : Signal Text
+
+@source process.argv
+signal beta : Signal Text
+
+@source process.env
+signal gamma : Signal Text
+
+value view =
+    <Window title={alpha}>
+        <Label text={beta} tooltip={gamma} />
+    </Window>
+"#,
+        );
+        let alpha = required_signal_item(&artifact, "alpha");
+        let beta = required_signal_item(&artifact, "beta");
+        let gamma = required_signal_item(&artifact, "gamma");
+        let required = BTreeMap::from([(alpha, "alpha".into()), (gamma, "gamma".into())]);
         let globals = BTreeMap::from([
             (
-                BackendItemId::from_raw(1),
+                alpha,
                 DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(7)),
             ),
             (
-                BackendItemId::from_raw(2),
+                beta,
                 DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(8)),
             ),
             (
-                BackendItemId::from_raw(3),
+                gamma,
                 DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(9)),
             ),
         ]);
@@ -2424,11 +2776,11 @@ mod tests {
             projected,
             BTreeMap::from([
                 (
-                    BackendItemId::from_raw(1),
+                    alpha,
                     DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(7)),
                 ),
                 (
-                    BackendItemId::from_raw(3),
+                    gamma,
                     DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(9)),
                 ),
             ])
@@ -2937,6 +3289,87 @@ export main
     }
 
     #[gtk::test]
+    fn deferred_live_button_click_event_payloads_use_current_markup_bindings() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let artifact = prepare_run_from_text_with_hydration_mode(
+            "deferred-live-event-hook-payload-run.aivi",
+            r#"
+signal selected : Signal Text
+signal selectedText : Signal Text = selected
+ +|> "None" keepLatest
+
+type Text -> Text -> Text
+func keepLatest = next current=>    next
+
+value rows = ["Alpha", "Beta"]
+
+value main =
+    <Window title="Host">
+        <Box orientation="vertical">
+            <Label text={selectedText} />
+            <each of={rows} as={item} key={item}>
+                <Button label={item} onClick={selected item} />
+            </each>
+        </Box>
+    </Window>
+
+export main
+"#,
+            RunHydrationPreparationMode::DeferredLive,
+        );
+        assert!(
+            artifact.event_handlers.is_empty(),
+            "deferred live event hook fixture should skip eager handler resolution"
+        );
+        let selected_item = required_signal_item(&artifact, "selectedText");
+        let harness = start_run_session_with_launch_config(
+            Path::new("deferred-live-event-hook-payload-run.aivi"),
+            artifact,
+            RunLaunchConfig::default(),
+        )
+        .expect("deferred live payload event handler fixture should start a run session");
+        let context = harness.control().context();
+        harness
+            .present_root_windows()
+            .expect("presenting the deferred live fixture window should trigger initial hydration");
+        assert!(
+            pump_until(&context, Duration::from_millis(500), || {
+                harness.root_windows().iter().any(|window| {
+                    find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Beta").is_some()
+                })
+            }),
+            "deferred live fixture should render a Beta button after presentation"
+        );
+        let beta = harness
+            .root_windows()
+            .iter()
+            .find_map(|window| {
+                find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Beta")
+            })
+            .expect("deferred live fixture should render a Beta button");
+        assert_eq!(text_signal_for(&harness, selected_item), "None");
+
+        beta.emit_clicked();
+        let published = pump_until(&context, Duration::from_millis(250), || {
+            text_signal_for(&harness, selected_item) == "Beta"
+        });
+        if !published {
+            let (handler_count, runtime_error) = harness.with_access(|access| {
+                let handler_count = match &access.session.kind {
+                    super::RunSessionKind::Gtk(state) => state.event_handlers.len(),
+                    super::RunSessionKind::HeadlessTask => 0,
+                };
+                (handler_count, access.runtime_error().map(str::to_owned))
+            });
+            panic!(
+                "deferred live payload event hooks should publish the clicked row binding into the selected signal (resolved handlers: {handler_count}, runtime error: {runtime_error:?})"
+            );
+        }
+
+        harness.shutdown();
+    }
+
+    #[gtk::test]
     fn parameterized_from_selectors_refresh_markup_after_signal_updates() {
         let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
         let artifact = prepare_run_from_text(
@@ -3281,11 +3714,16 @@ export main
             patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
+            deferred_inputs: BTreeMap::new(),
+            deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+            lazy_hydration: None,
+            signal_items_by_handle: BTreeMap::new(),
             runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
                 artifact.backend.clone(),
                 artifact.backend_native_kernels.clone(),
             )),
         };
+        let required_signal_globals = artifact.required_signal_globals.clone();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("reversi demo should start a run session");
@@ -3312,10 +3750,16 @@ export main
         );
 
         let globals = harness.with_access(|access| {
-            access
-                .driver()
-                .current_signal_globals()
-                .expect("signal globals should be readable for hydration profiling")
+            required_signal_globals
+                .keys()
+                .filter_map(|&signal| {
+                    access
+                        .driver()
+                        .current_signal_value(signal)
+                        .expect("signal globals should be readable for hydration profiling")
+                        .map(|value| (signal, value))
+                })
+                .collect::<BTreeMap<_, _>>()
         });
         let (_plan, profile) = plan_run_hydration_profiled(&shared, &globals)
             .expect("reversi hydration should be profileable from live runtime globals");
@@ -3360,11 +3804,16 @@ export main
             patterns: artifact.patterns.clone(),
             bridge: artifact.bridge.clone(),
             inputs: artifact.hydration_inputs.clone(),
+            deferred_inputs: BTreeMap::new(),
+            deferred_input_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+            lazy_hydration: None,
+            signal_items_by_handle: BTreeMap::new(),
             runtime_execution: Arc::new(RunFragmentExecutionUnit::new(
                 artifact.backend.clone(),
                 artifact.backend_native_kernels.clone(),
             )),
         };
+        let required_signal_globals = artifact.required_signal_globals.clone();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("snake demo should start a run session");
@@ -3391,10 +3840,16 @@ export main
         pump_context(&context, Duration::from_millis(50));
 
         let baseline_globals = harness.with_access(|access| {
-            access
-                .driver()
-                .current_signal_globals()
-                .expect("baseline snake globals should be readable")
+            required_signal_globals
+                .keys()
+                .filter_map(|&signal| {
+                    access
+                        .driver()
+                        .current_signal_value(signal)
+                        .expect("baseline snake globals should be readable")
+                        .map(|value| (signal, value))
+                })
+                .collect::<BTreeMap<_, _>>()
         });
         let (_baseline_plan, baseline_profile) =
             plan_run_hydration_profiled(&shared, &baseline_globals)
@@ -3409,10 +3864,16 @@ export main
         );
 
         let turned_globals = harness.with_access(|access| {
-            access
-                .driver()
-                .current_signal_globals()
-                .expect("turned snake globals should be readable")
+            required_signal_globals
+                .keys()
+                .filter_map(|&signal| {
+                    access
+                        .driver()
+                        .current_signal_value(signal)
+                        .expect("turned snake globals should be readable")
+                        .map(|value| (signal, value))
+                })
+                .collect::<BTreeMap<_, _>>()
         });
         let (_turn_plan, turn_profile) = plan_run_hydration_profiled(&shared, &turned_globals)
             .expect("turned snake hydration should be profileable");

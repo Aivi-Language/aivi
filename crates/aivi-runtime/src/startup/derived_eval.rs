@@ -2,6 +2,7 @@ struct LinkedDerivedEvaluator<'a> {
     backend: &'a BackendRuntimePayload,
     native_kernels: &'a aivi_backend::NativeKernelArtifactSet,
     signal_items_by_handle: &'a BTreeMap<SignalHandle, BackendItemId>,
+    signal_alias_items_by_handle: &'a BTreeMap<SignalHandle, Box<[BackendItemId]>>,
     derived_signals: &'a BTreeMap<DerivedHandle, LinkedDerivedSignal>,
     reactive_signals: &'a BTreeMap<SignalHandle, LinkedReactiveSignal>,
     reactive_clauses: &'a BTreeMap<crate::ReactiveClauseHandle, LinkedReactiveClause>,
@@ -297,6 +298,42 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
 }
 
 impl LinkedDerivedEvaluator<'_> {
+    fn update_signal_global(
+        &self,
+        globals: &mut BTreeMap<BackendItemId, RuntimeValue>,
+        signal: SignalHandle,
+        value: Option<RuntimeValue>,
+    ) {
+        let Some(&primary) = self.signal_items_by_handle.get(&signal) else {
+            return;
+        };
+        match &value {
+            Some(value) => {
+                globals.insert(primary, value.clone());
+            }
+            None => {
+                globals.remove(&primary);
+            }
+        }
+        for &alias in self
+            .signal_alias_items_by_handle
+            .get(&signal)
+            .into_iter()
+            .flat_map(|items| items.iter())
+        {
+            match &value {
+                Some(value) => {
+                    globals.insert(alias, value.clone());
+                }
+                None => {
+                    globals.remove(&alias);
+                }
+            }
+        }
+    }
+}
+
+impl LinkedDerivedEvaluator<'_> {
     fn backend_view(&self) -> BackendRuntimeView<'_> {
         self.backend.runtime_view()
     }
@@ -331,15 +368,19 @@ impl LinkedDerivedEvaluator<'_> {
             let Some(signal) = inputs.signal(index) else {
                 continue;
             };
-            let Some(&dependency) = self.signal_items_by_handle.get(&signal) else {
+            if !self.signal_items_by_handle.contains_key(&signal) {
                 continue;
-            };
+            }
             match inputs.value(index) {
                 Some(value) => {
-                    globals.insert(dependency, signal_global_value(value));
+                    self.update_signal_global(
+                        &mut globals,
+                        signal,
+                        Some(signal_global_value(value)),
+                    );
                 }
                 None => {
-                    globals.remove(&dependency);
+                    self.update_signal_global(&mut globals, signal, None);
                 }
             }
         }
@@ -357,15 +398,15 @@ impl LinkedDerivedEvaluator<'_> {
             let Some(signal) = inputs.signal(index) else {
                 continue;
             };
-            let Some(&dependency) = self.signal_items_by_handle.get(&signal) else {
+            if !self.signal_items_by_handle.contains_key(&signal) {
                 continue;
-            };
+            }
             match inputs.value(index) {
                 Some(value) => {
-                    globals.insert(dependency, value.clone());
+                    self.update_signal_global(&mut globals, signal, Some(value.clone()));
                 }
                 None => {
-                    globals.remove(&dependency);
+                    self.update_signal_global(&mut globals, signal, None);
                 }
             }
         }

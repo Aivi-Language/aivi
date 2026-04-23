@@ -1,9 +1,9 @@
 const RUN_ARTIFACT_FORMAT: &str = "aivi.run-artifact";
-const RUN_ARTIFACT_VERSION: u32 = 4;
+const RUN_ARTIFACT_VERSION: u32 = 6;
 const RUN_ARTIFACT_FILE_NAME: &str = "run-artifact.bin";
 const RUN_ARTIFACT_PAYLOAD_DIR: &str = "payloads";
 const FROZEN_RUN_IMAGE_FORMAT: &str = "aivi.frozen-run-image";
-const FROZEN_RUN_IMAGE_VERSION: u32 = 2;
+const FROZEN_RUN_IMAGE_VERSION: u32 = 4;
 const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
 const FROZEN_BACKEND_CATALOG_FORMAT: &str = "aivi.frozen-backend-catalog";
 const FROZEN_BACKEND_CATALOG_VERSION: u32 = 1;
@@ -11,7 +11,7 @@ const ENCODED_BACKEND_PAYLOAD_FORMAT: &str = "aivi.encoded-backend-payload";
 const ENCODED_BACKEND_PAYLOAD_VERSION: u32 = 1;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 3;
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "4";
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "6";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 
@@ -59,7 +59,7 @@ struct SerializedRunGtkArtifact {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct RunPatternEntryWire {
-    id: HirPatternId,
+    id: PatternRef,
     pattern: RunPattern,
 }
 
@@ -77,7 +77,7 @@ enum CompiledRunInputWire {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct CompiledRunFragmentWire {
-    expr: HirExprId,
+    expr: ExprRef,
     parameters: Vec<RunFragmentParameter>,
     execution: BackendPayloadWire,
     item: BackendItemId,
@@ -97,13 +97,13 @@ enum CompiledRunTextSegmentWire {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct RequiredSignalGlobalWire {
-    item: BackendItemId,
+    signal: SignalHandle,
     name: Box<str>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct RunEventHandlerEntryWire {
-    handler: HirExprId,
+    handler: ExprRef,
     resolved: ResolvedRunEventHandler,
 }
 
@@ -205,6 +205,7 @@ struct FrozenSerializedRunArtifact {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct FrozenLinkedRuntimeTablesWire {
     signal_items_by_handle: Box<[(aivi_runtime::SignalHandle, BackendItemId)]>,
+    signal_alias_items_by_handle: Box<[(aivi_runtime::SignalHandle, Box<[BackendItemId]>)]>,
     runtime_signal_by_item: Box<[(BackendItemId, aivi_runtime::SignalHandle)]>,
     derived_signals: Box<[(aivi_runtime::DerivedHandle, aivi_runtime::LinkedDerivedSignal)]>,
     reactive_signals: Box<[(aivi_runtime::SignalHandle, aivi_runtime::LinkedReactiveSignal)]>,
@@ -264,7 +265,7 @@ enum FrozenCompiledRunInputWire {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct FrozenCompiledRunFragmentWire {
-    expr: HirExprId,
+    expr: ExprRef,
     parameters: Vec<RunFragmentParameter>,
     entry: FrozenEntryHandle,
     required_signal_globals: Vec<CompiledRunSignalGlobal>,
@@ -287,6 +288,7 @@ struct FrozenHirRuntimeAssemblyWire {
     reactive_program: aivi_runtime::ReactiveProgramParts,
     owners: Box<[aivi_runtime::HirOwnerBinding]>,
     signals: Box<[FrozenHirSignalBindingWire]>,
+    import_signals: Box<[aivi_runtime::HirImportSignalBinding]>,
     sources: Box<[aivi_runtime::HirSourceBinding]>,
     tasks: Box<[aivi_runtime::HirTaskBinding]>,
     gates: Box<[aivi_runtime::HirGateStageBinding]>,
@@ -352,6 +354,7 @@ struct HirRuntimeAssemblyWire {
     reactive_program: aivi_runtime::ReactiveProgramParts,
     owners: Box<[aivi_runtime::HirOwnerBinding]>,
     signals: Box<[HirSignalBindingWire]>,
+    import_signals: Box<[aivi_runtime::HirImportSignalBinding]>,
     sources: Box<[aivi_runtime::HirSourceBinding]>,
     tasks: Box<[aivi_runtime::HirTaskBinding]>,
     gates: Box<[aivi_runtime::HirGateStageBinding]>,
@@ -1706,6 +1709,16 @@ fn serialize_run_artifact(
     artifact: &RunArtifact,
     payloads: &mut ArtifactPayloadRegistry,
 ) -> Result<SerializedRunArtifact, String> {
+    if let RunArtifactKind::Gtk(surface) = &artifact.kind
+        && (!surface.deferred_hydration_inputs.is_empty()
+            || surface.lazy_hydration.is_some()
+            || surface.lazy_event_handlers.is_some())
+    {
+        return Err(
+            "cannot serialize run artifact with deferred live preparation; freeze the eager path instead"
+                .to_owned(),
+        );
+    }
     let kind = match &artifact.kind {
         RunArtifactKind::Gtk(surface) => SerializedRunArtifactKind::Gtk(SerializedRunGtkArtifact {
             patterns: surface
@@ -1754,8 +1767,8 @@ fn serialize_run_artifact(
         required_signal_globals: artifact
             .required_signal_globals
             .iter()
-            .map(|(&item, name)| RequiredSignalGlobalWire {
-                item,
+            .map(|(&signal, name)| RequiredSignalGlobalWire {
+                signal,
                 name: name.clone(),
             })
             .collect::<Vec<_>>()
@@ -1817,6 +1830,16 @@ fn serialize_frozen_run_artifact(
     artifact: &RunArtifact,
     payloads: &mut FrozenPayloadRegistry,
 ) -> Result<FrozenSerializedRunArtifact, String> {
+    if let RunArtifactKind::Gtk(surface) = &artifact.kind
+        && (!surface.deferred_hydration_inputs.is_empty()
+            || surface.lazy_hydration.is_some()
+            || surface.lazy_event_handlers.is_some())
+    {
+        return Err(
+            "cannot freeze run artifact with deferred live preparation; freeze the eager path instead"
+                .to_owned(),
+        );
+    }
     let runtime_tables =
         aivi_runtime::derive_backend_linked_runtime_tables_with_seed_and_native_kernels_from_payload(
             &artifact.runtime_assembly,
@@ -1892,8 +1915,8 @@ fn serialize_frozen_run_artifact(
         required_signal_globals: artifact
             .required_signal_globals
             .iter()
-            .map(|(&item, name)| RequiredSignalGlobalWire {
-                item,
+            .map(|(&signal, name)| RequiredSignalGlobalWire {
+                signal,
                 name: name.clone(),
             })
             .collect::<Vec<_>>()
@@ -1942,6 +1965,9 @@ fn deserialize_run_artifact(
                         .map(|compiled| (entry.input, compiled))
                 })
                 .collect::<Result<_, _>>()?,
+            deferred_hydration_inputs: BTreeMap::new(),
+            lazy_hydration: None,
+            lazy_event_handlers: None,
             event_handlers: surface
                 .event_handlers
                 .into_vec()
@@ -1960,7 +1986,7 @@ fn deserialize_run_artifact(
             .required_signal_globals
             .into_vec()
             .into_iter()
-            .map(|entry| (entry.item, entry.name))
+            .map(|entry| (entry.signal, entry.name))
             .collect(),
         sources: None,
         runtime_assembly: hir_runtime_assembly_from_wire(serialized.runtime_assembly, &mut payloads)?,
@@ -2005,6 +2031,9 @@ fn deserialize_frozen_run_artifact(
                         .map(|compiled| (entry.input, compiled))
                 })
                 .collect::<Result<_, _>>()?,
+            deferred_hydration_inputs: BTreeMap::new(),
+            lazy_hydration: None,
+            lazy_event_handlers: None,
             event_handlers: surface
                 .event_handlers
                 .into_vec()
@@ -2023,7 +2052,7 @@ fn deserialize_frozen_run_artifact(
             .required_signal_globals
             .into_vec()
             .into_iter()
-            .map(|entry| (entry.item, entry.name))
+            .map(|entry| (entry.signal, entry.name))
             .collect(),
         sources: None,
         runtime_assembly: frozen_hir_runtime_assembly_from_wire(serialized.runtime_assembly, payloads)?,
@@ -2053,6 +2082,12 @@ fn frozen_linked_runtime_tables_to_wire(
             .signal_items_by_handle
             .iter()
             .map(|(&signal, &item)| (signal, item))
+            .collect::<Vec<_>>()
+            .into_boxed_slice(),
+        signal_alias_items_by_handle: tables
+            .signal_alias_items_by_handle
+            .iter()
+            .map(|(&signal, items)| (signal, items.clone()))
             .collect::<Vec<_>>()
             .into_boxed_slice(),
         runtime_signal_by_item: tables
@@ -2264,6 +2299,11 @@ fn frozen_linked_runtime_tables_from_wire(
 ) -> Result<aivi_runtime::BackendLinkedRuntimeTables, String> {
     Ok(aivi_runtime::BackendLinkedRuntimeTables {
         signal_items_by_handle: wire.signal_items_by_handle.into_vec().into_iter().collect(),
+        signal_alias_items_by_handle: wire
+            .signal_alias_items_by_handle
+            .into_vec()
+            .into_iter()
+            .collect(),
         runtime_signal_by_item: wire.runtime_signal_by_item.into_vec().into_iter().collect(),
         derived_signals: wire.derived_signals.into_vec().into_iter().collect(),
         reactive_signals: wire.reactive_signals.into_vec().into_iter().collect(),
@@ -2333,6 +2373,12 @@ fn backfill_fragment_opaque_layout_variants(artifact: &mut RunArtifact) {
     );
 
     if let Some(surface) = artifact.gtk_mut() {
+        if let Some(lazy) = surface.lazy_hydration.as_mut() {
+            let lazy = Arc::get_mut(lazy)
+                .expect("lazy hydration context should remain unique during artifact backfill");
+            lazy.opaque_variant_templates = templates.clone();
+            lazy.representational_carrier_templates = carrier_templates.clone();
+        }
         for input in surface.hydration_inputs.values_mut() {
             backfill_compiled_run_input_opaque_variants(input, &templates, &carrier_templates);
         }
@@ -2588,7 +2634,7 @@ fn backfill_backend_payload_opaque_variants(
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct OpaqueVariantTemplate {
     name: Box<str>,
     field_count: usize,
@@ -3130,6 +3176,7 @@ fn hir_runtime_assembly_to_wire(
                 .map(|signal| hir_signal_binding_to_wire(signal, payloads))
                 .collect::<Result<Vec<_>, _>>()?
                 .into_boxed_slice(),
+        import_signals: parts.import_signals,
         sources: parts.sources,
         tasks: parts.tasks,
         gates: parts.gates,
@@ -3153,6 +3200,7 @@ fn hir_runtime_assembly_from_wire(
             .map(|signal| hir_signal_binding_from_wire(signal, payloads))
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice(),
+        import_signals: wire.import_signals,
         sources: wire.sources,
         tasks: wire.tasks,
         gates: wire.gates,
@@ -3175,8 +3223,9 @@ fn frozen_hir_runtime_assembly_to_wire(
             .into_vec()
             .into_iter()
             .map(|signal| frozen_hir_signal_binding_to_wire(signal, payloads))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_boxed_slice(),
+                .collect::<Result<Vec<_>, _>>()?
+                .into_boxed_slice(),
+        import_signals: parts.import_signals,
         sources: parts.sources,
         tasks: parts.tasks,
         gates: parts.gates,
@@ -3200,6 +3249,7 @@ fn frozen_hir_runtime_assembly_from_wire(
             .map(|signal| frozen_hir_signal_binding_from_wire(signal, payloads))
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice(),
+        import_signals: wire.import_signals,
         sources: wire.sources,
         tasks: wire.tasks,
         gates: wire.gates,

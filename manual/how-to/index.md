@@ -11,6 +11,7 @@ you start with a goal, and the guide gives you the shortest dependable path to t
 | Show loading and failure states clearly | [How to model loading and error states](/how-to/loading-and-error-states) |
 | Run work on a schedule | [How to work with timers](/how-to/work-with-timers) |
 | Split code across files and exports | [How to organize modules](/how-to/organize-modules) |
+| Start a splash window and additional companion entries together | [How to launch multiple entries](/how-to/launch-multiple-entries) |
 | Use an OpenAPI spec as the source of truth | [OpenAPI source guide](/guide/openapi-source) |
 | Survey the main built-in integration patterns | [Integration patterns](/guide/integrations) |
 

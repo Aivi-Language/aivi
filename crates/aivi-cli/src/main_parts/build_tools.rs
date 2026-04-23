@@ -630,6 +630,7 @@ fn maybe_run_embedded_build_output(arguments: &[OsString]) -> Result<Option<Exit
         run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
             SourceProviderContext::current().with_app_dir(launch_cwd.clone()),
         )),
+        true,
         |_, _| {},
         |_| {},
     )?;
@@ -1366,6 +1367,13 @@ DESCRIPTION:
     live widget tree. Serialized run artifacts skip the source/HIR
     pipeline and launch directly from bundled runtime payloads. The app
     runs until the window is closed.
+
+    When the selected default [run] entry declares [[run.launch]]
+    entries in aivi.toml, the launcher entry reaches session-ready first
+    and then spawns each extra run target as a child `aivi run` process. A
+    launcher may be a visible splash window or a headless supervisor. The
+    terminal progress tracker shows those launch parts on its final
+    status lane.
 "
         }
         "execute" => {

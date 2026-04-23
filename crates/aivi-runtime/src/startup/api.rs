@@ -6,6 +6,7 @@ pub struct BackendRuntimeLinkSeed {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BackendLinkedRuntimeTables {
     pub signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
+    pub signal_alias_items_by_handle: BTreeMap<SignalHandle, Box<[BackendItemId]>>,
     pub runtime_signal_by_item: BTreeMap<BackendItemId, SignalHandle>,
     pub derived_signals: BTreeMap<DerivedHandle, LinkedDerivedSignal>,
     pub reactive_signals: BTreeMap<SignalHandle, LinkedReactiveSignal>,
@@ -159,6 +160,7 @@ fn link_backend_runtime_with_tables_from_parts(
         backend,
         native_kernels,
         signal_items_by_handle: linked.signal_items_by_handle,
+        signal_alias_items_by_handle: linked.signal_alias_items_by_handle,
         runtime_signal_by_item: linked.runtime_signal_by_item,
         derived_signals: linked.derived_signals,
         reactive_signals: linked.reactive_signals,
@@ -190,6 +192,7 @@ pub struct BackendLinkedRuntime {
     backend: BackendRuntimePayload,
     native_kernels: std::sync::Arc<aivi_backend::NativeKernelArtifactSet>,
     signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
+    signal_alias_items_by_handle: BTreeMap<SignalHandle, Box<[BackendItemId]>>,
     runtime_signal_by_item: BTreeMap<BackendItemId, SignalHandle>,
     derived_signals: BTreeMap<DerivedHandle, LinkedDerivedSignal>,
     reactive_signals: BTreeMap<SignalHandle, LinkedReactiveSignal>,

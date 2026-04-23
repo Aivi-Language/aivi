@@ -372,6 +372,23 @@ pub fn lower_runtime_module_with_workspace<'a>(
     lowerer.build()
 }
 
+/// Computes the exact item-origin base assigned to each workspace module during
+/// `lower_runtime_module_with_workspace`, using the same internal lowering pass
+/// that allocates synthetic item origins.
+pub fn runtime_workspace_item_origin_offsets<'a>(
+    hir: &'a aivi_hir::Module,
+    workspace_hirs: &[(&str, &'a aivi_hir::Module)],
+) -> Result<HashMap<aivi_base::FileId, u32>, LoweringErrors> {
+    let mut lowerer = ModuleLowerer::new_internal(hir, Some(HashSet::new()));
+    lowerer.ws_origin_base = lowerer.next_synthetic_item_origin_raw;
+    let mut offsets = HashMap::from([(hir.file(), 0)]);
+    for (name, ws_hir) in workspace_hirs {
+        offsets.insert(ws_hir.file(), lowerer.ws_origin_base);
+        lowerer.compile_workspace_module(name, ws_hir)?;
+    }
+    Ok(offsets)
+}
+
 fn validate_general_expr_report_completeness(
     hir: &aivi_hir::Module,
     report: &aivi_hir::GeneralExprElaborationReport,

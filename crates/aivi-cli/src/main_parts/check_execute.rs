@@ -234,6 +234,13 @@ fn run_markup_file_with_launch_config(
     let total_start = Instant::now();
     let progress = RunProgressReporter::new(path, !timings);
     let progress_handle = progress.handle();
+    let show_running_line = !progress_handle.is_enabled()
+        && std::env::var_os(run_session::RUN_LAUNCH_PART_NOTIFY_ENV).is_none();
+    progress_handle.set_launch_parts(launch_config.launch_parts());
+    let launch_config = launch_config.with_launch_part_observer(std::sync::Arc::new({
+        let progress_handle = progress_handle.clone();
+        move |event| progress_handle.update_launch_part(event)
+    }));
     require_file_exists(path)?;
     if let Some(view) = requested_view {
         validate_module_name(view)?;
@@ -244,6 +251,7 @@ fn run_markup_file_with_launch_config(
             path,
             artifact,
             launch_config,
+            show_running_line,
             {
                 let progress_handle = progress_handle.clone();
                 move |stage, startup_metrics| {
@@ -290,6 +298,7 @@ fn run_markup_file_with_launch_config(
             path,
             artifact,
             launch_config,
+            show_running_line,
             {
                 let progress_handle = progress_handle.clone();
                 move |stage, startup_metrics| {
@@ -398,6 +407,7 @@ fn run_markup_file_with_launch_config(
         &workspace_hirs,
         requested_view,
         Some(snapshot.backend_query_context()),
+        RunHydrationPreparationMode::DeferredLive,
         &mut report_prelaunch_stage,
     ) {
         Ok(prepared) => prepared,
@@ -409,9 +419,13 @@ fn run_markup_file_with_launch_config(
     prepared.metrics.source_run_cache_load = source_run_cache_load;
     prepared.metrics.workspace_collection = workspace_collection;
     let mut artifact_metrics = prepared.metrics;
+    let debug_startup = env::var_os("AIVI_DEBUG_STARTUP").is_some();
     let frozen_artifact = {
+        if debug_startup {
+            run_session::startup_debug_log("startup: freeze begin");
+        }
         let freeze_started = Instant::now();
-        match freeze_run_artifact(&prepared.artifact) {
+        let result = match freeze_run_artifact(&prepared.artifact) {
             Ok(frozen) => {
                 artifact_metrics.frozen_image_prepare = freeze_started.elapsed();
                 artifact_metrics.total += artifact_metrics.frozen_image_prepare;
@@ -423,11 +437,18 @@ fn run_markup_file_with_launch_config(
                 }
                 None
             }
+        };
+        if debug_startup {
+            run_session::startup_debug_log("startup: freeze done");
         }
+        result
     };
     let query_cache = snapshot.frontend.db.cache_stats();
     if let Some(cache_home) = cache_home.as_deref() {
         if let Some(frozen) = frozen_artifact.as_ref() {
+            if debug_startup {
+                run_session::startup_debug_log("startup: cache store begin");
+            }
             let cache_store_started = Instant::now();
             match store_cached_frozen_run_image(
                 cache_home,
@@ -450,17 +471,24 @@ fn run_markup_file_with_launch_config(
                 }
                 Err(_) => {}
             }
+            if debug_startup {
+                run_session::startup_debug_log("startup: cache store done");
+            }
         }
     }
     let launch_artifact = frozen_artifact
         .map(|frozen| frozen.artifact)
         .unwrap_or(prepared.artifact);
 
+    if debug_startup {
+        run_session::startup_debug_log("startup: launch begin");
+    }
     progress_handle.mark_launching();
     run_session::launch_run_with_config(
         path,
         launch_artifact,
         launch_config,
+        show_running_line,
         {
             let progress_handle = progress_handle.clone();
             move |stage, startup_metrics| {
@@ -838,6 +866,7 @@ fn prepare_backend_only_test_artifact(
     query_context: Option<BackendQueryContext<'_>>,
 ) -> Result<ExecuteArtifact, String> {
     let lowered = compile_runtime_fragment_backend_unit(
+        None,
         module,
         &[],
         fragment,

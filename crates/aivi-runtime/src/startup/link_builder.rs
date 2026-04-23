@@ -5,6 +5,7 @@ struct LinkBuilder<'a> {
     errors: Vec<BackendRuntimeLinkError>,
     hir_to_backend: BTreeMap<hir::ItemId, BackendItemId>,
     signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
+    signal_alias_items_by_handle: BTreeMap<SignalHandle, Vec<BackendItemId>>,
     runtime_signal_by_item: BTreeMap<BackendItemId, SignalHandle>,
     derived_signals: BTreeMap<DerivedHandle, LinkedDerivedSignal>,
     reactive_signals: BTreeMap<SignalHandle, LinkedReactiveSignal>,
@@ -40,6 +41,7 @@ impl<'a> LinkBuilder<'a> {
             errors,
             hir_to_backend,
             signal_items_by_handle: BTreeMap::new(),
+            signal_alias_items_by_handle: BTreeMap::new(),
             runtime_signal_by_item: BTreeMap::new(),
             derived_signals: BTreeMap::new(),
             reactive_signals: BTreeMap::new(),
@@ -61,6 +63,10 @@ impl<'a> LinkBuilder<'a> {
         if self.errors.is_empty() {
             Ok(BackendLinkedRuntimeTables {
                 signal_items_by_handle: std::mem::take(&mut self.signal_items_by_handle),
+                signal_alias_items_by_handle: std::mem::take(&mut self.signal_alias_items_by_handle)
+                    .into_iter()
+                    .map(|(signal, items)| (signal, items.into_boxed_slice()))
+                    .collect(),
                 runtime_signal_by_item: std::mem::take(&mut self.runtime_signal_by_item),
                 derived_signals: std::mem::take(&mut self.derived_signals),
                 reactive_signals: std::mem::take(&mut self.reactive_signals),
@@ -88,6 +94,23 @@ impl<'a> LinkBuilder<'a> {
                 .insert(binding.signal(), backend_item);
             self.runtime_signal_by_item
                 .insert(backend_item, binding.signal());
+        }
+        for binding in self.assembly.import_signals() {
+            let Some(&backend_item) = self.hir_to_backend.get(&binding.item) else {
+                continue;
+            };
+            self.runtime_signal_by_item.insert(backend_item, binding.signal);
+            match self.signal_items_by_handle.get(&binding.signal).copied() {
+                Some(primary) if primary != backend_item => self
+                    .signal_alias_items_by_handle
+                    .entry(binding.signal)
+                    .or_default()
+                    .push(backend_item),
+                Some(_) => {}
+                None => {
+                    self.signal_items_by_handle.insert(binding.signal, backend_item);
+                }
+            }
         }
     }
 
@@ -451,7 +474,7 @@ impl<'a> LinkBuilder<'a> {
                     .iter()
                     .filter_map(|signal| self.signal_items_by_handle.get(signal).copied())
                     .collect::<Vec<_>>();
-                if !same_items(&required, &dependency_items) {
+                if !self.same_signal_items(binding.item, &required, &dependency_items) {
                     self.errors
                         .push(BackendRuntimeLinkError::SignalRequirementMismatch {
                             item: binding.item,
@@ -509,7 +532,7 @@ impl<'a> LinkBuilder<'a> {
             } else {
                 info.dependencies.clone().into_boxed_slice()
             };
-            if !same_items(&required, &declared) {
+            if !self.same_signal_items(binding.item, &required, &declared) {
                 self.errors
                     .push(BackendRuntimeLinkError::SignalRequirementMismatch {
                         item: binding.item,
@@ -622,6 +645,32 @@ impl<'a> LinkBuilder<'a> {
         None
     }
 
+    fn canonical_signal_item(
+        &mut self,
+        owner: hir::ItemId,
+        item: BackendItemId,
+    ) -> Option<BackendItemId> {
+        let signal = self.runtime_signal_for_backend_item(owner, item)?;
+        self.signal_items_by_handle.get(&signal).copied()
+    }
+
+    fn same_signal_items(
+        &mut self,
+        owner: hir::ItemId,
+        left: &[BackendItemId],
+        right: &[BackendItemId],
+    ) -> bool {
+        let left = left
+            .iter()
+            .filter_map(|&item| self.canonical_signal_item(owner, item))
+            .collect::<BTreeSet<_>>();
+        let right = right
+            .iter()
+            .filter_map(|&item| self.canonical_signal_item(owner, item))
+            .collect::<BTreeSet<_>>();
+        left == right
+    }
+
     fn collect_recurrence_signal_items(
         &mut self,
         owner: hir::ItemId,
@@ -648,7 +697,9 @@ impl<'a> LinkBuilder<'a> {
                         required.insert(item_id);
                     }
                     _ => {
-                        if item.name.starts_with("__aivi_") {
+                        if item.name.starts_with("__aivi_")
+                            || (item.body.is_none() && matches!(item.kind, BackendItemKind::Function))
+                        {
                             // Ambient prelude items are runtime-interpreted, not compiled.
                             continue;
                         }
@@ -694,7 +745,9 @@ impl<'a> LinkBuilder<'a> {
                         required.insert(*item_id);
                     }
                     _ => {
-                        if item.name.starts_with("__aivi_") {
+                        if item.name.starts_with("__aivi_")
+                            || (item.body.is_none() && matches!(item.kind, BackendItemKind::Function))
+                        {
                             continue;
                         }
                         let Some(body) = item.body else {
@@ -739,7 +792,9 @@ impl<'a> LinkBuilder<'a> {
                         required.insert(*item_id);
                     }
                     _ => {
-                        if item.name.starts_with("__aivi_") {
+                        if item.name.starts_with("__aivi_")
+                            || (item.body.is_none() && matches!(item.kind, BackendItemKind::Function))
+                        {
                             continue;
                         }
                         let Some(body) = item.body else {
@@ -761,7 +816,7 @@ impl<'a> LinkBuilder<'a> {
     fn kernel_eval_lane(
         &self,
         backend: BackendRuntimeView<'_>,
-        native_kernels: &aivi_backend::NativeKernelArtifactSet,
+        _native_kernels: &aivi_backend::NativeKernelArtifactSet,
         kernel: Option<KernelId>,
         dependency_layouts: &[aivi_backend::LayoutId],
     ) -> LinkedEvalLane {
@@ -771,36 +826,13 @@ impl<'a> LinkBuilder<'a> {
         if !native_kernel_plans_enabled() {
             return LinkedEvalLane::Fallback;
         }
-        let native_plan = match backend {
-            BackendRuntimeView::Program(program) => {
-                aivi_backend::NativeKernelPlan::compile_with_native_artifacts(
-                    program,
-                    Some(native_kernels),
-                    kernel,
-                )
-            }
-            BackendRuntimeView::Meta(meta) => {
-                aivi_backend::NativeKernelPlan::from_runtime_meta_with_native_artifacts(
-                    meta,
-                    Some(native_kernels),
-                    kernel,
-                )
-            }
-            BackendRuntimeView::FrozenCatalog(catalog) => {
-                aivi_backend::NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
-                    catalog,
-                    Some(native_kernels),
-                    kernel,
-                )
-            }
-        };
-        let Some(native_plan) = native_plan else {
+        let Some(kernel_meta) = backend.kernel(kernel) else {
             return LinkedEvalLane::Fallback;
         };
         LinkedEvalLane::Native(LinkedNativeKernelEval {
             kernel,
             dependency_layouts: dependency_layouts.to_vec().into_boxed_slice(),
-            result_layout: native_plan.result_layout(),
+            result_layout: kernel_meta.result_layout,
         })
     }
 
@@ -971,12 +1003,6 @@ impl<'a> LinkBuilder<'a> {
                     })
             })
     }
-}
-
-fn same_items(left: &[BackendItemId], right: &[BackendItemId]) -> bool {
-    left.len() == right.len()
-        && left.iter().copied().collect::<BTreeSet<_>>()
-            == right.iter().copied().collect::<BTreeSet<_>>()
 }
 
 fn active_when_value(

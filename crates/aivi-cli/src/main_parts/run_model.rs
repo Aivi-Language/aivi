@@ -58,7 +58,7 @@ impl GtkHostValue for RunHostValue {
 struct RunArtifact {
     view_name: Box<str>,
     kind: RunArtifactKind,
-    required_signal_globals: BTreeMap<BackendItemId, Box<str>>,
+    required_signal_globals: BTreeMap<SignalHandle, Box<str>>,
     sources: Option<aivi_base::SourceDatabase>,
     runtime_assembly: HirRuntimeAssembly,
     runtime_link: aivi_runtime::BackendRuntimeLinkSeed,
@@ -82,7 +82,10 @@ struct RunGtkArtifact {
     patterns: RunPatternTable,
     bridge: GtkBridgeGraph,
     hydration_inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
-    event_handlers: BTreeMap<HirExprId, ResolvedRunEventHandler>,
+    deferred_hydration_inputs: BTreeMap<RuntimeInputHandle, RunInputSpec>,
+    lazy_hydration: Option<Arc<LazyRunHydrationContext>>,
+    lazy_event_handlers: Option<Arc<LazyRunEventHandlerContext>>,
+    event_handlers: BTreeMap<ExprRef, ResolvedRunEventHandler>,
 }
 
 impl RunArtifact {
@@ -197,7 +200,7 @@ impl RunFragmentExecutionUnit {
 
 #[derive(Clone, Debug)]
 struct CompiledRunFragment {
-    expr: HirExprId,
+    expr: ExprRef,
     parameters: Vec<RunFragmentParameter>,
     execution: Arc<RunFragmentExecutionUnit>,
     item: BackendItemId,
@@ -206,20 +209,19 @@ struct CompiledRunFragment {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct RunFragmentParameter {
-    binding: aivi_hir::BindingId,
+    binding: BindingRef,
     name: Box<str>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 enum CompiledRunGlobalKind {
-    Signal,
-    RuntimeItem,
+    Signal { signal: SignalHandle },
+    RuntimeItem { item: BackendItemId },
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct CompiledRunSignalGlobal {
     fragment_item: BackendItemId,
-    runtime_item: BackendItemId,
     name: Box<str>,
     kind: CompiledRunGlobalKind,
 }
@@ -243,21 +245,44 @@ enum CompiledRunTextSegment {
 
 #[derive(Clone, Debug)]
 enum RunInputSpec {
-    Expr(HirExprId),
-    Text(aivi_hir::TextLiteral),
+    Expr(ExprRef),
+    Text(InterpolatedText),
+}
+
+#[derive(Debug)]
+struct LazyRunHydrationContext {
+    sources: SourceDatabase,
+    module: HirModule,
+    workspace_hirs: Vec<(Box<str>, HirModule)>,
+    view_owner: aivi_hir::ItemId,
+    sites: RunMarkupExprSites,
+    runtime_assembly: HirRuntimeAssembly,
+    runtime_backend: Arc<BackendProgram>,
+    runtime_backend_by_hir: BTreeMap<aivi_hir::ItemId, BackendItemId>,
+    fragment_cache: Arc<std::sync::Mutex<BTreeMap<ExprRef, CompiledRunFragment>>>,
+    opaque_variant_templates: BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
+    representational_carrier_templates: BTreeMap<String, String>,
+}
+
+#[derive(Debug)]
+struct LazyRunEventHandlerContext {
+    sources: SourceDatabase,
+    module: HirModule,
+    workspace_hirs: Vec<(Box<str>, HirModule)>,
+    runtime_assembly: HirRuntimeAssembly,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct RunPatternTable {
-    patterns: BTreeMap<HirPatternId, RunPattern>,
+    patterns: BTreeMap<PatternRef, RunPattern>,
 }
 
 impl RunPatternTable {
-    fn insert(&mut self, id: HirPatternId, pattern: RunPattern) {
+    fn insert(&mut self, id: PatternRef, pattern: RunPattern) {
         self.patterns.insert(id, pattern);
     }
 
-    fn get(&self, id: HirPatternId) -> Option<&RunPattern> {
+    fn get(&self, id: PatternRef) -> Option<&RunPattern> {
         self.patterns.get(&id)
     }
 }
@@ -271,7 +296,7 @@ struct RunPattern {
 enum RunPatternKind {
     Wildcard,
     Binding {
-        binding: aivi_hir::BindingId,
+        binding: BindingRef,
         name: Box<str>,
     },
     Integer {
@@ -280,15 +305,15 @@ enum RunPatternKind {
     Text {
         value: Box<str>,
     },
-    Tuple(Box<[HirPatternId]>),
+    Tuple(Box<[PatternRef]>),
     List {
-        elements: Box<[HirPatternId]>,
-        rest: Option<HirPatternId>,
+        elements: Box<[PatternRef]>,
+        rest: Option<PatternRef>,
     },
     Record(Box<[RunRecordPatternField]>),
     Constructor {
         callee: RunPatternConstructor,
-        arguments: Box<[HirPatternId]>,
+        arguments: Box<[PatternRef]>,
     },
     UnresolvedName,
 }
@@ -296,7 +321,7 @@ enum RunPatternKind {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct RunRecordPatternField {
     label: Box<str>,
-    pattern: HirPatternId,
+    pattern: PatternRef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -314,11 +339,38 @@ struct RunInputCompilationMetrics {
 }
 
 #[derive(Clone, Debug)]
+struct RunMarkupExprSite {
+    owner: HirItemId,
+    span: SourceSpan,
+    ty: GateType,
+    parameters: Vec<GeneralExprParameter>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct RunMarkupExprSites {
+    sites: BTreeMap<ExprRef, RunMarkupExprSite>,
+}
+
+impl RunMarkupExprSites {
+    fn insert(&mut self, expr: ExprRef, site: RunMarkupExprSite) {
+        self.sites.insert(expr, site);
+    }
+
+    fn get(&self, expr: ExprRef) -> Option<&RunMarkupExprSite> {
+        self.sites.get(&expr)
+    }
+}
+
+#[derive(Clone, Debug)]
 struct RunHydrationStaticState {
     view_name: Box<str>,
     patterns: RunPatternTable,
     bridge: GtkBridgeGraph,
     inputs: BTreeMap<RuntimeInputHandle, CompiledRunInput>,
+    deferred_inputs: BTreeMap<RuntimeInputHandle, RunInputSpec>,
+    deferred_input_cache: Arc<std::sync::Mutex<BTreeMap<RuntimeInputHandle, CompiledRunInput>>>,
+    lazy_hydration: Option<Arc<LazyRunHydrationContext>>,
+    signal_items_by_handle: BTreeMap<SignalHandle, BackendItemId>,
     runtime_execution: Arc<RunFragmentExecutionUnit>,
 }
 
@@ -350,7 +402,7 @@ struct RunHydrationProfile {
     planned_nodes: u64,
     evaluated_inputs: u64,
     evaluated_texts: u64,
-    fragment_profiles: BTreeMap<HirExprId, RunHydrationFragmentProfile>,
+    fragment_profiles: BTreeMap<ExprRef, RunHydrationFragmentProfile>,
     program_profiles: BTreeMap<usize, KernelEvaluationProfile>,
 }
 

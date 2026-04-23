@@ -33,9 +33,9 @@ pub use graph::{
     SignalKind, SignalSpec, TopologyBatch,
 };
 pub use hir_adapter::{
-    HirDbChangedBinding, HirGateStageBinding, HirGateStageId, HirOwnerBinding,
-    HirReactiveUpdateBinding, HirRecurrenceBinding, HirRecurrenceNodeId, HirRuntimeAdapterError,
-    HirRuntimeAdapterErrors, HirRuntimeAssembly, HirRuntimeAssemblyBuilder,
+    HirDbChangedBinding, HirGateStageBinding, HirGateStageId, HirImportSignalBinding,
+    HirOwnerBinding, HirReactiveUpdateBinding, HirRecurrenceBinding, HirRecurrenceNodeId,
+    HirRuntimeAdapterError, HirRuntimeAdapterErrors, HirRuntimeAssembly, HirRuntimeAssemblyBuilder,
     HirRuntimeAssemblyParts, HirRuntimeAssemblyStats, HirRuntimeGatePlan,
     HirRuntimeInstantiationError, HirSignalBinding, HirSignalBindingKind, HirSourceBinding,
     HirTaskBinding, ProfiledHirRuntimeAssembly, assemble_hir_runtime,

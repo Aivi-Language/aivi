@@ -124,7 +124,7 @@ pub use resolver::{
 pub use sequence::{AtLeastTwo, NonEmpty, SequenceError};
 pub use signal_metadata_elaboration::{
     collect_signal_dependencies_for_expr, collect_signal_dependencies_for_exprs,
-    populate_signal_metadata,
+    collect_signal_dependency_roots_for_expr, populate_signal_metadata,
 };
 pub use source_contract_resolution::{
     ResolvedSourceContractType, ResolvedSourceTypeConstructor, SourceContractResolutionError,

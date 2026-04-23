@@ -35,8 +35,10 @@ The MCP (Model Context Protocol) server exposes live app introspection tools for
 | `list_sources` | List live source instances and their modes |
 | `set_source_mode` | Switch a source between live and manual modes |
 | `publish_source_value` | Inject a value into a source (enters manual mode) |
-| `snapshot_gtk_tree` | Capture the live GTK widget tree semantically |
+| `snapshot_gtk_tree` | Capture the live GTK widget tree semantically, including `surface_id` and per-widget `x`/`y` positions |
 | `find_widgets` | Search the GTK snapshot for widgets by role, text, focus, or actionability |
+| `capture_gtk_screenshot` | Write PNG screenshots for each visible GTK toplevel and return capture metadata |
+| `capture_widget_screenshot` | Write a PNG screenshot for one live widget by `widget_id` |
 | `emit_gtk_event` | Emulate a GTK interaction (click, set_text, key press, etc.) |
 | `check_workspace` | Run a full HIR check and return structured diagnostics |
 | `list_diagnostics` | List diagnostics for a single file |
@@ -48,6 +50,15 @@ The MCP (Model Context Protocol) server exposes live app introspection tools for
 | `session_status` | Inspect app/session lifecycle and hydration state |
 
 The MCP server uses `prepare_run_artifact` → `compile_run_expr_fragment` → `lower_runtime_fragment` for markup expression compilation.
+
+The GTK-facing MCP surface is now strong enough for agentic visual QA loops:
+
+- `snapshot_gtk_tree` and `find_widgets` expose stable `surface_id`s plus widget positions/sizes so
+  clients can reason about layout and target widgets more precisely.
+- `capture_gtk_screenshot` and `capture_widget_screenshot` emit PNG files under `out/mcp-captures/`
+  for visual comparison against wireframes or prior captures.
+- `emit_gtk_event` now covers `MenuButton`-style activation paths cleanly enough for popover-driven
+  UI flows in addition to plain button clicks.
 
 Install: `cargo install --path crates/aivi-cli`
 
@@ -90,10 +101,42 @@ Pre-existing known failures:
 - Source-mode `aivi run` now opportunistically reuses a cached `run-artifact.bin` bundle plus
   source-run manifest, keyed by normalized entry path, requested view, CLI version, and workspace
   file fingerprints, before rebuilding the runtime artifact from source.
+- When a workspace `[run]` entry also declares `[[run.launch]]`, the selected launcher target
+  reaches session-ready first and then spawns each declared extra entry as a child
+  `aivi run --path ...` process. The launcher can be a visible splash window or a headless
+  supervisor, which makes it suitable for shell-wrapper replacement.
+- `[[run.launch]]` is manifest-driven only: explicit `--path` or `--app` targets run that one
+  entry directly and do not inherit the default launch fan-out.
+- The live run tracker keeps a dedicated `launch` lane showing queued / starting / started /
+  failed state for each manifest launch part so multi-entry startup remains visible from one
+  terminal session.
 - Backend execution can still attach compiled object artifacts while constructing a lazy-JIT engine,
   so object emission and runtime execution currently coexist rather than replacing each other.
 - Runnable executables now preload native kernel sidecars into the lazy-JIT execution path, so
   launch no longer recompiles supported kernels from backend JSON. The embedded artifact still keeps serialized
   `Program` metadata because runtime linking, source configs, and fallback execution need it.
+
+### Manifest launch orchestration
+
+```toml
+[run]
+entry = "apps/launcher/main.aivi"
+
+[[run.launch]]
+label = "Main window"
+entry = "apps/ui/main.aivi"
+
+[[run.launch]]
+label = "Daemon"
+entry = "apps/daemon/main.aivi"
+view = "main"
+```
+
+- `label` is the progress-tracker label.
+- `entry` is resolved relative to the workspace manifest that supplied `[run]`.
+- `view` is optional and forwards to the child `aivi run --view ...` invocation.
+- Launch parts start only after the parent launcher is ready. Visible launcher windows therefore
+  present first, while headless launchers can supervise heavier companion entries without showing
+  an extra window.
 
 *See also: [lsp-server.md](lsp-server.md), [architecture.md](architecture.md)*

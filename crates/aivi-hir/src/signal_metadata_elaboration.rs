@@ -43,6 +43,15 @@ pub fn collect_signal_dependencies_for_expr(module: &Module, expr: ExprId) -> Ve
     collect_signal_dependencies(module, vec![DependencyWork::Expr(expr)])
 }
 
+/// Collects both item-based and import-based signal dependencies for a single
+/// expression root. Returns `(item_signal_deps, import_signal_deps)`.
+pub fn collect_signal_dependency_roots_for_expr(
+    module: &Module,
+    expr: ExprId,
+) -> (Vec<ItemId>, Vec<ImportId>) {
+    collect_all_signal_dependencies(module, vec![DependencyWork::Expr(expr)])
+}
+
 pub fn collect_signal_dependencies_for_exprs(
     module: &Module,
     exprs: impl IntoIterator<Item = ExprId>,

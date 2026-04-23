@@ -9,6 +9,7 @@ use std::{
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use parking_lot::RwLock;
+use aivi_hir::resolver::RawHoistItem;
 
 use crate::{
     SourceFile,
@@ -134,6 +135,7 @@ struct DbState {
     parsed: FxHashMap<u32, Cached<ParsedFileResult>>,
     hir: FxHashMap<u32, Cached<HirModuleResult>>,
     workspace_modules: FxHashMap<u32, WorkspaceModulesCacheEntry>,
+    workspace_hoists: FxHashMap<PathBuf, Arc<[RawHoistItem]>>,
     whole_program_units: FxHashMap<WholeProgramUnitCacheKey, WholeProgramUnitCacheEntry>,
     runtime_fragment_units: FxHashMap<RuntimeFragmentUnitCacheKey, RuntimeFragmentUnitCacheEntry>,
     file_deps: FileDeps,
@@ -143,6 +145,7 @@ fn invalidate_file_caches(state: &mut DbState, file_id: u32) {
     state.parsed.remove(&file_id);
     state.hir.remove(&file_id);
     state.workspace_modules.remove(&file_id);
+    state.workspace_hoists.clear();
     state
         .whole_program_units
         .retain(|key, _| key.file_id != file_id);
@@ -503,5 +506,22 @@ impl RootDatabase {
         if state.files.contains_key(&key.file_id) {
             state.runtime_fragment_units.insert(key, entry);
         }
+    }
+
+    pub(crate) fn workspace_hoist_cache_entry(&self, root: &Path) -> Option<Arc<[RawHoistItem]>> {
+        self.state.read().workspace_hoists.get(root).cloned()
+    }
+
+    pub(crate) fn store_workspace_hoist_cache_entry(
+        &self,
+        root: PathBuf,
+        entry: Arc<[RawHoistItem]>,
+    ) -> Arc<[RawHoistItem]> {
+        let mut state = self.state.write();
+        if let Some(cached) = state.workspace_hoists.get(&root) {
+            return Arc::clone(cached);
+        }
+        state.workspace_hoists.insert(root, Arc::clone(&entry));
+        entry
     }
 }

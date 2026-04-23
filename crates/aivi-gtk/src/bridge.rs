@@ -1,13 +1,16 @@
 use std::{collections::BTreeSet, error::Error, fmt};
 
 use aivi_base::SourceSpan;
-use aivi_hir::{BindingId, NamePath, PatternId};
+use aivi_hir::NamePath;
 use aivi_runtime::{OwnerHandle, SignalGraph};
 
 use crate::{
     GtkChildContainerKind, GtkChildGroupDescriptor, GtkChildMountRoute, GtkDefaultChildGroup,
     lookup_widget_schema,
-    plan::{PlanNodeId, PlanNodeTag, RepeatedChildPolicy, StableNodeId, WidgetPlan},
+    plan::{
+        BindingRef, PatternRef, PlanNodeId, PlanNodeTag, RepeatedChildPolicy, StableNodeId,
+        WidgetPlan,
+    },
     runtime_adapter::{
         RuntimeCaseBranch, RuntimeChildOp, RuntimeEventBinding, RuntimeExprInput, RuntimeNodeRef,
         RuntimePlanNode, RuntimePlanNodeKind, RuntimePropertyBinding, RuntimeShowMountPolicy,
@@ -857,7 +860,7 @@ pub enum GtkShowState {
 pub struct GtkEachNode {
     pub collection: RuntimeExprInput,
     pub key_input: Option<RuntimeExprInput>,
-    pub binding: BindingId,
+    pub binding: BindingRef,
     pub child_policy: RepeatedChildPolicy,
     pub item_template: GtkChildGroup,
     pub empty_branch: Option<GtkEmptyBranch>,
@@ -900,13 +903,13 @@ impl GtkMatchNode {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkCaseBranch {
     pub case: GtkBridgeNodeRef,
-    pub pattern: PatternId,
+    pub pattern: PatternRef,
     pub body: GtkChildGroup,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkCaseNode {
-    pub pattern: PatternId,
+    pub pattern: PatternRef,
     pub body: GtkChildGroup,
 }
 
@@ -918,7 +921,7 @@ pub struct GtkFragmentNode {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GtkWithNode {
     pub value: RuntimeExprInput,
-    pub binding: BindingId,
+    pub binding: BindingRef,
     pub body: GtkChildGroup,
 }
 

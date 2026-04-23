@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use aivi_base::SourceDatabase;
 use aivi_gtk::{
     ChildOp, ChildUpdateMode, EventHookStrategy, PlanNodeKind, PropertyPlan, RepeatedChildPolicy,
-    SetterSource, ShowMountPolicy, lower_markup_expr,
+    SetterSource, ShowMountPolicy, StableNodeId, lower_markup_expr,
 };
 use aivi_hir::{ExprKind, Item, lower_module};
 use aivi_syntax::parse_module;
@@ -321,5 +321,86 @@ fn lowers_markup_control_fixture_into_explicit_control_nodes() {
         PropertyPlan::Setter(setter)
             if setter.name.text() == "text"
                 && matches!(setter.source, SetterSource::InterpolatedText(_))
+    ));
+}
+
+#[test]
+fn lowers_same_file_markup_component_inside_window_titlebar() {
+    let hir = lower_text(
+        "component-titlebar.aivi",
+        r#"
+value Header =
+    <HeaderBar />
+
+value view =
+    <Window title="App">
+        <Window.titlebar>
+            <Header />
+        </Window.titlebar>
+        <Label text="Hi" />
+    </Window>
+"#,
+    );
+    assert!(
+        !hir.has_errors(),
+        "component titlebar fixture should lower into HIR cleanly: {:?}",
+        hir.diagnostics()
+    );
+
+    let module = hir.module();
+    let value = find_value_item(module, "view");
+    let plan = lower_markup_expr(module, value.body).expect("component titlebar should lower");
+    let root = plan.node(plan.root()).expect("root node should exist");
+    let PlanNodeKind::Widget(window) = &root.kind else {
+        panic!("expected root window widget, found {:?}", root.kind.tag());
+    };
+    assert_eq!(window.widget.to_string(), "Window");
+    assert_eq!(window.children.len(), 2);
+}
+
+#[test]
+fn lowers_reused_markup_component_with_unique_stable_ids() {
+    let hir = lower_text(
+        "component-reuse.aivi",
+        r#"
+value Chip =
+    <Label text="Hi" />
+
+value view =
+    <Box>
+        <Chip />
+        <Chip />
+    </Box>
+"#,
+    );
+    assert!(
+        !hir.has_errors(),
+        "component reuse fixture should lower into HIR cleanly: {:?}",
+        hir.diagnostics()
+    );
+
+    let module = hir.module();
+    let value = find_value_item(module, "view");
+    let plan = lower_markup_expr(module, value.body).expect("component reuse should lower");
+    let root = plan.node(plan.root()).expect("root node should exist");
+    let PlanNodeKind::Widget(container) = &root.kind else {
+        panic!("expected root box widget, found {:?}", root.kind.tag());
+    };
+    assert_eq!(container.children.len(), 2);
+
+    let first = plan
+        .node(child_id(container.children[0]))
+        .expect("first component child should exist");
+    let second = plan
+        .node(child_id(container.children[1]))
+        .expect("second component child should exist");
+    assert_ne!(first.stable_id, second.stable_id);
+    assert!(matches!(
+        first.stable_id,
+        StableNodeId::ExpandedMarkup { .. }
+    ));
+    assert!(matches!(
+        second.stable_id,
+        StableNodeId::ExpandedMarkup { .. }
     ));
 }

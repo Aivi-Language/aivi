@@ -4,6 +4,12 @@ enum RunPreparationStageEvent {
     Completed(&'static str, Duration),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RunHydrationPreparationMode {
+    Eager,
+    DeferredLive,
+}
+
 fn prepare_run_artifact(
     sources: &SourceDatabase,
     module: &HirModule,
@@ -43,6 +49,7 @@ fn prepare_run_artifact_with_metrics_and_query_context(
         workspace_hirs,
         requested_view,
         query_context,
+        RunHydrationPreparationMode::Eager,
         |_| {},
     )
 }
@@ -53,6 +60,7 @@ fn prepare_run_artifact_with_metrics_and_progress<F>(
     workspace_hirs: &[(&str, &HirModule)],
     requested_view: Option<&str>,
     query_context: Option<BackendQueryContext<'_>>,
+    hydration_mode: RunHydrationPreparationMode,
     mut on_stage_event: F,
 ) -> Result<PreparedRunArtifact, String>
 where
@@ -75,7 +83,8 @@ where
         SelectedRunEntryKind::Gtk => {
             on_stage_event(RunPreparationStageEvent::Started("markup lowering"));
             let markup_lowering_started = Instant::now();
-            let plan = lower_markup_expr(module, selected.value.body).map_err(|error| {
+            let plan = lower_markup_expr_with_workspace(module, workspace_hirs, selected.value.body)
+                .map_err(|error| {
                 format!(
                     "failed to lower run view `{}` into GTK markup: {error}",
                     selected.value.name.text()
@@ -112,63 +121,85 @@ where
         SelectedRunEntryKind::HeadlessTaskMain => None,
     };
     on_stage_event(RunPreparationStageEvent::Started("full-program lowering"));
-    let runtime_backend_lowering_started = Instant::now();
-    let lowered = if workspace_hirs.is_empty() {
-        if let Some(query_context) = query_context {
-        let unit = whole_program_backend_unit_with_items(
-            query_context.db,
-            query_context.entry,
-            &included_items,
-        )
-        .map_err(|error| format!("failed to lower `aivi run` module into backend unit: {error}"))?;
-        LoweredRunBackendStack {
-            core: unit.core().clone(),
-            backend: unit.backend_arc(),
-        }
-        } else {
-        lower_runtime_backend_stack_with_items_fast(module, &included_items, "`aivi run`")?
-        }
-    } else {
-        lower_runtime_backend_stack_with_workspace(
-            module,
-            workspace_hirs,
-            &included_items,
-            "`aivi run`",
-        )?
-    };
-    metrics.runtime_backend_lowering = runtime_backend_lowering_started.elapsed();
+    on_stage_event(RunPreparationStageEvent::Started("runtime assembly"));
+    let ((lowered, runtime_backend_lowering), (profiled_runtime_assembly, runtime_assembly, assembly_progress)) =
+        rayon::join(
+            || {
+                let started = Instant::now();
+                let lowered = if let Some(query_context) = query_context {
+                    match whole_program_backend_unit_with_items(
+                        query_context.db,
+                        query_context.entry,
+                        &included_items,
+                    )
+                    .map_err(|error| {
+                        format!("failed to lower `aivi run` module into backend unit: {error}")
+                    }) {
+                        Ok(unit) => Ok(LoweredRunBackendStack {
+                            core: unit.core().clone(),
+                            backend: unit.backend_arc(),
+                        }),
+                        Err(error) => Err(error),
+                    }
+                } else if workspace_hirs.is_empty() {
+                    lower_runtime_backend_stack_with_items_fast(
+                        module,
+                        &included_items,
+                        "`aivi run`",
+                    )
+                } else {
+                    lower_runtime_backend_stack_with_workspace(
+                        module,
+                        workspace_hirs,
+                        &included_items,
+                        "`aivi run`",
+                    )
+                };
+                (lowered, started.elapsed())
+            },
+            || {
+                let started = Instant::now();
+                let mut progress = Vec::new();
+                let profiled = if workspace_hirs.is_empty() {
+                    assemble_hir_runtime_with_items_profiled_and_progress(
+                        module,
+                        &included_items,
+                        |detail| progress.push(detail),
+                    )
+                } else {
+                    assemble_hir_runtime_with_items_and_workspace_profiled_and_progress(
+                        module,
+                        workspace_hirs,
+                        &included_items,
+                        |detail| progress.push(detail),
+                    )
+                }
+                .map_err(|errors| {
+                    let mut rendered =
+                        String::from("failed to assemble runtime plans for `aivi run`:\n");
+                    for error in errors.errors() {
+                        rendered.push_str("- ");
+                        rendered.push_str(&error.to_string());
+                        rendered.push('\n');
+                    }
+                    rendered
+                });
+                (profiled, started.elapsed(), progress)
+            },
+        );
+    let lowered = lowered?;
+    metrics.runtime_backend_lowering = runtime_backend_lowering;
     on_stage_event(RunPreparationStageEvent::Completed(
         "full-program lowering",
         metrics.runtime_backend_lowering,
     ));
     metrics.runtime_backend_item_count = lowered.backend.items().iter().count();
     metrics.runtime_backend_kernel_count = lowered.backend.kernels().iter().count();
-    on_stage_event(RunPreparationStageEvent::Started("runtime assembly"));
-    let runtime_assembly_started = Instant::now();
-    let profiled_runtime_assembly = if workspace_hirs.is_empty() {
-        assemble_hir_runtime_with_items_profiled_and_progress(module, &included_items, |detail| {
-            on_stage_event(RunPreparationStageEvent::Detail("runtime assembly", detail));
-        })
-    } else {
-        assemble_hir_runtime_with_items_and_workspace_profiled_and_progress(
-            module,
-            workspace_hirs,
-            &included_items,
-            |detail| {
-                on_stage_event(RunPreparationStageEvent::Detail("runtime assembly", detail));
-            },
-        )
+    let profiled_runtime_assembly = profiled_runtime_assembly?;
+    metrics.runtime_assembly = runtime_assembly;
+    for detail in assembly_progress {
+        on_stage_event(RunPreparationStageEvent::Detail("runtime assembly", detail));
     }
-    .map_err(|errors| {
-        let mut rendered = String::from("failed to assemble runtime plans for `aivi run`:\n");
-        for error in errors.errors() {
-            rendered.push_str("- ");
-            rendered.push_str(&error.to_string());
-            rendered.push('\n');
-        }
-        rendered
-    })?;
-    metrics.runtime_assembly = runtime_assembly_started.elapsed();
     on_stage_event(RunPreparationStageEvent::Completed(
         "runtime assembly",
         metrics.runtime_assembly,
@@ -201,18 +232,7 @@ where
     let kind = if let Some(bridge) = gtk_preparation {
         on_stage_event(RunPreparationStageEvent::Started("runtime expr sites"));
         let markup_site_collection_started = Instant::now();
-        let sites = collect_markup_runtime_expr_sites(module, selected.value.body).map_err(|error| {
-            let span_info = match &error {
-                aivi_hir::MarkupRuntimeExprSiteError::UnknownExprType { span, .. } => {
-                    format!(" (failing expr at {})", source_location(sources, *span))
-                }
-                _ => String::new(),
-            };
-            format!(
-                "failed to collect runtime expression environments for run view at {}: {error}{span_info}",
-                source_location(sources, module.exprs()[selected.value.body].span)
-            )
-        })?;
+        let sites = collect_run_markup_expr_sites(sources, module, workspace_hirs)?;
         metrics.markup_site_collection = markup_site_collection_started.elapsed();
         on_stage_event(RunPreparationStageEvent::Completed(
             "runtime expr sites",
@@ -220,34 +240,94 @@ where
         ));
         on_stage_event(RunPreparationStageEvent::Started("hydration fragments"));
         let hydration_fragment_compilation_started = Instant::now();
-        let (hydration_inputs, hydration_metrics) = compile_run_inputs(
-            sources,
-            module,
-            workspace_hirs,
-            view_owner,
-            &sites,
-            &bridge,
-            lowered.backend.as_ref(),
-            &runtime_backend_by_hir,
-            query_context,
-        )?;
+        let input_specs = collect_run_input_specs_from_bridge(module, workspace_hirs, &bridge);
+        let unique_expr_count = collect_unique_run_input_exprs(&input_specs).len();
+        let (hydration_inputs, deferred_hydration_inputs, lazy_hydration, hydration_metrics) =
+            if hydration_mode == RunHydrationPreparationMode::DeferredLive {
+                on_stage_event(RunPreparationStageEvent::Detail(
+                    "hydration fragments",
+                    format!("deferred {unique_expr_count} unique fragments to live hydration"),
+                ));
+                (
+                    BTreeMap::new(),
+                    input_specs,
+                    Some(Arc::new(LazyRunHydrationContext {
+                        sources: sources.clone(),
+                        module: module.clone(),
+                        workspace_hirs: workspace_hirs
+                            .iter()
+                            .map(|(name, module)| ((*name).into(), (*module).clone()))
+                            .collect(),
+                        view_owner,
+                        sites: sites.clone(),
+                        runtime_assembly: runtime_assembly.clone(),
+                        runtime_backend: lowered.backend.clone(),
+                        runtime_backend_by_hir: runtime_backend_by_hir.clone(),
+                        fragment_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+                        opaque_variant_templates: BTreeMap::new(),
+                        representational_carrier_templates: BTreeMap::new(),
+                    })),
+                    RunInputCompilationMetrics {
+                        compiled_fragment_count: unique_expr_count,
+                    },
+                )
+            } else {
+                let (compiled, hydration_metrics) = compile_run_inputs(
+                    sources,
+                    module,
+                    workspace_hirs,
+                    view_owner,
+                    &sites,
+                    &bridge,
+                    &runtime_assembly,
+                    lowered.backend.as_ref(),
+                    &runtime_backend_by_hir,
+                    query_context,
+                    |detail| {
+                        on_stage_event(RunPreparationStageEvent::Detail(
+                            "hydration fragments",
+                            detail,
+                        ))
+                    },
+                )?;
+                (compiled, BTreeMap::new(), None, hydration_metrics)
+            };
         metrics.hydration_fragment_compilation = hydration_fragment_compilation_started.elapsed();
         on_stage_event(RunPreparationStageEvent::Completed(
             "hydration fragments",
             metrics.hydration_fragment_compilation,
         ));
         metrics.hydration_fragment_count = hydration_metrics.compiled_fragment_count;
-        let patterns = collect_run_patterns(sources, module, &bridge)?;
+        let patterns = collect_run_patterns(sources, module, workspace_hirs, &bridge)?;
         on_stage_event(RunPreparationStageEvent::Started("event handler resolve"));
         let event_handler_resolution_started = Instant::now();
-        let event_handlers = resolve_run_event_handlers(
-            module,
-            workspace_hirs,
-            &sites,
-            &bridge,
-            &runtime_assembly,
-            sources,
-        )?;
+        let (event_handlers, lazy_event_handlers) =
+            if hydration_mode == RunHydrationPreparationMode::DeferredLive {
+                (
+                    BTreeMap::new(),
+                    Some(Arc::new(LazyRunEventHandlerContext {
+                        sources: sources.clone(),
+                        module: module.clone(),
+                        workspace_hirs: workspace_hirs
+                            .iter()
+                            .map(|(name, module)| ((*name).into(), (*module).clone()))
+                            .collect(),
+                        runtime_assembly: runtime_assembly.clone(),
+                    })),
+                )
+            } else {
+                (
+                    resolve_run_event_handlers(
+                        module,
+                        workspace_hirs,
+                        &sites,
+                        &bridge,
+                        &runtime_assembly,
+                        sources,
+                    )?,
+                    None,
+                )
+            };
         metrics.event_handler_resolution = event_handler_resolution_started.elapsed();
         on_stage_event(RunPreparationStageEvent::Completed(
             "event handler resolve",
@@ -257,6 +337,9 @@ where
             patterns,
             bridge,
             hydration_inputs,
+            deferred_hydration_inputs,
+            lazy_hydration,
+            lazy_event_handlers,
             event_handlers,
         })
     } else {
@@ -270,7 +353,13 @@ where
         }
     };
     let required_signal_globals = match &kind {
-        RunArtifactKind::Gtk(surface) => collect_run_required_signal_globals(&surface.hydration_inputs),
+        RunArtifactKind::Gtk(surface) => collect_run_required_signal_globals(
+            module,
+            workspace_hirs,
+            &runtime_assembly,
+            &surface.hydration_inputs,
+            &surface.deferred_hydration_inputs,
+        )?,
         RunArtifactKind::HeadlessTask { .. } => BTreeMap::new(),
     };
     on_stage_event(RunPreparationStageEvent::Started("stub signal defaults"));
@@ -554,6 +643,7 @@ fn validate_run_plan(sources: &SourceDatabase, bridge: &GtkBridgeGraph) -> Resul
 fn collect_run_patterns(
     sources: &SourceDatabase,
     module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
     bridge: &GtkBridgeGraph,
 ) -> Result<RunPatternTable, String> {
     let mut patterns = RunPatternTable::default();
@@ -562,11 +652,25 @@ fn collect_run_patterns(
         match &node.kind {
             GtkBridgeNodeKind::Match(match_node) => {
                 for branch in &match_node.cases {
-                    collect_run_pattern(sources, module, branch.pattern, &mut patterns, &mut visited)?;
+                    collect_run_pattern(
+                        sources,
+                        module,
+                        workspace_hirs,
+                        branch.pattern,
+                        &mut patterns,
+                        &mut visited,
+                    )?;
                 }
             }
             GtkBridgeNodeKind::Case(case_node) => {
-                collect_run_pattern(sources, module, case_node.pattern, &mut patterns, &mut visited)?;
+                collect_run_pattern(
+                    sources,
+                    module,
+                    workspace_hirs,
+                    case_node.pattern,
+                    &mut patterns,
+                    &mut visited,
+                )?;
             }
             GtkBridgeNodeKind::Widget(_)
             | GtkBridgeNodeKind::Group(_)
@@ -583,18 +687,24 @@ fn collect_run_patterns(
 fn collect_run_pattern(
     sources: &SourceDatabase,
     module: &HirModule,
-    pattern_id: HirPatternId,
+    workspace_hirs: &[(&str, &HirModule)],
+    pattern_id: PatternRef,
     patterns: &mut RunPatternTable,
-    visited: &mut BTreeSet<HirPatternId>,
+    visited: &mut BTreeSet<PatternRef>,
 ) -> Result<(), String> {
     if !visited.insert(pattern_id) {
         return Ok(());
     }
-    let pattern = &module.patterns()[pattern_id];
+    let origin_module = module_for_file(module, workspace_hirs, pattern_id.origin_file)
+        .ok_or_else(|| format!("run artifact is missing workspace module {}", pattern_id.origin_file.as_u32()))?;
+    let pattern = &origin_module.patterns()[pattern_id.pattern];
     let kind = match &pattern.kind {
         PatternKind::Wildcard => RunPatternKind::Wildcard,
         PatternKind::Binding(binding) => RunPatternKind::Binding {
-            binding: binding.binding,
+            binding: BindingRef {
+                origin_file: pattern_id.origin_file,
+                binding: binding.binding,
+            },
             name: binding.name.text().into(),
         },
         PatternKind::Integer(integer) => RunPatternKind::Integer {
@@ -610,43 +720,93 @@ fn collect_run_pattern(
             .into(),
         },
         PatternKind::Tuple(elements) => {
-            let children = elements.iter().copied().collect::<Vec<_>>();
+            let children = elements
+                .iter()
+                .copied()
+                .map(|pattern| PatternRef {
+                    origin_file: pattern_id.origin_file,
+                    pattern,
+                })
+                .collect::<Vec<_>>();
             for child in &children {
-                collect_run_pattern(sources, module, *child, patterns, visited)?;
+                collect_run_pattern(sources, module, workspace_hirs, *child, patterns, visited)?;
             }
             RunPatternKind::Tuple(children.into_boxed_slice())
         }
         PatternKind::List { elements, rest } => {
-            for child in elements {
-                collect_run_pattern(sources, module, *child, patterns, visited)?;
+            let elements = elements
+                .iter()
+                .copied()
+                .map(|pattern| PatternRef {
+                    origin_file: pattern_id.origin_file,
+                    pattern,
+                })
+                .collect::<Vec<_>>();
+            for child in &elements {
+                collect_run_pattern(sources, module, workspace_hirs, *child, patterns, visited)?;
             }
+            let rest = rest.map(|pattern| PatternRef {
+                origin_file: pattern_id.origin_file,
+                pattern,
+            });
             if let Some(rest) = rest {
-                collect_run_pattern(sources, module, *rest, patterns, visited)?;
+                collect_run_pattern(sources, module, workspace_hirs, rest, patterns, visited)?;
             }
             RunPatternKind::List {
-                elements: elements.clone().into_boxed_slice(),
-                rest: *rest,
+                elements: elements.into_boxed_slice(),
+                rest,
             }
         }
         PatternKind::Record(fields) => {
             let mut run_fields = Vec::with_capacity(fields.len());
             for field in fields {
-                collect_run_pattern(sources, module, field.pattern, patterns, visited)?;
+                let field_pattern = PatternRef {
+                    origin_file: pattern_id.origin_file,
+                    pattern: field.pattern,
+                };
+                collect_run_pattern(
+                    sources,
+                    module,
+                    workspace_hirs,
+                    field_pattern,
+                    patterns,
+                    visited,
+                )?;
                 run_fields.push(RunRecordPatternField {
                     label: field.label.text().into(),
-                    pattern: field.pattern,
+                    pattern: field_pattern,
                 });
             }
             RunPatternKind::Record(run_fields.into_boxed_slice())
         }
         PatternKind::Constructor { callee, arguments } => {
-            for child in arguments {
-                collect_run_pattern(sources, module, *child, patterns, visited)?;
+            let arguments = arguments
+                .iter()
+                .copied()
+                .map(|pattern| PatternRef {
+                    origin_file: pattern_id.origin_file,
+                    pattern,
+                })
+                .collect::<Vec<_>>();
+            for child in &arguments {
+                collect_run_pattern(sources, module, workspace_hirs, *child, patterns, visited)?;
             }
-            serialize_run_pattern_constructor(callee, arguments)
+            serialize_run_pattern_constructor(
+                module,
+                workspace_hirs,
+                pattern_id.origin_file,
+                callee,
+                &arguments,
+            )
         }
         PatternKind::UnresolvedName(reference) => {
-            serialize_run_pattern_constructor(reference, &[])
+            serialize_run_pattern_constructor(
+                module,
+                workspace_hirs,
+                pattern_id.origin_file,
+                reference,
+                &[],
+            )
         }
     };
     patterns.insert(pattern_id, RunPattern { kind });
@@ -654,8 +814,11 @@ fn collect_run_pattern(
 }
 
 fn serialize_run_pattern_constructor(
+    entry_module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
+    origin_file: FileId,
     callee: &aivi_hir::TermReference,
-    arguments: &[HirPatternId],
+    arguments: &[PatternRef],
 ) -> RunPatternKind {
     match callee.resolution.as_ref() {
         aivi_hir::ResolutionState::Resolved(TermResolution::Builtin(term)) => {
@@ -667,7 +830,8 @@ fn serialize_run_pattern_constructor(
         aivi_hir::ResolutionState::Resolved(TermResolution::Item(item)) => {
             RunPatternKind::Constructor {
                 callee: RunPatternConstructor::Item {
-                    item: *item,
+                    item: globalize_run_item_id(entry_module, workspace_hirs, origin_file, *item)
+                        .unwrap_or(*item),
                     variant_name: callee
                         .path
                         .segments()
@@ -979,29 +1143,53 @@ fn lower_runtime_backend_stack_with_workspace(
 fn resolve_run_event_handlers(
     module: &HirModule,
     workspace_hirs: &[(&str, &HirModule)],
-    sites: &MarkupRuntimeExprSites,
+    sites: &RunMarkupExprSites,
     bridge: &GtkBridgeGraph,
     runtime_assembly: &HirRuntimeAssembly,
     sources: &SourceDatabase,
-) -> Result<BTreeMap<HirExprId, ResolvedRunEventHandler>, String> {
-    let mut handlers = BTreeMap::new();
+) -> Result<BTreeMap<ExprRef, ResolvedRunEventHandler>, String> {
+    let resolution = RunEventResolutionContext::new(module, workspace_hirs, runtime_assembly)?;
+    let mut pending = Vec::new();
     for node in bridge.nodes() {
         let GtkBridgeNodeKind::Widget(widget) = &node.kind else {
             continue;
         };
         for event in &widget.event_hooks {
-            let resolved = resolve_run_event_handler(
-                module,
-                workspace_hirs,
-                sites,
-                runtime_assembly,
-                sources,
-                &widget.widget,
-                event.name.text(),
+            pending.push((
+                widget.widget.clone(),
+                event.name.text().to_owned(),
                 event.handler,
-            )?;
-            handlers.entry(event.handler).or_insert(resolved);
+            ));
         }
+    }
+    let resolve_one = |(widget, event_name, handler): &(aivi_hir::NamePath, String, ExprRef)| {
+        resolve_run_event_handler(
+            module,
+            workspace_hirs,
+            sites,
+            &resolution,
+            runtime_assembly,
+            sources,
+            widget,
+            event_name,
+            *handler,
+        )
+        .map(|resolved| (*handler, resolved))
+    };
+    let resolved_handlers = if pending.len() <= 1 {
+        pending.iter().map(resolve_one).collect::<Result<Vec<_>, _>>()?
+    } else {
+        match fragment_thread_pool() {
+            Some(pool) => pool.install(|| {
+                use rayon::prelude::*;
+                pending.par_iter().map(resolve_one).collect::<Result<Vec<_>, _>>()
+            })?,
+            None => pending.iter().map(resolve_one).collect::<Result<Vec<_>, _>>()?,
+        }
+    };
+    let mut handlers = BTreeMap::new();
+    for (handler, resolved) in resolved_handlers {
+        handlers.entry(handler).or_insert(resolved);
     }
     Ok(handlers)
 }
@@ -1009,32 +1197,45 @@ fn resolve_run_event_handlers(
 fn resolve_run_event_handler(
     module: &HirModule,
     workspace_hirs: &[(&str, &HirModule)],
-    sites: &MarkupRuntimeExprSites,
+    sites: &RunMarkupExprSites,
+    resolution: &RunEventResolutionContext<'_>,
     runtime_assembly: &HirRuntimeAssembly,
     sources: &SourceDatabase,
     widget: &aivi_hir::NamePath,
     event_name: &str,
-    expr: HirExprId,
+    expr: ExprRef,
 ) -> Result<ResolvedRunEventHandler, String> {
-    let location = source_location(sources, module.exprs()[expr].span);
+    let origin_module = resolution.module_for_file(expr.origin_file).ok_or_else(|| {
+        format!(
+            "event handler uses expression from unknown workspace module {}",
+            expr.origin_file.as_u32()
+        )
+    })?;
+    let span = origin_module.exprs()[expr.expr].span;
     let Some(event) = lookup_widget_event(widget, event_name) else {
+        let location = source_location(sources, span);
         return Err(format!(
             "event handler at {location} uses unsupported GTK event `{}` on widget `{}`",
             event_name,
             run_widget_name(widget)
         ));
     };
-    match &module.exprs()[expr].kind {
+    match &origin_module.exprs()[expr.expr].kind {
         ExprKind::Name(reference) => {
             let resolved = resolve_run_event_signal_target(
                 module,
                 workspace_hirs,
+                origin_module,
+                expr.origin_file,
+                resolution,
                 runtime_assembly,
                 reference,
-                &location,
+                sources,
+                span,
             )?;
             let payload = event.payload;
             if !event_signal_accepts_payload(resolved.inner_payload_type.as_ref(), payload) {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} points at signal `{}`, but `{}` on `{}` publishes `{}` and requires `{}`",
                     name_path_text(&reference.path),
@@ -1054,11 +1255,13 @@ fn resolve_run_event_handler(
         }
         ExprKind::Apply { callee, arguments } => {
             if arguments.len() != 1 {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler at {location} must call a direct signal name with exactly one explicit payload expression"
                 ));
             }
-            let ExprKind::Name(reference) = &module.exprs()[*callee].kind else {
+            let ExprKind::Name(reference) = &origin_module.exprs()[*callee].kind else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler at {location} must call a direct signal name when providing an explicit payload"
                 ));
@@ -1070,25 +1273,36 @@ fn resolve_run_event_handler(
             let resolved = resolve_run_event_signal_target(
                 module,
                 workspace_hirs,
+                origin_module,
+                expr.origin_file,
+                resolution,
                 runtime_assembly,
                 reference,
-                &location,
+                sources,
+                span,
             )?;
             let required_payload = resolved.inner_payload_type.clone().ok_or_else(|| {
+                let location = source_location(sources, span);
                 format!(
                     "event handler `{}` at {location} points at signal `{}`, but explicit payload hooks require a known `Signal A` payload type",
                     name_path_text(&reference.path),
                     resolved.signal_name,
                 )
             })?;
+            let payload_expr = ExprRef {
+                origin_file: expr.origin_file,
+                expr: payload_expr,
+            };
             let site = sites.get(payload_expr).ok_or_else(|| {
+                let location = source_location(sources, span);
                 format!(
                     "event handler `{}` at {location} uses payload expression {} without a collected runtime environment",
                     name_path_text(&reference.path),
-                    payload_expr.as_raw()
+                    payload_expr.expr.as_raw()
                 )
             })?;
             if !site.ty.same_shape(&required_payload) {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} points at signal `{}`, but the explicit payload has type `{}` and the signal requires `{}`",
                     name_path_text(&reference.path),
@@ -1104,9 +1318,90 @@ fn resolve_run_event_handler(
                 payload: ResolvedRunEventPayload::ScopedInput,
             })
         }
-        _ => Err(format!(
-            "event handler at {location} must be a direct signal name or a direct signal application with one explicit payload"
-        )),
+        _ => {
+            let location = source_location(sources, span);
+            Err(format!(
+                "event handler at {location} must be a direct signal name or a direct signal application with one explicit payload"
+            ))
+        }
+    }
+}
+
+fn resolve_deferred_run_event_handler(
+    context: &LazyRunEventHandlerContext,
+    expr: ExprRef,
+) -> Result<ResolvedRunEventHandler, String> {
+    let workspace_hirs = context
+        .workspace_hirs
+        .iter()
+        .map(|(name, module)| (name.as_ref(), module))
+        .collect::<Vec<_>>();
+    let resolution =
+        RunEventResolutionContext::new(&context.module, &workspace_hirs, &context.runtime_assembly)?;
+    let origin_module = resolution.module_for_file(expr.origin_file).ok_or_else(|| {
+        format!(
+            "event handler uses expression from unknown workspace module {}",
+            expr.origin_file.as_u32()
+        )
+    })?;
+    let span = origin_module.exprs()[expr.expr].span;
+    match &origin_module.exprs()[expr.expr].kind {
+        ExprKind::Name(reference) => {
+            let resolved = resolve_run_event_signal_target(
+                &context.module,
+                &workspace_hirs,
+                origin_module,
+                expr.origin_file,
+                &resolution,
+                &context.runtime_assembly,
+                reference,
+                &context.sources,
+                span,
+            )?;
+            Ok(ResolvedRunEventHandler {
+                signal_item: resolved.item_id,
+                signal_name: resolved.signal_name,
+                signal_input: resolved.signal_input,
+                payload: ResolvedRunEventPayload::GtkPayload,
+            })
+        }
+        ExprKind::Apply { callee, arguments } => {
+            if arguments.len() != 1 {
+                let location = source_location(&context.sources, span);
+                return Err(format!(
+                    "event handler at {location} must call a direct signal name with exactly one explicit payload expression"
+                ));
+            }
+            let ExprKind::Name(reference) = &origin_module.exprs()[*callee].kind else {
+                let location = source_location(&context.sources, span);
+                return Err(format!(
+                    "event handler at {location} must call a direct signal name when providing an explicit payload"
+                ));
+            };
+            let resolved = resolve_run_event_signal_target(
+                &context.module,
+                &workspace_hirs,
+                origin_module,
+                expr.origin_file,
+                &resolution,
+                &context.runtime_assembly,
+                reference,
+                &context.sources,
+                span,
+            )?;
+            Ok(ResolvedRunEventHandler {
+                signal_item: resolved.item_id,
+                signal_name: resolved.signal_name,
+                signal_input: resolved.signal_input,
+                payload: ResolvedRunEventPayload::ScopedInput,
+            })
+        }
+        _ => {
+            let location = source_location(&context.sources, span);
+            Err(format!(
+                "event handler at {location} must be a direct signal name or a direct signal application with one explicit payload"
+            ))
+        }
     }
 }
 
@@ -1119,23 +1414,109 @@ struct EventSignalResolution {
     inner_payload_type: Option<GateType>,
 }
 
+struct RunEventResolutionContext<'a> {
+    module_by_file: HashMap<FileId, &'a HirModule>,
+    signal_by_item: HashMap<aivi_hir::ItemId, &'a aivi_runtime::HirSignalBinding>,
+    workspace_signal_exports: Option<BTreeMap<&'a str, BTreeMap<String, aivi_hir::ItemId>>>,
+    signal_payload_types: std::sync::Mutex<
+        HashMap<(FileId, aivi_hir::ItemId), Option<GateType>>,
+    >,
+}
+
+impl<'a> RunEventResolutionContext<'a> {
+    fn new(
+        entry_module: &'a HirModule,
+        workspace_hirs: &[(&'a str, &'a HirModule)],
+        runtime_assembly: &'a HirRuntimeAssembly,
+    ) -> Result<Self, String> {
+        let mut module_by_file = HashMap::with_capacity(workspace_hirs.len() + 1);
+        module_by_file.insert(entry_module.file(), entry_module);
+        for &(_, module) in workspace_hirs {
+            module_by_file.insert(module.file(), module);
+        }
+        let signal_by_item = runtime_assembly
+            .signals()
+            .iter()
+            .map(|binding| (binding.item, binding))
+            .collect();
+        let workspace_signal_exports = if workspace_hirs.is_empty() {
+            None
+        } else {
+            Some(
+                workspace_signal_exports(entry_module, workspace_hirs).ok_or_else(|| {
+                    "failed to build workspace signal export table for GTK event handlers"
+                        .to_owned()
+                })?,
+            )
+        };
+        Ok(Self {
+            module_by_file,
+            signal_by_item,
+            workspace_signal_exports,
+            signal_payload_types: std::sync::Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn module_for_file(&self, file: FileId) -> Option<&'a HirModule> {
+        self.module_by_file.get(&file).copied()
+    }
+
+    fn signal(&self, item: aivi_hir::ItemId) -> Option<&'a aivi_runtime::HirSignalBinding> {
+        self.signal_by_item.get(&item).copied()
+    }
+
+    fn signal_payload_type(
+        &self,
+        module: &HirModule,
+        item_id: aivi_hir::ItemId,
+        signal: &aivi_hir::SignalItem,
+    ) -> Option<GateType> {
+        let key = (module.file(), item_id);
+        if let Some(cached) = self
+            .signal_payload_types
+            .lock()
+            .ok()
+            .and_then(|cache| cache.get(&key).cloned())
+        {
+            return cached;
+        }
+        let payload = signal_payload_type(module, signal);
+        if let Ok(mut cache) = self.signal_payload_types.lock() {
+            cache.entry(key).or_insert_with(|| payload.clone());
+        }
+        payload
+    }
+}
+
 fn resolve_run_event_signal_target(
-    module: &HirModule,
+    entry_module: &HirModule,
     workspace_hirs: &[(&str, &HirModule)],
+    module: &HirModule,
+    module_file: FileId,
+    resolution: &RunEventResolutionContext<'_>,
     runtime_assembly: &HirRuntimeAssembly,
     reference: &aivi_hir::TermReference,
-    location: &str,
+    sources: &SourceDatabase,
+    span: SourceSpan,
 ) -> Result<EventSignalResolution, String> {
     match reference.resolution.as_ref() {
         aivi_hir::ResolutionState::Resolved(TermResolution::Item(item_id)) => {
             let Item::Signal(signal) = &module.items()[*item_id] else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} resolves to a {}, but event hooks require an input-backed signal",
                     name_path_text(&reference.path),
                     hir_item_kind_label(&module.items()[*item_id])
                 ));
             };
-            let binding = runtime_assembly.signal(*item_id).ok_or_else(|| {
+            let runtime_item =
+                globalize_run_item_id(entry_module, workspace_hirs, module_file, *item_id)
+                    .unwrap_or(*item_id);
+            let binding = resolution
+                .signal(runtime_item)
+                .or_else(|| runtime_assembly.signal(runtime_item))
+                .ok_or_else(|| {
+                let location = source_location(sources, span);
                 format!(
                     "event handler `{}` at {location} points at signal `{}` without a runtime binding",
                     name_path_text(&reference.path),
@@ -1143,15 +1524,16 @@ fn resolve_run_event_signal_target(
                 )
             })?;
             let Some(signal_input) = binding.input() else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} points at signal `{}`, but only direct input signals are publishable from GTK events",
                     name_path_text(&reference.path),
                     signal.name.text()
                 ));
             };
-            let inner_payload_type = signal_payload_type(module, signal);
+            let inner_payload_type = resolution.signal_payload_type(module, *item_id, signal);
             Ok(EventSignalResolution {
-                item_id: *item_id,
+                item_id: runtime_item,
                 signal_name: signal.name.text().into(),
                 signal_input,
                 inner_payload_type,
@@ -1159,6 +1541,7 @@ fn resolve_run_event_signal_target(
         }
         aivi_hir::ResolutionState::Resolved(TermResolution::Import(import_id)) => {
             let Some(import_binding) = module.imports().get(*import_id) else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location}: import binding not found",
                     name_path_text(&reference.path)
@@ -1168,21 +1551,31 @@ fn resolve_run_event_signal_target(
                 ty: ImportValueType::Signal(inner_ty),
             } = &import_binding.metadata
             else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} resolves to a cross-module import that is not a Signal",
                     name_path_text(&reference.path)
                 ));
             };
-            let Some(item_id) =
-                workspace_import_signal_item(module, workspace_hirs, *import_id, import_binding)
+            let Some(item_id) = workspace_import_signal_item_cached(
+                module,
+                *import_id,
+                import_binding,
+                resolution,
+            )
             else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location}: no runtime binding found for cross-module signal `{}`",
                     name_path_text(&reference.path),
                     import_binding.local_name.text()
                 ));
             };
-            let binding = runtime_assembly.signal(item_id).ok_or_else(|| {
+            let binding = resolution
+                .signal(item_id)
+                .or_else(|| runtime_assembly.signal(item_id))
+                .ok_or_else(|| {
+                let location = source_location(sources, span);
                 format!(
                     "event handler `{}` at {location}: no runtime binding found for cross-module signal `{}`",
                     name_path_text(&reference.path),
@@ -1190,6 +1583,7 @@ fn resolve_run_event_signal_target(
                 )
             })?;
             let Some(signal_input) = binding.input() else {
+                let location = source_location(sources, span);
                 return Err(format!(
                     "event handler `{}` at {location}: cross-module signal `{}` is not a publishable input signal",
                     name_path_text(&reference.path),
@@ -1204,14 +1598,18 @@ fn resolve_run_event_signal_target(
                 inner_payload_type,
             })
         }
-        _ => Err(format!(
-            "event handler `{}` at {location} must resolve directly to a signal item",
-            name_path_text(&reference.path)
-        )),
+        _ => {
+            let location = source_location(sources, span);
+            Err(format!(
+                "event handler `{}` at {location} must resolve directly to a signal item",
+                name_path_text(&reference.path)
+            ))
+        }
     }
 }
 
 fn workspace_import_signal_item(
+    entry_module: &HirModule,
     module: &HirModule,
     workspace_hirs: &[(&str, &HirModule)],
     import_id: ImportId,
@@ -1222,7 +1620,24 @@ fn workspace_import_signal_item(
         .as_deref()
         .map(str::to_owned)
         .or_else(|| workspace_import_source_module(module, import_id))?;
-    let workspace_exports = workspace_signal_exports(module, workspace_hirs)?;
+    let workspace_exports = workspace_signal_exports(entry_module, workspace_hirs)?;
+    workspace_exports
+        .get(source_module.as_str())
+        .and_then(|exports| exports.get(import_binding.imported_name.text()).copied())
+}
+
+fn workspace_import_signal_item_cached(
+    module: &HirModule,
+    import_id: ImportId,
+    import_binding: &aivi_hir::ImportBinding,
+    resolution: &RunEventResolutionContext<'_>,
+) -> Option<aivi_hir::ItemId> {
+    let source_module = import_binding
+        .source_module
+        .as_deref()
+        .map(str::to_owned)
+        .or_else(|| workspace_import_source_module(module, import_id))?;
+    let workspace_exports = resolution.workspace_signal_exports.as_ref()?;
     workspace_exports
         .get(source_module.as_str())
         .and_then(|exports| exports.get(import_binding.imported_name.text()).copied())
@@ -1232,19 +1647,12 @@ fn workspace_signal_exports<'a>(
     entry_module: &HirModule,
     workspace_hirs: &[(&'a str, &'a HirModule)],
 ) -> Option<BTreeMap<&'a str, BTreeMap<String, aivi_hir::ItemId>>> {
-    let entry_item_count = u32::try_from(entry_module.items().iter().count()).ok()?;
-    let entry_import_count = u32::try_from(entry_module.imports().iter().count()).ok()?;
-    let mut next_origin = entry_item_count + entry_import_count;
+    let file_offsets = run_module_offsets(entry_module, workspace_hirs)?;
     let mut module_offsets = HashMap::new();
     let mut import_to_module = HashMap::new();
     for (name, workspace_module) in workspace_hirs {
-        module_offsets.insert(*name, next_origin);
+        module_offsets.insert(*name, *file_offsets.get(&workspace_module.file())?);
         import_to_module.insert(*name, workspace_import_to_module(workspace_module));
-        let item_count = u32::try_from(workspace_module.items().iter().count()).ok()?;
-        let import_count = u32::try_from(workspace_module.imports().iter().count()).ok()?;
-        next_origin = next_origin
-            .saturating_add(item_count)
-            .saturating_add(import_count);
     }
 
     let mut exports = BTreeMap::<&str, BTreeMap<String, aivi_hir::ItemId>>::new();
@@ -1467,8 +1875,114 @@ fn hir_item_kind_label(item: &Item) -> &'static str {
     }
 }
 
+fn module_for_file<'a>(
+    entry_module: &'a HirModule,
+    workspace_hirs: &[(&'a str, &'a HirModule)],
+    file: FileId,
+) -> Option<&'a HirModule> {
+    if entry_module.file() == file {
+        return Some(entry_module);
+    }
+    workspace_hirs
+        .iter()
+        .find_map(|(_, module)| (module.file() == file).then_some(*module))
+}
+
+fn run_module_offsets<'a>(
+    entry_module: &'a HirModule,
+    workspace_hirs: &[(&'a str, &'a HirModule)],
+) -> Option<HashMap<FileId, u32>> {
+    static OFFSETS_CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<usize, HashMap<FileId, u32>>>> =
+        std::sync::OnceLock::new();
+    let key = entry_module as *const HirModule as usize;
+    let cache = OFFSETS_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+    if let Some(offsets) = cache.lock().ok()?.get(&key).cloned() {
+        return Some(offsets);
+    }
+    let offsets = runtime_workspace_item_origin_offsets(entry_module, workspace_hirs).ok()?;
+    cache.lock().ok()?.insert(key, offsets.clone());
+    Some(offsets)
+}
+
+fn globalize_run_item_id(
+    entry_module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
+    origin_file: FileId,
+    item: HirItemId,
+) -> Option<HirItemId> {
+    let offset = *run_module_offsets(entry_module, workspace_hirs)?
+        .get(&origin_file)?;
+    Some(HirItemId::from_raw(offset.saturating_add(item.as_raw())))
+}
+
+fn localize_run_item_id(
+    entry_module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
+    item: HirItemId,
+) -> Option<(FileId, HirItemId)> {
+    let raw = item.as_raw();
+    let entry_item_count = u32::try_from(entry_module.items().iter().count()).ok()?;
+    if raw < entry_item_count {
+        return Some((entry_module.file(), item));
+    }
+    let offsets = run_module_offsets(entry_module, workspace_hirs)?;
+    for (_, module) in workspace_hirs {
+        let offset = *offsets.get(&module.file())?;
+        let item_count = u32::try_from(module.items().iter().count()).ok()?;
+        if (offset..offset.saturating_add(item_count)).contains(&raw) {
+            return Some((
+                module.file(),
+                HirItemId::from_raw(raw.saturating_sub(offset)),
+            ));
+        }
+    }
+    None
+}
+
+fn collect_run_markup_expr_sites(
+    sources: &SourceDatabase,
+    entry_module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
+) -> Result<RunMarkupExprSites, String> {
+    let mut sites = RunMarkupExprSites::default();
+    let modules = std::iter::once(entry_module).chain(workspace_hirs.iter().map(|(_, module)| *module));
+    for module in modules {
+        for (item_id, item) in module.items().iter() {
+            let Item::Value(value) = item else {
+                continue;
+            };
+            if !matches!(module.exprs()[value.body].kind, ExprKind::Markup(_)) {
+                continue;
+            }
+            let collected = collect_markup_runtime_expr_sites(module, value.body).map_err(|error| {
+                let span = module.exprs()[value.body].span;
+                format!(
+                    "failed to collect runtime expression environments for run view at {}: {error}",
+                    source_location(sources, span)
+                )
+            })?;
+            for (&expr, site) in collected.sites() {
+                sites.insert(
+                    ExprRef {
+                        origin_file: module.file(),
+                        expr,
+                    },
+                    RunMarkupExprSite {
+                        owner: item_id,
+                        span: site.span,
+                        ty: site.ty.clone(),
+                        parameters: site.parameters.clone(),
+                    },
+                );
+            }
+        }
+    }
+    Ok(sites)
+}
+
 fn collect_run_input_specs_from_bridge(
     module: &HirModule,
+    workspace_hirs: &[(&str, &HirModule)],
     bridge: &GtkBridgeGraph,
 ) -> BTreeMap<RuntimeInputHandle, RunInputSpec> {
     let mut inputs = BTreeMap::new();
@@ -1487,7 +2001,14 @@ fn collect_run_input_specs_from_bridge(
                     }
                 }
                 for event in &widget.event_hooks {
-                    if let Some(payload_expr) = event_handler_payload_expr(module, event.handler) {
+                    let Some(origin_module) =
+                        module_for_file(module, workspace_hirs, event.handler.origin_file)
+                    else {
+                        continue;
+                    };
+                    if let Some(payload_expr) =
+                        event_handler_payload_expr(origin_module, event.handler)
+                    {
                         inputs.insert(event.input, RunInputSpec::Expr(payload_expr));
                     }
                 }
@@ -1533,11 +2054,13 @@ fn compile_run_inputs(
     module: &HirModule,
     workspace_hirs: &[(&str, &HirModule)],
     view_owner: aivi_hir::ItemId,
-    sites: &aivi_hir::MarkupRuntimeExprSites,
+    sites: &RunMarkupExprSites,
     bridge: &GtkBridgeGraph,
+    runtime_assembly: &HirRuntimeAssembly,
     runtime_backend: &BackendProgram,
     runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
     query_context: Option<BackendQueryContext<'_>>,
+    mut on_detail: impl FnMut(String),
 ) -> Result<
     (
         BTreeMap<RuntimeInputHandle, CompiledRunInput>,
@@ -1545,11 +2068,20 @@ fn compile_run_inputs(
     ),
     String,
 > {
-    let input_specs = collect_run_input_specs_from_bridge(module, bridge);
+    let debug_hydration_fragments = std::env::var_os("AIVI_DEBUG_HYDRATION_FRAGMENTS").is_some();
+    let mut emit_detail = |detail: String| {
+        if debug_hydration_fragments {
+            eprintln!("hydration fragments: {detail}");
+        }
+        on_detail(detail);
+    };
+    let input_specs = collect_run_input_specs_from_bridge(module, workspace_hirs, bridge);
     let mut inputs = BTreeMap::new();
     let mut metrics = RunInputCompilationMetrics::default();
-    if query_context.is_some() {
+        if query_context.is_some() {
         let unique_exprs = collect_unique_run_input_exprs(&input_specs);
+        let total = unique_exprs.len();
+        emit_detail(format!("{total} unique fragments queued"));
         let compile_expr = |expr| {
             compile_run_fragment_for_input(
                 module,
@@ -1557,6 +2089,7 @@ fn compile_run_inputs(
                 workspace_hirs,
                 view_owner,
                 sites,
+                runtime_assembly,
                 runtime_backend,
                 runtime_backend_by_hir,
                 query_context,
@@ -1567,6 +2100,7 @@ fn compile_run_inputs(
         let parallelism = bounded_fragment_parallelism(unique_exprs.len());
         let batch_size = fragment_batch_size(unique_exprs.len());
         let mut compiled_fragments = BTreeMap::new();
+        let mut compiled_count = 0usize;
         for expr_batch in unique_exprs.chunks(batch_size) {
             let batch_results = if parallelism <= 1 {
                 expr_batch
@@ -1587,10 +2121,12 @@ fn compile_run_inputs(
                         .iter()
                         .copied()
                         .map(compile_expr)
-                        .collect::<Result<Vec<_>, _>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
                 }
             };
+            compiled_count += batch_results.len();
             compiled_fragments.extend(batch_results);
+            emit_detail(format!("{compiled_count}/{total} fragments compiled"));
         }
         metrics.compiled_fragment_count = compiled_fragments.len();
         for (input, spec) in input_specs {
@@ -1602,8 +2138,8 @@ fn compile_run_inputs(
                         .expect("parallel run fragment compilation should cover every unique expr"),
                 ),
                 RunInputSpec::Text(text) => {
-                    let mut segments = Vec::with_capacity(text.segments.len());
-                    for segment in text.segments {
+                    let mut segments = Vec::with_capacity(text.literal.segments.len());
+                    for segment in text.literal.segments {
                         match segment {
                             aivi_hir::TextSegment::Text(text) => {
                                 segments.push(CompiledRunTextSegment::Text(text.raw));
@@ -1611,7 +2147,10 @@ fn compile_run_inputs(
                             aivi_hir::TextSegment::Interpolation(interpolation) => {
                                 segments.push(CompiledRunTextSegment::Interpolation(
                                     compiled_fragments
-                                        .get(&interpolation.expr)
+                                        .get(&ExprRef {
+                                            origin_file: text.origin_file,
+                                            expr: interpolation.expr,
+                                        })
                                         .cloned()
                                         .expect("parallel run fragment compilation should cover interpolation exprs"),
                                 ));
@@ -1633,6 +2172,7 @@ fn compile_run_inputs(
         workspace_hirs,
         view_owner,
         sites,
+        runtime_assembly,
         runtime_backend,
         runtime_backend_by_hir,
         query_context,
@@ -1641,6 +2181,10 @@ fn compile_run_inputs(
         let (fragment, compiled_now) = compiler.compile(expr)?;
         if compiled_now {
             metrics.compiled_fragment_count += 1;
+            emit_detail(format!(
+                "{} fragments compiled",
+                metrics.compiled_fragment_count
+            ));
         }
         Ok::<_, String>(fragment)
     };
@@ -1648,15 +2192,18 @@ fn compile_run_inputs(
         let compiled = match spec {
             RunInputSpec::Expr(expr) => CompiledRunInput::Expr(compile_fragment(expr)?),
             RunInputSpec::Text(text) => {
-                let mut segments = Vec::with_capacity(text.segments.len());
-                for segment in text.segments {
+                let mut segments = Vec::with_capacity(text.literal.segments.len());
+                for segment in text.literal.segments {
                     match segment {
                         aivi_hir::TextSegment::Text(text) => {
                             segments.push(CompiledRunTextSegment::Text(text.raw));
                         }
                         aivi_hir::TextSegment::Interpolation(interpolation) => {
                             segments.push(CompiledRunTextSegment::Interpolation(compile_fragment(
-                                interpolation.expr,
+                                ExprRef {
+                                    origin_file: text.origin_file,
+                                    expr: interpolation.expr,
+                                },
                             )?))
                         }
                     }
@@ -1711,7 +2258,7 @@ fn fragment_thread_pool() -> Option<&'static rayon::ThreadPool> {
 
 fn collect_unique_run_input_exprs(
     input_specs: &BTreeMap<RuntimeInputHandle, RunInputSpec>,
-) -> Vec<HirExprId> {
+) -> Vec<ExprRef> {
     let mut exprs = BTreeSet::new();
     for spec in input_specs.values() {
         match spec {
@@ -1719,9 +2266,12 @@ fn collect_unique_run_input_exprs(
                 exprs.insert(*expr);
             }
             RunInputSpec::Text(text) => {
-                for segment in &text.segments {
+                for segment in &text.literal.segments {
                     if let aivi_hir::TextSegment::Interpolation(interpolation) = segment {
-                        exprs.insert(interpolation.expr);
+                        exprs.insert(ExprRef {
+                            origin_file: text.origin_file,
+                            expr: interpolation.expr,
+                        });
                     }
                 }
             }

@@ -1,16 +1,20 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use aivi_backend::{
-    RuntimeCustomCapabilityCommandPlan, RuntimeNamedValue, compile_native_kernel_artifact,
+    AbiParameter, AbiResult, CallingConvention, CallingConventionKind, IntegerLiteral, Kernel,
+    KernelExpr, KernelExprKind, KernelOrigin, KernelOriginKind, Layout, LayoutKind, ParameterRole,
+    PrimitiveType, RuntimeCustomCapabilityCommandPlan, RuntimeNamedValue,
+    compile_native_kernel_artifact,
 };
-use aivi_base::SourceDatabase;
+use aivi_base::{SourceDatabase, SourceSpan};
 use aivi_hir::{Item, lower_module as lower_hir_module};
 use aivi_lambda::lower_module as lower_lambda_module;
 use aivi_syntax::parse_module;
 
 use super::*;
 use crate::{
-    SignalGraphBuilder, TaskRuntimeSpec, TaskSourceRuntime,
+    HirImportSignalBinding, HirOwnerBinding, HirRuntimeAssemblyParts, HirSignalBinding,
+    HirSignalBindingKind, SignalGraphBuilder, TaskRuntimeSpec, TaskSourceRuntime,
     task_executor::CustomCapabilityCommandExecutor,
 };
 
@@ -157,6 +161,7 @@ fn manual_task_linked_runtime(lowered: &LoweredStack, owner_name: &str) -> Backe
         backend: BackendRuntimePayload::Program(Arc::new(lowered.backend.clone())),
         native_kernels: Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
         signal_items_by_handle: BTreeMap::new(),
+        signal_alias_items_by_handle: BTreeMap::new(),
         runtime_signal_by_item: BTreeMap::new(),
         derived_signals: BTreeMap::new(),
         reactive_signals: BTreeMap::new(),
@@ -421,6 +426,227 @@ signal total : Signal Int = ready
         linked.runtime().current_value(total_signal).unwrap(),
         Some(&RuntimeValue::Int(42)),
         "fallback reactive seed evaluation should still compute the reactive seed"
+    );
+}
+
+#[test]
+fn linked_runtime_ignores_bodyless_callable_import_globals_when_linking_signals() {
+    let lowered = lower_text(
+        "main.aivi",
+        r#"
+use aivi.list (length)
+
+signal total : Int = length [1, 2]
+"#,
+    );
+    let assembly = crate::assemble_hir_runtime(lowered.hir.module())
+        .expect("callable import fixture should assemble");
+    let mut linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend))
+        .expect("bodyless callable imports should not block runtime linking");
+    linked.tick().expect("callable import fixture should tick");
+    let total_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "total"))
+        .expect("total signal binding should exist")
+        .signal();
+    let Some(RuntimeValue::Int(total)) = linked.runtime().current_value(total_signal).unwrap()
+    else {
+        panic!("total signal should publish an int");
+    };
+    assert_eq!(*total, 2);
+}
+
+#[test]
+fn linked_runtime_tables_resolve_workspace_signal_import_alias_dependencies() {
+    let span = SourceSpan::default();
+    let owner_item = hir::ItemId::from_raw(1);
+    let shared_item = hir::ItemId::from_raw(2);
+    let shared_import_item = hir::ItemId::from_raw(3);
+    let current_item = hir::ItemId::from_raw(4);
+
+    let mut graph_builder = SignalGraphBuilder::new();
+    let owner = graph_builder
+        .add_owner("root", None)
+        .expect("owner should build");
+    let shared_input = graph_builder
+        .add_input("shared", Some(owner))
+        .expect("input should build");
+    let current = graph_builder
+        .add_derived("current", Some(owner))
+        .expect("derived should build");
+    graph_builder
+        .define_derived(current, [shared_input.as_signal()])
+        .expect("derived dependency should build");
+    let graph = graph_builder.build().expect("graph should build");
+
+    let assembly = HirRuntimeAssembly::from_parts(HirRuntimeAssemblyParts {
+        graph: graph.into_parts(),
+        reactive_program: crate::ReactiveProgramParts {
+            signals: Vec::new().into_boxed_slice(),
+            clauses: Vec::new().into_boxed_slice(),
+            partitions: Vec::new().into_boxed_slice(),
+            topo_order: Vec::new().into_boxed_slice(),
+        },
+        owners: vec![HirOwnerBinding {
+            item: owner_item,
+            span,
+            name: "root".into(),
+            handle: owner,
+        }]
+        .into_boxed_slice(),
+        signals: vec![
+            HirSignalBinding {
+                item: shared_item,
+                span,
+                name: "shared".into(),
+                owner,
+                kind: HirSignalBindingKind::Input {
+                    signal: shared_input,
+                },
+                source_input: None,
+            },
+            HirSignalBinding {
+                item: current_item,
+                span,
+                name: "current".into(),
+                owner,
+                kind: HirSignalBindingKind::Derived {
+                    signal: current,
+                    dependencies: vec![shared_input.as_signal()].into_boxed_slice(),
+                    temporal_trigger_dependencies: Vec::new().into_boxed_slice(),
+                    temporal_helpers: Vec::new().into_boxed_slice(),
+                },
+                source_input: None,
+            },
+        ]
+        .into_boxed_slice(),
+        import_signals: vec![HirImportSignalBinding {
+            item: shared_import_item,
+            signal: shared_input.as_signal(),
+        }]
+        .into_boxed_slice(),
+        sources: Vec::new().into_boxed_slice(),
+        tasks: Vec::new().into_boxed_slice(),
+        gates: Vec::new().into_boxed_slice(),
+        recurrences: Vec::new().into_boxed_slice(),
+        db_changed_bindings: Vec::new().into_boxed_slice(),
+    });
+
+    let mut backend = aivi_backend::Program::new();
+    let int_layout = backend
+        .layouts_mut()
+        .alloc(Layout::new(LayoutKind::Primitive(PrimitiveType::Int)))
+        .expect("int layout should allocate");
+    let mut exprs = aivi_core::Arena::new();
+    let root = exprs
+        .alloc(KernelExpr {
+            span,
+            layout: int_layout,
+            kind: KernelExprKind::Integer(IntegerLiteral { raw: "0".into() }),
+        })
+        .expect("kernel expr should allocate");
+    let current_backend_item = aivi_backend::ItemId::from_raw(2);
+    let kernel = backend
+        .kernels_mut()
+        .alloc(Kernel::new(
+            KernelOrigin {
+                item: current_backend_item,
+                span,
+                kind: KernelOriginKind::SignalBody {
+                    item: current_backend_item,
+                },
+            },
+            None,
+            Vec::new(),
+            vec![int_layout],
+            int_layout,
+            CallingConvention {
+                kind: CallingConventionKind::RuntimeKernelV1,
+                parameters: vec![AbiParameter {
+                    role: ParameterRole::Environment(aivi_backend::EnvSlotId::from_raw(0)),
+                    layout: int_layout,
+                    pass_mode: aivi_backend::AbiPassMode::ByValue,
+                }],
+                result: AbiResult {
+                    layout: int_layout,
+                    pass_mode: aivi_backend::AbiPassMode::ByValue,
+                },
+            },
+            vec![aivi_backend::ItemId::from_raw(1)],
+            root,
+            exprs,
+        ))
+        .expect("kernel should allocate");
+    let shared_backend = backend
+        .items_mut()
+        .alloc(aivi_backend::Item {
+            origin: aivi_core::ItemId::from_raw(shared_item.as_raw()),
+            span,
+            name: "shared".into(),
+            kind: aivi_backend::ItemKind::Signal(aivi_backend::SignalInfo::default()),
+            parameters: Vec::new(),
+            body: None,
+            pipelines: Vec::new(),
+        })
+        .expect("shared backend item should allocate");
+    let shared_import_backend = backend
+        .items_mut()
+        .alloc(aivi_backend::Item {
+            origin: aivi_core::ItemId::from_raw(shared_import_item.as_raw()),
+            span,
+            name: "shared".into(),
+            kind: aivi_backend::ItemKind::Signal(aivi_backend::SignalInfo::default()),
+            parameters: Vec::new(),
+            body: None,
+            pipelines: Vec::new(),
+        })
+        .expect("shared import backend item should allocate");
+    let current_backend = backend
+        .items_mut()
+        .alloc(aivi_backend::Item {
+            origin: aivi_core::ItemId::from_raw(current_item.as_raw()),
+            span,
+            name: "current".into(),
+            kind: aivi_backend::ItemKind::Signal(aivi_backend::SignalInfo {
+                dependencies: vec![shared_import_backend],
+                dependency_layouts: vec![int_layout],
+                body_kernel: Some(kernel),
+                source: None,
+            }),
+            parameters: Vec::new(),
+            body: Some(kernel),
+            pipelines: Vec::new(),
+        })
+        .expect("current backend item should allocate");
+    assert_eq!(shared_backend, aivi_backend::ItemId::from_raw(0));
+    assert_eq!(shared_import_backend, aivi_backend::ItemId::from_raw(1));
+    assert_eq!(current_backend, current_backend_item);
+
+    let tables = derive_backend_linked_runtime_tables_with_seed_and_native_kernels_from_payload(
+        &assembly,
+        &BackendRuntimePayload::Program(Arc::new(backend)),
+        &Arc::new(aivi_backend::NativeKernelArtifactSet::default()),
+        &BackendRuntimeLinkSeed {
+            hir_to_backend: vec![
+                (shared_item, shared_backend),
+                (shared_import_item, shared_import_backend),
+                (current_item, current_backend),
+            ]
+            .into_boxed_slice(),
+        },
+    )
+    .expect("workspace signal import aliases should resolve to their runtime signal");
+
+    assert_eq!(
+        tables
+            .runtime_signal_by_item
+            .get(&shared_import_backend)
+            .copied(),
+        Some(shared_input.as_signal())
+    );
+    assert!(
+        tables.derived_signals.contains_key(&current),
+        "derived signal should link through the import alias"
     );
 }
 

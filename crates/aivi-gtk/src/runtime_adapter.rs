@@ -1,15 +1,16 @@
 use std::{error::Error, fmt};
 
 use aivi_base::SourceSpan;
-use aivi_hir::{BindingId, ExprId, Name, NamePath, PatternId};
+use aivi_hir::{Name, NamePath};
 use aivi_runtime::{
     GraphBuildError, InputHandle, OwnerHandle, SignalGraph, SignalGraphBuilder, SignalGraphParts,
 };
 
 use crate::plan::{
-    AttributeSite, ChildOp, EventHookStrategy, EventHookTeardown, PlanNode, PlanNodeId,
-    PlanNodeKind, PlanNodeTag, PropertyPlan, RepeatedChildPolicy, SetterSource, SetterTeardown,
-    SetterUpdateStrategy, ShowMountPolicy, StableNodeId, StaticPropertyPlan, WidgetPlan,
+    AttributeSite, BindingRef, ChildOp, EventHookStrategy, EventHookTeardown, ExprRef, PatternRef,
+    PlanNode, PlanNodeId, PlanNodeKind, PlanNodeTag, PropertyPlan, RepeatedChildPolicy,
+    SetterSource, SetterTeardown, SetterUpdateStrategy, ShowMountPolicy, StableNodeId,
+    StaticPropertyPlan, WidgetPlan,
 };
 
 /// Adapt one lowered widget plan into a runtime-facing assembly.
@@ -672,7 +673,7 @@ pub struct RuntimeSetterBinding {
 pub struct RuntimeEventBinding {
     pub site: AttributeSite,
     pub name: Name,
-    pub handler: ExprId,
+    pub handler: ExprRef,
     pub owner: OwnerHandle,
     pub input: InputHandle,
     pub hookup: EventHookStrategy,
@@ -696,7 +697,7 @@ pub enum RuntimeShowMountPolicy {
 pub struct RuntimeEachNode {
     pub collection: RuntimeExprInput,
     pub key_input: Option<RuntimeExprInput>,
-    pub binding: BindingId,
+    pub binding: BindingRef,
     pub child_policy: RepeatedChildPolicy,
     pub item_children: Box<[RuntimeChildOp]>,
     pub empty_branch: Option<RuntimeNodeRef>,
@@ -716,12 +717,12 @@ pub struct RuntimeMatchNode {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeCaseBranch {
     pub case: RuntimeNodeRef,
-    pub pattern: PatternId,
+    pub pattern: PatternRef,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeCaseNode {
-    pub pattern: PatternId,
+    pub pattern: PatternRef,
     pub children: Box<[RuntimeChildOp]>,
 }
 
@@ -733,14 +734,14 @@ pub struct RuntimeFragmentNode {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeWithNode {
     pub value: RuntimeExprInput,
-    pub binding: BindingId,
+    pub binding: BindingRef,
     pub children: Box<[RuntimeChildOp]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeExprInput {
     pub owner: OwnerHandle,
-    pub expr: ExprId,
+    pub expr: ExprRef,
     pub input: InputHandle,
 }
 
@@ -1033,6 +1034,28 @@ fn runtime_stable_name(stable_id: StableNodeId) -> String {
     match stable_id {
         StableNodeId::Markup(id) => format!("markup:{}", id.as_raw()),
         StableNodeId::Control(id) => format!("control:{}", id.as_raw()),
+        StableNodeId::ExpandedMarkup {
+            expansion,
+            origin_file,
+            origin,
+        } => {
+            format!(
+                "expanded:{expansion}:file:{}:markup:{}",
+                origin_file.as_u32(),
+                origin.as_raw()
+            )
+        }
+        StableNodeId::ExpandedControl {
+            expansion,
+            origin_file,
+            origin,
+        } => {
+            format!(
+                "expanded:{expansion}:file:{}:control:{}",
+                origin_file.as_u32(),
+                origin.as_raw()
+            )
+        }
     }
 }
 

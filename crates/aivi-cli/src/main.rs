@@ -33,21 +33,23 @@ use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
 use aivi_core::{
     IncludedItems, RuntimeFragmentSpec, lower_runtime_fragment, lower_runtime_module_with_items,
     lower_runtime_module_with_workspace, runtime_fragment_included_items,
-    validate_module as validate_core_module,
+    runtime_workspace_item_origin_offsets, validate_module as validate_core_module,
 };
+#[cfg(test)]
+use aivi_gtk::lower_markup_expr;
 use aivi_gtk::{
-    GtkBridgeGraph, GtkBridgeNodeKind, GtkBridgeNodeRef, GtkChildGroup, GtkCollectionKey,
-    GtkConcreteEventPayload, GtkConcreteHost, GtkExecutionPath, GtkHostValue, GtkNodeInstance,
-    GtkRuntimeExecutor, RepeatedChildPolicy, RuntimePropertyBinding, RuntimeShowMountPolicy,
-    SetterSource, lookup_widget_event, lookup_widget_schema, lower_markup_expr,
-    lower_widget_bridge,
+    BindingRef, ExprRef, GtkBridgeGraph, GtkBridgeNodeKind, GtkBridgeNodeRef, GtkChildGroup,
+    GtkCollectionKey, GtkConcreteEventPayload, GtkConcreteHost, GtkExecutionPath, GtkHostValue,
+    GtkNodeInstance, GtkRuntimeExecutor, InterpolatedText, PatternRef, RepeatedChildPolicy,
+    RuntimePropertyBinding, RuntimeShowMountPolicy, SetterSource, lookup_widget_event,
+    lookup_widget_schema, lower_markup_expr_with_workspace, lower_widget_bridge,
 };
 use aivi_hir::{
     BuiltinTerm, BuiltinType, DecoratorPayload, ExprId as HirExprId, ExprKind, GateRecordField,
     GateType, GeneralExprOutcome, GeneralExprParameter, ImportBindingMetadata, ImportId,
-    ImportValueType, Item, ItemId as HirItemId, MarkupRuntimeExprSites, Module as HirModule,
-    PatternId as HirPatternId, PatternKind, TermResolution, ValidationMode, ValueItem,
-    collect_markup_runtime_expr_sites, elaborate_runtime_expr_with_env, signal_payload_type,
+    ImportValueType, Item, ItemId as HirItemId, Module as HirModule, PatternKind, TermResolution,
+    ValidationMode, ValueItem, collect_markup_runtime_expr_sites,
+    collect_signal_dependency_roots_for_expr, elaborate_runtime_expr_with_env, signal_payload_type,
 };
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_query::{
@@ -58,10 +60,9 @@ use aivi_query::{
 };
 use aivi_runtime::{
     BackendLinkedRuntime, GlibLinkedRuntimeDriver, GlibLinkedRuntimeFailure, HirRuntimeAssembly,
-    InputHandle as RuntimeInputHandle, Publication, SourceProviderContext, SourceProviderManager,
-    assemble_hir_runtime_with_items, assemble_hir_runtime_with_items_and_workspace_profiled,
+    InputHandle as RuntimeInputHandle, Publication, SignalHandle, SourceProviderContext,
+    SourceProviderManager, assemble_hir_runtime_with_items,
     assemble_hir_runtime_with_items_and_workspace_profiled_and_progress,
-    assemble_hir_runtime_with_items_profiled,
     assemble_hir_runtime_with_items_profiled_and_progress, execute_runtime_value_with_context,
     link_backend_runtime,
 };

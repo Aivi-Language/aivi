@@ -222,6 +222,7 @@ impl BackendLinkedRuntime {
             backend: &self.backend,
             native_kernels: self.native_kernels.as_ref(),
             signal_items_by_handle: &self.signal_items_by_handle,
+            signal_alias_items_by_handle: &self.signal_alias_items_by_handle,
             derived_signals: &self.derived_signals,
             reactive_signals: &self.reactive_signals,
             reactive_clauses: &self.reactive_clauses,
@@ -244,6 +245,7 @@ impl BackendLinkedRuntime {
                 backend: &self.backend,
                 native_kernels: self.native_kernels.as_ref(),
                 signal_items_by_handle: &self.signal_items_by_handle,
+                signal_alias_items_by_handle: &self.signal_alias_items_by_handle,
                 derived_signals: &self.derived_signals,
                 reactive_signals: &self.reactive_signals,
                 reactive_clauses: &self.reactive_clauses,
@@ -486,7 +488,16 @@ impl BackendLinkedRuntime {
                     RuntimeValue::Signal(_) => value.clone(),
                     other => RuntimeValue::Signal(Box::new(other.clone())),
                 };
-                snapshots.insert(item, DetachedRuntimeValue::from_runtime_owned(public_value));
+                let detached = DetachedRuntimeValue::from_runtime_owned(public_value);
+                snapshots.insert(item, detached.clone());
+                for &alias in self
+                    .signal_alias_items_by_handle
+                    .get(&signal)
+                    .into_iter()
+                    .flat_map(|items| items.iter())
+                {
+                    snapshots.insert(alias, detached.clone());
+                }
             }
         }
         Ok(snapshots)

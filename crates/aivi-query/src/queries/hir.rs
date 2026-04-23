@@ -27,13 +27,6 @@ thread_local! {
     static SUPPRESS_HOISTS: Cell<bool> = const { Cell::new(false) };
 }
 
-// When true, hir_module_with_stack skips storing computed HIR in the
-// database cache.  This is set during the hoist warmup pass so that
-// modules compiled with incomplete hoists do not pollute the cache.
-thread_local! {
-    static WARMUP_PASS: Cell<bool> = const { Cell::new(false) };
-}
-
 /// Result of lowering a source file to HIR.
 #[derive(Clone, Debug)]
 pub struct HirModuleResult {
@@ -194,16 +187,13 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
         }
 
         // Compile the hoisted module with an *empty* import stack and with
-        // SUPPRESS_HOISTS set for project modules.  Temporarily clear
-        // WARMUP_PASS so the hoist module's result IS cached — these are
-        // the modules we're trying to warm up.
+        // SUPPRESS_HOISTS set for project modules so cross-hoist recursion
+        // stays broken without polluting the parent module's import stack.
         HOIST_COMPILING.with(|set| {
             set.borrow_mut().insert(file_id);
         });
         let was_suppressed = SUPPRESS_HOISTS.with(|f| f.replace(true));
-        let was_warmup = WARMUP_PASS.with(|f| f.replace(false));
         let lowered = hir_module_with_stack(self.db, file, &[], Some(self.workspace));
-        WARMUP_PASS.with(|f| f.set(was_warmup));
         SUPPRESS_HOISTS.with(|f| f.set(was_suppressed));
         HOIST_COMPILING.with(|set| {
             set.borrow_mut().remove(&file_id);
@@ -213,7 +203,7 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
     }
 
     fn workspace_hoist_items(&self) -> Vec<aivi_hir::resolver::RawHoistItem> {
-        collect_workspace_hoist_items(self.db, self.workspace)
+        collect_workspace_hoist_items(self.db, self.workspace).as_ref().to_vec()
     }
 
     fn current_module_path(&self) -> Option<String> {
@@ -223,11 +213,10 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
 
 /// Lower the given source file to HIR and memoise the result by file revision.
 ///
-/// Entry-point modules (those compiled directly, not via import) get a two-pass
-/// treatment: the first pass is a "warmup" that triggers the hoist cascade,
-/// populating the cache for all hoist modules.  No HIR results are cached
-/// during this warmup (WARMUP_PASS flag).  The second pass compiles with a
-/// complete set of hoisted names available from the cache.
+/// Before compiling an entry module, prewarm the exported names of every
+/// workspace-hoisted module. This avoids recompiling the full entry graph in a
+/// second warmup pass while still guaranteeing that hoisted names are available
+/// from the query cache during the real compilation.
 pub fn hir_module(db: &RootDatabase, file: SourceFile) -> Arc<HirModuleResult> {
     // Fast path: already compiled.
     let parsed = parsed_file(db, file);
@@ -235,19 +224,9 @@ pub fn hir_module(db: &RootDatabase, file: SourceFile) -> Arc<HirModuleResult> {
         db.record_hir_hit();
         return cached;
     }
-
-    // Warmup pass: compile with WARMUP_PASS=true so that NO modules get
-    // their HIR cached.  The hoist cascade still runs resolve_for_hoist
-    // which compiles hoist modules — those results are cached because
-    // resolve_for_hoist temporarily clears WARMUP_PASS for its direct
-    // compilations.  Transitively imported non-hoist modules are NOT cached.
-    WARMUP_PASS.with(|f| f.set(true));
-    let _ = hir_module_with_stack(db, file, &[], None);
-    WARMUP_PASS.with(|f| f.set(false));
-
-    // Real pass: all hoist modules are now cached; the entry module and
-    // its transitive imports will see the complete set of workspace hoists.
-    hir_module_with_stack(db, file, &[], None)
+    let workspace = Workspace::discover(db, file);
+    prewarm_workspace_hoist_exports(db, &workspace, file);
+    hir_module_with_stack(db, file, &[], Some(&workspace))
 }
 
 /// `parent_workspace` propagates the calling compilation's workspace to
@@ -304,15 +283,29 @@ fn hir_module_with_stack(
             exported_names,
         });
 
-        // During the warmup pass, do NOT cache the result — it was compiled
-        // with incomplete hoists and must not pollute the real compilation.
-        if WARMUP_PASS.with(|f| f.get()) {
-            return computed;
-        }
-
         if let Some(current) = db.store_hir(file, computed.revision(), computed) {
             return current;
         }
+    }
+}
+
+fn prewarm_workspace_hoist_exports(db: &RootDatabase, workspace: &Workspace, file: SourceFile) {
+    let resolver = WorkspaceImportResolver::new(db, workspace, &[]);
+    let current_module_path = workspace.module_name_for_file(db, file);
+    let mut warmed = HashSet::new();
+    for hoist in collect_workspace_hoist_items(db, workspace).iter() {
+        if hoist.module_path.is_empty() {
+            continue;
+        }
+        let module_name = hoist.module_path.join(".");
+        if current_module_path.as_deref() == Some(module_name.as_str()) {
+            continue;
+        }
+        if !warmed.insert(module_name) {
+            continue;
+        }
+        let segments = hoist.module_path.iter().map(String::as_str).collect::<Vec<_>>();
+        let _ = resolver.resolve_for_hoist(&segments);
     }
 }
 
@@ -368,7 +361,10 @@ pub fn format_file(db: &RootDatabase, file: SourceFile) -> Option<String> {
 fn collect_workspace_hoist_items(
     db: &RootDatabase,
     workspace: &Workspace,
-) -> Vec<aivi_hir::resolver::RawHoistItem> {
+) -> Arc<[aivi_hir::resolver::RawHoistItem]> {
+    if let Some(cached) = db.workspace_hoist_cache_entry(workspace.root()) {
+        return cached;
+    }
     let debug_hoist = std::env::var("AIVI_DEBUG_HOIST").is_ok();
     let mut result = Vec::new();
     let mut seen = rustc_hash::FxHashSet::default();
@@ -419,7 +415,7 @@ fn collect_workspace_hoist_items(
     if debug_hoist {
         eprintln!("[hoist-scan] total hoists collected: {}", result.len());
     }
-    result
+    db.store_workspace_hoist_cache_entry(workspace.root().to_path_buf(), Arc::from(result))
 }
 
 /// Walk a module's CST and collect `hoist` declarations as `RawHoistItem`s.

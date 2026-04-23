@@ -41,6 +41,12 @@ Aligned list membership with ambient `Eq` instead of predicate/comparator plumbi
 Updated `stdlib/aivi/list.aivi`, demos, manual pages, and wiki notes so `contains` now means
 `Eq`-driven membership while predicate search stays on `any`.
 
+## [2026-04-23] ingest | MCP GTK screenshots
+
+Extended the CLI MCP surface for richer GTK inspection and agentic interaction.  
+Updated [cli.md](cli.md) for semantic snapshot coordinates, PNG screenshot capture tools, and
+improved `MenuButton`/popover interaction coverage in `crates/aivi-cli/src/mcp.rs`.
+
 ## [2026-04-06] ingest | Initial wiki seeded from codebase
 
 Seeded wiki from source files in `src/`, `crates/`, `manual/`, `stdlib/`, `syntax.md`, `AIVI_RFC.md`.  

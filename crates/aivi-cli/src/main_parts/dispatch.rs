@@ -53,6 +53,10 @@ fn run() -> Result<ExitCode, String> {
         return run_markup(args);
     }
 
+    if first == "__launch-part" {
+        return run_launch_part(args);
+    }
+
     if first == "execute" {
         return run_execute(args);
     }
@@ -382,6 +386,7 @@ fn resolve_run_entrypoint_for_build(
     Ok(ResolvedRunEntrypoint {
         entry_path: resolved.entry_path().to_path_buf(),
         manifest_view: resolved.manifest_view().map(str::to_owned),
+        manifest_launch: Vec::new(),
     })
 }
 
@@ -506,14 +511,23 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
         .as_deref()
         .or(resolved.manifest_view.as_deref())
         .map(str::to_owned);
+    let launch_config = run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
+        SourceProviderContext::current().with_entry_path(&resolved.entry_path),
+    ))
+    .with_launch_parts(resolved.manifest_launch);
     run_markup_file_with_launch_config(
         &resolved.entry_path,
         view.as_deref(),
-        run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
-            SourceProviderContext::current().with_entry_path(&resolved.entry_path),
-        )),
+        launch_config,
         timings,
     )
+}
+
+fn run_launch_part(args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
+    #[cfg(target_os = "linux")]
+    rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::Term))
+        .map_err(|error| format!("failed to supervise launched run part: {error}"))?;
+    run_markup(args)
 }
 
 fn should_spawn_all_manifest_apps(manifest: &aivi_query::AiviManifest) -> bool {
@@ -524,6 +538,7 @@ fn should_spawn_all_manifest_apps(manifest: &aivi_query::AiviManifest) -> bool {
 struct ResolvedRunEntrypoint {
     entry_path: PathBuf,
     manifest_view: Option<String>,
+    manifest_launch: Vec<run_session::RunLaunchPart>,
 }
 
 fn resolve_run_entrypoint(
@@ -536,6 +551,17 @@ fn resolve_run_entrypoint(
     Ok(ResolvedRunEntrypoint {
         entry_path: resolved.entry_path().to_path_buf(),
         manifest_view: resolved.manifest_view().map(str::to_owned),
+        manifest_launch: resolved
+            .manifest_launch()
+            .iter()
+            .map(|part| {
+                run_session::RunLaunchPart::new(
+                    part.label(),
+                    part.entry_path().to_path_buf(),
+                    part.view().map(str::to_owned),
+                )
+            })
+            .collect(),
     })
 }
 

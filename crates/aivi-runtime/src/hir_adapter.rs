@@ -11,7 +11,9 @@ use aivi_backend::{
     Program as BackendProgram, lower_module_with_hir as lower_backend_module,
 };
 use aivi_base::SourceSpan;
-use aivi_core::{RuntimeFragmentSpec, lower_runtime_fragment};
+use aivi_core::{
+    RuntimeFragmentSpec, lower_runtime_fragment, runtime_workspace_item_origin_offsets,
+};
 use aivi_hir as hir;
 use aivi_lambda::lower_module as lower_lambda_module;
 use aivi_typing::RecurrenceTarget;
@@ -294,6 +296,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         let mut graph_builder = SignalGraphBuilder::new();
         let mut owners = Vec::new();
         let mut signals = Vec::new();
+        let mut import_signals = Vec::new();
         let mut public_signals = BTreeMap::<hir::ItemId, SignalHandle>::new();
         let mut source_inputs = BTreeMap::<hir::ItemId, InputHandle>::new();
         let mut signal_origins = BTreeMap::<hir::ItemId, RuntimeSignalOrigin>::new();
@@ -379,6 +382,11 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                 &public_signals,
                 state,
             );
+            import_signals.extend(collect_runtime_import_signal_bindings(
+                workspace_module.module,
+                workspace_module.item_origin_offset,
+                state,
+            ));
         }
         on_progress("seed import handles (entry)".to_owned());
         let entry_import_to_module = entry_state.import_to_module.clone();
@@ -389,6 +397,11 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
             &public_signals,
             &mut entry_state,
         );
+        import_signals.extend(collect_runtime_import_signal_bindings(
+            self.module,
+            0,
+            &entry_state,
+        ));
 
         let mut next_reactive_clause_raw = 0u32;
         for binding in &mut signals {
@@ -950,6 +963,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                 reactive_program,
                 owners: owners.into_boxed_slice(),
                 signals: signals.into_boxed_slice(),
+                import_signals: import_signals.into_boxed_slice(),
                 sources: sources.into_boxed_slice(),
                 tasks: tasks.into_boxed_slice(),
                 gates: gates.into_boxed_slice(),
@@ -1052,25 +1066,17 @@ fn build_workspace_runtime_modules<'a>(
     entry_module: &hir::Module,
     workspace_hirs: &[(&'a str, &'a hir::Module)],
 ) -> Vec<RuntimeWorkspaceModule<'a>> {
-    let entry_item_count =
-        u32::try_from(entry_module.items().iter().count()).expect("HIR item count fits u32");
-    let entry_import_count =
-        u32::try_from(entry_module.imports().iter().count()).expect("HIR import count fits u32");
-    let mut next_origin = entry_item_count + entry_import_count;
+    let offsets = runtime_workspace_item_origin_offsets(entry_module, workspace_hirs)
+        .expect("validated workspace modules should produce runtime origin offsets");
     let mut modules = Vec::with_capacity(workspace_hirs.len());
     for (name, module) in workspace_hirs {
         modules.push(RuntimeWorkspaceModule {
             name,
             module,
-            item_origin_offset: next_origin,
+            item_origin_offset: *offsets
+                .get(&module.file())
+                .expect("workspace origin offset should exist for every module"),
         });
-        let item_count =
-            u32::try_from(module.items().iter().count()).expect("HIR item count fits u32");
-        let import_count =
-            u32::try_from(module.imports().iter().count()).expect("HIR import count fits u32");
-        next_origin = next_origin
-            .saturating_add(item_count)
-            .saturating_add(import_count);
     }
     modules
 }
@@ -1310,6 +1316,21 @@ fn seed_runtime_import_signal_handles(
     }
 }
 
+fn collect_runtime_import_signal_bindings(
+    module: &hir::Module,
+    item_origin_offset: u32,
+    state: &RuntimeModuleSignalState,
+) -> Vec<HirImportSignalBinding> {
+    state
+        .import_signal_handles
+        .iter()
+        .map(|(&import_id, &signal)| HirImportSignalBinding {
+            item: runtime_signal_import_item_id(module, item_origin_offset, import_id),
+            signal,
+        })
+        .collect()
+}
+
 fn workspace_import_source_module<'a>(
     binding: &'a hir::ImportBinding,
     import_to_module: &'a HashMap<hir::ImportId, Box<str>>,
@@ -1394,6 +1415,7 @@ pub struct HirRuntimeAssembly {
     reactive_program: ReactiveProgram,
     owners: Box<[HirOwnerBinding]>,
     signals: Box<[HirSignalBinding]>,
+    import_signals: Box<[HirImportSignalBinding]>,
     sources: Box<[HirSourceBinding]>,
     tasks: Box<[HirTaskBinding]>,
     gates: Box<[HirGateStageBinding]>,
@@ -1407,6 +1429,7 @@ pub struct HirRuntimeAssemblyParts {
     pub reactive_program: crate::ReactiveProgramParts,
     pub owners: Box<[HirOwnerBinding]>,
     pub signals: Box<[HirSignalBinding]>,
+    pub import_signals: Box<[HirImportSignalBinding]>,
     pub sources: Box<[HirSourceBinding]>,
     pub tasks: Box<[HirTaskBinding]>,
     pub gates: Box<[HirGateStageBinding]>,
@@ -1429,6 +1452,10 @@ impl HirRuntimeAssembly {
 
     pub fn signals(&self) -> &[HirSignalBinding] {
         &self.signals
+    }
+
+    pub fn import_signals(&self) -> &[HirImportSignalBinding] {
+        &self.import_signals
     }
 
     pub fn sources(&self) -> &[HirSourceBinding] {
@@ -1508,6 +1535,7 @@ impl HirRuntimeAssembly {
             reactive_program,
             owners,
             signals,
+            import_signals,
             sources,
             tasks,
             gates,
@@ -1519,6 +1547,7 @@ impl HirRuntimeAssembly {
             reactive_program: reactive_program.into_parts(),
             owners,
             signals,
+            import_signals,
             sources,
             tasks,
             gates,
@@ -1533,6 +1562,7 @@ impl HirRuntimeAssembly {
             reactive_program,
             owners,
             signals,
+            import_signals,
             sources,
             tasks,
             gates,
@@ -1544,6 +1574,7 @@ impl HirRuntimeAssembly {
             reactive_program: ReactiveProgram::from_parts(reactive_program),
             owners,
             signals,
+            import_signals,
             sources,
             tasks,
             gates,
@@ -1575,6 +1606,12 @@ pub struct HirSignalBinding {
     pub owner: OwnerHandle,
     pub kind: HirSignalBindingKind,
     pub source_input: Option<InputHandle>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HirImportSignalBinding {
+    pub item: hir::ItemId,
+    pub signal: SignalHandle,
 }
 
 impl HirSignalBinding {

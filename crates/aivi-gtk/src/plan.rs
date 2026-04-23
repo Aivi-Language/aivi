@@ -1,10 +1,44 @@
 use std::{collections::HashMap, error::Error, fmt};
 
-use aivi_base::SourceSpan;
+use aivi_base::{FileId, SourceSpan};
 use aivi_hir::{
     BindingId, ControlNodeId, ExprId, MarkupNodeId, Name, NamePath, NonEmpty, PatternId,
     TextLiteral,
 };
+
+/// Module-qualified expression reference for runtime hydration.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct ExprRef {
+    pub origin_file: FileId,
+    pub expr: ExprId,
+}
+
+/// Module-qualified binding reference for runtime hydration.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct BindingRef {
+    pub origin_file: FileId,
+    pub binding: BindingId,
+}
+
+/// Module-qualified pattern reference for runtime hydration.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct PatternRef {
+    pub origin_file: FileId,
+    pub pattern: PatternId,
+}
+
+/// Interpolated text with module-qualified expression references.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InterpolatedText {
+    pub origin_file: FileId,
+    pub literal: TextLiteral,
+}
 
 /// One node in the lowered widget plan arena.
 #[derive(
@@ -37,6 +71,16 @@ impl fmt::Display for PlanNodeId {
 pub enum StableNodeId {
     Markup(MarkupNodeId),
     Control(ControlNodeId),
+    ExpandedMarkup {
+        expansion: u32,
+        origin_file: FileId,
+        origin: MarkupNodeId,
+    },
+    ExpandedControl {
+        expansion: u32,
+        origin_file: FileId,
+        origin: ControlNodeId,
+    },
 }
 
 /// Maximum nesting depth for a widget plan.
@@ -380,8 +424,8 @@ pub struct SetterBindingPlan {
 /// One value source for a direct setter binding.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SetterSource {
-    Expr(ExprId),
-    InterpolatedText(TextLiteral),
+    Expr(ExprRef),
+    InterpolatedText(InterpolatedText),
 }
 
 /// Concrete update mode mandated by the RFC.
@@ -401,7 +445,7 @@ pub enum SetterTeardown {
 pub struct EventHookPlan {
     pub site: AttributeSite,
     pub name: Name,
-    pub handler: ExprId,
+    pub handler: ExprRef,
     pub hookup: EventHookStrategy,
     pub teardown: EventHookTeardown,
 }
@@ -429,7 +473,7 @@ pub struct AttributeSite {
 /// Lowered `<show>` control.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShowNode {
-    pub when: ExprId,
+    pub when: ExprRef,
     pub mount: ShowMountPolicy,
     pub children: Vec<ChildOp>,
 }
@@ -438,14 +482,14 @@ pub struct ShowNode {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ShowMountPolicy {
     UnmountWhenHidden,
-    KeepMounted { decision: ExprId },
+    KeepMounted { decision: ExprRef },
 }
 
 /// Lowered `<each>` control with explicit localized child management policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EachNode {
-    pub collection: ExprId,
-    pub binding: BindingId,
+    pub collection: ExprRef,
+    pub binding: BindingRef,
     pub child_policy: RepeatedChildPolicy,
     pub item_children: Vec<ChildOp>,
     pub empty_branch: Option<PlanNodeId>,
@@ -458,7 +502,7 @@ pub enum RepeatedChildPolicy {
         updates: ChildUpdateMode,
     },
     Keyed {
-        key: ExprId,
+        key: ExprRef,
         updates: ChildUpdateMode,
     },
 }
@@ -478,14 +522,14 @@ pub struct EmptyNode {
 /// Lowered `<match>` control.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MatchNode {
-    pub scrutinee: ExprId,
+    pub scrutinee: ExprRef,
     pub cases: NonEmpty<PlanNodeId>,
 }
 
 /// Lowered `<case>` branch.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaseNode {
-    pub pattern: PatternId,
+    pub pattern: PatternRef,
     pub children: Vec<ChildOp>,
 }
 
@@ -498,8 +542,8 @@ pub struct FragmentNode {
 /// Lowered `<with>` control.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WithNode {
-    pub value: ExprId,
-    pub binding: BindingId,
+    pub value: ExprRef,
+    pub binding: BindingRef,
     pub children: Vec<ChildOp>,
 }
 
@@ -667,8 +711,14 @@ mod tests {
                     stable_id: StableNodeId::Control(ControlNodeId::from_raw(0)),
                     span: span(),
                     kind: PlanNodeKind::Each(EachNode {
-                        collection: aivi_hir::ExprId::from_raw(0),
-                        binding: aivi_hir::BindingId::from_raw(0),
+                        collection: super::ExprRef {
+                            origin_file: FileId::new(0),
+                            expr: aivi_hir::ExprId::from_raw(0),
+                        },
+                        binding: super::BindingRef {
+                            origin_file: FileId::new(0),
+                            binding: aivi_hir::BindingId::from_raw(0),
+                        },
                         child_policy: RepeatedChildPolicy::Positional {
                             updates: super::ChildUpdateMode::Localized,
                         },
@@ -704,8 +754,14 @@ mod tests {
                     stable_id: StableNodeId::Control(ControlNodeId::from_raw(0)),
                     span: span(),
                     kind: PlanNodeKind::Each(EachNode {
-                        collection: aivi_hir::ExprId::from_raw(0),
-                        binding: aivi_hir::BindingId::from_raw(0),
+                        collection: super::ExprRef {
+                            origin_file: FileId::new(0),
+                            expr: aivi_hir::ExprId::from_raw(0),
+                        },
+                        binding: super::BindingRef {
+                            origin_file: FileId::new(0),
+                            binding: aivi_hir::BindingId::from_raw(0),
+                        },
                         child_policy: RepeatedChildPolicy::Positional {
                             updates: super::ChildUpdateMode::Localized,
                         },
