@@ -379,6 +379,29 @@ impl<'a> ModuleLowerer<'a> {
         // ── Compile workspace module items ───────────────────────────────────
         self.seed_items()?;
         self.lower_general_exprs();
+        let has_completeness_errors = self.errors.iter().any(|e| {
+            matches!(
+                e,
+                LoweringError::MissingGeneralExprElaboration { .. }
+                    | LoweringError::MissingDomainMemberElaboration { .. }
+                    | LoweringError::MissingInstanceMemberElaboration { .. }
+            )
+        });
+        if has_completeness_errors {
+            return Err(LoweringErrors::new(std::mem::take(&mut self.errors)));
+        }
+        self.seed_signal_dependencies();
+        self.lower_gate_stages();
+        self.lower_truthy_falsy_stages();
+        self.lower_fanout_stages();
+        self.lower_temporal_stages();
+        self.lower_recurrences();
+        self.finalize_pipes()?;
+        self.lower_sources()?;
+        self.lower_decode_programs()?;
+        if !self.errors.is_empty() {
+            return Err(LoweringErrors::new(std::mem::take(&mut self.errors)));
+        }
 
         // ── Advance ws_origin_base past everything this module may have used ─
         // next_synthetic_item_origin_raw now points to the high-water mark of all

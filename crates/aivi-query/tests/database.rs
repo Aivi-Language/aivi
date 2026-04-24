@@ -251,17 +251,15 @@ fn hir_queries_refresh_workspace_hoists_after_workspace_files_change() {
 
     let first = hir_module(&db, main);
     assert!(
-        first.hir_diagnostics()
+        first
+            .hir_diagnostics()
             .iter()
             .any(|diagnostic| diagnostic.message.contains("unknown term `plusOne`")),
         "without a hoisted provider the symbol should stay unresolved: {:?}",
         first.hir_diagnostics()
     );
 
-    workspace.write(
-        "shared/ops.aivi",
-        "hoist\nfunc plusOne = x =>\n    x + 1\n",
-    );
+    workspace.write("shared/ops.aivi", "hoist\nfunc plusOne = x =>\n    x + 1\n");
     assert!(main.set_text(&db, "value answer = plusOne 41\n\n".to_owned()));
 
     let second = hir_module(&db, main);

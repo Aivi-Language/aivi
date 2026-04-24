@@ -301,6 +301,10 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         let mut source_inputs = BTreeMap::<hir::ItemId, InputHandle>::new();
         let mut signal_origins = BTreeMap::<hir::ItemId, RuntimeSignalOrigin>::new();
         let workspace_modules = build_workspace_runtime_modules(self.module, self.workspace_hirs);
+        let workspace_recurrences = workspace_modules
+            .iter()
+            .map(|workspace_module| hir::elaborate_recurrences(workspace_module.module))
+            .collect::<Vec<_>>();
         let mut workspace_states = Vec::with_capacity(workspace_modules.len());
         for (module_index, workspace_module) in workspace_modules.iter().enumerate() {
             on_progress(format!(
@@ -702,6 +706,22 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         }
         let mut task_wakeups = BTreeMap::new();
         on_progress("collect task wakeups".to_owned());
+        for (workspace_module, recurrences) in
+            workspace_modules.iter().zip(workspace_recurrences.iter())
+        {
+            for node in recurrences.nodes() {
+                let owner = runtime_global_item_id(workspace_module.item_origin_offset, node.owner);
+                let hir::RecurrenceNodeOutcome::Planned(plan) = &node.outcome else {
+                    continue;
+                };
+                if plan.target.target() != RecurrenceTarget::Task {
+                    continue;
+                }
+                if task_wakeups.insert(owner, plan.wakeup).is_some() {
+                    errors.push(HirRuntimeAdapterError::DuplicateTaskOwner { owner });
+                }
+            }
+        }
         for node in self.recurrences.nodes() {
             if !self.includes_item(node.owner) {
                 continue;
@@ -914,6 +934,37 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
         let mut recurrences = Vec::new();
         let mut recurrence_sites = BTreeSet::new();
         on_progress("plan recurrences".to_owned());
+        for (workspace_module, recurrences_report) in
+            workspace_modules.iter().zip(workspace_recurrences.iter())
+        {
+            for node in recurrences_report.nodes() {
+                let owner = runtime_global_item_id(workspace_module.item_origin_offset, node.owner);
+                let site = HirRecurrenceNodeId::new(owner, node.pipe_expr, node.start_stage_index);
+                if !recurrence_sites.insert(site) {
+                    errors.push(HirRuntimeAdapterError::DuplicateRecurrenceNode { site });
+                    continue;
+                }
+                let owner_signal = signal_derived_handle(&signals, owner);
+                match &node.outcome {
+                    hir::RecurrenceNodeOutcome::Planned(plan) => {
+                        recurrences.push(HirRecurrenceBinding {
+                            site,
+                            start_stage_span: node.start_stage_span,
+                            owner_signal,
+                            wakeup_signal: plan.wakeup_signal.map(|signal| {
+                                runtime_global_item_id(workspace_module.item_origin_offset, signal)
+                            }),
+                        });
+                    }
+                    hir::RecurrenceNodeOutcome::Blocked(blocked) => {
+                        errors.push(HirRuntimeAdapterError::BlockedRecurrenceNode {
+                            site,
+                            blockers: blocked.blockers.clone().into_boxed_slice(),
+                        });
+                    }
+                }
+            }
+        }
         for node in self.recurrences.nodes() {
             if !self.includes_item(node.owner) {
                 continue;
@@ -3403,7 +3454,10 @@ mod tests {
     use std::collections::HashSet;
 
     use aivi_base::SourceDatabase;
-    use aivi_hir::{DecodeProgramStep, Item, lower_module};
+    use aivi_hir::{
+        DecodeProgramStep, ImportModuleResolution, ImportResolver, Item, exports, lower_module,
+        lower_module_with_resolver, resolver::RawHoistItem,
+    };
     use aivi_syntax::parse_module;
     use aivi_typing::{BuiltinSourceProvider, RecurrenceWakeupKind};
 
@@ -4007,6 +4061,116 @@ signal gated : Signal Int =
             recurrence.wakeup_signal,
             Some(user_events_id),
             "accumulate recurrence handoff should preserve its upstream wakeup signal"
+        );
+    }
+
+    #[test]
+    fn workspace_recurrence_bindings_are_added_to_runtime_assembly() {
+        struct Resolver {
+            module_file: &'static str,
+            module_text: &'static str,
+        }
+
+        impl ImportResolver for Resolver {
+            fn resolve(&self, _path: &[&str]) -> ImportModuleResolution {
+                let lowered = lower_text(self.module_file, self.module_text);
+                if lowered.has_errors() {
+                    return ImportModuleResolution::Missing;
+                }
+                ImportModuleResolution::Resolved(exports(lowered.module()))
+            }
+
+            fn workspace_hoist_items(&self) -> Vec<RawHoistItem> {
+                Vec::new()
+            }
+        }
+
+        let workspace_text = r#"
+type State = {
+    count: Int
+}
+
+value initial : State = { count: 7 }
+
+type Unit -> State -> State
+func step = tick state => state <| { count: state.count + 1 }
+
+signal bump : Signal Unit
+signal state : Signal State = bump +|> initial step
+signal count : Signal Int = state |> current => current.count
+
+export count
+"#;
+
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(
+            "main.aivi",
+            r#"
+use shared.nav (count)
+
+value currentCount : Int = count
+"#,
+        );
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "entry should parse before HIR lowering: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+        let resolver = Resolver {
+            module_file: "shared/nav.aivi",
+            module_text: workspace_text,
+        };
+        let entry = lower_module_with_resolver(&parsed.module, Some(&resolver));
+        assert!(
+            !entry.has_errors(),
+            "entry should lower cleanly: {:?}",
+            entry.diagnostics()
+        );
+        let workspace = lower_text("shared/nav.aivi", workspace_text);
+        assert!(
+            !workspace.has_errors(),
+            "workspace module should lower cleanly: {:?}",
+            workspace.diagnostics()
+        );
+
+        let included_items = entry
+            .module()
+            .root_items()
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        let assembly = assemble_hir_runtime_with_items_and_workspace(
+            entry.module(),
+            &[("shared.nav", workspace.module())],
+            &included_items,
+        )
+        .expect("workspace runtime assembly should succeed");
+
+        let offsets = runtime_workspace_item_origin_offsets(
+            entry.module(),
+            &[("shared.nav", workspace.module())],
+        )
+        .expect("workspace origin offsets should exist");
+        let offset = *offsets
+            .get(&workspace.module().file())
+            .expect("workspace module offset should exist");
+        let state_owner = runtime_global_item_id(offset, item_id(workspace.module(), "state"));
+        let bump_owner = runtime_global_item_id(offset, item_id(workspace.module(), "bump"));
+        assert!(
+            assembly
+                .recurrences()
+                .iter()
+                .any(|binding| binding.site.owner == state_owner),
+            "workspace recurrence binding should be preserved in runtime assembly"
+        );
+        assert!(
+            assembly
+                .recurrences()
+                .iter()
+                .find(|binding| binding.site.owner == state_owner)
+                .is_some_and(|binding| binding.wakeup_signal == Some(bump_owner)),
+            "workspace recurrence binding should point at the globalized wakeup signal"
         );
     }
 

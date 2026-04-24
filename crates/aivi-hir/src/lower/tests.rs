@@ -4,11 +4,12 @@ use aivi_base::{Severity, SourceDatabase};
 use aivi_syntax::parse_module;
 use aivi_typing::{BuiltinSourceProvider, Kind};
 
-use super::{lower_module, path_text};
+use super::{lower_module, lower_module_with_resolver, path_text};
 use crate::{
     ApplicativeSpineHead, BuiltinTerm, BuiltinType, ClusterFinalizer, ClusterPresentation,
-    DecoratorPayload, DomainMemberKind, DomainMemberResolution, ExportResolution, ExprKind,
-    HoistKindFilter, ImportBindingMetadata, ImportBundleKind, ImportValueType, IntrinsicValue,
+    DecoratorPayload, DomainMemberKind, DomainMemberResolution, ExportResolution, ExportedName,
+    ExportedNameKind, ExportedNames, ExprKind, HoistKindFilter, ImportBindingMetadata,
+    ImportBundleKind, ImportModuleResolution, ImportResolver, ImportValueType, IntrinsicValue,
     Item, LiteralSuffixResolution, PipeStageKind, ReactiveUpdateBodyMode, RecordRowTransform,
     RecurrenceWakeupDecoratorKind, ResolutionState, SourceProviderRef, TermResolution, TextSegment,
     TypeItemBody, TypeKind, TypeResolution, ValidationMode, exports,
@@ -32,6 +33,22 @@ fn lower_text(path: &str, text: &str) -> super::LoweringResult {
         parsed.all_diagnostics().collect::<Vec<_>>()
     );
     lower_module(&parsed.module)
+}
+
+fn lower_text_with_resolver(
+    path: &str,
+    text: &str,
+    resolver: &dyn ImportResolver,
+) -> super::LoweringResult {
+    let mut sources = SourceDatabase::new();
+    let file_id = sources.add_file(path, text);
+    let parsed = parse_module(&sources[file_id]);
+    assert!(
+        !parsed.has_errors(),
+        "fixture {path} should parse before HIR lowering: {:?}",
+        parsed.all_diagnostics().collect::<Vec<_>>()
+    );
+    lower_module_with_resolver(&parsed.module, Some(resolver))
 }
 
 fn lower_fixture(path: &str) -> super::LoweringResult {
@@ -3567,6 +3584,115 @@ fn use_member_imports_preserve_compiler_known_metadata() {
             ResolutionState::Resolved(TypeResolution::Import(_))
         )),
         "imported type references should resolve through import bindings: {imported_type_refs:?}"
+    );
+}
+
+#[test]
+fn bare_use_imports_all_resolved_module_exports() {
+    struct CatalogResolver;
+
+    impl ImportResolver for CatalogResolver {
+        fn resolve(&self, path: &[&str]) -> ImportModuleResolution {
+            if path == ["shared", "catalog"] {
+                return ImportModuleResolution::Resolved(ExportedNames {
+                    names: vec![
+                        ExportedName {
+                            name: "primaryLabel".to_owned(),
+                            kind: ExportedNameKind::Value,
+                            metadata: ImportBindingMetadata::Value {
+                                ty: ImportValueType::Primitive(BuiltinType::Text),
+                            },
+                            callable_type: None,
+                            deprecation: None,
+                        },
+                        ExportedName {
+                            name: "Request".to_owned(),
+                            kind: ExportedNameKind::Type,
+                            metadata: ImportBindingMetadata::TypeConstructor {
+                                type_item: None,
+                                constructors: None,
+                                kind: Kind::constructor(1),
+                                fields: None,
+                                definition: None,
+                            },
+                            callable_type: None,
+                            deprecation: None,
+                        },
+                        ExportedName {
+                            name: "joinLabels".to_owned(),
+                            kind: ExportedNameKind::Function,
+                            metadata: ImportBindingMetadata::Value {
+                                ty: ImportValueType::Arrow {
+                                    parameter: Box::new(ImportValueType::Primitive(
+                                        BuiltinType::Text,
+                                    )),
+                                    result: Box::new(ImportValueType::Arrow {
+                                        parameter: Box::new(ImportValueType::Primitive(
+                                            BuiltinType::Text,
+                                        )),
+                                        result: Box::new(ImportValueType::Primitive(
+                                            BuiltinType::Text,
+                                        )),
+                                    }),
+                                },
+                            },
+                            callable_type: Some(ImportValueType::Arrow {
+                                parameter: Box::new(ImportValueType::Primitive(BuiltinType::Text)),
+                                result: Box::new(ImportValueType::Arrow {
+                                    parameter: Box::new(ImportValueType::Primitive(
+                                        BuiltinType::Text,
+                                    )),
+                                    result: Box::new(ImportValueType::Primitive(BuiltinType::Text)),
+                                }),
+                            }),
+                            deprecation: None,
+                        },
+                    ],
+                    instances: vec![],
+                });
+            }
+            ImportModuleResolution::Missing
+        }
+    }
+
+    let lowered = lower_text_with_resolver(
+        "use-module-imports.aivi",
+        r#"
+use shared.catalog
+
+type PrimaryRequest = (Request Text)
+
+value primary : Text = primaryLabel
+value banner : Text = joinLabels primary "ready"
+"#,
+        &CatalogResolver,
+    );
+    assert!(
+        !lowered.has_errors(),
+        "bare module import should lower cleanly: {:?}",
+        lowered.diagnostics()
+    );
+
+    let report = lowered
+        .module()
+        .validate(ValidationMode::RequireResolvedNames);
+    assert!(
+        report.is_ok(),
+        "bare module import should validate as resolved HIR: {:?}",
+        report.diagnostics()
+    );
+
+    let imported_names = lowered
+        .module()
+        .imports()
+        .iter()
+        .map(|(_, import)| import.local_name.text().to_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        imported_names.contains(&"primaryLabel".to_owned())
+            && imported_names.contains(&"Request".to_owned())
+            && imported_names.contains(&"joinLabels".to_owned()),
+        "expected bare use to import every exported name, got {imported_names:?}"
     );
 }
 

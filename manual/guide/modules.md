@@ -15,6 +15,14 @@ use aivi.result (isOk)
 
 Imported names become available to the rest of the file.
 
+When you want the whole exported surface of a module, omit the import list:
+
+```aivi
+use aivi.http
+```
+
+That form brings every exported name from `aivi.http` into the local file scope.
+
 ## Import aliases
 
 Use `as` when you want a local name that differs from the exported one:
@@ -179,6 +187,7 @@ local definitions > use imports > hoisted globals > ambient prelude
 
 | Form | Meaning |
 | --- | --- |
+| `use module` | Import every exported name from this module into this file |
 | `use module (names)` | Import selected names into this file |
 | `use module (name as localName)` | Import one name under a local alias |
 | `export name` | Export one name to importers |

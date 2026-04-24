@@ -3561,6 +3561,12 @@ value view =
     }
 
     #[test]
+    fn formatter_preserves_bare_use_items() {
+        let formatted = format_text("use aivi.network\n");
+        assert_eq!(formatted, "use aivi.network\n");
+    }
+
+    #[test]
     fn formatter_normalizes_use_import_aliases() {
         let formatted = format_text("use aivi.network(http as primary,Request as HttpRequest)\n");
         assert_eq!(

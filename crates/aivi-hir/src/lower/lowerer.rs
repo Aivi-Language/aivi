@@ -1500,7 +1500,7 @@ impl<'a> Lowerer<'a> {
             // self-import where every requested name is a known intrinsic and suppress
             // the cycle error in that case.
             let is_direct_self_import = cycle.modules().iter().all(|m| m.as_ref() == module_name);
-            let all_intrinsics = item.imports.iter().all(|import| {
+            let all_intrinsics = !item.imports.is_empty() && item.imports.iter().all(|import| {
                 import
                     .path
                     .segments
@@ -1536,7 +1536,7 @@ impl<'a> Lowerer<'a> {
                 );
             }
         }
-        let mut imports = item
+        let mut import_specs = item
             .imports
             .iter()
             .map(|import| {
@@ -1551,12 +1551,29 @@ impl<'a> Lowerer<'a> {
                     .as_ref()
                     .map(|alias| self.make_name(&alias.text, alias.span))
                     .unwrap_or_else(|| imported_name.clone());
+                (import.path.span, imported_name, local_name)
+            })
+            .collect::<Vec<_>>();
+        if import_specs.is_empty()
+            && let ImportModuleResolution::Resolved(exports) = &module_resolution
+        {
+            import_specs = exports
+                .iter()
+                .map(|exported| {
+                    let imported_name = self.make_name(&exported.name, item.base.span);
+                    (item.base.span, imported_name.clone(), imported_name)
+                })
+                .collect();
+        }
+        let mut imports = import_specs
+            .into_iter()
+            .map(|(span, imported_name, local_name)| {
                 let (resolution, metadata, callable_type, deprecation) =
                     self.resolve_import_binding(&module_name, &imported_name, &module_resolution);
                 self.alloc_import(ImportBinding {
-                    span: import.path.span,
+                    span,
                     source_module: Some(module_name.clone().into()),
-                    imported_name: imported_name.clone(),
+                    imported_name,
                     local_name,
                     resolution,
                     metadata,

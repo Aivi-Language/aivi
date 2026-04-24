@@ -203,7 +203,9 @@ impl ImportResolver for WorkspaceImportResolver<'_> {
     }
 
     fn workspace_hoist_items(&self) -> Vec<aivi_hir::resolver::RawHoistItem> {
-        collect_workspace_hoist_items(self.db, self.workspace).as_ref().to_vec()
+        collect_workspace_hoist_items(self.db, self.workspace)
+            .as_ref()
+            .to_vec()
     }
 
     fn current_module_path(&self) -> Option<String> {
@@ -304,7 +306,11 @@ fn prewarm_workspace_hoist_exports(db: &RootDatabase, workspace: &Workspace, fil
         if !warmed.insert(module_name) {
             continue;
         }
-        let segments = hoist.module_path.iter().map(String::as_str).collect::<Vec<_>>();
+        let segments = hoist
+            .module_path
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
         let _ = resolver.resolve_for_hoist(&segments);
     }
 }

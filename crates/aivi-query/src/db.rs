@@ -8,8 +8,8 @@ use std::{
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use parking_lot::RwLock;
 use aivi_hir::resolver::RawHoistItem;
+use parking_lot::RwLock;
 
 use crate::{
     SourceFile,

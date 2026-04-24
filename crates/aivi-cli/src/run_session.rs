@@ -2015,8 +2015,10 @@ impl aivi_gtk::GtkEventSink<RunHostValue> for RunEventSink<'_> {
         let handler = if let Some(handler) = self.handlers.get(&route.binding.handler).cloned() {
             handler
         } else if let Some(context) = self.lazy_handlers {
-            let resolved = crate::resolve_deferred_run_event_handler(context, route.binding.handler)?;
-            self.handlers.insert(route.binding.handler, resolved.clone());
+            let resolved =
+                crate::resolve_deferred_run_event_handler(context, route.binding.handler)?;
+            self.handlers
+                .insert(route.binding.handler, resolved.clone());
             resolved
         } else {
             return Err(format!(
@@ -2066,8 +2068,8 @@ mod tests {
         render_run_error_report_with_color, start_run_session_with_launch_config,
         start_run_session_with_launch_config_and_reporter,
     };
-    use crate::{RunHydrationStaticState, plan_run_hydration_profiled};
     use crate::{RunHydrationPreparationMode, prepare_run_artifact_with_metrics_and_progress};
+    use crate::{RunHydrationStaticState, plan_run_hydration_profiled};
     use aivi_backend::{DetachedRuntimeValue, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};

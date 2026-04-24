@@ -171,14 +171,6 @@ impl McpHostState {
             prepared.artifact,
             prepared.launch_config,
         )?;
-        if prepared.sources_paused {
-            harness.with_access(|access| {
-                let driver = access.driver();
-                for binding in driver.source_bindings() {
-                    let _ = driver.set_source_mode(binding.instance, GlibLinkedSourceMode::Manual);
-                }
-            });
-        }
         harness.install_quit_on_last_window_close();
         harness.present_root_windows()?;
         let view_name = harness.view_name().to_owned();
@@ -194,6 +186,22 @@ impl McpHostState {
         if let Err(error) = self.settle_session() {
             self.stop_session();
             return Err(error);
+        }
+        if prepared.sources_paused {
+            if let Some(session) = &self.session {
+                session.harness.with_access(|access| {
+                    let driver = access.driver();
+                    for binding in driver.source_bindings() {
+                        let _ =
+                            driver.set_source_mode(binding.instance, GlibLinkedSourceMode::Manual);
+                    }
+                    access.process_pending_work()
+                })?;
+            }
+            if let Err(error) = self.settle_session() {
+                self.stop_session();
+                return Err(error);
+            }
         }
         self.session_status()
     }
@@ -399,11 +407,8 @@ impl McpHostState {
             .filter_map(|widget| {
                 let root_role = widget_role(&widget);
                 let root_id = self.widget_id_for(&widget);
-                let snapshot = self.snapshot_widget(
-                    &widget,
-                    &widget,
-                    vec![format!("{root_role}[{root_id}]")],
-                );
+                let snapshot =
+                    self.snapshot_widget(&widget, &widget, vec![format!("{root_role}[{root_id}]")]);
                 match (snapshot, args.include_hidden.unwrap_or(false)) {
                     (Ok(snapshot), true) => Some(Ok(snapshot)),
                     (Ok(snapshot), false) if snapshot.visible => Some(Ok(snapshot)),
@@ -431,7 +436,8 @@ impl McpHostState {
         if roots.is_empty() {
             return Err("the app is not running; call `launch_app` first".to_owned());
         }
-        roots.into_iter()
+        roots
+            .into_iter()
             .filter(|root| root.is_visible())
             .map(|root| self.capture_widget_png(&root))
             .collect()
@@ -688,9 +694,9 @@ impl McpHostState {
             .unwrap_or_else(|| widget.clone());
         let texture = render_widget_texture(widget, &surface_root)?;
         let path = next_capture_path(widget, "png")?;
-        texture
-            .save_to_png(&path)
-            .map_err(|error| format!("failed to save screenshot to `{}`: {error}", path.display()))?;
+        texture.save_to_png(&path).map_err(|error| {
+            format!("failed to save screenshot to `{}`: {error}", path.display())
+        })?;
         let surface_id = format!("widget:{}", self.widget_id_for(&surface_root));
         Ok(GtkScreenshotCapture {
             path: path.display().to_string(),
@@ -745,6 +751,23 @@ fn prepare_launch_request(
         validate_module_name(view)?;
     }
     let sources_paused = source_context.sources_paused.unwrap_or(false);
+    let requested_view_name = requested_view.as_deref();
+    let launch_config = run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
+        build_source_context(source_context)?.with_entry_path(entry_path),
+    ));
+    let cache_home = launch_config.cache_home().ok();
+    if let Some(cache_home) = cache_home.as_deref() {
+        if let Some(artifact) =
+            load_cached_source_run_artifact(cache_home, entry_path, requested_view_name)
+        {
+            return Ok(PreparedLaunch {
+                entry_path: entry_path.to_path_buf(),
+                artifact,
+                launch_config,
+                sources_paused,
+            });
+        }
+    }
     let snapshot = WorkspaceHirSnapshot::load(entry_path)?;
     if let Some(diagnostics) = rendered_workspace_errors(&snapshot) {
         return Err(diagnostics);
@@ -755,22 +778,34 @@ fn prepare_launch_request(
         .iter()
         .map(|(name, arc)| (name.as_str(), arc.module()))
         .collect();
-    let artifact = prepare_run_artifact_with_metrics_and_progress(
+    let prepared = prepare_run_artifact_with_metrics_and_progress(
         &snapshot.sources,
         lowered.module(),
         &workspace_hirs,
-        requested_view.as_deref(),
+        requested_view_name,
         Some(snapshot.backend_query_context()),
-        RunHydrationPreparationMode::DeferredLive,
+        if cache_home.is_some() {
+            RunHydrationPreparationMode::Eager
+        } else {
+            RunHydrationPreparationMode::DeferredLive
+        },
         |_| {},
-    )?
-    .artifact;
+    )?;
+    if let Some(cache_home) = cache_home.as_deref() {
+        if let Ok(frozen) = freeze_run_artifact(&prepared.artifact) {
+            let _ = store_cached_frozen_run_image(
+                cache_home,
+                entry_path,
+                requested_view_name,
+                &snapshot,
+                &frozen.bytes,
+            );
+        }
+    }
     Ok(PreparedLaunch {
         entry_path: entry_path.to_path_buf(),
-        artifact,
-        launch_config: run_session::RunLaunchConfig::new(SourceProviderManager::with_context(
-            build_source_context(source_context)?.with_entry_path(entry_path),
-        )),
+        artifact: prepared.artifact,
+        launch_config,
         sources_paused,
     })
 }
@@ -1115,7 +1150,7 @@ fn handle_tool_call(
                 json!({ "source": result.source }),
             )
         }
-                "publish_source_value" => {
+        "publish_source_value" => {
             let args: PublishSourceValueArgs = serde_json::from_value(arguments)
                 .map_err(|error| JsonRpcError::invalid_params(error.to_string()))?;
             let result = controller
@@ -2296,7 +2331,10 @@ fn emit_activate_event(widget: &gtk::Widget) -> Result<(), String> {
     ))
 }
 
-fn widget_bounds_in_surface(widget: &gtk::Widget, surface_root: &gtk::Widget) -> Option<(i32, i32)> {
+fn widget_bounds_in_surface(
+    widget: &gtk::Widget,
+    surface_root: &gtk::Widget,
+) -> Option<(i32, i32)> {
     let rect = widget.compute_bounds(surface_root)?;
     Some((rect.x().round() as i32, rect.y().round() as i32))
 }
@@ -2309,7 +2347,10 @@ fn default_widget_position(widget: &gtk::Widget, surface_root: &gtk::Widget) -> 
     (allocation.x(), allocation.y())
 }
 
-fn render_widget_texture(widget: &gtk::Widget, surface_root: &gtk::Widget) -> Result<gtk::gdk::Texture, String> {
+fn render_widget_texture(
+    widget: &gtk::Widget,
+    surface_root: &gtk::Widget,
+) -> Result<gtk::gdk::Texture, String> {
     let width = widget.width();
     let height = widget.height();
     if width <= 0 || height <= 0 {
@@ -2321,12 +2362,24 @@ fn render_widget_texture(widget: &gtk::Widget, surface_root: &gtk::Widget) -> Re
     let window = surface_root
         .clone()
         .downcast::<gtk::Window>()
-        .map_err(|_| format!("surface root `{}` is not a gtk::Window", surface_root.type_().name()))?;
-    let surface = window
-        .surface()
-        .ok_or_else(|| format!("window `{}` does not have a realized GDK surface yet", window.type_().name()))?;
-    let renderer = gtk::gsk::Renderer::for_surface(&surface)
-        .ok_or_else(|| format!("failed to create a GSK renderer for `{}`", window.type_().name()))?;
+        .map_err(|_| {
+            format!(
+                "surface root `{}` is not a gtk::Window",
+                surface_root.type_().name()
+            )
+        })?;
+    let surface = window.surface().ok_or_else(|| {
+        format!(
+            "window `{}` does not have a realized GDK surface yet",
+            window.type_().name()
+        )
+    })?;
+    let renderer = gtk::gsk::Renderer::for_surface(&surface).ok_or_else(|| {
+        format!(
+            "failed to create a GSK renderer for `{}`",
+            window.type_().name()
+        )
+    })?;
     if !renderer.is_realized() {
         renderer
             .realize(Some(&surface))
@@ -2868,13 +2921,15 @@ mod tests {
         CaptureWidgetScreenshotArgs, ConfiguredTarget, EmitGtkEventArgs, FindWidgetsArgs,
         JsonRpcError, JsonRpcRequest, JsonRpcTransport, LaunchSourceArgs, MCP_PROTOCOL_VERSION,
         McpHostController, McpHostState, WidgetSnapshot, detect_json_rpc_transport,
-        handle_json_rpc_request, parse_prefixed_u32, parse_prefixed_u64,
-        prepare_launch_request, read_json_rpc_message, resolve_initial_entry_path,
-        runtime_value_from_json, write_json_rpc_message,
+        handle_json_rpc_request, load_cached_source_run_artifact, parse_prefixed_u32,
+        parse_prefixed_u64, prepare_launch_request, read_json_rpc_message,
+        resolve_initial_entry_path, runtime_value_from_json, write_json_rpc_message,
     };
     use aivi_backend::RuntimeValue;
     use serde_json::{Value as JsonValue, json};
-    use std::{io::BufReader, path::PathBuf, sync::mpsc as sync_mpsc};
+    use std::{
+        collections::BTreeMap, io::BufReader, path::PathBuf, sync::mpsc as sync_mpsc, time::Instant,
+    };
 
     #[test]
     fn prefixed_ids_accept_raw_and_prefixed_forms() {
@@ -3105,6 +3160,40 @@ mod tests {
     }
 
     #[test]
+    fn prepare_launch_request_writes_and_reuses_source_run_cache() {
+        let workspace = tempfile::tempdir().expect("tempdir should create");
+        let entry = repo_path("demos/snake.aivi");
+        let cache_home = workspace.path().join("cache-home");
+        let args = LaunchSourceArgs {
+            cwd: Some(workspace.path().display().to_string()),
+            env: Some(BTreeMap::from([(
+                "XDG_CACHE_HOME".to_owned(),
+                cache_home.display().to_string(),
+            )])),
+            ..LaunchSourceArgs::default()
+        };
+
+        let first_started = Instant::now();
+        prepare_launch_request(&entry, Some("main".to_owned()), args.clone())
+            .expect("first prepare should succeed");
+        let first_elapsed = first_started.elapsed();
+        assert!(
+            load_cached_source_run_artifact(&cache_home, &entry, Some("main")).is_some(),
+            "first prepare should persist a reusable source run cache entry"
+        );
+
+        let second_started = Instant::now();
+        let second = prepare_launch_request(&entry, Some("main".to_owned()), args)
+            .expect("second prepare should succeed");
+        let second_elapsed = second_started.elapsed();
+        assert!(
+            second_elapsed * 3 < first_elapsed,
+            "second prepare should reuse the cached launch artifact and therefore be materially faster (first: {first_elapsed:?}, second: {second_elapsed:?})"
+        );
+        assert_eq!(second.artifact.view_name.as_ref(), "main");
+    }
+
+    #[test]
     fn window_key_event_args_do_not_require_widget_id() {
         let args: EmitGtkEventArgs = serde_json::from_value(json!({
             "event": "window_key",
@@ -3162,12 +3251,28 @@ mod tests {
     </Window>"#
     }
 
-    fn widget_tree_contains_text(
-        roots: &[WidgetSnapshot],
-        surface_id: &str,
-        text: &str,
-    ) -> bool {
-        roots.iter()
+    fn paused_sources_initial_state_source() -> &'static str {
+        r#"type Model = {
+    label: Text
+}
+
+type Unit -> Model -> Model
+func keepModel = pulse model =>
+    model
+
+signal pulse : Signal Unit
+signal model : Signal Model = pulse +|> { label: "Hello from initial state" } keepModel
+signal labelText = model |> state => state.label
+
+value main =
+    <Window title="App">
+        <Label text={labelText} />
+    </Window>"#
+    }
+
+    fn widget_tree_contains_text(roots: &[WidgetSnapshot], surface_id: &str, text: &str) -> bool {
+        roots
+            .iter()
             .filter(|root| root.surface_id == surface_id)
             .any(|root| widget_subtree_contains_text(root, text))
     }
@@ -3456,6 +3561,51 @@ mod tests {
         assert!(
             !result.gtk.is_empty(),
             "the settled terminal move should still return a GTK snapshot"
+        );
+
+        host.stop_session();
+    }
+
+    #[gtk::test]
+    fn sources_paused_preserves_initial_stateful_ui() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let workspace = tempfile::tempdir().expect("tempdir should create");
+        let path = workspace.path().join("main.aivi");
+        std::fs::write(&path, paused_sources_initial_state_source())
+            .expect("paused-sources fixture should write");
+        let prepared = prepare_launch_request(
+            &path,
+            Some("main".to_owned()),
+            LaunchSourceArgs {
+                sources_paused: Some(true),
+                ..LaunchSourceArgs::default()
+            },
+        )
+        .expect("paused-sources launch request should prepare");
+        let mut host = McpHostState {
+            context: gtk::glib::MainContext::default(),
+            configured: ConfiguredTarget {
+                entry_path: Some(path.clone()),
+                default_view: Some("main".to_owned()),
+            },
+            session: None,
+            widget_ids: Default::default(),
+            next_widget_id: 0,
+            shutting_down: false,
+        };
+
+        host.launch_prepared(prepared)
+            .expect("paused-sources fixture should launch through the MCP host");
+        let matches = host
+            .find_widgets(FindWidgetsArgs {
+                text_contains: Some("Hello from initial state".to_owned()),
+                include_hidden: Some(true),
+                ..Default::default()
+            })
+            .expect("paused-sources fixture should expose the initial label text");
+        assert!(
+            !matches.is_empty(),
+            "launch_app with sources_paused should still preserve the initial stateful UI"
         );
 
         host.stop_session();

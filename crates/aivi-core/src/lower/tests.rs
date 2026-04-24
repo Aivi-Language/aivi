@@ -944,6 +944,122 @@ value headerTitle = viewTitle currentView
 }
 
 #[test]
+fn workspace_signal_recurrences_lower_with_full_runtime_passes() {
+    struct Resolver {
+        module_file: &'static str,
+        module_text: &'static str,
+    }
+
+    impl ImportResolver for Resolver {
+        fn resolve(&self, _path: &[&str]) -> ImportModuleResolution {
+            let lowered = lower_text(self.module_file, self.module_text);
+            if lowered.has_errors() {
+                return ImportModuleResolution::Missing;
+            }
+            ImportModuleResolution::Resolved(exports(lowered.module()))
+        }
+
+        fn workspace_hoist_items(&self) -> Vec<RawHoistItem> {
+            Vec::new()
+        }
+    }
+
+    let workspace_text = r#"
+type State = {
+    count: Int
+}
+
+value initial : State = { count: 7 }
+
+type Unit -> State -> State
+func step = tick state => state <| { count: state.count + 1 }
+
+signal bump : Signal Unit
+signal state : Signal State = bump +|> initial step
+signal count : Signal Int = state |> current => current.count
+
+export count
+"#;
+    let mut sources = SourceDatabase::new();
+    let file_id = sources.add_file(
+        "main.aivi",
+        r#"
+use shared.nav (count)
+
+value currentCount : Int = count
+"#,
+    );
+    let parsed = parse_module(&sources[file_id]);
+    assert!(
+        !parsed.has_errors(),
+        "entry should parse before HIR lowering: {:?}",
+        parsed.all_diagnostics().collect::<Vec<_>>()
+    );
+    let resolver = Resolver {
+        module_file: "shared/nav.aivi",
+        module_text: workspace_text,
+    };
+    let entry = lower_module_with_resolver(&parsed.module, Some(&resolver));
+    assert!(
+        !entry.has_errors(),
+        "entry should lower cleanly before typed-core lowering: {:?}",
+        entry.diagnostics()
+    );
+    let workspace = lower_text("shared/nav.aivi", workspace_text);
+    assert!(
+        !workspace.has_errors(),
+        "workspace module should lower cleanly before typed-core lowering: {:?}",
+        workspace.diagnostics()
+    );
+
+    let included_items = entry
+        .module()
+        .root_items()
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    let core = lower_runtime_module_with_workspace(
+        entry.module(),
+        &[("shared.nav", workspace.module())],
+        &included_items,
+    )
+    .expect("workspace runtime lowering should succeed");
+
+    let state = core
+        .items()
+        .iter()
+        .find_map(|(id, item)| (item.name.as_ref() == "state").then_some(id))
+        .expect("expected compiled workspace state signal");
+    assert!(
+        !core.items()[state].pipes.is_empty(),
+        "workspace state signal should keep a lowered pipe"
+    );
+    let state_pipe = &core.pipes()[core.items()[state].pipes[0]];
+    let recurrence = state_pipe
+        .recurrence
+        .as_ref()
+        .expect("workspace state signal should keep its recurrence");
+    assert_eq!(recurrence.start.stage_index, 0);
+
+    let count = core
+        .items()
+        .iter()
+        .find_map(|(id, item)| (item.name.as_ref() == "count").then_some(id))
+        .expect("expected compiled workspace count signal");
+    let ItemKind::Signal(count_info) = &core.items()[count].kind else {
+        panic!("count should lower as a signal item");
+    };
+    assert!(
+        !count_info.dependencies.is_empty(),
+        "workspace derived signals should retain direct signal dependencies"
+    );
+    assert!(
+        !core.items()[count].pipes.is_empty() || core.items()[count].body.is_some(),
+        "workspace derived signal should keep executable lowering"
+    );
+}
+
+#[test]
 fn debug_decorator_injects_debug_pipe_stages() {
     let lowered = lower_text(
         "typed-core-debug.aivi",
